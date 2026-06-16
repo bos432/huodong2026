@@ -14,16 +14,16 @@ type PageTheme = {
 };
 
 const defaultTheme: Required<PageTheme> = {
-  backgroundColor: "#f4f6f8",
+  backgroundColor: "#F5F0E8",
   backgroundImage: "",
-  backgroundOverlayColor: "#f4f6f8",
+  backgroundOverlayColor: "#F5F0E8",
   backgroundOverlayOpacity: 0,
-  cardBackgroundColor: "#ffffff",
-  cardOpacity: 96,
-  cardRadius: 8,
-  textColor: "#111827",
-  mutedColor: "#667085",
-  primaryColor: "#0f766e"
+  cardBackgroundColor: "#FFFFFF",
+  cardOpacity: 100,
+  cardRadius: 20,
+  textColor: "#333333",
+  mutedColor: "#666666",
+  primaryColor: "#C43D3D"
 };
 
 function clamp(value: unknown, min: number, max: number, fallback: number) {
@@ -73,7 +73,7 @@ export function applyPageTheme(theme?: PageTheme | null) {
   root.style.setProperty("--text-color", normalized.textColor);
   root.style.setProperty("--muted-color", normalized.mutedColor);
   root.style.setProperty("--primary-color", normalized.primaryColor);
-  root.style.setProperty("--primary-soft", rgba(normalized.primaryColor, 12));
+  root.style.setProperty("--primary-soft", rgba(normalized.primaryColor, 14));
   // #endif
 }
 

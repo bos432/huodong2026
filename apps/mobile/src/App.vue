@@ -13,7 +13,7 @@ onLaunch(() => {
 
 <style>
 page {
-  background: var(--page-bg, #f5f7fb);
-  color: var(--text-color, #172033);
+  background: var(--page-bg, #F5F0E8);
+  color: var(--text-color, #333333);
 }
 </style>

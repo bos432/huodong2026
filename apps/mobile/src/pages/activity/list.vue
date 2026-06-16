@@ -5,7 +5,8 @@ import { consumeActivityListIntent, getCurrentTenantCode, request, withTenantCod
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
-import AppBottomNav from "../../components/AppBottomNav.vue";
+import AppBottomNav from "../../components/AppBottomNav.vue"
+import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
 const categories = ref<any[]>([]);
@@ -318,3 +319,4 @@ onReachBottom(loadMore);
 .load-more.disabled { opacity: 0.58; }
 .no-more { color: #98a2b3; }
 </style>
+
