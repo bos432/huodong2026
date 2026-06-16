@@ -839,11 +839,11 @@ export class PublicService {
   }
 
   async registrationDetail(id: number, userId: number, context?: PublicTenantContext) {
-    const registration = await this.registrations.findOne({ where: { id, user: { id: userId } } });
+    const registration = await this.findUserRegistration(id, userId);
     if (!registration) throw new NotFoundException("报名记录不存在");
     const tenant = await this.assertRegistrationTenantAccess(registration, context);
-    const [order, operationSetting] = await Promise.all([this.orders.findOne({ where: { registration: { id } } }), this.ensureOperationSetting(tenant)]);
-    const refunds = order ? await this.refunds.find({ where: { order: { id: order.id } }, order: { createdAt: "DESC" } }) : [];
+    const [order, operationSetting] = await Promise.all([this.findRegistrationOrder(id), this.ensureOperationSetting(tenant)]);
+    const refunds = order ? await this.findOrderRefunds(order.id) : [];
     const charityRefund = order ? await this.registrationCharityRefundView(order, refunds) : null;
     const groupVisible = ![RegistrationStatus.Cancelled, RegistrationStatus.Rejected].includes(registration.status);
     const groupQrCodeUrl = groupVisible ? registration.activity.groupQrCodeUrl || operationSetting.defaultGroupQrCodeUrl || null : null;
@@ -851,15 +851,15 @@ export class PublicService {
   }
 
   async requestRegistrationRefund(id: number, user: User, context?: PublicTenantContext) {
-    const registration = await this.registrations.findOne({ where: { id, user: { id: user.id } } });
+    const registration = await this.findUserRegistration(id, user.id);
     if (!registration) throw new NotFoundException("报名记录不存在");
     await this.assertRegistrationTenantAccess(registration, context);
-    const order = await this.orders.findOne({ where: { registration: { id } } });
+    const order = await this.findRegistrationOrder(id);
     if (!order) throw new NotFoundException("订单不存在");
     if (![OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status)) throw new BadRequestException("当前订单不能申请退款");
     if (registration.status === RegistrationStatus.CheckedIn) throw new BadRequestException("已签到报名不能在线申请退款");
 
-    const refunds = await this.refunds.find({ where: { order: { id: order.id }, status: In(["pending", "processing", "completed"]) } });
+    const refunds = await this.findOrderRefunds(order.id, ["pending", "processing", "completed"]);
     if (refunds.some((item) => ["pending", "processing"].includes(item.status))) throw new BadRequestException("已有退款申请处理中，请勿重复提交");
 
     const preview = await this.charityFund.previewRetainedActivityRefund(order);
@@ -883,14 +883,14 @@ export class PublicService {
   }
 
   async cancelRegistration(id: number, userId: number, context?: PublicTenantContext) {
-    const registration = await this.registrations.findOne({ where: { id, user: { id: userId } } });
+    const registration = await this.findUserRegistration(id, userId);
     if (!registration) throw new NotFoundException("报名记录不存在");
     await this.assertRegistrationTenantAccess(registration, context);
     if (!registration.activity.allowCancel) throw new BadRequestException("该活动不允许用户取消报名");
     if ([RegistrationStatus.Cancelled, RegistrationStatus.CheckedIn].includes(registration.status)) throw new BadRequestException("当前状态不能取消");
     registration.status = RegistrationStatus.Cancelled;
     registration.cancelReason = "用户取消";
-    const order = await this.orders.findOne({ where: { registration: { id } } });
+    const order = await this.findRegistrationOrder(id);
     if (order && order.status === OrderStatus.PendingPayment) {
       order.status = OrderStatus.Cancelled;
       await this.orders.save(order);
@@ -900,11 +900,46 @@ export class PublicService {
   }
 
   async checkInCode(id: number, userId: number, context?: PublicTenantContext) {
-    const registration = await this.registrations.findOne({ where: { id, user: { id: userId } } });
+    const registration = await this.findUserRegistration(id, userId);
     if (!registration) throw new NotFoundException("报名记录不存在");
     await this.assertRegistrationTenantAccess(registration, context);
     if (![RegistrationStatus.Approved, RegistrationStatus.CheckedIn].includes(registration.status)) throw new BadRequestException("报名成功后才会生成签到码");
     return { code: registration.checkInCode };
+  }
+
+  private findUserRegistration(id: number, userId: number) {
+    return this.registrations
+      .createQueryBuilder("registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("registration.tenant", "tenant")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("registration.user", "user")
+      .where("registration.id = :id", { id })
+      .andWhere("user.id = :userId", { userId })
+      .getOne();
+  }
+
+  private findRegistrationOrder(registrationId: number) {
+    return this.orders
+      .createQueryBuilder("order")
+      .leftJoinAndSelect("order.registration", "registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndSelect("order.tenant", "tenant")
+      .leftJoinAndSelect("order.ticketType", "ticketType")
+      .leftJoinAndSelect("order.coupon", "coupon")
+      .leftJoinAndSelect("order.memberLevel", "memberLevel")
+      .where("registration.id = :registrationId", { registrationId })
+      .getOne();
+  }
+
+  private findOrderRefunds(orderId: number, statuses?: string[]) {
+    const builder = this.refunds
+      .createQueryBuilder("refund")
+      .where("refund.orderId = :orderId", { orderId })
+      .orderBy("refund.createdAt", "DESC");
+    if (statuses?.length) builder.andWhere("refund.status IN (:...statuses)", { statuses });
+    return builder.getMany();
   }
 
   private async assertRegistrationTenantAccess(registration: Registration, context?: PublicTenantContext) {
