@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ActivityCategory } from "../../entities/activity-category.entity";
+import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { Activity } from "../../entities/activity.entity";
@@ -9,6 +10,7 @@ import { Agent } from "../../entities/agent.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
 import { Coupon } from "../../entities/coupon.entity";
+import { ConversionEvent } from "../../entities/conversion-event.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { CheckIn } from "../../entities/check-in.entity";
@@ -34,7 +36,7 @@ import { NotificationProviderService } from "../v1/notification-provider.service
 import { RefundCompletionService } from "../refund-completion.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, ActivityCategory, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn])],
+  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn])],
   controllers: [PublicController, PaymentController],
   providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService],
   exports: [PublicService]

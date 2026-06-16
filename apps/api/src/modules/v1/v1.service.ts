@@ -4,6 +4,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import ExcelJS from "exceljs";
 import { In, Repository } from "typeorm";
 import { ActivityHost } from "../../entities/activity-host.entity";
+import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
@@ -29,6 +30,7 @@ import { NotificationProviderService } from "./notification-provider.service";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
+type ActivityTrackingInput = { source?: string; inviteCode?: string; channelCode?: string; clientIp?: string | null };
 
 export interface AnnouncementInput {
   title: string;
@@ -108,6 +110,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
+    @InjectRepository(ActivityChannel) private readonly activityChannels: Repository<ActivityChannel>,
     @InjectRepository(ActivityHost) private readonly hosts: Repository<ActivityHost>,
     @InjectRepository(ActivitySection) private readonly sections: Repository<ActivitySection>,
     @InjectRepository(ActivityReview) private readonly reviews: Repository<ActivityReview>,
@@ -205,14 +208,15 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     return tenant;
   }
 
-  async enhancedActivity(id: number, userId?: number, source?: string, inviteCode?: string, context?: PublicTenantContext) {
+  async enhancedActivity(id: number, userId?: number, tracking?: ActivityTrackingInput, context?: PublicTenantContext) {
     const activity = await this.activities.findOne({ where: { id }, relations: ["fields"] });
     if (!activity) throw new NotFoundException("活动不存在");
     await this.assertPublicActivityTenantAccess(activity, context);
 
     const user = userId ? await this.users.findOneBy({ id: userId }) : null;
-    await this.viewLogs.save(this.viewLogs.create({ activity, user, source: inviteCode ? "invite" : source || "h5" }));
-    if (inviteCode) await this.trackShare(id, { code: inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
+    const channel = await this.resolveActivityChannel(activity, tracking?.channelCode);
+    await this.recordEnhancedActivityView(activity, user, channel, tracking);
+    if (tracking?.inviteCode) await this.trackShare(id, { code: tracking.inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
 
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
     const [hosts, sections, stats, reviews, memberAccess] = await Promise.all([
@@ -224,6 +228,33 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     ]);
 
     return { ...activity, ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews, memberAccess };
+  }
+
+  private async resolveActivityChannel(activity: Activity, channelCode?: string) {
+    const code = this.cleanTrackingText(channelCode, 48);
+    if (!code) return null;
+    return this.activityChannels.findOne({ where: { activity: { id: activity.id }, code, enabled: true } });
+  }
+
+  private async recordEnhancedActivityView(activity: Activity, user: User | null, channel: ActivityChannel | null, tracking?: ActivityTrackingInput) {
+    const source = this.cleanTrackingText(tracking?.inviteCode ? "invite" : tracking?.source || channel?.source || "h5", 80) || "h5";
+    const since = new Date(Date.now() - 30 * 60 * 1000);
+    const duplicate = await this.viewLogs
+      .createQueryBuilder("view")
+      .where("view.activityId = :activityId", { activityId: activity.id })
+      .andWhere(user ? "view.userId = :userId" : "view.userId IS NULL", user ? { userId: user.id } : {})
+      .andWhere(channel ? "view.channelId = :channelId" : "view.channelId IS NULL", channel ? { channelId: channel.id } : {})
+      .andWhere("view.source = :source", { source })
+      .andWhere("view.createdAt >= :since", { since })
+      .getExists();
+    if (duplicate) return;
+    await this.viewLogs.save(this.viewLogs.create({ activity, user, channel, source }));
+  }
+
+  private cleanTrackingText(value: unknown, maxLength: number) {
+    const text = typeof value === "string" ? value.trim() : "";
+    if (!text) return "";
+    return text.replace(/[^\w\u4e00-\u9fa5:./-]/g, "").slice(0, maxLength);
   }
 
   async activityReviews(activityId: number, context?: PublicTenantContext) {

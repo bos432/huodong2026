@@ -20,9 +20,15 @@ export class PublicV1Controller {
     };
   }
 
+  private clientIp(req: any) {
+    const forwarded = req.headers?.["x-forwarded-for"];
+    if (typeof forwarded === "string" && forwarded.trim()) return forwarded.split(",")[0].trim();
+    return req.ip || req.socket?.remoteAddress || null;
+  }
+
   @Get("activities/:id/enhanced")
-  enhancedActivity(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Query("userId") userId?: string, @Query("source") source?: string, @Query("inviteCode") inviteCode?: string, @Query("tenantCode") tenantCode?: string) {
-    return this.service.enhancedActivity(id, this.publicAuth.optionalUserIdFromAuthorization(req.headers?.authorization), source, inviteCode, this.tenantContext(req, tenantCode));
+  enhancedActivity(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Query("userId") userId?: string, @Query("source") source?: string, @Query("inviteCode") inviteCode?: string, @Query("channelCode") channelCode?: string, @Query("tenantCode") tenantCode?: string) {
+    return this.service.enhancedActivity(id, this.publicAuth.optionalUserIdFromAuthorization(req.headers?.authorization), { source, inviteCode, channelCode, clientIp: this.clientIp(req) }, this.tenantContext(req, tenantCode));
   }
 
   @Post("activities/:id/share-poster")

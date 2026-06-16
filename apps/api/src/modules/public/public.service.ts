@@ -9,9 +9,12 @@ import { In, MoreThan, Repository } from "typeorm";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityCategory } from "../../entities/activity-category.entity";
 import { Activity } from "../../entities/activity.entity";
+import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
+import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { Coupon } from "../../entities/coupon.entity";
+import { ConversionEvent, ConversionEventType } from "../../entities/conversion-event.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
@@ -38,6 +41,7 @@ import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallb
 import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
+type PublicTrackingContext = { channelCode?: string | null; source?: string | null; inviteCode?: string | null; clientIp?: string | null; userAgent?: string | null };
 
 @Injectable()
 export class PublicService {
@@ -47,6 +51,7 @@ export class PublicService {
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
+    @InjectRepository(ActivityViewLog) private readonly activityViewLogs: Repository<ActivityViewLog>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
     @InjectRepository(Registration) private readonly registrations: Repository<Registration>,
@@ -64,6 +69,8 @@ export class PublicService {
     @InjectRepository(H5AuthCodeLog) private readonly h5AuthCodeLogs: Repository<H5AuthCodeLog>,
     @InjectRepository(UserWallet) private readonly userWallets: Repository<UserWallet>,
     @InjectRepository(WalletTransaction) private readonly walletTransactions: Repository<WalletTransaction>,
+    @InjectRepository(ActivityChannel) private readonly activityChannels: Repository<ActivityChannel>,
+    @InjectRepository(ConversionEvent) private readonly conversionEvents: Repository<ConversionEvent>,
     private readonly notificationProvider: NotificationProviderService,
     private readonly paymentProvider: PaymentProviderService,
     private readonly refundCompletion: RefundCompletionService,
@@ -344,10 +351,12 @@ export class PublicService {
     return Math.min(Math.max(Number.isFinite(value) ? value : fallback, 1), max);
   }
 
-  async activityDetail(id: number, userId?: number, context?: PublicTenantContext) {
+  async activityDetail(id: number, userId?: number, context?: PublicTenantContext, tracking?: PublicTrackingContext) {
     const activity = await this.activities.findOne({ where: { id, status: ActivityStatus.Open }, relations: ["fields"] });
     if (!activity) throw new NotFoundException("活动不存在或未开放");
     await this.assertPublicTenantAccess(activity, context);
+    const user = userId ? await this.users.findOneBy({ id: userId }) : null;
+    await this.recordActivityView(activity, user || null, tracking);
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
     const [ticketTypes, memberAccess] = await Promise.all([
       this.ticketTypes.find({ where: { activity: { id }, enabled: true }, order: { price: "ASC", id: "ASC" } }),
@@ -389,8 +398,10 @@ export class PublicService {
     const paymentMethod = price > 0 ? dto.paymentMethod || PaymentMethod.Wechat : PaymentMethod.Free;
     if (price > 0 && paymentMethod === PaymentMethod.Balance) await this.assertSufficientBalance(user, activity.tenant, price);
     const status = price > 0 ? RegistrationStatus.PendingPayment : activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
-    const registration = await this.registrations.save(this.registrations.create({ activity, tenant: activity.tenant, user, status, answers: dto.answers, checkInCode: uuidv4() }));
+    const channel = await this.resolveActivityChannel(activity, dto.channelCode, dto.source);
+    const registration = await this.registrations.save(this.registrations.create({ activity, tenant: activity.tenant, user, channel, status, answers: dto.answers, checkInCode: uuidv4() }));
     const order = await this.orders.save(this.orders.create({ orderNo: `OD${Date.now()}${registration.id}`, registration, tenant: activity.tenant, agent: activity.agent, amount: quote.payableAmount, originalAmount: quote.originalAmount, discountAmount: quote.discountAmount, memberDiscountAmount: quote.memberDiscountAmount, pointsUsed: quote.pointsUsed, pointsDiscountAmount: quote.pointsDiscountAmount, paymentMethod, status: price > 0 ? OrderStatus.PendingPayment : OrderStatus.Paid, paidAt: price > 0 ? null : new Date(), expiresAt: this.paymentExpiresAt(price), ticketType: quote.ticketType, coupon: quote.coupon, memberLevel: quote.memberLevel }));
+    await this.recordConversionEvent("register", { activity, user, registration, order, channel, amount: quote.payableAmount, source: dto.source, idempotencyKey: `register:${registration.id}` });
     if (quote.coupon) await this.coupons.increment({ id: quote.coupon.id }, "usedCount", 1);
     if (quote.pointsUsed > 0) await this.awardPoints(user, -quote.pointsUsed, "points_redeem", order.id, "报名积分抵扣");
     if (price > 0 && paymentMethod === PaymentMethod.Balance) {
@@ -1000,7 +1011,64 @@ export class PublicService {
       savedOrder.registration.status = savedOrder.registration.activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
       await this.registrations.save(savedOrder.registration);
     }
+    await this.recordConversionEvent("pay", { activity: savedOrder.registration.activity, user: savedOrder.registration.user, registration: savedOrder.registration, order: savedOrder, channel: savedOrder.registration.channel || null, amount: savedOrder.amount, source: provider, idempotencyKey: `pay:${savedOrder.id}` });
     return { order: savedOrder, transaction, idempotent: false };
+  }
+
+  private async recordActivityView(activity: Activity, user: User | null, tracking?: PublicTrackingContext) {
+    const channel = await this.resolveActivityChannel(activity, tracking?.channelCode, tracking?.source);
+    const source = this.cleanTrackingText(tracking?.source || channel?.source || tracking?.inviteCode || "direct", 80);
+    const visitorKey = user?.id ? `u${user.id}` : this.cleanTrackingText(tracking?.clientIp || "anonymous", 40);
+    const day = new Date().toISOString().slice(0, 10);
+    const channelKey = channel?.id || "none";
+    const idempotencyKey = `view:${activity.id}:${visitorKey}:${day}:${channelKey}`;
+    const exists = await this.conversionEvents.findOne({ where: { idempotencyKey } });
+    if (exists) return;
+    await this.activityViewLogs.save(this.activityViewLogs.create({ activity, user, channel, source }));
+    await this.recordConversionEvent("view", {
+      activity,
+      user,
+      channel,
+      source,
+      idempotencyKey,
+      clientIp: tracking?.clientIp,
+      userAgent: tracking?.userAgent,
+      payload: { inviteCode: tracking?.inviteCode || null }
+    });
+  }
+
+  private async resolveActivityChannel(activity: Activity, channelCode?: string | null, source?: string | null) {
+    const code = this.cleanTrackingText(channelCode, 48);
+    if (code) {
+      const channel = await this.activityChannels.findOne({ where: { code, activity: { id: activity.id }, enabled: true } });
+      if (channel) return channel;
+    }
+    const sourceText = this.cleanTrackingText(source, 80);
+    if (!sourceText) return null;
+    return this.activityChannels.findOne({ where: { activity: { id: activity.id }, source: sourceText, enabled: true } });
+  }
+
+  private async recordConversionEvent(type: ConversionEventType, input: { activity?: Activity | null; user?: User | null; registration?: Registration | null; order?: Order | null; channel?: ActivityChannel | null; amount?: string | number | null; source?: string | null; idempotencyKey?: string | null; clientIp?: string | null; userAgent?: string | null; payload?: Record<string, unknown> | null }) {
+    if (input.idempotencyKey && await this.conversionEvents.findOne({ where: { idempotencyKey: input.idempotencyKey } })) return null;
+    return this.conversionEvents.save(this.conversionEvents.create({
+      type,
+      tenant: input.activity?.tenant || input.order?.tenant || input.registration?.tenant || input.channel?.tenant || null,
+      activity: input.activity || input.registration?.activity || input.order?.registration?.activity || null,
+      user: input.user || input.registration?.user || input.order?.registration?.user || null,
+      registration: input.registration || input.order?.registration || null,
+      order: input.order || null,
+      channel: input.channel || input.registration?.channel || null,
+      amount: Number(input.amount || 0).toFixed(2),
+      source: this.cleanTrackingText(input.source, 80) || null,
+      idempotencyKey: input.idempotencyKey || null,
+      clientIp: this.cleanTrackingText(input.clientIp, 80) || null,
+      userAgent: this.cleanTrackingText(input.userAgent, 255) || null,
+      payload: input.payload || null
+    }));
+  }
+
+  private cleanTrackingText(value: unknown, max = 80) {
+    return String(value || "").trim().replace(/[^\w\u4e00-\u9fa5:.-]/g, "").slice(0, max);
   }
 
   private async recordPaymentDiscrepancy(order: Order, transactionNo: string, provider: string, amount: number, discrepancyType: string, remark: string) {

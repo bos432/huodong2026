@@ -10,6 +10,7 @@ import { ActivityHost } from "../../entities/activity-host.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
+import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { Activity } from "../../entities/activity.entity";
 import { AdminLoginLog } from "../../entities/admin-login-log.entity";
 import { AdminOperationLog } from "../../entities/admin-operation-log.entity";
@@ -21,6 +22,7 @@ import { Agent } from "../../entities/agent.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { Coupon } from "../../entities/coupon.entity";
+import { ConversionEvent } from "../../entities/conversion-event.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
@@ -51,7 +53,7 @@ import { RefundCompletionService } from "../refund-completion.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, ActivityCategory, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, H5AuthCodeLog, HomepageSection, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit]),
+    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

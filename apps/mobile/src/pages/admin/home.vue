@@ -9,6 +9,9 @@ const dashboard = ref<any>(null);
 const activities = ref<any[]>([]);
 const session = computed(() => getMobileAdminSession());
 const canWrite = computed(() => Boolean(bootstrap.value?.permissions?.canWriteActivities));
+const canViewRegistrations = computed(() => Boolean(bootstrap.value?.permissions?.canViewRegistrations));
+const canViewOrders = computed(() => Boolean(bootstrap.value?.permissions?.canViewOrders));
+const canCheckIn = computed(() => Boolean(bootstrap.value?.permissions?.canCheckIn));
 
 function statusText(status: ActivityStatus) {
   return activityStatusText[status] || status;
@@ -20,6 +23,18 @@ function goCreate() {
 
 function goList() {
   uni.navigateTo({ url: "/pages/admin/activity/list" });
+}
+
+function goRegistrations() {
+  uni.navigateTo({ url: "/pages/admin/registrations" });
+}
+
+function goOrders() {
+  uni.navigateTo({ url: "/pages/admin/orders" });
+}
+
+function goCheckIn() {
+  uni.navigateTo({ url: "/pages/admin/check-in" });
 }
 
 function goEdit(id: number) {
@@ -76,6 +91,9 @@ onMounted(load);
       <view class="actions">
         <view class="action primary" :class="{ disabled: !canWrite }" @click="canWrite && goCreate()">发布活动</view>
         <view class="action" @click="goList">活动管理</view>
+        <view v-if="canViewRegistrations" class="action" @click="goRegistrations">报名审核</view>
+        <view v-if="canCheckIn" class="action" @click="goCheckIn">签到核销</view>
+        <view v-if="canViewOrders" class="action" @click="goOrders">订单查看</view>
       </view>
 
       <view v-if="!canWrite" class="notice">当前账号可查看活动，但没有手机端创建和编辑权限。</view>

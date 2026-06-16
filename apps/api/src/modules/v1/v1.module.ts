@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { ActivityHost } from "../../entities/activity-host.entity";
+import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
@@ -27,7 +28,7 @@ import { V1Service } from "./v1.service";
 import { PublicModule } from "../public/public.module";
 
 @Module({
-  imports: [PublicModule, TypeOrmModule.forFeature([Activity, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Tenant, Registration, Order, OperationSetting, CheckIn, User, InviteCode, ShareVisit, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule])],
+  imports: [PublicModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Tenant, Registration, Order, OperationSetting, CheckIn, User, InviteCode, ShareVisit, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule])],
   controllers: [AdminV1Controller, PublicV1Controller],
   providers: [V1Service, NotificationProviderService]
 })

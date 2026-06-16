@@ -38,6 +38,13 @@ const h5QrDialogVisible = ref(false);
 const h5QrActivity = ref<any | null>(null);
 const posterDialogVisible = ref(false);
 const posterActivity = ref<any | null>(null);
+const channelDrawer = ref(false);
+const channelActivity = ref<any | null>(null);
+const channelLoading = ref(false);
+const channelSaving = ref(false);
+const channels = ref<any[]>([]);
+const channelReport = ref<any[]>([]);
+const channelForm = reactive({ name: "", code: "", source: "", remark: "" });
 const form = reactive<any>(defaultForm());
 const pageTitle = computed(() => (isPlatformAdmin() ? "活动审核" : "活动管理"));
 const defaultActivityStatus = () => (isPlatformAdmin() ? ActivityStatus.PendingApproval : ActivityStatus.Open);
@@ -572,6 +579,60 @@ function showActivityPoster(row: any) {
   posterDialogVisible.value = true;
 }
 
+async function showActivityChannels(row: any) {
+  channelActivity.value = row;
+  Object.assign(channelForm, { name: "", code: "", source: "", remark: "" });
+  channelDrawer.value = true;
+  await loadActivityChannels();
+}
+
+async function loadActivityChannels() {
+  if (!channelActivity.value) return;
+  channelLoading.value = true;
+  try {
+    const [channelRows, report] = await Promise.all([
+      api.get<any, any[]>(`/admin/activities/${channelActivity.value.id}/channels`),
+      api.get<any, any>(`/admin/activities/${channelActivity.value.id}/channel-report`)
+    ]);
+    channels.value = channelRows;
+    channelReport.value = report.channels || [];
+  } finally {
+    channelLoading.value = false;
+  }
+}
+
+async function createChannel() {
+  if (!channelActivity.value) return;
+  if (!channelForm.name.trim()) return ElMessage.warning("请输入渠道名称");
+  channelSaving.value = true;
+  try {
+    await api.post(`/admin/activities/${channelActivity.value.id}/channels`, {
+      name: channelForm.name,
+      code: channelForm.code || undefined,
+      source: channelForm.source || undefined,
+      remark: channelForm.remark || undefined
+    });
+    ElMessage.success("渠道已创建");
+    Object.assign(channelForm, { name: "", code: "", source: "", remark: "" });
+    await loadActivityChannels();
+  } finally {
+    channelSaving.value = false;
+  }
+}
+
+function channelUrl(row: any) {
+  if (!channelActivity.value) return "";
+  const url = new URL(activityPreviewUrl(channelActivity.value), window.location.origin);
+  url.searchParams.set("channelCode", row.code);
+  if (row.source) url.searchParams.set("source", row.source);
+  return url.toString();
+}
+
+async function copyChannelUrl(row: any) {
+  await copyToClipboard(channelUrl(row));
+  ElMessage.success("渠道链接已复制");
+}
+
 function approvalActionLabel(action?: string) {
   return approvalActionText[action || ""] || action || "-";
 }
@@ -690,12 +751,13 @@ onMounted(async () => {
         <el-table-column label="会员门槛" width="130"><template #default="{ row }">{{ row.minMemberLevel?.name || "不限" }}</template></el-table-column>
         <el-table-column label="优先报名" width="190"><template #default="{ row }">{{ row.priorityMemberLevel ? `${row.priorityMemberLevel.name} / ${formatTime(row.priorityRegistrationEndsAt)}` : "未设置" }}</template></el-table-column>
         <el-table-column label="开始时间" width="170"><template #default="{ row }">{{ formatTime(row.startTime) }}</template></el-table-column>
-        <el-table-column label="操作" :width="canOperateActivities ? 700 : 410" fixed="right">
+        <el-table-column label="操作" :width="canOperateActivities ? 780 : 500" fixed="right">
           <template #default="{ row }">
             <el-button size="small" :icon="View" @click="openActivityH5(row)">预览H5</el-button>
             <el-button size="small" :icon="CopyDocument" @click="copyActivityH5Url(row)">复制链接</el-button>
             <el-button size="small" :icon="Grid" @click="showActivityH5Qr(row)">二维码</el-button>
             <el-button size="small" :icon="Picture" @click="showActivityPoster(row)">海报</el-button>
+            <el-button size="small" :icon="Grid" @click="showActivityChannels(row)">渠道</el-button>
             <el-button size="small" :icon="Clock" @click="loadApprovalLogs(row)">审核记录</el-button>
             <el-button v-if="canOperateActivities" size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
             <el-button v-if="canSubmitApproval(row)" size="small" type="primary" :icon="Upload" @click="submitApproval(row)">提交审核</el-button>
@@ -740,6 +802,56 @@ onMounted(async () => {
           </div>
         </el-timeline-item>
       </el-timeline>
+    </el-drawer>
+
+    <el-drawer v-model="channelDrawer" size="860px" title="渠道推广与转化">
+      <div class="approval-header">
+        <strong>{{ channelActivity?.title || "-" }}</strong>
+        <el-button size="small" @click="loadActivityChannels">刷新</el-button>
+      </div>
+      <el-form v-if="canOperateActivities" class="channel-form" label-position="top">
+        <el-form-item label="渠道名称">
+          <el-input v-model="channelForm.name" placeholder="例如：朋友圈、社群、公众号、线下海报" />
+        </el-form-item>
+        <el-form-item label="渠道码">
+          <el-input v-model="channelForm.code" placeholder="不填则自动生成，只能字母/数字/下划线/连字符" />
+        </el-form-item>
+        <el-form-item label="来源标记">
+          <el-input v-model="channelForm.source" placeholder="例如 wechat_group / poster / official_account" />
+        </el-form-item>
+        <el-form-item label="备注">
+          <el-input v-model="channelForm.remark" placeholder="内部备注" />
+        </el-form-item>
+        <el-button type="primary" :loading="channelSaving" @click="createChannel">创建渠道</el-button>
+      </el-form>
+
+      <div class="table-card embedded">
+        <h3>渠道链接</h3>
+        <el-table :data="channels" stripe empty-text="暂无渠道" v-loading="channelLoading">
+          <el-table-column prop="name" label="渠道" min-width="130" />
+          <el-table-column prop="code" label="渠道码" width="130" />
+          <el-table-column prop="source" label="来源" width="130" />
+          <el-table-column label="链接" min-width="260" show-overflow-tooltip>
+            <template #default="{ row }">{{ channelUrl(row) }}</template>
+          </el-table-column>
+          <el-table-column label="操作" width="100">
+            <template #default="{ row }"><el-button size="small" @click="copyChannelUrl(row)">复制</el-button></template>
+          </el-table-column>
+        </el-table>
+      </div>
+
+      <div class="table-card embedded">
+        <h3>渠道效果</h3>
+        <el-table :data="channelReport" stripe empty-text="暂无渠道转化数据" v-loading="channelLoading">
+          <el-table-column prop="name" label="渠道" min-width="130" />
+          <el-table-column prop="viewCount" label="浏览" width="80" />
+          <el-table-column prop="registrationCount" label="报名" width="80" />
+          <el-table-column prop="paidCount" label="支付" width="80" />
+          <el-table-column label="报名率" width="90"><template #default="{ row }">{{ row.signupRate }}%</template></el-table-column>
+          <el-table-column label="支付率" width="90"><template #default="{ row }">{{ row.paymentRate }}%</template></el-table-column>
+          <el-table-column label="实收" width="110"><template #default="{ row }">¥{{ row.paidAmount }}</template></el-table-column>
+        </el-table>
+      </div>
     </el-drawer>
 
     <el-drawer v-model="drawer" size="900px" :title="editingId ? '编辑活动' : '新建活动'">
@@ -909,8 +1021,11 @@ onMounted(async () => {
 .approval-log-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
 .approval-log-title span, .approval-log-meta { color: #64748b; }
 .approval-log-remark { padding: 8px 10px; border-radius: 8px; background: #f8fafc; color: #475569; line-height: 1.6; }
+.channel-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; margin-bottom: 16px; }
+.channel-form .el-button { align-self: end; margin-bottom: 18px; }
+.embedded { margin-top: 16px; }
 @media (max-width: 1100px) {
-  .filter-bar, .form-grid, .field-row, .host-row, .section-row, .section-image-field { grid-template-columns: 1fr; }
+  .filter-bar, .form-grid, .field-row, .host-row, .section-row, .section-image-field, .channel-form { grid-template-columns: 1fr; }
   .pager-row { align-items: flex-start; flex-direction: column; }
 }
 </style>

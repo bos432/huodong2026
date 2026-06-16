@@ -1,6 +1,7 @@
 import { RegistrationAnswer, RegistrationStatus } from "../shared/domain";
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Activity } from "./activity.entity";
+import { ActivityChannel } from "./activity-channel.entity";
 import { Tenant } from "./tenant.entity";
 import { User } from "./user.entity";
 
@@ -17,6 +18,9 @@ export class Registration {
 
   @ManyToOne(() => User, { eager: true })
   user!: User;
+
+  @ManyToOne(() => ActivityChannel, { eager: true, nullable: true, onDelete: "SET NULL" })
+  channel!: ActivityChannel | null;
 
   @Column({ type: "enum", enum: RegistrationStatus })
   status!: RegistrationStatus;

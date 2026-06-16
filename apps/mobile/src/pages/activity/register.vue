@@ -18,6 +18,9 @@ const pointsToUse = ref(0);
 const quote = ref<any>();
 const userId = ref<number>();
 const paymentMethod = ref<"wechat" | "balance">("wechat");
+const channelCode = ref("");
+const source = ref("");
+const inviteCode = ref("");
 const attemptedSubmit = ref(false);
 const missingFieldId = ref<number>();
 const values = reactive<Record<number, any>>({});
@@ -124,7 +127,18 @@ async function doSubmit() {
   try {
     userId.value = await ensureUser();
     const answers = activity.value.fields.map((field: any) => ({ fieldId: field.id, label: field.label, type: field.type, value: values[field.id] ?? (field.type === FieldType.MultipleChoice ? [] : "") }));
-    const result = await request<any>(`/public/activities/${activity.value.id}/register`, { method: "POST", data: { answers, ticketTypeId: selectedTicketTypeId.value, couponCode: couponCode.value.trim() || undefined, pointsToUse: pointsToUse.value || undefined, paymentMethod: payableNumber.value > 0 ? paymentMethod.value : undefined } });
+    const result = await request<any>(`/public/activities/${activity.value.id}/register`, {
+      method: "POST",
+      data: {
+        answers,
+        ticketTypeId: selectedTicketTypeId.value,
+        couponCode: couponCode.value.trim() || undefined,
+        pointsToUse: pointsToUse.value || undefined,
+        paymentMethod: payableNumber.value > 0 ? paymentMethod.value : undefined,
+        channelCode: channelCode.value || undefined,
+        source: source.value || undefined
+      }
+    });
     if (result.waitlisted) {
       uni.showModal({ title: "已进入候补", content: "当前活动名额已满，你已进入候补名单。若有名额释放，主办方可在后台为你补位。", showCancel: false, success: () => uni.navigateBack() });
       return;
@@ -172,10 +186,19 @@ function applyPoints() {
 onMounted(async () => {
   try {
     const pages = getCurrentPages();
-    const id = Number((pages[pages.length - 1] as any).options.id);
+    const options = (pages[pages.length - 1] as any).options || {};
+    const id = Number(options.id);
+    channelCode.value = options.channelCode || "";
+    source.value = options.source || "";
+    inviteCode.value = options.inviteCode || "";
     userId.value = await ensureUser();
+    const query = [
+      channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
+      source.value ? `source=${encodeURIComponent(source.value)}` : "",
+      inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : ""
+    ].filter(Boolean).join("&");
     const [detail, setting] = await Promise.all([
-      request(`/public/activities/${id}`),
+      request(`/public/activities/${id}${query ? `?${query}` : ""}`),
       request("/public/settings/operation")
     ]);
     activity.value = detail;

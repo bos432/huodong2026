@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 
 const SUPER_ADMIN = [AdminRole.SuperAdmin];
@@ -129,6 +129,30 @@ export class AdminController {
   @Get("dashboard")
   dashboard(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.dashboard(admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("analytics/overview")
+  analyticsOverview(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.analyticsOverview(query, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("analytics/trends")
+  analyticsTrends(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.analyticsTrends(query, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("analytics/channels")
+  analyticsChannels(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.analyticsChannels(query, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("analytics/users")
+  analyticsUsers(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.analyticsUsers(query, admin);
   }
 
   @AdminRoles(...ACTIVITY_VIEW_ROLES)
@@ -335,6 +359,24 @@ export class AdminController {
   @Get("activities/:id/approval-logs")
   activityApprovalLogs(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.listActivityApprovalLogs(id, admin);
+  }
+
+  @AdminRoles(...ACTIVITY_VIEW_ROLES)
+  @Get("activities/:id/channel-report")
+  activityChannelReport(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.activityChannelReport(id, admin);
+  }
+
+  @AdminRoles(...ACTIVITY_VIEW_ROLES)
+  @Get("activities/:id/channels")
+  activityChannels(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listActivityChannels(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("activities/:id/channels")
+  createActivityChannel(@Param("id", ParseIntPipe) id: number, @Body() dto: ActivityChannelDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createActivityChannel(id, dto, admin);
   }
 
   @AdminRoles(...OPERATION_ROLES)

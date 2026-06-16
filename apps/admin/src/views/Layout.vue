@@ -26,6 +26,7 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.operation, scope: "any" },
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview, scope: "any" },
       { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: permissions.superAdmin, scope: "platform" },
       { index: "/admins", icon: "UserFilled", label: "商家账号", roles: permissions.superAdmin, scope: "any" },
       { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: permissions.superAdmin, scope: "platform" },
@@ -62,6 +63,7 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/dashboard", icon: "DataAnalysis", label: "数据看板", roles: permissions.overview },
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview },
       { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: permissions.operation },
       { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: permissions.operation }
     ]

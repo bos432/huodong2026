@@ -65,6 +65,14 @@ export class RegisterDto {
   @IsOptional()
   @IsIn([PaymentMethod.Wechat, PaymentMethod.Balance])
   paymentMethod?: PaymentMethod.Wechat | PaymentMethod.Balance;
+
+  @IsOptional()
+  @IsString()
+  channelCode?: string;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
 }
 
 export class QuoteDto {
@@ -127,6 +135,10 @@ export class ProviderPayDto {
   @IsOptional()
   @IsString()
   returnUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  channelCode?: string;
 }
 
 export class ProviderPaymentCallbackDto {

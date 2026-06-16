@@ -11,6 +11,8 @@ const operationSetting = ref<any>();
 const loading = ref(true);
 const error = ref("");
 const inviteCode = ref("");
+const channelCode = ref("");
+const source = ref("h5");
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 
 function registrationPaused() {
@@ -49,7 +51,13 @@ function register() {
     uni.showToast({ title: registrationPaused() ? registrationPausedMessage() : activity.value?.memberAccess?.message || "暂不可报名", icon: "none" });
     return;
   }
-  uni.navigateTo({ url: withTenantCode(`/pages/activity/register?id=${activity.value.id}${inviteCode.value ? `&inviteCode=${inviteCode.value}` : ""}`) });
+  const query = [
+    `id=${activity.value.id}`,
+    inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : "",
+    channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
+    source.value ? `source=${encodeURIComponent(source.value)}` : ""
+  ].filter(Boolean).join("&");
+  uni.navigateTo({ url: withTenantCode(`/pages/activity/register?${query}`) });
 }
 
 function statusText(status: string) {
@@ -154,7 +162,13 @@ async function load() {
     const options = (pages[pages.length - 1] as any).options || {};
     const id = Number(options.id);
     inviteCode.value = options.inviteCode || "";
-    const query = [inviteCode.value ? `inviteCode=${inviteCode.value}` : "", "source=h5"].filter(Boolean).join("&");
+    channelCode.value = options.channelCode || "";
+    source.value = options.source || "h5";
+    const query = [
+      inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : "",
+      channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
+      `source=${encodeURIComponent(source.value)}`
+    ].filter(Boolean).join("&");
     const [detail, setting] = await Promise.all([
       request(`/public/activities/${id}/enhanced?${query}`),
       request("/public/settings/operation")

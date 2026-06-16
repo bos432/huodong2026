@@ -79,8 +79,14 @@ export class PublicController {
   }
 
   @Get("activities/:id")
-  activity(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("userId") userId?: string, @Query("tenantCode") tenantCode?: string) {
-    return this.service.activityDetail(id, this.service.optionalUserIdFromAuthorization(req.headers?.authorization), this.tenantContext(req, tenantCode));
+  activity(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("userId") userId?: string, @Query("tenantCode") tenantCode?: string, @Query("channelCode") channelCode?: string, @Query("source") source?: string, @Query("inviteCode") inviteCode?: string) {
+    return this.service.activityDetail(id, this.service.optionalUserIdFromAuthorization(req.headers?.authorization), this.tenantContext(req, tenantCode), {
+      channelCode,
+      source,
+      inviteCode,
+      clientIp: this.clientIp(req),
+      userAgent: req.headers?.["user-agent"] || null
+    });
   }
 
   @Post("activities/:id/quote")

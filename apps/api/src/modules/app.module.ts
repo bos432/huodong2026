@@ -6,6 +6,7 @@ import fs from "fs";
 import path from "path";
 import { Activity } from "../entities/activity.entity";
 import { ActivityCategory } from "../entities/activity-category.entity";
+import { ActivityChannel } from "../entities/activity-channel.entity";
 import { ActivityApprovalLog } from "../entities/activity-approval-log.entity";
 import { ActivityField } from "../entities/activity-field.entity";
 import { ActivityHost } from "../entities/activity-host.entity";
@@ -22,6 +23,7 @@ import { Agent } from "../entities/agent.entity";
 import { Announcement } from "../entities/announcement.entity";
 import { CheckIn } from "../entities/check-in.entity";
 import { Coupon } from "../entities/coupon.entity";
+import { ConversionEvent } from "../entities/conversion-event.entity";
 import { H5AuthCodeLog } from "../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../entities/homepage-section.entity";
 import { InviteCode } from "../entities/invite-code.entity";
@@ -52,7 +54,7 @@ import { InstallModule } from "./install/install.module";
 import { PublicModule } from "./public/public.module";
 import { V1Module } from "./v1/v1.module";
 
-const entities = [User, UserWallet, WalletTransaction, Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, ActivityCategory, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, CheckIn, H5AuthCodeLog, HomepageSection, InviteCode, ShareVisit, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule];
+const entities = [User, UserWallet, WalletTransaction, Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, CheckIn, H5AuthCodeLog, HomepageSection, InviteCode, ShareVisit, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule];
 
 loadEnv({ path: "apps/api/.env" });
 loadEnv();

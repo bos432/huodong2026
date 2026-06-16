@@ -4,6 +4,7 @@ import { AdminRole, canAccess, canAccessScope, isPlatformAdmin, permissions } fr
 const Login = () => import("./views/Login.vue");
 const Layout = () => import("./views/Layout.vue");
 const Dashboard = () => import("./views/Dashboard.vue");
+const Analytics = () => import("./views/Analytics.vue");
 const Activities = () => import("./views/Activities.vue");
 const Funnels = () => import("./views/Funnels.vue");
 const Recaps = () => import("./views/Recaps.vue");
@@ -43,6 +44,7 @@ export const router = createRouter({
       children: [
         { path: "", redirect: () => (isPlatformAdmin() ? "/tenants" : "/dashboard") },
         { path: "dashboard", component: Dashboard, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
+        { path: "analytics", component: Analytics, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "tenants", component: Tenants, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "activities", component: Activities, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
         { path: "funnels", component: Funnels, meta: { roles: permissions.operation, scope: "tenant" } },

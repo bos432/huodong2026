@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { config } from "dotenv";
 import { DataSource } from "typeorm";
 import { ActivityCategory } from "./entities/activity-category.entity";
+import { ActivityChannel } from "./entities/activity-channel.entity";
 import { ActivityApprovalLog } from "./entities/activity-approval-log.entity";
 import { ActivityField } from "./entities/activity-field.entity";
 import { ActivityHost } from "./entities/activity-host.entity";
@@ -19,6 +20,7 @@ import { Agent } from "./entities/agent.entity";
 import { Announcement } from "./entities/announcement.entity";
 import { CheckIn } from "./entities/check-in.entity";
 import { Coupon } from "./entities/coupon.entity";
+import { ConversionEvent } from "./entities/conversion-event.entity";
 import { H5AuthCodeLog } from "./entities/h5-auth-code-log.entity";
 import { HomepageSection } from "./entities/homepage-section.entity";
 import { InviteCode } from "./entities/invite-code.entity";
@@ -67,6 +69,7 @@ export default new DataSource({
     AgentSettlement,
     AgentSettlementTransfer,
     ActivityCategory,
+    ActivityChannel,
     ActivityApprovalLog,
     Activity,
     ActivityField,
@@ -84,6 +87,7 @@ export default new DataSource({
     Refund,
     TicketType,
     Coupon,
+    ConversionEvent,
     CheckIn,
     H5AuthCodeLog,
     HomepageSection,

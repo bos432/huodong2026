@@ -402,6 +402,48 @@ export class ActivityQueryDto {
   pageSize?: number;
 }
 
+export class AnalyticsQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  activityId?: number;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+}
+
+export class ActivityChannelDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
 export class AdminQueryDto {
   @IsOptional()
   @IsString()

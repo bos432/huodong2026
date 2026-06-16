@@ -8,6 +8,7 @@ import { mkdirSync } from "fs";
 import { DataSource, In, LessThanOrEqual, MoreThan, Repository } from "typeorm";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityCategory } from "../../entities/activity-category.entity";
+import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityApprovalLog } from "../../entities/activity-approval-log.entity";
 import { ActivityField } from "../../entities/activity-field.entity";
 import { ActivityHost } from "../../entities/activity-host.entity";
@@ -25,6 +26,7 @@ import { Agent } from "../../entities/agent.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { Coupon } from "../../entities/coupon.entity";
+import { ConversionEvent } from "../../entities/conversion-event.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
@@ -51,7 +53,7 @@ import { inspectRuntimeConfig } from "../../shared/config-validation";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActor, tenantRelationForActor } from "../../shared/tenant-scope";
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
@@ -77,6 +79,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(AgentSettlementTransfer) private readonly agentSettlementTransfers: Repository<AgentSettlementTransfer>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
+    @InjectRepository(ActivityChannel) private readonly activityChannels: Repository<ActivityChannel>,
     @InjectRepository(ActivityApprovalLog) private readonly activityApprovalLogs: Repository<ActivityApprovalLog>,
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
     @InjectRepository(ActivityField) private readonly fields: Repository<ActivityField>,
@@ -93,6 +96,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(Refund) private readonly refunds: Repository<Refund>,
     @InjectRepository(TicketType) private readonly ticketTypes: Repository<TicketType>,
     @InjectRepository(Coupon) private readonly coupons: Repository<Coupon>,
+    @InjectRepository(ConversionEvent) private readonly conversionEvents: Repository<ConversionEvent>,
     @InjectRepository(H5AuthCodeLog) private readonly h5AuthCodeLogs: Repository<H5AuthCodeLog>,
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
@@ -442,6 +446,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async mobileBootstrap(admin?: AdminContext) {
     const normalizedRole = normalizeAdminRole(admin?.role);
     const canWriteActivities = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Operator;
+    const canReviewRegistrations = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Operator;
+    const canViewRegistrations = canReviewRegistrations || normalizedRole === AdminRole.Finance || normalizedRole === AdminRole.CheckInStaff;
+    const canViewOrders = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Finance;
+    const canCheckIn = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Operator || normalizedRole === AdminRole.CheckInStaff;
     const currentTenant = admin?.tenantId ? await this.tenants.findOneBy({ id: admin.tenantId }) : null;
     const [tenants, categories, agents, memberLevels, operationSetting] = await Promise.all([
       normalizedRole === AdminRole.SuperAdmin && !admin?.tenantId ? this.listTenants(admin) : Promise.resolve(currentTenant ? [this.publicTenant(currentTenant)] : []),
@@ -452,7 +460,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     ]);
     return {
       admin: { id: admin?.id || null, username: admin?.username || "", role: normalizedRole, tenantId: admin?.tenantId || null, tenant: currentTenant ? this.publicTenant(currentTenant) : null },
-      permissions: { canWriteActivities, canSelectTenant: normalizedRole === AdminRole.SuperAdmin && !admin?.tenantId },
+      permissions: { canWriteActivities, canReviewRegistrations, canViewRegistrations, canViewOrders, canCheckIn, canSelectTenant: normalizedRole === AdminRole.SuperAdmin && !admin?.tenantId },
       tenants,
       categories,
       agents,
@@ -460,6 +468,127 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       operationSetting,
       upload: { imageEndpoint: "/admin/uploads/images", maxImageSizeMb: 5, imageTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"] }
     };
+  }
+
+  async analyticsOverview(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
+    const scope = await this.analyticsScope(query, admin);
+    const builders = this.analyticsBuilders(scope, admin);
+    const [eventCounts, paidAmount, refundAmount, walletRechargeAmount, activeUserCount, tenantRanking, risk] = await Promise.all([
+      builders.events.select("event.type", "type").addSelect("COUNT(1)", "count").groupBy("event.type").getRawMany<{ type: string; count: string }>(),
+      builders.payments.select("COALESCE(SUM(transaction.amount), 0)", "sum").andWhere("transaction.status = :status", { status: "success" }).getRawOne<{ sum: string }>(),
+      builders.refunds.select("COALESCE(SUM(refund.amount), 0)", "sum").andWhere("refund.status = :status", { status: "completed" }).getRawOne<{ sum: string }>(),
+      builders.walletTx.select("COALESCE(SUM(walletTx.amount), 0)", "sum").andWhere("walletTx.direction = :direction", { direction: "credit" }).andWhere("walletTx.type = :type", { type: "admin_recharge" }).getRawOne<{ sum: string }>(),
+      builders.events.select("COUNT(DISTINCT event.userId)", "count").andWhere("event.userId IS NOT NULL").getRawOne<{ count: string }>(),
+      this.analyticsTenantRanking(scope, admin),
+      this.analyticsRisk(scope, admin)
+    ]);
+    const counts = Object.fromEntries(eventCounts.map((row) => [row.type, Number(row.count || 0)]));
+    return {
+      scope: scope.tenantId ? "tenant" : "platform",
+      range: { startDate: scope.startDate?.toISOString() || null, endDate: scope.endDate?.toISOString() || null },
+      totals: {
+        viewCount: counts.view || 0,
+        registrationCount: counts.register || 0,
+        paidCount: counts.pay || 0,
+        checkInCount: counts.check_in || 0,
+        reviewCount: counts.review || 0,
+        activeUserCount: Number(activeUserCount?.count || 0),
+        paidAmount: Number(paidAmount?.sum || 0).toFixed(2),
+        refundAmount: Number(refundAmount?.sum || 0).toFixed(2),
+        netAmount: (Number(paidAmount?.sum || 0) - Number(refundAmount?.sum || 0)).toFixed(2),
+        walletRechargeAmount: Number(walletRechargeAmount?.sum || 0).toFixed(2)
+      },
+      rates: {
+        signupRate: this.rate(counts.register || 0, counts.view || 0),
+        paymentRate: this.rate(counts.pay || 0, counts.register || 0),
+        checkInRate: this.rate(counts.check_in || 0, counts.pay || 0),
+        reviewRate: this.rate(counts.review || 0, counts.check_in || 0)
+      },
+      tenantRanking,
+      risk
+    };
+  }
+
+  async analyticsTrends(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
+    const scope = await this.analyticsScope(query, admin);
+    const eventBuilder = this.conversionEvents.createQueryBuilder("event").select("DATE(event.createdAt)", "date").addSelect("event.type", "type").addSelect("COUNT(1)", "count").groupBy("DATE(event.createdAt)").addGroupBy("event.type").orderBy("date", "ASC");
+    this.applyAnalyticsScope(eventBuilder, "event", scope, admin);
+    const amountBuilder = this.paymentTransactions.createQueryBuilder("transaction").select("DATE(transaction.createdAt)", "date").addSelect("COALESCE(SUM(transaction.amount), 0)", "amount").where("transaction.status = :status", { status: "success" }).groupBy("DATE(transaction.createdAt)").orderBy("date", "ASC");
+    this.applyAnalyticsScope(amountBuilder, "transaction", scope, admin);
+    const [events, amounts] = await Promise.all([eventBuilder.getRawMany<{ date: string; type: string; count: string }>(), amountBuilder.getRawMany<{ date: string; amount: string }>()]);
+    const byDate = new Map<string, Record<string, unknown>>();
+    for (const row of events) {
+      const item = byDate.get(row.date) || { date: row.date, view: 0, register: 0, pay: 0, check_in: 0, review: 0, paidAmount: "0.00" };
+      item[row.type] = Number(row.count || 0);
+      byDate.set(row.date, item);
+    }
+    for (const row of amounts) {
+      const item = byDate.get(row.date) || { date: row.date, view: 0, register: 0, pay: 0, check_in: 0, review: 0, paidAmount: "0.00" };
+      item.paidAmount = Number(row.amount || 0).toFixed(2);
+      byDate.set(row.date, item);
+    }
+    return Array.from(byDate.values()).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
+  }
+
+  async analyticsChannels(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
+    const scope = await this.analyticsScope(query, admin);
+    const rows = await this.channelReportBuilder(scope, admin).getRawMany<any>();
+    return rows.map((row) => this.channelReportRow(row));
+  }
+
+  async analyticsUsers(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
+    const scope = await this.analyticsScope(query, admin);
+    const [newUsers, activeUsers, repeatUsers, memberLevels, categoryPreference] = await Promise.all([
+      this.users.createQueryBuilder("user").where(scope.startDate ? "user.createdAt >= :startDate" : "1 = 1", { startDate: scope.startDate }).andWhere(scope.endDate ? "user.createdAt < :endDate" : "1 = 1", { endDate: scope.endDate }).getCount(),
+      this.conversionEvents.createQueryBuilder("event").select("COUNT(DISTINCT event.userId)", "count").where("event.userId IS NOT NULL").andWhere(scope.tenantId ? "event.tenantId = :tenantId" : "1 = 1", { tenantId: scope.tenantId }).getRawOne<{ count: string }>(),
+      this.registrations.createQueryBuilder("registration").select("COUNT(DISTINCT registration.userId)", "count").leftJoin("registration.activity", "activity").where("registration.userId IN (SELECT r.userId FROM registrations r GROUP BY r.userId HAVING COUNT(1) > 1)").andWhere(scope.tenantId ? "(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)" : "1 = 1", { tenantId: scope.tenantId }).getRawOne<{ count: string }>(),
+      this.memberProfiles.createQueryBuilder("profile").leftJoin("profile.level", "level").select("COALESCE(level.name, '普通用户')", "level").addSelect("COUNT(1)", "count").groupBy("COALESCE(level.name, '普通用户')").getRawMany<{ level: string; count: string }>(),
+      this.registrations.createQueryBuilder("registration").leftJoin("registration.activity", "activity").leftJoin("activity.category", "category").select("COALESCE(category.name, '未分类')", "category").addSelect("COUNT(1)", "count").where(scope.tenantId ? "(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)" : "1 = 1", { tenantId: scope.tenantId }).groupBy("COALESCE(category.name, '未分类')").orderBy("count", "DESC").limit(8).getRawMany<{ category: string; count: string }>()
+    ]);
+    return {
+      newUserCount: newUsers,
+      activeUserCount: Number(activeUsers?.count || 0),
+      repeatUserCount: Number(repeatUsers?.count || 0),
+      memberLevels: memberLevels.map((row) => ({ level: row.level, count: Number(row.count || 0) })),
+      categoryPreference: categoryPreference.map((row) => ({ category: row.category, count: Number(row.count || 0) }))
+    };
+  }
+
+  async listActivityChannels(activityId: number, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id: activityId });
+    if (!activity) throw new NotFoundException("活动不存在");
+    this.assertTenantAccess(activity, admin);
+    return this.activityChannels.find({ where: { activity: { id: activityId } }, order: { id: "DESC" } });
+  }
+
+  async createActivityChannel(activityId: number, dto: ActivityChannelDto, admin?: AdminContext) {
+    const activity = await this.activities.findOne({ where: { id: activityId } });
+    if (!activity) throw new NotFoundException("活动不存在");
+    this.assertTenantAccess(activity, admin);
+    const code = this.normalizeChannelCode(dto.code || `${activity.id}-${Date.now().toString(36)}`);
+    if (await this.activityChannels.findOne({ where: { code } })) throw new BadRequestException("渠道码已存在");
+    const creator = admin?.id ? await this.admins.findOneBy({ id: admin.id }) : null;
+    const saved = await this.activityChannels.save(this.activityChannels.create({
+      activity,
+      tenant: activity.tenant || null,
+      createdBy: creator,
+      name: dto.name.trim(),
+      code,
+      source: dto.source?.trim() || null,
+      remark: dto.remark?.trim() || null,
+      enabled: dto.enabled ?? true,
+      qrCodeUrl: null
+    }));
+    await this.logOperation(admin, "activity_channel.create", "activity", activity.id, `创建活动渠道：${saved.name}`, { code: saved.code });
+    return saved;
+  }
+
+  async activityChannelReport(activityId: number, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id: activityId });
+    if (!activity) throw new NotFoundException("活动不存在");
+    this.assertTenantAccess(activity, admin);
+    const rows = await this.channelReportBuilder({ activityId }, admin).getRawMany<any>();
+    return { activity: { id: activity.id, title: activity.title }, channels: rows.map((row) => this.channelReportRow(row)) };
   }
 
   configCheck(admin?: AdminContext) {
@@ -2161,6 +2290,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     registration.status = RegistrationStatus.CheckedIn;
     await this.registrations.save(registration);
     const checkIn = await this.checkIns.save(this.checkIns.create({ registration, operator: admin, remark: remark || null }));
+    await this.recordAdminConversionEvent("check_in", { activity: registration.activity, user: registration.user, registration, channel: registration.channel || null, idempotencyKey: `check_in:${checkIn.id}` });
     await this.awardPoints(registration.user, 20, "check_in", checkIn.id, "活动签到奖励");
     await this.logOperation(currentAdmin || admin, "check_in.verify", "registration", registration.id, `签到核销：${registration.activity.title}`, { code, remark: remark || null });
     return checkIn;
@@ -2664,6 +2794,161 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       operationAdvice,
       remainingSeats: Math.max(Number(activity.capacity || 0) - registeredCount, 0)
     };
+  }
+
+  private async analyticsScope(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
+    const tenantId = this.isTenantScoped(admin) ? admin?.tenantId || undefined : query.tenantId;
+    if (tenantId && !this.isTenantScoped(admin)) {
+      const tenant = await this.tenants.findOneBy({ id: tenantId });
+      if (!tenant) throw new NotFoundException("商家不存在");
+    }
+    const startDate = query.startDate ? new Date(query.startDate) : undefined;
+    const endDate = query.endDate ? new Date(query.endDate) : undefined;
+    if (startDate && Number.isNaN(startDate.getTime())) throw new BadRequestException("开始日期格式错误");
+    if (endDate && Number.isNaN(endDate.getTime())) throw new BadRequestException("结束日期格式错误");
+    return { tenantId, activityId: query.activityId, startDate, endDate };
+  }
+
+  private analyticsBuilders(scope: { tenantId?: number; activityId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
+    const events = this.conversionEvents.createQueryBuilder("event");
+    const payments = this.paymentTransactions.createQueryBuilder("transaction").leftJoin("transaction.order", "order").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity");
+    const refunds = this.refunds.createQueryBuilder("refund").leftJoin("refund.order", "order").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity");
+    const walletTx = this.walletTransactions.createQueryBuilder("walletTx");
+    this.applyAnalyticsScope(events, "event", scope, admin);
+    this.applyAnalyticsScope(payments, "transaction", scope, admin);
+    this.applyAnalyticsScope(refunds, "refund", scope, admin);
+    if (scope.tenantId) walletTx.andWhere("walletTx.tenantId = :walletTenantId", { walletTenantId: scope.tenantId });
+    if (scope.startDate) walletTx.andWhere("walletTx.createdAt >= :walletStartDate", { walletStartDate: scope.startDate });
+    if (scope.endDate) walletTx.andWhere("walletTx.createdAt < :walletEndDate", { walletEndDate: scope.endDate });
+    return { events, payments, refunds, walletTx };
+  }
+
+  private applyAnalyticsScope(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, alias: string, scope: { tenantId?: number; activityId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
+    const tenantId = this.isTenantScoped(admin) ? admin?.tenantId : scope.tenantId;
+    if (tenantId) builder.andWhere(`${alias}.tenantId = :analyticsTenantId`, { analyticsTenantId: tenantId });
+    if (scope.activityId) {
+      if (alias === "transaction" || alias === "refund") builder.andWhere("activity.id = :analyticsActivityId", { analyticsActivityId: scope.activityId });
+      else builder.andWhere(`${alias}.activityId = :analyticsActivityId`, { analyticsActivityId: scope.activityId });
+    }
+    if (scope.startDate) builder.andWhere(`${alias}.createdAt >= :analyticsStartDate`, { analyticsStartDate: scope.startDate });
+    if (scope.endDate) builder.andWhere(`${alias}.createdAt < :analyticsEndDate`, { analyticsEndDate: scope.endDate });
+  }
+
+  private channelReportBuilder(scope: { tenantId?: number; activityId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
+    const builder = this.activityChannels
+      .createQueryBuilder("channel")
+      .leftJoin("channel.activity", "activity")
+      .leftJoin("channel.tenant", "tenant")
+      .leftJoin("conversion_events", "event", "event.channelId = channel.id")
+      .select("channel.id", "id")
+      .addSelect("channel.name", "name")
+      .addSelect("channel.code", "code")
+      .addSelect("channel.source", "source")
+      .addSelect("channel.enabled", "enabled")
+      .addSelect("activity.id", "activityId")
+      .addSelect("activity.title", "activityTitle")
+      .addSelect("tenant.name", "tenantName")
+      .addSelect("SUM(CASE WHEN event.type = 'view' THEN 1 ELSE 0 END)", "viewCount")
+      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
+      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", "paidCount")
+      .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", "checkInCount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "paidAmount")
+      .groupBy("channel.id")
+      .addGroupBy("activity.id")
+      .addGroupBy("tenant.name")
+      .orderBy("paidAmount", "DESC");
+    const tenantId = this.isTenantScoped(admin) ? admin?.tenantId : scope.tenantId;
+    if (tenantId) builder.andWhere("channel.tenantId = :channelTenantId", { channelTenantId: tenantId });
+    if (scope.activityId) builder.andWhere("activity.id = :channelActivityId", { channelActivityId: scope.activityId });
+    if (scope.startDate) builder.andWhere("(event.createdAt IS NULL OR event.createdAt >= :channelStartDate)", { channelStartDate: scope.startDate });
+    if (scope.endDate) builder.andWhere("(event.createdAt IS NULL OR event.createdAt < :channelEndDate)", { channelEndDate: scope.endDate });
+    return builder;
+  }
+
+  private channelReportRow(row: any) {
+    const viewCount = Number(row.viewCount || 0);
+    const registrationCount = Number(row.registrationCount || 0);
+    const paidCount = Number(row.paidCount || 0);
+    return {
+      id: Number(row.id),
+      name: row.name,
+      code: row.code,
+      source: row.source,
+      enabled: Boolean(row.enabled),
+      activityId: Number(row.activityId),
+      activityTitle: row.activityTitle,
+      tenantName: row.tenantName,
+      viewCount,
+      registrationCount,
+      paidCount,
+      checkInCount: Number(row.checkInCount || 0),
+      paidAmount: Number(row.paidAmount || 0).toFixed(2),
+      signupRate: this.rate(registrationCount, viewCount),
+      paymentRate: this.rate(paidCount, registrationCount)
+    };
+  }
+
+  private async recordAdminConversionEvent(type: string, input: { activity?: Activity | null; user?: User | null; registration?: Registration | null; order?: Order | null; channel?: ActivityChannel | null; amount?: string | number | null; source?: string | null; idempotencyKey?: string | null }) {
+    if (input.idempotencyKey && await this.conversionEvents.findOne({ where: { idempotencyKey: input.idempotencyKey } })) return null;
+    return this.conversionEvents.save(this.conversionEvents.create({
+      type: type as any,
+      tenant: input.activity?.tenant || input.order?.tenant || input.registration?.tenant || input.channel?.tenant || null,
+      activity: input.activity || input.registration?.activity || input.order?.registration?.activity || null,
+      user: input.user || input.registration?.user || input.order?.registration?.user || null,
+      registration: input.registration || input.order?.registration || null,
+      order: input.order || null,
+      channel: input.channel || input.registration?.channel || null,
+      amount: Number(input.amount || 0).toFixed(2),
+      source: input.source || "admin",
+      idempotencyKey: input.idempotencyKey || null,
+      clientIp: null,
+      userAgent: null,
+      payload: null
+    }));
+  }
+
+  private async analyticsTenantRanking(scope: { tenantId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
+    if (this.isTenantScoped(admin) || scope.tenantId) return [];
+    const builder = this.tenants
+      .createQueryBuilder("tenant")
+      .leftJoin("activities", "activity", "activity.tenantId = tenant.id")
+      .leftJoin("conversion_events", "event", "event.tenantId = tenant.id")
+      .select("tenant.id", "tenantId")
+      .addSelect("tenant.name", "tenantName")
+      .addSelect("COUNT(DISTINCT activity.id)", "activityCount")
+      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
+      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END)", "paidAmount")
+      .groupBy("tenant.id")
+      .orderBy("paidAmount", "DESC")
+      .limit(10);
+    if (scope.startDate) builder.andWhere("(event.createdAt IS NULL OR event.createdAt >= :rankStartDate)", { rankStartDate: scope.startDate });
+    if (scope.endDate) builder.andWhere("(event.createdAt IS NULL OR event.createdAt < :rankEndDate)", { rankEndDate: scope.endDate });
+    const rows = await builder.getRawMany<any>();
+    return rows.map((row) => ({ tenantId: Number(row.tenantId), tenantName: row.tenantName, activityCount: Number(row.activityCount || 0), registrationCount: Number(row.registrationCount || 0), paidAmount: Number(row.paidAmount || 0).toFixed(2) }));
+  }
+
+  private async analyticsRisk(scope: { tenantId?: number }, admin?: AdminContext) {
+    const tenantId = this.isTenantScoped(admin) ? admin?.tenantId : scope.tenantId;
+    const pendingRefundBuilder = this.refunds.createQueryBuilder("refund").where("refund.status = :status", { status: "pending" });
+    const callbackRiskBuilder = this.paymentCallbackLogs.createQueryBuilder("callback").where("(callback.signatureValid = :invalid OR callback.resultStatus IN (:...statuses))", { invalid: false, statuses: ["failed", "error"] });
+    const reconciliationBuilder = this.paymentTransactions.createQueryBuilder("transaction").where("transaction.reconciliationStatus = :status", { status: "pending" });
+    if (tenantId) {
+      pendingRefundBuilder.andWhere("refund.tenantId = :riskTenantId", { riskTenantId: tenantId });
+      callbackRiskBuilder.andWhere("callback.tenantId = :riskTenantId", { riskTenantId: tenantId });
+      reconciliationBuilder.andWhere("transaction.tenantId = :riskTenantId", { riskTenantId: tenantId });
+    }
+    const [pendingRefundCount, callbackRiskCount, pendingReconciliationCount] = await Promise.all([pendingRefundBuilder.getCount(), callbackRiskBuilder.getCount(), reconciliationBuilder.getCount()]);
+    return { pendingRefundCount, callbackRiskCount, pendingReconciliationCount };
+  }
+
+  private rate(numerator: number, denominator: number) {
+    return denominator > 0 ? Math.round((numerator / denominator) * 1000) / 10 : 0;
+  }
+
+  private normalizeChannelCode(value: string) {
+    const code = String(value || "").trim().replace(/[^\w-]/g, "").slice(0, 48);
+    if (code.length < 2) throw new BadRequestException("渠道码至少需要 2 位字母、数字、下划线或连字符");
+    return code;
   }
 
   private dashboardActivityAdvice(input: { registeredCount: number; netAmount: number; checkInRate: number; registrationConversionRate: number }) {
