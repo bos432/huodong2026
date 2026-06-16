@@ -2545,8 +2545,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private validateAdminPassword(password: string) {
-    if (!password || password.length < 10) throw new BadRequestException("Admin password must be at least 10 characters");
-    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) throw new BadRequestException("管理员密码需要包含大小写字母和数");
+    if (!password || password.length < 8) throw new BadRequestException("管理员密码至少需要 8 位");
+    if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) throw new BadRequestException("管理员密码需要包含大小写字母和数字");
   }
 
   private publicAdmin(admin: AdminUser) {

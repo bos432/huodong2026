@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Key, Plus, Refresh, Search, Switch } from "@element-plus/icons-vue";
+import { Key, Plus, Refresh, Search, Switch, UserFilled } from "@element-plus/icons-vue";
 import { useRoute } from "vue-router";
 import { api } from "../api";
 import { AdminRole, isPlatformAdmin, roleOptions } from "../permissions";
@@ -29,8 +29,11 @@ type PageResult<T> = {
 
 const rows = ref<AdminRow[]>([]);
 const tenants = ref<TenantRow[]>([]);
+const memberRows = ref<any[]>([]);
 const loading = ref(false);
 const saving = ref(false);
+const memberLoading = ref(false);
+const memberDialog = ref(false);
 const total = ref(0);
 const hasDefaultAdmin = ref(false);
 const route = useRoute();
@@ -39,6 +42,7 @@ const visibleRoleOptions = computed(() => (isPlatformAdmin() ? roleOptions : rol
 const defaultCreateRole = computed(() => (isPlatformAdmin() ? AdminRole.SuperAdmin : AdminRole.Operator));
 const form = reactive({ username: "", password: "", role: defaultCreateRole.value, tenantId: undefined as number | undefined });
 const filters = reactive({ keyword: "", role: "", enabled: "", tenantId: undefined as number | undefined, includeSmoke: false, page: 1, pageSize: 20 });
+const memberKeyword = ref("");
 const selectedTenant = computed(() => tenants.value.find((tenant) => tenant.id === form.tenantId));
 const accountScopePreview = computed(() => {
   if (!isPlatformAdmin()) return "本商家员工账号";
@@ -95,7 +99,7 @@ function applyTenantFromRoute() {
 }
 
 function validatePassword(password: string) {
-  if (password.length < 10) return "密码至少需要 10 位";
+  if (password.length < 8) return "密码至少需要 8 位";
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) return "密码需要包含大小写字母和数字";
   return "";
 }
@@ -127,10 +131,32 @@ async function submit() {
   }
 }
 
+async function openMemberDialog() {
+  memberDialog.value = true;
+  await searchMembers();
+}
+
+async function searchMembers() {
+  memberLoading.value = true;
+  try {
+    memberRows.value = await api.get<any, any[]>("/admin/members", { params: { keyword: memberKeyword.value.trim() || undefined } });
+  } finally {
+    memberLoading.value = false;
+  }
+}
+
+function useMember(row: any) {
+  const phone = row?.user?.phone || "";
+  if (!phone) return ElMessage.warning("该会员没有手机号，不能作为登录账号");
+  form.username = phone;
+  memberDialog.value = false;
+  ElMessage.success("已带入会员手机号，可继续选择角色并设置密码");
+}
+
 async function resetPassword(row: AdminRow) {
   const { value } = await ElMessageBox.prompt(`为 ${row.username} 设置新密码`, "重置密码", {
     inputType: "password",
-    inputPlaceholder: "至少 10 位，包含大小写字母和数字",
+    inputPlaceholder: "至少 8 位，包含大小写字母和数字",
     confirmButtonText: "确认重置",
     cancelButtonText: "取消"
   });
@@ -192,15 +218,11 @@ onMounted(() => {
     <div class="table-card create-card">
       <el-form inline>
         <el-form-item label="账号" required><el-input v-model="form.username" maxlength="40" /></el-form-item>
+        <el-button :icon="UserFilled" @click="openMemberDialog">从会员选择</el-button>
         <el-form-item label="密码" required><el-input v-model="form.password" type="password" show-password maxlength="80" /></el-form-item>
         <el-form-item label="角色" required>
           <el-select v-model="form.role" class="role-select">
-            <el-option v-for="role in visibleRoleOptions" :key="role.value" :label="role.label" :value="role.value">
-              <div class="role-option">
-                <strong>{{ role.label }}</strong>
-                <span>{{ role.description }}</span>
-              </div>
-            </el-option>
+            <el-option v-for="role in visibleRoleOptions" :key="role.value" :label="role.label" :value="role.value" />
           </el-select>
         </el-form-item>
         <el-form-item v-if="isPlatformAdmin()" label="所属商家">
@@ -220,6 +242,32 @@ onMounted(() => {
         <span v-for="role in visibleRoleOptions" :key="role.value"><strong>{{ role.label }}</strong>：{{ role.description }}</span>
       </div>
     </div>
+
+    <el-dialog v-model="memberDialog" width="760px" title="从会员选择账号">
+      <el-form inline class="filters">
+        <el-form-item label="会员">
+          <el-input v-model="memberKeyword" clearable placeholder="手机号/昵称" style="width: 240px" @keyup.enter="searchMembers" @clear="searchMembers" />
+        </el-form-item>
+        <el-button type="primary" :icon="Search" @click="searchMembers">搜索</el-button>
+      </el-form>
+      <el-table :data="memberRows" stripe v-loading="memberLoading" empty-text="暂无会员">
+        <el-table-column label="会员" min-width="180">
+          <template #default="{ row }">{{ row.user.nickname || row.user.phone || `用户${row.user.id}` }}</template>
+        </el-table-column>
+        <el-table-column label="手机号" width="150">
+          <template #default="{ row }">{{ row.user.phone || "-" }}</template>
+        </el-table-column>
+        <el-table-column label="等级" width="130">
+          <template #default="{ row }">{{ row.level?.name || "普通会员" }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="110">
+          <template #default="{ row }"><el-button size="small" type="primary" @click="useMember(row)">选择</el-button></template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="memberDialog=false">关闭</el-button>
+      </template>
+    </el-dialog>
 
     <div class="table-card">
       <el-form class="filters" inline>
@@ -307,11 +355,10 @@ onMounted(() => {
 .default-tag { margin-left: 8px; }
 .role-select { width: 180px; }
 .tenant-select { width: 220px; }
-.role-option { display: grid; gap: 2px; line-height: 1.3; padding: 4px 0; }
 .tenant-option, .account-scope { display: flex; align-items: center; gap: 8px; }
 .tenant-option { justify-content: space-between; }
 .scope-alert { margin-top: 10px; }
-.role-option span, .role-help { color: #64748b; font-size: 12px; }
+.role-help { color: #64748b; font-size: 12px; }
 .role-help { display: grid; gap: 6px; margin-top: 10px; line-height: 1.5; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; }
 </style>
