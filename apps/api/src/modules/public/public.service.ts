@@ -474,13 +474,17 @@ export class PublicService {
   }
 
   private findPublicActivity(id: number, options?: { status?: ActivityStatus; withFields?: boolean }) {
-    const relations = ["tenant", "category", "agent", "minMemberLevel", "priorityMemberLevel"];
-    if (options?.withFields) relations.push("fields");
-    return this.activities.findOne({
-      where: options?.status ? { id, status: options.status } : { id },
-      relations,
-      loadEagerRelations: false
-    });
+    const builder = this.activities
+      .createQueryBuilder("activity")
+      .leftJoinAndSelect("activity.tenant", "tenant")
+      .leftJoinAndSelect("activity.category", "category")
+      .leftJoinAndSelect("activity.agent", "agent")
+      .leftJoinAndSelect("activity.minMemberLevel", "minMemberLevel")
+      .leftJoinAndSelect("activity.priorityMemberLevel", "priorityMemberLevel")
+      .where("activity.id = :id", { id });
+    if (options?.status) builder.andWhere("activity.status = :status", { status: options.status });
+    if (options?.withFields) builder.leftJoinAndSelect("activity.fields", "fields").addOrderBy("fields.sortOrder", "ASC").addOrderBy("fields.id", "ASC");
+    return builder.getOne();
   }
 
   async activityDetail(id: number, userId?: number, context?: PublicTenantContext, tracking?: PublicTrackingContext) {
@@ -1216,7 +1220,7 @@ export class PublicService {
     const day = new Date().toISOString().slice(0, 10);
     const channelKey = channel?.id || "none";
     const idempotencyKey = `view:${activity.id}:${visitorKey}:${day}:${channelKey}`;
-    const exists = await this.conversionEvents.findOne({ where: { idempotencyKey } });
+    const exists = await this.conversionEventExists(idempotencyKey);
     if (exists) return;
     await this.activityViewLogs.save(this.activityViewLogs.create({ activity, user, channel, source }));
     await this.recordConversionEvent("view", {
@@ -1234,16 +1238,26 @@ export class PublicService {
   private async resolveActivityChannel(activity: Activity, channelCode?: string | null, source?: string | null) {
     const code = this.cleanTrackingText(channelCode, 48);
     if (code) {
-      const channel = await this.activityChannels.findOne({ where: { code, activity: { id: activity.id }, enabled: true } });
+      const channel = await this.activityChannels
+        .createQueryBuilder("channel")
+        .where("channel.activityId = :activityId", { activityId: activity.id })
+        .andWhere("channel.code = :code", { code })
+        .andWhere("channel.enabled = :enabled", { enabled: true })
+        .getOne();
       if (channel) return channel;
     }
     const sourceText = this.cleanTrackingText(source, 80);
     if (!sourceText) return null;
-    return this.activityChannels.findOne({ where: { activity: { id: activity.id }, source: sourceText, enabled: true } });
+    return this.activityChannels
+      .createQueryBuilder("channel")
+      .where("channel.activityId = :activityId", { activityId: activity.id })
+      .andWhere("channel.source = :source", { source: sourceText })
+      .andWhere("channel.enabled = :enabled", { enabled: true })
+      .getOne();
   }
 
   private async recordConversionEvent(type: ConversionEventType, input: { activity?: Activity | null; user?: User | null; registration?: Registration | null; order?: Order | null; channel?: ActivityChannel | null; amount?: string | number | null; source?: string | null; idempotencyKey?: string | null; clientIp?: string | null; userAgent?: string | null; payload?: Record<string, unknown> | null }) {
-    if (input.idempotencyKey && await this.conversionEvents.findOne({ where: { idempotencyKey: input.idempotencyKey } })) return null;
+    if (input.idempotencyKey && await this.conversionEventExists(input.idempotencyKey)) return null;
     return this.conversionEvents.save(this.conversionEvents.create({
       type,
       tenant: input.activity?.tenant || input.order?.tenant || input.registration?.tenant || input.channel?.tenant || null,
@@ -1259,6 +1273,11 @@ export class PublicService {
       userAgent: this.cleanTrackingText(input.userAgent, 255) || null,
       payload: input.payload || null
     }));
+  }
+
+  private async conversionEventExists(idempotencyKey: string) {
+    const count = await this.conversionEvents.createQueryBuilder("event").where("event.idempotencyKey = :idempotencyKey", { idempotencyKey }).getCount();
+    return count > 0;
   }
 
   private cleanTrackingText(value: unknown, max = 80) {
