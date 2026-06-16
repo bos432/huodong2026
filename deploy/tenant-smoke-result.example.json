@@ -1,0 +1,34 @@
+{
+  "passed": false,
+  "checkedAt": "2026-06-10T00:00:00.000Z",
+  "runId": 0,
+  "apiBase": "https://api.example.com/api",
+  "tenantA": {
+    "code": "tenant-a"
+  },
+  "tenantB": {
+    "code": "tenant-b"
+  },
+  "checks": {
+    "operationContent": {
+      "status": "pending",
+      "note": "Tenant A/B homepage sections, announcements and operation settings are isolated."
+    },
+    "activityBoundary": {
+      "status": "pending",
+      "note": "Tenant A/B admin and public activity lists, details and writes are isolated."
+    },
+    "exportBoundary": {
+      "status": "pending",
+      "note": "Tenant A/B registration exports do not include the other tenant's activity or registration data."
+    },
+    "paymentBoundary": {
+      "status": "pending",
+      "note": "Tenant B cannot pay Tenant A orders, and sandbox callback ownership stays bound to the order tenant."
+    },
+    "settlementBoundary": {
+      "status": "pending",
+      "note": "Tenant A/B agent settlement lists, details and exports are isolated."
+    }
+  }
+}

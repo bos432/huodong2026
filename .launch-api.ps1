@@ -1,0 +1,10 @@
+$env:DB_HOST="127.0.0.1"
+$env:DB_PORT="3307"
+$env:DB_USERNAME="activity"
+$env:DB_PASSWORD="activitypass"
+$env:DB_DATABASE="activity_registration"
+$env:DB_SYNCHRONIZE="true"
+$env:API_PORT="3000"
+$env:NODE_ENV="development"
+$p=Start-Process -FilePath "C:\Program Files\nodejs\node.exe" -ArgumentList "dist\main.js" -WorkingDirectory "D:\2026\活动报名\apps\api" -WindowStyle Hidden -PassThru
+"API PID: $($p.Id)"

@@ -1,0 +1,36 @@
+{
+  "name": "activity-registration-platform",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "install:all": "npm install --prefix packages/shared && npm install --prefix apps/api && npm install --prefix apps/admin && npm install --prefix apps/mobile --legacy-peer-deps",
+    "dev:api": "npm --prefix apps/api run start:dev",
+    "dev:admin": "npm --prefix apps/admin run dev",
+    "dev:mobile:h5": "npm --prefix apps/mobile run dev:h5",
+    "doctor": "node scripts/doctor.mjs",
+    "preflight": "npm run test:preflight-guards && node scripts/preflight.mjs",
+    "test:preflight-guards": "node scripts/preflight-chain-guard.mjs && node scripts/preflight-real-payment-guard.mjs && node scripts/preflight-tenant-guard.mjs && node scripts/preflight-saas-tenant-guard.mjs && node scripts/preflight-notification-guard.mjs && node scripts/preflight-release-metadata-guard.mjs && node scripts/preflight-origin-guard.mjs && node scripts/preflight-order-worker-guard.mjs && node scripts/preflight-security-guard.mjs && node scripts/preflight-backup-guard.mjs && node scripts/preflight-auth-rate-limit-guard.mjs && node scripts/preflight-migration-guard.mjs && node scripts/preflight-rollout-flags-guard.mjs && node scripts/preflight-result-file-guard.mjs && node scripts/preflight-env-sync-guard.mjs && node scripts/preflight-compose-env-guard.mjs && node scripts/preflight-nginx-guard.mjs && node scripts/preflight-health-guard.mjs && node scripts/preflight-monitoring-guard.mjs && node scripts/preflight-rollback-guard.mjs && node scripts/preflight-ops-routine-guard.mjs && node scripts/preflight-build-artifact-guard.mjs && node scripts/preflight-smoke-guard.mjs && node scripts/preflight-admin-account-guard.mjs && node scripts/preflight-admin-role-guard.mjs && node scripts/preflight-operation-audit-guard.mjs && node scripts/preflight-export-guard.mjs && node scripts/preflight-upload-guard.mjs && node scripts/preflight-operation-setting-guard.mjs && node scripts/preflight-finance-reconciliation-guard.mjs && node scripts/preflight-agent-settlement-transfer-guard.mjs",
+    "init:production-env": "node scripts/init-production-env.mjs",
+    "db:backup": "node scripts/db-backup.mjs",
+    "db:restore": "node scripts/db-restore.mjs",
+    "db:prune-backups": "node scripts/db-prune-backups.mjs",
+    "admins:disable-smoke": "node scripts/disable-smoke-admins.mjs",
+    "smoke": "node scripts/smoke.mjs",
+    "smoke:flow": "node scripts/smoke-flow.mjs",
+    "smoke:tenant:seed": "node scripts/tenant-smoke-seed.mjs",
+    "seed:qiwai-demo": "node scripts/seed-qiwai-demo.mjs",
+    "smoke:qiwai-demo": "node scripts/qiwai-demo-smoke.mjs",
+    "report:qiwai-demo": "node scripts/qiwai-demo-report.mjs",
+    "smoke:tenant": "node scripts/tenant-smoke.mjs",
+    "smoke:real-payment": "node scripts/real-payment-smoke-result.mjs",
+    "build": "npm run build:shared && npm run build:api && npm run build:admin && npm run build:mobile:h5",
+    "build:shared": "npm --prefix packages/shared run build",
+    "build:api": "npm --prefix apps/api run build",
+    "build:admin": "npm --prefix apps/admin run build",
+    "build:mobile:h5": "npm --prefix apps/mobile run build:h5",
+    "test": "npm --prefix apps/api run test"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  }
+}

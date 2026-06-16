@@ -1,0 +1,37 @@
+.uni-body,
+html,
+body,
+#app,
+uni-app,
+uni-page,
+uni-page-wrapper,
+uni-page-body {
+  width: 100%;
+  min-height: 100%;
+  margin: 0;
+}
+
+html,
+body {
+  overflow-x: hidden;
+  background: var(--page-bg, #f5f7fb);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+.container { min-height: 100vh; padding: 24rpx; background: var(--page-bg-layer, #f5f7fb); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #172033); }
+.card { background: var(--card-bg, #fff); border: 1px solid #e5e7eb; border-radius: var(--card-radius, 8px); padding: 24rpx; margin-bottom: 20rpx; }
+.row { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
+.title { font-size: 34rpx; font-weight: 700; }
+.subtle { color: var(--muted-color, #667085); font-size: 26rpx; }
+.button { height: 84rpx; border-radius: 6px; background: var(--primary-color, #0f766e); color: #fff; display: flex; align-items: center; justify-content: center; }
+.button.secondary { background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); }
+.tag { display: inline-flex; padding: 6rpx 14rpx; border-radius: 999px; color: var(--primary-color, #0f766e); background: var(--primary-soft, #e6f2ef); font-size: 24rpx; }
+.input { height: 78rpx; border: 1px solid #d7dde8; border-radius: 6px; padding: 0 20rpx; background: var(--card-bg, #fff); color: var(--text-color, #172033); }
+.textarea { min-height: 140rpx; border: 1px solid #d7dde8; border-radius: 6px; padding: 18rpx 20rpx; background: var(--card-bg, #fff); color: var(--text-color, #172033); }
+.custom-tabbar { position: fixed; left: 18rpx; right: 18rpx; bottom: 18rpx; z-index: 20; display: grid; grid-template-columns: repeat(var(--nav-count, 3), 1fr); gap: 8rpx; min-height: 98rpx; padding: 10rpx 12rpx calc(10rpx + env(safe-area-inset-bottom)); border-radius: 8px; box-shadow: 0 -10rpx 34rpx rgba(15, 23, 42, 0.12); }
+.custom-tabbar-item { display: grid; gap: 4rpx; justify-items: center; align-content: center; min-width: 0; font-size: 22rpx; font-weight: 800; }
+.custom-tabbar-icon { width: 42rpx; height: 42rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 20rpx; font-weight: 900; }
+.custom-tabbar-item.active { font-weight: 900; }

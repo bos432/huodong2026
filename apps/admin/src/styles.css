@@ -1,0 +1,8 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, "Microsoft YaHei", Arial, sans-serif; color: #1f2937; background: #f5f7fb; }
+.page { padding: 20px; }
+.toolbar { display: flex; gap: 12px; align-items: center; justify-content: space-between; margin-bottom: 16px; }
+.table-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+.form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 20px; }
+.full { grid-column: 1 / -1; }
+.status-tag { min-width: 72px; text-align: center; }

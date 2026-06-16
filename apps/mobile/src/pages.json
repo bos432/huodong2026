@@ -1,0 +1,20 @@
+{
+  "pages": [
+    { "path": "pages/index/index", "style": { "navigationBarTitleText": "活动报名" } },
+    { "path": "pages/activity/list", "style": { "navigationBarTitleText": "活动列表" } },
+    { "path": "pages/activity/detail", "style": { "navigationBarTitleText": "活动详情" } },
+    { "path": "pages/activity/register", "style": { "navigationBarTitleText": "报名" } },
+    { "path": "pages/announcement/list", "style": { "navigationBarTitleText": "公告中心" } },
+    { "path": "pages/service/index", "style": { "navigationBarTitleText": "服务中心" } },
+    { "path": "pages/partner/index", "style": { "navigationBarTitleText": "城市合伙人" } },
+    { "path": "pages/admin/login", "style": { "navigationBarTitleText": "管理登录" } },
+    { "path": "pages/admin/home", "style": { "navigationBarTitleText": "手机管理" } },
+    { "path": "pages/admin/activity/list", "style": { "navigationBarTitleText": "活动管理" } },
+    { "path": "pages/admin/activity/edit", "style": { "navigationBarTitleText": "发布活动" } },
+    { "path": "pages/admin/activity/preview", "style": { "navigationBarTitleText": "活动预览" } },
+    { "path": "pages/user/my", "style": { "navigationBarTitleText": "我的活动" } },
+    { "path": "pages/user/login", "style": { "navigationBarTitleText": "手机号登录" } },
+    { "path": "pages/user/registration", "style": { "navigationBarTitleText": "报名详情" } },
+    { "path": "pages/user/review", "style": { "navigationBarTitleText": "活动评价" } }
+  ]
+}

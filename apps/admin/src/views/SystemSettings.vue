@@ -1,0 +1,1246 @@
+﻿<script setup lang="ts">
+import { computed, onMounted, reactive, ref } from "vue";
+import { useRouter } from "vue-router";
+import { ElMessage } from "element-plus";
+import { UploadFilled } from "@element-plus/icons-vue";
+import { api } from "../api";
+import { isPlatformAdmin } from "../permissions";
+
+type CheckStatus = "ok" | "warning" | "error";
+
+type ConfigCheck = {
+  key: string;
+  label: string;
+  status: CheckStatus;
+  message: string;
+  value?: string;
+};
+
+type ConfigInspection = {
+  status: CheckStatus;
+  environment: string;
+  checkedAt: string;
+  release?: {
+    version: string;
+    commit: string;
+    buildTime: string;
+  };
+  summary: {
+    okCount: number;
+    warningCount: number;
+    errorCount: number;
+  };
+  checks: ConfigCheck[];
+};
+
+type NotificationReadiness = {
+  key: string;
+  label: string;
+  enabled: boolean;
+  status: "disabled" | "ready" | "missing";
+  statusText: string;
+  description: string;
+  missing: string[];
+};
+
+type DomainReadiness = {
+  key: string;
+  label: string;
+  envKey: string;
+  value: string;
+  status: "ready" | "invalid";
+  statusText: string;
+  issues: string[];
+};
+
+type ReleaseReadiness = {
+  key: string;
+  label: string;
+  envKey: string;
+  value: string;
+  status: "ready" | "invalid";
+  statusText: string;
+  issues: string[];
+};
+
+type SecurityReadiness = {
+  key: string;
+  label: string;
+  envKey: string;
+  status: "ready" | "invalid";
+  statusText: string;
+  detail: string;
+};
+
+type RolloutReadiness = {
+  key: string;
+  label: string;
+  status: "disabled" | "ready" | "missing";
+  statusText: string;
+  description: string;
+  missing: string[];
+};
+
+const defaultPageTheme = {
+  backgroundColor: "#f4f6f8",
+  backgroundImage: "",
+  backgroundOverlayColor: "#f4f6f8",
+  backgroundOverlayOpacity: 0,
+  cardBackgroundColor: "#ffffff",
+  cardOpacity: 96,
+  cardRadius: 8,
+  textColor: "#111827",
+  mutedColor: "#667085",
+  primaryColor: "#0f766e"
+};
+
+const router = useRouter();
+const activeTab = ref("operation");
+const canManagePlatformSettings = computed(() => isPlatformAdmin());
+const loadingOperation = ref(false);
+const savingOperation = ref(false);
+const loadingConfig = ref(false);
+const report = ref<ConfigInspection | null>(null);
+
+const form = reactive({
+  registrationEnabled: true,
+  registrationDisabledMessage: "",
+  offlinePaymentInstructions: "",
+  customerServiceName: "",
+  customerServicePhone: "",
+  customerServiceWechat: "",
+  defaultGroupQrCodeUrl: "",
+  pageTheme: { ...defaultPageTheme },
+  refundInstructions: "",
+  invoiceInstructions: "",
+  smsProviderEnabled: false,
+  smsProvider: "tencent-cloud-sms",
+  smsAccessKeyId: "",
+  smsAccessKeySecret: "",
+  smsSignName: "",
+  smsTemplateId: ""
+});
+
+const deployment = reactive({
+  appVersion: "0.1.0",
+  buildCommit: "",
+  h5Origin: "https://h5.example.com",
+  adminOrigin: "https://admin.example.com",
+  apiOrigin: "https://api.example.com",
+  mysqlDatabase: "activity_registration",
+  mysqlUser: "activity",
+  mysqlPassword: "",
+  mysqlRootPassword: "",
+  jwtSecret: "",
+  h5AuthSecret: "",
+  dbSynchronize: false,
+  trustProxy: true,
+  securityHeadersEnabled: true,
+  securityHstsEnabled: true,
+  validationForbidNonWhitelisted: true,
+  accessLogEnabled: true,
+  accessLogSkipHealth: true,
+  uploadDir: "uploads",
+  backupDir: "backups/mysql",
+  backupRetentionDays: 30,
+  h5AuthMode: "sms",
+  smsEnabled: true,
+  smsProvider: "tencent-cloud-sms",
+  smsAccessKeyId: "",
+  smsAccessKeySecret: "",
+  smsSignName: "",
+  smsTemplateId: "",
+  emailEnabled: false,
+  emailProvider: "smtp",
+  smtpHost: "",
+  smtpPort: 465,
+  smtpUser: "",
+  smtpPassword: "",
+  smtpFrom: "",
+  wechatMessageEnabled: false,
+  wechatMessageProvider: "wechat-subscribe-message",
+  wechatAppId: "",
+  wechatAppSecret: "",
+  paymentSandboxEnabled: false,
+  paymentSandboxSecret: "",
+  wechatPaySandboxSecret: "",
+  alipayPaySandboxSecret: "",
+  realPaymentEnabled: false,
+  realPaymentSdkImplemented: false,
+  realPaymentCallbackVerificationImplemented: false,
+  realRefundQueryImplemented: false,
+  realPaymentStatementFetchImplemented: false,
+  agentRealTransferImplemented: false,
+  realPaymentPreflightPassed: false,
+  realPaymentPreflightResultFile: "deploy/real-payment-smoke-result.json",
+  realPaymentPreflightMaxAgeHours: 168,
+  multiTenantEnabled: false,
+  multiTenantSchemaImplemented: false,
+  multiTenantAccessFilterImplemented: false,
+  multiTenantPublicBoundaryImplemented: false,
+  multiTenantPreflightPassed: false,
+  multiTenantPreflightResultFile: "deploy/tenant-smoke-result.json",
+  multiTenantPreflightMaxAgeHours: 168,
+  wechatPayEnabled: false,
+  wechatPayAppId: "",
+  wechatPayMchId: "",
+  wechatPayApiV3Key: "",
+  wechatPayPrivateKeyPath: "",
+  wechatPayCertSerialNo: "",
+  wechatPayPlatformCertPath: "",
+  wechatPayNotifyUrl: "",
+  alipayEnabled: false,
+  alipayAppId: "",
+  alipayPrivateKeyPath: "",
+  alipayPublicCertPath: "",
+  alipayRootCertPath: "",
+  alipayNotifyUrl: "",
+  offlinePaymentExpireMinutes: 1440,
+  orderCloseWorkerEnabled: true,
+  orderCloseWorkerIntervalSeconds: 300
+});
+
+const statusText: Record<CheckStatus, string> = {
+  ok: "正常",
+  warning: "待确认",
+  error: "需修复"
+};
+
+const tagType: Record<CheckStatus, "success" | "warning" | "danger"> = {
+  ok: "success",
+  warning: "warning",
+  error: "danger"
+};
+
+const generatedEnv = computed(() => {
+  const corsOrigin = [deployment.h5Origin, deployment.adminOrigin].filter(Boolean).join(",");
+  const buildTime = new Date().toISOString();
+  return [
+    "# Generated by system settings. Copy to deploy/.env.production before production deployment.",
+    envLine("MYSQL_ROOT_PASSWORD", deployment.mysqlRootPassword),
+    envLine("MYSQL_DATABASE", deployment.mysqlDatabase),
+    envLine("MYSQL_USER", deployment.mysqlUser),
+    envLine("MYSQL_PASSWORD", deployment.mysqlPassword),
+    "",
+    envLine("NODE_ENV", "production"),
+    envLine("APP_VERSION", deployment.appVersion),
+    envLine("BUILD_COMMIT", deployment.buildCommit),
+    envLine("BUILD_TIME", buildTime),
+    envLine("API_PORT", 3000),
+    envLine("DB_HOST", "mysql"),
+    envLine("DB_PORT", 3306),
+    envLine("DB_USERNAME", deployment.mysqlUser),
+    envLine("DB_PASSWORD", deployment.mysqlPassword),
+    envLine("DB_DATABASE", deployment.mysqlDatabase),
+    envLine("DB_SYNCHRONIZE", boolValue(deployment.dbSynchronize)),
+    envLine("JWT_SECRET", deployment.jwtSecret),
+    envLine("H5_AUTH_SECRET", deployment.h5AuthSecret),
+    envLine("CORS_ORIGIN", corsOrigin),
+    envLine("TRUST_PROXY", boolValue(deployment.trustProxy)),
+    envLine("SECURITY_HEADERS_ENABLED", boolValue(deployment.securityHeadersEnabled)),
+    envLine("SECURITY_HSTS_ENABLED", boolValue(deployment.securityHstsEnabled)),
+    envLine("VALIDATION_FORBID_NON_WHITELISTED", boolValue(deployment.validationForbidNonWhitelisted)),
+    envLine("ACCESS_LOG_ENABLED", boolValue(deployment.accessLogEnabled)),
+    envLine("ACCESS_LOG_SKIP_HEALTH", boolValue(deployment.accessLogSkipHealth)),
+    envLine("PUBLIC_H5_ORIGIN", deployment.h5Origin),
+    envLine("PUBLIC_ADMIN_ORIGIN", deployment.adminOrigin),
+    envLine("PUBLIC_API_ORIGIN", deployment.apiOrigin),
+    envLine("UPLOAD_DIR", deployment.uploadDir),
+    envLine("H5_AUTH_MODE", deployment.h5AuthMode),
+    envLine("EMAIL_PROVIDER_ENABLED", boolValue(deployment.emailEnabled)),
+    envLine("EMAIL_PROVIDER", deployment.emailProvider),
+    envLine("SMTP_HOST", deployment.smtpHost),
+    envLine("SMTP_PORT", deployment.smtpPort),
+    envLine("SMTP_USER", deployment.smtpUser),
+    envLine("SMTP_PASSWORD", deployment.smtpPassword),
+    envLine("SMTP_FROM", deployment.smtpFrom),
+    envLine("WECHAT_MESSAGE_PROVIDER_ENABLED", boolValue(deployment.wechatMessageEnabled)),
+    envLine("WECHAT_MESSAGE_PROVIDER", deployment.wechatMessageProvider),
+    envLine("WECHAT_APP_ID", deployment.wechatAppId),
+    envLine("WECHAT_APP_SECRET", deployment.wechatAppSecret),
+    envLine("PAYMENT_SANDBOX_ENABLED", boolValue(deployment.paymentSandboxEnabled)),
+    envLine("PAYMENT_SANDBOX_SECRET", deployment.paymentSandboxSecret),
+    envLine("WECHAT_PAY_SANDBOX_SECRET", deployment.wechatPaySandboxSecret),
+    envLine("ALIPAY_PAY_SANDBOX_SECRET", deployment.alipayPaySandboxSecret),
+    envLine("REAL_PAYMENT_ENABLED", boolValue(deployment.realPaymentEnabled)),
+    envLine("REAL_PAYMENT_SDK_IMPLEMENTED", boolValue(deployment.realPaymentSdkImplemented)),
+    envLine("REAL_PAYMENT_CALLBACK_VERIFICATION_IMPLEMENTED", boolValue(deployment.realPaymentCallbackVerificationImplemented)),
+    envLine("REAL_REFUND_QUERY_IMPLEMENTED", boolValue(deployment.realRefundQueryImplemented)),
+    envLine("REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED", boolValue(deployment.realPaymentStatementFetchImplemented)),
+    envLine("AGENT_REAL_TRANSFER_IMPLEMENTED", boolValue(deployment.agentRealTransferImplemented)),
+    envLine("REAL_PAYMENT_PREFLIGHT_PASSED", boolValue(deployment.realPaymentPreflightPassed)),
+    envLine("REAL_PAYMENT_PREFLIGHT_RESULT_FILE", deployment.realPaymentPreflightResultFile),
+    envLine("REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS", deployment.realPaymentPreflightMaxAgeHours),
+    envLine("MULTI_TENANT_ENABLED", boolValue(deployment.multiTenantEnabled)),
+    envLine("MULTI_TENANT_SCHEMA_IMPLEMENTED", boolValue(deployment.multiTenantSchemaImplemented)),
+    envLine("MULTI_TENANT_ACCESS_FILTER_IMPLEMENTED", boolValue(deployment.multiTenantAccessFilterImplemented)),
+    envLine("MULTI_TENANT_PUBLIC_BOUNDARY_IMPLEMENTED", boolValue(deployment.multiTenantPublicBoundaryImplemented)),
+    envLine("MULTI_TENANT_PREFLIGHT_PASSED", boolValue(deployment.multiTenantPreflightPassed)),
+    envLine("MULTI_TENANT_PREFLIGHT_RESULT_FILE", deployment.multiTenantPreflightResultFile),
+    envLine("MULTI_TENANT_PREFLIGHT_MAX_AGE_HOURS", deployment.multiTenantPreflightMaxAgeHours),
+    envLine("WECHAT_PAY_ENABLED", boolValue(deployment.wechatPayEnabled)),
+    envLine("WECHAT_PAY_APP_ID", deployment.wechatPayAppId),
+    envLine("WECHAT_PAY_MCH_ID", deployment.wechatPayMchId),
+    envLine("WECHAT_PAY_API_V3_KEY", deployment.wechatPayApiV3Key),
+    envLine("WECHAT_PAY_PRIVATE_KEY_PATH", deployment.wechatPayPrivateKeyPath),
+    envLine("WECHAT_PAY_CERT_SERIAL_NO", deployment.wechatPayCertSerialNo),
+    envLine("WECHAT_PAY_PLATFORM_CERT_PATH", deployment.wechatPayPlatformCertPath),
+    envLine("WECHAT_PAY_NOTIFY_URL", deployment.wechatPayNotifyUrl),
+    envLine("ALIPAY_ENABLED", boolValue(deployment.alipayEnabled)),
+    envLine("ALIPAY_APP_ID", deployment.alipayAppId),
+    envLine("ALIPAY_PRIVATE_KEY_PATH", deployment.alipayPrivateKeyPath),
+    envLine("ALIPAY_PUBLIC_CERT_PATH", deployment.alipayPublicCertPath),
+    envLine("ALIPAY_ROOT_CERT_PATH", deployment.alipayRootCertPath),
+    envLine("ALIPAY_NOTIFY_URL", deployment.alipayNotifyUrl),
+    envLine("OFFLINE_PAYMENT_EXPIRE_MINUTES", deployment.offlinePaymentExpireMinutes),
+    envLine("ORDER_CLOSE_WORKER_ENABLED", boolValue(deployment.orderCloseWorkerEnabled)),
+    envLine("ORDER_CLOSE_WORKER_INTERVAL_SECONDS", deployment.orderCloseWorkerIntervalSeconds),
+    envLine("BACKUP_DIR", deployment.backupDir),
+    envLine("BACKUP_RETENTION_DAYS", deployment.backupRetentionDays),
+    envLine("BACKUP_USE_DOCKER", "true"),
+    envLine("MYSQL_CONTAINER", "activity-mysql")
+  ].join("\n");
+});
+
+const configGroups = computed(() => {
+  const rows = report.value?.checks || [];
+  const groups = [
+    { title: "生产安全", keys: ["NODE_ENV", "JWT_SECRET", "DB_PASSWORD", "DB_SYNCHRONIZE", "VALIDATION_FORBID_NON_WHITELISTED", "SECURITY_HEADERS_ENABLED", "SECURITY_HSTS_ENABLED", "TRUST_PROXY", "ACCESS_LOG_ENABLED"] },
+    { title: "域名与上传", keys: ["CORS_ORIGIN", "PUBLIC_H5_ORIGIN", "PUBLIC_ADMIN_ORIGIN", "PUBLIC_API_ORIGIN", "UPLOAD_DIR"] },
+    { title: "登录与通知", keys: ["H5_AUTH_MODE", "H5_AUTH_SECRET", "SMS_PROVIDER_ENABLED", "EMAIL_PROVIDER_ENABLED", "WECHAT_MESSAGE_PROVIDER_ENABLED"] },
+    {
+      title: "支付与订单",
+      keys: [
+        "PAYMENT_SANDBOX_ENABLED",
+        "PAYMENT_SANDBOX_SECRET",
+        "WECHAT_PAY_SANDBOX_SECRET",
+        "ALIPAY_PAY_SANDBOX_SECRET",
+        "REAL_PAYMENT_ENABLED",
+        "REAL_PAYMENT_SDK_IMPLEMENTED",
+        "REAL_PAYMENT_CALLBACK_VERIFICATION_IMPLEMENTED",
+        "REAL_REFUND_QUERY_IMPLEMENTED",
+        "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED",
+        "AGENT_REAL_TRANSFER_IMPLEMENTED",
+        "REAL_PAYMENT_PREFLIGHT_PASSED",
+        "MULTI_TENANT_ENABLED",
+        "MULTI_TENANT_SCHEMA_IMPLEMENTED",
+        "MULTI_TENANT_ACCESS_FILTER_IMPLEMENTED",
+        "MULTI_TENANT_PUBLIC_BOUNDARY_IMPLEMENTED",
+        "MULTI_TENANT_PREFLIGHT_PASSED",
+        "OFFLINE_PAYMENT_EXPIRE_MINUTES",
+        "ORDER_CLOSE_WORKER_ENABLED"
+      ]
+    }
+  ];
+  return groups.map((group) => ({ ...group, rows: rows.filter((item) => group.keys.includes(item.key)) })).filter((group) => group.rows.length);
+});
+
+const notificationReadiness = computed<NotificationReadiness[]>(() => [
+  buildNotificationReadiness("sms", "短信验证码", deployment.smsEnabled, "H5 手机号验证码依赖短信通道，上线前必须确认签名和模板已审核。", [
+    ["smsProvider", "SMS_PROVIDER"],
+    ["smsAccessKeyId", "SMS_ACCESS_KEY_ID"],
+    ["smsAccessKeySecret", "SMS_ACCESS_KEY_SECRET"],
+    ["smsSignName", "SMS_SIGN_NAME"],
+    ["smsTemplateId", "SMS_TEMPLATE_ID"]
+  ]),
+  buildNotificationReadiness("email", "邮件通知", deployment.emailEnabled, "用于邮件通知和后续运营触达；不开启时不会阻塞 H5 验证码。", [
+    ["emailProvider", "EMAIL_PROVIDER"],
+    ["smtpHost", "SMTP_HOST"],
+    ["smtpPort", "SMTP_PORT"],
+    ["smtpUser", "SMTP_USER"],
+    ["smtpPassword", "SMTP_PASSWORD"],
+    ["smtpFrom", "SMTP_FROM"]
+  ]),
+  buildNotificationReadiness("wechat", "微信订阅消息", deployment.wechatMessageEnabled, "用于微信订阅消息触达；开启前确认小程序 AppID、密钥和模板审核状态。", [
+    ["wechatMessageProvider", "WECHAT_MESSAGE_PROVIDER"],
+    ["wechatAppId", "WECHAT_APP_ID"],
+    ["wechatAppSecret", "WECHAT_APP_SECRET"]
+  ])
+]);
+
+const domainReadiness = computed<DomainReadiness[]>(() => [
+  buildDomainReadiness("h5", "H5 域名", "PUBLIC_H5_ORIGIN", deployment.h5Origin),
+  buildDomainReadiness("admin", "后台域名", "PUBLIC_ADMIN_ORIGIN", deployment.adminOrigin),
+  buildDomainReadiness("api", "API 域名", "PUBLIC_API_ORIGIN", deployment.apiOrigin)
+]);
+
+const releaseReadiness = computed<ReleaseReadiness[]>(() => [
+  buildReleaseReadiness("version", "版本号", "APP_VERSION", deployment.appVersion),
+  buildReleaseReadiness("commit", "发布提交", "BUILD_COMMIT", deployment.buildCommit),
+  { key: "buildTime", label: "构建时间", envKey: "BUILD_TIME", value: "生成配置时自动写入", status: "ready", statusText: "自动生成", issues: [] }
+]);
+
+const securityReadiness = computed<SecurityReadiness[]>(() => [
+  buildSecretReadiness("dbPassword", "数据库密码", "DB_PASSWORD", deployment.mysqlPassword, 12),
+  buildSecretReadiness("rootPassword", "Root 密码", "MYSQL_ROOT_PASSWORD", deployment.mysqlRootPassword, 16),
+  buildSecretReadiness("jwtSecret", "JWT 密钥", "JWT_SECRET", deployment.jwtSecret, 32),
+  buildSecretReadiness("h5AuthSecret", "H5 登录密钥", "H5_AUTH_SECRET", deployment.h5AuthSecret, 32),
+  buildBooleanReadiness("dbSynchronize", "数据库同步", "DB_SYNCHRONIZE", !deployment.dbSynchronize, "生产必须保持 false，并通过 migration 发布结构变更。"),
+  buildBooleanReadiness("securityHeaders", "安全响应头", "SECURITY_HEADERS_ENABLED", deployment.securityHeadersEnabled, "生产必须开启安全响应头。"),
+  buildBooleanReadiness("securityHsts", "HSTS", "SECURITY_HSTS_ENABLED", deployment.securityHstsEnabled, "HTTPS 稳定后必须开启 HSTS。"),
+  buildBooleanReadiness("strictValidation", "请求字段白名单", "VALIDATION_FORBID_NON_WHITELISTED", deployment.validationForbidNonWhitelisted, "生产必须拒绝多余请求字段。"),
+  buildBooleanReadiness("accessLog", "访问日志", "ACCESS_LOG_ENABLED", deployment.accessLogEnabled, "生产必须开启结构化访问日志。"),
+  buildBooleanReadiness("trustProxy", "可信代理", "TRUST_PROXY", deployment.trustProxy, "Nginx 或负载均衡后必须开启真实 IP 识别。")
+]);
+
+const rolloutReadiness = computed<RolloutReadiness[]>(() => [
+  buildRolloutReadiness("realPayment", "真实支付总开关", deployment.realPaymentEnabled, "打开后会把订单导向真实服务商；上线前必须完成实现标记、渠道配置和预发证据。", [
+    ["realPaymentSdkImplemented", "REAL_PAYMENT_SDK_IMPLEMENTED"],
+    ["realPaymentCallbackVerificationImplemented", "REAL_PAYMENT_CALLBACK_VERIFICATION_IMPLEMENTED"],
+    ["realRefundQueryImplemented", "REAL_REFUND_QUERY_IMPLEMENTED"],
+    ["realPaymentStatementFetchImplemented", "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED"],
+    ["realPaymentPreflightPassed", "REAL_PAYMENT_PREFLIGHT_PASSED"]
+  ], deployment.wechatPayEnabled || deployment.alipayEnabled ? [] : ["WECHAT_PAY_ENABLED 或 ALIPAY_ENABLED"]),
+  buildRolloutReadiness("wechatPay", "微信支付", deployment.wechatPayEnabled, "用于微信 Native/H5/JSAPI 真实下单、回调验签和退款/账单链路。", [
+    ["wechatPayAppId", "WECHAT_PAY_APP_ID"],
+    ["wechatPayMchId", "WECHAT_PAY_MCH_ID"],
+    ["wechatPayApiV3Key", "WECHAT_PAY_API_V3_KEY"],
+    ["wechatPayPrivateKeyPath", "WECHAT_PAY_PRIVATE_KEY_PATH"],
+    ["wechatPayCertSerialNo", "WECHAT_PAY_CERT_SERIAL_NO"],
+    ["wechatPayPlatformCertPath", "WECHAT_PAY_PLATFORM_CERT_PATH"],
+    ["wechatPayNotifyUrl", "WECHAT_PAY_NOTIFY_URL"]
+  ]),
+  buildRolloutReadiness("alipay", "支付宝", deployment.alipayEnabled, "用于支付宝预创建/WAP/PAGE 真实下单、回调验签和退款/账单链路。", [
+    ["alipayAppId", "ALIPAY_APP_ID"],
+    ["alipayPrivateKeyPath", "ALIPAY_PRIVATE_KEY_PATH"],
+    ["alipayPublicCertPath", "ALIPAY_PUBLIC_CERT_PATH"],
+    ["alipayRootCertPath", "ALIPAY_ROOT_CERT_PATH"],
+    ["alipayNotifyUrl", "ALIPAY_NOTIFY_URL"]
+  ]),
+  buildRolloutReadiness("agentTransfer", "代理真实打款", deployment.agentRealTransferImplemented, "打开前必须确认支付机构转账产品、真实请求/查询实现和代理打款预发证据。", [
+    ["realPaymentEnabled", "REAL_PAYMENT_ENABLED"],
+    ["realPaymentPreflightPassed", "REAL_PAYMENT_PREFLIGHT_PASSED"]
+  ]),
+  buildRolloutReadiness("preflightEvidence", "预发验收结果", deployment.realPaymentPreflightPassed, "真实支付、退款、账单、代理账户路由和代理真实打款都需要留存新鲜通过记录。", [
+    ["realPaymentPreflightResultFile", "REAL_PAYMENT_PREFLIGHT_RESULT_FILE"],
+    ["realPaymentPreflightMaxAgeHours", "REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS"]
+  ]),
+  buildRolloutReadiness("multiTenant", "多机构隔离", deployment.multiTenantEnabled, "打开后后台、公开端、支付回调和财务动作都会按机构边界运行；上线前必须完成实现标记和 A/B 预发验收。", [
+    ["multiTenantSchemaImplemented", "MULTI_TENANT_SCHEMA_IMPLEMENTED"],
+    ["multiTenantAccessFilterImplemented", "MULTI_TENANT_ACCESS_FILTER_IMPLEMENTED"],
+    ["multiTenantPublicBoundaryImplemented", "MULTI_TENANT_PUBLIC_BOUNDARY_IMPLEMENTED"],
+    ["multiTenantPreflightPassed", "MULTI_TENANT_PREFLIGHT_PASSED"]
+  ]),
+  buildRolloutReadiness("tenantEvidence", "多机构预发验收", deployment.multiTenantPreflightPassed, "启用多机构前必须跑通 A/B 机构后台、公开端、导出、支付边界和结算边界验收。", [
+    ["multiTenantPreflightResultFile", "MULTI_TENANT_PREFLIGHT_RESULT_FILE"],
+    ["multiTenantPreflightMaxAgeHours", "MULTI_TENANT_PREFLIGHT_MAX_AGE_HOURS"]
+  ])
+]);
+
+function isRegistrationEnabled(value: unknown) {
+  return value !== false && value !== 0 && value !== "0";
+}
+
+const uploadHeaders = () => {
+  const token = localStorage.getItem("admin_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
+
+function beforeImageUpload(file: File) {
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  if (!allowed.includes(file.type)) {
+    ElMessage.error("请上传 JPG、PNG、WebP 或 GIF 图片");
+    return false;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error("图片不能超过 5MB");
+    return false;
+  }
+  return true;
+}
+
+function handleDefaultGroupQrSuccess(response: any) {
+  const data = response?.data || response;
+  if (!data?.url) return ElMessage.error("上传成功但未返回图片地址");
+  form.defaultGroupQrCodeUrl = data.url;
+  ElMessage.success("默认入群二维码已上传");
+}
+
+function handleThemeBackgroundSuccess(response: any) {
+  const data = response?.data || response;
+  if (!data?.url) return ElMessage.error("上传成功但未返回图片地址");
+  form.pageTheme.backgroundImage = data.url;
+  ElMessage.success("H5 页面背景图已上传");
+}
+
+function handleUploadError(error: Error) {
+  ElMessage.error(error.message || "图片上传失败");
+}
+
+function hexToRgb(hex?: string) {
+  const normalized = (hex || "").replace("#", "").trim();
+  if (!/^[0-9a-fA-F]{6}$/.test(normalized)) return { r: 255, g: 255, b: 255 };
+  return {
+    r: parseInt(normalized.slice(0, 2), 16),
+    g: parseInt(normalized.slice(2, 4), 16),
+    b: parseInt(normalized.slice(4, 6), 16)
+  };
+}
+
+function rgba(hex: string | undefined, opacity: number) {
+  const { r, g, b } = hexToRgb(hex);
+  return `rgba(${r}, ${g}, ${b}, ${Math.min(Math.max(Number(opacity) || 0, 0), 100) / 100})`;
+}
+
+function pageThemePreviewStyle() {
+  const theme = form.pageTheme;
+  const overlay = rgba(theme.backgroundOverlayColor, Number(theme.backgroundOverlayOpacity || 0));
+  return {
+    backgroundColor: theme.backgroundColor,
+    backgroundImage: theme.backgroundImage ? `linear-gradient(${overlay}, ${overlay}), url(${theme.backgroundImage})` : undefined,
+    backgroundSize: "cover",
+    backgroundPosition: "center",
+    color: theme.textColor
+  };
+}
+
+function pageThemeCardStyle() {
+  const theme = form.pageTheme;
+  return {
+    backgroundColor: rgba(theme.cardBackgroundColor, Number(theme.cardOpacity || 100)),
+    borderRadius: `${Math.max(Number(theme.cardRadius || 0), 0)}px`,
+    color: theme.textColor
+  };
+}
+
+function formatTime(value?: string) {
+  if (!value) return "-";
+  return value.replace("T", " ").slice(0, 19);
+}
+
+function boolValue(value: boolean) {
+  return value ? "true" : "false";
+}
+
+function hasDeploymentValue(field: keyof typeof deployment) {
+  const value = deployment[field];
+  return value !== undefined && value !== null && String(value).trim() !== "";
+}
+
+function hasRolloutValue(field: keyof typeof deployment) {
+  const value = deployment[field];
+  if (typeof value === "boolean") return value;
+  return value !== undefined && value !== null && String(value).trim() !== "";
+}
+
+function buildNotificationReadiness(
+  key: string,
+  label: string,
+  enabled: boolean,
+  description: string,
+  requiredFields: Array<[keyof typeof deployment, string]>
+): NotificationReadiness {
+  if (!enabled) return { key, label, enabled, status: "disabled", statusText: "已关闭", description, missing: [] };
+  const missing = requiredFields.filter(([field]) => !hasDeploymentValue(field)).map(([, envKey]) => envKey);
+  return {
+    key,
+    label,
+    enabled,
+    status: missing.length ? "missing" : "ready",
+    statusText: missing.length ? "缺配置" : "已就绪",
+    description,
+    missing
+  };
+}
+
+function readinessType(status: NotificationReadiness["status"] | RolloutReadiness["status"]) {
+  if (status === "ready") return "success";
+  if (status === "missing") return "danger";
+  return "info";
+}
+
+function buildRolloutReadiness(
+  key: string,
+  label: string,
+  enabled: boolean,
+  description: string,
+  requiredFields: Array<[keyof typeof deployment, string]>,
+  extraMissing: string[] = []
+): RolloutReadiness {
+  if (!enabled) return { key, label, status: "disabled", statusText: "已关闭", description, missing: [] };
+  const missing = requiredFields.filter(([field]) => !hasRolloutValue(field)).map(([, envKey]) => envKey);
+  return {
+    key,
+    label,
+    status: missing.length || extraMissing.length ? "missing" : "ready",
+    statusText: missing.length || extraMissing.length ? "缺配置" : "可预发验证",
+    description,
+    missing: [...missing, ...extraMissing]
+  };
+}
+
+function buildDomainReadiness(key: string, label: string, envKey: string, value: string): DomainReadiness {
+  const text = String(value || "").trim();
+  const issues: string[] = [];
+  if (!text) issues.push("未填写");
+  if (text && !text.startsWith("https://")) issues.push("必须使用 HTTPS");
+  if (/localhost|127\.0\.0\.1|0\.0\.0\.0|example\.com/i.test(text)) issues.push("仍是示例或本地域名");
+  return {
+    key,
+    label,
+    envKey,
+    value: text || "-",
+    status: issues.length ? "invalid" : "ready",
+    statusText: issues.length ? "需替换" : "真实 HTTPS",
+    issues
+  };
+}
+
+function domainType(status: DomainReadiness["status"]) {
+  return status === "ready" ? "success" : "danger";
+}
+
+function buildReleaseReadiness(key: string, label: string, envKey: string, value: string): ReleaseReadiness {
+  const text = String(value || "").trim();
+  const issues: string[] = [];
+  if (!text) issues.push("未填写");
+  if (/^(local|unknown)$/i.test(text) || /change-me|replace-with/i.test(text)) issues.push("仍是占位值");
+  return {
+    key,
+    label,
+    envKey,
+    value: text || "-",
+    status: issues.length ? "invalid" : "ready",
+    statusText: issues.length ? "需替换" : "已填写",
+    issues
+  };
+}
+
+function releaseType(status: ReleaseReadiness["status"]) {
+  return status === "ready" ? "success" : "danger";
+}
+
+function buildSecretReadiness(key: string, label: string, envKey: string, value: string, minLength: number): SecurityReadiness {
+  const length = String(value || "").trim().length;
+  const ready = length >= minLength;
+  return {
+    key,
+    label,
+    envKey,
+    status: ready ? "ready" : "invalid",
+    statusText: ready ? "强度足够" : "需生成",
+    detail: ready ? `已填写，长度 ${length} 位。` : `至少需要 ${minLength} 位随机值。`
+  };
+}
+
+function buildBooleanReadiness(key: string, label: string, envKey: string, ready: boolean, detail: string): SecurityReadiness {
+  return {
+    key,
+    label,
+    envKey,
+    status: ready ? "ready" : "invalid",
+    statusText: ready ? "已符合" : "需调整",
+    detail
+  };
+}
+
+function securityType(status: SecurityReadiness["status"]) {
+  return status === "ready" ? "success" : "danger";
+}
+
+function quoteEnv(value: unknown) {
+  const text = String(value ?? "");
+  if (!text) return "";
+  return /[\s#"'\\]/.test(text) ? JSON.stringify(text) : text;
+}
+
+function envLine(key: string, value: unknown) {
+  return `${key}=${quoteEnv(value)}`;
+}
+
+function randomSecret(length = 48) {
+  const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+  const bytes = new Uint8Array(length);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => alphabet[byte % alphabet.length]).join("");
+}
+
+function fillSecrets() {
+  deployment.mysqlPassword ||= randomSecret(24);
+  deployment.mysqlRootPassword ||= randomSecret(28);
+  deployment.jwtSecret ||= randomSecret(48);
+  deployment.h5AuthSecret ||= randomSecret(48);
+  deployment.paymentSandboxSecret ||= randomSecret(40);
+  deployment.wechatPaySandboxSecret ||= randomSecret(40);
+  deployment.alipayPaySandboxSecret ||= randomSecret(40);
+  ElMessage.success("已生成随机密钥，请妥善保存");
+}
+
+async function copyGeneratedEnv() {
+  try {
+    await navigator.clipboard.writeText(generatedEnv.value);
+    ElMessage.success("已复制生产环境配置");
+  } catch {
+    ElMessage.error("复制失败，请手动复制下方内容");
+  }
+}
+
+function downloadGeneratedEnv() {
+  const blob = new Blob([generatedEnv.value], { type: "text/plain;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = ".env.production";
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function loadOperation() {
+  loadingOperation.value = true;
+  try {
+    const data = await api.get<any, any>("/admin/settings/operation");
+    Object.assign(form, {
+      registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
+      registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
+      offlinePaymentInstructions: data.offlinePaymentInstructions || "",
+      customerServiceName: data.customerServiceName || "",
+      customerServicePhone: data.customerServicePhone || "",
+      customerServiceWechat: data.customerServiceWechat || "",
+      defaultGroupQrCodeUrl: data.defaultGroupQrCodeUrl || "",
+      pageTheme: { ...defaultPageTheme, ...(data.pageTheme || {}) },
+      refundInstructions: data.refundInstructions || "",
+      invoiceInstructions: data.invoiceInstructions || "",
+      smsProviderEnabled: Boolean(data.smsProviderEnabled),
+      smsProvider: data.smsProvider || "tencent-cloud-sms",
+      smsAccessKeyId: data.smsAccessKeyId || "",
+      smsAccessKeySecret: data.smsAccessKeySecret || "",
+      smsSignName: data.smsSignName || "",
+      smsTemplateId: data.smsTemplateId || ""
+    });
+  } finally {
+    loadingOperation.value = false;
+  }
+}
+
+async function saveOperation() {
+  if (!form.registrationEnabled && !form.registrationDisabledMessage.trim()) return ElMessage.error("请填写暂停报名提示");
+  if (!form.offlinePaymentInstructions.trim()) return ElMessage.error("请填写线下付款说明");
+  if (!form.refundInstructions.trim()) return ElMessage.error("请填写退款说明");
+  savingOperation.value = true;
+  try {
+    await api.post("/admin/settings/operation", form);
+    ElMessage.success("系统设置已保存");
+    await loadOperation();
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存失败");
+  } finally {
+    savingOperation.value = false;
+  }
+}
+
+async function loadConfig() {
+  if (!canManagePlatformSettings.value) return;
+  loadingConfig.value = true;
+  try {
+    report.value = await api.get<any, ConfigInspection>("/admin/system/config-check");
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载上线体检失败");
+  } finally {
+    loadingConfig.value = false;
+  }
+}
+
+function go(path: string) {
+  router.push(path);
+}
+
+onMounted(() => {
+  loadOperation();
+  if (canManagePlatformSettings.value) loadConfig();
+});
+</script>
+
+<template>
+  <div class="page">
+    <div class="toolbar">
+      <div>
+        <h2>{{ canManagePlatformSettings ? "系统设置" : "运营设置" }}</h2>
+        <p class="subtitle">
+          {{ canManagePlatformSettings ? "集中管理平台运营开关、部署配置、上线体检和关键管理入口。" : "配置本商家的报名开关、收款说明、客服信息、入群二维码和 H5 页面主题。" }}
+        </p>
+      </div>
+      <div class="toolbar-actions">
+        <el-button @click="loadOperation">刷新设置</el-button>
+        <el-button type="primary" :loading="savingOperation" @click="saveOperation">保存设置</el-button>
+      </div>
+    </div>
+
+    <el-tabs v-model="activeTab" class="system-tabs">
+      <el-tab-pane label="运营设置" name="operation">
+        <div class="table-card" v-loading="loadingOperation">
+          <el-alert
+            type="info"
+            title="这里的内容保存后立即影响 H5 和报名流程。入群二维码优先使用活动配置，活动未配置时使用全局默认二维码。"
+            show-icon
+            :closable="false"
+            class="panel-alert"
+          />
+          <el-form label-width="128px" class="setting-form">
+            <el-form-item label="报名通道">
+              <div class="switch-row">
+                <el-switch v-model="form.registrationEnabled" active-text="允许新报名" inactive-text="暂停新报名" />
+                <el-tag :type="form.registrationEnabled ? 'success' : 'warning'" effect="plain">
+                  {{ form.registrationEnabled ? "用户可正常提交报名" : "用户只能浏览活动，不能提交新报名" }}
+                </el-tag>
+              </div>
+            </el-form-item>
+            <el-form-item label="暂停提示" :required="!form.registrationEnabled">
+              <el-input v-model="form.registrationDisabledMessage" type="textarea" :rows="3" maxlength="300" show-word-limit />
+            </el-form-item>
+            <el-form-item label="线下付款说明" required>
+              <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="客服名称">
+              <el-input v-model="form.customerServiceName" maxlength="100" />
+            </el-form-item>
+            <el-form-item label="客服电话">
+              <el-input v-model="form.customerServicePhone" maxlength="40" />
+            </el-form-item>
+            <el-form-item label="客服微信">
+              <el-input v-model="form.customerServiceWechat" maxlength="80" />
+            </el-form-item>
+            <el-form-item label="默认入群二维码">
+              <div class="qr-field">
+                <el-input v-model="form.defaultGroupQrCodeUrl" placeholder="活动未配置二维码时使用；不填则报名后不显示入群二维码" />
+                <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleDefaultGroupQrSuccess" :on-error="handleUploadError">
+                  <el-button :icon="UploadFilled">上传二维码</el-button>
+                </el-upload>
+                <img v-if="form.defaultGroupQrCodeUrl" class="qr-preview" :src="form.defaultGroupQrCodeUrl" alt="默认入群二维码预览" />
+              </div>
+            </el-form-item>
+            <el-divider content-position="left">短信验证码服务</el-divider>
+            <el-form-item label="启用短信">
+              <el-switch v-model="form.smsProviderEnabled" active-text="开启" inactive-text="关闭" />
+            </el-form-item>
+            <el-form-item label="短信服务商">
+              <el-input v-model="form.smsProvider" placeholder="tencent-cloud-sms" maxlength="80" />
+            </el-form-item>
+            <el-form-item label="Access Key">
+              <el-input v-model="form.smsAccessKeyId" maxlength="120" placeholder="短信服务商 AccessKeyId" />
+            </el-form-item>
+            <el-form-item label="Access Secret">
+              <el-input v-model="form.smsAccessKeySecret" show-password maxlength="200" placeholder="短信服务商 AccessKeySecret" />
+            </el-form-item>
+            <el-form-item label="短信签名">
+              <el-input v-model="form.smsSignName" maxlength="100" placeholder="已在短信服务商平台审核通过的签名" />
+            </el-form-item>
+            <el-form-item label="模板 ID">
+              <el-input v-model="form.smsTemplateId" maxlength="120" placeholder="已在短信服务商平台审核通过的模板 ID" />
+            </el-form-item>
+            <el-divider content-position="left">短信验证码服务</el-divider>
+            <el-form-item label="短信服务">
+              <div class="switch-row">
+                <el-switch v-model="form.smsProviderEnabled" active-text="启用" inactive-text="关闭" />
+                <el-tag :type="form.smsProviderEnabled ? 'success' : 'info'" effect="plain">
+                  {{ form.smsProviderEnabled ? "H5 登录验证码将使用下方服务商配置" : "未启用时，H5 验证码发送会提示先配置短信服务" }}
+                </el-tag>
+              </div>
+            </el-form-item>
+            <el-form-item label="短信服务商">
+              <el-input v-model="form.smsProvider" placeholder="tencent-cloud-sms / aliyun-sms" maxlength="80" />
+            </el-form-item>
+            <el-form-item label="AccessKey ID">
+              <el-input v-model="form.smsAccessKeyId" maxlength="120" autocomplete="off" />
+            </el-form-item>
+            <el-form-item label="AccessKey Secret">
+              <el-input v-model="form.smsAccessKeySecret" show-password maxlength="200" autocomplete="new-password" />
+            </el-form-item>
+            <el-form-item label="短信签名">
+              <el-input v-model="form.smsSignName" maxlength="100" />
+            </el-form-item>
+            <el-form-item label="模板 ID">
+              <el-input v-model="form.smsTemplateId" maxlength="120" />
+            </el-form-item>
+            <el-form-item label="H5 页面主题">
+              <div class="theme-panel">
+                <div class="theme-controls">
+                  <div class="theme-grid">
+                    <label><span>页面底色</span><el-color-picker v-model="form.pageTheme.backgroundColor" /></label>
+                    <label><span>文字颜色</span><el-color-picker v-model="form.pageTheme.textColor" /></label>
+                    <label><span>辅助文字</span><el-color-picker v-model="form.pageTheme.mutedColor" /></label>
+                    <label><span>品牌主色</span><el-color-picker v-model="form.pageTheme.primaryColor" /></label>
+                    <label><span>卡片底色</span><el-color-picker v-model="form.pageTheme.cardBackgroundColor" /></label>
+                    <label><span>遮罩颜色</span><el-color-picker v-model="form.pageTheme.backgroundOverlayColor" /></label>
+                  </div>
+                  <div class="theme-upload">
+                    <el-input v-model="form.pageTheme.backgroundImage" placeholder="背景图地址，留空则只使用底色" />
+                    <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleThemeBackgroundSuccess" :on-error="handleUploadError">
+                      <el-button :icon="UploadFilled">上传背景图</el-button>
+                    </el-upload>
+                    <el-button v-if="form.pageTheme.backgroundImage" @click="form.pageTheme.backgroundImage = ''">移除</el-button>
+                  </div>
+                  <div class="theme-sliders">
+                    <div>
+                      <span>背景遮罩透明度 {{ form.pageTheme.backgroundOverlayOpacity }}%</span>
+                      <el-slider v-model="form.pageTheme.backgroundOverlayOpacity" :min="0" :max="90" />
+                    </div>
+                    <div>
+                      <span>卡片透明度 {{ form.pageTheme.cardOpacity }}%</span>
+                      <el-slider v-model="form.pageTheme.cardOpacity" :min="40" :max="100" />
+                    </div>
+                    <div>
+                      <span>卡片圆角</span>
+                      <el-input-number v-model="form.pageTheme.cardRadius" :min="0" :max="24" controls-position="right" />
+                    </div>
+                  </div>
+                </div>
+                <div class="theme-preview" :style="pageThemePreviewStyle()">
+                  <div class="theme-phone-card" :style="pageThemeCardStyle()">
+                    <strong>活动报名</strong>
+                    <span>页面背景、卡片透明度和文字颜色会同步到 H5 主要页面。</span>
+                    <button :style="{ background: form.pageTheme.primaryColor }">立即报名</button>
+                  </div>
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item label="退款说明" required>
+              <el-input v-model="form.refundInstructions" type="textarea" :rows="4" maxlength="1000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="发票说明">
+              <el-input v-model="form.invoiceInstructions" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+            </el-form-item>
+          </el-form>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane v-if="canManagePlatformSettings" label="部署配置" name="deployment">
+        <el-alert
+          type="warning"
+          title="部署级配置不会保存到数据库。这里生成 deploy/.env.production 内容，部署到服务器后重启 API 生效。"
+          show-icon
+          :closable="false"
+          class="panel-alert"
+        />
+        <div class="deploy-layout">
+          <div class="deploy-form">
+            <div class="table-card deploy-card">
+              <div class="card-title">域名与基础信息</div>
+              <div class="release-readiness">
+                <div v-for="item in releaseReadiness" :key="item.key" class="release-card">
+                  <div class="release-head">
+                    <strong>{{ item.label }}</strong>
+                    <el-tag :type="releaseType(item.status)">{{ item.statusText }}</el-tag>
+                  </div>
+                  <span>{{ item.envKey }}</span>
+                  <p>{{ item.value }}</p>
+                  <small v-if="item.issues.length">{{ item.issues.join("、") }}</small>
+                  <small v-else>可用于上线体检、健康检查和回滚定位。</small>
+                </div>
+              </div>
+              <div class="domain-readiness">
+                <div v-for="item in domainReadiness" :key="item.key" class="domain-card">
+                  <div class="domain-head">
+                    <strong>{{ item.label }}</strong>
+                    <el-tag :type="domainType(item.status)">{{ item.statusText }}</el-tag>
+                  </div>
+                  <span>{{ item.envKey }}</span>
+                  <p>{{ item.value }}</p>
+                  <small v-if="item.issues.length">{{ item.issues.join("、") }}</small>
+                  <small v-else>可用于生产 CORS、公开入口和回调地址。</small>
+                </div>
+              </div>
+              <div class="deploy-grid">
+                <el-form-item label="版本号"><el-input v-model="deployment.appVersion" /></el-form-item>
+                <el-form-item label="发布提交"><el-input v-model="deployment.buildCommit" placeholder="Git commit、镜像 digest 或发布流水号" /></el-form-item>
+                <el-form-item label="H5 域名"><el-input v-model="deployment.h5Origin" placeholder="https://h5.example.com" /></el-form-item>
+                <el-form-item label="后台域名"><el-input v-model="deployment.adminOrigin" placeholder="https://admin.example.com" /></el-form-item>
+                <el-form-item label="API 域名"><el-input v-model="deployment.apiOrigin" placeholder="https://api.example.com" /></el-form-item>
+                <el-form-item label="上传目录"><el-input v-model="deployment.uploadDir" /></el-form-item>
+              </div>
+            </div>
+
+            <div class="table-card deploy-card">
+              <div class="card-title-row">
+                <div class="card-title">数据库与安全密钥</div>
+                <el-button type="primary" plain @click="fillSecrets">生成随机密钥</el-button>
+              </div>
+              <div class="security-readiness">
+                <div v-for="item in securityReadiness" :key="item.key" class="security-card">
+                  <div class="security-head">
+                    <strong>{{ item.label }}</strong>
+                    <el-tag :type="securityType(item.status)">{{ item.statusText }}</el-tag>
+                  </div>
+                  <span>{{ item.envKey }}</span>
+                  <p>{{ item.detail }}</p>
+                </div>
+              </div>
+              <div class="deploy-grid">
+                <el-form-item label="数据库名"><el-input v-model="deployment.mysqlDatabase" /></el-form-item>
+                <el-form-item label="数据库用户"><el-input v-model="deployment.mysqlUser" /></el-form-item>
+                <el-form-item label="数据库密码"><el-input v-model="deployment.mysqlPassword" show-password /></el-form-item>
+                <el-form-item label="Root 密码"><el-input v-model="deployment.mysqlRootPassword" show-password /></el-form-item>
+                <el-form-item label="JWT 密钥"><el-input v-model="deployment.jwtSecret" show-password /></el-form-item>
+                <el-form-item label="H5 登录密钥"><el-input v-model="deployment.h5AuthSecret" show-password /></el-form-item>
+                <el-form-item label="DB 同步"><el-switch v-model="deployment.dbSynchronize" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="可信代理"><el-switch v-model="deployment.trustProxy" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="安全响应头"><el-switch v-model="deployment.securityHeadersEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="HSTS"><el-switch v-model="deployment.securityHstsEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="字段白名单"><el-switch v-model="deployment.validationForbidNonWhitelisted" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="访问日志"><el-switch v-model="deployment.accessLogEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+              </div>
+            </div>
+
+            <div class="table-card deploy-card">
+              <div class="card-title">通知、支付与任务</div>
+              <div class="notification-readiness">
+                <div v-for="item in notificationReadiness" :key="item.key" class="readiness-card">
+                  <div class="readiness-head">
+                    <strong>{{ item.label }}</strong>
+                    <el-tag :type="readinessType(item.status)">{{ item.statusText }}</el-tag>
+                  </div>
+                  <p>{{ item.description }}</p>
+                  <span v-if="item.missing.length">缺少：{{ item.missing.join("、") }}</span>
+                  <span v-else>{{ item.enabled ? "生产变量已填写，仍需到服务商后台确认签名/模板审核状态。" : "未启用时不会生成发送通道。" }}</span>
+                </div>
+              </div>
+              <div class="rollout-readiness">
+                <div v-for="item in rolloutReadiness" :key="item.key" class="readiness-card">
+                  <div class="readiness-head">
+                    <strong>{{ item.label }}</strong>
+                    <el-tag :type="readinessType(item.status)">{{ item.statusText }}</el-tag>
+                  </div>
+                  <p>{{ item.description }}</p>
+                  <span v-if="item.missing.length">缺少：{{ item.missing.join("、") }}</span>
+                  <span v-else>{{ item.status === "disabled" ? "保持关闭时不会放量该能力。" : "可进入预发验证，生产前仍需保留回滚记录。" }}</span>
+                </div>
+              </div>
+              <div class="deploy-grid">
+                <el-form-item label="登录模式"><el-input v-model="deployment.h5AuthMode" /></el-form-item>
+                <el-form-item label="短信启用"><el-switch v-model="deployment.smsEnabled" /></el-form-item>
+                <el-form-item label="短信服务商"><el-input v-model="deployment.smsProvider" /></el-form-item>
+                <el-form-item label="短信签名"><el-input v-model="deployment.smsSignName" /></el-form-item>
+                <el-form-item label="短信模板 ID"><el-input v-model="deployment.smsTemplateId" /></el-form-item>
+                <el-form-item label="短信 Key"><el-input v-model="deployment.smsAccessKeyId" /></el-form-item>
+                <el-form-item label="短信 Secret"><el-input v-model="deployment.smsAccessKeySecret" show-password /></el-form-item>
+                <el-form-item label="邮件启用"><el-switch v-model="deployment.emailEnabled" /></el-form-item>
+                <el-form-item label="邮件服务商"><el-input v-model="deployment.emailProvider" /></el-form-item>
+                <el-form-item label="SMTP 主机"><el-input v-model="deployment.smtpHost" /></el-form-item>
+                <el-form-item label="SMTP 端口"><el-input-number v-model="deployment.smtpPort" :min="1" /></el-form-item>
+                <el-form-item label="SMTP 用户"><el-input v-model="deployment.smtpUser" /></el-form-item>
+                <el-form-item label="SMTP 密码"><el-input v-model="deployment.smtpPassword" show-password /></el-form-item>
+                <el-form-item label="发件人"><el-input v-model="deployment.smtpFrom" /></el-form-item>
+                <el-form-item label="微信通知"><el-switch v-model="deployment.wechatMessageEnabled" /></el-form-item>
+                <el-form-item label="微信通知服务商"><el-input v-model="deployment.wechatMessageProvider" /></el-form-item>
+                <el-form-item label="微信 AppId"><el-input v-model="deployment.wechatAppId" /></el-form-item>
+                <el-form-item label="微信 Secret"><el-input v-model="deployment.wechatAppSecret" show-password /></el-form-item>
+                <el-form-item label="支付沙箱"><el-switch v-model="deployment.paymentSandboxEnabled" /></el-form-item>
+                <el-form-item label="沙箱密钥"><el-input v-model="deployment.paymentSandboxSecret" show-password /></el-form-item>
+                <el-form-item label="微信支付沙箱"><el-input v-model="deployment.wechatPaySandboxSecret" show-password /></el-form-item>
+                <el-form-item label="支付宝沙箱"><el-input v-model="deployment.alipayPaySandboxSecret" show-password /></el-form-item>
+                <el-form-item label="真实支付"><el-switch v-model="deployment.realPaymentEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="下单实现"><el-switch v-model="deployment.realPaymentSdkImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="回调验签"><el-switch v-model="deployment.realPaymentCallbackVerificationImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="退款查询"><el-switch v-model="deployment.realRefundQueryImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="账单拉取"><el-switch v-model="deployment.realPaymentStatementFetchImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="代理打款"><el-switch v-model="deployment.agentRealTransferImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="预发通过"><el-switch v-model="deployment.realPaymentPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
+                <el-form-item label="验收文件"><el-input v-model="deployment.realPaymentPreflightResultFile" /></el-form-item>
+                <el-form-item label="有效期"><el-input-number v-model="deployment.realPaymentPreflightMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
+                <el-form-item label="多机构隔离"><el-switch v-model="deployment.multiTenantEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="机构模型"><el-switch v-model="deployment.multiTenantSchemaImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="后台过滤"><el-switch v-model="deployment.multiTenantAccessFilterImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="公开端边界"><el-switch v-model="deployment.multiTenantPublicBoundaryImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="机构预发"><el-switch v-model="deployment.multiTenantPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
+                <el-form-item label="机构验收文件"><el-input v-model="deployment.multiTenantPreflightResultFile" /></el-form-item>
+                <el-form-item label="机构有效期"><el-input-number v-model="deployment.multiTenantPreflightMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
+                <el-form-item label="微信支付"><el-switch v-model="deployment.wechatPayEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="微信 AppId"><el-input v-model="deployment.wechatPayAppId" /></el-form-item>
+                <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" /></el-form-item>
+                <el-form-item label="微信 APIv3 Key"><el-input v-model="deployment.wechatPayApiV3Key" show-password /></el-form-item>
+                <el-form-item label="微信私钥路径"><el-input v-model="deployment.wechatPayPrivateKeyPath" /></el-form-item>
+                <el-form-item label="微信证书序列号"><el-input v-model="deployment.wechatPayCertSerialNo" /></el-form-item>
+                <el-form-item label="微信平台证书"><el-input v-model="deployment.wechatPayPlatformCertPath" /></el-form-item>
+                <el-form-item label="微信回调 URL"><el-input v-model="deployment.wechatPayNotifyUrl" /></el-form-item>
+                <el-form-item label="支付宝"><el-switch v-model="deployment.alipayEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="支付宝 AppId"><el-input v-model="deployment.alipayAppId" /></el-form-item>
+                <el-form-item label="支付宝私钥路径"><el-input v-model="deployment.alipayPrivateKeyPath" /></el-form-item>
+                <el-form-item label="支付宝公钥证书"><el-input v-model="deployment.alipayPublicCertPath" /></el-form-item>
+                <el-form-item label="支付宝根证书"><el-input v-model="deployment.alipayRootCertPath" /></el-form-item>
+                <el-form-item label="支付宝回调 URL"><el-input v-model="deployment.alipayNotifyUrl" /></el-form-item>
+                <el-form-item label="付款超时"><el-input-number v-model="deployment.offlinePaymentExpireMinutes" :min="1" /><span class="unit">分钟</span></el-form-item>
+                <el-form-item label="关单任务"><el-switch v-model="deployment.orderCloseWorkerEnabled" /></el-form-item>
+                <el-form-item label="关单间隔"><el-input-number v-model="deployment.orderCloseWorkerIntervalSeconds" :min="30" /><span class="unit">秒</span></el-form-item>
+                <el-form-item label="备份目录"><el-input v-model="deployment.backupDir" /></el-form-item>
+                <el-form-item label="保留天数"><el-input-number v-model="deployment.backupRetentionDays" :min="1" /></el-form-item>
+              </div>
+            </div>
+          </div>
+
+          <div class="table-card env-preview">
+            <div class="card-title-row">
+              <div class="card-title">生成的 .env.production</div>
+              <div class="preview-actions">
+                <el-button @click="copyGeneratedEnv">复制</el-button>
+                <el-button type="primary" plain @click="downloadGeneratedEnv">下载</el-button>
+              </div>
+            </div>
+            <el-input class="env-textarea" type="textarea" :rows="32" :model-value="generatedEnv" readonly />
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane v-if="canManagePlatformSettings" label="配置体检" name="config">
+        <div class="summary-grid" v-if="report">
+          <div class="summary-card">
+            <span>运行环境</span>
+            <strong>{{ report.environment || "-" }}</strong>
+          </div>
+          <div class="summary-card">
+            <span>当前版本</span>
+            <strong>{{ report.release?.version || "-" }}</strong>
+          </div>
+          <div class="summary-card warning">
+            <span>待确认</span>
+            <strong>{{ report.summary.warningCount }}</strong>
+          </div>
+          <div class="summary-card error">
+            <span>需修复</span>
+            <strong>{{ report.summary.errorCount }}</strong>
+          </div>
+        </div>
+        <div class="config-grid" v-loading="loadingConfig">
+          <div v-for="group in configGroups" :key="group.title" class="table-card config-card">
+            <div class="config-card-head">
+              <h3>{{ group.title }}</h3>
+              <span>检查时间：{{ formatTime(report?.checkedAt) }}</span>
+            </div>
+            <el-table :data="group.rows" stripe size="small">
+              <el-table-column label="状态" width="96">
+                <template #default="{ row }">
+                  <el-tag :type="tagType[row.status as CheckStatus]">{{ statusText[row.status as CheckStatus] }}</el-tag>
+                </template>
+              </el-table-column>
+              <el-table-column prop="label" label="项目" width="150" />
+              <el-table-column prop="key" label="配置键" width="220" />
+              <el-table-column prop="value" label="当前状态" width="160" />
+              <el-table-column prop="message" label="说明" min-width="260" />
+            </el-table>
+          </div>
+        </div>
+      </el-tab-pane>
+
+      <el-tab-pane label="管理入口" name="links">
+        <div class="link-grid">
+          <div v-if="!canManagePlatformSettings" class="link-card" @click="go('/categories')">
+            <strong>分类管理</strong>
+            <span>维护活动分类和前台筛选。</span>
+          </div>
+          <div v-if="!canManagePlatformSettings" class="link-card" @click="go('/homepage-builder')">
+            <strong>首页装修</strong>
+            <span>配置 H5 首页模块、图片广告和运营内容。</span>
+          </div>
+          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/tenants')">
+            <strong>商家/代理管理</strong>
+            <span>开通商家、停用商家和配置审核权限。</span>
+          </div>
+          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/config-check')">
+            <strong>上线体检</strong>
+            <span>检查生产配置、真实支付、多租户和发布标识。</span>
+          </div>
+          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/ops-routine')">
+            <strong>运营巡检</strong>
+            <span>按日、周、月跟进平台上线后的巡检事项。</span>
+          </div>
+          <div class="link-card" @click="go('/admins')">
+            <strong>{{ canManagePlatformSettings ? "商家账号" : "员工账号" }}</strong>
+            <span>{{ canManagePlatformSettings ? "给平台或商家创建后台账号、重置密码、启停账号。" : "创建本商家的运营、财务、签到账号。" }}</span>
+          </div>
+          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/admin-login-logs')">
+            <strong>登录日志</strong>
+            <span>查看后台登录成功、失败和限流记录。</span>
+          </div>
+          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/h5-code-logs')">
+            <strong>验证码日志</strong>
+            <span>查看 H5 手机号验证码发送和失败记录。</span>
+          </div>
+          <div class="link-card" @click="go('/operation-logs')">
+            <strong>操作日志</strong>
+            <span>追踪收款、退款、签到和设置修改。</span>
+          </div>
+        </div>
+      </el-tab-pane>
+    </el-tabs>
+  </div>
+</template>
+
+<style scoped>
+.toolbar { align-items: flex-start; }
+.toolbar-actions, .switch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
+.system-tabs { margin-top: 12px; }
+.panel-alert { margin-bottom: 16px; }
+.setting-form { max-width: 980px; }
+.qr-field { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+.qr-preview { grid-column: 1 / -1; width: 180px; aspect-ratio: 1 / 1; object-fit: contain; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
+.theme-panel { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 14px; align-items: stretch; }
+.theme-controls { display: grid; gap: 12px; }
+.theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
+.theme-grid label { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; color: #475569; font-size: 13px; }
+.theme-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+.theme-sliders { display: grid; gap: 8px; }
+.theme-sliders > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: center; color: #475569; font-size: 13px; }
+.theme-preview { min-height: 280px; border-radius: 16px; padding: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e7eb; overflow: hidden; }
+.theme-phone-card { width: 150px; min-height: 160px; padding: 18px; display: grid; gap: 12px; align-content: center; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12); }
+.theme-phone-card strong { font-size: 18px; line-height: 1.25; }
+.theme-phone-card span { color: #64748b; font-size: 12px; line-height: 1.5; }
+.theme-phone-card button { height: 34px; border: 0; border-radius: 999px; color: #fff; font-weight: 700; cursor: default; }
+.deploy-layout { display: grid; grid-template-columns: minmax(0, 1fr) 520px; gap: 16px; align-items: start; }
+.deploy-form { display: grid; gap: 16px; }
+.deploy-card { padding: 18px; }
+.card-title, .card-title-row .card-title { color: #111827; font-size: 16px; font-weight: 700; }
+.card-title { margin-bottom: 16px; }
+.card-title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.release-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.release-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; display: grid; gap: 7px; min-width: 0; }
+.release-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.release-head strong { color: #111827; font-size: 14px; }
+.release-card span { color: #475569; font-size: 12px; font-family: "Cascadia Mono", Consolas, monospace; }
+.release-card p { margin: 0; color: #111827; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.release-card small { color: #64748b; font-size: 12px; line-height: 1.5; }
+.domain-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.domain-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; display: grid; gap: 7px; min-width: 0; }
+.domain-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.domain-head strong { color: #111827; font-size: 14px; }
+.domain-card span { color: #475569; font-size: 12px; font-family: "Cascadia Mono", Consolas, monospace; }
+.domain-card p { margin: 0; color: #111827; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.domain-card small { color: #64748b; font-size: 12px; line-height: 1.5; }
+.security-readiness { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.security-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; display: grid; gap: 7px; min-width: 0; }
+.security-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.security-head strong { color: #111827; font-size: 14px; }
+.security-card span { color: #475569; font-size: 12px; font-family: "Cascadia Mono", Consolas, monospace; }
+.security-card p { margin: 0; color: #334155; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.deploy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
+.deploy-grid :deep(.el-form-item) { margin-bottom: 14px; }
+.deploy-grid :deep(.el-form-item__label) { color: #475569; font-weight: 600; }
+.notification-readiness, .rollout-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.readiness-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; display: grid; gap: 8px; }
+.readiness-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.readiness-head strong { color: #111827; font-size: 14px; }
+.readiness-card p { margin: 0; color: #64748b; font-size: 12px; line-height: 1.5; }
+.readiness-card span { color: #334155; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.unit { margin-left: 8px; color: #64748b; font-size: 13px; }
+.env-preview { position: sticky; top: 20px; padding: 18px; }
+.preview-actions { display: flex; gap: 8px; }
+.env-textarea :deep(textarea) { font-family: "Cascadia Mono", Consolas, monospace; font-size: 12px; line-height: 1.55; }
+.summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.summary-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; display: grid; gap: 8px; }
+.summary-card span { color: #64748b; font-size: 13px; }
+.summary-card strong { color: #111827; font-size: 22px; overflow-wrap: anywhere; }
+.summary-card.warning strong { color: #d97706; }
+.summary-card.error strong { color: #dc2626; }
+.config-grid { display: grid; gap: 16px; }
+.config-card { padding: 0; overflow: hidden; }
+.config-card-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px; border-bottom: 1px solid #edf0f5; }
+.config-card-head h3 { margin: 0; font-size: 16px; }
+.config-card-head span { color: #64748b; font-size: 13px; }
+.link-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.link-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; display: grid; gap: 8px; cursor: pointer; transition: border-color 0.2s, box-shadow 0.2s; }
+.link-card:hover { border-color: #0f766e; box-shadow: 0 8px 24px rgba(15, 118, 110, 0.08); }
+.link-card strong { color: #111827; font-size: 16px; }
+.link-card span { color: #64748b; line-height: 1.5; }
+@media (max-width: 1100px) {
+  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .theme-sliders > div { grid-template-columns: 1fr; }
+  .env-preview { position: static; }
+}
+</style>

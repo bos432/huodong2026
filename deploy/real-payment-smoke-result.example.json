@@ -1,0 +1,143 @@
+{
+  "passed": false,
+  "checkedAt": "2026-06-09T00:00:00.000Z",
+  "environment": "staging",
+  "providers": {
+    "wechat": {
+      "enabled": true,
+      "merchantScope": "agent"
+    },
+    "alipay": {
+      "enabled": false,
+      "merchantScope": "none"
+    }
+  },
+  "checks": {
+    "paymentCreate": {
+      "status": "pending",
+      "note": "Official provider payment request/signature generated and accepted in staging."
+    },
+    "paymentSceneCoverage": {
+      "status": "pending",
+      "note": "Verify every enabled provider scene with the intended platform or agent merchant account.",
+      "scenes": {
+        "wechat": {
+          "native": {
+            "status": "pending",
+            "merchantScope": "platform-or-agent",
+            "evidence": {
+              "codeUrl": ""
+            },
+            "note": ""
+          },
+          "h5": {
+            "status": "pending",
+            "merchantScope": "platform-or-agent",
+            "evidence": {
+              "clientIp": "",
+              "h5Url": ""
+            },
+            "note": ""
+          },
+          "jsapi": {
+            "status": "pending",
+            "merchantScope": "platform-or-agent",
+            "evidence": {
+              "openId": "",
+              "prepayId": ""
+            },
+            "note": ""
+          }
+        },
+        "alipay": {
+          "precreate": {
+            "status": "pending",
+            "merchantScope": "platform-or-agent",
+            "evidence": {
+              "qrCode": ""
+            },
+            "note": ""
+          },
+          "wap": {
+            "status": "pending",
+            "merchantScope": "platform-or-agent",
+            "evidence": {
+              "returnUrl": "",
+              "formBody": ""
+            },
+            "note": ""
+          },
+          "page": {
+            "status": "pending",
+            "merchantScope": "platform-or-agent",
+            "evidence": {
+              "returnUrl": "",
+              "formBody": ""
+            },
+            "note": ""
+          }
+        }
+      }
+    },
+    "paymentCallback": {
+      "status": "pending",
+      "note": "Official callback signature/decrypt accepted and matched local order."
+    },
+    "duplicateCallback": {
+      "status": "pending",
+      "note": "Repeated provider callback stayed idempotent."
+    },
+    "amountMismatchCallback": {
+      "status": "pending",
+      "note": "Amount mismatch produced reconciliation discrepancy without changing order status."
+    },
+    "refundRequest": {
+      "status": "pending",
+      "note": "Provider refund request returned accepted/processing/success with provider refund number."
+    },
+    "refundNotification": {
+      "status": "pending",
+      "note": "Provider refund notification verified, parsed and completed local refund through shared service."
+    },
+    "refundQuery": {
+      "status": "pending",
+      "note": "Provider refund query verified response signature and synced final status."
+    },
+    "statementFetch": {
+      "status": "pending",
+      "note": "Provider statement download parsed rows and matched local orders."
+    },
+    "agentAccountRouting": {
+      "status": "pending",
+      "note": "Agent order used the locked agent payment account for pay, callback and refund."
+    },
+    "agentTransfer": {
+      "status": "pending",
+      "note": "Verify agent automatic transfer in staging after the provider transfer product is enabled.",
+      "evidence": {
+        "provider": "",
+        "agentId": "",
+        "settlementNo": "",
+        "transferNo": "",
+        "providerTransferNo": "",
+        "amount": "",
+        "successQueryResult": "",
+        "failureCase": "",
+        "rollbackRecord": ""
+      }
+    },
+    "rollbackPlan": {
+      "status": "pending",
+      "note": "Rollback steps rehearsed or reviewed before enabling production traffic."
+    }
+  },
+  "rollback": {
+    "documented": false,
+    "steps": [
+      "Set REAL_PAYMENT_ENABLED=false and redeploy API.",
+      "Keep PAYMENT_SANDBOX_ENABLED=false in production.",
+      "Disable WECHAT_PAY_ENABLED/ALIPAY_ENABLED if provider callbacks keep failing.",
+      "Use finance reconciliation and refund provider scan before re-opening real payment."
+    ]
+  }
+}
