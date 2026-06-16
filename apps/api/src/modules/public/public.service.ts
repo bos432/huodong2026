@@ -38,7 +38,7 @@ import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults"
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
-import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, WechatLoginDto } from "./dto";
+import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
 import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -177,6 +177,71 @@ export class PublicService {
       tenantId: admin.tenant?.id ?? null,
       tenantName: admin.tenant?.name || null
     };
+  }
+
+  async myProfile(user: User) {
+    const fresh = await this.users.findOneBy({ id: user.id });
+    if (!fresh) throw new UnauthorizedException("登录已失效，请重新登录");
+    const profile = await this.memberProfiles.findOne({ where: { user: { id: fresh.id } } });
+    return {
+      id: fresh.id,
+      phone: fresh.phone,
+      nickname: fresh.nickname,
+      avatarUrl: fresh.avatarUrl,
+      hasPassword: Boolean(fresh.passwordHash),
+      memberLevel: profile?.level ? { id: profile.level.id, name: profile.level.name } : null,
+      points: profile?.points || 0
+    };
+  }
+
+  async updateMyProfile(user: User, dto: UpdateProfileDto) {
+    const row = await this.users.findOneBy({ id: user.id });
+    if (!row) throw new UnauthorizedException("登录已失效，请重新登录");
+    const nickname = dto.nickname === undefined ? row.nickname : String(dto.nickname || "").trim();
+    const avatarUrl = dto.avatarUrl === undefined ? row.avatarUrl : String(dto.avatarUrl || "").trim();
+    if (nickname && nickname.length > 40) throw new BadRequestException("昵称不能超过 40 个字");
+    if (avatarUrl && avatarUrl.length > 500) throw new BadRequestException("头像地址过长");
+    row.nickname = nickname || null;
+    row.avatarUrl = avatarUrl || null;
+    return this.myProfile(await this.users.save(row));
+  }
+
+  async updateMyPassword(user: User, dto: UpdatePasswordDto) {
+    const password = String(dto.password || "");
+    if (password.length < 6 || password.length > 64) throw new BadRequestException("密码长度需为 6-64 位");
+    const row = await this.users.findOneBy({ id: user.id });
+    if (!row) throw new UnauthorizedException("登录已失效，请重新登录");
+    row.passwordHash = await bcrypt.hash(password, 10);
+    await this.users.save(row);
+    return { id: row.id, hasPassword: true };
+  }
+
+  async phoneChangeCode(dto: PhoneChangeCodeDto, clientIp?: string | null) {
+    return this.h5Code({ phone: dto.phone }, clientIp);
+  }
+
+  async updateMyPhone(user: User, dto: UpdatePhoneDto) {
+    const phone = this.normalizePhone(dto.phone);
+    this.verifyH5Token(phone, dto.verificationCode, dto.verificationToken);
+    const row = await this.users.findOneBy({ id: user.id });
+    if (!row) throw new UnauthorizedException("登录已失效，请重新登录");
+    const exists = await this.users.findOne({ where: { phone } });
+    if (exists && exists.id !== row.id) throw new BadRequestException("该手机号已绑定其他账号");
+    row.phone = phone;
+    if (!row.nickname) row.nickname = `本地用户${phone.slice(-4)}`;
+    const saved = await this.users.save(row);
+    return this.myProfile(saved);
+  }
+
+  async uploadMyAvatar(user: User, file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException("请上传头像图片");
+    const publicBase = this.config.get<string>("PUBLIC_API_ORIGIN", "").replace(/\/$/, "");
+    const urlPath = `/uploads/avatars/${file.filename}`;
+    const row = await this.users.findOneBy({ id: user.id });
+    if (!row) throw new UnauthorizedException("登录已失效，请重新登录");
+    row.avatarUrl = publicBase ? `${publicBase}${urlPath}` : urlPath;
+    await this.users.save(row);
+    return { url: row.avatarUrl, path: urlPath, filename: file.filename, size: file.size, mimetype: file.mimetype };
   }
 
   async wechatLogin(dto: WechatLoginDto) {

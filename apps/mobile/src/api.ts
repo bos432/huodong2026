@@ -174,6 +174,10 @@ export function clearUser() {
   uni.removeStorageSync("user_nickname");
 }
 
+export function getUserToken() {
+  return String(uni.getStorageSync(USER_TOKEN_STORAGE_KEY) || "");
+}
+
 export async function requestH5Code(phone: string) {
   return request<any>("/public/auth/h5-code", { method: "POST", data: { phone } });
 }
@@ -195,6 +199,66 @@ function saveUserSession(result: any, phone: string, nickname?: string) {
   uni.setStorageSync("user_phone", phone);
   uni.setStorageSync("user_nickname", user.nickname || nickname || "");
   return user;
+}
+
+export function saveProfileSession(user: any) {
+  if (user?.phone) uni.setStorageSync("user_phone", user.phone);
+  else uni.removeStorageSync("user_phone");
+  uni.setStorageSync("user_nickname", user?.nickname || "");
+  return user;
+}
+
+export async function fetchMyProfile() {
+  const profile = await request<any>("/public/me/profile");
+  saveProfileSession(profile);
+  return profile;
+}
+
+export async function updateMyProfile(data: { nickname?: string; avatarUrl?: string }) {
+  const profile = await request<any>("/public/me/profile", { method: "PATCH", data });
+  saveProfileSession(profile);
+  return profile;
+}
+
+export async function updateMyPassword(password: string) {
+  return request<any>("/public/me/password", { method: "POST", data: { password } });
+}
+
+export async function requestPhoneChangeCode(phone: string) {
+  return request<any>("/public/me/phone/change-code", { method: "POST", data: { phone } });
+}
+
+export async function updateMyPhone(phone: string, verificationToken: string, verificationCode: string) {
+  const profile = await request<any>("/public/me/phone", { method: "POST", data: { phone, verificationToken, verificationCode } });
+  saveProfileSession(profile);
+  return profile;
+}
+
+export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: string }> {
+  const token = getUserToken();
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: `${API_BASE}${appendTenantCode("/public/me/avatar", getCurrentTenantCode())}`,
+      filePath,
+      name: "file",
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      success(res) {
+        let body: any = res.data;
+        if (typeof body === "string") {
+          try {
+            body = JSON.parse(body);
+          } catch {
+            body = null;
+          }
+        }
+        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(body.data);
+        else reject(new ApiClientError(body?.message || "上传失败", body?.requestId || headerValue(res.header, "x-request-id")));
+      },
+      fail(error) {
+        reject(error);
+      }
+    });
+  });
 }
 
 export async function loginWechat(code: string, nickname?: string, avatarUrl?: string) {

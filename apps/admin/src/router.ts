@@ -43,7 +43,7 @@ export const router = createRouter({
       path: "/",
       component: Layout,
       children: [
-        { path: "", redirect: () => (isPlatformAdmin() ? "/tenants" : "/dashboard") },
+        { path: "", redirect: "/dashboard" },
         { path: "dashboard", component: Dashboard, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "analytics", component: Analytics, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "tenants", component: Tenants, meta: { roles: permissions.superAdmin, scope: "platform" } },
@@ -83,7 +83,7 @@ export const router = createRouter({
 });
 
 function fallbackPath() {
-  if (isPlatformAdmin()) return "/tenants";
+  if (isPlatformAdmin()) return "/dashboard";
   if (canAccess(permissions.overview)) return "/dashboard";
   if (canAccess(permissions.checkIn)) return "/check-in";
   return "/login";

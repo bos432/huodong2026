@@ -1,6 +1,18 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
+import { mkdirSync } from "fs";
+import { diskStorage } from "multer";
+import { join } from "path";
 import { PublicService, PublicTenantContext } from "./public.service";
-import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, WechatLoginDto } from "./dto";
+import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
+
+const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/webp": ".webp"
+};
+const AVATAR_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "avatars");
+mkdirSync(AVATAR_UPLOAD_DIR, { recursive: true });
 
 @Controller("public")
 export class PublicController {
@@ -139,6 +151,55 @@ export class PublicController {
   async myWallet(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myWallet(user, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("me/profile")
+  async myProfile(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myProfile(user);
+  }
+
+  @Patch("me/profile")
+  async updateMyProfile(@Body() dto: UpdateProfileDto, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.updateMyProfile(user, dto);
+  }
+
+  @Post("me/password")
+  async updateMyPassword(@Body() dto: UpdatePasswordDto, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.updateMyPassword(user, dto);
+  }
+
+  @Post("me/phone/change-code")
+  async myPhoneChangeCode(@Body() dto: PhoneChangeCodeDto, @Req() req: any) {
+    await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.phoneChangeCode(dto, this.clientIp(req));
+  }
+
+  @Post("me/phone")
+  async updateMyPhone(@Body() dto: UpdatePhoneDto, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.updateMyPhone(user, dto);
+  }
+
+  @Post("me/avatar")
+  @UseInterceptors(FileInterceptor("file", {
+    storage: diskStorage({
+      destination: AVATAR_UPLOAD_DIR,
+      filename: (_req, file, callback) => {
+        const suffix = AVATAR_EXTENSION_BY_MIME[file.mimetype] || ".jpg";
+        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
+      }
+    }),
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: (_req, file, callback) => {
+      callback(null, Boolean(AVATAR_EXTENSION_BY_MIME[file.mimetype]));
+    }
+  }))
+  async uploadMyAvatar(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.uploadMyAvatar(user, file);
   }
 
   @Get("me/wallet/transactions")

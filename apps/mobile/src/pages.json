@@ -16,8 +16,12 @@
     { "path": "pages/admin/orders", "style": { "navigationBarTitleText": "订单查看" } },
     { "path": "pages/admin/check-in", "style": { "navigationBarTitleText": "签到核销" } },
     { "path": "pages/user/my", "style": { "navigationBarTitleText": "我的活动" } },
+    { "path": "pages/user/profile", "style": { "navigationBarTitleText": "账号资料" } },
+    { "path": "pages/user/security", "style": { "navigationBarTitleText": "账号安全" } },
+    { "path": "pages/user/wallet", "style": { "navigationBarTitleText": "余额明细" } },
     { "path": "pages/user/login", "style": { "navigationBarTitleText": "手机号登录" } },
     { "path": "pages/user/registration", "style": { "navigationBarTitleText": "报名详情" } },
-    { "path": "pages/user/review", "style": { "navigationBarTitleText": "活动评价" } }
+    { "path": "pages/user/review", "style": { "navigationBarTitleText": "活动评价" } },
+    { "path": "pages/charity/index", "style": { "navigationBarTitleText": "公益池" } }
   ]
 }

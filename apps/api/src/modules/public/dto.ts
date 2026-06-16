@@ -1,5 +1,5 @@
 import { PaymentMethod, RegistrationAnswer } from "../../shared/domain";
-import { IsArray, IsIn, IsInt, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
 
 export class H5LoginDto {
   @IsString()
@@ -44,6 +44,38 @@ export class WechatLoginDto {
   @IsOptional()
   @IsString()
   avatarUrl?: string;
+}
+
+export class UpdateProfileDto {
+  @IsOptional()
+  @IsString()
+  nickname?: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+}
+
+export class UpdatePasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  password!: string;
+}
+
+export class PhoneChangeCodeDto {
+  @IsString()
+  phone!: string;
+}
+
+export class UpdatePhoneDto {
+  @IsString()
+  phone!: string;
+
+  @IsString()
+  verificationToken!: string;
+
+  @IsString()
+  verificationCode!: string;
 }
 
 export class RegisterDto {

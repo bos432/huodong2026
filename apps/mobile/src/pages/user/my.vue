@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { RegistrationStatus, registrationStatusText, type HomepagePayload, type HomepageSectionView } from "@activity/shared";
-import { ensureUser, getCurrentTenantCode, request, setActivityListIntent, withTenantCode } from "../../api";
+import { ensureUser, fetchMyProfile, getCurrentTenantCode, request, setActivityListIntent, withTenantCode } from "../../api";
 import { getMobileAdminSession } from "../../mobile-admin";
 import { loadPageTheme } from "../../theme";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
@@ -13,6 +13,7 @@ import { goDecoratedLink, quickInitial as decoratedQuickInitial } from "../../de
 const rows = ref<any[]>([]);
 const homepageSections = ref<HomepageSectionView[]>([]);
 const tenant = ref<HomepagePayload["tenant"] | null>(null);
+const profile = ref<any | null>(null);
 const wallet = ref<any | null>(null);
 const walletTransactions = ref<any[]>([]);
 const charity = ref<any | null>(null);
@@ -32,7 +33,7 @@ const tabs = computed(() => [
 ]);
 
 const filteredRows = computed(() => (activeStatus.value === "all" ? rows.value : rows.value.filter((item) => item.status === activeStatus.value)));
-const latestWalletTransactions = computed(() => walletTransactions.value.slice(0, 4));
+const latestWalletTransactions = computed(() => walletTransactions.value.slice(0, 2));
 const myPageSection = computed(() => homepageSections.value.find((item) => item.enabled && item.type === "my_page"));
 const bottomNavSection = computed(() => homepageSections.value.find((item) => item.enabled && item.type === "bottom_nav"));
 const myConfig = computed<Record<string, any>>(() => (myPageSection.value?.config || {}) as Record<string, any>);
@@ -44,10 +45,12 @@ const toolItems = computed(() => {
   const fallback = configured.length
     ? configured
     : [
-        { label: "手机管理", icon: "管", color: "#1d4ed8", link: adminLink },
-        { label: "浏览活动", icon: "活", color: "#0f766e", link: "/pages/activity/list", action: "mainPage" },
-        { label: "公告中心", icon: "告", color: "#c2410c", link: "/pages/announcement/list" },
-        { label: "服务中心", icon: "服", color: "#475467", link: "/pages/service/index" }
+        { label: "我的报名", icon: "报", color: "#0f766e", action: "registrations" },
+        { label: "余额明细", icon: "余", color: "#1d4ed8", link: "/pages/user/wallet" },
+        { label: "公益池", icon: "益", color: "#15803d", link: "/pages/charity/index" },
+        { label: "账号设置", icon: "设", color: "#7c3aed", link: "/pages/user/profile" },
+        { label: "客服帮助", icon: "服", color: "#475467", link: "/pages/service/index" },
+        { label: "手机管理", icon: "管", color: "#c2410c", link: adminLink }
       ];
   return fallback
     .map((item) => item.label === "管理后台" || item.label === "手机管理" ? { ...item, label: "手机管理", icon: item.icon || "管", color: item.color || "#1d4ed8", link: adminLink } : item)
@@ -91,6 +94,10 @@ function goPage(url: string) {
 function goLink(url?: string, action?: string) {
   if (action === "refresh") {
     load();
+    return;
+  }
+  if (action === "registrations") {
+    activeStatus.value = "all";
     return;
   }
   goDecoratedLink(url, action);
@@ -137,7 +144,15 @@ function walletAmountText(item: any) {
 }
 
 function goWalletHelp() {
-  uni.navigateTo({ url: withTenantCode("/pages/service/index") });
+  uni.navigateTo({ url: withTenantCode("/pages/user/wallet") });
+}
+
+function goProfile() {
+  uni.navigateTo({ url: withTenantCode("/pages/user/profile") });
+}
+
+function displayName() {
+  return profile.value?.nickname || phone.value || "我的活动";
 }
 
 function statusClass(status: RegistrationStatus) {
@@ -154,7 +169,8 @@ async function load() {
   try {
     await ensureUser();
     phone.value = uni.getStorageSync("user_phone") || "";
-    const [registrations, homepage, walletDetail, transactions, charityDetail, adminStatus] = await Promise.all([
+    const [userProfile, registrations, homepage, walletDetail, transactions, charityDetail, adminStatus] = await Promise.all([
+      fetchMyProfile().catch(() => null),
       request<any[]>("/public/me/registrations"),
       request<HomepagePayload>("/public/page-decoration?pageKey=user_my").catch(() => ({ sections: [], fallback: true })),
       request<any>("/public/me/wallet").catch(() => null),
@@ -162,6 +178,7 @@ async function load() {
       request<any>("/public/me/charity").catch(() => null),
       request<any>("/public/me/admin-access").catch(() => ({ canAccess: false }))
     ]);
+    profile.value = userProfile;
     rows.value = registrations;
     homepageSections.value = homepage.sections || [];
     tenant.value = homepage.tenant || null;
@@ -199,11 +216,17 @@ onShow(async () => {
     <PageDecorationBlocks :sections="homepageSections.filter((item) => item.enabled && item.type !== 'bottom_nav' && item.type !== 'my_page')" />
 
     <view class="profile" :style="{ background: myLayout.heroBackgroundColor || '#111827', color: myLayout.heroTextColor || '#ffffff' }">
-      <view>
-        <view class="hello">{{ myConfig.greeting || myPageSection?.title || "我的活动" }}</view>
+      <image v-if="profile?.avatarUrl" class="avatar" :src="profile.avatarUrl" mode="aspectFill" @click="goProfile" />
+      <view v-else class="avatar fallback" @click="goProfile">{{ displayName().slice(0, 1) }}</view>
+      <view class="profile-info">
+        <view class="hello">{{ displayName() }}</view>
         <view class="sub">{{ phone ? `当前账号 ${phone}` : (myPageSection?.subtitle || "报名、付款、审核、签到状态都在这里") }}</view>
+        <view class="member-row">
+          <text>{{ profile?.memberLevel?.name || "普通会员" }}</text>
+          <text>{{ profile?.points || 0 }} 积分</text>
+        </view>
       </view>
-      <view class="total">{{ rows.length }}</view>
+      <view class="edit-profile" @click="goProfile">编辑</view>
     </view>
 
     <view class="wallet-card">
@@ -212,7 +235,7 @@ onShow(async () => {
           <view class="wallet-label">账户余额</view>
           <view class="wallet-amount">¥{{ money(wallet?.availableBalance) }}</view>
         </view>
-        <view class="wallet-action" @click="goWalletHelp">充值说明</view>
+        <view class="wallet-action" @click="goWalletHelp">明细</view>
       </view>
       <view class="wallet-stats">
         <view>
@@ -245,15 +268,7 @@ onShow(async () => {
         <view><text>已拨付</text><strong>¥{{ money(charity?.pool?.totalDisbursed) }}</strong></view>
       </view>
       <view class="wallet-tip">{{ charity?.setting?.publicNote || "公益金来自平台订单收入计提，用户无需额外支付。" }}</view>
-      <view v-if="charity?.projects?.length" class="charity-projects">
-        <view v-for="project in charity.projects" :key="project.id" class="charity-project">
-          <view>
-            <view class="flow-title">{{ project.title }}</view>
-            <view class="flow-time">目标 ¥{{ money(project.targetAmount) }} · 已拨付 ¥{{ money(project.disbursedAmount) }}</view>
-          </view>
-          <view class="project-progress">{{ project.progressPercent || 0 }}%</view>
-        </view>
-      </view>
+      <view class="charity-link" @click="goLink('/pages/charity/index')">查看公益池和项目进度</view>
     </view>
 
     <view class="tool-grid">
@@ -273,8 +288,11 @@ onShow(async () => {
     </scroll-view>
 
     <view class="wallet-flow">
-      <view class="section-title">余额明细</view>
-      <view v-if="!latestWalletTransactions.length" class="flow-empty">暂无余额流水。后台充值后会显示在这里。</view>
+      <view class="section-head">
+        <view class="section-title">最近余额变动</view>
+        <view class="section-link" @click="goWalletHelp">全部明细</view>
+      </view>
+      <view v-if="!latestWalletTransactions.length" class="flow-empty">暂无余额流水。</view>
       <view v-for="item in latestWalletTransactions" :key="item.id" class="flow-item">
         <view>
           <view class="flow-title">{{ walletTypeText(item.type) }}</view>
@@ -327,11 +345,16 @@ onShow(async () => {
 </template>
 
 <style scoped>
-.my-page { min-height: 100vh; padding: 24rpx 24rpx 140rpx; background: var(--page-bg-layer, #f4f6f8); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #111827); }
-.profile { display: flex; justify-content: space-between; align-items: center; padding: 34rpx 28rpx; border-radius: 8px; background: #111827; color: #fff; }
+.my-page { min-height: 100vh; padding: 24rpx 24rpx 170rpx; background: var(--page-bg-layer, #f4f6f8); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #111827); }
+.profile { display: flex; align-items: center; gap: 20rpx; padding: 30rpx 28rpx; border-radius: 8px; background: #111827; color: #fff; }
+.avatar { width: 104rpx; height: 104rpx; border-radius: 999px; flex: 0 0 auto; background: rgba(255,255,255,.12); }
+.avatar.fallback { display: flex; align-items: center; justify-content: center; background: rgba(255,255,255,.14); color: #fff; font-size: 38rpx; font-weight: 950; }
+.profile-info { min-width: 0; flex: 1; }
 .hello { font-size: 42rpx; font-weight: 900; }
 .sub { margin-top: 10rpx; color: rgba(255,255,255,0.72); font-size: 25rpx; }
-.total { width: 86rpx; height: 86rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-color, #0f766e); font-size: 34rpx; font-weight: 900; }
+.member-row { display: flex; gap: 12rpx; flex-wrap: wrap; margin-top: 12rpx; }
+.member-row text { padding: 6rpx 12rpx; border-radius: 999px; background: rgba(255,255,255,.12); color: rgba(255,255,255,.86); font-size: 22rpx; font-weight: 800; }
+.edit-profile { flex: 0 0 auto; padding: 12rpx 18rpx; border-radius: 999px; background: rgba(255,255,255,.12); color: #fff; font-size: 24rpx; font-weight: 900; }
 .wallet-card { margin-top: 20rpx; padding: 26rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.07); }
 .wallet-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
 .wallet-label { color: var(--muted-color, #667085); font-size: 25rpx; font-weight: 800; }
@@ -350,10 +373,8 @@ onShow(async () => {
 .charity-stats view { min-width: 0; display: grid; gap: 6rpx; padding: 16rpx; border-radius: 8px; background: rgba(255,255,255,.78); }
 .charity-stats text { color: var(--muted-color, #667085); font-size: 22rpx; }
 .charity-stats strong { color: #14532d; font-size: 25rpx; }
-.charity-projects { margin-top: 18rpx; border-top: 1px solid #bbf7d0; }
-.charity-project { display: flex; justify-content: space-between; gap: 18rpx; padding: 16rpx 0 0; }
-.project-progress { flex: 0 0 auto; color: #15803d; font-size: 28rpx; font-weight: 950; }
-.tool-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14rpx; margin: 20rpx 0 8rpx; }
+.charity-link { margin-top: 18rpx; color: #15803d; font-size: 25rpx; font-weight: 900; }
+.tool-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14rpx; margin: 20rpx 0 8rpx; }
 .tool { min-height: 124rpx; display: grid; gap: 10rpx; justify-items: center; align-content: center; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); color: #344054; font-size: 24rpx; font-weight: 800; box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
 .tool text { width: 52rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 25rpx; font-weight: 900; }
 .tool text.warm { background: #fff7ed; color: #c2410c; }
@@ -365,7 +386,9 @@ onShow(async () => {
 .tab text:last-child { color: var(--text-color, #111827); font-size: 28rpx; }
 .tab.active { background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); }
 .wallet-flow { margin-bottom: 20rpx; padding: 24rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
-.section-title { margin-bottom: 16rpx; color: var(--text-color, #111827); font-size: 31rpx; font-weight: 900; }
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 16rpx; }
+.section-title { color: var(--text-color, #111827); font-size: 31rpx; font-weight: 900; }
+.section-link { flex: 0 0 auto; color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 900; }
 .flow-empty { padding: 24rpx 0; color: var(--muted-color, #667085); font-size: 25rpx; text-align: center; }
 .flow-item { display: flex; justify-content: space-between; gap: 18rpx; padding: 18rpx 0; border-top: 1px solid #eef2f7; }
 .flow-item:first-of-type { border-top: 0; padding-top: 0; }

@@ -20,128 +20,170 @@ const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformAdmin() ? "" :
 const currentH5PreviewLabel = computed(() => (isPlatformAdmin() ? "平台H5" : "商家H5"));
 const menuGroups = [
   {
-    index: "platform",
-    icon: "OfficeBuilding",
-    label: "平台总控",
+    index: "platform-overview",
+    icon: "DataAnalysis",
+    label: "平台端 · 总览",
     scope: "platform",
     items: [
-      { index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.overview, scope: "any" },
-      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview, scope: "any" },
+      { index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.overview, scope: "platform" },
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview, scope: "platform" }
+    ]
+  },
+  {
+    index: "platform-merchant",
+    icon: "OfficeBuilding",
+    label: "平台端 · 商家",
+    scope: "platform",
+    items: [
       { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/admins", icon: "UserFilled", label: "商家账号", roles: permissions.superAdmin, scope: "any" },
-      { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: permissions.operation, scope: "any" },
+      { index: "/admins", icon: "UserFilled", label: "商家账号", roles: permissions.superAdmin, scope: "platform" },
+      { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: permissions.superAdmin, scope: "platform" }
+    ]
+  },
+  {
+    index: "platform-activity",
+    icon: "Calendar",
+    label: "平台端 · 活动监管",
+    scope: "platform",
+    items: [
+      { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: permissions.operation, scope: "platform" },
+      { index: "/activities?status=all", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
+      { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
       { index: "/announcements", icon: "Bell", label: "公告监管", roles: permissions.operation, scope: "platform" },
       { index: "/homepage-builder", icon: "Grid", label: "H5全局装修", roles: permissions.operation, scope: "platform" }
     ]
   },
   {
-    index: "platform-operation",
-    icon: "Tickets",
-    label: "运营监管",
-    scope: "platform",
-    items: [
-      { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
-      { index: "/activities?status=all", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" }
-    ]
-  },
-  {
     index: "platform-finance",
     icon: "Wallet",
-    label: "财务监管",
+    label: "平台端 · 订单财务",
     scope: "platform",
     items: [
       { index: "/orders", icon: "Wallet", label: "全局订单", roles: permissions.finance, scope: "platform" },
       { index: "/finance", icon: "CreditCard", label: "全局对账", roles: permissions.finance, scope: "platform" },
-      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "platform" },
       { index: "/agents", icon: "Shop", label: "商家收款账户", roles: permissions.superAdmin, scope: "platform" }
     ]
   },
   {
-    index: "overview",
-    icon: "DataAnalysis",
-    label: "商家概览",
-    scope: "tenant",
-    items: [
-      { index: "/dashboard", icon: "DataAnalysis", label: "数据看板", roles: permissions.overview },
-      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview },
-      { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: permissions.operation },
-      { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: permissions.operation }
-    ]
-  },
-  {
-    index: "activity",
-    icon: "Calendar",
-    label: "活动运营",
-    scope: "tenant",
-    items: [
-      { index: "/activities", icon: "Calendar", label: "活动管理", roles: permissions.activityView },
-      { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: permissions.operation },
-      { index: "/announcements", icon: "Bell", label: "公告管理", roles: permissions.operation },
-      { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: permissions.operation },
-      { index: "/notifications", icon: "Message", label: "通知中心", roles: permissions.operation },
-      { index: "/reviews", icon: "ChatDotRound", label: "评价管理", roles: permissions.operation }
-    ]
-  },
-  {
-    index: "registration",
-    icon: "Tickets",
-    label: "报名与现场",
-    scope: "tenant",
-    items: [
-      { index: "/registrations", icon: "Tickets", label: "报名管理", roles: permissions.registrationView },
-      { index: "/waitlists", icon: "List", label: "候补管理", roles: permissions.operation },
-      { index: "/check-in", icon: "Finished", label: "签到核销", roles: permissions.checkIn }
-    ]
-  },
-  {
-    index: "trade",
-    icon: "Wallet",
-    label: "票务与财务",
-    scope: "tenant",
-    items: [
-      { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: permissions.operation },
-      { index: "/coupons", icon: "Discount", label: "优惠码", roles: permissions.operation },
-      { index: "/agents", icon: "Shop", label: "收款方式", roles: permissions.paymentAccountView },
-      { index: "/agent-settlements", icon: "Money", label: "代理结算", roles: permissions.finance },
-      { index: "/orders", icon: "Wallet", label: "订单管理", roles: permissions.finance },
-      { index: "/finance", icon: "CreditCard", label: "财务对账", roles: permissions.finance }
-    ]
-  },
-  {
-    index: "user",
+    index: "platform-member",
     icon: "User",
-    label: "用户与会员",
-    scope: "tenantOrPlatformAdmin",
+    label: "平台端 · 会员资产",
+    scope: "platform",
     items: [
-      { index: "/members", icon: "User", label: "会员管理", roles: permissions.operation, scope: "tenantOrPlatformAdmin" },
-      { index: "/tags", icon: "PriceTag", label: "用户标签", roles: permissions.operation, scope: "tenant" }
+      { index: "/members", icon: "User", label: "会员资料管理", roles: permissions.operation, scope: "platform" }
     ]
   },
   {
-    index: "charity",
+    index: "platform-charity",
     icon: "Coin",
-    label: "公益运营",
-    scope: "tenant",
+    label: "平台端 · 公益池",
+    scope: "platform",
     items: [
-      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview }
+      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "platform" }
     ]
   },
   {
-    index: "system",
+    index: "platform-security",
     icon: "Tools",
-    label: "系统与安全",
-    scope: "any",
+    label: "平台端 · 系统安全",
+    scope: "platform",
     items: [
       { index: "/system-settings", icon: "Tools", label: "系统设置", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/system-settings", icon: "Tools", label: "运营设置", roles: permissions.superAdmin, scope: "tenant" },
-      { index: "/tenant-profile", icon: "Shop", label: "商家资料", roles: permissions.superAdmin, scope: "tenant" },
       { index: "/config-check", icon: "Monitor", label: "上线体检", roles: permissions.superAdmin, scope: "platform" },
       { index: "/ops-routine", icon: "List", label: "运营巡检", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/admins", icon: "UserFilled", label: "员工账号", roles: permissions.superAdmin, scope: "tenant" },
-      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: permissions.superAdmin, scope: "any" },
+      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: permissions.superAdmin, scope: "platform" },
       { index: "/admin-login-logs", icon: "Key", label: "登录日志", roles: permissions.superAdmin, scope: "platform" },
       { index: "/h5-code-logs", icon: "Lock", label: "验证码日志", roles: permissions.superAdmin, scope: "platform" }
+    ]
+  },
+  {
+    index: "tenant-workbench",
+    icon: "DataAnalysis",
+    label: "商家端 · 工作台",
+    scope: "tenant",
+    items: [
+      { index: "/dashboard", icon: "DataAnalysis", label: "工作台", roles: permissions.overview, scope: "tenant" },
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview, scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-activity",
+    icon: "Calendar",
+    label: "商家端 · 活动",
+    scope: "tenant",
+    items: [
+      { index: "/activities", icon: "Calendar", label: "活动管理", roles: permissions.activityView, scope: "tenant" },
+      { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: permissions.operation, scope: "tenant" },
+      { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: permissions.operation, scope: "tenant" },
+      { index: "/coupons", icon: "Discount", label: "优惠码", roles: permissions.operation, scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-registration",
+    icon: "Tickets",
+    label: "商家端 · 报名签到",
+    scope: "tenant",
+    items: [
+      { index: "/registrations", icon: "Tickets", label: "报名管理", roles: permissions.registrationView, scope: "tenant" },
+      { index: "/waitlists", icon: "List", label: "候补管理", roles: permissions.operation, scope: "tenant" },
+      { index: "/check-in", icon: "Finished", label: "签到核销", roles: permissions.checkIn, scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-finance",
+    icon: "Wallet",
+    label: "商家端 · 订单财务",
+    scope: "tenant",
+    items: [
+      { index: "/orders", icon: "Wallet", label: "订单管理", roles: permissions.finance, scope: "tenant" },
+      { index: "/finance", icon: "CreditCard", label: "财务对账", roles: permissions.finance, scope: "tenant" },
+      { index: "/agents", icon: "Shop", label: "收款方式", roles: permissions.paymentAccountView, scope: "tenant" },
+      { index: "/agent-settlements", icon: "Money", label: "代理结算", roles: permissions.finance, scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-member",
+    icon: "User",
+    label: "商家端 · 会员运营",
+    scope: "tenant",
+    items: [
+      { index: "/members", icon: "User", label: "会员资料管理", roles: permissions.operation, scope: "tenant" },
+      { index: "/tags", icon: "PriceTag", label: "用户标签", roles: permissions.operation, scope: "tenant" },
+      { index: "/notifications", icon: "Message", label: "通知中心", roles: permissions.operation, scope: "tenant" },
+      { index: "/reviews", icon: "ChatDotRound", label: "评价管理", roles: permissions.operation, scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-marketing",
+    icon: "Grid",
+    label: "商家端 · 装修营销",
+    scope: "tenant",
+    items: [
+      { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: permissions.operation, scope: "tenant" },
+      { index: "/announcements", icon: "Bell", label: "公告管理", roles: permissions.operation, scope: "tenant" },
+      { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: permissions.operation, scope: "tenant" },
+      { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: permissions.operation, scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-charity",
+    icon: "Coin",
+    label: "商家端 · 公益池",
+    scope: "tenant",
+    items: [
+      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-system",
+    icon: "Tools",
+    label: "商家端 · 系统设置",
+    scope: "tenant",
+    items: [
+      { index: "/system-settings", icon: "Tools", label: "运营设置", roles: permissions.superAdmin, scope: "tenant" },
+      { index: "/tenant-profile", icon: "Shop", label: "商家资料", roles: permissions.superAdmin, scope: "tenant" },
+      { index: "/admins", icon: "UserFilled", label: "员工账号", roles: permissions.superAdmin, scope: "tenant" },
+      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: permissions.superAdmin, scope: "tenant" }
     ]
   }
 ];
