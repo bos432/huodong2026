@@ -491,7 +491,7 @@ export class PublicService {
     await this.recordActivityView(activity, user || null, tracking);
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
     const [ticketTypes, memberAccess] = await Promise.all([
-      this.ticketTypes.find({ where: { activity: { id }, enabled: true }, order: { price: "ASC", id: "ASC" } }),
+      this.findPublicTicketTypes(id),
       this.memberAccessSnapshot(activity, userId)
     ]);
     return { ...(await this.withPublicStats(activity)), ticketTypes, memberAccess };
@@ -1513,11 +1513,25 @@ export class PublicService {
     return Boolean(activity.priorityMemberLevel && activity.priorityRegistrationEndsAt && activity.priorityRegistrationEndsAt.getTime() > Date.now());
   }
 
+  private findPublicTicketTypes(activityId: number) {
+    return this.ticketTypes
+      .createQueryBuilder("ticketType")
+      .where("ticketType.activityId = :activityId", { activityId })
+      .andWhere("ticketType.enabled = :enabled", { enabled: true })
+      .orderBy("ticketType.price", "ASC")
+      .addOrderBy("ticketType.id", "ASC")
+      .getMany();
+  }
+
   private async withPublicStats(activity: Activity) {
     const usedStatuses = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
     const [registeredCount, waitingCount] = await Promise.all([
-      this.registrations.count({ where: { activity: { id: activity.id }, status: In(usedStatuses) } }),
-      this.waitlists.count({ where: { activity: { id: activity.id }, status: WaitlistStatus.Waiting } })
+      this.registrations
+        .createQueryBuilder("registration")
+        .where("registration.activityId = :activityId", { activityId: activity.id })
+        .andWhere("registration.status IN (:...statuses)", { statuses: usedStatuses })
+        .getCount(),
+      this.waitlists.createQueryBuilder("waitlist").where("waitlist.activityId = :activityId", { activityId: activity.id }).andWhere("waitlist.status = :status", { status: WaitlistStatus.Waiting }).getCount()
     ]);
     const remainingSeats = Math.max(activity.capacity - registeredCount, 0);
     const now = Date.now();
