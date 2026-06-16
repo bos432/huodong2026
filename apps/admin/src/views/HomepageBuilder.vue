@@ -433,6 +433,15 @@ async function uploadLayoutImage(file: File) {
   return false;
 }
 
+async function uploadConfigArrayItemImage(file: File, arrayKey: "items" | "tools", index: number, key: string) {
+  const data = new FormData();
+  data.append("file", file);
+  const result = await api.post<any, any>("/admin/uploads/images", data, { headers: { "Content-Type": "multipart/form-data" } });
+  updateConfigArrayItem(arrayKey, index, key, result.url || result.path);
+  ElMessage.success("图标已上传");
+  return false;
+}
+
 function onTypeChange(value: string | number | boolean) {
   resetForm(String(value));
 }
@@ -807,6 +816,12 @@ onMounted(async () => {
               <el-input :model-value="item.label" placeholder="菜单名称" @input="(value: string) => updateConfigArrayItem('items', index, 'label', value)" />
               <el-input :model-value="item.link" placeholder="跳转路径" @input="(value: string) => updateConfigArrayItem('items', index, 'link', value)" />
               <el-input :model-value="item.action" placeholder="action，如 mainPage" @input="(value: string) => updateConfigArrayItem('items', index, 'action', value)" />
+              <div class="upload-line">
+                <el-input :model-value="item.iconUrl" placeholder="图标图片" @input="(value: string) => updateConfigArrayItem('items', index, 'iconUrl', value)" />
+                <el-upload :show-file-list="false" :before-upload="(file: File) => uploadConfigArrayItemImage(file, 'items', index, 'iconUrl')">
+                  <el-button :icon="Upload">上传</el-button>
+                </el-upload>
+              </div>
               <el-color-picker :model-value="item.color" @change="(value: string | null) => updateConfigArrayItem('items', index, 'color', String(value || '#0f766e'))" />
               <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('items', index)" />
             </div>
@@ -945,7 +960,7 @@ onMounted(async () => {
 .drawer-save-actions { display: flex; gap: 8px; flex-shrink: 0; }
 .quick-editor { display: grid; gap: 10px; margin-bottom: 18px; }
 .quick-row { display: grid; grid-template-columns: 120px 1fr 42px 34px; gap: 8px; align-items: center; }
-.quick-row.nav-row { grid-template-columns: 100px 1fr 140px 42px 34px; }
+.quick-row.nav-row { grid-template-columns: 100px 1fr 130px minmax(220px, 1fr) 42px 34px; }
 .quick-row.my-tool-row { grid-template-columns: 70px 110px 1fr 130px 42px 34px; }
 .inner-page-row { display: grid; grid-template-columns: 110px 130px 1fr 120px 34px; gap: 8px; align-items: center; }
 @media (max-width: 1280px) {

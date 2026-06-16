@@ -901,6 +901,20 @@ export class CreateAdminDto {
   tenantId?: number;
 }
 
+export class UpdateAdminDto {
+  @IsOptional()
+  @IsEnum(AdminRole)
+  role?: string;
+
+  @IsOptional()
+  @IsInt()
+  tenantId?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
 export class ActivityApprovalDto {
   @IsOptional()
   @IsString()

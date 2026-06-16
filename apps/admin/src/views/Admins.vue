@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Key, Plus, Refresh, Search, Switch, UserFilled } from "@element-plus/icons-vue";
+import { Edit, Key, Plus, Refresh, Search, Switch, UserFilled } from "@element-plus/icons-vue";
 import { useRoute } from "vue-router";
 import { api } from "../api";
 import { AdminRole, isPlatformAdmin, roleOptions } from "../permissions";
@@ -34,6 +34,8 @@ const loading = ref(false);
 const saving = ref(false);
 const memberLoading = ref(false);
 const memberDialog = ref(false);
+const editDialog = ref(false);
+const editingAdmin = ref<AdminRow | null>(null);
 const total = ref(0);
 const hasDefaultAdmin = ref(false);
 const route = useRoute();
@@ -41,6 +43,7 @@ const tenantStaffRoles = [AdminRole.Operator, AdminRole.Finance, AdminRole.Check
 const visibleRoleOptions = computed(() => (isPlatformAdmin() ? roleOptions : roleOptions.filter((role) => tenantStaffRoles.includes(role.value))));
 const defaultCreateRole = computed(() => (isPlatformAdmin() ? AdminRole.SuperAdmin : AdminRole.Operator));
 const form = reactive({ username: "", password: "", role: defaultCreateRole.value, tenantId: undefined as number | undefined });
+const editForm = reactive({ role: defaultCreateRole.value, tenantId: undefined as number | undefined, enabled: true });
 const filters = reactive({ keyword: "", role: "", enabled: "", tenantId: undefined as number | undefined, includeSmoke: false, page: 1, pageSize: 20 });
 const memberKeyword = ref("");
 const selectedTenant = computed(() => tenants.value.find((tenant) => tenant.id === form.tenantId));
@@ -165,6 +168,33 @@ async function resetPassword(row: AdminRow) {
   await api.post(`/admin/admins/${row.id}/password`, { password: value });
   ElMessage.success("密码已重置");
   await load();
+}
+
+function openEdit(row: AdminRow) {
+  editingAdmin.value = row;
+  Object.assign(editForm, {
+    role: row.role as AdminRole,
+    tenantId: row.tenant?.id || undefined,
+    enabled: row.enabled
+  });
+  editDialog.value = true;
+}
+
+async function saveEdit() {
+  if (!editingAdmin.value) return;
+  if (!visibleRoleOptions.value.some((role) => role.value === editForm.role)) return ElMessage.error("当前后台不能设置该角色");
+  try {
+    await api.patch(`/admin/admins/${editingAdmin.value.id}`, {
+      role: editForm.role,
+      tenantId: isPlatformAdmin() ? editForm.tenantId || undefined : undefined,
+      enabled: editForm.enabled
+    });
+    ElMessage.success("管理员已更新");
+    editDialog.value = false;
+    await load();
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存失败");
+  }
 }
 
 async function toggleStatus(row: AdminRow) {
@@ -321,8 +351,9 @@ onMounted(() => {
         </el-table-column>
         <el-table-column label="创建时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="更新时间" width="170"><template #default="{ row }">{{ formatTime(row.updatedAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
+            <el-button size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
             <el-button size="small" :icon="Key" @click="resetPassword(row)">重置密码</el-button>
             <el-button size="small" :type="row.enabled ? 'warning' : 'success'" :icon="Switch" @click="toggleStatus(row)">
               {{ row.enabled ? "禁用" : "启用" }}
@@ -343,6 +374,32 @@ onMounted(() => {
         />
       </div>
     </div>
+
+    <el-dialog v-model="editDialog" width="520px" title="编辑管理员">
+      <el-form label-position="top">
+        <el-form-item label="账号">
+          <el-input :model-value="editingAdmin?.username" disabled />
+        </el-form-item>
+        <el-form-item label="角色">
+          <el-select v-model="editForm.role" style="width: 100%">
+            <el-option v-for="role in visibleRoleOptions" :key="role.value" :label="role.label" :value="role.value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="isPlatformAdmin()" label="所属商家">
+          <el-select v-model="editForm.tenantId" clearable filterable style="width: 100%" placeholder="平台账号">
+            <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name}（${tenant.code}）`" :value="tenant.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="状态">
+          <el-switch v-model="editForm.enabled" active-text="启用" inactive-text="禁用" />
+        </el-form-item>
+      </el-form>
+      <el-alert type="info" show-icon :closable="false" title="管理员账号不建议物理删除" description="如果添加错了，建议改角色、改所属商家，或禁用账号，这样操作日志和历史记录还能追溯。" />
+      <template #footer>
+        <el-button @click="editDialog=false">取消</el-button>
+        <el-button type="primary" @click="saveEdit">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 

@@ -44,7 +44,8 @@ function isCurrent(url?: string) {
       :style="{ color: isCurrent(item.link) ? String(item.color || section?.layout?.activeColor || '#0f766e') : String(section?.layout?.textColor || '#667085') }"
       @click="goDecoratedLink(item.link, item.action)"
     >
-      <text class="custom-tabbar-icon" :style="{ background: `${item.color || '#0f766e'}18` }">{{ quickInitial(item.label, item.icon) }}</text>
+      <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
+      <text v-else class="custom-tabbar-icon" :style="{ background: `${item.color || '#0f766e'}18` }">{{ quickInitial(item.label, item.icon) }}</text>
       <text>{{ item.label }}</text>
     </view>
   </view>

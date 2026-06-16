@@ -51,7 +51,7 @@ import { inspectRuntimeConfig } from "../../shared/config-validation";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActor, tenantRelationForActor } from "../../shared/tenant-scope";
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
@@ -518,6 +518,25 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     row.passwordHash = await bcrypt.hash(dto.password, 10);
     const saved = await this.admins.save(row);
     await this.logOperation(admin, "admin.password.reset", "admin", saved.id, `重置管理员密码：${saved.username}`);
+    return this.publicAdmin(saved);
+  }
+
+  async updateAdmin(id: number, dto: UpdateAdminDto, admin?: AdminContext) {
+    const row = await this.admins.findOneBy({ id });
+    if (!row) throw new NotFoundException("管理员不存在");
+    this.assertAdminAccountAccess(row, admin);
+    const nextRole = dto.role ? this.resolveNewAdminRole(dto.role, admin) : normalizeAdminRole(row.role);
+    const nextTenant = dto.tenantId !== undefined ? await this.resolveAdminTenant(dto.tenantId, admin) : row.tenant || null;
+    if (dto.enabled === false) {
+      if (admin?.id === id) throw new BadRequestException("不能禁用当前登录账号");
+      const enabledCount = await this.admins.count({ where: { enabled: true } });
+      if (row.enabled && enabledCount <= 1) throw new BadRequestException("至少需要保留一个启用的管理员账号");
+    }
+    row.role = nextRole;
+    row.tenant = nextTenant;
+    if (dto.enabled !== undefined) row.enabled = dto.enabled;
+    const saved = await this.admins.save(row);
+    await this.logOperation(admin, "admin.update", "admin", saved.id, `编辑管理员：${saved.username}`, { role: saved.role, tenantId: saved.tenant?.id || null, enabled: saved.enabled });
     return this.publicAdmin(saved);
   }
 
