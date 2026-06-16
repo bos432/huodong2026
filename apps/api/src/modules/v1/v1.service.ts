@@ -208,8 +208,18 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     return tenant;
   }
 
+  private findPublicActivity(id: number, withFields = false) {
+    const relations = ["tenant", "category", "agent", "minMemberLevel", "priorityMemberLevel"];
+    if (withFields) relations.push("fields");
+    return this.activities.findOne({
+      where: { id },
+      relations,
+      loadEagerRelations: false
+    });
+  }
+
   async enhancedActivity(id: number, userId?: number, tracking?: ActivityTrackingInput, context?: PublicTenantContext) {
-    const activity = await this.activities.findOne({ where: { id }, relations: ["fields"] });
+    const activity = await this.findPublicActivity(id, true);
     if (!activity) throw new NotFoundException("活动不存在");
     await this.assertPublicActivityTenantAccess(activity, context);
 
@@ -258,7 +268,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   async activityReviews(activityId: number, context?: PublicTenantContext) {
-    const activity = await this.activities.findOneBy({ id: activityId });
+    const activity = await this.findPublicActivity(activityId);
     if (!activity) throw new NotFoundException("Activity not found");
     await this.assertPublicActivityTenantAccess(activity, context);
     return this.reviews.find({

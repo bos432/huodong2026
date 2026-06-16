@@ -473,8 +473,18 @@ export class PublicService {
     return Math.min(Math.max(Number.isFinite(value) ? value : fallback, 1), max);
   }
 
+  private findPublicActivity(id: number, options?: { status?: ActivityStatus; withFields?: boolean }) {
+    const relations = ["tenant", "category", "agent", "minMemberLevel", "priorityMemberLevel"];
+    if (options?.withFields) relations.push("fields");
+    return this.activities.findOne({
+      where: options?.status ? { id, status: options.status } : { id },
+      relations,
+      loadEagerRelations: false
+    });
+  }
+
   async activityDetail(id: number, userId?: number, context?: PublicTenantContext, tracking?: PublicTrackingContext) {
-    const activity = await this.activities.findOne({ where: { id, status: ActivityStatus.Open }, relations: ["fields"] });
+    const activity = await this.findPublicActivity(id, { status: ActivityStatus.Open, withFields: true });
     if (!activity) throw new NotFoundException("活动不存在或未开放");
     await this.assertPublicTenantAccess(activity, context);
     const user = userId ? await this.users.findOneBy({ id: userId }) : null;
@@ -488,14 +498,14 @@ export class PublicService {
   }
 
   async quote(activityId: number, dto: QuoteDto, user: User, context?: PublicTenantContext) {
-    const activity = await this.activities.findOne({ where: { id: activityId, status: ActivityStatus.Open } });
+    const activity = await this.findPublicActivity(activityId, { status: ActivityStatus.Open });
     if (!activity) throw new NotFoundException("活动不存在或未开放");
     await this.assertPublicTenantAccess(activity, context);
     return this.calculateQuote(activity, { ...dto, userId: user.id });
   }
 
   async register(activityId: number, dto: RegisterDto, user: User, context?: PublicTenantContext) {
-    const activity = await this.activities.findOne({ where: { id: activityId }, relations: ["fields"] });
+    const activity = await this.findPublicActivity(activityId, { withFields: true });
     if (!activity || activity.status !== ActivityStatus.Open) throw new BadRequestException("活动暂不可报名");
     await this.assertPublicTenantAccess(activity, context);
     await this.assertRegistrationEnabled();
