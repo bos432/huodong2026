@@ -10,6 +10,9 @@ import { v4 as uuidv4 } from "uuid";
 import { ActivityCategory } from "../../entities/activity-category.entity";
 import { Activity } from "../../entities/activity.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
+import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { AmbassadorCase } from "../../entities/ambassador-case.entity";
+import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
@@ -38,7 +41,7 @@ import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults"
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
-import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
+import { AmbassadorApplicationDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
 import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -53,6 +56,9 @@ export class PublicService {
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
     @InjectRepository(ActivityViewLog) private readonly activityViewLogs: Repository<ActivityViewLog>,
+    @InjectRepository(AmbassadorLandingSetting) private readonly ambassadorSettings: Repository<AmbassadorLandingSetting>,
+    @InjectRepository(AmbassadorCase) private readonly ambassadorCases: Repository<AmbassadorCase>,
+    @InjectRepository(AmbassadorApplication) private readonly ambassadorApplications: Repository<AmbassadorApplication>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
     @InjectRepository(Registration) private readonly registrations: Repository<Registration>,
@@ -260,6 +266,8 @@ export class PublicService {
       .createQueryBuilder("category")
       .leftJoin("category.tenant", "tenant")
       .where("category.enabled = :enabled", { enabled: true })
+      .andWhere("category.publicVisible = :publicVisible", { publicVisible: true })
+      .andWhere("category.scene = :scene", { scene: "activity" })
       .andWhere("(category.tenantId IS NULL OR tenant.enabled = :tenantEnabled)", { tenantEnabled: true })
       .orderBy("category.sortOrder", "ASC")
       .addOrderBy("category.id", "ASC");
@@ -291,6 +299,37 @@ export class PublicService {
 
   charityProjects() {
     return this.charityFund.publicProjects();
+  }
+
+  async ambassadorLanding() {
+    const setting = await this.ambassadorSettings.findOne({ where: {}, order: { id: "ASC" } });
+    const cases = await this.ambassadorCases.find({ where: { enabled: true }, order: { sortOrder: "ASC", id: "ASC" } });
+    return {
+      setting: {
+        enabled: setting?.enabled !== false,
+        config: this.mergeAmbassadorConfig(setting?.config)
+      },
+      cases
+    };
+  }
+
+  async submitAmbassadorApplication(dto: AmbassadorApplicationDto) {
+    const phone = this.normalizePhone(dto.phone);
+    const name = String(dto.name || "").trim();
+    const city = String(dto.city || "").trim();
+    const expertise = String(dto.expertise || "").trim();
+    const experience = String(dto.experience || "").trim();
+    const wechat = String(dto.wechat || "").trim();
+    const source = this.cleanTrackingText(dto.source, 80) || null;
+    const channelCode = this.cleanTrackingText(dto.channelCode, 80) || null;
+    if (!name) throw new BadRequestException("请填写姓名");
+    if (!city) throw new BadRequestException("请填写城市");
+    if (!expertise) throw new BadRequestException("请填写擅长领域");
+    if (!experience) throw new BadRequestException("请填写经验介绍");
+    if (!wechat) throw new BadRequestException("请填写微信号");
+    const row = this.ambassadorApplications.create({ name, phone, city, expertise, experience, wechat, source, channelCode, status: "pending" });
+    const saved = await this.ambassadorApplications.save(row);
+    return { id: saved.id, status: saved.status, submittedAt: saved.createdAt };
   }
 
   myCharity(user: User) {
@@ -1335,7 +1374,7 @@ export class PublicService {
   }
 
   private defaultPaymentMethods() {
-    return { free: true, wechat: true, alipay: false, balance: true, offline: true };
+    return { free: true, wechat: false, alipay: false, balance: true, offline: true };
   }
 
   private normalizePaymentMethods(value: unknown) {
@@ -1492,6 +1531,57 @@ export class PublicService {
   private publicOperationSetting(setting: OperationSetting) {
     const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
     return { ...publicSetting, paymentMethods: this.normalizePaymentMethods(setting.paymentMethods) };
+  }
+
+  private mergeAmbassadorConfig(input?: Record<string, unknown> | null) {
+    const defaults = this.defaultAmbassadorConfig();
+    const next = input && typeof input === "object" && !Array.isArray(input) ? input : {};
+    const merged: Record<string, unknown> = { ...defaults, ...next };
+    for (const key of ["painPoints", "solutionItems", "benefits", "requirements"]) merged[key] = this.normalizeStringArray(merged[key], defaults[key] as string[]);
+    merged.faqs = this.normalizeFaqs(merged.faqs, defaults.faqs as Array<{ question: string; answer: string }>);
+    return merged;
+  }
+
+  private defaultAmbassadorConfig(): Record<string, unknown> {
+    return {
+      heroTitle: "寻找100位“七维文化大使”",
+      heroSubtitle: "一起用7把钥匙，打开中国人的精神家园",
+      heroCopy: "不用辞职、不用囤货，只需把你的热爱变成课程，平台帮你搞定技术、流量和变现。",
+      ctaText: "立即申请，锁定早鸟名额",
+      originalPrice: "2999",
+      earlyBirdPrice: "999",
+      quotaText: "首期限额100人，审核制入驻",
+      refundText: "入驻30天内，觉得不合适，可申请全额退款。",
+      customerWechat: "",
+      customerPhone: "",
+      backgroundImageUrl: "",
+      painPoints: ["你在传统文化、书法、教育、健康、创业或技能领域有积累，却缺一个被看见的舞台。", "你试过做内容，但流量不稳定，转化不系统。", "你想把知识做成课程，却被技术、运营和交付卡住。", "你不想只做卖课的人，更想进入一个共创、成长、长期沉淀品牌的圈子。"],
+      solutionItems: ["独立小程序店铺 + 专属H5主页，一键开课。", "平台全域流量扶持，结合城市线下活动导流。", "每月闭门共创会，授课技能训练，关键阶段策略陪跑。", "链接传统文化、书法、教育、健康、创业、技能等领域的共创者。"],
+      benefits: ["官方认证身份：颁发“七维书院·特聘文化大使”证书，并获得平台个人品牌展示机会。", "课程收益支持：首批入驻享平台扶持政策，具体规则以审核沟通为准。", "高端私密社群：进入七维书院共创圈，资源互换、经验复盘。", "全年赋能陪跑：闭门策略会、线下大课、课程打磨与运营指导。"],
+      requirements: ["有真才实学：在传统文化、东方哲学、民俗文化、书法、教育、健康、创业、技能任一领域有扎实积累。", "有利他之心：愿意分享，愿意帮助他人成长。", "有长期主义：不是来赚快钱，而是想打造个人品牌、沉淀长期资产。"],
+      faqs: [
+        { question: "我没有录制课程经验，怎么办？", answer: "平台会协助你梳理课程大纲、设计表达结构，并陪跑第一门课程上线。" },
+        { question: "入驻后多久能看到收益？", answer: "收益取决于课程质量、运营投入和受众匹配度，平台会提供流量、工具和运营建议。" },
+        { question: "早鸟费用是一次性还是每年？", answer: "默认展示为首年早鸟价，具体续费和权益可在后台文案中调整。" }
+      ]
+    };
+  }
+
+  private normalizeStringArray(value: unknown, fallback: string[]) {
+    if (!Array.isArray(value)) return fallback;
+    const list = value.map((item) => String(item || "").trim()).filter(Boolean);
+    return list.length ? list.slice(0, 20) : fallback;
+  }
+
+  private normalizeFaqs(value: unknown, fallback: Array<{ question: string; answer: string }>) {
+    if (!Array.isArray(value)) return fallback;
+    const list = value
+      .map((item) => {
+        const row = item && typeof item === "object" && !Array.isArray(item) ? (item as Record<string, unknown>) : {};
+        return { question: String(row.question || "").trim(), answer: String(row.answer || "").trim() };
+      })
+      .filter((item) => item.question && item.answer);
+    return list.length ? list.slice(0, 20) : fallback;
   }
 }
 

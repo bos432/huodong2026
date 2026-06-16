@@ -196,7 +196,7 @@ function announcementSummary(content: unknown) {
 }
 
 function categoryCover(category: any) {
-  return latest.value.find((item) => item.category?.id === category.id && item.coverUrl)?.coverUrl || latest.value.find((item) => item.coverUrl)?.coverUrl || "";
+  return category.coverUrl || category.iconUrl || latest.value.find((item) => item.category?.id === category.id && item.coverUrl)?.coverUrl || latest.value.find((item) => item.coverUrl)?.coverUrl || "";
 }
 
 function quickInitial(label: string) {

@@ -17,6 +17,22 @@ export class CategoryDto {
   name!: string;
 
   @IsOptional()
+  @IsString()
+  iconUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  coverUrl?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  publicVisible?: boolean;
+
+  @IsOptional()
+  @IsString()
+  scene?: string;
+
+  @IsOptional()
   @IsInt()
   sortOrder?: number;
 
@@ -144,6 +160,87 @@ export class AgentSettlementSandboxTransferDto {
   @IsOptional()
   @IsString()
   remark?: string;
+}
+
+export class AmbassadorSettingDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, unknown>;
+}
+
+export class AmbassadorCaseDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  field?: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  metrics?: string;
+
+  @IsOptional()
+  @IsString()
+  quote?: string;
+
+  @IsOptional()
+  @IsInt()
+  sortOrder?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
+export class AmbassadorApplicationQueryDto {
+  @IsOptional()
+  @IsString()
+  keyword?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  priority?: string;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+}
+
+export class AmbassadorApplicationStatusDto {
+  @IsString()
+  @IsIn(["pending", "contacted", "approved", "rejected"])
+  status!: "pending" | "contacted" | "approved" | "rejected";
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @IsOptional()
+  @IsString()
+  assignee?: string;
+
+  @IsOptional()
+  @IsString()
+  @IsIn(["low", "normal", "high"])
+  priority?: "low" | "normal" | "high";
+
+  @IsOptional()
+  @IsString()
+  nextFollowAt?: string;
 }
 
 export class PaymentStatementImportItemDto {

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
+import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
 const code = ref("");
 const remark = ref("");
@@ -126,11 +127,12 @@ onBeforeUnmount(stopH5Scan);
       <view class="meta">时间：{{ formatTime(result.createdAt) }}</view>
       <view class="meta">备注：{{ result.remark || "-" }}</view>
     </view>
+    <AdminBottomNav current="checkin" :permissions="{ canCheckIn: true, canViewRegistrations: true, canViewOrders: true }" />
   </view>
 </template>
 
 <style scoped>
-.admin-page { min-height: 100vh; padding: 24rpx; background: #f4f6f8; color: #111827; }
+.admin-page { min-height: 100vh; padding: 24rpx 24rpx 150rpx; background: #f4f6f8; color: #111827; }
 .head { padding: 30rpx 26rpx; border-radius: 8px; background: #111827; color: #fff; }
 .title { font-size: 42rpx; font-weight: 900; }
 .sub { margin-top: 8rpx; color: rgba(255,255,255,.72); font-size: 24rpx; }

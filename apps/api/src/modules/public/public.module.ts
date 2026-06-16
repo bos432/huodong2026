@@ -7,6 +7,9 @@ import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { Activity } from "../../entities/activity.entity";
 import { AgentPaymentAccount } from "../../entities/agent-payment-account.entity";
 import { Agent } from "../../entities/agent.entity";
+import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { AmbassadorCase } from "../../entities/ambassador-case.entity";
+import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
 import { Coupon } from "../../entities/coupon.entity";
@@ -41,7 +44,7 @@ import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement])],
+  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement])],
   controllers: [PublicController, PaymentController],
   providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
   exports: [PublicService]

@@ -9,6 +9,18 @@ export class ActivityCategory {
   @Column()
   name!: string;
 
+  @Column({ type: "varchar", length: 500, nullable: true })
+  iconUrl!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  coverUrl!: string | null;
+
+  @Column({ default: true })
+  publicVisible!: boolean;
+
+  @Column({ type: "varchar", length: 40, default: "activity" })
+  scene!: string;
+
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
   tenant!: Tenant | null;
 

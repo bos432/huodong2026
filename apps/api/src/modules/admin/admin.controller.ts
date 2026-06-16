@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 
 const SUPER_ADMIN = [AdminRole.SuperAdmin];
@@ -201,6 +201,57 @@ export class AdminController {
   @Post("settings/charity")
   saveCharitySetting(@Body() dto: CharitySettingDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.saveCharitySetting(dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("ambassador/settings")
+  ambassadorSetting(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.ambassadorSetting(admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("ambassador/settings")
+  saveAmbassadorSetting(@Body() dto: AmbassadorSettingDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveAmbassadorSetting(dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("ambassador/cases")
+  ambassadorCases(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.ambassadorCasesList(admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("ambassador/cases")
+  createAmbassadorCase(@Body() dto: AmbassadorCaseDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveAmbassadorCase(dto, undefined, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("ambassador/cases/:id")
+  updateAmbassadorCase(@Param("id", ParseIntPipe) id: number, @Body() dto: AmbassadorCaseDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveAmbassadorCase(dto, id, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("ambassador/applications")
+  ambassadorApplications(@Query() query: AmbassadorApplicationQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.ambassadorApplicationsList(query, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("ambassador/applications/export")
+  async exportAmbassadorApplications(@Query() query: AmbassadorApplicationQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {
+    const buffer = await this.service.exportAmbassadorApplications(query, admin);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=ambassador-applications.xlsx");
+    res.end(Buffer.from(buffer));
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("ambassador/applications/:id")
+  updateAmbassadorApplication(@Param("id", ParseIntPipe) id: number, @Body() dto: AmbassadorApplicationStatusDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateAmbassadorApplication(id, dto, admin);
   }
 
   @AdminRoles(...ACTIVITY_VIEW_ROLES)
@@ -725,6 +776,12 @@ export class AdminController {
   @Patch("orders/:id/remark")
   updateOrderRemark(@Param("id", ParseIntPipe) id: number, @Body() dto: OrderRemarkDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.updateOrderRemark(id, dto, admin);
+  }
+
+  @AdminRoles(...FINANCE_ROLES)
+  @Get("orders/:id/timeline")
+  orderTimeline(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.orderTimeline(id, admin);
   }
 
   @AdminRoles(...FINANCE_ROLES)

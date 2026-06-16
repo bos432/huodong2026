@@ -23,6 +23,10 @@ const remarkDialog = ref(false);
 const remarkSaving = ref(false);
 const remarkOrder = ref<any | null>(null);
 const remarkText = ref("");
+const timelineDrawer = ref(false);
+const timelineLoading = ref(false);
+const timelineOrder = ref<any | null>(null);
+const timelineRows = ref<any[]>([]);
 const refundForm = reactive({ amount: 0, reason: "", refundNo: "" });
 function routeOrderStatus() {
   const status = typeof route.query.status === "string" ? route.query.status : "";
@@ -149,6 +153,19 @@ async function saveRemark() {
   }
 }
 
+async function openTimeline(row: any) {
+  timelineOrder.value = row;
+  timelineDrawer.value = true;
+  timelineLoading.value = true;
+  try {
+    timelineRows.value = await api.get<any, any[]>(`/admin/orders/${row.id}/timeline`);
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载订单时间线失败");
+  } finally {
+    timelineLoading.value = false;
+  }
+}
+
 async function refund() {
   if (!refundTarget.value) return;
   if (refundForm.amount <= 0) {
@@ -219,6 +236,11 @@ function paymentMethodLabel(value?: string) {
     offline: "线下收款 / 人工确认"
   };
   return value ? labels[value] || value : "-";
+}
+
+function timelineColor(level?: string) {
+  const map: Record<string, string> = { primary: "#2563eb", success: "#16a34a", warning: "#d97706", danger: "#dc2626", info: "#64748b" };
+  return map[level || "info"] || map.info;
 }
 
 function tenantDisplayName(row: any) {
@@ -352,6 +374,7 @@ watch(
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button size="small" :icon="ChatLineSquare" @click="openRemark(row)">备注</el-button>
+            <el-button size="small" :icon="Clock" @click="openTimeline(row)">时间线</el-button>
             <el-button size="small" type="success" :icon="Money" :disabled="!canConfirm(row)" @click="confirm(row)">收款</el-button>
             <el-button size="small" type="warning" :icon="RefreshLeft" :disabled="!canRefund(row)" @click="openRefund(row)">申请退款</el-button>
           </template>
@@ -391,6 +414,23 @@ watch(
       </el-form>
       <template #footer><el-button @click="remarkDialog=false">取消</el-button><el-button type="primary" :loading="remarkSaving" @click="saveRemark">保存备注</el-button></template>
     </el-dialog>
+
+    <el-drawer v-model="timelineDrawer" size="560px" title="订单时间线">
+      <div class="timeline-head">
+        <strong>{{ timelineOrder?.orderNo || "-" }}</strong>
+        <span>{{ timelineOrder?.registration?.activity?.title || "-" }}</span>
+      </div>
+      <el-skeleton v-if="timelineLoading" :rows="5" animated />
+      <el-empty v-else-if="!timelineRows.length" description="暂无时间线事件" />
+      <el-timeline v-else>
+        <el-timeline-item v-for="item in timelineRows" :key="`${item.type}-${item.time}-${item.title}`" :timestamp="formatTime(item.time)" :color="timelineColor(item.level)">
+          <div class="timeline-item">
+            <strong>{{ item.title }}</strong>
+            <p v-if="item.detail">{{ item.detail }}</p>
+          </div>
+        </el-timeline-item>
+      </el-timeline>
+    </el-drawer>
   </div>
 </template>
 
@@ -406,4 +446,8 @@ small { color: #667085; display: block; line-height: 1.5; }
 .activity-alert { margin-bottom: 14px; }
 .filters { margin-bottom: 12px; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; }
+.timeline-head { display: grid; gap: 6px; padding-bottom: 16px; margin-bottom: 18px; border-bottom: 1px solid #e5e7eb; }
+.timeline-head span { color: #64748b; }
+.timeline-item { display: grid; gap: 6px; }
+.timeline-item p { margin: 0; color: #64748b; line-height: 1.6; }
 </style>

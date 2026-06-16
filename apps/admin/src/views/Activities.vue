@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Check, Clock, Close, CopyDocument, Delete, Edit, Grid, Hide, Picture, Plus, Upload, UploadFilled, View } from "@element-plus/icons-vue";
+import { Check, Clock, Close, CopyDocument, Delete, Edit, Grid, Hide, MoreFilled, Picture, Plus, Upload, UploadFilled, View } from "@element-plus/icons-vue";
 import { ActivityStatus, FieldType, checkActivityContentCompliance } from "@activity/shared";
 import { api } from "../api";
 import ActivityPosterDialog from "../components/ActivityPosterDialog.vue";
@@ -548,6 +548,12 @@ function canApprove(row: any) {
   return canOperateActivities.value && isPlatformAdmin() && row.status === ActivityStatus.PendingApproval;
 }
 
+function primaryAction(row: any) {
+  if (canApprove(row)) return { label: "审核通过", type: "success", icon: Check, handler: () => approveActivity(row) };
+  if (canOperateActivities.value) return { label: row.status === ActivityStatus.PendingApproval && isPlatformAdmin() ? "审核/编辑" : "编辑", type: "primary", icon: Edit, handler: () => edit(row) };
+  return null;
+}
+
 function tenantDisplayName(row: any) {
   return row.tenant?.name || row.tenant?.code || "平台";
 }
@@ -751,19 +757,25 @@ onMounted(async () => {
         <el-table-column label="会员门槛" width="130"><template #default="{ row }">{{ row.minMemberLevel?.name || "不限" }}</template></el-table-column>
         <el-table-column label="优先报名" width="190"><template #default="{ row }">{{ row.priorityMemberLevel ? `${row.priorityMemberLevel.name} / ${formatTime(row.priorityRegistrationEndsAt)}` : "未设置" }}</template></el-table-column>
         <el-table-column label="开始时间" width="170"><template #default="{ row }">{{ formatTime(row.startTime) }}</template></el-table-column>
-        <el-table-column label="操作" :width="canOperateActivities ? 780 : 500" fixed="right">
+        <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button size="small" :icon="View" @click="openActivityH5(row)">预览H5</el-button>
-            <el-button size="small" :icon="CopyDocument" @click="copyActivityH5Url(row)">复制链接</el-button>
-            <el-button size="small" :icon="Grid" @click="showActivityH5Qr(row)">二维码</el-button>
-            <el-button size="small" :icon="Picture" @click="showActivityPoster(row)">海报</el-button>
-            <el-button size="small" :icon="Grid" @click="showActivityChannels(row)">渠道</el-button>
-            <el-button size="small" :icon="Clock" @click="loadApprovalLogs(row)">审核记录</el-button>
-            <el-button v-if="canOperateActivities" size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
-            <el-button v-if="canSubmitApproval(row)" size="small" type="primary" :icon="Upload" @click="submitApproval(row)">提交审核</el-button>
-            <el-button v-if="canApprove(row)" size="small" type="success" :icon="Check" @click="approveActivity(row)">通过</el-button>
-            <el-button v-if="canApprove(row)" size="small" type="danger" :icon="Close" @click="rejectActivity(row)">驳回</el-button>
-            <el-button v-if="canOperateActivities" size="small" type="warning" :icon="Hide" :disabled="row.status === ActivityStatus.Closed" @click="closeActivity(row)">下架</el-button>
+            <el-button v-if="primaryAction(row)" size="small" :type="primaryAction(row)?.type as any" :icon="primaryAction(row)?.icon" @click="primaryAction(row)?.handler()">{{ primaryAction(row)?.label }}</el-button>
+            <el-dropdown trigger="click">
+              <el-button size="small" :icon="MoreFilled">更多</el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item :icon="CopyDocument" @click="copyActivityH5Url(row)">复制链接</el-dropdown-item>
+                  <el-dropdown-item :icon="Grid" @click="showActivityH5Qr(row)">二维码</el-dropdown-item>
+                  <el-dropdown-item :icon="Picture" @click="showActivityPoster(row)">海报</el-dropdown-item>
+                  <el-dropdown-item :icon="Grid" @click="showActivityChannels(row)">渠道</el-dropdown-item>
+                  <el-dropdown-item :icon="Clock" @click="loadApprovalLogs(row)">审核记录</el-dropdown-item>
+                  <el-dropdown-item v-if="canSubmitApproval(row)" :icon="Upload" @click="submitApproval(row)">提交审核</el-dropdown-item>
+                  <el-dropdown-item v-if="canApprove(row)" :icon="Close" divided @click="rejectActivity(row)">驳回</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities" :icon="Hide" divided :disabled="row.status === ActivityStatus.Closed" @click="closeActivity(row)">下架</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </el-table>

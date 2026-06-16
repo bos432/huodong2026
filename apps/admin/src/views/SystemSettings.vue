@@ -101,6 +101,13 @@ const loadingOperation = ref(false);
 const savingOperation = ref(false);
 const loadingConfig = ref(false);
 const report = ref<ConfigInspection | null>(null);
+const paymentReadiness = computed(() => [
+  { key: "free", label: "免费报名", status: "已可用", type: "success", note: "适合免费活动，后端可直接完成报名。" },
+  { key: "balance", label: "余额支付", status: "已可用", type: "success", note: "使用用户余额扣款，适合测试和会员账户场景。" },
+  { key: "offline", label: "线下收款 / 人工确认", status: "已可用", type: "success", note: "商家可放个人或机构收款说明，后台/手机端确认收款。" },
+  { key: "wechat", label: "微信支付", status: "需服务商配置", type: "warning", note: "真实 SDK、回调验签、退款和对账未完整配置前不建议开启。" },
+  { key: "alipay", label: "支付宝", status: "自动化未完成", type: "warning", note: "保留配置入口，生产使用前需要完成真实支付和退款链路。" }
+]);
 
 const form = reactive({
   registrationEnabled: true,
@@ -108,7 +115,7 @@ const form = reactive({
   offlinePaymentInstructions: "",
   paymentMethods: {
     free: true,
-    wechat: true,
+    wechat: false,
     alipay: false,
     balance: true,
     offline: true
@@ -700,7 +707,7 @@ async function loadOperation() {
       registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
       registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: data.offlinePaymentInstructions || "",
-      paymentMethods: { free: true, wechat: true, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
+      paymentMethods: { free: true, wechat: false, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
       customerServiceName: data.customerServiceName || "",
       customerServicePhone: data.customerServicePhone || "",
       customerServiceWechat: data.customerServiceWechat || "",
@@ -807,6 +814,15 @@ onMounted(() => {
                   <el-checkbox v-model="form.paymentMethods.balance">余额支付</el-checkbox>
                   <el-checkbox v-model="form.paymentMethods.offline">线下收款 / 人工确认</el-checkbox>
                 </div>
+                <div class="payment-readiness">
+                  <div v-for="item in paymentReadiness" :key="item.key" class="payment-readiness-card">
+                    <div>
+                      <strong>{{ item.label }}</strong>
+                      <span>{{ item.note }}</span>
+                    </div>
+                    <el-tag :type="item.type as any" effect="plain">{{ item.status }}</el-tag>
+                  </div>
+                </div>
                 <p class="form-tip">关闭某个支付方式后，前端报名页不再展示，后端也会拒绝直接调用该支付方式。</p>
               </div>
             </el-form-item>
@@ -827,25 +843,6 @@ onMounted(() => {
                 </el-upload>
                 <img v-if="form.defaultGroupQrCodeUrl" class="qr-preview" :src="form.defaultGroupQrCodeUrl" alt="默认入群二维码预览" />
               </div>
-            </el-form-item>
-            <el-divider content-position="left">短信验证码服务</el-divider>
-            <el-form-item label="启用短信">
-              <el-switch v-model="form.smsProviderEnabled" active-text="开启" inactive-text="关闭" />
-            </el-form-item>
-            <el-form-item label="短信服务商">
-              <el-input v-model="form.smsProvider" placeholder="tencent-cloud-sms" maxlength="80" />
-            </el-form-item>
-            <el-form-item label="Access Key">
-              <el-input v-model="form.smsAccessKeyId" maxlength="120" placeholder="短信服务商 AccessKeyId" />
-            </el-form-item>
-            <el-form-item label="Access Secret">
-              <el-input v-model="form.smsAccessKeySecret" show-password maxlength="200" placeholder="短信服务商 AccessKeySecret" />
-            </el-form-item>
-            <el-form-item label="短信签名">
-              <el-input v-model="form.smsSignName" maxlength="100" placeholder="已在短信服务商平台审核通过的签名" />
-            </el-form-item>
-            <el-form-item label="模板 ID">
-              <el-input v-model="form.smsTemplateId" maxlength="120" placeholder="已在短信服务商平台审核通过的模板 ID" />
             </el-form-item>
             <el-divider content-position="left">短信验证码服务</el-divider>
             <el-form-item label="短信服务">
@@ -1188,6 +1185,11 @@ onMounted(() => {
 .toolbar-actions, .switch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .payment-methods-block { display: grid; gap: 6px; }
 .payment-methods { display: flex; align-items: center; gap: 12px 22px; flex-wrap: wrap; }
+.payment-readiness { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
+.payment-readiness-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #f8fafc; }
+.payment-readiness-card div { display: grid; gap: 5px; min-width: 0; }
+.payment-readiness-card strong { color: #111827; font-size: 13px; }
+.payment-readiness-card span { color: #64748b; font-size: 12px; line-height: 1.45; }
 .form-tip { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .system-tabs { margin-top: 12px; }
@@ -1263,7 +1265,7 @@ onMounted(() => {
 .link-card strong { color: #111827; font-size: 16px; }
 .link-card span { color: #64748b; line-height: 1.5; }
 @media (max-width: 1100px) {
-  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .theme-sliders > div { grid-template-columns: 1fr; }
+  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .payment-readiness, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .theme-sliders > div { grid-template-columns: 1fr; }
   .env-preview { position: static; }
 }
 </style>

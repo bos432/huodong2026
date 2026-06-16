@@ -19,6 +19,9 @@ import { AgentPaymentAccount } from "../../entities/agent-payment-account.entity
 import { AgentSettlementTransfer } from "../../entities/agent-settlement-transfer.entity";
 import { AgentSettlement } from "../../entities/agent-settlement.entity";
 import { Agent } from "../../entities/agent.entity";
+import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { AmbassadorCase } from "../../entities/ambassador-case.entity";
+import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { CharityFundSetting } from "../../entities/charity-fund-setting.entity";
@@ -58,7 +61,7 @@ import { CharityFundService } from "../charity-fund.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
+    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

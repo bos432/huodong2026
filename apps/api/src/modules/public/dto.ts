@@ -78,6 +78,40 @@ export class UpdatePhoneDto {
   verificationCode!: string;
 }
 
+export class AmbassadorApplicationDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  city!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  expertise!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  experience!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  wechat!: string;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  channelCode?: string;
+}
+
 export class RegisterDto {
   @IsArray()
   answers!: RegistrationAnswer[];

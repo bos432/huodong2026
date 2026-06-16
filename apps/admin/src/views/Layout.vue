@@ -16,6 +16,14 @@ const changingPassword = ref(false);
 const passwordForm = reactive({ oldPassword: "", newPassword: "", confirmPassword: "" });
 const roleLabel = computed(() => roleOptions.find((item) => item.value === currentRole())?.label || "管理员");
 const shellTitle = computed(() => (isPlatformAdmin() ? "平台超级管理后台" : `${currentTenantName() || "商家"}管理后台`));
+const roleCapabilityText = computed(() => {
+  const role = currentRole();
+  if (isPlatformAdmin()) return "平台超管：可管理全平台商家、活动、订单、公益池、系统安全，并拥有会员余额调整权限。";
+  if (role === AdminRole.Operator) return "运营账号：可管理活动、报名、会员和装修营销；不处理余额调整等平台资产操作。";
+  if (role === AdminRole.Finance) return "财务账号：可查看订单财务、确认线下收款、处理退款和对账；不编辑活动内容。";
+  if (role === AdminRole.CheckInStaff) return "签到账号：用于现场查询报名和签到核销；不显示审核、收款和活动编辑操作。";
+  return "商家管理员：只管理本商家数据，可配置活动、报名、员工账号和经营设置。";
+});
 const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformAdmin() ? "" : currentTenantCode()));
 const currentH5PreviewLabel = computed(() => (isPlatformAdmin() ? "平台H5" : "商家H5"));
 const menuGroups = [
@@ -50,7 +58,8 @@ const menuGroups = [
       { index: "/activities?status=all", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
       { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
       { index: "/announcements", icon: "Bell", label: "公告监管", roles: permissions.operation, scope: "platform" },
-      { index: "/homepage-builder", icon: "Grid", label: "H5全局装修", roles: permissions.operation, scope: "platform" }
+      { index: "/homepage-builder", icon: "Grid", label: "H5全局装修", roles: permissions.operation, scope: "platform" },
+      { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: permissions.operation, scope: "platform" }
     ]
   },
   {
@@ -76,10 +85,11 @@ const menuGroups = [
   {
     index: "platform-charity",
     icon: "Coin",
-    label: "平台端 · 公益池",
+    label: "平台端 · 公益与招募",
     scope: "platform",
     items: [
-      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "platform" }
+      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "platform" },
+      { index: "/ambassador", icon: "Flag", label: "文化大使招募", roles: permissions.superAdmin, scope: "platform" }
     ]
   },
   {
@@ -279,7 +289,10 @@ function logout() {
     </el-aside>
     <el-container>
       <el-header class="header">
-        <span>{{ shellTitle }} · {{ roleLabel }}</span>
+        <div class="header-title">
+          <span>{{ shellTitle }} · {{ roleLabel }}</span>
+          <small>{{ roleCapabilityText }}</small>
+        </div>
         <div class="header-actions">
           <el-button :icon="View" @click="openCurrentH5Preview">打开{{ currentH5PreviewLabel }}</el-button>
           <el-button :icon="CopyDocument" @click="copyCurrentH5PreviewUrl">复制{{ currentH5PreviewLabel }}</el-button>
@@ -323,7 +336,9 @@ function logout() {
 .aside { background: #162033; overflow-x: hidden; }
 .brand { height: 60px; display: flex; align-items: center; padding: 0 20px; color: #fff; font-size: 20px; font-weight: 700; }
 .header { background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
-.header > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-title { min-width: 0; display: grid; gap: 3px; }
+.header-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-title small { color: #64748b; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .el-menu { border-right: 0; }
 :deep(.el-sub-menu__title) { height: 46px; color: #b7c2d6; font-weight: 700; }

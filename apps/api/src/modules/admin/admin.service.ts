@@ -23,6 +23,9 @@ import { AgentPaymentAccount } from "../../entities/agent-payment-account.entity
 import { AgentSettlementTransfer } from "../../entities/agent-settlement-transfer.entity";
 import { AgentSettlement } from "../../entities/agent-settlement.entity";
 import { Agent } from "../../entities/agent.entity";
+import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { AmbassadorCase } from "../../entities/ambassador-case.entity";
+import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { Coupon } from "../../entities/coupon.entity";
@@ -53,13 +56,14 @@ import { inspectRuntimeConfig } from "../../shared/config-validation";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActor, tenantRelationForActor } from "../../shared/tenant-scope";
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
 import { paymentStatementOrderWhere } from "./payment-statement-import";
 import { buildAgentSettlementTransferCapability } from "./agent-transfer-capability";
 import { CharityFundService } from "../charity-fund.service";
+import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean };
@@ -78,6 +82,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(AgentPaymentAccount) private readonly agentPaymentAccounts: Repository<AgentPaymentAccount>,
     @InjectRepository(AgentSettlement) private readonly agentSettlements: Repository<AgentSettlement>,
     @InjectRepository(AgentSettlementTransfer) private readonly agentSettlementTransfers: Repository<AgentSettlementTransfer>,
+    @InjectRepository(AmbassadorLandingSetting) private readonly ambassadorSettings: Repository<AmbassadorLandingSetting>,
+    @InjectRepository(AmbassadorCase) private readonly ambassadorCases: Repository<AmbassadorCase>,
+    @InjectRepository(AmbassadorApplication) private readonly ambassadorApplications: Repository<AmbassadorApplication>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(ActivityChannel) private readonly activityChannels: Repository<ActivityChannel>,
@@ -111,6 +118,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(MemberPointLog) private readonly memberPointLogs: Repository<MemberPointLog>,
     @InjectRepository(Notification) private readonly notifications: Repository<Notification>,
     @InjectRepository(ShareVisit) private readonly shareVisits: Repository<ShareVisit>,
+    @InjectRepository(CharityFundTransaction) private readonly charityTransactionsRepo: Repository<CharityFundTransaction>,
     private readonly jwt: JwtService,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
@@ -500,6 +508,118 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return this.charityFund.saveSetting(dto, admin);
   }
 
+  async ambassadorSetting(admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    return this.publicAmbassadorSetting(await this.ensureAmbassadorSetting());
+  }
+
+  async saveAmbassadorSetting(dto: AmbassadorSettingDto, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const setting = await this.ensureAmbassadorSetting();
+    setting.enabled = dto.enabled === undefined ? setting.enabled : Boolean(dto.enabled);
+    setting.config = this.mergeAmbassadorConfig(dto.config, setting.config);
+    const saved = await this.ambassadorSettings.save(setting);
+    await this.logOperation(admin, "ambassador.settings.update", "ambassador", saved.id, "更新文化大使落地页配置", { enabled: saved.enabled });
+    return this.publicAmbassadorSetting(saved);
+  }
+
+  async ambassadorCasesList(admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    return this.ambassadorCases.find({ order: { sortOrder: "ASC", id: "ASC" } });
+  }
+
+  async saveAmbassadorCase(dto: AmbassadorCaseDto, id?: number, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const row = id ? await this.ambassadorCases.findOneBy({ id }) : this.ambassadorCases.create();
+    if (!row) throw new NotFoundException("案例不存在");
+    row.name = dto.name.trim();
+    if (!row.name) throw new BadRequestException("案例姓名不能为空");
+    row.field = this.nullableText(dto.field);
+    row.avatarUrl = this.nullableText(dto.avatarUrl);
+    row.metrics = this.nullableText(dto.metrics);
+    row.quote = this.nullableText(dto.quote);
+    row.sortOrder = Number(dto.sortOrder ?? row.sortOrder ?? 0);
+    row.enabled = dto.enabled === undefined ? row.enabled !== false : Boolean(dto.enabled);
+    const saved = await this.ambassadorCases.save(row);
+    await this.logOperation(admin, id ? "ambassador.case.update" : "ambassador.case.create", "ambassador_case", saved.id, `${id ? "更新" : "新增"}文化大使案例：${saved.name}`, { enabled: saved.enabled });
+    return saved;
+  }
+
+  async ambassadorApplicationsList(query: AmbassadorApplicationQueryDto = {}, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const builder = this.ambassadorApplications.createQueryBuilder("application").orderBy("application.id", "DESC");
+    const status = String(query.status || "").trim();
+    if (status) builder.andWhere("application.status = :status", { status });
+    const priority = String(query.priority || "").trim();
+    if (priority) builder.andWhere("application.priority = :priority", { priority });
+    const source = String(query.source || "").trim();
+    if (source) builder.andWhere("application.source = :source", { source });
+    const keyword = String(query.keyword || "").trim();
+    if (keyword) {
+      builder.andWhere("(application.name LIKE :keyword OR application.phone LIKE :keyword OR application.city LIKE :keyword OR application.expertise LIKE :keyword OR application.wechat LIKE :keyword OR application.assignee LIKE :keyword)", { keyword: `%${keyword}%` });
+    }
+    return builder.take(500).getMany();
+  }
+
+  async exportAmbassadorApplications(query: AmbassadorApplicationQueryDto = {}, admin?: AdminContext) {
+    const rows = await this.ambassadorApplicationsList(query, admin);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("ambassador-applications");
+    sheet.columns = [
+      { header: "ID", key: "id", width: 8 },
+      { header: "姓名", key: "name", width: 14 },
+      { header: "手机号", key: "phone", width: 18 },
+      { header: "城市", key: "city", width: 16 },
+      { header: "擅长领域", key: "expertise", width: 24 },
+      { header: "微信号", key: "wechat", width: 20 },
+      { header: "来源", key: "source", width: 16 },
+      { header: "渠道码", key: "channelCode", width: 18 },
+      { header: "状态", key: "status", width: 14 },
+      { header: "线索等级", key: "priority", width: 12 },
+      { header: "跟进人", key: "assignee", width: 14 },
+      { header: "下次跟进", key: "nextFollowAt", width: 22 },
+      { header: "备注", key: "remark", width: 36 },
+      { header: "提交时间", key: "createdAt", width: 22 }
+    ];
+    rows.forEach((row) =>
+      sheet.addRow({
+        id: row.id,
+        name: row.name,
+        phone: row.phone,
+        city: row.city,
+        expertise: row.expertise,
+        wechat: row.wechat,
+        source: row.source || "",
+        channelCode: row.channelCode || "",
+        status: row.status,
+        priority: row.priority || "normal",
+        assignee: row.assignee || "",
+        nextFollowAt: row.nextFollowAt ? row.nextFollowAt.toISOString().slice(0, 19).replace("T", " ") : "",
+        remark: row.remark || "",
+        createdAt: row.createdAt ? row.createdAt.toISOString().slice(0, 19).replace("T", " ") : ""
+      })
+    );
+    sheet.getRow(1).font = { bold: true };
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    return workbook.xlsx.writeBuffer();
+  }
+
+  async updateAmbassadorApplication(id: number, dto: AmbassadorApplicationStatusDto, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const row = await this.ambassadorApplications.findOneBy({ id });
+    if (!row) throw new NotFoundException("申请记录不存在");
+    row.status = dto.status;
+    row.remark = this.nullableText(dto.remark);
+    if (dto.assignee !== undefined) row.assignee = this.nullableText(dto.assignee);
+    if (dto.priority !== undefined) row.priority = dto.priority;
+    if (dto.nextFollowAt !== undefined) row.nextFollowAt = dto.nextFollowAt ? this.parseDate(dto.nextFollowAt) : null;
+    row.reviewedBy = admin?.id || null;
+    row.reviewedAt = new Date();
+    const saved = await this.ambassadorApplications.save(row);
+    await this.logOperation(admin, "ambassador.application.update", "ambassador_application", saved.id, `跟进文化大使申请：${saved.name}`, { status: saved.status });
+    return saved;
+  }
+
   async analyticsOverview(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
     const scope = await this.analyticsScope(query, admin);
     const builders = this.analyticsBuilders(scope, admin);
@@ -514,33 +634,36 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       this.analyticsRisk(scope, admin)
     ]);
     const counts = Object.fromEntries(eventCounts.map((row) => [row.type, Number(row.count || 0)]));
+    const totals = {
+      viewCount: counts.view || 0,
+      registrationCount: counts.register || 0,
+      paidCount: counts.pay || 0,
+      checkInCount: counts.check_in || 0,
+      reviewCount: counts.review || 0,
+      activeUserCount: Number(activeUserCount?.count || 0),
+      paidAmount: Number(paidAmount?.sum || 0).toFixed(2),
+      refundAmount: Number(refundAmount?.sum || 0).toFixed(2),
+      netAmount: (Number(paidAmount?.sum || 0) - Number(refundAmount?.sum || 0)).toFixed(2),
+      walletRechargeAmount: Number(walletRechargeAmount?.sum || 0).toFixed(2),
+      charityAccruedAmount: charitySummary.totalAccrued,
+      charityAvailableAmount: charitySummary.availableAmount,
+      charityDisbursedAmount: charitySummary.totalDisbursed,
+      charityReversedAmount: charitySummary.totalReversed
+    };
+    const rates = {
+      signupRate: this.rate(counts.register || 0, counts.view || 0),
+      paymentRate: this.rate(counts.pay || 0, counts.register || 0),
+      checkInRate: this.rate(counts.check_in || 0, counts.pay || 0),
+      reviewRate: this.rate(counts.review || 0, counts.check_in || 0)
+    };
     return {
       scope: scope.tenantId ? "tenant" : "platform",
       range: { startDate: scope.startDate?.toISOString() || null, endDate: scope.endDate?.toISOString() || null },
-      totals: {
-        viewCount: counts.view || 0,
-        registrationCount: counts.register || 0,
-        paidCount: counts.pay || 0,
-        checkInCount: counts.check_in || 0,
-        reviewCount: counts.review || 0,
-        activeUserCount: Number(activeUserCount?.count || 0),
-        paidAmount: Number(paidAmount?.sum || 0).toFixed(2),
-        refundAmount: Number(refundAmount?.sum || 0).toFixed(2),
-        netAmount: (Number(paidAmount?.sum || 0) - Number(refundAmount?.sum || 0)).toFixed(2),
-        walletRechargeAmount: Number(walletRechargeAmount?.sum || 0).toFixed(2),
-        charityAccruedAmount: charitySummary.totalAccrued,
-        charityAvailableAmount: charitySummary.availableAmount,
-        charityDisbursedAmount: charitySummary.totalDisbursed,
-        charityReversedAmount: charitySummary.totalReversed
-      },
-      rates: {
-        signupRate: this.rate(counts.register || 0, counts.view || 0),
-        paymentRate: this.rate(counts.pay || 0, counts.register || 0),
-        checkInRate: this.rate(counts.check_in || 0, counts.pay || 0),
-        reviewRate: this.rate(counts.review || 0, counts.check_in || 0)
-      },
+      totals,
+      rates,
       tenantRanking,
-      risk
+      risk,
+      operationAdvice: this.analyticsOperationAdvice(totals, rates, risk)
     };
   }
 
@@ -878,16 +1001,51 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   createCategory(dto: CategoryDto, admin?: AdminContext) {
-    return this.categories.save(this.categories.create({ ...dto, tenant: this.tenantRelation(admin) }));
+    return this.categories.save(this.categories.create({ ...this.normalizeCategoryDto(dto), tenant: this.tenantRelation(admin) }));
   }
 
   async updateCategory(id: number, dto: CategoryDto, admin?: AdminContext) {
     const category = await this.categories.findOneBy({ id });
     this.assertTenantAccess(category, admin);
     if (!category) throw new NotFoundException("分类不存");
-    Object.assign(category, dto);
+    Object.assign(category, this.normalizeCategoryDto(dto));
     category.tenant = this.tenantRelation(admin, category.tenant);
     return this.categories.save(category);
+  }
+
+  async orderTimeline(orderId: number, admin?: AdminContext) {
+    const order = await this.orders.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException("订单不存在");
+    this.assertTenantAccess(order, admin);
+    const [transactions, refunds, charityTransactions, logs] = await Promise.all([
+      this.paymentTransactions.find({ where: { order: { id: order.id } }, order: { createdAt: "ASC" } }),
+      this.refunds.find({ where: { order: { id: order.id } }, order: { createdAt: "ASC" } }),
+      this.charityTransactionsRepo.find({ where: { order: { id: order.id } }, order: { createdAt: "ASC" } }),
+      this.operationLogs.find({ where: { targetType: "order", targetId: String(order.id) }, order: { createdAt: "ASC" }, take: 100 })
+    ]);
+    const events: Array<{ type: string; title: string; time: Date | null; level: "primary" | "success" | "warning" | "danger" | "info"; detail?: string | null; payload?: Record<string, unknown> }> = [];
+    const add = (event: (typeof events)[number]) => events.push(event);
+    add({ type: "order_created", title: "创建订单", time: order.createdAt, level: "primary", detail: `${order.orderNo} / ${this.paymentMethodLabel(order.paymentMethod)}`, payload: { amount: order.amount, status: order.status } });
+    add({ type: "registration_submitted", title: "提交报名", time: order.registration?.createdAt || order.createdAt, level: "info", detail: order.registration?.activity?.title || null, payload: { registrationStatus: order.registration?.status } });
+    if (order.expiresAt) add({ type: "payment_deadline", title: "付款截止", time: order.expiresAt, level: order.status === OrderStatus.PendingPayment ? "warning" : "info", detail: "线下/线上待付款订单到期时间" });
+    for (const transaction of transactions) {
+      add({ type: "payment_transaction", title: transaction.status === "success" ? "支付成功" : "支付流水", time: transaction.createdAt, level: transaction.status === "success" ? "success" : "warning", detail: `${transaction.provider} / ${transaction.amount} 元`, payload: { transactionNo: transaction.transactionNo, reconciliationStatus: transaction.reconciliationStatus } });
+    }
+    if (order.paidAt) add({ type: "order_paid", title: order.paidByAdmin ? "后台确认收款" : "订单已支付", time: order.paidAt, level: "success", detail: order.paidByAdmin ? `${order.paidByAdmin}${order.paidRemark ? `：${order.paidRemark}` : ""}` : null });
+    if (order.closedAt) add({ type: "order_closed", title: "订单关闭", time: order.closedAt, level: "danger", detail: order.closeReason });
+    for (const refund of refunds) {
+      add({ type: "refund", title: `退款${refund.status}`, time: refund.completedAt || refund.reviewedAt || refund.createdAt, level: refund.status === "completed" ? "success" : refund.status === "rejected" ? "danger" : "warning", detail: `${refund.amount} 元${refund.reason ? ` / ${refund.reason}` : ""}`, payload: { refundNo: refund.refundNo, reviewedBy: refund.reviewedBy } });
+    }
+    for (const tx of charityTransactions) {
+      add({ type: "charity", title: tx.type === "charity_reversal" ? "公益金冲回" : tx.type === "project_disbursement" ? "公益拨付" : "公益金计提", time: tx.createdAt, level: tx.direction === "credit" ? "success" : "warning", detail: `${tx.amount} 元${tx.remark ? ` / ${tx.remark}` : ""}`, payload: { retainedOnRefund: tx.retainedOnRefund, ratePercent: tx.ratePercent } });
+    }
+    for (const log of logs) {
+      add({ type: "operation_log", title: log.action, time: log.createdAt, level: "info", detail: log.summary || null, payload: log.detail || undefined });
+    }
+    return events
+      .filter((event) => event.time)
+      .sort((a, b) => new Date(a.time as Date).getTime() - new Date(b.time as Date).getTime())
+      .map((event) => ({ ...event, time: event.time?.toISOString() || null }));
   }
 
   async removeCategory(id: number, admin?: AdminContext) {
@@ -3019,6 +3177,50 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return denominator > 0 ? Math.round((numerator / denominator) * 1000) / 10 : 0;
   }
 
+  private normalizeCategoryDto(dto: CategoryDto) {
+    return {
+      name: dto.name.trim(),
+      iconUrl: this.truncateNullableText(dto.iconUrl, 500),
+      coverUrl: this.truncateNullableText(dto.coverUrl, 500),
+      publicVisible: dto.publicVisible ?? true,
+      scene: this.normalizeScene(dto.scene),
+      sortOrder: Number(dto.sortOrder ?? 0),
+      enabled: dto.enabled ?? true
+    };
+  }
+
+  private normalizeScene(value?: string) {
+    const scene = String(value || "activity").trim().replace(/[^\w-]/g, "").slice(0, 40);
+    return scene || "activity";
+  }
+
+  private truncateNullableText(value?: string | null, max = 255) {
+    const text = String(value ?? "").trim();
+    return text ? text.slice(0, max) : null;
+  }
+
+  private paymentMethodLabel(method: PaymentMethod | string) {
+    const map: Record<string, string> = {
+      [PaymentMethod.Free]: "免费报名",
+      [PaymentMethod.Wechat]: "微信支付",
+      [PaymentMethod.Alipay]: "支付宝",
+      [PaymentMethod.Balance]: "余额支付",
+      [PaymentMethod.Offline]: "线下收款"
+    };
+    return map[String(method)] || String(method || "未知支付");
+  }
+
+  private analyticsOperationAdvice(totals: Record<string, any>, rates: Record<string, any>, risk: Record<string, any>) {
+    const advice: Array<{ level: "success" | "warning" | "danger" | "info"; title: string; message: string }> = [];
+    if (Number(totals.viewCount || 0) > 50 && Number(rates.signupRate || 0) < 8) advice.push({ level: "warning", title: "浏览高报名低", message: "建议优化活动标题、封面、价格和报名说明，降低用户决策成本。" });
+    if (Number(totals.registrationCount || 0) > 10 && Number(rates.paymentRate || 0) < 60) advice.push({ level: "warning", title: "报名高支付低", message: "建议检查支付方式、线下收款说明和付款截止提醒。" });
+    if (Number(totals.paidCount || 0) > 10 && Number(rates.checkInRate || 0) < 70) advice.push({ level: "danger", title: "支付高签到低", message: "建议加强活动前提醒、客服触达和现场签到引导。" });
+    if (Number(totals.refundAmount || 0) > Number(totals.paidAmount || 0) * 0.2 && Number(totals.refundAmount || 0) > 0) advice.push({ level: "danger", title: "退款偏高", message: "建议复盘活动交付、退款规则和用户预期管理。" });
+    if (Number(risk?.pendingReconciliationCount || 0) > 0) advice.push({ level: "warning", title: "对账待处理", message: "存在支付对账异常，建议财务优先核对流水。" });
+    if (!advice.length) advice.push({ level: "success", title: "经营数据平稳", message: "当前核心漏斗暂无明显异常，可继续观察渠道和复购变化。" });
+    return advice;
+  }
+
   private normalizeChannelCode(value: string) {
     const code = String(value || "").trim().replace(/[^\w-]/g, "").slice(0, 48);
     if (code.length < 2) throw new BadRequestException("渠道码至少需要 2 位字母、数字、下划线或连字符");
@@ -3372,7 +3574,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private defaultPaymentMethods() {
-    return { free: true, wechat: true, alipay: false, balance: true, offline: true };
+    return { free: true, wechat: false, alipay: false, balance: true, offline: true };
   }
 
   private normalizePaymentMethods(value: unknown) {
@@ -3450,6 +3652,72 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!value) throw new BadRequestException("首页模块类型不能为空");
     if (!HOMEPAGE_SECTION_TYPES.includes(value as any)) throw new BadRequestException("不支持的首页模块类型");
     return value;
+  }
+
+  private async ensureAmbassadorSetting() {
+    let setting = await this.ambassadorSettings.findOne({ where: {}, order: { id: "ASC" } });
+    if (!setting) setting = await this.ambassadorSettings.save(this.ambassadorSettings.create({ enabled: true, config: this.defaultAmbassadorConfig() }));
+    if (!this.isPlainObject(setting.config)) {
+      setting.config = this.defaultAmbassadorConfig();
+      setting = await this.ambassadorSettings.save(setting);
+    }
+    return setting;
+  }
+
+  private publicAmbassadorSetting(setting: AmbassadorLandingSetting) {
+    return { ...setting, config: this.mergeAmbassadorConfig(setting.config, null) };
+  }
+
+  private mergeAmbassadorConfig(input?: Record<string, unknown> | null, current?: Record<string, unknown> | null) {
+    const defaults = this.defaultAmbassadorConfig();
+    const base = this.isPlainObject(current) ? current || {} : {};
+    const next = this.isPlainObject(input) ? input || {} : {};
+    const merged: Record<string, unknown> = { ...defaults, ...base, ...next };
+    for (const key of ["painPoints", "solutionItems", "benefits", "requirements"]) merged[key] = this.normalizeStringArray(merged[key], defaults[key] as string[]);
+    merged.faqs = this.normalizeFaqs(merged.faqs, defaults.faqs as Array<{ question: string; answer: string }>);
+    return merged;
+  }
+
+  private defaultAmbassadorConfig(): Record<string, unknown> {
+    return {
+      heroTitle: "寻找100位“七维文化大使”",
+      heroSubtitle: "一起用7把钥匙，打开中国人的精神家园",
+      heroCopy: "不用辞职、不用囤货，只需把你的热爱变成课程，平台帮你搞定技术、流量和变现。",
+      ctaText: "立即申请，锁定早鸟名额",
+      originalPrice: "2999",
+      earlyBirdPrice: "999",
+      quotaText: "首期限额100人，审核制入驻",
+      refundText: "入驻30天内，觉得不合适，可申请全额退款。",
+      customerWechat: "",
+      customerPhone: "",
+      backgroundImageUrl: "",
+      painPoints: ["在传统文化、书法、教育、健康、创业或技能领域钻研多年，却缺少被更多人看见的舞台。", "试过内容平台和社群运营，但流量不稳定、转化不系统。", "想把知识做成课程，却被技术、运营、交付和客服卡住。", "不想只做卖课的人，更想进入一个能共创、能成长、能长期沉淀品牌的圈子。"],
+      solutionItems: ["独立小程序店铺 + 专属H5主页，一键开课，收益路径清晰。", "平台全域流量扶持，结合城市线下活动导流。", "每月闭门共创会，讲书/授课技能训练，关键阶段策略陪跑。", "链接传统文化、书法、教育、健康、创业、技能等领域的共创者。"],
+      benefits: ["官方认证身份：颁发“七维书院·特聘文化大使”证书，并获得平台个人品牌展示机会。", "课程收益支持：首批入驻享平台扶持政策，具体规则以审核沟通为准。", "高端私密社群：进入七维书院共创圈，资源互换、经验复盘。", "全年赋能陪跑：闭门策略会、线下大课、课程打磨与运营指导。"],
+      requirements: ["有真才实学：在传统文化、东方哲学、民俗文化、书法、教育、健康、创业、技能任一领域有扎实积累。", "有利他之心：愿意分享，愿意帮助他人成长。", "有长期主义：不是来赚快钱，而是想打造个人品牌、沉淀长期资产。"],
+      faqs: [
+        { question: "我没有录制课程经验，怎么办？", answer: "平台会协助你梳理课程大纲、设计表达结构，并陪跑第一门课程上线。" },
+        { question: "入驻后多久能看到收益？", answer: "收益取决于课程质量、运营投入和受众匹配度，平台会提供流量、工具和运营建议。" },
+        { question: "早鸟费用是一次性还是每年？", answer: "默认展示为首年早鸟价，具体续费和权益可在后台文案中调整。" }
+      ]
+    };
+  }
+
+  private normalizeStringArray(value: unknown, fallback: string[]) {
+    if (!Array.isArray(value)) return fallback;
+    const list = value.map((item) => String(item || "").trim()).filter(Boolean);
+    return list.length ? list.slice(0, 20) : fallback;
+  }
+
+  private normalizeFaqs(value: unknown, fallback: Array<{ question: string; answer: string }>) {
+    if (!Array.isArray(value)) return fallback;
+    const list = value
+      .map((item) => {
+        const row = this.isPlainObject(item) ? (item as Record<string, unknown>) : {};
+        return { question: String(row.question || "").trim(), answer: String(row.answer || "").trim() };
+      })
+      .filter((item) => item.question && item.answer);
+    return list.length ? list.slice(0, 20) : fallback;
   }
 
   private normalizeJsonObject(value: unknown, label: string) {

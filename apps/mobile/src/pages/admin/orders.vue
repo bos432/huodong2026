@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { OrderStatus, orderStatusText } from "@activity/shared";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
+import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
 const rows = ref<any[]>([]);
 const bootstrap = ref<any>(null);
@@ -138,11 +139,12 @@ onMounted(load);
       </view>
       <view v-else-if="item.paymentMethod === 'offline' && item.status === OrderStatus.PendingPayment" class="notice">线下收款订单等待确认<text v-if="isExpired(item)">，当前订单已超时</text></view>
     </view>
+    <AdminBottomNav current="orders" :permissions="bootstrap?.permissions" />
   </view>
 </template>
 
 <style scoped>
-.admin-page { min-height: 100vh; padding: 24rpx; background: #f4f6f8; color: #111827; }
+.admin-page { min-height: 100vh; padding: 24rpx 24rpx 150rpx; background: #f4f6f8; color: #111827; }
 .head { display: flex; align-items: center; justify-content: space-between; padding: 28rpx 24rpx; border-radius: 8px; background: #111827; color: #fff; }
 .title { font-size: 40rpx; font-weight: 900; }
 .sub { margin-top: 6rpx; color: rgba(255,255,255,.7); font-size: 24rpx; }

@@ -18,6 +18,7 @@ const TicketTypes = () => import("./views/TicketTypes.vue");
 const Coupons = () => import("./views/Coupons.vue");
 const Agents = () => import("./views/Agents.vue");
 const AgentSettlements = () => import("./views/AgentSettlements.vue");
+const Ambassador = () => import("./views/Ambassador.vue");
 const CheckIn = () => import("./views/CheckIn.vue");
 const Waitlists = () => import("./views/Waitlists.vue");
 const UserTags = () => import("./views/UserTags.vue");
@@ -47,6 +48,7 @@ export const router = createRouter({
         { path: "dashboard", component: Dashboard, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "analytics", component: Analytics, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "tenants", component: Tenants, meta: { roles: permissions.superAdmin, scope: "platform" } },
+        { path: "ambassador", component: Ambassador, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "activities", component: Activities, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
         { path: "funnels", component: Funnels, meta: { roles: permissions.operation, scope: "tenant" } },
         { path: "recaps", component: Recaps, meta: { roles: permissions.operation, scope: "tenant" } },
@@ -74,7 +76,7 @@ export const router = createRouter({
         { path: "h5-code-logs", component: H5CodeLogs, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "config-check", component: ConfigCheck, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "ops-routine", component: OpsRoutine, meta: { roles: permissions.superAdmin, scope: "platform" } },
-        { path: "categories", component: Categories, meta: { roles: permissions.operation, scope: "tenant" } },
+        { path: "categories", component: Categories, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
         { path: "admins", component: Admins, meta: { roles: permissions.superAdmin, scope: "any" } },
         { path: ":pathMatch(.*)*", redirect: () => fallbackPath() }
       ]

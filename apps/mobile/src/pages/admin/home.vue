@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { activityStatusText, type ActivityStatus } from "@activity/shared";
 import { adminActivityPreviewUrl, clearMobileAdminSession, getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
+import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
 const loading = ref(true);
 const bootstrap = ref<any>(null);
@@ -118,12 +119,13 @@ onMounted(load);
         <view class="pill">{{ statusText(item.status) }}</view>
       </view>
       <view v-if="!activities.length" class="panel">暂无活动</view>
+      <AdminBottomNav current="home" :permissions="bootstrap?.permissions" />
     </template>
   </view>
 </template>
 
 <style scoped>
-.admin-page { min-height: 100vh; padding: 24rpx; background: #f4f6f8; color: #111827; }
+.admin-page { min-height: 100vh; padding: 24rpx 24rpx 150rpx; background: #f4f6f8; color: #111827; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 30rpx 26rpx; border-radius: 8px; background: #111827; color: #fff; }
 .hello { font-size: 42rpx; font-weight: 900; }
 .sub { margin-top: 8rpx; color: rgba(255,255,255,.72); font-size: 24rpx; }

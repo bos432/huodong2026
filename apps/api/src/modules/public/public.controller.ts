@@ -4,7 +4,7 @@ import { mkdirSync } from "fs";
 import { diskStorage } from "multer";
 import { join } from "path";
 import { PublicService, PublicTenantContext } from "./public.service";
-import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
+import { AmbassadorApplicationDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
 
 const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -71,6 +71,16 @@ export class PublicController {
   @Get("charity/projects")
   charityProjects() {
     return this.service.charityProjects();
+  }
+
+  @Get("ambassador/landing")
+  ambassadorLanding() {
+    return this.service.ambassadorLanding();
+  }
+
+  @Post("ambassador/applications")
+  submitAmbassadorApplication(@Body() dto: AmbassadorApplicationDto) {
+    return this.service.submitAmbassadorApplication(dto);
   }
 
   @Get("activities")
