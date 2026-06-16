@@ -51,6 +51,16 @@ export class PublicController {
     return this.service.operationSetting(this.tenantContext(req, tenantCode));
   }
 
+  @Get("charity/summary")
+  charitySummary() {
+    return this.service.charitySummary();
+  }
+
+  @Get("charity/projects")
+  charityProjects() {
+    return this.service.charityProjects();
+  }
+
   @Get("activities")
   activities(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("categoryId") categoryId?: string, @Query("status") status?: string, @Query("featured") featured?: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string, @Query("keyword") keyword?: string) {
     return this.service.activitiesList({
@@ -141,6 +151,12 @@ export class PublicController {
   async myAdminAccess(@Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myAdminAccess(user);
+  }
+
+  @Get("me/charity")
+  async myCharity(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myCharity(user);
   }
 
   @Get("me/registrations")

@@ -53,12 +53,13 @@ import { inspectRuntimeConfig } from "../../shared/config-validation";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActor, tenantRelationForActor } from "../../shared/tenant-scope";
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
 import { paymentStatementOrderWhere } from "./payment-statement-import";
 import { buildAgentSettlementTransferCapability } from "./agent-transfer-capability";
+import { CharityFundService } from "../charity-fund.service";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean };
@@ -114,7 +115,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
     private readonly paymentProvider: PaymentProviderService,
-    private readonly refundCompletion: RefundCompletionService
+    private readonly refundCompletion: RefundCompletionService,
+    private readonly charityFund: CharityFundService
   ) {}
 
   async onModuleInit() {
@@ -470,14 +472,43 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  charitySummary(admin?: AdminContext) {
+    return this.charityFund.adminSummary(admin);
+  }
+
+  charityTransactions(admin?: AdminContext) {
+    return this.charityFund.adminTransactions(admin);
+  }
+
+  charityProjects(admin?: AdminContext) {
+    return this.charityFund.adminProjects(admin);
+  }
+
+  saveCharityProject(dto: CharityProjectDto, id?: number, admin?: AdminContext) {
+    return this.charityFund.saveProject(dto, id, admin);
+  }
+
+  addCharityDisbursement(projectId: number, dto: CharityDisbursementDto, admin?: AdminContext) {
+    return this.charityFund.addDisbursement(projectId, dto, admin);
+  }
+
+  charitySetting(admin?: AdminContext) {
+    return this.charityFund.getSetting(admin);
+  }
+
+  saveCharitySetting(dto: CharitySettingDto, admin?: AdminContext) {
+    return this.charityFund.saveSetting(dto, admin);
+  }
+
   async analyticsOverview(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
     const scope = await this.analyticsScope(query, admin);
     const builders = this.analyticsBuilders(scope, admin);
-    const [eventCounts, paidAmount, refundAmount, walletRechargeAmount, activeUserCount, tenantRanking, risk] = await Promise.all([
+    const [eventCounts, paidAmount, refundAmount, walletRechargeAmount, charitySummary, activeUserCount, tenantRanking, risk] = await Promise.all([
       builders.events.select("event.type", "type").addSelect("COUNT(1)", "count").groupBy("event.type").getRawMany<{ type: string; count: string }>(),
       builders.payments.select("COALESCE(SUM(transaction.amount), 0)", "sum").andWhere("transaction.status = :status", { status: "success" }).getRawOne<{ sum: string }>(),
       builders.refunds.select("COALESCE(SUM(refund.amount), 0)", "sum").andWhere("refund.status = :status", { status: "completed" }).getRawOne<{ sum: string }>(),
       builders.walletTx.select("COALESCE(SUM(walletTx.amount), 0)", "sum").andWhere("walletTx.direction = :direction", { direction: "credit" }).andWhere("walletTx.type = :type", { type: "admin_recharge" }).getRawOne<{ sum: string }>(),
+      this.charityFund.adminSummary(admin),
       builders.events.select("COUNT(DISTINCT event.userId)", "count").andWhere("event.userId IS NOT NULL").getRawOne<{ count: string }>(),
       this.analyticsTenantRanking(scope, admin),
       this.analyticsRisk(scope, admin)
@@ -496,7 +527,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         paidAmount: Number(paidAmount?.sum || 0).toFixed(2),
         refundAmount: Number(refundAmount?.sum || 0).toFixed(2),
         netAmount: (Number(paidAmount?.sum || 0) - Number(refundAmount?.sum || 0)).toFixed(2),
-        walletRechargeAmount: Number(walletRechargeAmount?.sum || 0).toFixed(2)
+        walletRechargeAmount: Number(walletRechargeAmount?.sum || 0).toFixed(2),
+        charityAccruedAmount: charitySummary.totalAccrued,
+        charityAvailableAmount: charitySummary.availableAmount,
+        charityDisbursedAmount: charitySummary.totalDisbursed,
+        charityReversedAmount: charitySummary.totalReversed
       },
       rates: {
         signupRate: this.rate(counts.register || 0, counts.view || 0),
@@ -2102,6 +2137,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const savedOrder = await this.orders.save(order);
     await this.ensurePaymentTransaction(savedOrder, "offline", dto.remark || "后台确认线下收款");
     if (Number(savedOrder.amount) > 0) await this.awardPoints(savedOrder.registration.user, Math.floor(Number(savedOrder.amount)), "order_paid", savedOrder.id, "活动消费积分");
+    await this.charityFund.recordOrderAccrual(savedOrder, this.actorName(admin));
     const registration = await this.getRegistration(order.registration.id, admin);
     registration.status = registration.activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
     await this.registrations.save(registration);

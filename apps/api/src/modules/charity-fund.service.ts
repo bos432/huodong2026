@@ -1,0 +1,304 @@
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { InjectRepository } from "@nestjs/typeorm";
+import { Repository } from "typeorm";
+import { AdminUser } from "../entities/admin-user.entity";
+import { CharityAccrualBasis, CharityFundSetting } from "../entities/charity-fund-setting.entity";
+import { CharityFundTransaction } from "../entities/charity-fund-transaction.entity";
+import { CharityProjectDisbursement } from "../entities/charity-project-disbursement.entity";
+import { CharityProject, CharityProjectStatus } from "../entities/charity-project.entity";
+import { Order } from "../entities/order.entity";
+import { Refund } from "../entities/refund.entity";
+import { Tenant } from "../entities/tenant.entity";
+import { User } from "../entities/user.entity";
+import { charityAccrualAmount, charityBasisAmount, charityReversalAmount, roundMoney } from "./charity-fund-calculator";
+
+type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
+type CharitySummaryScope = { tenantId?: number | null };
+export type CharitySettingInput = {
+  enabled?: boolean;
+  ratePercent?: number;
+  accrualBasis?: CharityAccrualBasis;
+  manualBasisAmount?: number | null;
+  userDisplayName?: string;
+  publicNote?: string;
+};
+export type CharityProjectInput = {
+  title: string;
+  targetAmount: number;
+  status?: CharityProjectStatus;
+  coverUrl?: string | null;
+  description?: string | null;
+  executedAt?: string | null;
+  publicVisible?: boolean;
+};
+export type CharityDisbursementInput = { amount: number; proofUrl?: string | null; remark?: string | null };
+
+@Injectable()
+export class CharityFundService {
+  constructor(
+    @InjectRepository(CharityFundSetting) private readonly settings: Repository<CharityFundSetting>,
+    @InjectRepository(CharityFundTransaction) private readonly transactions: Repository<CharityFundTransaction>,
+    @InjectRepository(CharityProject) private readonly projects: Repository<CharityProject>,
+    @InjectRepository(CharityProjectDisbursement) private readonly disbursements: Repository<CharityProjectDisbursement>,
+    @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
+    @InjectRepository(AdminUser) private readonly admins: Repository<AdminUser>
+  ) {}
+
+  async publicSummary() {
+    const [setting, summary, projects] = await Promise.all([this.ensureSetting(null), this.summary(), this.publicProjects(4)]);
+    return { setting: this.publicSetting(setting), ...summary, projects };
+  }
+
+  async publicProjects(limit = 20) {
+    const rows = await this.projects.find({ where: { publicVisible: true }, order: { createdAt: "DESC" }, take: limit });
+    return rows.map((row) => this.projectView(row));
+  }
+
+  async userContribution(user: User) {
+    const [setting, contribution, summary, projects] = await Promise.all([
+      this.ensureSetting(null),
+      this.userContributionAmount(user.id),
+      this.summary(),
+      this.publicProjects(3)
+    ]);
+    return { setting: this.publicSetting(setting), contributionAmount: contribution.toFixed(2), pool: summary, projects };
+  }
+
+  async adminSummary(admin?: AdminContext) {
+    return this.summary(this.scope(admin));
+  }
+
+  async adminTransactions(admin?: AdminContext, limit = 100) {
+    const builder = this.transactions.createQueryBuilder("tx").leftJoinAndSelect("tx.tenant", "tenant").leftJoinAndSelect("tx.user", "user").leftJoinAndSelect("tx.order", "order").leftJoinAndSelect("tx.refund", "refund").orderBy("tx.createdAt", "DESC").take(limit);
+    this.applyScope(builder, "tx", admin);
+    return builder.getMany();
+  }
+
+  async getSetting(admin?: AdminContext) {
+    return this.ensureSetting(this.settingTenantId(admin));
+  }
+
+  async saveSetting(input: CharitySettingInput, admin?: AdminContext) {
+    const setting = await this.ensureSetting(this.settingTenantId(admin));
+    const rate = input.ratePercent === undefined ? Number(setting.ratePercent) : Number(input.ratePercent);
+    if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new BadRequestException("公益计提比例需在 0-100 之间");
+    const basis = input.accrualBasis || setting.accrualBasis || "paid_amount";
+    if (!["paid_amount", "original_amount", "manual"].includes(basis)) throw new BadRequestException("公益计提口径不正确");
+    setting.enabled = input.enabled === undefined ? setting.enabled : Boolean(input.enabled);
+    setting.ratePercent = rate.toFixed(2);
+    setting.accrualBasis = basis;
+    setting.manualBasisAmount = input.manualBasisAmount === undefined || input.manualBasisAmount === null ? null : Math.max(Number(input.manualBasisAmount), 0).toFixed(2);
+    setting.userDisplayName = this.cleanText(input.userDisplayName, 80) || setting.userDisplayName || "我的公益贡献";
+    setting.publicNote = this.cleanText(input.publicNote, 120) || setting.publicNote || "公益金来自平台订单收入计提，用户无需额外支付。";
+    return this.settings.save(setting);
+  }
+
+  async adminProjects(admin?: AdminContext) {
+    const builder = this.projects.createQueryBuilder("project").leftJoinAndSelect("project.tenant", "tenant").orderBy("project.createdAt", "DESC");
+    this.applyScope(builder, "project", admin);
+    const rows = await builder.getMany();
+    return rows.map((row) => this.projectView(row));
+  }
+
+  async saveProject(input: CharityProjectInput, id?: number, admin?: AdminContext) {
+    const tenant = await this.adminTenant(admin);
+    const project = id ? await this.projects.findOne({ where: { id } }) : this.projects.create({ tenant });
+    if (!project) throw new NotFoundException("公益项目不存在");
+    this.assertProjectScope(project, admin);
+    const title = this.cleanText(input.title, 120);
+    if (!title) throw new BadRequestException("请输入公益项目标题");
+    const targetAmount = Number(input.targetAmount);
+    if (!Number.isFinite(targetAmount) || targetAmount <= 0) throw new BadRequestException("目标金额必须大于 0");
+    project.title = title;
+    project.targetAmount = targetAmount.toFixed(2);
+    project.status = input.status || project.status || "fundraising";
+    project.coverUrl = this.cleanText(input.coverUrl, 500) || null;
+    project.description = input.description?.trim() || null;
+    project.executedAt = input.executedAt ? new Date(input.executedAt) : null;
+    project.publicVisible = input.publicVisible === undefined ? project.publicVisible ?? true : Boolean(input.publicVisible);
+    if (!id) project.tenant = tenant;
+    return this.projectView(await this.projects.save(project));
+  }
+
+  async addDisbursement(projectId: number, input: CharityDisbursementInput, admin?: AdminContext) {
+    const project = await this.projects.findOne({ where: { id: projectId } });
+    if (!project) throw new NotFoundException("公益项目不存在");
+    this.assertProjectScope(project, admin);
+    const amount = Number(input.amount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException("拨付金额必须大于 0");
+    const summary = await this.summary(this.scope(admin));
+    if (Number(summary.availableAmount) + 0.001 < amount) throw new BadRequestException("公益池可用金额不足");
+    const operator = admin?.id ? await this.admins.findOne({ where: { id: admin.id } }) : null;
+    return this.disbursements.manager.transaction(async (manager) => {
+      const disbursement = await manager.save(CharityProjectDisbursement, manager.create(CharityProjectDisbursement, {
+        project,
+        tenant: project.tenant || null,
+        operator,
+        amount: amount.toFixed(2),
+        proofUrl: this.cleanText(input.proofUrl, 500) || null,
+        remark: input.remark?.trim() || null
+      }));
+      project.disbursedAmount = (Number(project.disbursedAmount || 0) + amount).toFixed(2);
+      if (Number(project.disbursedAmount) >= Number(project.targetAmount)) project.status = "completed";
+      const savedProject = await manager.save(CharityProject, project);
+      await manager.save(CharityFundTransaction, manager.create(CharityFundTransaction, {
+        tenant: project.tenant || null,
+        user: null,
+        order: null,
+        refund: null,
+        direction: "debit",
+        type: "project_disbursement",
+        amount: amount.toFixed(2),
+        basisAmount: "0.00",
+        ratePercent: "0.00",
+        operator: admin?.username || "admin",
+        remark: input.remark || `公益项目拨付：${project.title}`,
+        idempotencyKey: `project_disbursement:${disbursement.id}`
+      }));
+      return { project: this.projectView(savedProject), disbursement };
+    });
+  }
+
+  async recordOrderAccrual(order: Order, operator = "system") {
+    if (!order?.id || Number(order.amount) <= 0) return null;
+    const key = `charity_accrual:${order.id}`;
+    const existing = await this.transactions.findOne({ where: { idempotencyKey: key } });
+    if (existing) return existing;
+    const setting = await this.effectiveSetting(order.tenant || null);
+    if (!setting.enabled || Number(setting.ratePercent) <= 0) return null;
+    const basisAmount = this.orderBasisAmount(order, setting);
+    const amount = charityAccrualAmount({ paidAmount: Number(order.amount || 0), originalAmount: Number(order.originalAmount || order.amount || 0), manualBasisAmount: Number(setting.manualBasisAmount || 0), ratePercent: Number(setting.ratePercent), accrualBasis: setting.accrualBasis });
+    if (amount <= 0) return null;
+    return this.transactions.save(this.transactions.create({
+      tenant: order.tenant || null,
+      user: order.registration?.user || null,
+      order,
+      refund: null,
+      direction: "credit",
+      type: "charity_accrual",
+      amount: amount.toFixed(2),
+      basisAmount: basisAmount.toFixed(2),
+      ratePercent: Number(setting.ratePercent).toFixed(2),
+      operator,
+      remark: `订单公益金计提：${order.orderNo}`,
+      idempotencyKey: key
+    }));
+  }
+
+  async recordRefundReversal(order: Order, refund: Refund, operator = "system") {
+    if (!order?.id || !refund?.id || Number(refund.amount) <= 0) return null;
+    const key = `charity_reversal:${refund.id}`;
+    const existing = await this.transactions.findOne({ where: { idempotencyKey: key } });
+    if (existing) return existing;
+    const accrual = await this.transactions.findOne({ where: { idempotencyKey: `charity_accrual:${order.id}` } });
+    if (!accrual) return null;
+    const amount = charityReversalAmount(Number(accrual.amount), Number(refund.amount), Number(order.amount));
+    if (amount <= 0) return null;
+    return this.transactions.save(this.transactions.create({
+      tenant: order.tenant || null,
+      user: order.registration?.user || null,
+      order,
+      refund,
+      direction: "debit",
+      type: "charity_reversal",
+      amount: amount.toFixed(2),
+      basisAmount: Number(refund.amount).toFixed(2),
+      ratePercent: accrual.ratePercent,
+      operator,
+      remark: `订单退款公益金冲回：${refund.refundNo}`,
+      idempotencyKey: key
+    }));
+  }
+
+  private async summary(scope: CharitySummaryScope = {}) {
+    const builder = this.transactions.createQueryBuilder("tx");
+    if (scope.tenantId) builder.where("tx.tenantId = :tenantId", { tenantId: scope.tenantId });
+    const rows = await builder
+      .select("COALESCE(SUM(CASE WHEN tx.direction = 'credit' THEN tx.amount ELSE 0 END), 0)", "totalAccrued")
+      .addSelect("COALESCE(SUM(CASE WHEN tx.type = 'charity_reversal' THEN tx.amount ELSE 0 END), 0)", "totalReversed")
+      .addSelect("COALESCE(SUM(CASE WHEN tx.type = 'project_disbursement' THEN tx.amount ELSE 0 END), 0)", "totalDisbursed")
+      .addSelect("COUNT(DISTINCT tx.userId)", "participantCount")
+      .getRawOne<{ totalAccrued: string; totalReversed: string; totalDisbursed: string; participantCount: string }>();
+    const totalAccrued = Number(rows?.totalAccrued || 0);
+    const totalReversed = Number(rows?.totalReversed || 0);
+    const totalDisbursed = Number(rows?.totalDisbursed || 0);
+    return {
+      totalAccrued: totalAccrued.toFixed(2),
+      totalReversed: totalReversed.toFixed(2),
+      totalDisbursed: totalDisbursed.toFixed(2),
+      availableAmount: Math.max(totalAccrued - totalReversed - totalDisbursed, 0).toFixed(2),
+      participantCount: Number(rows?.participantCount || 0)
+    };
+  }
+
+  private async userContributionAmount(userId: number) {
+    const row = await this.transactions
+      .createQueryBuilder("tx")
+      .select("COALESCE(SUM(CASE WHEN tx.direction = 'credit' THEN tx.amount ELSE -tx.amount END), 0)", "sum")
+      .where("tx.userId = :userId", { userId })
+      .andWhere("tx.type IN (:...types)", { types: ["charity_accrual", "charity_reversal"] })
+      .getRawOne<{ sum: string }>();
+    return Math.max(Number(row?.sum || 0), 0);
+  }
+
+  private async effectiveSetting(tenant: Tenant | null) {
+    const tenantSetting = tenant?.id ? await this.settings.findOne({ where: { tenant: { id: tenant.id } } }) : null;
+    return tenantSetting || this.ensureSetting(null);
+  }
+
+  private async ensureSetting(tenantId: number | null) {
+    let setting = tenantId
+      ? await this.settings.findOne({ where: { tenant: { id: tenantId } } })
+      : await this.settings.createQueryBuilder("setting").leftJoinAndSelect("setting.tenant", "tenant").where("setting.tenantId IS NULL").getOne();
+    if (setting) return setting;
+    const tenant = tenantId ? await this.tenants.findOne({ where: { id: tenantId } }) : null;
+    setting = await this.settings.save(this.settings.create({ tenant: tenant || null }));
+    return setting;
+  }
+
+  private orderBasisAmount(order: Order, setting: CharityFundSetting) {
+    return charityBasisAmount({ paidAmount: Number(order.amount || 0), originalAmount: Number(order.originalAmount || order.amount || 0), manualBasisAmount: Number(setting.manualBasisAmount || 0), ratePercent: Number(setting.ratePercent), accrualBasis: setting.accrualBasis });
+  }
+
+  private projectView(project: CharityProject) {
+    const target = Number(project.targetAmount || 0);
+    const disbursed = Number(project.disbursedAmount || 0);
+    return {
+      ...project,
+      progressPercent: target > 0 ? Math.min(Number(((disbursed / target) * 100).toFixed(2)), 100) : 0
+    };
+  }
+
+  private publicSetting(setting: CharityFundSetting) {
+    return { enabled: setting.enabled, ratePercent: setting.ratePercent, userDisplayName: setting.userDisplayName, publicNote: setting.publicNote };
+  }
+
+  private scope(admin?: AdminContext): CharitySummaryScope {
+    return admin?.tenantId ? { tenantId: admin.tenantId } : {};
+  }
+
+  private settingTenantId(admin?: AdminContext) {
+    return admin?.tenantId || null;
+  }
+
+  private applyScope(builder: any, alias: string, admin?: AdminContext) {
+    if (admin?.tenantId) builder.andWhere(`${alias}.tenantId = :tenantId`, { tenantId: admin.tenantId });
+  }
+
+  private async adminTenant(admin?: AdminContext) {
+    return admin?.tenantId ? await this.tenants.findOne({ where: { id: admin.tenantId } }) : null;
+  }
+
+  private assertProjectScope(project: CharityProject, admin?: AdminContext) {
+    if (admin?.tenantId && project.tenant?.id !== admin.tenantId) throw new NotFoundException("公益项目不存在");
+  }
+
+  private cleanText(value: unknown, maxLength: number) {
+    const text = typeof value === "string" ? value.trim() : "";
+    return text.slice(0, maxLength);
+  }
+
+  private roundMoney(value: number) {
+    return roundMoney(value);
+  }
+}

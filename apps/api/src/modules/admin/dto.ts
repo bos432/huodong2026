@@ -444,6 +444,79 @@ export class ActivityChannelDto {
   enabled?: boolean;
 }
 
+export class CharitySettingDto {
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(100)
+  ratePercent?: number;
+
+  @IsOptional()
+  @IsIn(["paid_amount", "original_amount", "manual"])
+  accrualBasis?: "paid_amount" | "original_amount" | "manual";
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  manualBasisAmount?: number;
+
+  @IsOptional()
+  @IsString()
+  userDisplayName?: string;
+
+  @IsOptional()
+  @IsString()
+  publicNote?: string;
+}
+
+export class CharityProjectDto {
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsNumber()
+  @Min(0.01)
+  targetAmount!: number;
+
+  @IsOptional()
+  @IsIn(["fundraising", "pending_execution", "executing", "completed", "archived"])
+  status?: "fundraising" | "pending_execution" | "executing" | "completed" | "archived";
+
+  @IsOptional()
+  @IsString()
+  coverUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  executedAt?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  publicVisible?: boolean;
+}
+
+export class CharityDisbursementDto {
+  @IsNumber()
+  @Min(0.01)
+  amount!: number;
+
+  @IsOptional()
+  @IsString()
+  proofUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
 export class AdminQueryDto {
   @IsOptional()
   @IsString()

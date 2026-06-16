@@ -25,6 +25,7 @@ const Members = () => import("./views/Members.vue");
 const Categories = () => import("./views/Categories.vue");
 const Admins = () => import("./views/Admins.vue");
 const Finance = () => import("./views/Finance.vue");
+const Charity = () => import("./views/Charity.vue");
 const SystemSettings = () => import("./views/SystemSettings.vue");
 const OperationLogs = () => import("./views/OperationLogs.vue");
 const AdminLoginLogs = () => import("./views/AdminLoginLogs.vue");
@@ -63,6 +64,7 @@ export const router = createRouter({
         { path: "agent-settlements", component: AgentSettlements, meta: { roles: permissions.finance, scope: "tenant" } },
         { path: "orders", component: Orders, meta: { roles: permissions.finance, scope: "tenantOrPlatformAdmin" } },
         { path: "finance", component: Finance, meta: { roles: permissions.finance, scope: "tenantOrPlatformAdmin" } },
+        { path: "charity", component: Charity, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "check-in", component: CheckIn, meta: { roles: permissions.checkIn, scope: "tenant" } },
         { path: "system-settings", component: SystemSettings, meta: { roles: permissions.superAdmin, scope: "tenantOrPlatformAdmin" } },
         { path: "tenant-profile", component: TenantProfile, meta: { roles: permissions.superAdmin, scope: "tenant" } },

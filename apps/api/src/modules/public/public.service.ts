@@ -37,6 +37,7 @@ import { assertTenantOwnedResourceAccess, normalizeTenantCode, normalizeTenantHo
 import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults";
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
+import { CharityFundService } from "../charity-fund.service";
 import { H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, WechatLoginDto } from "./dto";
 import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
@@ -74,6 +75,7 @@ export class PublicService {
     private readonly notificationProvider: NotificationProviderService,
     private readonly paymentProvider: PaymentProviderService,
     private readonly refundCompletion: RefundCompletionService,
+    private readonly charityFund: CharityFundService,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService
   ) {}
@@ -216,6 +218,18 @@ export class PublicService {
   async operationSetting(context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     return this.publicOperationSetting(await this.ensureOperationSetting(tenant));
+  }
+
+  charitySummary() {
+    return this.charityFund.publicSummary();
+  }
+
+  charityProjects() {
+    return this.charityFund.publicProjects();
+  }
+
+  myCharity(user: User) {
+    return this.charityFund.userContribution(user);
   }
 
   async activitiesList(options: { categoryId?: number; status?: string; featured?: boolean; page?: number; pageSize?: number; keyword?: string }, context?: PublicTenantContext) {
@@ -541,6 +555,7 @@ export class PublicService {
       return { order: savedOrder, walletTransaction, idempotent: false };
     });
     if (!result.idempotent && Number(result.order.amount) > 0) await this.awardPoints(user, Math.floor(Number(result.order.amount)), "order_paid", result.order.id, "活动消费积分");
+    if (!result.idempotent) await this.charityFund.recordOrderAccrual(result.order, "balance");
     return result;
   }
 
@@ -1012,6 +1027,7 @@ export class PublicService {
       await this.registrations.save(savedOrder.registration);
     }
     await this.recordConversionEvent("pay", { activity: savedOrder.registration.activity, user: savedOrder.registration.user, registration: savedOrder.registration, order: savedOrder, channel: savedOrder.registration.channel || null, amount: savedOrder.amount, source: provider, idempotencyKey: `pay:${savedOrder.id}` });
+    await this.charityFund.recordOrderAccrual(savedOrder, provider);
     return { order: savedOrder, transaction, idempotent: false };
   }
 

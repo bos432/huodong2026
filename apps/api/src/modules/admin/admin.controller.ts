@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 
 const SUPER_ADMIN = [AdminRole.SuperAdmin];
@@ -153,6 +153,54 @@ export class AdminController {
   @Get("analytics/users")
   analyticsUsers(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.analyticsUsers(query, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("charity/summary")
+  charitySummary(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.charitySummary(admin);
+  }
+
+  @AdminRoles(...FINANCE_ROLES)
+  @Get("charity/transactions")
+  charityTransactions(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.charityTransactions(admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("charity/projects")
+  charityProjects(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.charityProjects(admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("charity/projects")
+  createCharityProject(@Body() dto: CharityProjectDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveCharityProject(dto, undefined, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Patch("charity/projects/:id")
+  updateCharityProject(@Param("id", ParseIntPipe) id: number, @Body() dto: CharityProjectDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveCharityProject(dto, id, admin);
+  }
+
+  @AdminRoles(...FINANCE_ROLES)
+  @Post("charity/projects/:id/disbursements")
+  addCharityDisbursement(@Param("id", ParseIntPipe) id: number, @Body() dto: CharityDisbursementDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.addCharityDisbursement(id, dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("settings/charity")
+  charitySetting(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.charitySetting(admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("settings/charity")
+  saveCharitySetting(@Body() dto: CharitySettingDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveCharitySetting(dto, admin);
   }
 
   @AdminRoles(...ACTIVITY_VIEW_ROLES)

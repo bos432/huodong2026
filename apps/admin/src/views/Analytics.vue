@@ -20,6 +20,8 @@ const metricCards = computed(() => {
     { label: "净收入", value: `¥${totals.netAmount || "0.00"}`, sub: `退款 ¥${totals.refundAmount || "0.00"}` },
     { label: "活跃用户", value: totals.activeUserCount || 0, sub: `新增 ${users.value?.newUserCount || 0}` },
     { label: "余额充值", value: `¥${totals.walletRechargeAmount || "0.00"}`, sub: "后台充值余额" },
+    { label: "公益池", value: `¥${totals.charityAvailableAmount || "0.00"}`, sub: `累计 ¥${totals.charityAccruedAmount || "0.00"}` },
+    { label: "公益拨付", value: `¥${totals.charityDisbursedAmount || "0.00"}`, sub: `冲回 ¥${totals.charityReversedAmount || "0.00"}` },
     { label: "评价", value: totals.reviewCount || 0, sub: `评价转化 ${rates.reviewRate || 0}%` },
     { label: "风险待办", value: riskTotal.value, sub: "退款/回调/对账" }
   ];

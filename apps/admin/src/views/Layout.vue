@@ -53,6 +53,7 @@ const menuGroups = [
     items: [
       { index: "/orders", icon: "Wallet", label: "全局订单", roles: permissions.finance, scope: "platform" },
       { index: "/finance", icon: "CreditCard", label: "全局对账", roles: permissions.finance, scope: "platform" },
+      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "platform" },
       { index: "/agents", icon: "Shop", label: "商家收款账户", roles: permissions.superAdmin, scope: "platform" }
     ]
   },
@@ -115,6 +116,15 @@ const menuGroups = [
     items: [
       { index: "/members", icon: "User", label: "会员管理", roles: permissions.operation, scope: "tenantOrPlatformAdmin" },
       { index: "/tags", icon: "PriceTag", label: "用户标签", roles: permissions.operation, scope: "tenant" }
+    ]
+  },
+  {
+    index: "charity",
+    icon: "Coin",
+    label: "公益运营",
+    scope: "tenant",
+    items: [
+      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview }
     ]
   },
   {

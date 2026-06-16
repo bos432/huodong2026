@@ -13,6 +13,7 @@ import { User } from "../entities/user.entity";
 import { UserWallet } from "../entities/user-wallet.entity";
 import { WalletTransaction } from "../entities/wallet-transaction.entity";
 import { OrderStatus, PaymentMethod, RegistrationStatus } from "../shared/domain";
+import { CharityFundService } from "./charity-fund.service";
 
 export type CompleteRefundInput = {
   refund: Refund;
@@ -34,7 +35,8 @@ export class RefundCompletionService {
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
     @InjectRepository(ActivityReview) private readonly activityReviews: Repository<ActivityReview>,
     @InjectRepository(UserWallet) private readonly userWallets: Repository<UserWallet>,
-    @InjectRepository(WalletTransaction) private readonly walletTransactions: Repository<WalletTransaction>
+    @InjectRepository(WalletTransaction) private readonly walletTransactions: Repository<WalletTransaction>,
+    private readonly charityFund: CharityFundService
   ) {}
 
   async complete(input: CompleteRefundInput) {
@@ -58,6 +60,7 @@ export class RefundCompletionService {
     refund.providerRefundFailureReason = null;
     const savedRefund = await this.refunds.save(refund);
     await this.returnBalanceRefundIfNeeded(order, savedRefund, amount, input.actorName || "system");
+    await this.charityFund.recordRefundReversal(order, savedRefund, input.actorName || "system");
 
     await this.awardPoints(order.registration.user, -Math.floor(amount), "order_refund", savedRefund.refundNo, "订单退款扣减积分");
 

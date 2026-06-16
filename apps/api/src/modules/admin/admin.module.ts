@@ -21,6 +21,10 @@ import { AgentSettlement } from "../../entities/agent-settlement.entity";
 import { Agent } from "../../entities/agent.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
+import { CharityFundSetting } from "../../entities/charity-fund-setting.entity";
+import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
+import { CharityProjectDisbursement } from "../../entities/charity-project-disbursement.entity";
+import { CharityProject } from "../../entities/charity-project.entity";
 import { Coupon } from "../../entities/coupon.entity";
 import { ConversionEvent } from "../../entities/conversion-event.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
@@ -50,10 +54,11 @@ import { JwtStrategy } from "./jwt.strategy";
 import { RolesGuard } from "./roles.guard";
 import { PaymentProviderService } from "../public/payment-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
+import { CharityFundService } from "../charity-fund.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit]),
+    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -62,7 +67,7 @@ import { RefundCompletionService } from "../refund-completion.service";
     })
   ],
   controllers: [AdminController],
-  providers: [AdminService, JwtStrategy, RolesGuard, PaymentProviderService, RefundCompletionService],
+  providers: [AdminService, JwtStrategy, RolesGuard, PaymentProviderService, RefundCompletionService, CharityFundService],
   exports: [AdminService]
 })
 export class AdminModule {}

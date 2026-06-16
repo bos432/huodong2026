@@ -19,6 +19,10 @@ import { AgentSettlement } from "./entities/agent-settlement.entity";
 import { Agent } from "./entities/agent.entity";
 import { Announcement } from "./entities/announcement.entity";
 import { CheckIn } from "./entities/check-in.entity";
+import { CharityFundSetting } from "./entities/charity-fund-setting.entity";
+import { CharityFundTransaction } from "./entities/charity-fund-transaction.entity";
+import { CharityProjectDisbursement } from "./entities/charity-project-disbursement.entity";
+import { CharityProject } from "./entities/charity-project.entity";
 import { Coupon } from "./entities/coupon.entity";
 import { ConversionEvent } from "./entities/conversion-event.entity";
 import { H5AuthCodeLog } from "./entities/h5-auth-code-log.entity";
@@ -89,6 +93,10 @@ export default new DataSource({
     Coupon,
     ConversionEvent,
     CheckIn,
+    CharityFundSetting,
+    CharityFundTransaction,
+    CharityProject,
+    CharityProjectDisbursement,
     H5AuthCodeLog,
     HomepageSection,
     InviteCode,

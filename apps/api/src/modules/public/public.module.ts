@@ -14,6 +14,10 @@ import { ConversionEvent } from "../../entities/conversion-event.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { CheckIn } from "../../entities/check-in.entity";
+import { CharityFundSetting } from "../../entities/charity-fund-setting.entity";
+import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
+import { CharityProjectDisbursement } from "../../entities/charity-project-disbursement.entity";
+import { CharityProject } from "../../entities/charity-project.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
@@ -34,11 +38,12 @@ import { PaymentProviderService } from "./payment-provider.service";
 import { PublicService } from "./public.service";
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
+import { CharityFundService } from "../charity-fund.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn])],
+  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement])],
   controllers: [PublicController, PaymentController],
-  providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService],
+  providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
   exports: [PublicService]
 })
 export class PublicModule {}

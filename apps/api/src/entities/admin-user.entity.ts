@@ -6,19 +6,19 @@ export class AdminUser {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ unique: true })
+  @Column({ type: "varchar", length: 80, unique: true })
   username!: string;
 
-  @Column()
+  @Column({ type: "varchar", length: 255 })
   passwordHash!: string;
 
-  @Column({ default: "admin" })
+  @Column({ type: "varchar", length: 40, default: "admin" })
   role!: string;
 
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
   tenant!: Tenant | null;
 
-  @Column({ default: true })
+  @Column({ type: "tinyint", default: true })
   enabled!: boolean;
 
   @CreateDateColumn()

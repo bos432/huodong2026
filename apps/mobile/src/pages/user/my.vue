@@ -15,6 +15,7 @@ const homepageSections = ref<HomepageSectionView[]>([]);
 const tenant = ref<HomepagePayload["tenant"] | null>(null);
 const wallet = ref<any | null>(null);
 const walletTransactions = ref<any[]>([]);
+const charity = ref<any | null>(null);
 const adminAccess = ref<{ canAccess?: boolean; role?: string; tenantName?: string | null } | null>(null);
 const loading = ref(true);
 const activeStatus = ref<"all" | RegistrationStatus>("all");
@@ -153,11 +154,12 @@ async function load() {
   try {
     await ensureUser();
     phone.value = uni.getStorageSync("user_phone") || "";
-    const [registrations, homepage, walletDetail, transactions, adminStatus] = await Promise.all([
+    const [registrations, homepage, walletDetail, transactions, charityDetail, adminStatus] = await Promise.all([
       request<any[]>("/public/me/registrations"),
       request<HomepagePayload>("/public/page-decoration?pageKey=user_my").catch(() => ({ sections: [], fallback: true })),
       request<any>("/public/me/wallet").catch(() => null),
       request<any[]>("/public/me/wallet/transactions").catch(() => []),
+      request<any>("/public/me/charity").catch(() => null),
       request<any>("/public/me/admin-access").catch(() => ({ canAccess: false }))
     ]);
     rows.value = registrations;
@@ -165,6 +167,7 @@ async function load() {
     tenant.value = homepage.tenant || null;
     wallet.value = walletDetail;
     walletTransactions.value = transactions;
+    charity.value = charityDetail;
     adminAccess.value = adminStatus;
   } finally {
     loading.value = false;
@@ -226,6 +229,31 @@ onShow(async () => {
         </view>
       </view>
       <view class="wallet-tip">余额由后台充值，可用于报名订单余额支付。</view>
+    </view>
+
+    <view class="charity-card">
+      <view class="charity-main">
+        <view>
+          <view class="wallet-label">{{ charity?.setting?.userDisplayName || "我的公益贡献" }}</view>
+          <view class="charity-amount">¥{{ money(charity?.contributionAmount) }}</view>
+        </view>
+        <view class="charity-badge">公益金</view>
+      </view>
+      <view class="charity-stats">
+        <view><text>公益池累计</text><strong>¥{{ money(charity?.pool?.totalAccrued) }}</strong></view>
+        <view><text>当前可用</text><strong>¥{{ money(charity?.pool?.availableAmount) }}</strong></view>
+        <view><text>已拨付</text><strong>¥{{ money(charity?.pool?.totalDisbursed) }}</strong></view>
+      </view>
+      <view class="wallet-tip">{{ charity?.setting?.publicNote || "公益金来自平台订单收入计提，用户无需额外支付。" }}</view>
+      <view v-if="charity?.projects?.length" class="charity-projects">
+        <view v-for="project in charity.projects" :key="project.id" class="charity-project">
+          <view>
+            <view class="flow-title">{{ project.title }}</view>
+            <view class="flow-time">目标 ¥{{ money(project.targetAmount) }} · 已拨付 ¥{{ money(project.disbursedAmount) }}</view>
+          </view>
+          <view class="project-progress">{{ project.progressPercent || 0 }}%</view>
+        </view>
+      </view>
     </view>
 
     <view class="tool-grid">
@@ -314,6 +342,17 @@ onShow(async () => {
 .wallet-stats text { color: var(--muted-color, #667085); font-size: 22rpx; }
 .wallet-stats strong { color: var(--text-color, #111827); font-size: 25rpx; }
 .wallet-tip { margin-top: 18rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.5; }
+.charity-card { margin-top: 20rpx; padding: 26rpx; border-radius: var(--card-radius, 8px); background: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.07); border: 1px solid #dcfce7; }
+.charity-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
+.charity-amount { margin-top: 8rpx; color: #15803d; font-size: 50rpx; line-height: 1; font-weight: 950; }
+.charity-badge { flex: 0 0 auto; padding: 12rpx 18rpx; border-radius: 999px; background: #dcfce7; color: #15803d; font-size: 24rpx; font-weight: 900; }
+.charity-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; margin-top: 24rpx; }
+.charity-stats view { min-width: 0; display: grid; gap: 6rpx; padding: 16rpx; border-radius: 8px; background: rgba(255,255,255,.78); }
+.charity-stats text { color: var(--muted-color, #667085); font-size: 22rpx; }
+.charity-stats strong { color: #14532d; font-size: 25rpx; }
+.charity-projects { margin-top: 18rpx; border-top: 1px solid #bbf7d0; }
+.charity-project { display: flex; justify-content: space-between; gap: 18rpx; padding: 16rpx 0 0; }
+.project-progress { flex: 0 0 auto; color: #15803d; font-size: 28rpx; font-weight: 950; }
 .tool-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14rpx; margin: 20rpx 0 8rpx; }
 .tool { min-height: 124rpx; display: grid; gap: 10rpx; justify-items: center; align-content: center; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); color: #344054; font-size: 24rpx; font-weight: 800; box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
 .tool text { width: 52rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 25rpx; font-weight: 900; }
