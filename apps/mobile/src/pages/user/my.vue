@@ -94,6 +94,18 @@ function goPage(url: string) {
 function scrollToRegistrations() {
   activeStatus.value = "all";
   setTimeout(() => {
+    // #ifdef H5
+    const target = document.querySelector(".registration-section") as HTMLElement | null;
+    if (target) {
+      const currentTop = document.documentElement.scrollTop || document.body.scrollTop || window.pageYOffset || 0;
+      const top = Math.max(target.getBoundingClientRect().top + currentTop - 12, 0);
+      const scroller = document.scrollingElement || document.documentElement || document.body;
+      scroller.scrollTo({ top, behavior: "smooth" });
+      document.body.scrollTop = top;
+      document.documentElement.scrollTop = top;
+      return;
+    }
+    // #endif
     uni.pageScrollTo({ selector: ".registration-section", duration: 240 });
   }, 30);
 }
