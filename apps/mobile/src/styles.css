@@ -22,6 +22,7 @@ body {
 }
 
 .container { min-height: 100vh; padding: 24rpx; background: var(--page-bg-layer, #f5f7fb); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #172033); }
+.has-custom-nav { padding-bottom: calc(190rpx + env(safe-area-inset-bottom)) !important; }
 .card { background: var(--card-bg, #fff); border: 1px solid #e5e7eb; border-radius: var(--card-radius, 8px); padding: 24rpx; margin-bottom: 20rpx; }
 .row { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .title { font-size: 34rpx; font-weight: 700; }
@@ -31,8 +32,9 @@ body {
 .tag { display: inline-flex; padding: 6rpx 14rpx; border-radius: 999px; color: var(--primary-color, #0f766e); background: var(--primary-soft, #e6f2ef); font-size: 24rpx; }
 .input { height: 78rpx; border: 1px solid #d7dde8; border-radius: 6px; padding: 0 20rpx; background: var(--card-bg, #fff); color: var(--text-color, #172033); }
 .textarea { min-height: 140rpx; border: 1px solid #d7dde8; border-radius: 6px; padding: 18rpx 20rpx; background: var(--card-bg, #fff); color: var(--text-color, #172033); }
-.custom-tabbar { position: fixed; left: 18rpx; right: 18rpx; bottom: 18rpx; z-index: 20; display: grid; grid-template-columns: repeat(var(--nav-count, 3), 1fr); gap: 8rpx; min-height: 98rpx; padding: 10rpx 12rpx calc(10rpx + env(safe-area-inset-bottom)); border-radius: 8px; box-shadow: 0 -10rpx 34rpx rgba(15, 23, 42, 0.12); }
-.custom-tabbar-item { display: grid; gap: 4rpx; justify-items: center; align-content: center; min-width: 0; font-size: 22rpx; font-weight: 800; }
+.custom-tabbar { position: fixed; left: 18rpx; right: 18rpx; bottom: max(14rpx, env(safe-area-inset-bottom)); z-index: 20; display: grid; grid-template-columns: repeat(var(--nav-count, 3), minmax(0, 1fr)); gap: 8rpx; height: 112rpx; padding: 10rpx 12rpx; border-radius: 8px; box-shadow: 0 -10rpx 34rpx rgba(15, 23, 42, 0.12); }
+.custom-tabbar-item { height: 92rpx; display: grid; grid-template-rows: 44rpx 30rpx; gap: 4rpx; justify-items: center; align-content: center; min-width: 0; font-size: 22rpx; line-height: 1.2; font-weight: 800; overflow: hidden; }
 .custom-tabbar-icon { width: 42rpx; height: 42rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 20rpx; font-weight: 900; }
 .custom-tabbar-image { width: 42rpx; height: 42rpx; display: block; }
 .custom-tabbar-item.active { font-weight: 900; }
+.custom-tabbar-item > text:last-child { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

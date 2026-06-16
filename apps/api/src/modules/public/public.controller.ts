@@ -131,6 +131,12 @@ export class PublicController {
     return this.service.myWalletTransactions(user, this.tenantContext(req, tenantCode));
   }
 
+  @Get("me/admin-access")
+  async myAdminAccess(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myAdminAccess(user);
+  }
+
   @Get("me/registrations")
   async myRegistrationsMe(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);

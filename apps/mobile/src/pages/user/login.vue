@@ -104,7 +104,7 @@ onMounted(loadDecoration);
 </script>
 
 <template>
-  <view class="container login-page">
+  <view class="container login-page has-custom-nav">
     <TenantContextBadge :tenant="tenant" label="当前城市" hint="登录后沿用" />
     <PageDecorationBlocks :sections="contentSections" />
 

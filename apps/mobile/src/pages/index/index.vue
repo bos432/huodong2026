@@ -46,6 +46,7 @@ const defaultSections: HomepageSectionView[] = [
 
 const orderedSections = computed(() => sections.value.filter((item) => item.enabled).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
 const bottomNavSection = computed(() => orderedSections.value.find((item) => item.type === "bottom_nav"));
+const hasBottomNav = computed(() => Boolean(bottomNavSection.value));
 const tenantName = computed(() => tenant.value?.name || "");
 const tenantHint = computed(() => tenant.value ? `${tenant.value.name}${tenant.value.region ? ` · ${tenant.value.region}` : ""}` : getCurrentTenantCode());
 const currentTenantCode = computed(() => tenant.value?.code || getCurrentTenantCode());
@@ -331,7 +332,7 @@ onShow(async () => {
 </script>
 
 <template>
-  <view class="discover">
+  <view class="discover" :class="{ 'has-custom-nav': hasBottomNav }">
     <view v-if="loading" class="state-card">加载中...</view>
 
     <template v-else>

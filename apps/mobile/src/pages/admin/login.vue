@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { getMobileAdminSession, loginMobileAdmin } from "../../mobile-admin";
 
-const username = ref("admin");
+const username = ref(String(uni.getStorageSync("user_phone") || "admin"));
 const password = ref("");
 const loading = ref(false);
 const canSubmit = computed(() => username.value.trim().length > 0 && password.value.length > 0 && !loading.value);

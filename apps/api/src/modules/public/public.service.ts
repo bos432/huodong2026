@@ -10,6 +10,7 @@ import { v4 as uuidv4 } from "uuid";
 import { ActivityCategory } from "../../entities/activity-category.entity";
 import { Activity } from "../../entities/activity.entity";
 import { Announcement } from "../../entities/announcement.entity";
+import { AdminUser } from "../../entities/admin-user.entity";
 import { Coupon } from "../../entities/coupon.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
@@ -42,6 +43,7 @@ export type PublicTenantContext = { tenantId?: number | null; tenantCode?: strin
 export class PublicService {
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
+    @InjectRepository(AdminUser) private readonly adminUsers: Repository<AdminUser>,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
@@ -153,6 +155,19 @@ export class PublicService {
       user = await this.users.save(user);
     }
     return this.userLoginResponse(user);
+  }
+
+  async myAdminAccess(user: User) {
+    if (!user.phone) return { canAccess: false };
+    const phone = this.normalizePhone(user.phone);
+    const admin = await this.adminUsers.findOne({ where: { username: phone, enabled: true } });
+    if (!admin) return { canAccess: false };
+    return {
+      canAccess: true,
+      role: admin.role === "admin" ? "super_admin" : admin.role,
+      tenantId: admin.tenant?.id ?? null,
+      tenantName: admin.tenant?.name || null
+    };
   }
 
   async wechatLogin(dto: WechatLoginDto) {

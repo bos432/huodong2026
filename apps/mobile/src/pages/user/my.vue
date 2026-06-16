@@ -15,6 +15,7 @@ const homepageSections = ref<HomepageSectionView[]>([]);
 const tenant = ref<HomepagePayload["tenant"] | null>(null);
 const wallet = ref<any | null>(null);
 const walletTransactions = ref<any[]>([]);
+const adminAccess = ref<{ canAccess?: boolean; role?: string; tenantName?: string | null } | null>(null);
 const loading = ref(true);
 const activeStatus = ref<"all" | RegistrationStatus>("all");
 const phone = ref("");
@@ -37,16 +38,19 @@ const myConfig = computed<Record<string, any>>(() => (myPageSection.value?.confi
 const myLayout = computed<Record<string, any>>(() => (myPageSection.value?.layout || {}) as Record<string, any>);
 const toolItems = computed(() => {
   const configured = Array.isArray(myConfig.value.tools) ? myConfig.value.tools : [];
+  const hasMobileAdminAccess = Boolean(adminAccess.value?.canAccess || getMobileAdminSession());
+  const adminLink = getMobileAdminSession() ? "/pages/admin/home" : "/pages/admin/login";
   const fallback = configured.length
     ? configured
     : [
-        { label: "管理后台", icon: "管", color: "#1d4ed8", link: getMobileAdminSession() ? "/pages/admin/home" : "/pages/admin/login" },
+        { label: "手机管理", icon: "管", color: "#1d4ed8", link: adminLink },
         { label: "浏览活动", icon: "活", color: "#0f766e", link: "/pages/activity/list", action: "mainPage" },
         { label: "公告中心", icon: "告", color: "#c2410c", link: "/pages/announcement/list" },
         { label: "服务中心", icon: "服", color: "#475467", link: "/pages/service/index" }
       ];
-  if (getMobileAdminSession()) return fallback;
-  return fallback.filter((item) => item.label !== "管理后台" && item.link !== "/pages/admin/login" && item.link !== "/pages/admin/home");
+  return fallback
+    .map((item) => item.label === "管理后台" || item.label === "手机管理" ? { ...item, label: "手机管理", icon: item.icon || "管", color: item.color || "#1d4ed8", link: adminLink } : item)
+    .filter((item) => hasMobileAdminAccess || (item.label !== "管理后台" && item.label !== "手机管理" && item.link !== "/pages/admin/login" && item.link !== "/pages/admin/home"));
 });
 
 function countByStatus(status: RegistrationStatus) {
@@ -149,17 +153,19 @@ async function load() {
   try {
     await ensureUser();
     phone.value = uni.getStorageSync("user_phone") || "";
-    const [registrations, homepage, walletDetail, transactions] = await Promise.all([
+    const [registrations, homepage, walletDetail, transactions, adminStatus] = await Promise.all([
       request<any[]>("/public/me/registrations"),
       request<HomepagePayload>("/public/page-decoration?pageKey=user_my").catch(() => ({ sections: [], fallback: true })),
       request<any>("/public/me/wallet").catch(() => null),
-      request<any[]>("/public/me/wallet/transactions").catch(() => [])
+      request<any[]>("/public/me/wallet/transactions").catch(() => []),
+      request<any>("/public/me/admin-access").catch(() => ({ canAccess: false }))
     ]);
     rows.value = registrations;
     homepageSections.value = homepage.sections || [];
     tenant.value = homepage.tenant || null;
     wallet.value = walletDetail;
     walletTransactions.value = transactions;
+    adminAccess.value = adminStatus;
   } finally {
     loading.value = false;
   }
@@ -185,7 +191,7 @@ onShow(async () => {
 </script>
 
 <template>
-  <view class="my-page">
+  <view class="my-page" :class="{ 'has-custom-nav': bottomNavSection }">
     <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
     <PageDecorationBlocks :sections="homepageSections.filter((item) => item.enabled && item.type !== 'bottom_nav' && item.type !== 'my_page')" />
 
