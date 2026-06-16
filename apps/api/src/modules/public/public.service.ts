@@ -629,14 +629,14 @@ export class PublicService {
   }
 
   async myWallet(user: User, context?: PublicTenantContext) {
-    const tenant = await this.resolveTenantContext(context);
+    const tenant = await this.resolveWalletTenantContext(context);
     const tenantScopeKey = this.walletTenantScopeKey(tenant);
     const wallet = await this.userWallets.findOne({ where: { user: { id: user.id }, tenantScopeKey } });
     return wallet || { user, tenant, tenantScopeKey, availableBalance: "0.00", frozenBalance: "0.00", totalRecharge: "0.00", totalSpent: "0.00" };
   }
 
   async myWalletTransactions(user: User, context?: PublicTenantContext) {
-    const tenant = await this.resolveTenantContext(context);
+    const tenant = await this.resolveWalletTenantContext(context);
     const builder = this.walletTransactions
       .createQueryBuilder("tx")
       .leftJoinAndSelect("tx.wallet", "wallet")
@@ -648,6 +648,12 @@ export class PublicService {
     if (tenant) builder.andWhere("tx.tenantId = :tenantId", { tenantId: tenant.id });
     else builder.andWhere("tx.tenantId IS NULL");
     return builder.getMany();
+  }
+
+  private async resolveWalletTenantContext(context?: PublicTenantContext) {
+    const multiTenantEnabled = this.config.get("MULTI_TENANT_ENABLED", "false") === "true";
+    if (!multiTenantEnabled || normalizeTenantCode(context?.tenantCode) === "platform") return null;
+    return this.resolveTenantContext(context);
   }
 
   private async assertSufficientBalance(user: User, tenant: Tenant | null, amount: number) {

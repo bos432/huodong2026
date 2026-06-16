@@ -37,7 +37,7 @@ const myConfig = computed<Record<string, any>>(() => (myPageSection.value?.confi
 const myLayout = computed<Record<string, any>>(() => (myPageSection.value?.layout || {}) as Record<string, any>);
 const toolItems = computed(() => {
   const configured = Array.isArray(myConfig.value.tools) ? myConfig.value.tools : [];
-  return configured.length
+  const fallback = configured.length
     ? configured
     : [
         { label: "管理后台", icon: "管", color: "#1d4ed8", link: getMobileAdminSession() ? "/pages/admin/home" : "/pages/admin/login" },
@@ -45,6 +45,8 @@ const toolItems = computed(() => {
         { label: "公告中心", icon: "告", color: "#c2410c", link: "/pages/announcement/list" },
         { label: "服务中心", icon: "服", color: "#475467", link: "/pages/service/index" }
       ];
+  if (getMobileAdminSession()) return fallback;
+  return fallback.filter((item) => item.label !== "管理后台" && item.link !== "/pages/admin/login" && item.link !== "/pages/admin/home");
 });
 
 function countByStatus(status: RegistrationStatus) {
