@@ -98,6 +98,7 @@ function goLink(url?: string, action?: string) {
   }
   if (action === "registrations") {
     activeStatus.value = "all";
+    uni.pageScrollTo({ selector: ".registration-section", duration: 240 });
     return;
   }
   goDecoratedLink(url, action);
@@ -303,6 +304,13 @@ onShow(async () => {
           <view>{{ walletAmountText(item) }}</view>
           <text>余额 ¥{{ money(item.balanceAfter) }}</text>
         </view>
+      </view>
+    </view>
+
+    <view class="registration-section">
+      <view class="section-head">
+        <view class="section-title">我的报名</view>
+        <view class="section-link" @click="goActivities">浏览活动</view>
       </view>
     </view>
 
