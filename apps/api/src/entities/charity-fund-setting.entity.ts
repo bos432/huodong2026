@@ -29,6 +29,15 @@ export class CharityFundSetting {
   @Column({ type: "varchar", length: 120, default: "公益金来自平台订单收入计提，用户无需额外支付。" })
   publicNote!: string;
 
+  @Column({ type: "tinyint", default: 1 })
+  retainOnActivityRefund!: boolean;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 100 })
+  ambassadorThreshold!: string;
+
+  @Column({ type: "varchar", length: 80, default: "公益大使" })
+  ambassadorTitle!: string;
+
   @CreateDateColumn()
   createdAt!: Date;
 

@@ -214,6 +214,14 @@ export async function fetchMyProfile() {
   return profile;
 }
 
+export async function fetchMyCharityTransactions(page = 1, pageSize = 20) {
+  return request<any>(`/public/me/charity/transactions?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function requestRegistrationRefund(id: number) {
+  return request<any>(`/public/me/registrations/${id}/refund-request`, { method: "POST" });
+}
+
 export async function updateMyProfile(data: { nickname?: string; avatarUrl?: string }) {
   const profile = await request<any>("/public/me/profile", { method: "PATCH", data });
   saveProfileSession(profile);

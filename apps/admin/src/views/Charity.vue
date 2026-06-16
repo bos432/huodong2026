@@ -13,7 +13,8 @@ const transactions = ref<any[]>([]);
 const projects = ref<any[]>([]);
 const projectDialogVisible = ref(false);
 const editingProjectId = ref<number | null>(null);
-const settingForm = reactive({ enabled: true, ratePercent: 5, accrualBasis: "paid_amount", manualBasisAmount: undefined as number | undefined, userDisplayName: "我的公益贡献", publicNote: "公益金来自平台订单收入计提，用户无需额外支付。" });
+const txFilter = reactive({ keyword: "", type: "", sourceType: "" });
+const settingForm = reactive({ enabled: true, ratePercent: 5, accrualBasis: "paid_amount", manualBasisAmount: undefined as number | undefined, userDisplayName: "我的公益贡献", publicNote: "公益金来自平台订单收入计提，用户无需额外支付。", retainOnActivityRefund: true, ambassadorThreshold: 100, ambassadorTitle: "公益大使" });
 const projectForm = reactive({ title: "", targetAmount: 500, status: "fundraising", coverUrl: "", description: "", executedAt: "", publicVisible: true });
 
 const canOperate = computed(() => canAccess(permissions.operation));
@@ -40,6 +41,23 @@ const basisText: Record<string, string> = {
   manual: "手动指定金额"
 };
 
+const sourceText: Record<string, string> = {
+  activity_order: "活动订单",
+  mall_order: "商城订单",
+  manual: "人工登记"
+};
+
+const filteredTransactions = computed(() => {
+  const keyword = txFilter.keyword.trim().toLowerCase();
+  return transactions.value.filter((row) => {
+    if (txFilter.type && row.type !== txFilter.type) return false;
+    if (txFilter.sourceType && row.sourceType !== txFilter.sourceType) return false;
+    if (!keyword) return true;
+    const text = [row.order?.orderNo, row.sourceTitle, row.user?.phone, row.user?.nickname, row.remark].filter(Boolean).join(" ").toLowerCase();
+    return text.includes(keyword);
+  });
+});
+
 async function load() {
   loading.value = true;
   try {
@@ -58,7 +76,10 @@ async function load() {
         accrualBasis: settingData.accrualBasis || "paid_amount",
         manualBasisAmount: settingData.manualBasisAmount ? Number(settingData.manualBasisAmount) : undefined,
         userDisplayName: settingData.userDisplayName || "我的公益贡献",
-        publicNote: settingData.publicNote || "公益金来自平台订单收入计提，用户无需额外支付。"
+        publicNote: settingData.publicNote || "公益金来自平台订单收入计提，用户无需额外支付。",
+        retainOnActivityRefund: settingData.retainOnActivityRefund !== false,
+        ambassadorThreshold: Number(settingData.ambassadorThreshold || 100),
+        ambassadorTitle: settingData.ambassadorTitle || "公益大使"
       });
     }
     if (canFinance.value) transactions.value = await api.get<any, any[]>("/admin/charity/transactions");
@@ -176,6 +197,9 @@ onMounted(load);
           </el-select>
         </el-form-item>
         <el-form-item v-if="settingForm.accrualBasis === 'manual'" label="手动基准金额"><el-input-number v-model="settingForm.manualBasisAmount" :min="0" :precision="2" /></el-form-item>
+        <el-form-item label="退款保留公益金"><el-switch v-model="settingForm.retainOnActivityRefund" /><span class="form-tip">用户申请活动退款时，默认退回实付减公益金，公益贡献保留。</span></el-form-item>
+        <el-form-item label="公益大使门槛"><el-input-number v-model="settingForm.ambassadorThreshold" :min="0" :precision="2" /> <span class="unit">元</span></el-form-item>
+        <el-form-item label="勋章名称"><el-input v-model="settingForm.ambassadorTitle" maxlength="80" /></el-form-item>
         <el-form-item label="用户端名称"><el-input v-model="settingForm.userDisplayName" maxlength="80" /></el-form-item>
         <el-form-item label="公开说明"><el-input v-model="settingForm.publicNote" maxlength="120" /></el-form-item>
         <el-form-item><el-button type="primary" :loading="savingSetting" @click="saveSetting">保存配置</el-button></el-form-item>
@@ -202,15 +226,28 @@ onMounted(load);
     </div>
 
     <div v-if="canFinance" class="table-card">
-      <h3>公益流水</h3>
-      <el-table :data="transactions" stripe empty-text="暂无公益流水">
+      <div class="table-head">
+        <h3>公益流水</h3>
+        <div class="filters">
+          <el-input v-model="txFilter.keyword" clearable placeholder="搜索用户/订单/说明" />
+          <el-select v-model="txFilter.type" clearable placeholder="流水类型">
+            <el-option v-for="(label, value) in typeText" :key="value" :label="label" :value="value" />
+          </el-select>
+          <el-select v-model="txFilter.sourceType" clearable placeholder="来源">
+            <el-option v-for="(label, value) in sourceText" :key="value" :label="label" :value="value" />
+          </el-select>
+        </div>
+      </div>
+      <el-table :data="filteredTransactions" stripe empty-text="暂无公益流水">
         <el-table-column label="类型" width="110"><template #default="{ row }">{{ typeText[row.type] || row.type }}</template></el-table-column>
+        <el-table-column label="来源" width="110"><template #default="{ row }">{{ sourceText[row.sourceType] || row.sourceType || "-" }}</template></el-table-column>
         <el-table-column label="方向" width="90"><template #default="{ row }"><el-tag :type="row.direction === 'credit' ? 'success' : 'warning'">{{ row.direction === "credit" ? "入池" : "出池" }}</el-tag></template></el-table-column>
         <el-table-column label="金额" width="120"><template #default="{ row }">¥{{ money(row.amount) }}</template></el-table-column>
         <el-table-column label="计提基准" width="120"><template #default="{ row }">¥{{ money(row.basisAmount) }}</template></el-table-column>
         <el-table-column label="比例" width="90"><template #default="{ row }">{{ row.ratePercent }}%</template></el-table-column>
-        <el-table-column label="订单" min-width="160" show-overflow-tooltip><template #default="{ row }">{{ row.order?.orderNo || "-" }}</template></el-table-column>
+        <el-table-column label="订单/项目" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.order?.orderNo || row.sourceTitle || "-" }}</template></el-table-column>
         <el-table-column label="用户" min-width="140" show-overflow-tooltip><template #default="{ row }">{{ row.user?.phone || row.user?.nickname || "-" }}</template></el-table-column>
+        <el-table-column label="退款保留" width="100"><template #default="{ row }"><el-tag :type="row.retainedOnRefund ? 'success' : 'info'">{{ row.retainedOnRefund ? "是" : "否" }}</el-tag></template></el-table-column>
         <el-table-column prop="remark" label="说明" min-width="220" show-overflow-tooltip />
         <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
       </el-table>
@@ -247,7 +284,12 @@ onMounted(load);
 .metric strong { color: #111827; font-size: 26px; }
 .setting-card { margin-bottom: 18px; }
 .unit { margin-left: 8px; color: #667085; }
+.form-tip { margin-left: 10px; color: #667085; font-size: 13px; }
+.table-head { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 16px; }
+.table-head h3 { margin: 0; }
+.filters { display: grid; grid-template-columns: 220px 150px 150px; gap: 10px; }
 h3 { margin: 0 0 16px; }
 @media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .table-head { display: grid; } .filters { grid-template-columns: 1fr; } }
 @media (max-width: 640px) { .metric-grid { grid-template-columns: 1fr; } }
 </style>

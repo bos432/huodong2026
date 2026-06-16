@@ -21,6 +21,9 @@ export type CharitySettingInput = {
   manualBasisAmount?: number | null;
   userDisplayName?: string;
   publicNote?: string;
+  retainOnActivityRefund?: boolean;
+  ambassadorThreshold?: number;
+  ambassadorTitle?: string;
 };
 export type CharityProjectInput = {
   title: string;
@@ -55,13 +58,34 @@ export class CharityFundService {
   }
 
   async userContribution(user: User) {
-    const [setting, contribution, summary, projects] = await Promise.all([
+    const [setting, contribution, summary, projects, transactions] = await Promise.all([
       this.ensureSetting(null),
       this.userContributionAmount(user.id),
       this.summary(),
-      this.publicProjects(3)
+      this.publicProjects(3),
+      this.userTransactions(user, 1, 5)
     ]);
-    return { setting: this.publicSetting(setting), contributionAmount: contribution.toFixed(2), pool: summary, projects };
+    return { setting: this.publicSetting(setting), contributionAmount: contribution.toFixed(2), pool: summary, projects, transactions: transactions.items, ambassador: this.ambassadorView(user.id, contribution, setting) };
+  }
+
+  async userTransactions(user: User, page = 1, pageSize = 20) {
+    const safePage = Math.max(Number(page || 1), 1);
+    const safePageSize = Math.min(Math.max(Number(pageSize || 20), 1), 100);
+    const builder = this.transactions
+      .createQueryBuilder("tx")
+      .leftJoinAndSelect("tx.tenant", "tenant")
+      .leftJoinAndSelect("tx.user", "user")
+      .leftJoinAndSelect("tx.order", "order")
+      .leftJoinAndSelect("order.registration", "registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("tx.refund", "refund")
+      .where("tx.userId = :userId", { userId: user.id })
+      .andWhere("tx.type IN (:...types)", { types: ["charity_accrual", "charity_reversal"] })
+      .orderBy("tx.createdAt", "DESC")
+      .skip((safePage - 1) * safePageSize)
+      .take(safePageSize);
+    const [rows, total] = await builder.getManyAndCount();
+    return { items: rows.map((row) => this.transactionView(row)), total, page: safePage, pageSize: safePageSize };
   }
 
   async adminSummary(admin?: AdminContext) {
@@ -81,15 +105,20 @@ export class CharityFundService {
   async saveSetting(input: CharitySettingInput, admin?: AdminContext) {
     const setting = await this.ensureSetting(this.settingTenantId(admin));
     const rate = input.ratePercent === undefined ? Number(setting.ratePercent) : Number(input.ratePercent);
+    const enabled = input.enabled === undefined ? setting.enabled : Boolean(input.enabled);
     if (!Number.isFinite(rate) || rate < 0 || rate > 100) throw new BadRequestException("公益计提比例需在 0-100 之间");
     const basis = input.accrualBasis || setting.accrualBasis || "paid_amount";
     if (!["paid_amount", "original_amount", "manual"].includes(basis)) throw new BadRequestException("公益计提口径不正确");
-    setting.enabled = input.enabled === undefined ? setting.enabled : Boolean(input.enabled);
+    setting.enabled = enabled;
     setting.ratePercent = rate.toFixed(2);
     setting.accrualBasis = basis;
     setting.manualBasisAmount = input.manualBasisAmount === undefined || input.manualBasisAmount === null ? null : Math.max(Number(input.manualBasisAmount), 0).toFixed(2);
     setting.userDisplayName = this.cleanText(input.userDisplayName, 80) || setting.userDisplayName || "我的公益贡献";
     setting.publicNote = this.cleanText(input.publicNote, 120) || setting.publicNote || "公益金来自平台订单收入计提，用户无需额外支付。";
+    setting.retainOnActivityRefund = input.retainOnActivityRefund === undefined ? setting.retainOnActivityRefund : Boolean(input.retainOnActivityRefund);
+    const threshold = input.ambassadorThreshold === undefined ? Number(setting.ambassadorThreshold || 100) : Number(input.ambassadorThreshold);
+    setting.ambassadorThreshold = Math.max(Number.isFinite(threshold) ? threshold : 100, 0).toFixed(2);
+    setting.ambassadorTitle = this.cleanText(input.ambassadorTitle, 80) || setting.ambassadorTitle || "公益大使";
     return this.settings.save(setting);
   }
 
@@ -148,6 +177,10 @@ export class CharityFundService {
         refund: null,
         direction: "debit",
         type: "project_disbursement",
+        sourceType: "manual",
+        sourceTitle: project.title,
+        retainedOnRefund: false,
+        certificateEligible: false,
         amount: amount.toFixed(2),
         basisAmount: "0.00",
         ratePercent: "0.00",
@@ -176,6 +209,10 @@ export class CharityFundService {
       refund: null,
       direction: "credit",
       type: "charity_accrual",
+      sourceType: "activity_order",
+      sourceTitle: order.registration?.activity?.title || order.orderNo,
+      retainedOnRefund: false,
+      certificateEligible: true,
       amount: amount.toFixed(2),
       basisAmount: basisAmount.toFixed(2),
       ratePercent: Number(setting.ratePercent).toFixed(2),
@@ -186,6 +223,7 @@ export class CharityFundService {
   }
 
   async recordRefundReversal(order: Order, refund: Refund, operator = "system") {
+    if (this.isRetainedCharityRefund(refund)) return this.markRefundRetained(order, refund, operator);
     if (!order?.id || !refund?.id || Number(refund.amount) <= 0) return null;
     const key = `charity_reversal:${refund.id}`;
     const existing = await this.transactions.findOne({ where: { idempotencyKey: key } });
@@ -201,6 +239,10 @@ export class CharityFundService {
       refund,
       direction: "debit",
       type: "charity_reversal",
+      sourceType: "activity_order",
+      sourceTitle: order.registration?.activity?.title || order.orderNo,
+      retainedOnRefund: false,
+      certificateEligible: false,
       amount: amount.toFixed(2),
       basisAmount: Number(refund.amount).toFixed(2),
       ratePercent: accrual.ratePercent,
@@ -208,6 +250,25 @@ export class CharityFundService {
       remark: `订单退款公益金冲回：${refund.refundNo}`,
       idempotencyKey: key
     }));
+  }
+
+  async previewRetainedActivityRefund(order: Order) {
+    const setting = await this.effectiveSetting(order.tenant || null);
+    const accrual = await this.accrualForOrder(order);
+    const charityAmount = Number(accrual?.amount || 0) || charityAccrualAmount({ paidAmount: Number(order.amount || 0), originalAmount: Number(order.originalAmount || order.amount || 0), manualBasisAmount: Number(setting.manualBasisAmount || 0), ratePercent: Number(setting.ratePercent), accrualBasis: setting.accrualBasis });
+    const refundAmount = roundMoney(Math.max(Number(order.amount || 0) - charityAmount, 0));
+    return {
+      enabled: Boolean(setting.enabled && setting.retainOnActivityRefund && charityAmount > 0),
+      charityAmount: charityAmount.toFixed(2),
+      refundAmount: refundAmount.toFixed(2),
+      ratePercent: Number(setting.ratePercent).toFixed(2),
+      retainOnActivityRefund: Boolean(setting.retainOnActivityRefund)
+    };
+  }
+
+  async retainedActivityRefundAmount(order: Order) {
+    const preview = await this.previewRetainedActivityRefund(order);
+    return Number(preview.refundAmount);
   }
 
   private async summary(scope: CharitySummaryScope = {}) {
@@ -241,6 +302,25 @@ export class CharityFundService {
     return Math.max(Number(row?.sum || 0), 0);
   }
 
+  private async accrualForOrder(order: Order) {
+    if (!order?.id) return null;
+    return this.transactions.findOne({ where: { idempotencyKey: `charity_accrual:${order.id}` } });
+  }
+
+  private async markRefundRetained(order: Order, refund: Refund, operator = "system") {
+    const accrual = await this.accrualForOrder(order);
+    if (!accrual) return null;
+    if (accrual.retainedOnRefund) return accrual;
+    accrual.retainedOnRefund = true;
+    accrual.remark = accrual.remark || `订单公益金计提：${order.orderNo}`;
+    accrual.operator = operator || accrual.operator;
+    return this.transactions.save(accrual);
+  }
+
+  private isRetainedCharityRefund(refund: Refund) {
+    return String(refund.reason || "").includes("[charity_retained]");
+  }
+
   private async effectiveSetting(tenant: Tenant | null) {
     const tenantSetting = tenant?.id ? await this.settings.findOne({ where: { tenant: { id: tenant.id } } }) : null;
     return tenantSetting || this.ensureSetting(null);
@@ -269,8 +349,37 @@ export class CharityFundService {
     };
   }
 
+  private transactionView(tx: CharityFundTransaction) {
+    const order = tx.order;
+    const refund = tx.refund;
+    const paidAmount = Number(order?.amount || 0);
+    const amount = Number(tx.amount || 0);
+    const retained = Boolean(tx.retainedOnRefund);
+    return {
+      ...tx,
+      sourceTitle: tx.sourceTitle || order?.registration?.activity?.title || order?.orderNo || "公益流水",
+      paidAmount: paidAmount.toFixed(2),
+      charityAmount: amount.toFixed(2),
+      refundAmount: retained ? Math.max(paidAmount - amount, 0).toFixed(2) : refund ? Number(refund.amount || 0).toFixed(2) : "0.00",
+      orderNo: order?.orderNo || null,
+      activityTitle: order?.registration?.activity?.title || null,
+      refundStatus: refund?.status || (retained ? "retained" : null)
+    };
+  }
+
+  private ambassadorView(userId: number, contribution: number, setting: CharityFundSetting) {
+    const threshold = Number(setting.ambassadorThreshold || 0);
+    const eligible = threshold > 0 && contribution + 0.001 >= threshold;
+    return {
+      eligible,
+      title: setting.ambassadorTitle || "公益大使",
+      threshold: threshold.toFixed(2),
+      number: eligible ? `No.${String(userId).padStart(6, "0")}` : null
+    };
+  }
+
   private publicSetting(setting: CharityFundSetting) {
-    return { enabled: setting.enabled, ratePercent: setting.ratePercent, userDisplayName: setting.userDisplayName, publicNote: setting.publicNote };
+    return { enabled: setting.enabled, ratePercent: setting.ratePercent, userDisplayName: setting.userDisplayName, publicNote: setting.publicNote, retainOnActivityRefund: setting.retainOnActivityRefund, ambassadorThreshold: setting.ambassadorThreshold, ambassadorTitle: setting.ambassadorTitle };
   }
 
   private scope(admin?: AdminContext): CharitySummaryScope {

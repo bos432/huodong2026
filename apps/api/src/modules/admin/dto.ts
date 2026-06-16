@@ -471,6 +471,19 @@ export class CharitySettingDto {
   @IsOptional()
   @IsString()
   publicNote?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  retainOnActivityRefund?: boolean;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  ambassadorThreshold?: number;
+
+  @IsOptional()
+  @IsString()
+  ambassadorTitle?: string;
 }
 
 export class CharityProjectDto {

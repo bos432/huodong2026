@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { OrderStatus, RegistrationStatus } from "@activity/shared";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, request, requestRegistrationRefund, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
@@ -30,6 +30,7 @@ const code = ref("");
 const userId = ref(0);
 const loading = ref(true);
 const paying = ref<"" | "wechat" | "alipay" | "balance">("");
+const refunding = ref(false);
 const groupDialogVisible = ref(false);
 const groupQrImageError = ref(false);
 const paymentInstructionsField = "offlinePaymentInstructions";
@@ -40,6 +41,7 @@ const groupQrCodeUrl = computed(() => detail.value?.groupQrCodeUrl || "");
 const registrationStatus = computed(() => detail.value?.registration?.status as RegistrationStatus | undefined);
 const orderStatus = computed(() => detail.value?.order?.status as OrderStatus | undefined);
 const primaryAction = computed(() => actionForStatus(registrationStatus.value));
+const charityRefund = computed(() => detail.value?.charityRefund || null);
 
 function currentStepIndex(status: RegistrationStatus) {
   const index = steps.indexOf(status);
@@ -156,6 +158,29 @@ async function doCancel() {
   } catch (error: any) {
     uni.showToast({ title: error.message, icon: "none" });
   }
+}
+
+async function requestRefund() {
+  const preview = charityRefund.value;
+  if (!detail.value?.registration?.id || !preview?.canRequest || refunding.value) return;
+  uni.showModal({
+    title: "申请退款",
+    content: `预计退回 ¥${money(preview.actualRefundAmount || preview.refundAmount)}，保留公益金 ¥${money(preview.charityAmount)}。提交后等待后台审核。`,
+    confirmText: "提交申请",
+    success: async (res) => {
+      if (!res.confirm) return;
+      refunding.value = true;
+      try {
+        await requestRegistrationRefund(detail.value.registration.id);
+        uni.showToast({ title: "已提交退款申请" });
+        await load();
+      } catch (error: any) {
+        uni.showToast({ title: error.message || "申请失败", icon: "none" });
+      } finally {
+        refunding.value = false;
+      }
+    }
+  });
 }
 
 async function showCode() {
@@ -337,6 +362,12 @@ onMounted(() => {
           <view v-if="detail.order.paymentMethod === 'balance' && canPay('balance')" class="button secondary" :class="{ disabled: Boolean(paying) }" @click="payOrder('balance')">{{ paying === "balance" ? "余额支付中..." : "余额支付" }}</view>
           <view v-if="detail.order.paymentMethod === 'offline'" class="button secondary disabled">等待后台确认收款</view>
         </view>
+        <view v-if="charityRefund?.enabled" class="charity-refund-box">
+          <view class="charity-refund-title">公益退款规则</view>
+          <view class="charity-refund-copy">该订单公益金 ¥{{ money(charityRefund.charityAmount) }} 会保留到你的公益基金，预计可退 ¥{{ money(charityRefund.actualRefundAmount || charityRefund.refundAmount) }}。</view>
+          <view v-if="charityRefund.pendingRefund" class="notice">退款申请处理中：¥{{ money(charityRefund.pendingRefund.amount) }}，请等待后台审核。</view>
+          <view v-else-if="charityRefund.canRequest" class="button secondary" :class="{ disabled: refunding }" @click="requestRefund">{{ refunding ? "提交中..." : "申请退款并保留公益金" }}</view>
+        </view>
         <view v-if="detail.order.status === OrderStatus.Closed" class="notice muted">订单已关闭：{{ detail.order.closeReason || "订单已关闭，名额已释放" }}</view>
         <view v-if="detail.order.status === OrderStatus.PartiallyRefunded" class="notice">该订单已有部分退款，具体金额请联系主办方确认。</view>
         <view v-if="detail.order.status === OrderStatus.Refunded" class="notice muted">该订单已退款，报名已取消或由主办方处理。</view>
@@ -422,6 +453,10 @@ onMounted(() => {
 .pay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-top: 18rpx; }
 .pay-actions .button { margin-top: 0; }
 .button.disabled { opacity: 0.55; pointer-events: none; }
+.charity-refund-box { margin-top: 18rpx; padding: 18rpx; border-radius: 8px; background: #f0fdf4; border: 1px solid #bbf7d0; }
+.charity-refund-title { color: #14532d; font-size: 26rpx; font-weight: 900; }
+.charity-refund-copy { margin-top: 8rpx; color: #166534; font-size: 24rpx; line-height: 1.5; }
+.charity-refund-box .button { margin-top: 16rpx; }
 .group-dialog-mask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 36rpx; background: rgba(15, 23, 42, 0.58); }
 .group-dialog { width: min(620rpx, 100%); padding: 34rpx 28rpx 28rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); text-align: center; box-shadow: 0 28rpx 80rpx rgba(15, 23, 42, 0.25); }
 .dialog-title { color: var(--text-color, #111827); font-size: 34rpx; font-weight: 900; }

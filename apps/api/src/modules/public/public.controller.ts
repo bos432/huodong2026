@@ -220,6 +220,12 @@ export class PublicController {
     return this.service.myCharity(user);
   }
 
+  @Get("me/charity/transactions")
+  async myCharityTransactions(@Req() req: any, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myCharityTransactions(user, page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
+  }
+
   @Get("me/registrations")
   async myRegistrationsMe(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
@@ -236,6 +242,12 @@ export class PublicController {
   async cancelMe(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.cancelRegistration(id, user.id, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("me/registrations/:id/refund-request")
+  async requestRegistrationRefund(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.requestRegistrationRefund(id, user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/registrations/:id/check-in-code")
@@ -260,6 +272,12 @@ export class PublicController {
   async cancel(@Param("userId", ParseIntPipe) _userId: number, @Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.cancelRegistration(id, user.id, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("users/:userId/registrations/:id/refund-request")
+  async requestRegistrationRefundLegacy(@Param("userId", ParseIntPipe) _userId: number, @Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.requestRegistrationRefund(id, user, this.tenantContext(req, tenantCode));
   }
 
   @Get("users/:userId/registrations/:id/check-in-code")

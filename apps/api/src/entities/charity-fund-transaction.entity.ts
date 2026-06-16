@@ -6,6 +6,7 @@ import { User } from "./user.entity";
 
 export type CharityFundDirection = "credit" | "debit";
 export type CharityFundTransactionType = "charity_accrual" | "charity_reversal" | "project_disbursement" | "manual_adjust";
+export type CharityFundSourceType = "activity_order" | "mall_order" | "manual";
 
 @Entity("charity_fund_transactions")
 @Unique(["idempotencyKey"])
@@ -30,6 +31,18 @@ export class CharityFundTransaction {
 
   @Column({ type: "varchar", length: 32 })
   type!: CharityFundTransactionType;
+
+  @Column({ type: "varchar", length: 32, default: "activity_order" })
+  sourceType!: CharityFundSourceType;
+
+  @Column({ type: "varchar", length: 180, nullable: true })
+  sourceTitle!: string | null;
+
+  @Column({ type: "tinyint", default: 0 })
+  retainedOnRefund!: boolean;
+
+  @Column({ type: "tinyint", default: 1 })
+  certificateEligible!: boolean;
 
   @Column({ type: "decimal", precision: 12, scale: 2 })
   amount!: string;

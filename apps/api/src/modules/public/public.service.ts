@@ -297,6 +297,10 @@ export class PublicService {
     return this.charityFund.userContribution(user);
   }
 
+  myCharityTransactions(user: User, page?: number, pageSize?: number) {
+    return this.charityFund.userTransactions(user, page, pageSize);
+  }
+
   async activitiesList(options: { categoryId?: number; status?: string; featured?: boolean; page?: number; pageSize?: number; keyword?: string }, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     const usePagination = options.page !== undefined || options.pageSize !== undefined;
@@ -786,9 +790,43 @@ export class PublicService {
     if (!registration) throw new NotFoundException("报名记录不存在");
     const tenant = await this.assertRegistrationTenantAccess(registration, context);
     const [order, operationSetting] = await Promise.all([this.orders.findOne({ where: { registration: { id } } }), this.ensureOperationSetting(tenant)]);
+    const refunds = order ? await this.refunds.find({ where: { order: { id: order.id } }, order: { createdAt: "DESC" } }) : [];
+    const charityRefund = order ? await this.registrationCharityRefundView(order, refunds) : null;
     const groupVisible = ![RegistrationStatus.Cancelled, RegistrationStatus.Rejected].includes(registration.status);
     const groupQrCodeUrl = groupVisible ? registration.activity.groupQrCodeUrl || operationSetting.defaultGroupQrCodeUrl || null : null;
-    return { registration: this.publicRegistration(registration), order: order ? this.publicOrder(order) : null, operationSetting: this.publicOperationSetting(operationSetting), groupQrCodeUrl };
+    return { registration: this.publicRegistration(registration), order: order ? this.publicOrder(order) : null, refunds, charityRefund, operationSetting: this.publicOperationSetting(operationSetting), groupQrCodeUrl };
+  }
+
+  async requestRegistrationRefund(id: number, user: User, context?: PublicTenantContext) {
+    const registration = await this.registrations.findOne({ where: { id, user: { id: user.id } } });
+    if (!registration) throw new NotFoundException("报名记录不存在");
+    await this.assertRegistrationTenantAccess(registration, context);
+    const order = await this.orders.findOne({ where: { registration: { id } } });
+    if (!order) throw new NotFoundException("订单不存在");
+    if (![OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status)) throw new BadRequestException("当前订单不能申请退款");
+    if (registration.status === RegistrationStatus.CheckedIn) throw new BadRequestException("已签到报名不能在线申请退款");
+
+    const refunds = await this.refunds.find({ where: { order: { id: order.id }, status: In(["pending", "processing", "completed"]) } });
+    if (refunds.some((item) => ["pending", "processing"].includes(item.status))) throw new BadRequestException("已有退款申请处理中，请勿重复提交");
+
+    const preview = await this.charityFund.previewRetainedActivityRefund(order);
+    if (!preview.enabled) throw new BadRequestException("当前订单暂不支持公益退款申请");
+    const completedAmount = refunds.filter((item) => item.status === "completed").reduce((sum, item) => sum + Number(item.amount), 0);
+    const availableAmount = Math.max(Number(order.amount || 0) - completedAmount, 0);
+    const amount = Math.min(Number(preview.refundAmount || 0), availableAmount);
+    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException("当前订单暂无可退金额");
+
+    const refundNo = `URF${Date.now()}${order.id}`;
+    const refund = await this.refunds.save(this.refunds.create({
+      order,
+      tenant: order.tenant || null,
+      refundNo,
+      amount: amount.toFixed(2),
+      status: "pending",
+      operator: `user:${user.id}`,
+      reason: `[charity_retained] 用户申请活动公益退款，公益金保留 ${preview.charityAmount} 元`
+    }));
+    return { refund, order: this.publicOrder(order), charityRefund: { ...preview, canRequest: false, pendingRefund: refund } };
   }
 
   async cancelRegistration(id: number, userId: number, context?: PublicTenantContext) {
@@ -835,6 +873,28 @@ export class PublicService {
     const normalized = String(phone || "").trim();
     if (!/^1\d{10}$/.test(normalized)) throw new BadRequestException("请输入正确的手机号");
     return normalized;
+  }
+
+  private async registrationCharityRefundView(order: Order, refunds: Refund[]) {
+    const preview = await this.charityFund.previewRetainedActivityRefund(order);
+    const activeRefund = refunds.find((item) => ["pending", "processing"].includes(item.status)) || null;
+    const completedAmount = refunds.filter((item) => item.status === "completed").reduce((sum, item) => sum + Number(item.amount), 0);
+    const availableAmount = Math.max(Number(order.amount || 0) - completedAmount, 0);
+    const canRequest = Boolean(
+      preview.enabled &&
+      !activeRefund &&
+      [OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status) &&
+      Number(preview.refundAmount || 0) > 0 &&
+      availableAmount > 0
+    );
+    return {
+      ...preview,
+      canRequest,
+      pendingRefund: activeRefund,
+      completedRefundAmount: completedAmount.toFixed(2),
+      availableRefundAmount: availableAmount.toFixed(2),
+      actualRefundAmount: Math.min(Number(preview.refundAmount || 0), availableAmount).toFixed(2)
+    };
   }
 
   async requireUserFromAuthorization(authorization?: string | string[] | null) {
