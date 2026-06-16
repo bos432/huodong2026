@@ -1,8 +1,8 @@
-const DEFAULT_H5_ORIGIN = "http://localhost:5173";
-
 function configuredH5Origin() {
   const value = String(import.meta.env.VITE_H5_ORIGIN || "").trim();
-  return value || DEFAULT_H5_ORIGIN;
+  if (value) return value;
+  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
+  return "http://localhost:5173";
 }
 
 export function h5PreviewUrl(tenantCode?: string | null, path = "/") {

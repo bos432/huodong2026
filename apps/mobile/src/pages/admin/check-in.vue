@@ -1,21 +1,76 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { onBeforeUnmount, ref } from "vue";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 
 const code = ref("");
 const remark = ref("");
 const submitting = ref(false);
 const result = ref<any>(null);
+const scanning = ref(false);
+const scanVideoId = "checkin-scan-video";
+let scanStream: MediaStream | null = null;
+let scanTimer: number | null = null;
+let barcodeDetector: any = null;
 
 function scanCode() {
   requireMobileAdmin();
+  // #ifdef H5
+  startH5Scan();
+  return;
+  // #endif
   uni.scanCode({
     success: (res) => {
       code.value = String(res.result || "").trim();
       if (code.value) submit();
     },
-    fail: () => uni.showToast({ title: "扫码取消或失败", icon: "none" })
+    fail: () => uni.showToast({ title: "扫码取消或失败，可手动输入签到码", icon: "none" })
   });
+}
+
+async function startH5Scan() {
+  if (scanning.value) return;
+  if (typeof navigator === "undefined" || !navigator.mediaDevices?.getUserMedia) {
+    uni.showToast({ title: "当前浏览器不支持扫码，请手动输入签到码", icon: "none" });
+    return;
+  }
+  if (!("BarcodeDetector" in window)) {
+    uni.showToast({ title: "当前浏览器不支持网页扫码，请手动输入签到码", icon: "none" });
+    return;
+  }
+  try {
+    scanning.value = true;
+    barcodeDetector = barcodeDetector || new (window as any).BarcodeDetector({ formats: ["qr_code"] });
+    scanStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "environment" } });
+    await new Promise<void>((resolve) => setTimeout(resolve, 80));
+    const video = document.getElementById(scanVideoId) as HTMLVideoElement | null;
+    if (!video) throw new Error("扫码窗口初始化失败");
+    video.srcObject = scanStream;
+    await video.play();
+    scanTimer = window.setInterval(async () => {
+      if (!video || video.readyState < 2 || submitting.value) return;
+      const codes = await barcodeDetector.detect(video).catch(() => []);
+      const value = String(codes?.[0]?.rawValue || "").trim();
+      if (!value) return;
+      stopH5Scan();
+      code.value = value;
+      await submit();
+    }, 350);
+  } catch (error: any) {
+    stopH5Scan();
+    uni.showToast({ title: error?.message || "扫码启动失败，请手动输入签到码", icon: "none" });
+  }
+}
+
+function stopH5Scan() {
+  if (scanTimer !== null) {
+    window.clearInterval(scanTimer);
+    scanTimer = null;
+  }
+  if (scanStream) {
+    scanStream.getTracks().forEach((track) => track.stop());
+    scanStream = null;
+  }
+  scanning.value = false;
 }
 
 async function submit() {
@@ -41,6 +96,8 @@ async function submit() {
 function formatTime(value?: string) {
   return value ? value.replace("T", " ").slice(0, 16) : "-";
 }
+
+onBeforeUnmount(stopH5Scan);
 </script>
 
 <template>
@@ -52,6 +109,11 @@ function formatTime(value?: string) {
 
     <view class="card">
       <view class="scan" @click="scanCode">扫码核销</view>
+      <view v-if="scanning" class="scan-panel">
+        <video :id="scanVideoId" class="scan-video" autoplay playsinline muted></video>
+        <view class="scan-tip">请将签到二维码放入画面中。若浏览器不支持，可关闭后手动输入签到码。</view>
+        <view class="scan-close" @click="stopH5Scan">关闭扫码</view>
+      </view>
       <view class="label">签到码</view>
       <input v-model="code" class="input" placeholder="粘贴或输入签到码" />
       <view class="label">备注</view>
@@ -74,6 +136,10 @@ function formatTime(value?: string) {
 .sub { margin-top: 8rpx; color: rgba(255,255,255,.72); font-size: 24rpx; }
 .card { margin-top: 22rpx; padding: 24rpx; border-radius: 8px; background: #fff; box-shadow: 0 12rpx 34rpx rgba(15,23,42,.06); }
 .scan, .submit { height: 86rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #0f766e; color: #fff; font-size: 28rpx; font-weight: 900; }
+.scan-panel { margin-top: 20rpx; padding: 16rpx; border-radius: 8px; background: #0f172a; color: #fff; }
+.scan-video { width: 100%; height: 420rpx; border-radius: 8px; background: #020617; object-fit: cover; }
+.scan-tip { margin-top: 12rpx; color: rgba(255,255,255,.74); font-size: 24rpx; line-height: 1.5; }
+.scan-close { margin-top: 14rpx; height: 68rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(255,255,255,.12); color: #fff; font-weight: 900; }
 .label { margin: 24rpx 0 12rpx; color: #344054; font-size: 26rpx; font-weight: 800; }
 .input, .textarea { width: 100%; box-sizing: border-box; border-radius: 6px; background: #f8fafc; color: #111827; font-size: 27rpx; }
 .input { height: 82rpx; padding: 0 20rpx; }
