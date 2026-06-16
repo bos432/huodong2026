@@ -91,16 +91,25 @@ function goPage(url: string) {
   uni.navigateTo({ url });
 }
 
-function goLink(url?: string, action?: string) {
+function scrollToRegistrations() {
+  activeStatus.value = "all";
+  setTimeout(() => {
+    uni.pageScrollTo({ selector: ".registration-section", duration: 240 });
+  }, 30);
+}
+
+function goLink(url?: string, action?: string, label?: string) {
   if (action === "refresh") {
     load();
     return;
   }
-  if (action === "registrations") {
-    activeStatus.value = "all";
-    uni.pageScrollTo({ selector: ".registration-section", duration: 240 });
+  if (action === "registrations" || label === "我的报名") {
+    scrollToRegistrations();
     return;
   }
+  if (!url && label === "余额明细") return goWalletHelp();
+  if (!url && label === "公益池") return goDecoratedLink("/pages/charity/index");
+  if (!url && label === "账号设置") return goProfile();
   goDecoratedLink(url, action);
 }
 
@@ -273,7 +282,7 @@ onShow(async () => {
     </view>
 
     <view class="tool-grid">
-      <view v-for="item in toolItems" :key="item.label" class="tool" @click="goLink(item.link, item.action)">
+      <view v-for="item in toolItems" :key="item.label" class="tool" @click="goLink(item.link, item.action, item.label)">
         <text :style="{ background: `${item.color || '#0f766e'}18`, color: item.color || '#0f766e' }">{{ quickInitial(item.label, item.icon) }}</text>
         <view>{{ item.label }}</view>
       </view>
