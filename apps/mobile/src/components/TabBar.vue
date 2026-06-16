@@ -8,8 +8,7 @@
       @click="switchTab(item.page)"
     >
       <view class="custom-tabbar-icon">
-        <text v-if="current === item.page">{{ item.activeIcon }}</text>
-        <text v-else>{{ item.icon }}</text>
+        <text>{{ current === item.page ? item.activeIcon : item.icon }}</text>
       </view>
       <text>{{ item.label }}</text>
     </view>
@@ -17,8 +16,6 @@
 </template>
 
 <script setup lang="ts">
-import { computed } from "vue";
-
 const props = defineProps<{ current: string }>();
 
 const tabs = [
@@ -28,17 +25,6 @@ const tabs = [
   { page: "activity", label: "活动", icon: "📅", activeIcon: "🎯" },
   { page: "user", label: "我的", icon: "⛰", activeIcon: "🏔" }
 ];
-
-const basePath = computed(() => {
-  switch (props.current) {
-    case "index": return "/pages/index/index";
-    case "courses": return "/pages/courses/index";
-    case "community": return "/pages/community/index";
-    case "activity": return "/pages/activity/list";
-    case "user": return "/pages/user/my";
-    default: return "/pages/index/index";
-  }
-});
 
 function switchTab(page: string) {
   if (page === props.current) return;
@@ -50,6 +36,6 @@ function switchTab(page: string) {
     case "activity": url = "/pages/activity/list"; break;
     case "user": url = "/pages/user/my"; break;
   }
-  uni.switchTab({ url });
+  uni.reLaunch({ url });
 }
 </script>

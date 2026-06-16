@@ -93,6 +93,16 @@ const menuGroups = [
     ]
   },
   {
+    index: "platform-academy",
+    icon: "Reading",
+    label: "平台端 · 书院运营",
+    scope: "platform",
+    items: [
+      { index: "/courses", icon: "Reading", label: "课程管理", roles: permissions.superAdmin, scope: "platform" },
+      { index: "/community", icon: "ChatLineSquare", label: "共修管理", roles: permissions.superAdmin, scope: "platform" }
+    ]
+  },
+  {
     index: "platform-security",
     icon: "Tools",
     label: "平台端 · 系统安全",
@@ -346,3 +356,4 @@ function logout() {
 :deep(.el-menu-item) { height: 42px; padding-left: 44px !important; }
 :deep(.el-menu-item.is-active) { background: #243653; font-weight: 700; }
 </style>
+

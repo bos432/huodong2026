@@ -31,6 +31,8 @@ const SystemSettings = () => import("./views/SystemSettings.vue");
 const OperationLogs = () => import("./views/OperationLogs.vue");
 const AdminLoginLogs = () => import("./views/AdminLoginLogs.vue");
 const H5CodeLogs = () => import("./views/H5CodeLogs.vue");
+const Courses = () => import("./views/Courses.vue");
+const Community = () => import("./views/Community.vue");
 const ConfigCheck = () => import("./views/ConfigCheck.vue");
 const OpsRoutine = () => import("./views/OpsRoutine.vue");
 const Tenants = () => import("./views/Tenants.vue");
@@ -47,7 +49,7 @@ export const router = createRouter({
         { path: "", redirect: "/dashboard" },
         { path: "dashboard", component: Dashboard, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "analytics", component: Analytics, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
-        { path: "tenants", component: Tenants, meta: { roles: permissions.superAdmin, scope: "platform" } },
+        { path: "courses", component: Courses, meta: { roles: permissions.superAdmin, scope: "platform" } },{ path: "community", component: Community, meta: { roles: permissions.superAdmin, scope: "platform" } },{ path: "tenants", component: Tenants, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "ambassador", component: Ambassador, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "activities", component: Activities, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
         { path: "funnels", component: Funnels, meta: { roles: permissions.operation, scope: "tenant" } },
@@ -96,3 +98,4 @@ router.beforeEach((to) => {
   if (to.path !== "/login" && to.meta.roles && !canAccess(to.meta.roles as AdminRole[])) return fallbackPath();
   if (to.path !== "/login" && !canAccessScope(to.meta.scope as any)) return fallbackPath();
 });
+

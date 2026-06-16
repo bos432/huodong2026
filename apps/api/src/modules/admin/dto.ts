@@ -1234,3 +1234,51 @@ export class SubmitRegistrationDto {
   answers!: RegistrationAnswer[];
 }
 
+
+export class CourseDto {
+  title!: string;
+  description?: string;
+  coverUrl?: string;
+  teacherName?: string;
+  teacherAvatar?: string;
+  categoryId?: number;
+  price?: number;
+  originalPrice?: number;
+  status?: string;
+  tags?: string[];
+}
+
+export class CourseChapterDto {
+  courseId!: number;
+  title!: string;
+  sortOrder?: number;
+}
+
+export class CourseLessonDto {
+  chapterId!: number;
+  title!: string;
+  videoUrl?: string;
+  duration?: string;
+  isFree?: boolean;
+  content?: string;
+}
+
+export class CommunityActivityDto {
+  title!: string;
+  description?: string;
+  startTime?: string;
+  location?: string;
+  coverUrl?: string;
+  status?: string;
+}
+
+export class CheckInTaskDto {
+  date!: string;
+  title!: string;
+  description?: string;
+}
+
+export class CommunityPostDto {
+  content!: string;
+  images?: string[];
+}

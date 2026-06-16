@@ -57,6 +57,7 @@ import { Waitlist } from "../entities/waitlist.entity";
 import { WalletTransaction } from "../entities/wallet-transaction.entity";
 import { AdminModule } from "./admin/admin.module";
 import { HealthModule } from "./health/health.module";
+import { CoursesModule } from "./courses/courses.module";
 import { InstallModule } from "./install/install.module";
 import { PublicModule } from "./public/public.module";
 import { V1Module } from "./v1/v1.module";
@@ -94,6 +95,7 @@ const businessModules = [
   AdminModule,
   PublicModule,
   HealthModule,
+    CoursesModule,
   V1Module
 ];
 
