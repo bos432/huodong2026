@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { FieldType } from "@activity/shared";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, request, getCurrentRouteWithQuery, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -9,6 +9,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 const activity = ref<any>();
 const operationSetting = ref<any>();
 const loading = ref(true);
+const loadError = ref("");
 const submitting = ref(false);
 const quoting = ref(false);
 const quoteError = ref("");
@@ -137,6 +138,11 @@ function submit() {
   });
 }
 
+function goLogin() {
+  const redirect = encodeURIComponent(getCurrentRouteWithQuery());
+  uni.navigateTo({ url: `/pages/user/login?redirect=${redirect}` });
+}
+
 async function doSubmit() {
   submitting.value = true;
   try {
@@ -199,6 +205,7 @@ function applyPoints() {
 }
 
 onMounted(async () => {
+  loadError.value = "";
   try {
     const pages = getCurrentPages();
     const options = (pages[pages.length - 1] as any).options || {};
@@ -223,6 +230,9 @@ onMounted(async () => {
     }
     selectedTicketTypeId.value = activity.value.ticketTypes?.[0]?.id;
     await refreshQuote();
+  } catch (error: any) {
+    loadError.value = error?.message || "报名页面加载失败，请重新进入活动后再试。";
+    uni.showToast({ title: loadError.value, icon: "none" });
   } finally {
     loading.value = false;
   }
@@ -237,6 +247,13 @@ watch(couponCode, () => {
 <template>
   <view class="container register">
     <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-else-if="loadError" class="card">
+      <view class="title">报名页面加载失败</view>
+      <view class="subtle">{{ loadError }}</view>
+      <view class="error-actions">
+        <view class="button secondary" @click="goLogin">去登录</view>
+      </view>
+    </view>
     <template v-else-if="activity">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
       <PageDecorationBlocks :sections="contentSections" />
@@ -355,6 +372,7 @@ watch(couponCode, () => {
 
 <style scoped>
 .register { padding-bottom: 160rpx; }
+.error-actions { margin-top: 18rpx; }
 .page-head { margin-bottom: 20rpx; padding: 28rpx 24rpx; border-radius: var(--card-radius, 8px); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
 .page-head-title { font-size: 40rpx; font-weight: 900; line-height: 1.25; }
 .page-head-copy { margin-top: 10rpx; font-size: 25rpx; line-height: 1.5; }

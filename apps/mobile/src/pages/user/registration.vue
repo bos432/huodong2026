@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { OrderStatus, RegistrationStatus } from "@activity/shared";
+import QRCode from "qrcode";
 import { ensureUser, request, requestRegistrationRefund, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
@@ -27,8 +28,10 @@ const orderStatusText: Record<OrderStatus, string> = {
 
 const detail = ref<any>();
 const code = ref("");
+const codeQrUrl = ref("");
 const userId = ref(0);
 const loading = ref(true);
+const loadError = ref("");
 const paying = ref<"" | "wechat" | "alipay" | "balance">("");
 const refunding = ref(false);
 const groupDialogVisible = ref(false);
@@ -122,16 +125,39 @@ function showGroupDialog() {
   groupDialogVisible.value = true;
 }
 
+function scrollToCode() {
+  setTimeout(() => {
+    // #ifdef H5
+    const target = document.querySelector(".code") as HTMLElement | null;
+    if (target) {
+      const currentTop = document.documentElement.scrollTop || document.body.scrollTop || window.pageYOffset || 0;
+      const top = Math.max(target.getBoundingClientRect().top + currentTop - 16, 0);
+      const scroller = document.scrollingElement || document.documentElement || document.body;
+      scroller.scrollTo({ top, behavior: "smooth" });
+      document.body.scrollTop = top;
+      document.documentElement.scrollTop = top;
+      return;
+    }
+    // #endif
+    uni.pageScrollTo({ selector: ".code", duration: 240 });
+  }, 60);
+}
+
 async function load() {
   loading.value = true;
+  loadError.value = "";
   try {
     userId.value = await ensureUser();
     const pages = getCurrentPages();
     const id = Number((pages[pages.length - 1] as any).options.id);
     detail.value = await request(`/public/me/registrations/${id}`);
     code.value = "";
+    codeQrUrl.value = "";
     groupQrImageError.value = false;
     groupDialogVisible.value = Boolean(detail.value?.groupQrCodeUrl);
+  } catch (error: any) {
+    loadError.value = error?.message || "加载报名详情失败，请稍后重试。";
+    uni.showToast({ title: loadError.value, icon: "none" });
   } finally {
     loading.value = false;
   }
@@ -187,9 +213,25 @@ async function showCode() {
   try {
     const data = await request<any>(`/public/me/registrations/${detail.value.registration.id}/check-in-code`);
     code.value = data.code;
+    try {
+      codeQrUrl.value = await QRCode.toDataURL(code.value, {
+        errorCorrectionLevel: "M",
+        margin: 1,
+        width: 220,
+        color: { dark: "#111827", light: "#ffffff" }
+      });
+    } catch {
+      codeQrUrl.value = "";
+    }
+    scrollToCode();
   } catch (error: any) {
     uni.showToast({ title: error.message, icon: "none" });
   }
+}
+
+function copyCode() {
+  if (!code.value) return;
+  uni.setClipboardData({ data: code.value, success: () => uni.showToast({ title: "已复制签到码", icon: "success" }) });
 }
 
 async function payOrder(provider: "wechat" | "alipay" | "balance") {
@@ -291,6 +333,11 @@ onMounted(() => {
 <template>
   <view class="container registration" :class="{ 'has-custom-nav': showBottomNav }">
     <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-else-if="loadError" class="card error-card">
+      <view class="title small">报名详情加载失败</view>
+      <view class="subtle">{{ loadError }}</view>
+      <view class="button secondary retry" @click="load">重新加载</view>
+    </view>
     <template v-else-if="detail">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
       <PageDecorationBlocks :sections="contentSections" />
@@ -390,7 +437,10 @@ onMounted(() => {
 
       <view v-if="code" class="card code">
         <view class="subtle">签到码</view>
+        <image v-if="codeQrUrl" class="code-qr" :src="codeQrUrl" mode="widthFix" />
         <view class="code-text">{{ code }}</view>
+        <view class="code-tip">现场可出示二维码扫码核销，也可让工作人员手动输入下方签到码。</view>
+        <view class="mini-button copy-code" @click="copyCode">复制签到码</view>
       </view>
 
       <view v-if="detail.registration.status === RegistrationStatus.Approved || detail.registration.status === RegistrationStatus.CheckedIn" class="button" @click="showCode">查看签到码</view>
@@ -447,7 +497,10 @@ onMounted(() => {
 .mini-button { flex: 0 0 auto; padding: 10rpx 18rpx; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 800; }
 .group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: var(--card-radius, 8px); border: 1px solid #e5e7eb; background: var(--card-bg, #fff); }
 .code { text-align: center; }
+.code-qr { display: block; width: 360rpx; margin: 18rpx auto 0; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
 .code-text { margin-top: 16rpx; font-size: 34rpx; word-break: break-all; }
+.code-tip { margin-top: 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.5; }
+.copy-code { display: inline-flex; margin-top: 18rpx; }
 .button { margin-top: 18rpx; }
 .danger-button { color: #dc2626; background: #fef2f2; }
 .pay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-top: 18rpx; }

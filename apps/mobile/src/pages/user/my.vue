@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { RegistrationStatus, registrationStatusText, type HomepagePayload, type HomepageSectionView } from "@activity/shared";
-import { ensureUser, fetchMyProfile, getCurrentTenantCode, request, setActivityListIntent, withTenantCode } from "../../api";
+import { ensureUser, fetchMyProfile, getCurrentRouteWithQuery, getCurrentTenantCode, request, setActivityListIntent, withTenantCode } from "../../api";
 import { getMobileAdminSession } from "../../mobile-admin";
 import { loadPageTheme } from "../../theme";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
@@ -19,6 +19,7 @@ const walletTransactions = ref<any[]>([]);
 const charity = ref<any | null>(null);
 const adminAccess = ref<{ canAccess?: boolean; role?: string; tenantName?: string | null } | null>(null);
 const loading = ref(true);
+const loadError = ref("");
 const activeStatus = ref<"all" | RegistrationStatus>("all");
 const phone = ref("");
 const mounted = ref(false);
@@ -89,6 +90,11 @@ function actionLabel(item: any) {
 
 function goPage(url: string) {
   uni.navigateTo({ url });
+}
+
+function goLogin() {
+  const redirect = encodeURIComponent(getCurrentRouteWithQuery());
+  uni.navigateTo({ url: `/pages/user/login?redirect=${redirect}` });
 }
 
 function scrollToRegistrations() {
@@ -187,13 +193,14 @@ function statusClass(status: RegistrationStatus) {
 
 async function load() {
   loading.value = true;
+  loadError.value = "";
   lastLoadedTenantCode.value = getCurrentTenantCode();
   try {
     await ensureUser();
     phone.value = uni.getStorageSync("user_phone") || "";
     const [userProfile, registrations, homepage, walletDetail, transactions, charityDetail, adminStatus] = await Promise.all([
       fetchMyProfile().catch(() => null),
-      request<any[]>("/public/me/registrations"),
+      request<any[]>("/public/me/registrations").catch(() => []),
       request<HomepagePayload>("/public/page-decoration?pageKey=user_my").catch(() => ({ sections: [], fallback: true })),
       request<any>("/public/me/wallet").catch(() => null),
       request<any[]>("/public/me/wallet/transactions").catch(() => []),
@@ -208,6 +215,10 @@ async function load() {
     walletTransactions.value = transactions;
     charity.value = charityDetail;
     adminAccess.value = adminStatus;
+  } catch (error: any) {
+    loadError.value = error?.message || "加载个人中心失败，请重新登录后再试。";
+    rows.value = [];
+    uni.showToast({ title: loadError.value, icon: "none" });
   } finally {
     loading.value = false;
   }
@@ -336,6 +347,14 @@ onShow(async () => {
     </view>
 
     <view v-if="loading" class="state-card">加载中...</view>
+    <view v-else-if="loadError" class="state-card">
+      <view class="empty-title">需要重新登录</view>
+      <view class="empty-copy">{{ loadError }}</view>
+      <view class="state-actions">
+        <view class="empty-button" @click="goLogin">去登录</view>
+        <view class="empty-button secondary" @click="load">重新加载</view>
+      </view>
+    </view>
     <template v-else>
       <view v-if="!filteredRows.length" class="empty">
         <view class="empty-title">暂无相关报名</view>
@@ -450,4 +469,6 @@ onShow(async () => {
 .empty-title { color: var(--text-color, #111827); font-size: 32rpx; font-weight: 900; }
 .empty-copy { margin-top: 10rpx; color: var(--muted-color, #667085); font-size: 25rpx; }
 .empty-button { display: inline-flex; margin-top: 22rpx; padding: 16rpx 28rpx; border-radius: 999px; background: var(--primary-color, #0f766e); color: #fff; font-size: 26rpx; font-weight: 900; }
+.state-actions { display: flex; justify-content: center; gap: 14rpx; flex-wrap: wrap; }
+.empty-button.secondary { background: #eef2f7; color: #344054; }
 </style>
