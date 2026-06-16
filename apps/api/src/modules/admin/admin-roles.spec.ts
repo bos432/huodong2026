@@ -8,6 +8,11 @@ function canAccess(role: string, allowed: AdminRole[]) {
   return true;
 }
 
+function canOperatePlatformWallet(role: string, tenantId?: number | null) {
+  if (normalizeAdminRole(role) !== AdminRole.SuperAdmin || tenantId) throw new ForbiddenException("Only platform super admin can operate");
+  return true;
+}
+
 describe("admin role permissions", () => {
   it("treats legacy admin role as super admin", () => {
     expect(normalizeAdminRole("admin")).toBe(AdminRole.SuperAdmin);
@@ -49,5 +54,12 @@ describe("admin role permissions", () => {
     expect(() => canAccess(AdminRole.Finance, operationRoles)).toThrow("当前账号无权限");
     expect(canAccess(AdminRole.CheckInStaff, registrationViewRoles)).toBe(true);
     expect(() => canAccess(AdminRole.CheckInStaff, operationRoles)).toThrow("当前账号无权限");
+  });
+
+  it("allows only platform super admin to operate user wallet balance", () => {
+    expect(canOperatePlatformWallet(AdminRole.SuperAdmin, null)).toBe(true);
+    expect(() => canOperatePlatformWallet(AdminRole.SuperAdmin, 10)).toThrow("Only platform super admin");
+    expect(() => canOperatePlatformWallet(AdminRole.Finance, null)).toThrow("Only platform super admin");
+    expect(() => canOperatePlatformWallet(AdminRole.Operator, null)).toThrow("Only platform super admin");
   });
 });

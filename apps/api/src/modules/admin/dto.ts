@@ -781,6 +781,26 @@ export class CreateMemberDto {
   remark?: string;
 }
 
+export class UpdateMemberDto {
+  @IsOptional()
+  @IsString()
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  nickname?: string;
+
+  @IsOptional()
+  @IsString()
+  avatarUrl?: string;
+}
+
+export class ResetMemberPasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  password!: string;
+}
+
 
 
 export class OperationSettingDto {

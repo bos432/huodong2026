@@ -53,7 +53,7 @@ import { inspectRuntimeConfig } from "../../shared/config-validation";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActor, tenantRelationForActor } from "../../shared/tenant-scope";
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
@@ -2538,6 +2538,39 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return profile;
   }
 
+  async updateMember(userId: number, dto: UpdateMemberDto, admin?: AdminContext) {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException("用户不存");
+    await this.assertUserTenantAccess(userId, admin);
+    const phone = dto.phone === undefined ? user.phone : String(dto.phone || "").trim();
+    const nickname = dto.nickname === undefined ? user.nickname : String(dto.nickname || "").trim();
+    const avatarUrl = dto.avatarUrl === undefined ? user.avatarUrl : String(dto.avatarUrl || "").trim();
+    if (phone && !/^1\d{10}$/.test(phone)) throw new BadRequestException("请填写正确的手机号");
+    if (phone && phone !== user.phone) {
+      const exists = await this.users.findOne({ where: { phone } });
+      if (exists && exists.id !== user.id) throw new BadRequestException("手机号已被其他会员使用");
+    }
+    user.phone = phone || null;
+    user.nickname = nickname || null;
+    user.avatarUrl = avatarUrl || null;
+    const saved = await this.users.save(user);
+    const profile = await this.ensureMemberProfile(saved);
+    await this.logOperation(admin, "member.update", "user", saved.id, `编辑会员：${saved.nickname || saved.phone || saved.id}`, { phone: saved.phone, nickname: saved.nickname });
+    return profile;
+  }
+
+  async resetMemberPassword(userId: number, dto: ResetMemberPasswordDto, admin?: AdminContext) {
+    const password = String(dto.password || "");
+    if (password.length < 6 || password.length > 64) throw new BadRequestException("会员密码长度需为 6-64 位");
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException("用户不存");
+    await this.assertUserTenantAccess(userId, admin);
+    user.passwordHash = await bcrypt.hash(password, 10);
+    const saved = await this.users.save(user);
+    await this.logOperation(admin, "member.password.reset", "user", saved.id, `重置会员密码：${saved.nickname || saved.phone || saved.id}`);
+    return { id: saved.id, passwordSet: true };
+  }
+
   async memberDetail(userId: number, admin?: AdminContext) {
     const user = await this.users.findOneBy({ id: userId });
     if (!user) throw new NotFoundException("用户不存");
@@ -2564,6 +2597,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listWallets(keyword?: string, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
     const tenant = await this.walletTenantForAdmin(admin);
     const builder = this.userWallets
       .createQueryBuilder("wallet")
@@ -2578,6 +2612,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getUserWallet(userId: number, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
     const user = await this.users.findOneBy({ id: userId });
     if (!user) throw new NotFoundException("用户不存");
     await this.assertUserTenantAccess(userId, admin);
@@ -2588,6 +2623,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listWalletTransactions(userId: number | undefined, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
     const tenant = await this.walletTenantForAdmin(admin);
     const builder = this.walletTransactions
       .createQueryBuilder("tx")
@@ -2607,6 +2643,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async adjustUserWallet(userId: number, dto: WalletAdjustDto, admin: AdminContext) {
+    this.assertPlatformAdmin(admin);
     const amount = Number(dto.amount);
     if (!Number.isFinite(amount) || amount === 0) throw new BadRequestException("调整金额不能为 0");
     if (dto.type !== "adjust" && amount <= 0) throw new BadRequestException("充值或扣减金额必须大于 0");

@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
-import { Edit, Plus, Refresh, Search } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { Edit, Key, Plus, Refresh, Search } from "@element-plus/icons-vue";
 import { api } from "../api";
 import { isPlatformAdmin } from "../permissions";
 
@@ -19,9 +19,13 @@ const activityId = ref<number | undefined>(routeActivityId());
 const detailDrawer = ref(false);
 const levelDialog = ref(false);
 const memberDialog = ref(false);
+const editMemberDialog = ref(false);
+const passwordDialog = ref(false);
 const walletDialog = ref(false);
 const saving = ref(false);
 const memberSaving = ref(false);
+const editMemberSaving = ref(false);
+const passwordSaving = ref(false);
 const walletSaving = ref(false);
 const editingLevelId = ref<number | null>(null);
 
@@ -45,6 +49,17 @@ const memberForm = reactive({
   password: "",
   nickname: "",
   remark: ""
+});
+
+const editMemberForm = reactive({
+  phone: "",
+  nickname: "",
+  avatarUrl: ""
+});
+
+const passwordForm = reactive({
+  password: "",
+  confirmPassword: ""
 });
 
 function routeActivityId() {
@@ -88,8 +103,8 @@ function clearActivityFilter() {
 async function openDetail(row: any) {
   const [memberDetail, walletDetail, transactions] = await Promise.all([
     api.get(`/admin/members/${row.user.id}`),
-    api.get(`/admin/users/${row.user.id}/wallet`),
-    api.get<any, any[]>("/admin/finance/wallet-transactions", { params: { userId: row.user.id } })
+    isPlatformAdmin() ? api.get(`/admin/users/${row.user.id}/wallet`) : Promise.resolve(null),
+    isPlatformAdmin() ? api.get<any, any[]>("/admin/finance/wallet-transactions", { params: { userId: row.user.id } }) : Promise.resolve([])
   ]);
   detail.value = memberDetail;
   wallet.value = walletDetail;
@@ -132,6 +147,67 @@ function openCreateLevel() {
 function openCreateMember() {
   Object.assign(memberForm, { phone: "", password: "", nickname: "", remark: "" });
   memberDialog.value = true;
+}
+
+function openEditMember() {
+  const user = detail.value?.profile?.user;
+  if (!user) return;
+  Object.assign(editMemberForm, { phone: user.phone || "", nickname: user.nickname || "", avatarUrl: user.avatarUrl || "" });
+  editMemberDialog.value = true;
+}
+
+async function saveMemberEdit() {
+  const user = detail.value?.profile?.user;
+  if (!user?.id) return;
+  if (editMemberForm.phone.trim() && !/^1\d{10}$/.test(editMemberForm.phone.trim())) {
+    ElMessage.warning("请填写正确的手机号");
+    return;
+  }
+  editMemberSaving.value = true;
+  try {
+    await api.patch(`/admin/members/${user.id}`, {
+      phone: editMemberForm.phone.trim(),
+      nickname: editMemberForm.nickname.trim(),
+      avatarUrl: editMemberForm.avatarUrl.trim()
+    });
+    ElMessage.success("会员资料已保存");
+    editMemberDialog.value = false;
+    await openDetail({ user });
+    await load();
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存失败");
+  } finally {
+    editMemberSaving.value = false;
+  }
+}
+
+function openPasswordDialog() {
+  Object.assign(passwordForm, { password: "", confirmPassword: "" });
+  passwordDialog.value = true;
+}
+
+async function resetMemberPassword() {
+  const user = detail.value?.profile?.user;
+  if (!user?.id) return;
+  if (passwordForm.password.length < 6 || passwordForm.password.length > 64) {
+    ElMessage.warning("会员密码长度需为 6-64 位");
+    return;
+  }
+  if (passwordForm.password !== passwordForm.confirmPassword) {
+    ElMessage.warning("两次输入的密码不一致");
+    return;
+  }
+  await ElMessageBox.confirm(`确认重置「${user.nickname || user.phone || `用户${user.id}`}」的 H5 登录密码？`, "重置会员密码", { type: "warning", confirmButtonText: "确认重置", cancelButtonText: "取消" });
+  passwordSaving.value = true;
+  try {
+    await api.post(`/admin/members/${user.id}/password`, { password: passwordForm.password });
+    ElMessage.success("会员密码已重置");
+    passwordDialog.value = false;
+  } catch (error: any) {
+    ElMessage.error(error.message || "重置失败");
+  } finally {
+    passwordSaving.value = false;
+  }
 }
 
 async function saveMember() {
@@ -302,7 +378,11 @@ watch(
           <div><span>积分</span><strong>{{ detail.profile.points }}</strong></div>
           <div><span>累计消费</span><strong>¥{{ money(detail.profile.totalSpent) }}</strong></div>
         </div>
-        <div class="wallet-card">
+        <div class="detail-actions">
+          <el-button :icon="Edit" @click="openEditMember">编辑资料</el-button>
+          <el-button :icon="Key" @click="openPasswordDialog">重置密码</el-button>
+        </div>
+        <div v-if="isPlatformAdmin()" class="wallet-card">
           <div>
             <span>账户余额</span>
             <strong>¥{{ money(wallet?.availableBalance) }}</strong>
@@ -315,7 +395,7 @@ watch(
           </div>
         </div>
         <el-tabs>
-          <el-tab-pane label="余额流水">
+          <el-tab-pane v-if="isPlatformAdmin()" label="余额流水">
             <el-table :data="walletTransactions" stripe empty-text="暂无余额流水">
               <el-table-column prop="transactionNo" label="流水号" min-width="170" />
               <el-table-column prop="type" label="类型" width="130" />
@@ -354,6 +434,24 @@ watch(
       </template>
     </el-drawer>
 
+    <el-dialog v-model="editMemberDialog" width="520px" title="编辑会员资料">
+      <el-form label-position="top">
+        <el-form-item label="手机号"><el-input v-model="editMemberForm.phone" maxlength="11" placeholder="用于 H5 手机号登录" /></el-form-item>
+        <el-form-item label="昵称"><el-input v-model="editMemberForm.nickname" maxlength="40" /></el-form-item>
+        <el-form-item label="头像 URL"><el-input v-model="editMemberForm.avatarUrl" maxlength="500" placeholder="可选，留空则清除头像" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="editMemberDialog=false">取消</el-button><el-button type="primary" :loading="editMemberSaving" @click="saveMemberEdit">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="passwordDialog" width="480px" title="重置会员密码">
+      <el-alert class="dialog-alert" type="warning" show-icon :closable="false" title="仅重置 H5 手机号密码登录" description="如果用户使用微信小程序授权登录，微信身份不会被修改。" />
+      <el-form label-position="top">
+        <el-form-item label="新密码"><el-input v-model="passwordForm.password" type="password" show-password maxlength="64" placeholder="6-64 位" /></el-form-item>
+        <el-form-item label="确认新密码"><el-input v-model="passwordForm.confirmPassword" type="password" show-password maxlength="64" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="passwordDialog=false">取消</el-button><el-button type="primary" :loading="passwordSaving" @click="resetMemberPassword">确认重置</el-button></template>
+    </el-dialog>
+
     <el-dialog v-model="walletDialog" width="480px" title="调整余额">
       <el-form label-position="top">
         <el-form-item label="类型">
@@ -384,6 +482,7 @@ h3 { margin: 0; }
 .profile div { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; display: grid; gap: 6px; }
 .profile span { color: #667085; font-size: 13px; }
 .profile strong { font-size: 20px; }
+.detail-actions { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
 .wallet-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 16px; border: 1px solid #d7dde8; border-radius: 8px; background: #f8fafc; }
 .wallet-card div:first-child { display: grid; gap: 6px; }
 .wallet-card span, .wallet-card small { color: #667085; font-size: 13px; }
