@@ -797,6 +797,10 @@ export class OperationSettingDto {
   offlinePaymentInstructions!: string;
 
   @IsOptional()
+  @IsObject()
+  paymentMethods?: Record<string, boolean>;
+
+  @IsOptional()
   @IsString()
   customerServiceName?: string;
 

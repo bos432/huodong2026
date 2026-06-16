@@ -29,7 +29,7 @@ const detail = ref<any>();
 const code = ref("");
 const userId = ref(0);
 const loading = ref(true);
-const paying = ref<"" | "wechat" | "balance">("");
+const paying = ref<"" | "wechat" | "alipay" | "balance">("");
 const groupDialogVisible = ref(false);
 const groupQrImageError = ref(false);
 const paymentInstructionsField = "offlinePaymentInstructions";
@@ -65,8 +65,7 @@ function operationSetting() {
 }
 
 function paymentInstructions() {
-  void operationSetting()[paymentInstructionsField];
-  return "本次上线支持微信支付和后台充值余额支付；如余额不足，请联系工作人员充值后再支付。";
+  return operationSetting()[paymentInstructionsField] || "线下付款后请联系主办方确认收款，后台确认后报名状态会自动更新。";
 }
 
 function statusTitle(status?: RegistrationStatus) {
@@ -80,7 +79,7 @@ function statusTitle(status?: RegistrationStatus) {
 }
 
 function statusCopy(status?: RegistrationStatus) {
-  if (status === RegistrationStatus.PendingPayment) return detail.value?.order?.expiresAt ? `请在 ${formatTime(detail.value.order.expiresAt)} 前完成微信或余额支付。` : "请完成微信或余额支付，付款成功后状态会更新。";
+  if (status === RegistrationStatus.PendingPayment) return detail.value?.order?.expiresAt ? `请在 ${formatTime(detail.value.order.expiresAt)} 前完成付款。` : "请完成付款，付款成功或后台确认后状态会更新。";
   if (status === RegistrationStatus.PendingReview) return "主办方正在确认报名信息，结果会同步到这里。";
   if (status === RegistrationStatus.Approved) return "活动当天可在这里查看签到码，也可以提前加入活动群获取通知。";
   if (status === RegistrationStatus.CheckedIn) return "活动已到场签到，欢迎留下评价帮助主办方改进。";
@@ -168,7 +167,7 @@ async function showCode() {
   }
 }
 
-async function payOrder(provider: "wechat" | "balance") {
+async function payOrder(provider: "wechat" | "alipay" | "balance") {
   if (!detail.value?.order || paying.value) return;
   paying.value = provider;
   try {
@@ -178,19 +177,36 @@ async function payOrder(provider: "wechat" | "balance") {
       await load();
       return;
     }
-    const pay = await request<any>(`/public/orders/${detail.value.order.id}/pay/${provider}`, { method: "POST", data: { paymentScene: preferredWechatScene() } });
+    const pay = await request<any>(`/public/orders/${detail.value.order.id}/pay/${provider}`, { method: "POST", data: { paymentScene: preferredPaymentScene(provider) } });
     if (pay.mode === "sandbox") {
       await request(`/payment/${provider}/callback`, {
         method: "POST",
         data: { ...pay.payParams, amount: Number(pay.amount) }
       });
-      uni.showToast({ title: "微信支付成功" });
+      uni.showToast({ title: provider === "alipay" ? "支付宝支付成功" : "微信支付成功" });
     } else if (pay.payParams?.h5Url) {
       // #ifdef H5
       window.location.href = String(pay.payParams.h5Url);
       return;
       // #endif
       uni.showModal({ title: "微信支付", content: String(pay.payParams.h5Url), showCancel: false });
+    } else if (pay.payParams?.formBody && pay.payParams?.gatewayUrl) {
+      // #ifdef H5
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = String(pay.payParams.gatewayUrl);
+      new URLSearchParams(String(pay.payParams.formBody)).forEach((value, key) => {
+        const input = document.createElement("input");
+        input.type = "hidden";
+        input.name = key;
+        input.value = value;
+        form.appendChild(input);
+      });
+      document.body.appendChild(form);
+      form.submit();
+      return;
+      // #endif
+      uni.showModal({ title: "支付宝", content: "请在浏览器中打开后完成支付宝付款。", showCancel: false });
     } else if (pay.payParams?.tradeType === "JSAPI" && pay.payParams?.package) {
       await requestWechatPayment(pay.payParams);
       uni.showToast({ title: "微信支付完成" });
@@ -207,11 +223,19 @@ async function payOrder(provider: "wechat" | "balance") {
   }
 }
 
-function preferredWechatScene() {
+function preferredPaymentScene(provider: "wechat" | "alipay" | "balance") {
   // #ifdef H5
-  return "h5";
+  return provider === "alipay" ? "wap" : "h5";
   // #endif
-  return "jsapi";
+  return provider === "alipay" ? "precreate" : "jsapi";
+}
+
+function enabledPaymentMethods() {
+  return operationSetting().paymentMethods || { free: true, wechat: true, alipay: false, balance: true, offline: true };
+}
+
+function canPay(method: "wechat" | "alipay" | "balance" | "offline") {
+  return Boolean(enabledPaymentMethods()[method]);
 }
 
 function requestWechatPayment(params: Record<string, any>) {
@@ -305,10 +329,13 @@ onMounted(() => {
         <view class="line strong"><text>实付</text><text>{{ Number(detail.order.amount) > 0 ? `¥${money(detail.order.amount)}` : "免费" }}</text></view>
         <view class="line"><text>状态</text><text>{{ orderStatusText[detail.order.status as OrderStatus] }}</text></view>
         <view v-if="detail.order.expiresAt" class="line"><text>付款截止</text><text>{{ formatTime(detail.order.expiresAt) }}</text></view>
-        <view v-if="detail.order.status === OrderStatus.PendingPayment" class="notice">请选择微信支付或余额支付。余额不足时可联系后台充值后再支付。</view>
+        <view v-if="detail.order.status === OrderStatus.PendingPayment && detail.order.paymentMethod !== 'offline'" class="notice">请选择当前订单对应的支付方式完成付款。余额不足时可联系后台充值后再支付。</view>
+        <view v-if="detail.order.status === OrderStatus.PendingPayment && detail.order.paymentMethod === 'offline'" class="notice">{{ paymentInstructions() }}</view>
         <view v-if="detail.order.status === OrderStatus.PendingPayment && Number(detail.order.amount) > 0" class="pay-actions">
-          <view class="button" :class="{ disabled: Boolean(paying) }" @click="payOrder('wechat')">{{ paying === "wechat" ? "微信支付中..." : "微信支付" }}</view>
-          <view class="button secondary" :class="{ disabled: Boolean(paying) }" @click="payOrder('balance')">{{ paying === "balance" ? "余额支付中..." : "余额支付" }}</view>
+          <view v-if="detail.order.paymentMethod === 'wechat' && canPay('wechat')" class="button" :class="{ disabled: Boolean(paying) }" @click="payOrder('wechat')">{{ paying === "wechat" ? "微信支付中..." : "微信支付" }}</view>
+          <view v-if="detail.order.paymentMethod === 'alipay' && canPay('alipay')" class="button" :class="{ disabled: Boolean(paying) }" @click="payOrder('alipay')">{{ paying === "alipay" ? "支付宝支付中..." : "支付宝" }}</view>
+          <view v-if="detail.order.paymentMethod === 'balance' && canPay('balance')" class="button secondary" :class="{ disabled: Boolean(paying) }" @click="payOrder('balance')">{{ paying === "balance" ? "余额支付中..." : "余额支付" }}</view>
+          <view v-if="detail.order.paymentMethod === 'offline'" class="button secondary disabled">等待后台确认收款</view>
         </view>
         <view v-if="detail.order.status === OrderStatus.Closed" class="notice muted">订单已关闭：{{ detail.order.closeReason || "订单已关闭，名额已释放" }}</view>
         <view v-if="detail.order.status === OrderStatus.PartiallyRefunded" class="notice">该订单已有部分退款，具体金额请联系主办方确认。</view>

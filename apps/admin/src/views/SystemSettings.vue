@@ -106,6 +106,13 @@ const form = reactive({
   registrationEnabled: true,
   registrationDisabledMessage: "",
   offlinePaymentInstructions: "",
+  paymentMethods: {
+    free: true,
+    wechat: true,
+    alipay: false,
+    balance: true,
+    offline: true
+  },
   customerServiceName: "",
   customerServicePhone: "",
   customerServiceWechat: "",
@@ -693,6 +700,7 @@ async function loadOperation() {
       registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
       registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: data.offlinePaymentInstructions || "",
+      paymentMethods: { free: true, wechat: true, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
       customerServiceName: data.customerServiceName || "",
       customerServicePhone: data.customerServicePhone || "",
       customerServiceWechat: data.customerServiceWechat || "",
@@ -789,6 +797,15 @@ onMounted(() => {
             </el-form-item>
             <el-form-item label="线下付款说明" required>
               <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit />
+            </el-form-item>
+            <el-form-item label="支付方式">
+              <div class="payment-methods">
+                <el-checkbox v-model="form.paymentMethods.free">免费报名</el-checkbox>
+                <el-checkbox v-model="form.paymentMethods.wechat">微信支付</el-checkbox>
+                <el-checkbox v-model="form.paymentMethods.alipay">支付宝</el-checkbox>
+                <el-checkbox v-model="form.paymentMethods.balance">余额支付</el-checkbox>
+                <el-checkbox v-model="form.paymentMethods.offline">线下收款 / 人工确认</el-checkbox>
+              </div>
             </el-form-item>
             <el-form-item label="客服名称">
               <el-input v-model="form.customerServiceName" maxlength="100" />
@@ -1166,6 +1183,7 @@ onMounted(() => {
 <style scoped>
 .toolbar { align-items: flex-start; }
 .toolbar-actions, .switch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.payment-methods { display: flex; align-items: center; gap: 12px 22px; flex-wrap: wrap; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .system-tabs { margin-top: 12px; }
 .panel-alert { margin-bottom: 16px; }

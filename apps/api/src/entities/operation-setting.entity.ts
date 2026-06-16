@@ -12,6 +12,9 @@ export class OperationSetting {
   @Column({ type: "text" })
   offlinePaymentInstructions!: string;
 
+  @Column({ type: "json", nullable: true })
+  paymentMethods!: Record<string, boolean> | null;
+
   @Column({
     type: "tinyint",
     default: 1,

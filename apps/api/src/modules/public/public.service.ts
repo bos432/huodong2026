@@ -410,6 +410,7 @@ export class PublicService {
     const quote = await this.calculateQuote(activity, { ...dto, userId: user.id });
     const price = Number(quote.payableAmount);
     const paymentMethod = price > 0 ? dto.paymentMethod || PaymentMethod.Wechat : PaymentMethod.Free;
+    await this.assertPaymentMethodEnabled(paymentMethod, activity.tenant);
     if (price > 0 && paymentMethod === PaymentMethod.Balance) await this.assertSufficientBalance(user, activity.tenant, price);
     const status = price > 0 ? RegistrationStatus.PendingPayment : activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
     const channel = await this.resolveActivityChannel(activity, dto.channelCode, dto.source);
@@ -467,8 +468,9 @@ export class PublicService {
     if (!order) throw new NotFoundException("订单不存在");
     await this.assertOrderTenantAccess(order, context);
     this.assertOrderUserAccess(order, user);
-    if (provider === "alipay") throw new BadRequestException("支付宝本次上线未开放");
+    await this.assertPaymentMethodEnabled(provider === "wechat" ? PaymentMethod.Wechat : PaymentMethod.Alipay, order.tenant);
     if (order.status !== OrderStatus.PendingPayment && order.status !== OrderStatus.Paid) throw new BadRequestException("当前订单不能发起支付");
+    if (order.paymentMethod !== provider) throw new BadRequestException("订单支付方式不匹配，请重新报名或联系主办方处理");
     if (order.registration.status === RegistrationStatus.Cancelled) throw new BadRequestException("已取消报名不能支付");
     if (this.isExpiredPendingOrder(order)) {
       await this.closeExpiredOrder(order, "订单超时未付款，系统已关闭");
@@ -483,6 +485,8 @@ export class PublicService {
     if (!order) throw new NotFoundException("订单不存在");
     await this.assertOrderTenantAccess(order, context);
     this.assertOrderUserAccess(order, user);
+    await this.assertPaymentMethodEnabled(PaymentMethod.Balance, order.tenant);
+    if (order.paymentMethod !== PaymentMethod.Balance) throw new BadRequestException("订单支付方式不匹配，请重新报名或联系主办方处理");
     if (order.status === OrderStatus.Paid) {
       const existing = await this.walletTransactions.findOne({ where: { idempotencyKey: `balance_pay:${order.id}` } });
       return { order, walletTransaction: existing, idempotent: true };
@@ -1170,6 +1174,7 @@ export class PublicService {
       registrationEnabled: true,
       registrationDisabledMessage: "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: "请在付款截止前完成线下转账或现场付款，并在备注中填写报名手机号。主办方确认收款后，报名状态会自动更新。",
+      paymentMethods: this.defaultPaymentMethods(),
       customerServiceName: "活动运营客服",
       customerServicePhone: "13800000000",
       customerServiceWechat: "activity_service",
@@ -1191,6 +1196,44 @@ export class PublicService {
     const setting = await this.ensureOperationSetting();
     if (setting.registrationEnabled !== false && (setting.registrationEnabled as unknown) !== 0 && (setting.registrationEnabled as unknown) !== "0") return;
     throw new BadRequestException(setting.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。");
+  }
+
+  private async assertPaymentMethodEnabled(method: PaymentMethod, tenant?: Tenant | null) {
+    const setting = await this.ensureOperationSetting(tenant || null);
+    const methods = this.normalizePaymentMethods(setting.paymentMethods);
+    if (method === PaymentMethod.Free && methods.free) return;
+    if (method === PaymentMethod.Wechat && methods.wechat) return;
+    if (method === PaymentMethod.Alipay && methods.alipay) return;
+    if (method === PaymentMethod.Balance && methods.balance) return;
+    if (method === PaymentMethod.Offline && methods.offline) return;
+    throw new BadRequestException(`${this.paymentMethodLabel(method)}暂未开放，请选择其他支付方式`);
+  }
+
+  private defaultPaymentMethods() {
+    return { free: true, wechat: true, alipay: false, balance: true, offline: true };
+  }
+
+  private normalizePaymentMethods(value: unknown) {
+    const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+    const defaults = this.defaultPaymentMethods();
+    return {
+      free: input.free === undefined ? defaults.free : Boolean(input.free),
+      wechat: input.wechat === undefined ? defaults.wechat : Boolean(input.wechat),
+      alipay: input.alipay === undefined ? defaults.alipay : Boolean(input.alipay),
+      balance: input.balance === undefined ? defaults.balance : Boolean(input.balance),
+      offline: input.offline === undefined ? defaults.offline : Boolean(input.offline)
+    };
+  }
+
+  private paymentMethodLabel(method: PaymentMethod) {
+    const map: Record<string, string> = {
+      [PaymentMethod.Free]: "免费报名",
+      [PaymentMethod.Wechat]: "微信支付",
+      [PaymentMethod.Alipay]: "支付宝",
+      [PaymentMethod.Balance]: "余额支付",
+      [PaymentMethod.Offline]: "线下收款"
+    };
+    return map[method] || "该支付方式";
   }
 
   private isExpiredPendingOrder(order: Order) {
@@ -1323,7 +1366,7 @@ export class PublicService {
 
   private publicOperationSetting(setting: OperationSetting) {
     const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
-    return publicSetting;
+    return { ...publicSetting, paymentMethods: this.normalizePaymentMethods(setting.paymentMethods) };
   }
 }
 

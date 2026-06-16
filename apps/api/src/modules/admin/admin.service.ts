@@ -2165,6 +2165,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       registrationEnabled: dto.registrationEnabled ?? true,
       registrationDisabledMessage: dto.registrationDisabledMessage?.trim() || null,
       offlinePaymentInstructions: dto.offlinePaymentInstructions.trim(),
+      paymentMethods: this.normalizePaymentMethods(dto.paymentMethods),
       customerServiceName: dto.customerServiceName?.trim() || null,
       customerServicePhone: dto.customerServicePhone?.trim() || null,
       customerServiceWechat: dto.customerServiceWechat?.trim() || null,
@@ -3311,6 +3312,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       registrationEnabled: true,
       registrationDisabledMessage: "报名通道暂时关闭，请稍后再试或联系主办方",
       offlinePaymentInstructions: "请在付款截止前完成线下转账或现场付款，并在备注中填写报名手机号。主办方确认收款后，报名状态会自动更新",
+      paymentMethods: this.defaultPaymentMethods(),
       customerServiceName: "活动运营客服",
       customerServicePhone: "13800000000",
       customerServiceWechat: "activity_service",
@@ -3330,6 +3332,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private isPlainObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  }
+
+  private defaultPaymentMethods() {
+    return { free: true, wechat: true, alipay: false, balance: true, offline: true };
+  }
+
+  private normalizePaymentMethods(value: unknown) {
+    const input = this.isPlainObject(value) ? value : {};
+    const defaults = this.defaultPaymentMethods();
+    return {
+      free: input.free === undefined ? defaults.free : Boolean(input.free),
+      wechat: input.wechat === undefined ? defaults.wechat : Boolean(input.wechat),
+      alipay: input.alipay === undefined ? defaults.alipay : Boolean(input.alipay),
+      balance: input.balance === undefined ? defaults.balance : Boolean(input.balance),
+      offline: input.offline === undefined ? defaults.offline : Boolean(input.offline)
+    };
   }
 
   private async ensureDevSeed() {

@@ -17,7 +17,8 @@ const couponCode = ref("");
 const pointsToUse = ref(0);
 const quote = ref<any>();
 const userId = ref<number>();
-const paymentMethod = ref<"wechat" | "balance">("wechat");
+type PayMethod = "wechat" | "alipay" | "balance" | "offline";
+const paymentMethod = ref<PayMethod>("wechat");
 const channelCode = ref("");
 const source = ref("");
 const inviteCode = ref("");
@@ -42,7 +43,17 @@ const paymentHint = computed(() => {
   if (registrationPaused.value) return registrationPausedMessage.value;
   if (memberBlocked.value) return activity.value.memberAccess.message;
   if (activity.value.remainingSeats <= 0) return "当前名额已满，提交后将进入候补名单";
-  return payableNumber.value > 0 ? "提交后可选择微信支付或余额支付，付款成功后状态会自动更新。" : activity.value.requireReview ? "提交后会进入主办方审核，审核结果会显示在我的报名里。" : "提交后即可获得报名成功状态。";
+  return payableNumber.value > 0 ? "提交后请选择支付方式；线下收款需后台确认后生效。" : activity.value.requireReview ? "提交后会进入主办方审核，审核结果会显示在我的报名里。" : "提交后即可获得报名成功状态。";
+});
+const paymentMethods = computed<Record<string, boolean>>(() => operationSetting.value?.paymentMethods || { free: true, wechat: true, alipay: false, balance: true, offline: true });
+const availablePaymentMethods = computed(() => {
+  const rows = [
+    { value: "wechat" as PayMethod, name: "微信支付", desc: "H5 / 小程序" },
+    { value: "alipay" as PayMethod, name: "支付宝", desc: "支付宝付款" },
+    { value: "balance" as PayMethod, name: "余额支付", desc: "后台充值余额" },
+    { value: "offline" as PayMethod, name: "线下收款", desc: "转账后人工确认" }
+  ];
+  return rows.filter((item) => paymentMethods.value[item.value]);
 });
 
 const showMemberAccess = computed(() => Boolean(activity.value?.minMemberLevel || activity.value?.memberAccess?.priorityMemberLevel || activity.value?.memberAccess?.requiredLevel));
@@ -109,6 +120,10 @@ function submit() {
   if (error) {
     uni.showToast({ title: error, icon: "none" });
     if (missingFieldId.value) uni.pageScrollTo({ selector: `.field-${missingFieldId.value}`, duration: 240 });
+    return;
+  }
+  if (payableNumber.value > 0 && !availablePaymentMethods.value.length) {
+    uni.showToast({ title: "暂无可用支付方式，请联系主办方", icon: "none" });
     return;
   }
   const content = `${selectedTicketName.value}，应付 ${payableText.value}。${paymentHint.value}`;
@@ -203,6 +218,9 @@ onMounted(async () => {
     ]);
     activity.value = detail;
     operationSetting.value = setting;
+    if (payableNumber.value > 0 && !paymentMethods.value[paymentMethod.value]) {
+      paymentMethod.value = availablePaymentMethods.value[0]?.value || "offline";
+    }
     selectedTicketTypeId.value = activity.value.ticketTypes?.[0]?.id;
     await refreshQuote();
   } finally {
@@ -295,15 +313,12 @@ watch(couponCode, () => {
         <view v-if="payableNumber > 0" class="payment-methods">
           <view class="discount-title">支付方式</view>
           <view class="method-grid">
-            <view class="method" :class="{ active: paymentMethod === 'wechat' }" @click="paymentMethod = 'wechat'">
-              <view class="method-name">微信支付</view>
-              <view class="subtle">H5 / 小程序</view>
-            </view>
-            <view class="method" :class="{ active: paymentMethod === 'balance' }" @click="paymentMethod = 'balance'">
-              <view class="method-name">余额支付</view>
-              <view class="subtle">后台充值余额</view>
+            <view v-for="method in availablePaymentMethods" :key="method.value" class="method" :class="{ active: paymentMethod === method.value }" @click="paymentMethod = method.value">
+              <view class="method-name">{{ method.name }}</view>
+              <view class="subtle">{{ method.desc }}</view>
             </view>
           </view>
+          <view v-if="!availablePaymentMethods.length" class="notice muted">暂无可用支付方式，请联系主办方。</view>
         </view>
       </view>
 

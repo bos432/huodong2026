@@ -63,8 +63,8 @@ export class RegisterDto {
   pointsToUse?: number;
 
   @IsOptional()
-  @IsIn([PaymentMethod.Wechat, PaymentMethod.Balance])
-  paymentMethod?: PaymentMethod.Wechat | PaymentMethod.Balance;
+  @IsIn([PaymentMethod.Wechat, PaymentMethod.Alipay, PaymentMethod.Balance, PaymentMethod.Offline])
+  paymentMethod?: PaymentMethod.Wechat | PaymentMethod.Alipay | PaymentMethod.Balance | PaymentMethod.Offline;
 
   @IsOptional()
   @IsString()
