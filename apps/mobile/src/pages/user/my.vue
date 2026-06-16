@@ -13,6 +13,8 @@ import { goDecoratedLink, quickInitial as decoratedQuickInitial } from "../../de
 const rows = ref<any[]>([]);
 const homepageSections = ref<HomepageSectionView[]>([]);
 const tenant = ref<HomepagePayload["tenant"] | null>(null);
+const wallet = ref<any | null>(null);
+const walletTransactions = ref<any[]>([]);
 const loading = ref(true);
 const activeStatus = ref<"all" | RegistrationStatus>("all");
 const phone = ref("");
@@ -28,6 +30,7 @@ const tabs = computed(() => [
 ]);
 
 const filteredRows = computed(() => (activeStatus.value === "all" ? rows.value : rows.value.filter((item) => item.status === activeStatus.value)));
+const latestWalletTransactions = computed(() => walletTransactions.value.slice(0, 4));
 const myPageSection = computed(() => homepageSections.value.find((item) => item.enabled && item.type === "my_page"));
 const bottomNavSection = computed(() => homepageSections.value.find((item) => item.enabled && item.type === "bottom_nav"));
 const myConfig = computed<Record<string, any>>(() => (myPageSection.value?.config || {}) as Record<string, any>);
@@ -106,6 +109,30 @@ function formatTime(value: string) {
   return `${year}-${month}-${day} ${hour}:${minute}`;
 }
 
+function money(value: string | number | undefined | null) {
+  return Number(value || 0).toFixed(2);
+}
+
+function walletTypeText(type: string) {
+  const map: Record<string, string> = {
+    admin_recharge: "后台充值",
+    admin_deduct: "后台扣减",
+    admin_adjust: "余额调整",
+    balance_pay: "余额支付",
+    refund_return: "退款返还"
+  };
+  return map[type] || type || "余额变动";
+}
+
+function walletAmountText(item: any) {
+  const prefix = item.direction === "debit" ? "-" : "+";
+  return `${prefix}¥${money(item.amount)}`;
+}
+
+function goWalletHelp() {
+  uni.navigateTo({ url: withTenantCode("/pages/service/index") });
+}
+
 function statusClass(status: RegistrationStatus) {
   if (status === RegistrationStatus.PendingPayment) return "is-payment";
   if (status === RegistrationStatus.PendingReview) return "is-review";
@@ -120,13 +147,17 @@ async function load() {
   try {
     await ensureUser();
     phone.value = uni.getStorageSync("user_phone") || "";
-    const [registrations, homepage] = await Promise.all([
+    const [registrations, homepage, walletDetail, transactions] = await Promise.all([
       request<any[]>("/public/me/registrations"),
-      request<HomepagePayload>("/public/page-decoration?pageKey=user_my").catch(() => ({ sections: [], fallback: true }))
+      request<HomepagePayload>("/public/page-decoration?pageKey=user_my").catch(() => ({ sections: [], fallback: true })),
+      request<any>("/public/me/wallet").catch(() => null),
+      request<any[]>("/public/me/wallet/transactions").catch(() => [])
     ]);
     rows.value = registrations;
     homepageSections.value = homepage.sections || [];
     tenant.value = homepage.tenant || null;
+    wallet.value = walletDetail;
+    walletTransactions.value = transactions;
   } finally {
     loading.value = false;
   }
@@ -164,6 +195,31 @@ onShow(async () => {
       <view class="total">{{ rows.length }}</view>
     </view>
 
+    <view class="wallet-card">
+      <view class="wallet-main">
+        <view>
+          <view class="wallet-label">账户余额</view>
+          <view class="wallet-amount">¥{{ money(wallet?.availableBalance) }}</view>
+        </view>
+        <view class="wallet-action" @click="goWalletHelp">充值说明</view>
+      </view>
+      <view class="wallet-stats">
+        <view>
+          <text>累计充值</text>
+          <strong>¥{{ money(wallet?.totalRecharge) }}</strong>
+        </view>
+        <view>
+          <text>累计消费</text>
+          <strong>¥{{ money(wallet?.totalSpent) }}</strong>
+        </view>
+        <view>
+          <text>冻结金额</text>
+          <strong>¥{{ money(wallet?.frozenBalance) }}</strong>
+        </view>
+      </view>
+      <view class="wallet-tip">余额由后台充值，可用于报名订单余额支付。</view>
+    </view>
+
     <view class="tool-grid">
       <view v-for="item in toolItems" :key="item.label" class="tool" @click="goLink(item.link, item.action)">
         <text :style="{ background: `${item.color || '#0f766e'}18`, color: item.color || '#0f766e' }">{{ quickInitial(item.label, item.icon) }}</text>
@@ -179,6 +235,22 @@ onShow(async () => {
         </view>
       </view>
     </scroll-view>
+
+    <view class="wallet-flow">
+      <view class="section-title">余额明细</view>
+      <view v-if="!latestWalletTransactions.length" class="flow-empty">暂无余额流水。后台充值后会显示在这里。</view>
+      <view v-for="item in latestWalletTransactions" :key="item.id" class="flow-item">
+        <view>
+          <view class="flow-title">{{ walletTypeText(item.type) }}</view>
+          <view class="flow-time">{{ formatTime(item.createdAt) }}</view>
+          <view v-if="item.remark" class="flow-remark">{{ item.remark }}</view>
+        </view>
+        <view class="flow-right" :class="{ debit: item.direction === 'debit' }">
+          <view>{{ walletAmountText(item) }}</view>
+          <text>余额 ¥{{ money(item.balanceAfter) }}</text>
+        </view>
+      </view>
+    </view>
 
     <view v-if="loading" class="state-card">加载中...</view>
     <template v-else>
@@ -224,6 +296,16 @@ onShow(async () => {
 .hello { font-size: 42rpx; font-weight: 900; }
 .sub { margin-top: 10rpx; color: rgba(255,255,255,0.72); font-size: 25rpx; }
 .total { width: 86rpx; height: 86rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-color, #0f766e); font-size: 34rpx; font-weight: 900; }
+.wallet-card { margin-top: 20rpx; padding: 26rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.07); }
+.wallet-main { display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
+.wallet-label { color: var(--muted-color, #667085); font-size: 25rpx; font-weight: 800; }
+.wallet-amount { margin-top: 8rpx; color: var(--text-color, #111827); font-size: 50rpx; line-height: 1; font-weight: 950; }
+.wallet-action { flex: 0 0 auto; padding: 12rpx 18rpx; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 900; }
+.wallet-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; margin-top: 24rpx; }
+.wallet-stats view { min-width: 0; display: grid; gap: 6rpx; padding: 16rpx; border-radius: 8px; background: #f8fafc; }
+.wallet-stats text { color: var(--muted-color, #667085); font-size: 22rpx; }
+.wallet-stats strong { color: var(--text-color, #111827); font-size: 25rpx; }
+.wallet-tip { margin-top: 18rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.5; }
 .tool-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14rpx; margin: 20rpx 0 8rpx; }
 .tool { min-height: 124rpx; display: grid; gap: 10rpx; justify-items: center; align-content: center; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); color: #344054; font-size: 24rpx; font-weight: 800; box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
 .tool text { width: 52rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 25rpx; font-weight: 900; }
@@ -235,6 +317,16 @@ onShow(async () => {
 .tab { min-width: 126rpx; display: grid; gap: 6rpx; justify-items: center; padding: 14rpx 20rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); color: var(--muted-color, #667085); font-size: 24rpx; font-weight: 800; }
 .tab text:last-child { color: var(--text-color, #111827); font-size: 28rpx; }
 .tab.active { background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); }
+.wallet-flow { margin-bottom: 20rpx; padding: 24rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
+.section-title { margin-bottom: 16rpx; color: var(--text-color, #111827); font-size: 31rpx; font-weight: 900; }
+.flow-empty { padding: 24rpx 0; color: var(--muted-color, #667085); font-size: 25rpx; text-align: center; }
+.flow-item { display: flex; justify-content: space-between; gap: 18rpx; padding: 18rpx 0; border-top: 1px solid #eef2f7; }
+.flow-item:first-of-type { border-top: 0; padding-top: 0; }
+.flow-title { color: var(--text-color, #111827); font-size: 27rpx; font-weight: 900; }
+.flow-time, .flow-remark { margin-top: 6rpx; color: var(--muted-color, #667085); font-size: 22rpx; line-height: 1.35; }
+.flow-right { flex: 0 0 auto; display: grid; gap: 6rpx; justify-items: end; color: var(--primary-color, #0f766e); font-size: 28rpx; font-weight: 950; }
+.flow-right.debit { color: #c2410c; }
+.flow-right text { color: var(--muted-color, #667085); font-size: 22rpx; font-weight: 700; }
 .registration-card { margin-bottom: 20rpx; padding: 24rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.07); }
 .card-head { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; }
 .status { flex: 0 0 auto; padding: 8rpx 16rpx; border-radius: 999px; font-size: 23rpx; font-weight: 900; }
