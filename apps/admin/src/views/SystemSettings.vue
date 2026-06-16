@@ -799,12 +799,15 @@ onMounted(() => {
               <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit />
             </el-form-item>
             <el-form-item label="支付方式">
-              <div class="payment-methods">
-                <el-checkbox v-model="form.paymentMethods.free">免费报名</el-checkbox>
-                <el-checkbox v-model="form.paymentMethods.wechat">微信支付</el-checkbox>
-                <el-checkbox v-model="form.paymentMethods.alipay">支付宝</el-checkbox>
-                <el-checkbox v-model="form.paymentMethods.balance">余额支付</el-checkbox>
-                <el-checkbox v-model="form.paymentMethods.offline">线下收款 / 人工确认</el-checkbox>
+              <div class="payment-methods-block">
+                <div class="payment-methods">
+                  <el-checkbox v-model="form.paymentMethods.free">免费报名</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.wechat">微信支付</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.alipay">支付宝</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.balance">余额支付</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.offline">线下收款 / 人工确认</el-checkbox>
+                </div>
+                <p class="form-tip">关闭某个支付方式后，前端报名页不再展示，后端也会拒绝直接调用该支付方式。</p>
               </div>
             </el-form-item>
             <el-form-item label="客服名称">
@@ -1183,7 +1186,9 @@ onMounted(() => {
 <style scoped>
 .toolbar { align-items: flex-start; }
 .toolbar-actions, .switch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.payment-methods-block { display: grid; gap: 6px; }
 .payment-methods { display: flex; align-items: center; gap: 12px 22px; flex-wrap: wrap; }
+.form-tip { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .system-tabs { margin-top: 12px; }
 .panel-alert { margin-bottom: 16px; }

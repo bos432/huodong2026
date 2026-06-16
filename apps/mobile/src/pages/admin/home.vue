@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { activityStatusText, type ActivityStatus } from "@activity/shared";
-import { clearMobileAdminSession, getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
+import { adminActivityPreviewUrl, clearMobileAdminSession, getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 
 const loading = ref(true);
 const bootstrap = ref<any>(null);
@@ -39,6 +39,16 @@ function goCheckIn() {
 
 function goEdit(id: number) {
   uni.navigateTo({ url: `/pages/admin/activity/edit?id=${id}` });
+}
+
+function previewActivity(item: any) {
+  const tenantCode = item.tenant?.code || "";
+  uni.navigateTo({ url: `/pages/admin/activity/preview?id=${item.id}&tenantCode=${encodeURIComponent(tenantCode)}` });
+}
+
+function copyPublicLink(item: any) {
+  const url = adminActivityPreviewUrl(item.id, item.tenant?.code);
+  uni.setClipboardData({ data: url, success: () => uni.showToast({ title: "已复制", icon: "success" }) });
 }
 
 function logout() {
@@ -99,10 +109,11 @@ onMounted(load);
       <view v-if="!canWrite" class="notice">当前账号可查看活动，但没有手机端创建和编辑权限。</view>
 
       <view class="section-title">最近活动</view>
-      <view v-for="item in activities" :key="item.id" class="activity" @click="goEdit(item.id)">
+      <view v-for="item in activities" :key="item.id" class="activity" @click="canWrite ? goEdit(item.id) : previewActivity(item)">
         <view>
           <view class="name">{{ item.title }}</view>
           <view class="meta">{{ item.tenant?.name || "平台" }} · {{ item.location || "-" }}</view>
+          <view v-if="!canWrite" class="link" @click.stop="copyPublicLink(item)">复制公开链接</view>
         </view>
         <view class="pill">{{ statusText(item.status) }}</view>
       </view>
@@ -131,5 +142,6 @@ onMounted(load);
 .activity { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 16rpx; padding: 22rpx; }
 .name { font-size: 28rpx; font-weight: 900; line-height: 1.4; }
 .meta { margin-top: 8rpx; color: #667085; font-size: 23rpx; }
+.link { margin-top: 10rpx; color: #0f766e; font-size: 23rpx; font-weight: 900; }
 .pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 999px; background: #e6f2ef; color: #0f766e; font-size: 22rpx; font-weight: 900; }
 </style>

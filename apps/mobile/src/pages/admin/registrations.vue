@@ -1,15 +1,17 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { RegistrationStatus, registrationStatusText } from "@activity/shared";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 
 const rows = ref<any[]>([]);
+const bootstrap = ref<any>(null);
 const loading = ref(true);
 const keyword = ref("");
 const status = ref<"all" | RegistrationStatus>(RegistrationStatus.PendingReview);
 const total = ref(0);
 const page = ref(1);
 const pageSize = 20;
+const canReview = computed(() => Boolean(bootstrap.value?.permissions?.canReviewRegistrations));
 
 const tabs: Array<{ label: string; value: "all" | RegistrationStatus }> = [
   { label: "待审核", value: RegistrationStatus.PendingReview },
@@ -30,7 +32,11 @@ async function load() {
   requireMobileAdmin();
   loading.value = true;
   try {
-    const data = await mobileAdminRequest<any>(buildUrl());
+    const [boot, data] = await Promise.all([
+      bootstrap.value ? Promise.resolve(bootstrap.value) : mobileAdminRequest<any>("/admin/mobile/bootstrap"),
+      mobileAdminRequest<any>(buildUrl())
+    ]);
+    bootstrap.value = boot;
     rows.value = data.items || [];
     total.value = data.total || 0;
   } catch (err: any) {
@@ -123,7 +129,7 @@ onMounted(load);
       <view class="meta">{{ item.user?.nickname || "用户" }} · {{ item.user?.phone || "-" }}</view>
       <view class="meta">提交时间：{{ formatTime(item.createdAt) }}</view>
       <view v-if="item.order" class="meta">订单：{{ item.order.orderNo }} · ￥{{ Number(item.order.amount || 0).toFixed(2) }}</view>
-      <view v-if="item.status === RegistrationStatus.PendingReview" class="ops">
+      <view v-if="canReview && item.status === RegistrationStatus.PendingReview" class="ops">
         <view class="ok" @click="approve(item)">通过</view>
         <view class="danger" @click="reject(item)">拒绝</view>
       </view>

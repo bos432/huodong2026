@@ -210,6 +210,17 @@ function money(value: string | number | undefined) {
   return Number(value || 0).toFixed(2);
 }
 
+function paymentMethodLabel(value?: string) {
+  const labels: Record<string, string> = {
+    free: "免费报名",
+    wechat: "微信支付",
+    alipay: "支付宝",
+    balance: "余额支付",
+    offline: "线下收款 / 人工确认"
+  };
+  return value ? labels[value] || value : "-";
+}
+
 function tenantDisplayName(row: any) {
   return row.tenant?.name || row.tenant?.code || row.registration?.activity?.tenant?.name || row.registration?.activity?.tenant?.code || "平台";
 }
@@ -319,6 +330,7 @@ watch(
             <small>原价 ¥{{ money(row.originalAmount || row.amount) }} / 优惠 ¥{{ money(row.discountAmount) }}</small>
           </template>
         </el-table-column>
+        <el-table-column label="支付方式" width="150"><template #default="{ row }">{{ paymentMethodLabel(row.paymentMethod) }}</template></el-table-column>
         <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag>{{ orderStatusText[row.status as OrderStatus] }}</el-tag></template></el-table-column>
         <el-table-column label="付款截止" width="170">
           <template #default="{ row }">

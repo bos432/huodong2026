@@ -75,7 +75,8 @@ export const router = createRouter({
         { path: "config-check", component: ConfigCheck, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "ops-routine", component: OpsRoutine, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "categories", component: Categories, meta: { roles: permissions.operation, scope: "tenant" } },
-        { path: "admins", component: Admins, meta: { roles: permissions.superAdmin, scope: "any" } }
+        { path: "admins", component: Admins, meta: { roles: permissions.superAdmin, scope: "any" } },
+        { path: ":pathMatch(.*)*", redirect: () => fallbackPath() }
       ]
     }
   ]

@@ -25,7 +25,7 @@ const menuGroups = [
     label: "平台总控",
     scope: "platform",
     items: [
-      { index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.operation, scope: "any" },
+      { index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.overview, scope: "any" },
       { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview, scope: "any" },
       { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: permissions.superAdmin, scope: "platform" },
       { index: "/admins", icon: "UserFilled", label: "商家账号", roles: permissions.superAdmin, scope: "any" },
@@ -162,7 +162,7 @@ function menuItemLabel(item: { index: string; label: string }) {
 }
 
 function validatePassword(password: string) {
-  if (password.length < 10) return "新密码至少需要 10 位";
+  if (password.length < 8) return "新密码至少需要 8 位";
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) return "新密码需要包含大小写字母和数字";
   return "";
 }

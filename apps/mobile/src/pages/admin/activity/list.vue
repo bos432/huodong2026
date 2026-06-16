@@ -1,16 +1,18 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { activityStatusText, type ActivityStatus } from "@activity/shared";
 import { adminActivityPreviewUrl, mobileAdminRequest, requireMobileAdmin } from "../../../mobile-admin";
 
 const rows = ref<any[]>([]);
 const counts = ref<Record<string, number>>({});
+const bootstrap = ref<any>(null);
 const loading = ref(true);
 const keyword = ref("");
 const status = ref<"all" | ActivityStatus>("all");
 const page = ref(1);
 const total = ref(0);
 const pageSize = 20;
+const canWrite = computed(() => Boolean(bootstrap.value?.permissions?.canWriteActivities));
 
 const tabs: Array<{ label: string; value: "all" | ActivityStatus }> = [
   { label: "全部", value: "all" },
@@ -35,7 +37,11 @@ async function load() {
   requireMobileAdmin();
   loading.value = true;
   try {
-    const data = await mobileAdminRequest<any>(buildUrl());
+    const [boot, data] = await Promise.all([
+      bootstrap.value ? Promise.resolve(bootstrap.value) : mobileAdminRequest<any>("/admin/mobile/bootstrap"),
+      mobileAdminRequest<any>(buildUrl())
+    ]);
+    bootstrap.value = boot;
     rows.value = data.items || [];
     counts.value = data.counts || {};
     total.value = data.total || 0;
@@ -53,10 +59,12 @@ function setStatus(value: "all" | ActivityStatus) {
 }
 
 function createActivity() {
+  if (!canWrite.value) return;
   uni.navigateTo({ url: "/pages/admin/activity/edit" });
 }
 
 function editActivity(id: number) {
+  if (!canWrite.value) return;
   uni.navigateTo({ url: `/pages/admin/activity/edit?id=${id}` });
 }
 
@@ -97,7 +105,7 @@ onMounted(load);
         <view class="title">活动管理</view>
         <view class="sub">共 {{ total }} 场活动</view>
       </view>
-      <view class="create" @click="createActivity">新增</view>
+      <view v-if="canWrite" class="create" @click="createActivity">新增</view>
     </view>
 
     <view class="search">
@@ -117,7 +125,7 @@ onMounted(load);
     <view v-if="loading" class="panel">加载中...</view>
     <view v-else-if="!rows.length" class="panel">暂无活动</view>
     <view v-for="item in rows" v-else :key="item.id" class="card">
-      <view class="main" @click="editActivity(item.id)">
+      <view class="main" @click="canWrite ? editActivity(item.id) : previewActivity(item)">
         <image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" />
         <view v-else class="cover">活动</view>
         <view class="body">
@@ -128,10 +136,10 @@ onMounted(load);
       </view>
       <view class="ops">
         <view class="pill">{{ statusText(item.status) }}</view>
-        <view @click="editActivity(item.id)">编辑</view>
+        <view v-if="canWrite" @click="editActivity(item.id)">编辑</view>
         <view @click="previewActivity(item)">预览</view>
         <view @click="copyPublicLink(item)">复制链接</view>
-        <view v-if="item.status !== 'closed'" class="danger" @click="closeActivity(item)">下架</view>
+        <view v-if="canWrite && item.status !== 'closed'" class="danger" @click="closeActivity(item)">下架</view>
       </view>
     </view>
   </view>
