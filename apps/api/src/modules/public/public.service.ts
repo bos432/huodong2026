@@ -792,7 +792,8 @@ export class PublicService {
       .andWhere("(activity.tenantId IS NULL OR activityTenant.enabled = :activityTenantEnabled)", { activityTenantEnabled: true })
       .orderBy("registration.createdAt", "DESC");
     if (tenant) builder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId: tenant.id });
-    return builder.getMany();
+    const rows = await builder.getMany();
+    return rows.map((registration) => this.publicRegistration(registration));
   }
 
   async myWallet(user: User, context?: PublicTenantContext) {

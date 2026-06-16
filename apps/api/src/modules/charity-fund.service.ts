@@ -195,7 +195,7 @@ export class CharityFundService {
   async recordOrderAccrual(order: Order, operator = "system") {
     if (!order?.id || Number(order.amount) <= 0) return null;
     const key = `charity_accrual:${order.id}`;
-    const existing = await this.transactions.findOne({ where: { idempotencyKey: key } });
+    const existing = await this.findTransactionByKey(key);
     if (existing) return existing;
     const setting = await this.effectiveSetting(order.tenant || null);
     if (!setting.enabled || Number(setting.ratePercent) <= 0) return null;
@@ -226,9 +226,9 @@ export class CharityFundService {
     if (this.isRetainedCharityRefund(refund)) return this.markRefundRetained(order, refund, operator);
     if (!order?.id || !refund?.id || Number(refund.amount) <= 0) return null;
     const key = `charity_reversal:${refund.id}`;
-    const existing = await this.transactions.findOne({ where: { idempotencyKey: key } });
+    const existing = await this.findTransactionByKey(key);
     if (existing) return existing;
-    const accrual = await this.transactions.findOne({ where: { idempotencyKey: `charity_accrual:${order.id}` } });
+    const accrual = await this.findTransactionByKey(`charity_accrual:${order.id}`);
     if (!accrual) return null;
     const amount = charityReversalAmount(Number(accrual.amount), Number(refund.amount), Number(order.amount));
     if (amount <= 0) return null;
@@ -304,7 +304,14 @@ export class CharityFundService {
 
   private async accrualForOrder(order: Order) {
     if (!order?.id) return null;
-    return this.transactions.findOne({ where: { idempotencyKey: `charity_accrual:${order.id}` } });
+    return this.findTransactionByKey(`charity_accrual:${order.id}`);
+  }
+
+  private findTransactionByKey(idempotencyKey: string) {
+    return this.transactions
+      .createQueryBuilder("tx")
+      .where("tx.idempotencyKey = :idempotencyKey", { idempotencyKey })
+      .getOne();
   }
 
   private async markRefundRetained(order: Order, refund: Refund, operator = "system") {
