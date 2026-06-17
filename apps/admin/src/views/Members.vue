@@ -271,6 +271,29 @@ function money(value: string | number | undefined) {
   return Number(value || 0).toFixed(2);
 }
 
+function sourceChannelText(value?: string | null) {
+  const labels: Record<string, string> = { h5: "H5", mp_weixin: "微信小程序", admin: "后台创建" };
+  return value ? labels[value] || value : "未记录";
+}
+
+function loginChannelText(value?: string | null) {
+  const labels: Record<string, string> = { h5: "H5", mp_weixin: "微信小程序" };
+  return value ? labels[value] || value : "未记录";
+}
+
+function maskIdentity(value?: string | null) {
+  if (!value) return "-";
+  if (value.length <= 12) return value;
+  return `${value.slice(0, 6)}...${value.slice(-4)}`;
+}
+
+function formatTime(value?: string | Date | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
 onMounted(load);
 
 watch(
@@ -337,13 +360,21 @@ watch(
       <el-table v-loading="loading" :data="rows" stripe empty-text="暂无会员">
         <el-table-column label="会员" min-width="180"><template #default="{ row }">{{ row.user.nickname || row.user.phone || `用户${row.user.id}` }}</template></el-table-column>
         <el-table-column label="手机号" width="140"><template #default="{ row }">{{ row.user.phone || "-" }}</template></el-table-column>
+        <el-table-column label="来源" width="115">
+          <template #default="{ row }"><el-tag :type="row.user.sourceChannel === 'mp_weixin' ? 'success' : row.user.sourceChannel === 'h5' ? 'primary' : 'info'">{{ sourceChannelText(row.user.sourceChannel) }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="微信绑定" width="110">
+          <template #default="{ row }"><el-tag :type="row.user.openid ? 'success' : 'info'">{{ row.user.openid ? "已绑定" : "未绑定" }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="AppID" width="150" show-overflow-tooltip><template #default="{ row }">{{ row.user.wechatAppId || "-" }}</template></el-table-column>
         <el-table-column label="等级" width="140"><template #default="{ row }"><el-tag>{{ row.level?.name || "普通会员" }}</el-tag></template></el-table-column>
         <el-table-column prop="points" label="积分" width="100" />
         <el-table-column label="消费" width="120"><template #default="{ row }">¥{{ money(row.totalSpent) }}</template></el-table-column>
         <el-table-column prop="registrationCount" label="报名" width="90" />
         <el-table-column prop="checkInCount" label="签到" width="90" />
         <el-table-column prop="reviewCount" label="评价" width="90" />
-        <el-table-column prop="lastActiveAt" label="最近活跃" width="180" />
+        <el-table-column label="最近活跃" width="180"><template #default="{ row }">{{ formatTime(row.lastActiveAt) }}</template></el-table-column>
+        <el-table-column label="最近登录" width="180"><template #default="{ row }">{{ formatTime(row.user.lastLoginAt) }}</template></el-table-column>
         <el-table-column label="操作" width="110" fixed="right"><template #default="{ row }"><el-button size="small" @click="openDetail(row)">详情</el-button></template></el-table-column>
       </el-table>
     </div>
@@ -381,6 +412,14 @@ watch(
         <div class="detail-actions">
           <el-button :icon="Edit" @click="openEditMember">编辑资料</el-button>
           <el-button :icon="Key" @click="openPasswordDialog">重置密码</el-button>
+        </div>
+        <div class="identity-card">
+          <div><span>来源端</span><strong>{{ sourceChannelText(detail.profile.user.sourceChannel) }}</strong></div>
+          <div><span>微信绑定</span><strong>{{ detail.profile.user.openid ? "已绑定" : "未绑定" }}</strong><small>{{ maskIdentity(detail.profile.user.openid) }}</small></div>
+          <div><span>小程序 AppID</span><strong>{{ detail.profile.user.wechatAppId || "-" }}</strong></div>
+          <div><span>UnionID</span><strong>{{ maskIdentity(detail.profile.user.unionid) }}</strong></div>
+          <div><span>最近登录端</span><strong>{{ loginChannelText(detail.profile.user.lastLoginChannel) }}</strong></div>
+          <div><span>最近登录时间</span><strong>{{ formatTime(detail.profile.user.lastLoginAt) }}</strong></div>
         </div>
         <div v-if="isPlatformAdmin()" class="wallet-card">
           <div>
@@ -483,6 +522,10 @@ h3 { margin: 0; }
 .profile span { color: #667085; font-size: 13px; }
 .profile strong { font-size: 20px; }
 .detail-actions { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
+.identity-card { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.identity-card div { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; display: grid; gap: 6px; background: #f8fafc; }
+.identity-card span, .identity-card small { color: #667085; font-size: 13px; }
+.identity-card strong { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #111827; font-size: 15px; }
 .wallet-card { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 18px; padding: 16px; border: 1px solid #d7dde8; border-radius: 8px; background: #f8fafc; }
 .wallet-card div:first-child { display: grid; gap: 6px; }
 .wallet-card span, .wallet-card small { color: #667085; font-size: 13px; }

@@ -275,7 +275,15 @@ export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: s
 }
 
 export async function loginWechat(code: string, nickname?: string, avatarUrl?: string) {
-  const result = await request<any>("/public/auth/wechat-login", { method: "POST", data: { code, nickname, avatarUrl } });
+  let appId = "";
+  // #ifdef MP-WEIXIN
+  try {
+    appId = uni.getAccountInfoSync?.().miniProgram?.appId || "";
+  } catch {
+    appId = "";
+  }
+  // #endif
+  const result = await request<any>("/public/auth/wechat-login", { method: "POST", data: { code, appId: appId || undefined, nickname, avatarUrl } });
   const user = result.user || result;
   uni.setStorageSync("user_id", user.id);
   if (result.userAccessToken) uni.setStorageSync(USER_TOKEN_STORAGE_KEY, result.userAccessToken);

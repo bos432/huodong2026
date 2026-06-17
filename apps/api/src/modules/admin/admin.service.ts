@@ -2703,7 +2703,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       user = this.users.create({
         phone: phone || null,
-        nickname: nickname || (phone ? `本地用户${phone.slice(-4)}` : `测试会员${Date.now().toString().slice(-4)}`)
+        nickname: nickname || (phone ? `本地用户${phone.slice(-4)}` : `测试会员${Date.now().toString().slice(-4)}`),
+        sourceChannel: "admin"
       });
     } else if (nickname && user.nickname !== nickname) {
       user.nickname = nickname;
@@ -2711,7 +2712,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (password) user.passwordHash = await bcrypt.hash(password, 10);
     const saved = await this.users.save(user);
     const profile = await this.ensureMemberProfile(saved);
-    await this.logOperation(admin, "member.create", "user", saved.id, `新增会员：${saved.nickname || saved.phone || saved.id}`, { phone: saved.phone, nickname: saved.nickname, passwordSet: Boolean(password), remark: dto.remark });
+    await this.logOperation(admin, "member.create", "user", saved.id, `新增会员：${saved.nickname || saved.phone || saved.id}`, { phone: saved.phone, nickname: saved.nickname, sourceChannel: saved.sourceChannel, passwordSet: Boolean(password), remark: dto.remark });
     return profile;
   }
 

@@ -39,6 +39,10 @@ export class WechatLoginDto {
 
   @IsOptional()
   @IsString()
+  appId?: string;
+
+  @IsOptional()
+  @IsString()
   nickname?: string;
 
   @IsOptional()

@@ -8,6 +8,18 @@ export class User {
   @Column({ type: "varchar", length: 128, nullable: true, unique: true })
   openid!: string | null;
 
+  @Column({ type: "varchar", length: 64, nullable: true })
+  wechatAppId!: string | null;
+
+  @Column({ type: "varchar", length: 128, nullable: true })
+  unionid!: string | null;
+
+  @Column({ type: "varchar", length: 32, nullable: true })
+  sourceChannel!: string | null;
+
+  @Column({ type: "varchar", length: 32, nullable: true })
+  lastLoginChannel!: string | null;
+
   @Column({ type: "varchar", length: 100, nullable: true })
   nickname!: string | null;
 
@@ -19,6 +31,9 @@ export class User {
 
   @Column({ type: "varchar", length: 255, nullable: true })
   passwordHash!: string | null;
+
+  @Column({ type: "datetime", nullable: true })
+  lastLoginAt!: Date | null;
 
   @CreateDateColumn()
   createdAt!: Date;

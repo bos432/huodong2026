@@ -158,8 +158,10 @@ export class PublicService {
     const phone = this.normalizePhone(dto.phone);
     this.verifyH5Token(phone, dto.verificationCode, dto.verificationToken);
     let user = await this.users.findOne({ where: { phone } });
-    if (!user) user = this.users.create({ phone, nickname: dto.nickname || `本地用户${phone.slice(-4)}` });
+    if (!user) user = this.users.create({ phone, nickname: dto.nickname || `本地用户${phone.slice(-4)}`, sourceChannel: "h5" });
     user.nickname = dto.nickname || user.nickname;
+    user.lastLoginChannel = "h5";
+    user.lastLoginAt = new Date();
     const saved = await this.users.save(user);
     return this.userLoginResponse(saved);
   }
@@ -173,7 +175,10 @@ export class PublicService {
       user = this.users.create({
         phone,
         nickname: dto.nickname || `本地用户${phone.slice(-4)}`,
-        passwordHash: await bcrypt.hash(password, 10)
+        passwordHash: await bcrypt.hash(password, 10),
+        sourceChannel: "h5",
+        lastLoginChannel: "h5",
+        lastLoginAt: new Date()
       });
       return this.userLoginResponse(await this.users.save(user));
     }
@@ -181,8 +186,10 @@ export class PublicService {
     if (!(await bcrypt.compare(password, user.passwordHash))) throw new BadRequestException("手机号或密码错误");
     if (dto.nickname && !user.nickname) {
       user.nickname = dto.nickname;
-      user = await this.users.save(user);
     }
+    user.lastLoginChannel = "h5";
+    user.lastLoginAt = new Date();
+    user = await this.users.save(user);
     return this.userLoginResponse(user);
   }
 
@@ -403,9 +410,17 @@ export class PublicService {
   }
 
   async wechatLogin(dto: WechatLoginDto) {
-    const openid = await this.resolveWechatOpenid(dto.code);
+    const identity = await this.resolveWechatIdentity(dto.code, dto.appId);
+    const openid = identity.openid;
     let user = await this.users.findOne({ where: { openid } });
-    if (!user) user = this.users.create({ openid });
+    if (!user && identity.unionid) user = await this.users.findOne({ where: { unionid: identity.unionid } });
+    if (!user) user = this.users.create({ openid, sourceChannel: "mp_weixin" });
+    user.openid = openid;
+    user.wechatAppId = identity.appId || user.wechatAppId;
+    user.unionid = identity.unionid || user.unionid;
+    user.sourceChannel = user.sourceChannel || "mp_weixin";
+    user.lastLoginChannel = "mp_weixin";
+    user.lastLoginAt = new Date();
     user.nickname = dto.nickname || user.nickname;
     user.avatarUrl = dto.avatarUrl || user.avatarUrl;
     const saved = await this.users.save(user);
@@ -1220,18 +1235,19 @@ export class PublicService {
     return tenant?.id ? String(tenant.id) : "platform";
   }
 
-  private async resolveWechatOpenid(code: string) {
+  private async resolveWechatIdentity(code: string, requestedAppId?: string) {
     const realWechatLogin = this.config.get("WECHAT_LOGIN_REAL_ENABLED", this.config.get("NODE_ENV") === "production" ? "true" : "false") === "true";
-    if (!realWechatLogin) return `dev_${code}`;
-    const appId = this.config.get<string>("WECHAT_APP_ID") || this.config.get<string>("WECHAT_PAY_APP_ID");
+    const appId = requestedAppId?.trim() || this.config.get<string>("WECHAT_APP_ID") || this.config.get<string>("WECHAT_PAY_APP_ID") || "";
+    if (!realWechatLogin) return { openid: `dev_${code}`, unionid: null, appId: appId || "dev" };
     const appSecret = this.config.get<string>("WECHAT_APP_SECRET");
     if (!appId || !appSecret) throw new BadRequestException("微信登录配置未完成");
     const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
     const response = await fetch(url);
     const payload = await response.json() as Record<string, unknown>;
     const openid = typeof payload.openid === "string" ? payload.openid.trim() : "";
+    const unionid = typeof payload.unionid === "string" ? payload.unionid.trim() : null;
     if (!response.ok || !openid) throw new BadRequestException(String(payload.errmsg || "微信登录失败"));
-    return openid;
+    return { openid, unionid, appId };
   }
 
   private generateVerificationCode() {
