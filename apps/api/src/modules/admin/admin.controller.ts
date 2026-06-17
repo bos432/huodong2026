@@ -6,8 +6,9 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
+import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
 const SUPER_ADMIN = [AdminRole.SuperAdmin];
 const OVERVIEW_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance];
@@ -31,7 +32,7 @@ const SETTLEMENT_PROOF_EXTENSION_BY_MIME: Record<string, string> = {
 
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly service: AdminService) {}
+  constructor(private readonly service: AdminService, private readonly miniprogramRelease: MiniprogramReleaseService) {}
 
   @Post("auth/login")
   login(@Body() dto: LoginDto, @Req() req: any) {
@@ -129,6 +130,48 @@ export class AdminController {
   @Get("system/config-check")
   configCheck(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.configCheck(admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("miniprogram-release/setting")
+  miniprogramReleaseSetting() {
+    return this.miniprogramRelease.getSetting();
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("miniprogram-release/setting")
+  saveMiniprogramReleaseSetting(@Body() dto: MiniprogramReleaseSettingDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.miniprogramRelease.saveSetting(dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("miniprogram-release/logs")
+  miniprogramReleaseLogs(@Query("limit") limit?: string) {
+    return this.miniprogramRelease.logsList(limit ? Number(limit) : 30);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("miniprogram-release/upload")
+  uploadMiniprogramTrial(@Body() dto: MiniprogramReleaseVersionDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.miniprogramRelease.uploadTrial(dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("miniprogram-release/submit-audit")
+  submitMiniprogramAudit(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.miniprogramRelease.submitAudit(admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("miniprogram-release/audit-status")
+  miniprogramAuditStatus(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.miniprogramRelease.latestAuditStatus(admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("miniprogram-release/release")
+  releaseMiniprogram(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.miniprogramRelease.release(admin);
   }
 
   @AdminRoles(...OVERVIEW_ROLES)

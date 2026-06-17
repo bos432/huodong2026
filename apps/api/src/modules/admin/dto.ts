@@ -1005,6 +1005,46 @@ export class TicketTypeDto {
   enabled?: boolean;
 }
 
+export class MiniprogramReleaseSettingDto {
+  @IsString()
+  @IsNotEmpty()
+  appId!: string;
+
+  @IsOptional()
+  @IsString()
+  appSecret?: string;
+
+  @IsOptional()
+  @IsString()
+  privateKey?: string;
+
+  @IsOptional()
+  @IsString()
+  version?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsString()
+  projectPath?: string;
+
+  @IsOptional()
+  @IsObject()
+  auditItem?: Record<string, unknown>;
+}
+
+export class MiniprogramReleaseVersionDto {
+  @IsOptional()
+  @IsString()
+  version?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
 export class CouponDto {
   @IsString()
   @IsNotEmpty()

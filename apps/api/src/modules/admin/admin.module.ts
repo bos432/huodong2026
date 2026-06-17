@@ -35,6 +35,8 @@ import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
+import { MiniprogramReleaseLog } from "../../entities/miniprogram-release-log.entity";
+import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
 import { Notification } from "../../entities/notification.entity";
 import { Order } from "../../entities/order.entity";
 import { OperationSetting } from "../../entities/operation-setting.entity";
@@ -53,6 +55,7 @@ import { TicketType } from "../../entities/ticket-type.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
+import { MiniprogramReleaseService } from "./miniprogram-release.service";
 import { JwtStrategy } from "./jwt.strategy";
 import { RolesGuard } from "./roles.guard";
 import { PaymentProviderService } from "../public/payment-provider.service";
@@ -61,7 +64,7 @@ import { CharityFundService } from "../charity-fund.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
+    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -70,7 +73,7 @@ import { CharityFundService } from "../charity-fund.service";
     })
   ],
   controllers: [AdminController],
-  providers: [AdminService, JwtStrategy, RolesGuard, PaymentProviderService, RefundCompletionService, CharityFundService],
+  providers: [AdminService, MiniprogramReleaseService, JwtStrategy, RolesGuard, PaymentProviderService, RefundCompletionService, CharityFundService],
   exports: [AdminService]
 })
 export class AdminModule {}

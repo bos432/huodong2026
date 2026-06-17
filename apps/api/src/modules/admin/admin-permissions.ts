@@ -7,6 +7,7 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "admin.manage", label: "后台账号管理", group: "平台管理" },
   { key: "logs.view", label: "操作/登录/验证码日志", group: "系统安全" },
   { key: "system.manage", label: "系统设置/上线体检", group: "系统安全" },
+  { key: "miniprogram_release.manage", label: "小程序发布管理", group: "系统安全", platformOnly: true },
   { key: "activity.view", label: "查看活动", group: "活动" },
   { key: "activity.manage", label: "创建/编辑/下架活动", group: "活动" },
   { key: "activity.approve", label: "平台审核活动", group: "活动", platformOnly: true },
@@ -152,6 +153,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "tenant/profile") return verb === "GET" ? "tenant_profile.manage" : "tenant_profile.manage";
   if (path.startsWith("admins")) return "admin.manage";
   if (path === "operation-logs" || path.startsWith("auth/login-logs") || path.startsWith("auth/h5-code-logs")) return "logs.view";
+  if (path.startsWith("miniprogram-release")) return "miniprogram_release.manage";
   if (path.startsWith("system/") || path === "settings/operation") return path === "settings/operation" ? (verb === "GET" ? "operation_settings.manage" : "operation_settings.manage") : "system.manage";
   if (path === "settings/charity") return write ? "charity.manage" : "charity.view";
   if (path.startsWith("charity/projects")) return path.includes("disbursements") ? "charity.finance" : write ? "charity.manage" : "charity.view";
