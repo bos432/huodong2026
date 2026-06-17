@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { CopyDocument, Grid, Key, SwitchButton, View } from "@element-plus/icons-vue";
@@ -14,6 +14,8 @@ const passwordDialogVisible = ref(false);
 const h5QrDialogVisible = ref(false);
 const changingPassword = ref(false);
 const passwordForm = reactive({ oldPassword: "", newPassword: "", confirmPassword: "" });
+const platformTenants = ref<Array<{ id: number; name?: string; code?: string; enabled?: boolean }>>([]);
+const selectedPlatformTenantId = ref(Number(localStorage.getItem("admin_selected_tenant_id") || 0));
 const roleLabel = computed(() => roleOptions.find((item) => item.value === currentRole())?.label || "管理员");
 const shellTitle = computed(() => (isPlatformAdmin() ? "平台超级管理后台" : `${currentTenantName() || "商家"}管理后台`));
 const roleCapabilityText = computed(() => {
@@ -24,8 +26,35 @@ const roleCapabilityText = computed(() => {
   if (role === AdminRole.CheckInStaff) return "签到账号：用于现场查询报名和签到核销；不显示审核、收款和活动编辑操作。";
   return "商家管理员：只管理本商家数据，可配置活动、报名、员工账号和经营设置。";
 });
-const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformAdmin() ? "" : currentTenantCode()));
-const currentH5PreviewLabel = computed(() => (isPlatformAdmin() ? "平台H5" : "商家H5"));
+const selectedPlatformTenant = computed(() => platformTenants.value.find((tenant) => tenant.id === selectedPlatformTenantId.value));
+const selectedPlatformTenantCode = computed(() => selectedPlatformTenant.value?.code || "");
+const selectedScopeName = computed(() => (selectedPlatformTenant.value ? selectedTenantLabel(selectedPlatformTenant.value) : "平台视角"));
+const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformAdmin() ? selectedPlatformTenantCode.value : currentTenantCode()));
+const currentH5PreviewLabel = computed(() => (isPlatformAdmin() ? (selectedPlatformTenant.value ? "商家H5" : "平台H5") : "商家H5"));
+const tenantScopedRoutePaths = new Set([
+  "/activities",
+  "/registrations",
+  "/orders",
+  "/finance",
+  "/admins",
+  "/agents",
+  "/announcements",
+  "/homepage-builder",
+  "/operation-logs",
+  "/courses",
+  "/community"
+]);
+const tenantQuickLinks = [
+  { label: "活动", path: "/activities" },
+  { label: "报名", path: "/registrations" },
+  { label: "订单", path: "/orders" },
+  { label: "财务", path: "/finance" },
+  { label: "装修", path: "/homepage-builder" },
+  { label: "课程", path: "/courses" },
+  { label: "共修", path: "/community" },
+  { label: "账号", path: "/admins" },
+  { label: "日志", path: "/operation-logs" }
+];
 const menuGroups = [
   {
     index: "platform-overview",
@@ -238,6 +267,49 @@ async function refreshCurrentAdminContext() {
   }
 }
 
+async function loadPlatformTenants() {
+  if (!isPlatformAdmin()) return;
+  try {
+    platformTenants.value = await api.get<any, any[]>("/admin/tenants");
+    if (selectedPlatformTenantId.value && !platformTenants.value.some((tenant) => tenant.id === selectedPlatformTenantId.value)) {
+      selectedPlatformTenantId.value = 0;
+      localStorage.removeItem("admin_selected_tenant_id");
+    }
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载商家列表失败");
+  }
+}
+
+function selectedTenantLabel(tenant: { name?: string; code?: string; enabled?: boolean }) {
+  const base = `${tenant.name || tenant.code || "未命名商家"}${tenant.code ? `（${tenant.code}）` : ""}`;
+  return tenant.enabled === false ? `${base} · 已停用` : base;
+}
+
+function scopedQueryForTenant() {
+  const nextQuery = { ...route.query };
+  if (selectedPlatformTenantId.value) nextQuery.tenantId = String(selectedPlatformTenantId.value);
+  else delete nextQuery.tenantId;
+  return nextQuery;
+}
+
+function syncSelectedTenantToRoute() {
+  if (!isPlatformAdmin() || !tenantScopedRoutePaths.has(route.path)) return;
+  const nextTenantId = selectedPlatformTenantId.value ? String(selectedPlatformTenantId.value) : undefined;
+  const currentTenantId = typeof route.query.tenantId === "string" ? route.query.tenantId : undefined;
+  if (currentTenantId === nextTenantId) return;
+  router.replace({ path: route.path, query: scopedQueryForTenant() });
+}
+
+function handleSelectedTenantChanged() {
+  if (selectedPlatformTenantId.value) localStorage.setItem("admin_selected_tenant_id", String(selectedPlatformTenantId.value));
+  else localStorage.removeItem("admin_selected_tenant_id");
+  syncSelectedTenantToRoute();
+}
+
+function goTenantQuickLink(path: string) {
+  router.push({ path, query: scopedQueryForTenant() });
+}
+
 function menuItemLabel(item: { index: string; label: string }) {
   const role = currentRole();
   if (role === AdminRole.Finance && item.index === "/dashboard") return "财务概览";
@@ -258,7 +330,7 @@ function openPasswordDialog() {
 }
 
 function openCurrentH5Preview() {
-  openH5Preview(isPlatformAdmin() ? "" : currentTenantCode());
+  openH5Preview(isPlatformAdmin() ? selectedPlatformTenantCode.value : currentTenantCode());
 }
 
 async function copyCurrentH5PreviewUrl() {
@@ -296,7 +368,16 @@ function logout() {
   router.push("/login");
 }
 
-onMounted(refreshCurrentAdminContext);
+onMounted(() => {
+  refreshCurrentAdminContext();
+  loadPlatformTenants();
+  syncSelectedTenantToRoute();
+});
+
+watch(
+  () => route.path,
+  () => syncSelectedTenantToRoute()
+);
 </script>
 
 <template>
@@ -323,6 +404,21 @@ onMounted(refreshCurrentAdminContext);
           <small>{{ roleCapabilityText }}</small>
         </div>
         <div class="header-actions">
+          <div v-if="isPlatformAdmin()" class="tenant-switcher">
+            <span>查看范围</span>
+            <el-select v-model="selectedPlatformTenantId" filterable placeholder="平台视角" @change="handleSelectedTenantChanged">
+              <el-option label="平台视角" :value="0" />
+              <el-option v-for="tenant in platformTenants" :key="tenant.id" :label="selectedTenantLabel(tenant)" :value="tenant.id" />
+            </el-select>
+          </div>
+          <el-dropdown v-if="isPlatformAdmin()" trigger="click" @command="goTenantQuickLink">
+            <el-button>进入{{ selectedScopeName }}</el-button>
+            <template #dropdown>
+              <el-dropdown-menu>
+                <el-dropdown-item v-for="item in tenantQuickLinks" :key="item.path" :command="item.path">{{ item.label }}</el-dropdown-item>
+              </el-dropdown-menu>
+            </template>
+          </el-dropdown>
           <el-button :icon="View" @click="openCurrentH5Preview">打开{{ currentH5PreviewLabel }}</el-button>
           <el-button :icon="CopyDocument" @click="copyCurrentH5PreviewUrl">复制{{ currentH5PreviewLabel }}</el-button>
           <el-button :icon="Grid" @click="openCurrentH5QrDialog">{{ currentH5PreviewLabel }}二维码</el-button>
@@ -369,6 +465,8 @@ onMounted(refreshCurrentAdminContext);
 .header-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-title small { color: #64748b; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.tenant-switcher { display: flex; align-items: center; gap: 8px; color: #475569; font-size: 12px; }
+.tenant-switcher .el-select { width: 220px; }
 .el-menu { border-right: 0; }
 :deep(.el-sub-menu__title) { height: 46px; color: #b7c2d6; font-weight: 700; }
 :deep(.el-sub-menu__title:hover), :deep(.el-menu-item:hover) { background-color: #1e2b43; }

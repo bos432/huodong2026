@@ -2,7 +2,12 @@
   <div class="courses-page">
     <div class="page-header">
       <h2>课程管理</h2>
-      <el-button type="primary" @click="showForm = true">新增课程</el-button>
+      <div class="header-actions">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="平台/全部商家" style="width: 220px" @change="changeTenant">
+          <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
+        </el-select>
+        <el-button type="primary" @click="createCourse">新增课程</el-button>
+      </div>
     </div>
 
     <el-table :data="courses" stripe style="width:100%;" empty-text="暂无课程">
@@ -12,6 +17,9 @@
       </el-table-column>
       <el-table-column prop="title" label="课程名称" min-width="160" />
       <el-table-column prop="teacherName" label="讲师" width="120" />
+      <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="160" show-overflow-tooltip>
+        <template #default="{row}">{{ tenantDisplayName(row) }}</template>
+      </el-table-column>
       <el-table-column prop="price" label="价格" width="80"><template #default="{row}">¥{{ row.price }}</template></el-table-column>
       <el-table-column prop="status" label="状态" width="80">
         <template #default="{row}"><el-tag :type="row.status==='published'?'success':'info'">{{ row.status==='published'?'已发布':'草稿' }}</el-tag></template>
@@ -29,6 +37,11 @@
     <el-dialog v-model="showForm" :title="editing ? '编辑课程' : '新增课程'" width="600px">
       <el-form :model="form" label-width="100px">
         <el-form-item label="课程名称"><el-input v-model="form.title" /></el-form-item>
+        <el-form-item v-if="isPlatformAdmin()" label="所属商家">
+          <el-select v-model="form.tenantId" clearable filterable placeholder="平台课程">
+            <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="讲师名称"><el-input v-model="form.teacherName" /></el-form-item>
         <el-form-item label="价格"><el-input-number v-model="form.price" :min="0" /></el-form-item>
         <el-form-item label="原价"><el-input-number v-model="form.originalPrice" :min="0" /></el-form-item>
@@ -61,6 +74,9 @@
           <el-option label="待付款" value="pending_payment" />
           <el-option label="已支付" value="paid" />
           <el-option label="已关闭" value="closed" />
+        </el-select>
+        <el-select v-if="isPlatformAdmin()" v-model="orderFilters.tenantId" clearable filterable placeholder="平台/全部商家" style="width: 220px" @change="loadOrders">
+          <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
         </el-select>
         <el-input v-model="orderFilters.keyword" clearable placeholder="订单号/课程/手机号" style="width: 220px" @keyup.enter="loadOrders" @clear="loadOrders" />
         <el-button :loading="orderLoading" @click="loadOrders">刷新</el-button>
@@ -102,11 +118,16 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted } from "vue";
+import { reactive, ref, onMounted, watch } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
+import { isPlatformAdmin } from "../permissions";
 
+const route = useRoute();
+const router = useRouter();
 const courses = ref<any[]>([]);
+const tenants = ref<any[]>([]);
 const showForm = ref(false);
 const editing = ref(false);
 const form = ref<any>({ title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"" });
@@ -117,7 +138,12 @@ const chapters = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
 const orderLoading = ref(false);
 const orderTotal = ref(0);
-const orderFilters = reactive({ status: "pending_payment", keyword: "", page: 1, pageSize: 20 });
+const routeTenantId = () => {
+  const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
+  return isPlatformAdmin() && tenantId && Number.isFinite(tenantId) ? tenantId : undefined;
+};
+const filters = reactive({ tenantId: routeTenantId() as number | undefined });
+const orderFilters = reactive({ status: "pending_payment", keyword: "", tenantId: routeTenantId() as number | undefined, page: 1, pageSize: 20 });
 
 function formatDateTime(value?: string | Date | null) {
   if (!value) return "-";
@@ -128,10 +154,38 @@ function formatDateTime(value?: string | Date | null) {
 
 async function load() {
   try {
-    courses.value = await api.get<any, any[]>("/admin/courses");
+    courses.value = await api.get<any, any[]>("/admin/courses", { params: { tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined } });
   } catch (error: any) {
     ElMessage.error(error.message || "加载课程失败");
   }
+}
+
+async function loadTenants() {
+  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+}
+
+function tenantOptionLabel(tenant: any) {
+  return `${tenant.name || tenant.code}（${tenant.code}）`;
+}
+
+function tenantDisplayName(row: any) {
+  return row.tenant?.name || row.tenant?.code || "平台/未归属";
+}
+
+function changeTenant() {
+  orderFilters.tenantId = filters.tenantId;
+  const query = { ...route.query };
+  if (filters.tenantId) query.tenantId = String(filters.tenantId);
+  else delete query.tenantId;
+  router.replace({ path: route.path, query });
+  load();
+  loadOrders();
+}
+
+function createCourse() {
+  editing.value = false;
+  form.value = { title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"", tenantId: filters.tenantId };
+  showForm.value = true;
 }
 
 function money(value: string | number | undefined) {
@@ -165,6 +219,7 @@ async function loadOrders() {
       params: {
         status: orderFilters.status || undefined,
         keyword: orderFilters.keyword.trim() || undefined,
+        tenantId: isPlatformAdmin() ? orderFilters.tenantId || undefined : undefined,
         page: orderFilters.page,
         pageSize: orderFilters.pageSize
       }
@@ -202,6 +257,7 @@ async function saveCourse() {
       price: Number(form.value.price || 0),
       originalPrice: Number(form.value.originalPrice || 0)
     };
+    if (isPlatformAdmin()) payload.tenantId = form.value.tenantId || null;
     if (editing.value && form.value.id) {
       await api.patch("/admin/courses/" + form.value.id, payload);
     } else {
@@ -220,7 +276,7 @@ async function saveCourse() {
 }
 
 function editCourse(row: any) {
-  form.value = { ...row };
+  form.value = { ...row, tenantId: row.tenant?.id };
   editing.value = true;
   showForm.value = true;
 }
@@ -294,6 +350,16 @@ async function saveChapters() {
 }
 
 onMounted(() => {
+  loadTenants();
+  load();
+  loadOrders();
+});
+
+watch(() => route.query.tenantId, () => {
+  const nextTenantId = routeTenantId();
+  if (filters.tenantId === nextTenantId && orderFilters.tenantId === nextTenantId) return;
+  filters.tenantId = nextTenantId;
+  orderFilters.tenantId = nextTenantId;
   load();
   loadOrders();
 });
@@ -302,6 +368,7 @@ onMounted(() => {
 <style scoped>
 .courses-page { padding: 24px; }
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+.header-actions { display:flex; gap:12px; align-items:center; }
 .order-header { margin-top: 12px; }
 .order-filters { display:flex; gap:12px; align-items:center; }
 .pagination { display:flex; justify-content:flex-end; padding-top:16px; }

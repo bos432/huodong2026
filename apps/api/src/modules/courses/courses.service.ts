@@ -32,9 +32,10 @@ export class CoursesService {
   ) {}
 
   // ===== Courses =====
-  async listCourses(query: { status?: string; categoryId?: number }, admin?: AdminContext) {
+  async listCourses(query: { status?: string; categoryId?: number; tenantId?: string | number }, admin?: AdminContext) {
     const builder = this.courses.createQueryBuilder("course").leftJoinAndSelect("course.tenant", "tenant").orderBy("course.sortOrder", "ASC").addOrderBy("course.createdAt", "DESC");
     applyTenantScopeToQuery(builder, "course", admin);
+    this.applyPlatformTenantFilter(builder, "course", query.tenantId, admin);
     if (query.status) builder.andWhere("course.status = :status", { status: query.status });
     if (query.categoryId) builder.andWhere("course.categoryId = :categoryId", { categoryId: Number(query.categoryId) });
     return builder.getMany();
@@ -121,7 +122,7 @@ export class CoursesService {
   }
 
   // ===== Course Orders =====
-  async listCourseOrders(query: { status?: string; courseId?: string | number; keyword?: string; page?: string | number; pageSize?: string | number }, admin?: AdminContext) {
+  async listCourseOrders(query: { status?: string; courseId?: string | number; keyword?: string; page?: string | number; pageSize?: string | number; tenantId?: string | number }, admin?: AdminContext) {
     const page = Math.max(Number(query.page || 1), 1);
     const pageSize = Math.min(Math.max(Number(query.pageSize || 20), 1), 100);
     const builder = this.courseOrders
@@ -133,6 +134,7 @@ export class CoursesService {
       .skip((page - 1) * pageSize)
       .take(pageSize);
     applyTenantScopeToQuery(builder, "course", admin);
+    this.applyPlatformTenantFilter(builder, "course", query.tenantId, admin);
     if (query.status) builder.andWhere("courseOrder.status = :status", { status: query.status });
     if (query.courseId) builder.andWhere("course.id = :courseId", { courseId: Number(query.courseId) });
     const keyword = String(query.keyword || "").trim();
@@ -178,6 +180,7 @@ export class CoursesService {
   async listCommunityActivities(query: any, admin?: AdminContext) {
     const builder = this.communityActivities.createQueryBuilder("activity").leftJoinAndSelect("activity.tenant", "tenant").orderBy("activity.sortOrder", "ASC").addOrderBy("activity.createdAt", "DESC");
     applyTenantScopeToQuery(builder, "activity", admin);
+    this.applyPlatformTenantFilter(builder, "activity", query.tenantId, admin);
     if (query.status) builder.andWhere("activity.status = :status", { status: query.status });
     return builder.getMany();
   }
@@ -206,6 +209,7 @@ export class CoursesService {
   async listCheckinTasks(query: any, admin?: AdminContext) {
     const builder = this.checkinTasks.createQueryBuilder("task").leftJoinAndSelect("task.tenant", "tenant").orderBy("task.date", "DESC");
     applyTenantScopeToQuery(builder, "task", admin);
+    this.applyPlatformTenantFilter(builder, "task", query.tenantId, admin);
     if (query.date) builder.andWhere("task.date = :date", { date: query.date });
     return builder.getMany();
   }
@@ -255,6 +259,7 @@ export class CoursesService {
   async listCommunityPosts(query: any, admin?: AdminContext) {
     const builder = this.communityPosts.createQueryBuilder("post").leftJoinAndSelect("post.tenant", "tenant").orderBy("post.createdAt", "DESC").take(Math.min(query.limit || 20, 50));
     applyTenantScopeToQuery(builder, "post", admin);
+    this.applyPlatformTenantFilter(builder, "post", query.tenantId, admin);
     if (query.visible !== undefined) builder.andWhere("post.visible = :visible", { visible: query.visible === true || query.visible === "true" || query.visible === "1" });
     return builder.getMany();
   }
@@ -272,7 +277,7 @@ export class CoursesService {
     return { success: true };
   }
 
-  async listCommunityPostComments(query: { status?: CommunityPostCommentStatus; postId?: string | number }, admin?: AdminContext) {
+  async listCommunityPostComments(query: { status?: CommunityPostCommentStatus; postId?: string | number; tenantId?: string | number }, admin?: AdminContext) {
     const builder = this.communityPostComments
       .createQueryBuilder("comment")
       .innerJoin(CommunityPost, "post", "post.id = comment.postId")
@@ -280,6 +285,7 @@ export class CoursesService {
       .orderBy("comment.createdAt", "DESC")
       .take(100);
     applyTenantScopeToQuery(builder, "post", admin);
+    this.applyPlatformTenantFilter(builder, "post", query.tenantId, admin);
     if (query.status) builder.andWhere("comment.status = :status", { status: query.status });
     if (query.postId) builder.andWhere("comment.postId = :postId", { postId: Number(query.postId) });
     return builder.getMany();
@@ -352,5 +358,11 @@ export class CoursesService {
   private async assignTenant<T extends { tenant?: Tenant | null }>(row: T, dto: any, admin?: AdminContext) {
     const tenantId = admin?.tenantId || Number(dto?.tenantId || dto?.tenant?.id || 0) || null;
     row.tenant = tenantRelationForActor<Tenant>(admin, tenantId ? await this.tenants.findOne({ where: { id: tenantId } }) : null);
+  }
+
+  private applyPlatformTenantFilter(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, alias: string, tenantId?: string | number, admin?: AdminContext) {
+    if (admin?.tenantId || !tenantId) return;
+    const id = Number(tenantId);
+    if (Number.isFinite(id) && id > 0) builder.andWhere(`${alias}.tenantId = :platformTenantId`, { platformTenantId: id });
   }
 }
