@@ -17,8 +17,9 @@ const lanes: FlowLane[] = [
     title: "平台超级管理员",
     subtitle: "先搭好平台规则，再把商家管起来。",
     steps: [
-      { title: "开通商家", owner: "超管", description: "创建商家/代理，配置商家编码、地区、联系人和启停状态。", outputs: ["商家资料", "tenantCode", "运营状态"] },
+      { title: "开通商家", owner: "超管", description: "创建商家/代理，配置商家编码、地区、联系人和启停状态。当前系统主要用 tenantCode 识别商家。", outputs: ["商家资料", "tenantCode", "运营状态"] },
       { title: "分配权限", owner: "超管", description: "按最小权限给商家或员工开后台账号，没权限的菜单不显示。", outputs: ["管理员账号", "角色权限", "操作边界"] },
+      { title: "规划区域保护", owner: "超管/运营", description: "上线前要明确每个商家/代理的经营城市、区县、排他范围和兜底商家；定位自动分发需要单独开发闭环。", outputs: ["经营区域", "排他规则", "兜底策略"] },
       { title: "配置收款与规则", owner: "超管/财务", description: "配置收款账户、报名审核、活动发布审核、系统设置和小程序发布配置。", outputs: ["收款账户", "审核规则", "系统配置"] },
       { title: "监管运营", owner: "超管", description: "查看全局订单、活动、报名、会员、操作日志和上线体检。", outputs: ["风险待办", "审计日志", "运营看板"] }
     ]
@@ -27,7 +28,7 @@ const lanes: FlowLane[] = [
     title: "商家/代理运营",
     subtitle: "商家负责内容、报名、课程、共修和用户服务。",
     steps: [
-      { title: "装修前台", owner: "商家运营", description: "配置首页、我的、服务中心、底部菜单和公告，前台刷新后展示。", outputs: ["装修模块", "公告", "H5 页面"] },
+      { title: "装修前台", owner: "商家运营", description: "只有拿到首页装修权限的商家账号才能配置首页、我的、服务中心、底部菜单和公告；无权限时使用平台默认装修或联系超管开通。", outputs: ["装修模块", "公告", "H5 页面"] },
       { title: "发布活动", owner: "商家运营", description: "创建活动、票种、报名字段、优惠码；若平台要求审核，需要等待超管通过。", outputs: ["活动详情", "票种库存", "报名表单"] },
       { title: "发布课程/共修", owner: "书院运营", description: "配置课程、课时、课程价格、共修活动和打卡任务。", outputs: ["课程列表", "共修任务", "打卡入口"] },
       { title: "处理订单和服务", owner: "运营/财务", description: "查看报名、确认线下收款、处理退款、签到核销、答复用户问题。", outputs: ["订单状态", "报名状态", "签到记录"] }
@@ -37,7 +38,7 @@ const lanes: FlowLane[] = [
     title: "普通学员",
     subtitle: "用户从前台完成浏览、报名、购买、学习和打卡。",
     steps: [
-      { title: "进入 H5/小程序", owner: "用户", description: "通过商家链接、二维码或小程序进入，系统根据 tenantCode 识别书院。", outputs: ["首页", "活动列表", "课程列表"] },
+      { title: "进入 H5/小程序", owner: "用户", description: "当前可通过商家链接、二维码、tenantCode 或手动切换进入指定书院；定位授权后自动匹配区域商家属于后续区域保护闭环。", outputs: ["首页", "活动列表", "课程列表"] },
       { title: "登录与报名", owner: "用户", description: "未登录先登录，选择活动、填写报名表、生成订单或等待审核。", outputs: ["用户身份", "报名记录", "订单"] },
       { title: "付款/确认", owner: "用户/财务", description: "未接真实支付时走线下确认；后台确认后用户权益生效。", outputs: ["已确认订单", "我的报名", "我的课程"] },
       { title: "学习与打卡", owner: "用户", description: "已购课程可播放，参与共修后打卡，刷新后状态应保持。", outputs: ["学习进度", "打卡记录", "评论点赞"] }
@@ -57,11 +58,19 @@ const lanes: FlowLane[] = [
 
 const businessChecks = [
   "超管创建商家 -> 创建管理员 -> 分配权限 -> 商家能登录后台",
-  "商家装修首页 -> 前台 H5 刷新后展示一致",
+  "超管授予 homepage.manage -> 商家装修首页 -> 前台 H5 刷新后展示一致",
   "商家发布活动 -> 用户报名 -> 后台审核/确认 -> 用户我的页面状态变化",
   "课程上架 -> 用户下单 -> 后台确认收款 -> 我的课程可学习",
   "共修打卡任务创建 -> 用户打卡 -> 刷新后仍显示已打卡",
   "小程序构建 -> 上传体验版 -> 提交审核 -> 审核通过后发布"
+];
+
+const regionalChecks = [
+  "定位授权：H5/小程序首次进入时说明用途，用户同意后获取经纬度。",
+  "区域匹配：后端按城市/区县、半径或多边形边界匹配商家/代理，排他区域不能互相覆盖。",
+  "手动切换：用户拒绝定位或定位失败时，可以手动选择城市/书院，并记住本次选择。",
+  "兜底展示：当前位置没有匹配商家时，展示平台默认页或引导用户选择区域。",
+  "运营审计：超管修改经营区域、排他规则和兜底商家时必须记录操作日志。"
 ];
 </script>
 
@@ -108,6 +117,18 @@ const businessChecks = [
         <div v-for="item in businessChecks" :key="item">{{ item }}</div>
       </div>
     </el-card>
+
+    <el-card shadow="never" class="check-card regional-card">
+      <template #header>
+        <div>
+          <strong>区域保护与定位分发（后续二开重点）</strong>
+          <p>现在系统主要靠 tenantCode 和手动切换识别商家；如果要做到“用户打开后按当前位置展示当地商家”，需要补齐下面这条闭环。</p>
+        </div>
+      </template>
+      <div class="check-list">
+        <div v-for="item in regionalChecks" :key="item">{{ item }}</div>
+      </div>
+    </el-card>
   </div>
 </template>
 
@@ -136,6 +157,7 @@ const businessChecks = [
 .check-card :deep(.el-card__header) p { margin: 6px 0 0; color: #64748b; }
 .check-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
 .check-list div { padding: 12px; border-radius: 12px; background: #fff7ed; border: 1px solid #fed7aa; color: #9a3412; line-height: 1.5; }
+.regional-card .check-list div { background: #ecfeff; border-color: #a5f3fc; color: #155e75; }
 @media (max-width: 1100px) {
   .flow-board, .check-list { grid-template-columns: 1fr; }
 }
