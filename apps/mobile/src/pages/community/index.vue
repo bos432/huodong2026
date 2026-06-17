@@ -27,16 +27,18 @@
         </view>
       </view>
     </view>
+    <EmptyState v-if="!activities.length" icon="📅" text="暂无近期活动" />
 
     <!-- 今日打卡 -->
     <view class="card checkin-card">
       <text class="title-md">📝 今日打卡</text>
-      <text class="body-text" style="margin-top:12rpx;">今日任务：抄写《道德经》第一章</text>
-      <view class="progress-bar" style="margin-top:12rpx;">
+      <text class="body-text" style="margin-top:12rpx;">{{ checkinTask ? `今日任务：${checkinTask.title}` : "暂无今日打卡任务" }}</text>
+      <text v-if="checkinTask?.description" class="subtle" style="margin-top:8rpx;">{{ checkinTask.description }}</text>
+      <view v-if="checkinTask" class="progress-bar" style="margin-top:12rpx;">
         <view class="progress-fill" style="width: 67%;"></view>
       </view>
-      <text class="subtle" style="margin-top:8rpx;">今日已有 128 人完成打卡</text>
-      <view class="button block" style="margin-top:16rpx;" @click="goCheckin">去打卡</view>
+      <text v-if="checkinTask" class="subtle" style="margin-top:8rpx;">今日已有 {{ checkinTask.completedCount || 0 }} 人完成打卡</text>
+      <view v-if="checkinTask" class="button block" style="margin-top:16rpx;" @click="goCheckin">去打卡</view>
     </view>
 
     <!-- 动态广场 -->
@@ -61,6 +63,7 @@
         </view>
       </view>
     </view>
+    <EmptyState v-if="!posts.length" icon="📝" text="暂无学员动态" />
 
     <view style="height:120rpx;"></view>
     <TabBar current="community" />
@@ -68,23 +71,21 @@
 </template>
 
 <script setup lang="ts">
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 import { onMounted } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
+import EmptyState from "../../components/EmptyState.vue";
 import { request, withTenantCode } from "../../api";
-import { addCommunityComment, defaultCommunityPosts, normalizeCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
+import { addCommunityComment, normalizeCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
 
 onShow(() => { loadPageTheme(); });
 
-const activities = reactive<any[]>([
-  { id:1, month:"7月", day:"15", title:"线上共读会：《论语》精读", time:"2026-07-15 19:30-21:00", location:"线上·腾讯会议", registered:128 },
-  { id:2, month:"7月", day:"22", title:"书法打卡营（第3期）", time:"2026-07-22 10:00-12:00", location:"七维书院·线下教室", registered:56 },
-  { id:3, month:"8月", day:"5", title:"中医养生沙龙", time:"2026-08-05 14:00-17:00", location:"七维书院·活动厅", registered:34 }
-]);
+const activities = reactive<any[]>([]);
 
-const posts = reactive<CommunityPost[]>(defaultCommunityPosts());
+const posts = reactive<CommunityPost[]>([]);
+const checkinTask = ref<any>(null);
 
 function formatActivityDate(value: string) {
   const date = new Date(value);
@@ -100,7 +101,6 @@ async function loadActivities() {
   try {
     const result = await request<any>("/public/activities?page=1&pageSize=3&status=open");
     const items = Array.isArray(result) ? result : result.items || [];
-    if (!items.length) return;
     activities.splice(0, activities.length, ...items.map((item: any) => {
       const date = formatActivityDate(item.startTime);
       return {
@@ -115,7 +115,7 @@ async function loadActivities() {
       };
     }));
   } catch {
-    // Keep local examples visible when the activity API is temporarily unavailable.
+    activities.splice(0, activities.length);
   }
 }
 
@@ -124,13 +124,22 @@ async function loadPosts() {
     const result = await request<any>("/public/community/posts");
     posts.splice(0, posts.length, ...normalizeCommunityPosts(result));
   } catch {
-    posts.splice(0, posts.length, ...defaultCommunityPosts());
+    posts.splice(0, posts.length);
+  }
+}
+
+async function loadCheckinTask() {
+  try {
+    checkinTask.value = await request<any>("/public/checkin/today");
+  } catch {
+    checkinTask.value = null;
   }
 }
 
 onMounted(() => {
   loadActivities();
   loadPosts();
+  loadCheckinTask();
 });
 
 function toggleLike(post: any) {

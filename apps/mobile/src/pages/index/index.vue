@@ -48,6 +48,7 @@
           </view>
         </view>
       </scroll-view>
+      <EmptyState v-if="!trialCourses.length" icon="📚" text="暂无体验课，请先在后台发布课程" />
     </view>
 
     <!-- 热门好课 -->
@@ -67,6 +68,7 @@
           <text class="price" style="font-size:28rpx;">{{ priceText(course.price) }}</text>
         </view>
       </scroll-view>
+      <EmptyState v-if="!hotCourses.length" icon="📖" text="暂无热门课程，请先在后台发布课程" />
     </view>
 
     <!-- 文化大使入口 -->
@@ -107,6 +109,7 @@
         </view>
       </view>
     </view>
+    <EmptyState v-if="!posts.length" icon="📝" text="暂无书院动态" />
 
     <!-- 底部安全区 -->
     <view style="height:120rpx;"></view>
@@ -118,14 +121,17 @@
 import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { withTenantCode } from "../../api";
+import { request } from "../../api";
 import { fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
-import { addCommunityComment, defaultCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
+import EmptyState from "../../components/EmptyState.vue";
+import { addCommunityComment, normalizeCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
 
 onShow(() => {
   loadPageTheme();
   loadCourses();
+  loadPosts();
 });
 
 const jingang = [
@@ -151,13 +157,22 @@ const trialCourses = computed(() => {
   return (freeCourses.length ? freeCourses : courses.value).slice(0, 4);
 });
 const hotCourses = computed(() => [...courses.value].sort((a, b) => b.hot - a.hot).slice(0, 4));
-const posts = reactive<CommunityPost[]>(defaultCommunityPosts().slice(0, 2));
+const posts = reactive<CommunityPost[]>([]);
 
 async function loadCourses() {
   try {
     courses.value = await fetchPublishedCourses();
   } catch {
     courses.value = [];
+  }
+}
+
+async function loadPosts() {
+  try {
+    const result = await request<any>("/public/community/posts");
+    posts.splice(0, posts.length, ...normalizeCommunityPosts(result).slice(0, 2));
+  } catch {
+    posts.splice(0, posts.length);
   }
 }
 

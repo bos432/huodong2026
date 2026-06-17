@@ -61,7 +61,13 @@ function userText(row: any) {
 }
 
 function answerText(row: any) {
-  return (row.answers || []).map((answer: any) => `${answer.label}: ${Array.isArray(answer.value) ? answer.value.join(", ") : answer.value || "-"}`).join("\n");
+  return (row.answers || [])
+    .map((answer: any, index: number) => {
+      const label = String(answer.label || answer.name || "").trim() || `报名信息 ${index + 1}`;
+      const value = Array.isArray(answer.value) ? answer.value.join(", ") : answer.value;
+      return `${label}: ${value || "-"}`;
+    })
+    .join("\n");
 }
 
 function formatTime(value?: string) {

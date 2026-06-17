@@ -46,7 +46,7 @@ export function defaultCommunityPosts() {
 
 export function normalizeCommunityPosts(payload: any) {
   const rows = Array.isArray(payload) ? payload : Array.isArray(payload?.data) ? payload.data : [];
-  if (!rows.length) return defaultCommunityPosts();
+  if (!rows.length) return [];
   return applyCommunityInteractions(rows.map((item: any, index: number) => ({
     id: Number(item.id || index + 1),
     avatar: item.avatar || `/static/avatar${(index % 3) + 1}.png`,
