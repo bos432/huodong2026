@@ -34,6 +34,7 @@ import { PaymentTransaction } from "../../entities/payment-transaction.entity";
 import { Refund } from "../../entities/refund.entity";
 import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantRegion } from "../../entities/tenant-region.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
@@ -60,6 +61,7 @@ export class PublicService {
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(AdminUser) private readonly adminUsers: Repository<AdminUser>,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
+    @InjectRepository(TenantRegion) private readonly tenantRegions: Repository<TenantRegion>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
     @InjectRepository(ActivityViewLog) private readonly activityViewLogs: Repository<ActivityViewLog>,
@@ -455,6 +457,38 @@ export class PublicService {
     return tenants.map((tenant) => this.publicHomepageTenant(tenant));
   }
 
+  async resolveTenantByLocation(latitudeText?: string, longitudeText?: string) {
+    const latitude = Number(latitudeText);
+    const longitude = Number(longitudeText);
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new BadRequestException("定位纬度无效");
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new BadRequestException("定位经度无效");
+    const regions = await this.tenantRegions
+      .createQueryBuilder("region")
+      .leftJoinAndSelect("region.tenant", "tenant")
+      .where("region.enabled = :enabled", { enabled: true })
+      .andWhere("tenant.enabled = :tenantEnabled", { tenantEnabled: true })
+      .orderBy("region.priority", "DESC")
+      .addOrderBy("region.id", "ASC")
+      .getMany();
+    const matches = regions
+      .map((region) => ({
+        region,
+        distanceMeters: Math.round(this.geoDistanceMeters(latitude, longitude, Number(region.latitude), Number(region.longitude)))
+      }))
+      .filter((item) => item.distanceMeters <= Number(item.region.radiusMeters || 0))
+      .sort((a, b) => b.region.priority - a.region.priority || a.distanceMeters - b.distanceMeters || a.region.id - b.region.id);
+    const match = matches[0] || null;
+    return {
+      matched: Boolean(match),
+      fallback: !match,
+      tenant: match ? this.publicHomepageTenant(match.region.tenant) : null,
+      region: match ? this.publicTenantRegion(match.region, match.distanceMeters) : null,
+      candidates: matches.slice(0, 5).map((item) => ({ tenant: this.publicHomepageTenant(item.region.tenant), region: this.publicTenantRegion(item.region, item.distanceMeters) })),
+      tenants: match ? [] : await this.publicTenants(),
+      message: match ? `已根据当前位置匹配：${match.region.tenant.name}` : "当前位置暂无匹配商家，请手动选择城市/书院"
+    };
+  }
+
   async operationSetting(context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     return this.publicOperationSetting(await this.ensureOperationSetting(tenant));
@@ -633,6 +667,31 @@ export class PublicService {
       contactName: tenant.contactName || null,
       contactPhone: tenant.contactPhone || null
     };
+  }
+
+  private publicTenantRegion(region: TenantRegion, distanceMeters?: number) {
+    return {
+      id: region.id,
+      name: region.name,
+      province: region.province,
+      city: region.city,
+      district: region.district,
+      latitude: Number(region.latitude),
+      longitude: Number(region.longitude),
+      radiusMeters: region.radiusMeters,
+      exclusive: region.exclusive,
+      priority: region.priority,
+      distanceMeters: distanceMeters ?? null
+    };
+  }
+
+  private geoDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const earthRadius = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * earthRadius * Math.asin(Math.sqrt(a));
   }
 
   private configLimit(config: Record<string, unknown>, fallback: number, max: number) {

@@ -1,6 +1,7 @@
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const DEV_PHONE = "13800000001";
 const TENANT_CODE_STORAGE_KEY = "h5_tenant_code";
+const TENANT_CODE_SOURCE_STORAGE_KEY = "h5_tenant_code_source";
 const ACTIVITY_LIST_INTENT_STORAGE_KEY = "h5_activity_list_intent";
 const USER_TOKEN_STORAGE_KEY = "user_token";
 
@@ -57,6 +58,7 @@ export function syncTenantCodeFromRoute() {
   const code = locationTenantCode() || pageTenantCode();
   if (code) {
     uni.setStorageSync(TENANT_CODE_STORAGE_KEY, code);
+    setCurrentTenantCodeSource("route");
     return code;
   }
   return normalizeTenantCode(uni.getStorageSync(TENANT_CODE_STORAGE_KEY));
@@ -79,6 +81,19 @@ export function setCurrentTenantCode(value: string) {
   }
   // #endif
   return code;
+}
+
+export function hasExplicitTenantCodeInRoute() {
+  return Boolean(locationTenantCode() || pageTenantCode());
+}
+
+export function setCurrentTenantCodeSource(value: "route" | "manual" | "location" | "") {
+  if (value) uni.setStorageSync(TENANT_CODE_SOURCE_STORAGE_KEY, value);
+  else uni.removeStorageSync(TENANT_CODE_SOURCE_STORAGE_KEY);
+}
+
+export function getCurrentTenantCodeSource() {
+  return String(uni.getStorageSync(TENANT_CODE_SOURCE_STORAGE_KEY) || "");
 }
 
 function isPublicApiUrl(url: string) {

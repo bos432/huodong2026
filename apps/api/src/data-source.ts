@@ -59,6 +59,7 @@ import { Registration } from "./entities/registration.entity";
 import { Refund } from "./entities/refund.entity";
 import { ShareVisit } from "./entities/share-visit.entity";
 import { Tenant } from "./entities/tenant.entity";
+import { TenantRegion } from "./entities/tenant-region.entity";
 import { TicketType } from "./entities/ticket-type.entity";
 import { UserTag } from "./entities/user-tag.entity";
 import { User } from "./entities/user.entity";
@@ -83,6 +84,7 @@ export default new DataSource({
     UserWallet,
     WalletTransaction,
     Tenant,
+    TenantRegion,
     AdminLoginLog,
     AdminOperationLog,
     AdminUser,

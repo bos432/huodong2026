@@ -53,6 +53,7 @@ import { Waitlist } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantRegion } from "../../entities/tenant-region.entity";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
@@ -64,7 +65,7 @@ import { CharityFundService } from "../charity-fund.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
+    TypeOrmModule.forFeature([Tenant, TenantRegion, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

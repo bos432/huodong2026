@@ -1,5 +1,7 @@
 <template>
   <view class="container has-custom-nav">
+    <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
+
     <!-- 顶部导航 -->
     <view class="header-row">
       <text class="title-xxl" style="font-family: 'STKaiti', 'KaiTi', serif;">七维书院</text>
@@ -122,22 +124,30 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
 import { loadPageTheme } from "../../theme";
+import { resolveTenantByCurrentLocation } from "../../tenant-location";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { usePageDecoration } from "../../decoration";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 
-const { contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
+const { tenant, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
+const lastLoadedTenantCode = ref("");
 
-onShow(() => {
+onShow(async () => {
   loadPageTheme();
+  const beforeTenantCode = getCurrentTenantCode();
+  await resolveTenantByCurrentLocation({ silent: true });
+  const changedByLocation = getCurrentTenantCode() !== beforeTenantCode || getCurrentTenantCode() !== lastLoadedTenantCode.value;
   loadDecoration();
   loadCourses();
   loadPosts();
+  lastLoadedTenantCode.value = getCurrentTenantCode();
+  if (changedByLocation && beforeTenantCode) uni.showToast({ title: "已按当前位置切换书院", icon: "none" });
 });
 
 const jingang = [
@@ -164,6 +174,12 @@ const trialCourses = computed(() => {
 });
 const hotCourses = computed(() => [...courses.value].sort((a, b) => b.hot - a.hot).slice(0, 4));
 const posts = reactive<CommunityPost[]>([]);
+
+async function handleTenantChanged() {
+  loadPageTheme();
+  await Promise.all([loadDecoration(), loadCourses(), loadPosts()]);
+  lastLoadedTenantCode.value = getCurrentTenantCode();
+}
 
 async function loadCourses() {
   try {

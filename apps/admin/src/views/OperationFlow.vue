@@ -19,7 +19,7 @@ const lanes: FlowLane[] = [
     steps: [
       { title: "开通商家", owner: "超管", description: "创建商家/代理，配置商家编码、地区、联系人和启停状态。当前系统主要用 tenantCode 识别商家。", outputs: ["商家资料", "tenantCode", "运营状态"] },
       { title: "分配权限", owner: "超管", description: "按最小权限给商家或员工开后台账号，没权限的菜单不显示。", outputs: ["管理员账号", "角色权限", "操作边界"] },
-      { title: "规划区域保护", owner: "超管/运营", description: "上线前要明确每个商家/代理的经营城市、区县、排他范围和兜底商家；定位自动分发需要单独开发闭环。", outputs: ["经营区域", "排他规则", "兜底策略"] },
+      { title: "配置区域保护", owner: "超管/运营", description: "配置每个商家/代理的经营城市、中心经纬度、服务半径、排他范围和优先级；前台可按定位自动匹配。", outputs: ["经营区域", "排他规则", "定位分发"] },
       { title: "配置收款与规则", owner: "超管/财务", description: "配置收款账户、报名审核、活动发布审核、系统设置和小程序发布配置。", outputs: ["收款账户", "审核规则", "系统配置"] },
       { title: "监管运营", owner: "超管", description: "查看全局订单、活动、报名、会员、操作日志和上线体检。", outputs: ["风险待办", "审计日志", "运营看板"] }
     ]
@@ -38,7 +38,7 @@ const lanes: FlowLane[] = [
     title: "普通学员",
     subtitle: "用户从前台完成浏览、报名、购买、学习和打卡。",
     steps: [
-      { title: "进入 H5/小程序", owner: "用户", description: "当前可通过商家链接、二维码、tenantCode 或手动切换进入指定书院；定位授权后自动匹配区域商家属于后续区域保护闭环。", outputs: ["首页", "活动列表", "课程列表"] },
+      { title: "进入 H5/小程序", owner: "用户", description: "可通过商家链接、二维码、tenantCode、手动切换进入指定书院；没有指定商家时，系统会尝试用定位匹配区域商家。", outputs: ["首页", "活动列表", "课程列表"] },
       { title: "登录与报名", owner: "用户", description: "未登录先登录，选择活动、填写报名表、生成订单或等待审核。", outputs: ["用户身份", "报名记录", "订单"] },
       { title: "付款/确认", owner: "用户/财务", description: "未接真实支付时走线下确认；后台确认后用户权益生效。", outputs: ["已确认订单", "我的报名", "我的课程"] },
       { title: "学习与打卡", owner: "用户", description: "已购课程可播放，参与共修后打卡，刷新后状态应保持。", outputs: ["学习进度", "打卡记录", "评论点赞"] }
@@ -121,8 +121,8 @@ const regionalChecks = [
     <el-card shadow="never" class="check-card regional-card">
       <template #header>
         <div>
-          <strong>区域保护与定位分发（后续二开重点）</strong>
-          <p>现在系统主要靠 tenantCode 和手动切换识别商家；如果要做到“用户打开后按当前位置展示当地商家”，需要补齐下面这条闭环。</p>
+          <strong>区域保护与定位分发</strong>
+          <p>第一版已支持中心点 + 半径匹配、排他区域冲突检查、手动切换兜底；后续可升级地图多边形围栏和更精细的街道边界。</p>
         </div>
       </template>
       <div class="check-list">

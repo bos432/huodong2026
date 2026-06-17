@@ -35,6 +35,7 @@ import { PaymentTransaction } from "../../entities/payment-transaction.entity";
 import { Refund } from "../../entities/refund.entity";
 import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantRegion } from "../../entities/tenant-region.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
@@ -51,7 +52,7 @@ import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning, UserFavorite, Certificate])],
+  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning, UserFavorite, Certificate])],
   controllers: [PublicController, PaymentController],
   providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
   exports: [PublicService]

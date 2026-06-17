@@ -73,6 +73,7 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: ["tenant.manage"], scope: "platform" },
+      { index: "/tenant-regions", icon: "Location", label: "区域保护", roles: ["tenant_region.manage"], scope: "platform" },
       { index: "/admins", icon: "UserFilled", label: "商家账号", roles: ["admin.manage"], scope: "platform" },
       { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: ["tenant.manage"], scope: "platform" }
     ]
@@ -256,7 +257,6 @@ const visibleMenuGroups = computed(() =>
     .map((group) => ({ ...group, items: group.items.filter((item) => canAccess(item.roles) && canAccessScope((item as any).scope)) }))
     .filter((group) => group.items.length)
 );
-const defaultOpeneds = computed(() => visibleMenuGroups.value.map((group) => group.index));
 
 async function refreshCurrentAdminContext() {
   try {
@@ -388,7 +388,7 @@ watch(
   <el-container class="shell">
     <el-aside width="248px" class="aside">
       <div class="brand">{{ shellTitle }}</div>
-      <el-menu router :default-active="route.fullPath" :default-openeds="defaultOpeneds" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened>
+      <el-menu router :default-active="route.fullPath" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened>
         <el-sub-menu v-for="group in visibleMenuGroups" :key="group.index" :index="group.index">
           <template #title>
             <el-icon><component :is="group.icon" /></el-icon>

@@ -709,6 +709,62 @@ export class TenantPermissionDto {
   paymentAccountEditable?: boolean;
 }
 
+export class TenantRegionDto {
+  @IsInt()
+  tenantId!: number;
+
+  @IsOptional()
+  @IsString()
+  province?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  district?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-90)
+  @Max(90)
+  latitude!: number;
+
+  @Type(() => Number)
+  @IsNumber()
+  @Min(-180)
+  @Max(180)
+  longitude!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(100)
+  @Max(200000)
+  radiusMeters!: number;
+
+  @IsOptional()
+  @IsBoolean()
+  exclusive?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  priority?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
 export class TenantProfileDto {
   @IsString()
   @IsNotEmpty()

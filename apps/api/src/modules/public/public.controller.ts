@@ -48,6 +48,11 @@ export class PublicController {
     return this.service.publicTenants();
   }
 
+  @Get("tenants/resolve")
+  resolveTenant(@Query("lat") lat?: string, @Query("lng") lng?: string) {
+    return this.service.resolveTenantByLocation(lat, lng);
+  }
+
   @Get("homepage")
   homepage(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     return this.service.homepage(this.tenantContext(req, tenantCode));

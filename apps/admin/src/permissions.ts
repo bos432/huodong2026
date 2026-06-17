@@ -16,7 +16,7 @@ export const roleOptions = [
 
 export const adminPermissionGroups = [
   { group: "总览", items: [{ key: "dashboard.view", label: "工作台/数据看板" }, { key: "analytics.view", label: "数据中心" }] },
-  { group: "平台管理", items: [{ key: "tenant.manage", label: "商家管理", platformOnly: true }, { key: "admin.manage", label: "后台账号管理" }] },
+  { group: "平台管理", items: [{ key: "tenant.manage", label: "商家管理", platformOnly: true }, { key: "tenant_region.manage", label: "区域保护", platformOnly: true }, { key: "admin.manage", label: "后台账号管理" }] },
   { group: "系统安全", items: [{ key: "logs.view", label: "操作/登录/验证码日志" }, { key: "system.manage", label: "系统设置/上线体检" }, { key: "miniprogram_release.manage", label: "小程序发布管理", platformOnly: true }] },
   { group: "活动", items: [{ key: "activity.view", label: "查看活动" }, { key: "activity.manage", label: "创建/编辑/下架活动" }, { key: "activity.approve", label: "平台审核活动", platformOnly: true }, { key: "category.manage", label: "活动分类管理" }, { key: "ticket.manage", label: "票种管理" }, { key: "coupon.manage", label: "优惠码管理" }] },
   { group: "报名签到", items: [{ key: "registration.view", label: "查看报名" }, { key: "registration.manage", label: "审核/取消报名" }, { key: "registration.export", label: "导出报名" }, { key: "waitlist.manage", label: "候补管理" }, { key: "checkin.manage", label: "签到核销" }] },

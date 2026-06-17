@@ -29,6 +29,7 @@ const activeSection = ref("quick");
 
 const databaseTables: DatabaseTable[] = [
   { group: "平台与权限", name: "tenants", meaning: "商家/书院/机构资料。", business: "平台商家管理、多商家隔离、H5 tenantCode。", caution: "停用或改 code 会影响商家后台和前台入口。" },
+  { group: "平台与权限", name: "tenant_regions", meaning: "商家/代理经营区域保护。", business: "用户定位后自动匹配当前区域商家，支持半径、排他、优先级。", caution: "配置错误会导致用户进入错商家，修改前要确认经纬度和服务半径。" },
   { group: "平台与权限", name: "admin_users", meaning: "后台管理员账号、角色、权限列表和所属商家。", business: "超管、商家管理员、运营、财务、签到人员登录。", caution: "不要随意改 role、tenantId、permissions，容易造成越权或看不到菜单。" },
   { group: "平台与权限", name: "admin_operation_logs", meaning: "后台关键操作日志。", business: "审计确认收款、退款、权限、设置等敏感操作。", caution: "上线运营后不要清空，出问题要靠它追责和定位。" },
   { group: "平台与权限", name: "admin_login_logs", meaning: "后台登录记录。", business: "排查异常登录、账号安全、登录失败。", caution: "可归档但不建议直接删除近期记录。" },
@@ -346,13 +347,13 @@ const sections: GuideSection[] = [
         title: "商家运营闭环",
         description: "确认一家书院能独立运营。",
         commands: ["确认商家拥有对应权限", "创建活动", "配置票种和报名字段", "查看报名", "确认收款或审核报名", "发布课程", "配置共修和打卡", "有 homepage.manage 权限时装修首页并前台刷新验证"],
-        notes: ["商家不是默认都能装修，必须由超管分配首页装修权限。", "当前商家识别主要靠 tenantCode/二维码/手动切换；定位授权后自动匹配区域商家属于后续区域保护功能。"]
+        notes: ["商家不是默认都能装修，必须由超管分配首页装修权限。", "当前商家识别支持 tenantCode/二维码/手动切换，也支持超管配置区域保护后按定位自动匹配。"]
       },
       {
         title: "平台超管闭环",
         description: "确认平台能管住商家、权限和系统。",
         commands: ["创建商家", "规划商家/代理经营区域", "分配最小权限", "无权限菜单隐藏", "查看全局订单和会员", "查看操作日志", "执行上线体检", "查看小程序发布记录"],
-        notes: ["如果要区域保护，必须先定义区域边界、排他规则、兜底商家和手动切换策略。"]
+        notes: ["区域保护第一版使用中心点 + 半径匹配；复杂街道边界、多边形围栏可作为后续升级。"]
       },
       {
         title: "财务客服闭环",

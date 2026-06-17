@@ -4,6 +4,7 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "dashboard.view", label: "工作台/数据看板", group: "总览" },
   { key: "analytics.view", label: "数据中心", group: "总览" },
   { key: "tenant.manage", label: "商家管理", group: "平台管理", platformOnly: true },
+  { key: "tenant_region.manage", label: "区域保护", group: "平台管理", platformOnly: true },
   { key: "admin.manage", label: "后台账号管理", group: "平台管理" },
   { key: "logs.view", label: "操作/登录/验证码日志", group: "系统安全" },
   { key: "system.manage", label: "系统设置/上线体检", group: "系统安全" },
@@ -150,6 +151,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "dashboard") return "dashboard.view";
   if (path.startsWith("analytics/")) return "analytics.view";
   if (path === "tenants" || path === "tenants/:id" || path === "tenants/:id/permissions" || path === "tenants/export") return "tenant.manage";
+  if (path.startsWith("tenant-regions")) return "tenant_region.manage";
   if (path === "tenant/profile") return verb === "GET" ? "tenant_profile.manage" : "tenant_profile.manage";
   if (path.startsWith("admins")) return "admin.manage";
   if (path === "operation-logs" || path.startsWith("auth/login-logs") || path.startsWith("auth/h5-code-logs")) return "logs.view";

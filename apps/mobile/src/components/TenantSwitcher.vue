@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { getCurrentTenantCode, request, setCurrentTenantCode } from "../api";
+import { getCurrentTenantCode, request, setCurrentTenantCode, setCurrentTenantCodeSource } from "../api";
 import type { HomepagePayload, PublicTenantView } from "@activity/shared";
 
 defineOptions({ name: "TenantSwitcher" });
@@ -52,6 +52,7 @@ function selectTenant(item: PublicTenantView) {
     return;
   }
   setCurrentTenantCode(item.code);
+  setCurrentTenantCodeSource("manual");
   hide();
   emit("changed", item);
 }

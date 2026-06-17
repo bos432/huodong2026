@@ -45,6 +45,7 @@ import { Registration } from "../../entities/registration.entity";
 import { Refund } from "../../entities/refund.entity";
 import { ShareVisit } from "../../entities/share-visit.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantRegion } from "../../entities/tenant-region.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { UserTag } from "../../entities/user-tag.entity";
 import { User } from "../../entities/user.entity";
@@ -57,7 +58,7 @@ import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActo
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultPermissionsForRole, effectivePermissionsForAdmin, normalizeAdminPermissions } from "./admin-permissions";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
@@ -76,6 +77,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   constructor(
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
+    @InjectRepository(TenantRegion) private readonly tenantRegions: Repository<TenantRegion>,
     @InjectRepository(AdminUser) private readonly admins: Repository<AdminUser>,
     @InjectRepository(AdminLoginLog) private readonly adminLoginLogs: Repository<AdminLoginLog>,
     @InjectRepository(AdminOperationLog) private readonly operationLogs: Repository<AdminOperationLog>,
@@ -244,6 +246,58 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const saved = await this.tenants.save(tenant);
     await this.logOperation(admin, "tenant.permissions.update", "tenant", saved.id, `更新商家权限：${saved.name}`, this.tenantPermissions(saved));
     return this.publicTenant(saved);
+  }
+
+  async listTenantRegions(admin?: AdminContext, tenantId?: number) {
+    this.assertPlatformAdmin(admin);
+    const builder = this.tenantRegions.createQueryBuilder("region").leftJoinAndSelect("region.tenant", "tenant").orderBy("region.priority", "DESC").addOrderBy("region.id", "ASC");
+    if (tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId });
+    const rows = await builder.getMany();
+    return rows.map((row) => this.publicTenantRegion(row));
+  }
+
+  async saveTenantRegion(dto: TenantRegionDto, id?: number, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const tenant = await this.tenants.findOne({ where: { id: Number(dto.tenantId), enabled: true } });
+    if (!tenant) throw new NotFoundException("商家不存在或已停用");
+    const region = id ? await this.tenantRegions.findOne({ where: { id } }) : this.tenantRegions.create();
+    if (!region) throw new NotFoundException("区域不存在");
+    const normalized = this.normalizeTenantRegionDto(dto);
+    await this.assertTenantRegionNoConflict({ ...normalized, tenantId: tenant.id, id: region.id || null });
+    Object.assign(region, {
+      tenant,
+      province: normalized.province,
+      city: normalized.city,
+      district: normalized.district,
+      name: normalized.name,
+      latitude: normalized.latitude.toFixed(6),
+      longitude: normalized.longitude.toFixed(6),
+      radiusMeters: normalized.radiusMeters,
+      exclusive: normalized.exclusive,
+      priority: normalized.priority,
+      enabled: normalized.enabled,
+      remark: normalized.remark
+    });
+    const saved = await this.tenantRegions.save(region);
+    await this.logOperation(admin, id ? "tenant_region.update" : "tenant_region.create", "tenant_region", saved.id, id ? `更新区域保护：${saved.name}` : `创建区域保护：${saved.name}`, {
+      tenantId: tenant.id,
+      tenantName: tenant.name,
+      latitude: saved.latitude,
+      longitude: saved.longitude,
+      radiusMeters: saved.radiusMeters,
+      exclusive: saved.exclusive,
+      enabled: saved.enabled
+    });
+    return this.publicTenantRegion(saved);
+  }
+
+  async deleteTenantRegion(id: number, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const row = await this.tenantRegions.findOne({ where: { id } });
+    if (!row) throw new NotFoundException("区域不存在");
+    await this.tenantRegions.delete(id);
+    await this.logOperation(admin, "tenant_region.delete", "tenant_region", id, `删除区域保护：${row.name}`, { tenantId: row.tenant.id, tenantName: row.tenant.name });
+    return { success: true };
   }
 
   async getTenantProfile(admin?: AdminContext) {
@@ -3276,6 +3330,73 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private publicTenant(tenant: Tenant) {
     return { id: tenant.id, code: tenant.code, name: tenant.name, region: tenant.region, contactName: tenant.contactName, contactPhone: tenant.contactPhone, remark: tenant.remark, enabled: tenant.enabled, settings: this.tenantPermissions(tenant), createdAt: tenant.createdAt, updatedAt: tenant.updatedAt };
+  }
+
+  private publicTenantRegion(region: TenantRegion) {
+    return {
+      id: region.id,
+      tenant: this.publicTenant(region.tenant),
+      province: region.province,
+      city: region.city,
+      district: region.district,
+      name: region.name,
+      latitude: Number(region.latitude),
+      longitude: Number(region.longitude),
+      radiusMeters: region.radiusMeters,
+      exclusive: region.exclusive,
+      priority: region.priority,
+      enabled: region.enabled,
+      remark: region.remark,
+      createdAt: region.createdAt,
+      updatedAt: region.updatedAt
+    };
+  }
+
+  private normalizeTenantRegionDto(dto: TenantRegionDto) {
+    const latitude = Number(dto.latitude);
+    const longitude = Number(dto.longitude);
+    const radiusMeters = Math.round(Number(dto.radiusMeters || 0));
+    if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new BadRequestException("纬度范围应为 -90 到 90");
+    if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new BadRequestException("经度范围应为 -180 到 180");
+    if (!Number.isFinite(radiusMeters) || radiusMeters < 100 || radiusMeters > 200000) throw new BadRequestException("保护半径应为 100 米到 200 公里");
+    return {
+      province: this.truncateNullableText(dto.province, 80),
+      city: this.truncateNullableText(dto.city, 80),
+      district: this.truncateNullableText(dto.district, 80),
+      name: String(dto.name || "").trim().slice(0, 120),
+      latitude,
+      longitude,
+      radiusMeters,
+      exclusive: dto.exclusive !== false,
+      priority: Number.isFinite(Number(dto.priority)) ? Number(dto.priority) : 0,
+      enabled: dto.enabled !== false,
+      remark: this.truncateNullableText(dto.remark, 1000)
+    };
+  }
+
+  private async assertTenantRegionNoConflict(input: { id?: number | null; tenantId: number; latitude: number; longitude: number; radiusMeters: number; exclusive: boolean; enabled: boolean }) {
+    if (!input.exclusive || !input.enabled) return;
+    const candidates = await this.tenantRegions
+      .createQueryBuilder("region")
+      .leftJoinAndSelect("region.tenant", "tenant")
+      .where("region.enabled = :enabled", { enabled: true })
+      .andWhere("region.exclusive = :exclusive", { exclusive: true })
+      .andWhere("tenant.id <> :tenantId", { tenantId: input.tenantId })
+      .getMany();
+    const conflict = candidates.find((region) => {
+      const distance = this.geoDistanceMeters(input.latitude, input.longitude, Number(region.latitude), Number(region.longitude));
+      return distance < input.radiusMeters + Number(region.radiusMeters || 0);
+    });
+    if (conflict) throw new BadRequestException(`区域与「${conflict.tenant.name} / ${conflict.name}」排他范围重叠，请调整半径、位置或关闭排他`);
+  }
+
+  private geoDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const earthRadius = 6371000;
+    const dLat = toRad(lat2 - lat1);
+    const dLng = toRad(lng2 - lng1);
+    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
+    return 2 * earthRadius * Math.asin(Math.sqrt(a));
   }
 
   private isTenantScoped(admin?: AdminContext) {
