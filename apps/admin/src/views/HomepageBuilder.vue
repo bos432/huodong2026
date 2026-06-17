@@ -812,53 +812,6 @@ onMounted(async () => {
           <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
         </div>
       </div>
-      <div class="drawer-live-preview">
-        <div class="drawer-live-preview-head">
-          <strong>当前模块实时预览</strong>
-          <span>这里显示未保存改动；保存后才会同步到前台 H5</span>
-        </div>
-        <div v-if="!drawerPreviewRow" class="drawer-preview-invalid">JSON 格式有误，修正 config / layout 后会恢复预览。</div>
-        <div v-else class="drawer-preview-canvas">
-          <div v-for="row in previewRows" :key="row.id" class="preview-row-shell" :class="{ focused: isFocusedPreviewRow(row), fallback: hasDefaultPreviewFallback }">
-            <div v-if="row.type === 'search_bar'" class="preview-search">
-              <span>{{ (row.config as any).cityLabel || "本地" }}</span>
-              <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
-            </div>
-            <div v-else-if="row.type === 'hero'" class="preview-hero" :style="previewHeroStyle(row)">
-              <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "Activity OS" }}</small>
-              <h4 :style="{ opacity: clampPercent((row.config as any).titleOpacity, 100) / 100 }">{{ row.title }}</h4>
-              <p :style="{ opacity: clampPercent((row.config as any).subtitleOpacity, 86) / 100 }">{{ row.subtitle }}</p>
-              <div v-if="(row.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (row.config as any).buttonOpacity, 18) }">{{ (row.config as any).primaryButtonText }}</div>
-              <div v-if="(row.config as any).showStats !== false" class="preview-hero-stats">
-                <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">9<br />报名中</span>
-                <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">10<br />全部活动</span>
-              </div>
-            </div>
-            <div v-else-if="row.type === 'quick_nav'" class="preview-grid">
-              <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-            </div>
-            <div v-else-if="row.type === 'image_banner'" class="preview-banner">
-              <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
-              <span v-else>图片 Banner</span>
-            </div>
-            <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav">
-              <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-            </div>
-            <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
-              <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
-              <span v-for="item in ((row.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-            </div>
-            <div v-else-if="row.type === 'inner_pages'" class="preview-inner-pages">
-              <strong>{{ row.title || "内页布局" }}</strong>
-              <span v-for="item in ((row.config as any).pages || []).slice(0, 4)" :key="item.key">{{ item.title }}</span>
-            </div>
-            <div v-else class="preview-section" :style="previewSectionStyle(row)">
-              <strong>{{ row.title || typeLabel(row.type) }}</strong>
-              <span>{{ typeLabel(row.type) }}</span>
-            </div>
-          </div>
-        </div>
-      </div>
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="模块类型">
@@ -1066,6 +1019,54 @@ onMounted(async () => {
         <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
       </template>
     </el-drawer>
+
+    <div v-if="drawer" class="drawer-live-preview">
+      <div class="drawer-live-preview-head">
+        <strong>当前模块实时预览</strong>
+        <span>保存后才会同步到前台 H5</span>
+      </div>
+      <div v-if="!drawerPreviewRow" class="drawer-preview-invalid">JSON 格式有误，修正 config / layout 后会恢复预览。</div>
+      <div v-else class="drawer-preview-canvas">
+        <div v-for="row in previewRows" :key="row.id" class="preview-row-shell" :class="{ focused: isFocusedPreviewRow(row), fallback: hasDefaultPreviewFallback }">
+          <div v-if="row.type === 'search_bar'" class="preview-search">
+            <span>{{ (row.config as any).cityLabel || "本地" }}</span>
+            <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
+          </div>
+          <div v-else-if="row.type === 'hero'" class="preview-hero" :style="previewHeroStyle(row)">
+            <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "Activity OS" }}</small>
+            <h4 :style="{ opacity: clampPercent((row.config as any).titleOpacity, 100) / 100 }">{{ row.title }}</h4>
+            <p :style="{ opacity: clampPercent((row.config as any).subtitleOpacity, 86) / 100 }">{{ row.subtitle }}</p>
+            <div v-if="(row.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (row.config as any).buttonOpacity, 18) }">{{ (row.config as any).primaryButtonText }}</div>
+            <div v-if="(row.config as any).showStats !== false" class="preview-hero-stats">
+              <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">9<br />报名中</span>
+              <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">10<br />全部活动</span>
+            </div>
+          </div>
+          <div v-else-if="row.type === 'quick_nav'" class="preview-grid">
+            <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+          </div>
+          <div v-else-if="row.type === 'image_banner'" class="preview-banner">
+            <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
+            <span v-else>图片 Banner</span>
+          </div>
+          <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav">
+            <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+          </div>
+          <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
+            <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
+            <span v-for="item in ((row.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+          </div>
+          <div v-else-if="row.type === 'inner_pages'" class="preview-inner-pages">
+            <strong>{{ row.title || "内页布局" }}</strong>
+            <span v-for="item in ((row.config as any).pages || []).slice(0, 4)" :key="item.key">{{ item.title }}</span>
+          </div>
+          <div v-else class="preview-section" :style="previewSectionStyle(row)">
+            <strong>{{ row.title || typeLabel(row.type) }}</strong>
+            <span>{{ typeLabel(row.type) }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
@@ -1131,11 +1132,11 @@ onMounted(async () => {
 .drawer-save-bar strong { display: block; color: #111827; font-size: 14px; }
 .drawer-save-bar span { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #667085; font-size: 12px; margin-top: 3px; }
 .drawer-save-actions { display: flex; gap: 8px; flex-shrink: 0; }
-.drawer-live-preview { position: sticky; top: 86px; z-index: 4; margin-bottom: 16px; padding: 12px; border: 1px solid #fed7aa; border-radius: 12px; background: #fff7ed; box-shadow: 0 10px 24px rgba(124, 45, 18, 0.08); }
+.drawer-live-preview { position: fixed; top: 118px; right: 590px; z-index: 3000; width: 392px; max-width: calc(100vw - 640px); padding: 12px; border: 1px solid #fed7aa; border-radius: 12px; background: #fff7ed; box-shadow: 0 18px 46px rgba(15, 23, 42, 0.18); }
 .drawer-live-preview-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; }
 .drawer-live-preview-head strong { color: #7c2d12; font-size: 14px; }
 .drawer-live-preview-head span { color: #9a3412; font-size: 12px; text-align: right; }
-.drawer-preview-canvas { max-height: 360px; overflow: auto; padding: 12px; border-radius: 12px; background: #f8fafc; }
+.drawer-preview-canvas { max-height: calc(100vh - 220px); overflow: auto; padding: 12px; border-radius: 12px; background: #f8fafc; }
 .drawer-preview-invalid { padding: 16px; border: 1px dashed #f97316; border-radius: 10px; background: #fff; color: #c2410c; font-weight: 700; }
 .drawer-bottom-nav { position: static; margin-top: 0; }
 .quick-editor { display: grid; gap: 10px; margin-bottom: 18px; }
@@ -1146,6 +1147,7 @@ onMounted(async () => {
 @media (max-width: 1280px) {
   .builder-layout { grid-template-columns: 200px minmax(420px, 1fr); }
   .phone-preview { display: none; }
+  .drawer-live-preview { display: none; }
 }
 </style>
 
