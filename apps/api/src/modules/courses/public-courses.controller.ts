@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, NotFoundException, Param, ParseIntPipe, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Between, In, Repository } from "typeorm";
@@ -300,7 +300,11 @@ export class PublicCoursesController {
   private async resolveTenant(req: any, tenantCode?: string): Promise<Tenant | null> {
     const headerCode = req.headers?.["x-tenant-code"];
     const code = normalizeTenantCode(tenantCode || (typeof headerCode === "string" ? headerCode : Array.isArray(headerCode) ? headerCode[0] : null));
-    if (code) return this.tenants.findOne({ where: { code, enabled: true } });
+    if (code) {
+      const tenant = await this.tenants.findOne({ where: { code, enabled: true } });
+      if (!tenant) throw new NotFoundException("机构不存在或已停用");
+      return tenant;
+    }
     const host = normalizeTenantHost(req.headers?.["x-forwarded-host"] || req.headers?.host || null);
     if (!host) return null;
     return this.tenants
