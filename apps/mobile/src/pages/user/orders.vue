@@ -1,5 +1,5 @@
 <template>
-  <view class="container orders-page">
+  <view class="container orders-page has-custom-nav">
     <view class="custom-nav">
       <view class="nav-back" @click="goBack">‹ 返回</view>
       <text class="title-md" style="flex:1; text-align:center;">我的订单</text>
@@ -37,6 +37,7 @@
       </view>
       <empty-state v-if="!visibleOrders.length" icon="📋" text="暂无对应订单" />
     </template>
+    <TabBar current="user" />
   </view>
 </template>
 
@@ -44,6 +45,7 @@
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import TabBar from "../../components/TabBar.vue";
 
 type OrderTab = "all" | "pending" | "learning" | "completed";
 type UiOrder = {
@@ -257,7 +259,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
-.orders-page { padding-bottom: 40rpx; }
+.orders-page { padding-bottom: 160rpx; }
 .custom-nav { display:flex; align-items:center; padding:16rpx 0; }
 .nav-back, .nav-refresh { font-size:28rpx; color:#4A6B8A; }
 .order-tabs { display:grid; grid-template-columns: repeat(4, 1fr); gap: 8rpx; margin-bottom: 18rpx; }

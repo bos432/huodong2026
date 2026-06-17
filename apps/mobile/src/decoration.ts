@@ -20,6 +20,8 @@ const defaultBottomNavSection: HomepageSectionView = {
   config: {
     items: [
       { label: "首页", link: "/pages/index/index", action: "mainPage", color: "#0f766e" },
+      { label: "课程", link: "/pages/courses/index", action: "mainPage", color: "#0f766e" },
+      { label: "共修", link: "/pages/community/index", action: "mainPage", color: "#0f766e" },
       { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#0f766e" },
       { label: "我的", link: "/pages/user/my", action: "mainPage", color: "#0f766e" }
     ]
@@ -62,7 +64,7 @@ function normalizeLink(url?: string) {
 }
 
 export function isTabUrl(url?: string) {
-  return ["/pages/index/index", "/pages/activity/list", "/pages/user/my"].includes(normalizeLink(url));
+  return ["/pages/index/index", "/pages/courses/index", "/pages/community/index", "/pages/activity/list", "/pages/user/my"].includes(normalizeLink(url));
 }
 
 export function quickInitial(label?: string, icon?: string) {
@@ -85,7 +87,7 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   const sections = ref<HomepageSectionView[]>([]);
   const tenant = ref<HomepagePayload["tenant"] | null>(null);
 
-  const bottomNavSection = computed(() => sections.value.find((item) => item.enabled && item.type === "bottom_nav") || (sections.value.length ? null : defaultBottomNavSection));
+  const bottomNavSection = computed(() => sections.value.find((item) => item.enabled && item.type === "bottom_nav") || defaultBottomNavSection);
   const innerPagesSection = computed(() => sections.value.find((item) => item.enabled && item.type === "inner_pages") || defaultInnerPagesSection);
   const innerPageLayout = computed<Record<string, any>>(() => ({ ...defaultInnerPagesSection.layout, ...(innerPagesSection.value.layout || {}) }));
   const innerPageConfig = computed<InnerPageConfig>(() => {

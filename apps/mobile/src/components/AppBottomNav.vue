@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed } from "vue";
 import type { HomepageSectionView } from "@activity/shared";
-import { goDecoratedLink, quickInitial } from "../decoration";
+import { goDecoratedLink } from "../decoration";
 
 const props = defineProps<{
   section?: HomepageSectionView | null;
@@ -9,21 +9,25 @@ const props = defineProps<{
 }>();
 
 const items = computed(() => {
-  const seen = new Set<string>();
-  const raw = Array.isArray(props.section?.config?.items) ? (props.section?.config?.items as any[]) : [];
-  const fallback = [
-    { label: "首页", link: "/pages/index/index", action: "mainPage", color: "#0f766e" },
-    { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#0f766e" },
-    { label: "我的", link: "/pages/user/my", action: "mainPage", color: "#0f766e" }
+  void props.section;
+  return [
+    { label: "书院", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", icon: "🏛", activeIcon: "🏯" },
+    { label: "课程", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", icon: "📖", activeIcon: "📚" },
+    { label: "共修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", icon: "🪷", activeIcon: "🌸" },
+    { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D", icon: "📅", activeIcon: "🎯" },
+    { label: "我的", link: "/pages/user/my", action: "mainPage", color: "#C43D3D", icon: "⛰", activeIcon: "🏔" }
   ];
-  return (raw.length ? raw : fallback)
-    .map((item) => ({ ...item, label: String(item?.label || "").trim(), link: String(item?.link || "").trim() }))
-    .filter((item) => item.label && item.link && !seen.has(item.link) && seen.add(item.link))
-    .slice(0, 4);
 });
 
 function isCurrent(url?: string) {
-  return String(url || "").split("?")[0] === props.currentPath;
+  const current = props.currentPath;
+  const target = String(url || "").split("?")[0];
+  if (target === current) return true;
+  if (current.startsWith("/pages/course/") || current.startsWith("/pages/user/courses") || current.startsWith("/pages/user/learning")) return target === "/pages/courses/index";
+  if (current.startsWith("/pages/community/")) return target === "/pages/community/index";
+  if (current.startsWith("/pages/activity/") || current.startsWith("/pages/user/registration") || current.startsWith("/pages/user/review")) return target === "/pages/activity/list";
+  if (current.startsWith("/pages/user/") || current.startsWith("/pages/charity/") || current.startsWith("/pages/service/")) return target === "/pages/user/my";
+  return false;
 }
 </script>
 
@@ -45,7 +49,7 @@ function isCurrent(url?: string) {
       @click="goDecoratedLink(item.link, item.action)"
     >
       <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
-      <text v-else class="custom-tabbar-icon" :style="{ background: `${item.color || '#0f766e'}18` }">{{ quickInitial(item.label, item.icon) }}</text>
+      <text v-else class="custom-tabbar-icon" :style="{ background: `${item.color || '#C43D3D'}18` }">{{ isCurrent(item.link) ? item.activeIcon : item.icon }}</text>
       <text>{{ item.label }}</text>
     </view>
   </view>

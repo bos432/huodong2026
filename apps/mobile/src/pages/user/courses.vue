@@ -1,5 +1,5 @@
 <template>
-  <view class="container">
+  <view class="container user-subpage has-custom-nav">
     <view class="custom-nav"><view class="nav-back" @click="goBack">‹ 返回</view><text class="title-md" style="flex:1; text-align:center;">我的课程</text></view>
     <view class="my-tabs">
       <view v-for="t in tabs" :key="t.key" class="my-tab" :class="{active:activeTab===t.key}" @click="activeTab=t.key">{{ t.label }}</view>
@@ -18,12 +18,14 @@
       </view>
     </view>
     <empty-state v-if="!visibleCourses.length" icon="📖" text="暂无学习中的课程" />
+    <TabBar current="courses" />
   </view>
 </template>
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
 import { normalizeCourse, type CourseCard } from "../../course-data";
+import TabBar from "../../components/TabBar.vue";
 
 const activeTab = ref("all");
 const tabs = [{key:"all",label:"全部"},{key:"ongoing",label:"进行中"},{key:"done",label:"已完成"}];
@@ -53,6 +55,7 @@ function goCourse(c:any) { uni.navigateTo({ url: withTenantCode("/pages/course/d
 onMounted(loadCourses);
 </script>
 <style scoped>
+.user-subpage { padding-bottom: 160rpx; }
 .custom-nav { display:flex; align-items:center; padding:16rpx 0; }
 .nav-back { font-size:28rpx; color:#4A6B8A; }
 .my-tabs { display:flex; gap:0; margin-bottom:16rpx; border-bottom:2rpx solid #E8E0D8; }

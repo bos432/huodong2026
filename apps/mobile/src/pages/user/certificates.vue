@@ -1,5 +1,5 @@
 <template>
-  <view class="container">
+  <view class="container user-subpage has-custom-nav">
     <view class="custom-nav"><view class="nav-back" @click="goBack">‹ 返回</view><text class="title-md" style="flex:1; text-align:center;">我的证书</text></view>
     <view v-for="c in certificates" :key="c.id" class="card certificate-card">
       <image v-if="c.imageUrl" class="cert-image" :src="c.imageUrl" mode="aspectFill" />
@@ -8,11 +8,13 @@
       <text class="subtle" style="margin-top:8rpx;">{{ formatTime(c.issuedAt) }}</text>
     </view>
     <empty-state v-if="!loading && !certificates.length" icon="🏅" text="暂无证书" />
+    <TabBar current="user" />
   </view>
 </template>
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ensureUser, request } from "../../api";
+import TabBar from "../../components/TabBar.vue";
 
 const loading = ref(true);
 const certificates = ref<any[]>([]);
@@ -41,6 +43,7 @@ function goBack() { uni.navigateBack(); }
 onMounted(loadCertificates);
 </script>
 <style scoped>
+.user-subpage { padding-bottom: 160rpx; }
 .custom-nav { display:flex; align-items:center; padding:16rpx 0; }
 .nav-back { font-size:28rpx; color:#4A6B8A; }
 .certificate-card { text-align:center; padding:40rpx; }

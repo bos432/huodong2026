@@ -1,5 +1,5 @@
 <template>
-  <view class="container">
+  <view class="container user-subpage has-custom-nav">
     <view class="custom-nav"><view class="nav-back" @click="goBack">‹ 返回</view><text class="title-md" style="flex:1; text-align:center;">我的收藏</text></view>
     <view class="course-grid">
       <view v-for="c in favorites" :key="c.id" class="course-card" @click="goDetail(c)">
@@ -12,12 +12,14 @@
       </view>
     </view>
     <empty-state v-if="!favorites.length" icon="❤" text="暂无收藏" />
+    <TabBar current="user" />
   </view>
 </template>
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
 import { normalizeCourse, priceText, type CourseCard } from "../../course-data";
+import TabBar from "../../components/TabBar.vue";
 
 const favorites = ref<CourseCard[]>([]);
 
@@ -37,6 +39,7 @@ function goDetail(c:any) { uni.navigateTo({ url: withTenantCode("/pages/course/d
 onMounted(loadFavorites);
 </script>
 <style scoped>
+.user-subpage { padding-bottom: 160rpx; }
 .custom-nav { display:flex; align-items:center; padding:16rpx 0; }
 .nav-back { font-size:28rpx; color:#4A6B8A; }
 .course-grid { display:grid; grid-template-columns:1fr 1fr; gap:20rpx; }

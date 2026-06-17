@@ -1,5 +1,5 @@
 <template>
-  <view class="container">
+  <view class="container user-subpage has-custom-nav">
     <view class="custom-nav"><view class="nav-back" @click="goBack">‹ 返回</view><text class="title-md" style="flex:1; text-align:center;">学习记录</text></view>
     <view v-for="r in records" :key="r.id" class="card" style="margin-bottom:12rpx;">
       <view class="row" style="justify-content:flex-start; gap:16rpx;">
@@ -8,11 +8,13 @@
       </view>
     </view>
     <empty-state v-if="!loading && !records.length" icon="🕐" text="暂无学习记录" />
+    <TabBar current="courses" />
   </view>
 </template>
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ensureUser, request } from "../../api";
+import TabBar from "../../components/TabBar.vue";
 
 const loading = ref(true);
 const records = ref<any[]>([]);
@@ -47,6 +49,7 @@ function goBack() { uni.navigateBack(); }
 onMounted(loadRecords);
 </script>
 <style scoped>
+.user-subpage { padding-bottom: 160rpx; }
 .custom-nav { display:flex; align-items:center; padding:16rpx 0; }
 .nav-back { font-size:28rpx; color:#4A6B8A; }
 </style>
