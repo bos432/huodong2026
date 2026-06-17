@@ -140,6 +140,7 @@ const menuGroups = [
       { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.manage"], scope: "platform" },
       { index: "/config-check", icon: "Monitor", label: "上线体检", roles: ["system.manage"], scope: "platform" },
       { index: "/miniprogram-release", icon: "Promotion", label: "小程序发布", roles: ["miniprogram_release.manage"], scope: "platform" },
+      { index: "/operation-flow", icon: "Connection", label: "操作流程图", roles: ["dashboard.view"], scope: "platform" },
       { index: "/operation-guide", icon: "Guide", label: "运维教程", roles: ["system.manage"], scope: "platform" },
       { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["system.manage"], scope: "platform" },
       { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "platform" },
@@ -242,6 +243,7 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/system-settings", icon: "Tools", label: "运营设置", roles: ["operation_settings.manage"], scope: "tenant" },
+      { index: "/operation-flow", icon: "Connection", label: "操作流程图", roles: ["dashboard.view"], scope: "tenant" },
       { index: "/tenant-profile", icon: "Shop", label: "商家资料", roles: ["tenant_profile.manage"], scope: "tenant" },
       { index: "/admins", icon: "UserFilled", label: "员工账号", roles: ["admin.manage"], scope: "tenant" },
       { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "tenant" }

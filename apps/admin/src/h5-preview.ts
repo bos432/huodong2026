@@ -1,10 +1,22 @@
 function configuredH5Origin() {
   const value = String(import.meta.env.VITE_H5_ORIGIN || "").trim();
-  if (value) return value;
+  if (value) return normalizeH5Origin(value);
   if (typeof window !== "undefined" && window.location?.hostname) {
-    return `${window.location.protocol}//${window.location.hostname}:4139`;
+    const { hostname, origin, protocol } = window.location;
+    if (hostname === "localhost" || hostname === "127.0.0.1") return `${protocol}//${hostname}:4139`;
+    return origin;
   }
   return "http://127.0.0.1:4139";
+}
+
+function normalizeH5Origin(value: string) {
+  try {
+    const url = new URL(value);
+    if (url.port === "4139" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") url.port = "";
+    return url.origin;
+  } catch {
+    return value;
+  }
 }
 
 export function h5PreviewUrl(tenantCode?: string | null, path = "/") {

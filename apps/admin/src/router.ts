@@ -36,6 +36,7 @@ const Community = () => import("./views/Community.vue");
 const ConfigCheck = () => import("./views/ConfigCheck.vue");
 const MiniprogramRelease = () => import("./views/MiniprogramRelease.vue");
 const OperationGuide = () => import("./views/OperationGuide.vue");
+const OperationFlow = () => import("./views/OperationFlow.vue");
 const OpsRoutine = () => import("./views/OpsRoutine.vue");
 const Tenants = () => import("./views/Tenants.vue");
 const TenantProfile = () => import("./views/TenantProfile.vue");
@@ -83,6 +84,7 @@ export const router = createRouter({
         { path: "config-check", component: ConfigCheck, meta: { roles: ["system.manage"], scope: "platform" } },
         { path: "miniprogram-release", component: MiniprogramRelease, meta: { roles: ["miniprogram_release.manage"], scope: "platform" } },
         { path: "operation-guide", component: OperationGuide, meta: { roles: ["system.manage"], scope: "platform" } },
+        { path: "operation-flow", component: OperationFlow, meta: { roles: ["dashboard.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "ops-routine", component: OpsRoutine, meta: { roles: ["system.manage"], scope: "platform" } },
         { path: "categories", component: Categories, meta: { roles: ["category.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "admins", component: Admins, meta: { roles: ["admin.manage"], scope: "any" } },
