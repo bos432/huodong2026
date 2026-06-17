@@ -37,14 +37,14 @@
       </view>
 
       <view class="bottom-actions">
-        <view class="button block button-lg" :class="{ disabled: paying }" @click="doPay">{{ paying ? "处理中..." : `确认支付 ${priceText(course.price)}` }}</view>
+        <view class="button block button-lg" :class="{ disabled: paying }" @click="doPay">{{ payButtonText }}</view>
       </view>
     </template>
   </view>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
 
 const selectedPayment = ref(0);
@@ -55,6 +55,10 @@ const course = ref<any>();
 const paymentMethods = [
   { icon: "🏦", label: "线下收款（待后台确认）", value: "offline" }
 ];
+const payButtonText = computed(() => {
+  if (paying.value) return "处理中...";
+  return Number(course.value?.price || 0) > 0 ? `提交线下付款订单 ${priceText(course.value.price)}` : "免费开通课程";
+});
 
 function currentCourseId() {
   const pages = getCurrentPages();
@@ -90,7 +94,7 @@ async function doPay() {
   paying.value = true;
   try {
     await ensureUser();
-    const paymentMethod = Number(course.value.price) > 0 ? paymentMethods[selectedPayment.value]?.value || "wechat" : undefined;
+    const paymentMethod = Number(course.value.price) > 0 ? paymentMethods[selectedPayment.value]?.value || "offline" : undefined;
     const result = await request<any>(`/public/courses/${course.value.id}/orders`, {
       method: "POST",
       data: { paymentMethod }

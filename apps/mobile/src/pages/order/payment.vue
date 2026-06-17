@@ -14,6 +14,7 @@ import { onLoad } from "@dcloudio/uni-app";
 import { withTenantCode } from "../../api";
 const isSuccess = ref(true);
 const isPending = ref(false);
+const accessMode = ref<"paid" | "free">("paid");
 const courseId = ref(0);
 const orderId = ref(0);
 onLoad((query) => {
@@ -22,13 +23,17 @@ onLoad((query) => {
     isSuccess.value = false;
     isPending.value = true;
   }
+  if (query?.mode === "free") accessMode.value = "free";
   courseId.value = Number(query?.id || 0);
   orderId.value = Number(query?.orderId || 0);
 });
 const iconText = computed(() => isSuccess.value ? "🎉" : isPending.value ? "⏳" : "😢");
-const titleText = computed(() => isSuccess.value ? "支付成功" : isPending.value ? "等待确认收款" : "支付失败");
+const titleText = computed(() => {
+  if (isSuccess.value) return accessMode.value === "free" ? "加入成功" : "支付成功";
+  return isPending.value ? "等待确认收款" : "支付失败";
+});
 const bodyText = computed(() => {
-  if (isSuccess.value) return "恭喜您获得课程学习权限";
+  if (isSuccess.value) return accessMode.value === "free" ? "课程已加入，可直接开始学习" : "恭喜您获得课程学习权限";
   if (isPending.value) return "课程订单已提交，当前不会自动开通学习权限。请联系书院完成线下付款，后台确认收款后再学习。";
   return "请稍后重试或联系客服";
 });

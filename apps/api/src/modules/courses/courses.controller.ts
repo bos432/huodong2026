@@ -96,4 +96,10 @@ export class CoursesController {
 
   @AdminRoles(...SUPER_ADMIN)
   @Delete("community-posts/:id") deletePost(@Param("id", ParseIntPipe) id: number) { return this.service.deleteCommunityPost(id); }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("community-post-comments") listPostComments(@Query() q: any) { return this.service.listCommunityPostComments(q); }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("community-post-comments/:id") reviewPostComment(@Param("id", ParseIntPipe) id: number, @Body() dto: any) { return this.service.reviewCommunityPostComment(id, dto); }
 }

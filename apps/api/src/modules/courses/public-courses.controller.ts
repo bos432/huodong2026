@@ -1,13 +1,15 @@
-import { BadRequestException, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Between, Repository } from "typeorm";
+import { Between, In, Repository } from "typeorm";
 import { createHmac } from "crypto";
 import { Course } from "../../entities/course.entity";
 import { CourseChapter } from "../../entities/course-chapter.entity";
 import { CourseLesson } from "../../entities/course-lesson.entity";
 import { CommunityActivity } from "../../entities/community-activity.entity";
 import { CommunityPost } from "../../entities/community-post.entity";
+import { CommunityPostComment } from "../../entities/community-post-comment.entity";
+import { CommunityPostLike } from "../../entities/community-post-like.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityCheckIn } from "../../entities/community-checkin.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
@@ -20,6 +22,8 @@ export class PublicCoursesController {
     @InjectRepository(CourseLesson) private lessons: Repository<CourseLesson>,
     @InjectRepository(CommunityActivity) private communityActivities: Repository<CommunityActivity>,
     @InjectRepository(CommunityPost) private communityPosts: Repository<CommunityPost>,
+    @InjectRepository(CommunityPostLike) private communityPostLikes: Repository<CommunityPostLike>,
+    @InjectRepository(CommunityPostComment) private communityPostComments: Repository<CommunityPostComment>,
     @InjectRepository(CheckInTask) private checkinTasks: Repository<CheckInTask>,
     @InjectRepository(CommunityCheckIn) private communityCheckins: Repository<CommunityCheckIn>,
     @InjectRepository(UserLearning) private userLearning: Repository<UserLearning>,
@@ -60,6 +64,7 @@ export class PublicCoursesController {
     const canPlayCourse = owned || Number(course.price || 0) <= 0;
     const playableLessons = lessons.filter((lesson) => canPlayCourse || lesson.isFree);
     if (!playableLessons.length && !owned) throw new BadRequestException("请先购买课程，后台确认收款后再学习");
+    const learningRows = lessons.length ? await this.userLearning.find({ where: { userId, courseId: id, lessonId: In(lessons.map((lesson) => lesson.id)) } }) : [];
     return {
       ...course,
       owned,
@@ -69,10 +74,42 @@ export class PublicCoursesController {
           .filter((lesson) => lesson.chapterId === chapter.id)
           .map((lesson) => ({
             ...lesson,
+            progress: Number(learningRows.find((row) => row.lessonId === lesson.id)?.progress || 0),
             locked: !(canPlayCourse || lesson.isFree)
           }))
       }))
     };
+  }
+
+  @Post("courses/:id/progress")
+  async updateCourseProgress(@Param("id", ParseIntPipe) id: number, @Body() dto: { lessonId?: number; progress?: number }, @Req() req: any) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const course = await this.courses.findOne({ where: { id, status: "published" } });
+    if (!course) throw new BadRequestException("课程不存在或未发布");
+    const lessonId = Number(dto.lessonId || 0);
+    const progress = Math.max(0, Math.min(Number(dto.progress || 0), 100));
+    if (lessonId > 0) {
+      const lesson = await this.lessons
+        .createQueryBuilder("lesson")
+        .innerJoin(CourseChapter, "chapter", "chapter.id = lesson.chapterId")
+        .where("lesson.id = :lessonId", { lessonId })
+        .andWhere("chapter.courseId = :courseId", { courseId: id })
+        .getOne();
+      if (!lesson) throw new BadRequestException("课时不存在");
+    }
+    if (!(await this.hasCourseAccess(userId, id)) && Number(course.price || 0) > 0) throw new BadRequestException("请先购买课程，后台确认收款后再学习");
+    const lessonRow = lessonId > 0 ? await this.saveLearning(userId, id, lessonId, progress) : null;
+    const lessons = await this.lessons
+      .createQueryBuilder("lesson")
+      .innerJoin(CourseChapter, "chapter", "chapter.id = lesson.chapterId")
+      .where("chapter.courseId = :courseId", { courseId: id })
+      .getMany();
+    const lessonRows = lessons.length ? await this.userLearning.find({ where: { userId, courseId: id, lessonId: In(lessons.map((lesson) => lesson.id)) } }) : [];
+    const totalProgress = lessons.length
+      ? lessonRows.reduce((sum, row) => sum + Number(row.progress || 0), 0) / lessons.length
+      : progress;
+    const courseRow = await this.saveLearning(userId, id, 0, totalProgress);
+    return { courseLearning: courseRow, lessonLearning: lessonRow };
   }
 
   @Get("community/activities")
@@ -82,9 +119,66 @@ export class PublicCoursesController {
   }
 
   @Get("community/posts")
-  async listPosts() {
+  async listPosts(@Req() req: any) {
+    const userId = this.optionalUserId(req.headers?.authorization);
     const items = await this.communityPosts.find({ where: { visible: true }, order: { createdAt: "DESC" }, take: 20 });
-    return items;
+    const ids = items.map((item) => item.id);
+    const likedRows = userId && ids.length ? await this.communityPostLikes.find({ where: { userId, postId: In(ids) } }) : [];
+    return items.map((item) => ({
+      ...item,
+      liked: likedRows.some((row) => row.postId === item.id)
+    }));
+  }
+
+  @Get("community/posts/:id")
+  async getPost(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+    const userId = this.optionalUserId(req.headers?.authorization);
+    const post = await this.communityPosts.findOne({ where: { id, visible: true } });
+    if (!post) return null;
+    const liked = userId ? await this.communityPostLikes.findOne({ where: { postId: id, userId } }) : null;
+    return {
+      ...post,
+      liked: Boolean(liked)
+    };
+  }
+
+  @Post("community/posts/:id/like")
+  async togglePostLike(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const post = await this.communityPosts.findOne({ where: { id, visible: true } });
+    if (!post) throw new BadRequestException("动态不存在或已下架");
+    const row = await this.communityPostLikes.findOne({ where: { postId: id, userId } });
+    if (row) {
+      await this.communityPostLikes.delete(row.id);
+      post.likes = Math.max(0, Number(post.likes || 0) - 1);
+      await this.communityPosts.save(post);
+      return { liked: false, likes: post.likes };
+    }
+    try {
+      await this.communityPostLikes.save(this.communityPostLikes.create({ postId: id, userId }));
+      post.likes = Number(post.likes || 0) + 1;
+      await this.communityPosts.save(post);
+    } catch (error: any) {
+      if (!this.isDuplicateKeyError(error)) throw error;
+    }
+    return { liked: true, likes: post.likes };
+  }
+
+  @Get("community/posts/:id/comments")
+  async listPostComments(@Param("id", ParseIntPipe) id: number) {
+    return this.communityPostComments.find({ where: { postId: id, status: "approved" }, order: { createdAt: "ASC" }, take: 50 });
+  }
+
+  @Post("community/posts/:id/comments")
+  async createPostComment(@Param("id", ParseIntPipe) id: number, @Body() dto: { content?: string }, @Req() req: any) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const post = await this.communityPosts.findOne({ where: { id, visible: true } });
+    if (!post) throw new BadRequestException("动态不存在或已下架");
+    const content = String(dto.content || "").trim();
+    if (!content) throw new BadRequestException("请输入评论内容");
+    if (content.length > 300) throw new BadRequestException("评论不能超过 300 个字");
+    const comment = await this.communityPostComments.save(this.communityPostComments.create({ postId: id, userId, content, status: "pending" }));
+    return { comment, message: "评论已提交，审核通过后展示" };
   }
 
   @Get("checkin/today")
@@ -131,6 +225,14 @@ export class PublicCoursesController {
   private async hasCourseAccess(userId: number, courseId: number) {
     const count = await this.userLearning.count({ where: { userId, courseId, lessonId: 0 } });
     return count > 0;
+  }
+
+  private async saveLearning(userId: number, courseId: number, lessonId: number, progress: number) {
+    let row = await this.userLearning.findOne({ where: { userId, courseId, lessonId } });
+    if (!row) row = this.userLearning.create({ userId, courseId, lessonId, progress: 0, completedAt: null });
+    row.progress = Number(progress.toFixed(2));
+    row.completedAt = progress >= 100 ? row.completedAt || new Date() : null;
+    return this.userLearning.save(row);
   }
 
   private isDuplicateKeyError(error: any) {

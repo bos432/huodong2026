@@ -200,6 +200,10 @@ export class PaymentProviderService {
     return this.isRealProviderEnabled(provider);
   }
 
+  canCreatePayment(provider: SupportedPaymentProvider) {
+    return this.isRealProviderEnabled(provider) || this.config.get("PAYMENT_SANDBOX_ENABLED", "false") === "true";
+  }
+
   createSandboxPayment(provider: SupportedPaymentProvider, order: Order, dto: ProviderPayDto): ProviderPaymentResult {
     this.assertSandboxAllowed(`${provider} sandbox payment`);
     const transactionNo = dto.transactionNo?.trim() || `${provider.toUpperCase()}${Date.now()}${order.id}`;

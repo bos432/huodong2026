@@ -19,7 +19,7 @@ const pointsToUse = ref(0);
 const quote = ref<any>();
 const userId = ref<number>();
 type PayMethod = "wechat" | "alipay" | "balance" | "offline";
-const paymentMethod = ref<PayMethod>("wechat");
+const paymentMethod = ref<PayMethod>("offline");
 const channelCode = ref("");
 const source = ref("");
 const inviteCode = ref("");
@@ -46,7 +46,8 @@ const paymentHint = computed(() => {
   if (activity.value.remainingSeats <= 0) return "当前名额已满，提交后将进入候补名单";
   return payableNumber.value > 0 ? "提交后请选择支付方式；线下收款需后台确认后生效。" : activity.value.requireReview ? "提交后会进入主办方审核，审核结果会显示在我的报名里。" : "提交后即可获得报名成功状态。";
 });
-const paymentMethods = computed<Record<string, boolean>>(() => operationSetting.value?.paymentMethods || { free: true, wechat: true, alipay: false, balance: true, offline: true });
+const defaultPaymentMethods = { free: true, wechat: false, alipay: false, balance: true, offline: true };
+const paymentMethods = computed<Record<string, boolean>>(() => ({ ...defaultPaymentMethods, ...(operationSetting.value?.paymentMethods || {}) }));
 const availablePaymentMethods = computed(() => {
   const rows = [
     { value: "wechat" as PayMethod, name: "微信支付", desc: "H5 / 小程序" },

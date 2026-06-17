@@ -11,7 +11,7 @@ const form = reactive({
   offlinePaymentInstructions: "",
   paymentMethods: {
     free: true,
-    wechat: true,
+    wechat: false,
     alipay: false,
     balance: true,
     offline: true
@@ -35,7 +35,7 @@ async function load() {
       registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
       registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: data.offlinePaymentInstructions || "",
-      paymentMethods: { free: true, wechat: true, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
+      paymentMethods: { free: true, wechat: false, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
       customerServiceName: data.customerServiceName || "",
       customerServicePhone: data.customerServicePhone || "",
       customerServiceWechat: data.customerServiceWechat || "",

@@ -657,8 +657,8 @@ export class PublicService {
   async register(activityId: number, dto: RegisterDto, user: User, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(activityId, { withFields: true });
     if (!activity || activity.status !== ActivityStatus.Open) throw new BadRequestException("活动暂不可报名");
-    await this.assertPublicTenantAccess(activity, context);
-    await this.assertRegistrationEnabled();
+    const tenant = await this.assertPublicTenantAccess(activity, context);
+    await this.assertRegistrationEnabled(tenant);
     if (new Date(activity.registrationDeadline).getTime() < Date.now()) throw new BadRequestException("报名已截止");
     await this.ensureActivityMemberAccess(activity, user);
 
@@ -677,7 +677,7 @@ export class PublicService {
 
     const quote = await this.calculateQuote(activity, { ...dto, userId: user.id });
     const price = Number(quote.payableAmount);
-    const paymentMethod = price > 0 ? dto.paymentMethod || PaymentMethod.Wechat : PaymentMethod.Free;
+    const paymentMethod = price > 0 ? dto.paymentMethod || PaymentMethod.Offline : PaymentMethod.Free;
     await this.assertPaymentMethodEnabled(paymentMethod, activity.tenant);
     if (price > 0 && paymentMethod === PaymentMethod.Balance) await this.assertSufficientBalance(user, activity.tenant, price);
     const status = price > 0 ? RegistrationStatus.PendingPayment : activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
@@ -939,7 +939,25 @@ export class PublicService {
       .orderBy("registration.createdAt", "DESC");
     if (tenant) builder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId: tenant.id });
     const rows = await builder.getMany();
-    return rows.map((registration) => this.publicRegistration(registration));
+    if (!rows.length) return [];
+    const orders = await this.orders.find({ where: rows.map((registration) => ({ registration: { id: registration.id } })) });
+    return rows.map((registration) => ({
+      ...this.publicRegistration(registration),
+      order: this.publicOrderSummary(orders.find((order) => order.registration.id === registration.id) || null)
+    }));
+  }
+
+  async myCourseOrders(user: User) {
+    const orders = await this.courseOrders.find({
+      where: { user: { id: user.id } },
+      order: { createdAt: "DESC" },
+      take: 100
+    });
+    return Promise.all(orders.map(async (order) => ({
+      ...this.publicCourseOrder(order),
+      course: this.publicCourse(order.course),
+      owned: await this.hasCourseAccess(user.id, order.course.id)
+    })));
   }
 
   async myWallet(user: User, context?: PublicTenantContext) {
@@ -1571,8 +1589,8 @@ export class PublicService {
     return this.operationSettings.save(setting);
   }
 
-  private async assertRegistrationEnabled() {
-    const setting = await this.ensureOperationSetting();
+  private async assertRegistrationEnabled(tenant?: Tenant | null) {
+    const setting = await this.ensureOperationSetting(tenant || null);
     if (setting.registrationEnabled !== false && (setting.registrationEnabled as unknown) !== 0 && (setting.registrationEnabled as unknown) !== "0") return;
     throw new BadRequestException(setting.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。");
   }
@@ -1581,11 +1599,22 @@ export class PublicService {
     const setting = await this.ensureOperationSetting(tenant || null);
     const methods = this.normalizePaymentMethods(setting.paymentMethods);
     if (method === PaymentMethod.Free && methods.free) return;
-    if (method === PaymentMethod.Wechat && methods.wechat) return;
-    if (method === PaymentMethod.Alipay && methods.alipay) return;
+    if (method === PaymentMethod.Wechat && methods.wechat) {
+      this.assertProviderPaymentReady("wechat", method);
+      return;
+    }
+    if (method === PaymentMethod.Alipay && methods.alipay) {
+      this.assertProviderPaymentReady("alipay", method);
+      return;
+    }
     if (method === PaymentMethod.Balance && methods.balance) return;
     if (method === PaymentMethod.Offline && methods.offline) return;
     throw new BadRequestException(`${this.paymentMethodLabel(method)}暂未开放，请选择其他支付方式`);
+  }
+
+  private assertProviderPaymentReady(provider: SupportedPaymentProvider, method: PaymentMethod) {
+    if (this.paymentProvider.canCreatePayment(provider)) return;
+    throw new BadRequestException(`${this.paymentMethodLabel(method)}尚未完成真实支付配置，请选择线下收款或联系主办方`);
   }
 
   private defaultPaymentMethods() {
@@ -1750,6 +1779,32 @@ export class PublicService {
 
   private publicOrder(order: Order) {
     return { ...order, registration: this.publicRegistration(order.registration) };
+  }
+
+  private publicOrderSummary(order?: Order | null) {
+    if (!order) return null;
+    return {
+      id: order.id,
+      orderNo: order.orderNo,
+      amount: order.amount,
+      originalAmount: order.originalAmount,
+      discountAmount: order.discountAmount,
+      memberDiscountAmount: order.memberDiscountAmount,
+      pointsUsed: order.pointsUsed,
+      pointsDiscountAmount: order.pointsDiscountAmount,
+      paymentMethod: order.paymentMethod,
+      status: order.status,
+      transactionNo: order.transactionNo,
+      paidAt: order.paidAt,
+      expiresAt: order.expiresAt,
+      closedAt: order.closedAt,
+      closeReason: order.closeReason,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt,
+      ticketType: order.ticketType,
+      coupon: order.coupon,
+      memberLevel: order.memberLevel
+    };
   }
 
   private publicCourse(course: Course) {

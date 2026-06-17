@@ -298,7 +298,7 @@ function preferredPaymentScene(provider: "wechat" | "alipay" | "balance") {
 }
 
 function enabledPaymentMethods() {
-  return operationSetting().paymentMethods || { free: true, wechat: true, alipay: false, balance: true, offline: true };
+  return { free: true, wechat: false, alipay: false, balance: true, offline: true, ...(operationSetting().paymentMethods || {}) };
 }
 
 function canPay(method: "wechat" | "alipay" | "balance" | "offline") {

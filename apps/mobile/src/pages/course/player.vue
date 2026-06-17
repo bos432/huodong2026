@@ -17,16 +17,16 @@
       <text style="font-size:80rpx;">📜</text>
       <view class="player-controls">
         <text class="player-btn">⏮</text>
-        <text class="player-btn player-btn-play">▶</text>
+        <text class="player-btn player-btn-play" @click="markProgress(60)">▶</text>
         <text class="player-btn">⏭</text>
       </view>
       <view class="player-progress">
         <view class="player-progress-track">
-          <view class="player-progress-fill" style="width:35%;"></view>
+          <view class="player-progress-fill" :style="{ width: currentProgress + '%' }"></view>
         </view>
         <view class="row" style="justify-content:space-between; margin-top:8rpx;">
-          <text class="subtle">05:23</text>
-          <text class="subtle">15:00</text>
+          <text class="subtle">已学 {{ currentProgress }}%</text>
+          <text class="subtle">{{ currentLesson?.duration || "-" }}</text>
         </view>
       </view>
     </view>
@@ -34,6 +34,7 @@
     <view class="player-info">
       <text class="title-md">{{ currentChapterTitle }}</text>
       <text class="body-text" style="margin-top:4rpx;">{{ currentLessonTitle }}</text>
+      <view class="button block" style="margin-top:20rpx;" :class="{ disabled: savingProgress }" @click="markProgress(100)">{{ savingProgress ? "保存中..." : "标记本课时完成" }}</view>
     </view>
 
     <!-- 目录按钮 -->
@@ -45,10 +46,10 @@
     <view v-if="showCatalog" class="card" style="margin-top:16rpx;">
       <view v-for="(chapter, ci) in chapters" :key="ci" style="margin-bottom:12rpx;">
         <text style="font-size:26rpx; font-weight:600; color:#333; display:block; margin-bottom:8rpx;">{{ chapter.title }}</text>
-        <view v-for="(lesson, li) in chapter.lessons" :key="li" class="catalog-lesson" :class="{ active: lesson.id === currentLesson?.id, locked: lesson.locked }">
+        <view v-for="(lesson, li) in chapter.lessons" :key="li" class="catalog-lesson" :class="{ active: lesson.id === currentLesson?.id, locked: lesson.locked }" @click="selectLesson(lesson)">
           <text>{{ lesson.locked ? '🔒' : '▶' }}</text>
           <text style="flex:1; color:#333; font-size:26rpx;">{{ lesson.title }}</text>
-          <text class="subtle">{{ lesson.duration }}</text>
+          <text class="subtle">{{ lesson.progress ? `${lesson.progress}%` : lesson.duration }}</text>
         </view>
       </view>
     </view>
@@ -62,13 +63,19 @@ import { ensureUser, request, withTenantCode } from "../../api";
 
 const showCatalog = ref(false);
 const loading = ref(true);
+const savingProgress = ref(false);
 const error = ref("");
 const rawCourse = ref<any>();
+const selectedLessonId = ref(0);
 const chapters = computed(() => rawCourse.value?.chapters || []);
 const courseTitle = computed(() => rawCourse.value?.title || "课程学习");
-const currentLesson = computed(() => chapters.value.flatMap((chapter: any) => chapter.lessons || []).find((lesson: any) => !lesson.locked));
+const currentLesson = computed(() => {
+  const lessons = chapters.value.flatMap((chapter: any) => chapter.lessons || []).filter((lesson: any) => !lesson.locked);
+  return lessons.find((lesson: any) => lesson.id === selectedLessonId.value) || lessons[0];
+});
 const currentChapterTitle = computed(() => chapters.value.find((chapter: any) => (chapter.lessons || []).some((lesson: any) => lesson.id === currentLesson.value?.id))?.title || "课程目录");
 const currentLessonTitle = computed(() => currentLesson.value?.title || "暂无可学习课时，请先在后台维护课程目录");
+const currentProgress = computed(() => Math.max(0, Math.min(Number(currentLesson.value?.progress || 0), 100)));
 
 function currentCourseId() {
   const pages = getCurrentPages();
@@ -89,6 +96,7 @@ async function loadCourse() {
     await ensureUser();
     rawCourse.value = await request<any>(`/public/courses/${id}/player`);
     if (!rawCourse.value) error.value = "课程不存在或未发布";
+    selectedLessonId.value = chapters.value.flatMap((chapter: any) => chapter.lessons || []).find((lesson: any) => !lesson.locked)?.id || 0;
   } catch (err: any) {
     rawCourse.value = null;
     error.value = err.message || "暂时无法进入学习";
@@ -99,6 +107,29 @@ async function loadCourse() {
 
 function goBack() { uni.navigateBack(); }
 function goDetail() { uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${currentCourseId() || 1}`) }); }
+function selectLesson(lesson: any) {
+  if (lesson.locked) {
+    uni.showToast({ title: "该课时需购买后学习", icon: "none" });
+    return;
+  }
+  selectedLessonId.value = lesson.id;
+}
+async function markProgress(progress: number) {
+  if (!currentLesson.value || savingProgress.value) return;
+  savingProgress.value = true;
+  try {
+    const result = await request<any>(`/public/courses/${currentCourseId()}/progress`, {
+      method: "POST",
+      data: { lessonId: currentLesson.value.id, progress }
+    });
+    currentLesson.value.progress = Number(result?.lessonLearning?.progress || progress);
+    uni.showToast({ title: progress >= 100 ? "已完成本课时" : "学习进度已保存", icon: "none" });
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "保存进度失败", icon: "none" });
+  } finally {
+    savingProgress.value = false;
+  }
+}
 function showMore() {
   uni.showActionSheet({
     itemList: ["查看课程详情", "反馈问题"],

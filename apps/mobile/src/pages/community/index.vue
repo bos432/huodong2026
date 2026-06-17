@@ -78,8 +78,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
-import { request, withTenantCode } from "../../api";
-import { addCommunityComment, normalizeCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
+import { ensureUser, request, withTenantCode } from "../../api";
+import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 
 onShow(() => {
   loadPageTheme();
@@ -147,9 +147,16 @@ onMounted(() => {
   loadPosts();
 });
 
-function toggleLike(post: any) {
-  toggleCommunityLike(post);
-  uni.showToast({ title: post.liked ? "已收藏动态" : "已取消收藏", icon: "none" });
+async function toggleLike(post: any) {
+  try {
+    await ensureUser();
+    const result = await request<any>(`/public/community/posts/${post.id}/like`, { method: "POST" });
+    post.liked = Boolean(result?.liked);
+    post.likes = Number(result?.likes || 0);
+    uni.showToast({ title: post.liked ? "已点赞" : "已取消点赞", icon: "none" });
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "操作失败", icon: "none" });
+  }
 }
 function commentPost(post: CommunityPost) {
   uni.showModal({
@@ -164,10 +171,18 @@ function commentPost(post: CommunityPost) {
         uni.showToast({ title: "请输入评论内容", icon: "none" });
         return;
       }
-      addCommunityComment(post);
-      uni.showToast({ title: "评论已发布", icon: "success" });
+      submitComment(post, content);
     }
   });
+}
+async function submitComment(post: CommunityPost, content: string) {
+  try {
+    await ensureUser();
+    const result = await request<any>(`/public/community/posts/${post.id}/comments`, { method: "POST", data: { content } });
+    uni.showToast({ title: result?.message || "评论已提交审核", icon: "none" });
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "评论失败", icon: "none" });
+  }
 }
 function goActivity(act: any) {
   uni.showModal({

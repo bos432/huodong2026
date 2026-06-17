@@ -206,7 +206,7 @@ async function buyCourse() {
     try {
       await ensureUser();
       await request(`/public/courses/${course.value.id}/orders`, { method: "POST", data: {} });
-      uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&id=${course.value.id}`) });
+      uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&mode=free&id=${course.value.id}`) });
     } catch (err: any) {
       uni.showToast({ title: err.message || "加入课程失败", icon: "none" });
     } finally {

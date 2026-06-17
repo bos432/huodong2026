@@ -34,6 +34,26 @@
           <el-table-column label="操作" width="100"><template #default="{row}"><el-button size="small" type="danger" @click="deletePost(row)">删除</el-button></template></el-table-column>
         </el-table>
       </el-tab-pane>
+      <el-tab-pane label="评论审核" name="comments">
+        <el-table :data="comments" stripe style="width:100%;" empty-text="暂无评论">
+          <el-table-column prop="id" label="ID" width="60" />
+          <el-table-column prop="postId" label="动态ID" width="80" />
+          <el-table-column prop="userId" label="用户ID" width="80" />
+          <el-table-column prop="content" label="评论内容" min-width="300" show-overflow-tooltip />
+          <el-table-column prop="status" label="状态" width="100">
+            <template #default="{row}">
+              <el-tag :type="row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'">{{ statusText(row.status) }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="createdAt" label="时间" width="160" />
+          <el-table-column label="操作" width="180">
+            <template #default="{row}">
+              <el-button size="small" type="success" :disabled="row.status === 'approved'" @click="reviewComment(row, 'approved')">通过</el-button>
+              <el-button size="small" type="danger" :disabled="row.status === 'rejected'" @click="reviewComment(row, 'rejected')">拒绝</el-button>
+            </template>
+          </el-table-column>
+        </el-table>
+      </el-tab-pane>
     </el-tabs>
 
     <el-dialog v-model="showForm" :title="editingActivity ? '编辑活动' : '新增活动'" width="500px">
@@ -67,6 +87,7 @@ const activeTab = ref("activities");
 const activities = ref<any[]>([]);
 const checkinTasks = ref<any[]>([]);
 const posts = ref<any[]>([]);
+const comments = ref<any[]>([]);
 const showForm = ref(false);
 const editingActivity = ref(false);
 const activityForm = ref<any>({ title:"", startTime:"", location:"", status:"draft", description:"" });
@@ -94,14 +115,16 @@ function formatLocalDate(value?: string | Date | null) {
 
 async function load() {
   try {
-    const [actRows, chkRows, postRows] = await Promise.all([
+    const [actRows, chkRows, postRows, commentRows] = await Promise.all([
       api.get<any, any[]>("/admin/community-activities"),
       api.get<any, any[]>("/admin/checkin-tasks"),
-      api.get<any, any[]>("/admin/community-posts")
+      api.get<any, any[]>("/admin/community-posts"),
+      api.get<any, any[]>("/admin/community-post-comments")
     ]);
     activities.value = actRows;
     checkinTasks.value = chkRows;
     posts.value = postRows;
+    comments.value = commentRows;
   } catch (error: any) {
     ElMessage.error(error.message || "加载共修数据失败");
   }
@@ -204,6 +227,22 @@ async function deletePost(row: any) {
   } catch (error: any) {
     if (error === "cancel") return;
     ElMessage.error(error.message || "删除动态失败");
+  }
+}
+
+function statusText(status: string) {
+  if (status === "approved") return "已通过";
+  if (status === "rejected") return "已拒绝";
+  return "待审核";
+}
+
+async function reviewComment(row: any, status: "approved" | "rejected") {
+  try {
+    await api.patch("/admin/community-post-comments/" + row.id, { status });
+    await load();
+    ElMessage.success(status === "approved" ? "评论已通过" : "评论已拒绝");
+  } catch (error: any) {
+    ElMessage.error(error.message || "审核评论失败");
   }
 }
 

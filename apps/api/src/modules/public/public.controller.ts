@@ -193,6 +193,12 @@ export class PublicController {
     return this.service.myCourses(user);
   }
 
+  @Get("me/course-orders")
+  async myCourseOrders(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myCourseOrders(user);
+  }
+
   @Get("me/certificates")
   async myCertificates(@Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);

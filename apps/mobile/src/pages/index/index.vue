@@ -8,6 +8,8 @@
       </view>
     </view>
 
+    <PageDecorationBlocks :sections="contentSections" />
+
     <!-- 金刚区 2x4 -->
     <view class="card" style="padding:16rpx 8rpx;">
       <view class="grid-2x4">
@@ -120,16 +122,20 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { withTenantCode } from "../../api";
-import { request } from "../../api";
+import { ensureUser, request, withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
-import { addCommunityComment, normalizeCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
+import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { usePageDecoration } from "../../decoration";
+import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
+
+const { contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
 
 onShow(() => {
   loadPageTheme();
+  loadDecoration();
   loadCourses();
   loadPosts();
 });
@@ -187,9 +193,16 @@ function goCourse(c: any) { uni.navigateTo({ url: withTenantCode(`/pages/course/
 function goAllCourses() { uni.reLaunch({ url:"/pages/courses/index" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goPost(p: any) { uni.navigateTo({ url:`/pages/community/detail?id=${p.id || 1}` }); }
-function toggleLike(post: CommunityPost) {
-  toggleCommunityLike(post);
-  uni.showToast({ title: post.liked ? "已收藏动态" : "已取消收藏", icon: "none" });
+async function toggleLike(post: CommunityPost) {
+  try {
+    await ensureUser();
+    const result = await request<any>(`/public/community/posts/${post.id}/like`, { method: "POST" });
+    post.liked = Boolean(result?.liked);
+    post.likes = Number(result?.likes || 0);
+    uni.showToast({ title: post.liked ? "已点赞" : "已取消点赞", icon: "none" });
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "操作失败", icon: "none" });
+  }
 }
 function commentPost(post: CommunityPost) {
   uni.showModal({
@@ -204,10 +217,18 @@ function commentPost(post: CommunityPost) {
         uni.showToast({ title: "请输入评论内容", icon: "none" });
         return;
       }
-      addCommunityComment(post);
-      uni.showToast({ title: "评论已发布", icon: "success" });
+      submitComment(post, content);
     }
   });
+}
+async function submitComment(post: CommunityPost, content: string) {
+  try {
+    await ensureUser();
+    const result = await request<any>(`/public/community/posts/${post.id}/comments`, { method: "POST", data: { content } });
+    uni.showToast({ title: result?.message || "评论已提交审核", icon: "none" });
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "评论失败", icon: "none" });
+  }
 }
 </script>
 

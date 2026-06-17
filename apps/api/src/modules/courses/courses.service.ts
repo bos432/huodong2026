@@ -8,6 +8,7 @@ import { CourseOrder, CourseOrderStatus } from "../../entities/course-order.enti
 import { CommunityActivity } from "../../entities/community-activity.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityPost } from "../../entities/community-post.entity";
+import { CommunityPostComment, CommunityPostCommentStatus } from "../../entities/community-post-comment.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { PaymentMethod } from "../../shared/domain";
 
@@ -21,6 +22,7 @@ export class CoursesService {
     @InjectRepository(CommunityActivity) private communityActivities: Repository<CommunityActivity>,
     @InjectRepository(CheckInTask) private checkinTasks: Repository<CheckInTask>,
     @InjectRepository(CommunityPost) private communityPosts: Repository<CommunityPost>,
+    @InjectRepository(CommunityPostComment) private communityPostComments: Repository<CommunityPostComment>,
     @InjectRepository(UserLearning) private userLearning: Repository<UserLearning>
   ) {}
 
@@ -229,5 +231,33 @@ export class CoursesService {
   async deleteCommunityPost(id: number) {
     await this.communityPosts.delete(id);
     return { success: true };
+  }
+
+  async listCommunityPostComments(query: { status?: CommunityPostCommentStatus; postId?: string | number }) {
+    const where: any = {};
+    if (query.status) where.status = query.status;
+    if (query.postId) where.postId = Number(query.postId);
+    return this.communityPostComments.find({ where, order: { createdAt: "DESC" }, take: 100 });
+  }
+
+  async reviewCommunityPostComment(id: number, dto: { status?: CommunityPostCommentStatus; reviewRemark?: string | null }) {
+    const comment = await this.communityPostComments.findOne({ where: { id } });
+    if (!comment) throw new NotFoundException("评论不存在");
+    const nextStatus = dto.status;
+    if (nextStatus !== "approved" && nextStatus !== "rejected" && nextStatus !== "pending") throw new BadRequestException("评论状态不正确");
+    const oldStatus = comment.status;
+    comment.status = nextStatus;
+    comment.reviewRemark = dto.reviewRemark?.trim() || null;
+    const saved = await this.communityPostComments.save(comment);
+    if (oldStatus !== "approved" && nextStatus === "approved") await this.adjustPostCommentCount(comment.postId, 1);
+    if (oldStatus === "approved" && nextStatus !== "approved") await this.adjustPostCommentCount(comment.postId, -1);
+    return saved;
+  }
+
+  private async adjustPostCommentCount(postId: number, delta: number) {
+    const post = await this.communityPosts.findOne({ where: { id: postId } });
+    if (!post) return;
+    post.comments = Math.max(0, Number(post.comments || 0) + delta);
+    await this.communityPosts.save(post);
   }
 }

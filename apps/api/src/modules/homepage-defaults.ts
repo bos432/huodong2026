@@ -191,7 +191,7 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
           { label: "浏览活动", icon: "活", color: "#0f766e", link: "/pages/activity/list", action: "mainPage" },
           { label: "公告中心", icon: "告", color: "#c2410c", link: "/pages/announcement/list" },
           { label: "服务中心", icon: "服", color: "#475467", link: "/pages/service/index" },
-          { label: "刷新状态", icon: "刷", color: "#4338ca", action: "refresh" }
+          { label: "我的订单", icon: "单", color: "#4338ca", link: "/pages/user/orders", action: "navigate" }
         ]
       },
       layout: { heroBackgroundColor: "#111827", heroTextColor: "#ffffff" }
@@ -243,6 +243,24 @@ function defaultInnerPageSections(pageKey: string): HomepageSectionTemplate[] {
     review_page: "你的反馈会帮助主办方持续改进活动体验。"
   };
   const sections: HomepageSectionTemplate[] = [
+    ...(pageKey === "user_my" ? [{
+      pageKey,
+      type: "my_page",
+      title: "我的",
+      subtitle: "会员权益、订单、课程和管理入口",
+      enabled: true,
+      sortOrder: 5,
+      config: {
+        greeting: "我的",
+        tools: [
+          { label: "我的订单", icon: "单", color: "#c43d3d", link: "/pages/user/orders", action: "navigate" },
+          { label: "我的课程", icon: "课", color: "#4a6b8a", link: "/pages/user/courses", action: "navigate" },
+          { label: "服务中心", icon: "服", color: "#475467", link: "/pages/service/index", action: "navigate" },
+          { label: "账号设置", icon: "设", color: "#7c3aed", link: "/pages/user/settings", action: "navigate" }
+        ]
+      },
+      layout: { heroBackgroundColor: "#111827", heroTextColor: "#ffffff" }
+    }] : []),
     {
       pageKey,
       type: "hero",

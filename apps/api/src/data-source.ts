@@ -31,6 +31,8 @@ import { CommunityCheckIn } from "./entities/community-checkin.entity";
 import { CheckInTask } from "./entities/checkin-task.entity";
 import { CommunityActivity } from "./entities/community-activity.entity";
 import { CommunityPost } from "./entities/community-post.entity";
+import { CommunityPostComment } from "./entities/community-post-comment.entity";
+import { CommunityPostLike } from "./entities/community-post-like.entity";
 import { Coupon } from "./entities/coupon.entity";
 import { ConversionEvent } from "./entities/conversion-event.entity";
 import { Course } from "./entities/course.entity";
@@ -133,6 +135,8 @@ export default new DataSource({
     CommunityActivity,
     CheckInTask,
     CommunityPost,
+    CommunityPostLike,
+    CommunityPostComment,
     CommunityCheckIn,
     UserLearning,
     UserFavorite,

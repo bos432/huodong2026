@@ -78,7 +78,7 @@ const defaultConfig: Record<string, Record<string, any>> = {
       { label: "浏览活动", icon: "活", color: "#0f766e", link: "/pages/activity/list", action: "mainPage" },
       { label: "公告中心", icon: "告", color: "#c2410c", link: "/pages/announcement/list" },
       { label: "服务中心", icon: "服", color: "#475467", link: "/pages/service/index" },
-      { label: "刷新状态", icon: "刷", color: "#4338ca", action: "refresh" }
+      { label: "我的订单", icon: "单", color: "#4338ca", link: "/pages/user/orders", action: "navigate" }
     ]
   },
   inner_pages: {

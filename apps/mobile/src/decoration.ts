@@ -93,7 +93,9 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
     return (pages.find((item: any) => item?.key === pageKey) as InnerPageConfig | undefined) || (defaultInnerPagesSection.config.pages as InnerPageConfig[]).find((item) => item.key === pageKey) || { key: pageKey, title: "", subtitle: "", showBottomNav: true };
   });
   const showBottomNav = computed(() => innerPageConfig.value.showBottomNav !== false && Boolean(bottomNavSection.value?.enabled));
-  const contentSections = computed(() => sections.value.filter((item) => item.enabled && item.type !== "bottom_nav").sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
+  const contentSections = computed(() => sections.value
+    .filter((item) => item.enabled && !["bottom_nav", "my_page", "inner_pages"].includes(item.type))
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
 
   async function loadDecoration() {
     try {
