@@ -35,6 +35,7 @@ const Courses = () => import("./views/Courses.vue");
 const Community = () => import("./views/Community.vue");
 const ConfigCheck = () => import("./views/ConfigCheck.vue");
 const MiniprogramRelease = () => import("./views/MiniprogramRelease.vue");
+const OperationGuide = () => import("./views/OperationGuide.vue");
 const OpsRoutine = () => import("./views/OpsRoutine.vue");
 const Tenants = () => import("./views/Tenants.vue");
 const TenantProfile = () => import("./views/TenantProfile.vue");
@@ -81,6 +82,7 @@ export const router = createRouter({
         { path: "h5-code-logs", component: H5CodeLogs, meta: { roles: ["logs.view"], scope: "platform" } },
         { path: "config-check", component: ConfigCheck, meta: { roles: ["system.manage"], scope: "platform" } },
         { path: "miniprogram-release", component: MiniprogramRelease, meta: { roles: ["miniprogram_release.manage"], scope: "platform" } },
+        { path: "operation-guide", component: OperationGuide, meta: { roles: ["system.manage"], scope: "platform" } },
         { path: "ops-routine", component: OpsRoutine, meta: { roles: ["system.manage"], scope: "platform" } },
         { path: "categories", component: Categories, meta: { roles: ["category.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "admins", component: Admins, meta: { roles: ["admin.manage"], scope: "any" } },

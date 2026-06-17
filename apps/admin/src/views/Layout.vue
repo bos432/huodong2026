@@ -140,6 +140,7 @@ const menuGroups = [
       { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.manage"], scope: "platform" },
       { index: "/config-check", icon: "Monitor", label: "上线体检", roles: ["system.manage"], scope: "platform" },
       { index: "/miniprogram-release", icon: "Promotion", label: "小程序发布", roles: ["miniprogram_release.manage"], scope: "platform" },
+      { index: "/operation-guide", icon: "Guide", label: "运维教程", roles: ["system.manage"], scope: "platform" },
       { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["system.manage"], scope: "platform" },
       { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "platform" },
       { index: "/admin-login-logs", icon: "Key", label: "登录日志", roles: ["logs.view"], scope: "platform" },
