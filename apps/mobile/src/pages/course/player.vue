@@ -6,7 +6,13 @@
       <view class="nav-more" @click="showMore">⋯</view>
     </view>
 
-    <!-- 模拟播放器 -->
+    <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-else-if="error" class="card state-card">
+      <view>{{ error }}</view>
+      <view class="button block" style="margin-top:24rpx;" @click="goDetail">返回课程详情</view>
+    </view>
+
+    <template v-else>
     <view class="player-area">
       <text style="font-size:80rpx;">📜</text>
       <view class="player-controls">
@@ -39,26 +45,30 @@
     <view v-if="showCatalog" class="card" style="margin-top:16rpx;">
       <view v-for="(chapter, ci) in chapters" :key="ci" style="margin-bottom:12rpx;">
         <text style="font-size:26rpx; font-weight:600; color:#333; display:block; margin-bottom:8rpx;">{{ chapter.title }}</text>
-        <view v-for="(lesson, li) in chapter.lessons" :key="li" class="catalog-lesson" :class="{ active: ci === 0 && li === 0 }">
-          <text>{{ lesson.isFree || (ci === 0 && li === 0) ? '▶' : '🔒' }}</text>
+        <view v-for="(lesson, li) in chapter.lessons" :key="li" class="catalog-lesson" :class="{ active: lesson.id === currentLesson?.id, locked: lesson.locked }">
+          <text>{{ lesson.locked ? '🔒' : '▶' }}</text>
           <text style="flex:1; color:#333; font-size:26rpx;">{{ lesson.title }}</text>
           <text class="subtle">{{ lesson.duration }}</text>
         </view>
       </view>
     </view>
+    </template>
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { request, withTenantCode } from "../../api";
+import { ensureUser, request, withTenantCode } from "../../api";
 
 const showCatalog = ref(false);
+const loading = ref(true);
+const error = ref("");
 const rawCourse = ref<any>();
 const chapters = computed(() => rawCourse.value?.chapters || []);
 const courseTitle = computed(() => rawCourse.value?.title || "课程学习");
-const currentChapterTitle = computed(() => chapters.value[0]?.title || "课程目录");
-const currentLessonTitle = computed(() => chapters.value[0]?.lessons?.[0]?.title || "暂无课时，请先在后台维护课程目录");
+const currentLesson = computed(() => chapters.value.flatMap((chapter: any) => chapter.lessons || []).find((lesson: any) => !lesson.locked));
+const currentChapterTitle = computed(() => chapters.value.find((chapter: any) => (chapter.lessons || []).some((lesson: any) => lesson.id === currentLesson.value?.id))?.title || "课程目录");
+const currentLessonTitle = computed(() => currentLesson.value?.title || "暂无可学习课时，请先在后台维护课程目录");
 
 function currentCourseId() {
   const pages = getCurrentPages();
@@ -67,21 +77,33 @@ function currentCourseId() {
 }
 
 async function loadCourse() {
+  loading.value = true;
+  error.value = "";
   const id = currentCourseId();
-  if (!id) return;
+  if (!id) {
+    error.value = "缺少课程ID";
+    loading.value = false;
+    return;
+  }
   try {
-    rawCourse.value = await request<any>(`/public/courses/${id}`);
-  } catch {
+    await ensureUser();
+    rawCourse.value = await request<any>(`/public/courses/${id}/player`);
+    if (!rawCourse.value) error.value = "课程不存在或未发布";
+  } catch (err: any) {
     rawCourse.value = null;
+    error.value = err.message || "暂时无法进入学习";
+  } finally {
+    loading.value = false;
   }
 }
 
 function goBack() { uni.navigateBack(); }
+function goDetail() { uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${currentCourseId() || 1}`) }); }
 function showMore() {
   uni.showActionSheet({
     itemList: ["查看课程详情", "反馈问题"],
     success(result) {
-      if (result.tapIndex === 0) uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${currentCourseId() || 1}`) });
+      if (result.tapIndex === 0) goDetail();
       if (result.tapIndex === 1) uni.navigateTo({ url:"/pages/service/index" });
     }
   });
@@ -114,4 +136,6 @@ onMounted(loadCourse);
   padding:12rpx 0; border-bottom:1rpx solid #E8E0D8;
 }
 .catalog-lesson.active { background:rgba(196,61,61,0.06); border-radius:8rpx; padding:12rpx; }
+.catalog-lesson.locked { opacity:0.58; }
+.state-card { text-align:center; margin-top:24rpx; }
 </style>

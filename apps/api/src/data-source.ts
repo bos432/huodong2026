@@ -27,6 +27,7 @@ import { CharityFundTransaction } from "./entities/charity-fund-transaction.enti
 import { CharityProjectDisbursement } from "./entities/charity-project-disbursement.entity";
 import { CharityProject } from "./entities/charity-project.entity";
 import { Certificate } from "./entities/certificate.entity";
+import { CommunityCheckIn } from "./entities/community-checkin.entity";
 import { CheckInTask } from "./entities/checkin-task.entity";
 import { CommunityActivity } from "./entities/community-activity.entity";
 import { CommunityPost } from "./entities/community-post.entity";
@@ -132,6 +133,7 @@ export default new DataSource({
     CommunityActivity,
     CheckInTask,
     CommunityPost,
+    CommunityCheckIn,
     UserLearning,
     UserFavorite,
     Certificate

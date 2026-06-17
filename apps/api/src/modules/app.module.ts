@@ -30,6 +30,7 @@ import { CharityFundTransaction } from "../entities/charity-fund-transaction.ent
 import { CharityProjectDisbursement } from "../entities/charity-project-disbursement.entity";
 import { CharityProject } from "../entities/charity-project.entity";
 import { Certificate } from "../entities/certificate.entity";
+import { CommunityCheckIn } from "../entities/community-checkin.entity";
 import { CheckInTask } from "../entities/checkin-task.entity";
 import { CommunityActivity } from "../entities/community-activity.entity";
 import { CommunityPost } from "../entities/community-post.entity";
@@ -72,7 +73,7 @@ import { InstallModule } from "./install/install.module";
 import { PublicModule } from "./public/public.module";
 import { V1Module } from "./v1/v1.module";
 
-const entities = [User, UserWallet, WalletTransaction, Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, H5AuthCodeLog, HomepageSection, InviteCode, ShareVisit, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, UserLearning, UserFavorite, Certificate];
+const entities = [User, UserWallet, WalletTransaction, Tenant, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, H5AuthCodeLog, HomepageSection, InviteCode, ShareVisit, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityCheckIn, UserLearning, UserFavorite, Certificate];
 
 loadEnv({ path: "apps/api/.env" });
 loadEnv();
