@@ -154,8 +154,10 @@ const currentFormSnapshot = computed(() => JSON.stringify({
 }));
 const hasUnsavedChanges = computed(() => drawer.value && formSnapshot.value !== currentFormSnapshot.value);
 const drawerPreviewRow = computed(() => currentDraftPreviewRow());
+const defaultPreviewRows = computed(() => buildDefaultPreviewRows(filters.pageKey));
+const previewBaseRows = computed(() => (orderedRows.value.length ? orderedRows.value : defaultPreviewRows.value));
 const previewRows = computed(() => {
-  const list = orderedRows.value.map((item) => ({ ...item, config: cloneJson(item.config || {}), layout: cloneJson(item.layout || {}) }));
+  const list = previewBaseRows.value.map((item) => ({ ...item, config: cloneJson(item.config || {}), layout: cloneJson(item.layout || {}) }));
   const draft = currentDraftPreviewRow();
   if (draft) {
     const index = editingId.value ? list.findIndex((item) => item.id === editingId.value) : -1;
@@ -164,6 +166,7 @@ const previewRows = computed(() => {
   }
   return list.filter((item) => item.enabled).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 });
+const hasDefaultPreviewFallback = computed(() => !orderedRows.value.length);
 
 function typeLabel(type: string) {
   return moduleTypes.find((item) => item.type === type)?.label || type;
@@ -171,6 +174,81 @@ function typeLabel(type: string) {
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value || {}));
+}
+
+function previewRow(
+  index: number,
+  type: HomepageSectionType | string,
+  overrides: Partial<HomepageSectionView> = {}
+): HomepageSectionView {
+  return {
+    id: -10000 - index,
+    pageKey: filters.pageKey,
+    type,
+    title: overrides.title ?? typeLabel(type),
+    subtitle: overrides.subtitle ?? null,
+    enabled: overrides.enabled ?? true,
+    sortOrder: overrides.sortOrder ?? (index + 1) * 10,
+    config: cloneJson(overrides.config || defaultConfig[type] || {}),
+    layout: cloneJson(overrides.layout || defaultLayout[type] || {}),
+    data: overrides.data
+  };
+}
+
+function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
+  if (pageKey === "home") {
+    return [
+      previewRow(0, "search_bar", { title: null, config: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、培训" } }),
+      previewRow(1, "hero", {
+        title: "发现值得参加的线下活动",
+        subtitle: "沙龙、读书会、训练营和社群聚会，一站完成筛选、报名、付款确认和签到。"
+      }),
+      previewRow(2, "announcement_bar", { title: "公告" }),
+      previewRow(3, "quick_nav", { title: null }),
+      previewRow(4, "category_grid", { title: "活动社区", subtitle: "按兴趣快速进入活动池" }),
+      previewRow(5, "featured_activities", { title: "精选活动", subtitle: "主办方推荐，适合优先查看" }),
+      previewRow(6, "activity_tabs", { title: null }),
+      previewRow(7, "activity_feed", { title: null }),
+      previewRow(8, "bottom_nav", { title: "底部菜单" })
+    ];
+  }
+
+  const label = currentPageOption.value.label;
+  const subtitleMap: Record<string, string> = {
+    activity_list: "筛选近期活动，快速找到适合参加的课程和线下活动。",
+    activity_detail: "查看活动介绍、报名规则、服务说明和现场信息。",
+    activity_register: "确认票种、优惠和报名信息，提交后可在我的活动查看进度。",
+    announcement_list: "活动通知、报名提醒和现场须知都会集中展示在这里。",
+    service_center: "付款、退款、发票和客服信息，都可以在这里快速找到。",
+    partner_page: "适合文化空间、书院、培训机构和本地社群运营者。",
+    user_my: "报名、付款、审核、签到状态都在这里。",
+    login_page: "用于查看报名、订单、签到码和会员权益。",
+    registration_detail: "查看报名状态、订单、签到码、入群二维码和主办方服务信息。",
+    review_page: "你的反馈会帮助主办方持续改进活动体验。"
+  };
+  const hideNav = ["activity_detail", "activity_register", "login_page"].includes(pageKey);
+  const list = [
+    ...(pageKey === "user_my" ? [previewRow(0, "my_page", { title: "我的", subtitle: "会员权益、订单、课程和管理入口", sortOrder: 5 })] : []),
+    previewRow(1, "hero", {
+      title: label,
+      subtitle: subtitleMap[pageKey] || "",
+      config: { ...defaultConfig.hero, eyebrow: "七维文化", showStats: false, primaryButtonText: "", primaryButtonLink: "", backgroundColor: "#0f766e" },
+      layout: { spacingBottom: 16, density: "compact", borderRadius: 8 }
+    }),
+    previewRow(2, "rich_text", {
+      title: "页面说明",
+      config: { content: subtitleMap[pageKey] || "", imageUrl: "", link: "" },
+      layout: { spacingBottom: 18 }
+    })
+  ];
+  if (!hideNav) list.push(previewRow(3, "bottom_nav", { title: "底部菜单", sortOrder: 90 }));
+  return list;
+}
+
+function isFocusedPreviewRow(row: HomepageSectionView) {
+  if (!drawer.value || !drawerPreviewRow.value) return false;
+  if (editingId.value) return row.id === editingId.value;
+  return row.id === drawerPreviewRow.value.id;
 }
 
 function clampPercent(value: unknown, fallback: number) {
@@ -674,10 +752,11 @@ onMounted(async () => {
       </main>
 
       <aside class="phone-preview">
+        <div v-if="hasDefaultPreviewFallback" class="preview-fallback-tip">当前页面还没有保存模块，下面展示默认装修效果。</div>
         <div class="phone-frame">
           <div class="phone-status"></div>
           <div class="preview-scroll">
-            <template v-for="row in previewRows" :key="row.id">
+            <div v-for="row in previewRows" :key="row.id" class="preview-row-shell" :class="{ focused: isFocusedPreviewRow(row), fallback: hasDefaultPreviewFallback }">
               <div v-if="row.type === 'search_bar'" class="preview-search">
                 <span>{{ (row.config as any).cityLabel || "本地" }}</span>
                 <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
@@ -714,7 +793,7 @@ onMounted(async () => {
                 <strong>{{ row.title || typeLabel(row.type) }}</strong>
                 <span>{{ typeLabel(row.type) }}</span>
               </div>
-            </template>
+            </div>
           </div>
         </div>
       </aside>
@@ -740,37 +819,43 @@ onMounted(async () => {
         </div>
         <div v-if="!drawerPreviewRow" class="drawer-preview-invalid">JSON 格式有误，修正 config / layout 后会恢复预览。</div>
         <div v-else class="drawer-preview-canvas">
-          <div v-if="drawerPreviewRow.type === 'search_bar'" class="preview-search">
-            <span>{{ (drawerPreviewRow.config as any).cityLabel || "本地" }}</span>
-            <b>{{ (drawerPreviewRow.config as any).placeholder || "搜索活动" }}</b>
-          </div>
-          <div v-else-if="drawerPreviewRow.type === 'hero'" class="preview-hero" :style="previewHeroStyle(drawerPreviewRow)">
-            <small :style="{ opacity: clampPercent((drawerPreviewRow.config as any).textOpacity, 100) / 100 }">{{ (drawerPreviewRow.config as any).eyebrow || "Activity OS" }}</small>
-            <h4 :style="{ opacity: clampPercent((drawerPreviewRow.config as any).titleOpacity, 100) / 100 }">{{ drawerPreviewRow.title }}</h4>
-            <p :style="{ opacity: clampPercent((drawerPreviewRow.config as any).subtitleOpacity, 86) / 100 }">{{ drawerPreviewRow.subtitle }}</p>
-            <div v-if="(drawerPreviewRow.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (drawerPreviewRow.config as any).buttonOpacity, 18) }">{{ (drawerPreviewRow.config as any).primaryButtonText }}</div>
-          </div>
-          <div v-else-if="drawerPreviewRow.type === 'quick_nav'" class="preview-grid">
-            <span v-for="item in ((drawerPreviewRow.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-          </div>
-          <div v-else-if="drawerPreviewRow.type === 'image_banner'" class="preview-banner">
-            <img v-if="(drawerPreviewRow.config as any).imageUrl" :src="(drawerPreviewRow.config as any).imageUrl" />
-            <span v-else>图片 Banner</span>
-          </div>
-          <div v-else-if="drawerPreviewRow.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav">
-            <span v-for="item in ((drawerPreviewRow.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-          </div>
-          <div v-else-if="drawerPreviewRow.type === 'my_page'" class="preview-my" :style="{ background: String((drawerPreviewRow.layout as any).heroBackgroundColor || '#111827'), color: String((drawerPreviewRow.layout as any).heroTextColor || '#ffffff') }">
-            <strong>{{ (drawerPreviewRow.config as any).greeting || drawerPreviewRow.title || "我的活动" }}</strong>
-            <span v-for="item in ((drawerPreviewRow.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-          </div>
-          <div v-else-if="drawerPreviewRow.type === 'inner_pages'" class="preview-inner-pages">
-            <strong>{{ drawerPreviewRow.title || "内页布局" }}</strong>
-            <span v-for="item in ((drawerPreviewRow.config as any).pages || []).slice(0, 4)" :key="item.key">{{ item.title }}</span>
-          </div>
-          <div v-else class="preview-section" :style="previewSectionStyle(drawerPreviewRow)">
-            <strong>{{ drawerPreviewRow.title || typeLabel(drawerPreviewRow.type) }}</strong>
-            <span>{{ typeLabel(drawerPreviewRow.type) }}</span>
+          <div v-for="row in previewRows" :key="row.id" class="preview-row-shell" :class="{ focused: isFocusedPreviewRow(row), fallback: hasDefaultPreviewFallback }">
+            <div v-if="row.type === 'search_bar'" class="preview-search">
+              <span>{{ (row.config as any).cityLabel || "本地" }}</span>
+              <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
+            </div>
+            <div v-else-if="row.type === 'hero'" class="preview-hero" :style="previewHeroStyle(row)">
+              <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "Activity OS" }}</small>
+              <h4 :style="{ opacity: clampPercent((row.config as any).titleOpacity, 100) / 100 }">{{ row.title }}</h4>
+              <p :style="{ opacity: clampPercent((row.config as any).subtitleOpacity, 86) / 100 }">{{ row.subtitle }}</p>
+              <div v-if="(row.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (row.config as any).buttonOpacity, 18) }">{{ (row.config as any).primaryButtonText }}</div>
+              <div v-if="(row.config as any).showStats !== false" class="preview-hero-stats">
+                <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">9<br />报名中</span>
+                <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">10<br />全部活动</span>
+              </div>
+            </div>
+            <div v-else-if="row.type === 'quick_nav'" class="preview-grid">
+              <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+            </div>
+            <div v-else-if="row.type === 'image_banner'" class="preview-banner">
+              <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
+              <span v-else>图片 Banner</span>
+            </div>
+            <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav">
+              <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+            </div>
+            <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
+              <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
+              <span v-for="item in ((row.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+            </div>
+            <div v-else-if="row.type === 'inner_pages'" class="preview-inner-pages">
+              <strong>{{ row.title || "内页布局" }}</strong>
+              <span v-for="item in ((row.config as any).pages || []).slice(0, 4)" :key="item.key">{{ item.title }}</span>
+            </div>
+            <div v-else class="preview-section" :style="previewSectionStyle(row)">
+              <strong>{{ row.title || typeLabel(row.type) }}</strong>
+              <span>{{ typeLabel(row.type) }}</span>
+            </div>
           </div>
         </div>
       </div>
@@ -1015,6 +1100,11 @@ onMounted(async () => {
 .phone-frame { width: 292px; height: 600px; margin: 0 auto; border: 10px solid #111827; border-radius: 30px; background: #f4f6f8; overflow: hidden; }
 .phone-status { height: 28px; background: #111827; }
 .preview-scroll { height: 552px; overflow: hidden; padding: 12px; }
+.preview-fallback-tip { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 800; }
+.preview-row-shell { position: relative; border: 2px solid transparent; border-radius: 12px; margin: -2px -2px 8px; padding: 2px; }
+.preview-row-shell.focused { border-color: #f97316; background: rgba(249, 115, 22, 0.08); box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12); }
+.preview-row-shell.focused::before { content: "正在编辑"; position: absolute; top: -10px; right: 8px; z-index: 2; padding: 2px 7px; border-radius: 999px; background: #f97316; color: #fff; font-size: 10px; font-weight: 900; }
+.preview-row-shell.fallback:not(.focused) { opacity: 0.92; }
 .preview-search { display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; margin-bottom: 10px; }
 .preview-search span { font-weight: 800; }
 .preview-search b { background: #fff; border-radius: 999px; padding: 9px 12px; color: #8a94a6; font-weight: 500; }
@@ -1031,7 +1121,7 @@ onMounted(async () => {
 .preview-section { display: flex; justify-content: space-between; align-items: center; border-radius: 8px; background: #fff; padding: 14px; margin-bottom: 10px; }
 .preview-section strong { color: #111827; }
 .preview-section span { color: #667085; font-size: 12px; }
-.preview-bottom-nav { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin-top: 10px; padding: 8px; border-radius: 12px; background: #fff; color: #667085; font-size: 12px; text-align: center; box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.08); }
+.preview-bottom-nav { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 10px 0 0; padding: 8px; border-radius: 12px; background: #fff; color: #667085; font-size: 12px; text-align: center; box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.08); }
 .preview-my { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #111827; color: #fff; }
 .preview-my span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,0.14); font-size: 12px; }
 .preview-inner-pages { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #fff; color: #111827; border: 1px solid #e5e7eb; }
@@ -1045,7 +1135,7 @@ onMounted(async () => {
 .drawer-live-preview-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; }
 .drawer-live-preview-head strong { color: #7c2d12; font-size: 14px; }
 .drawer-live-preview-head span { color: #9a3412; font-size: 12px; text-align: right; }
-.drawer-preview-canvas { max-height: 260px; overflow: auto; padding: 12px; border-radius: 12px; background: #f8fafc; }
+.drawer-preview-canvas { max-height: 360px; overflow: auto; padding: 12px; border-radius: 12px; background: #f8fafc; }
 .drawer-preview-invalid { padding: 16px; border: 1px dashed #f97316; border-radius: 10px; background: #fff; color: #c2410c; font-weight: 700; }
 .drawer-bottom-nav { position: static; margin-top: 0; }
 .quick-editor { display: grid; gap: 10px; margin-bottom: 18px; }
