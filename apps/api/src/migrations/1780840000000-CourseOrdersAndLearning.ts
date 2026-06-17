@@ -1,4 +1,4 @@
-import { MigrationInterface, QueryRunner, Table, TableForeignKey, TableIndex } from "typeorm";
+import { MigrationInterface, QueryRunner, Table, TableIndex } from "typeorm";
 
 export class CourseOrdersAndLearning1780840000000 implements MigrationInterface {
   name = "CourseOrdersAndLearning1780840000000";
@@ -26,10 +26,17 @@ export class CourseOrdersAndLearning1780840000000 implements MigrationInterface 
           ]
         })
       );
-      await queryRunner.createForeignKey("course_orders", new TableForeignKey({ columnNames: ["userId"], referencedTableName: "users", referencedColumnNames: ["id"], onDelete: "CASCADE" }));
-      await queryRunner.createForeignKey("course_orders", new TableForeignKey({ columnNames: ["courseId"], referencedTableName: "courses", referencedColumnNames: ["id"], onDelete: "CASCADE" }));
       await queryRunner.createIndex("course_orders", new TableIndex({ name: "IDX_course_orders_user_course_status", columnNames: ["userId", "courseId", "status"] }));
       await queryRunner.createIndex("course_orders", new TableIndex({ name: "IDX_course_orders_order_no", columnNames: ["orderNo"] }));
+    } else {
+      const table = await queryRunner.getTable("course_orders");
+      const indexNames = new Set((table?.indices || []).map((index) => index.name));
+      if (!indexNames.has("IDX_course_orders_user_course_status")) {
+        await queryRunner.createIndex("course_orders", new TableIndex({ name: "IDX_course_orders_user_course_status", columnNames: ["userId", "courseId", "status"] }));
+      }
+      if (!indexNames.has("IDX_course_orders_order_no")) {
+        await queryRunner.createIndex("course_orders", new TableIndex({ name: "IDX_course_orders_order_no", columnNames: ["orderNo"] }));
+      }
     }
 
     if (await queryRunner.hasTable("user_learning")) {
