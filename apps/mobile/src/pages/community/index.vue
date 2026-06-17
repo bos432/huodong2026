@@ -23,7 +23,7 @@
         <text class="activity-meta">📍 {{ act.location }}</text>
         <view class="row" style="justify-content:flex-start; margin-top:8rpx;">
           <text class="subtle">已报名 {{ act.registered }} 人</text>
-          <view class="button sm secondary" style="margin-left:auto;">立即报名</view>
+          <view class="button sm secondary" style="margin-left:auto;">了解详情</view>
         </view>
       </view>
     </view>
@@ -33,6 +33,7 @@
     <view class="card checkin-card">
       <text class="title-md">📝 今日打卡</text>
       <text class="body-text" style="margin-top:12rpx;">{{ checkinTask ? `今日任务：${checkinTask.title}` : "暂无今日打卡任务" }}</text>
+      <text v-if="!checkinTask" class="subtle" style="margin-top:8rpx;">请在后台新增今天日期的打卡任务，发布后这里会自动显示。</text>
       <text v-if="checkinTask?.description" class="subtle" style="margin-top:8rpx;">{{ checkinTask.description }}</text>
       <view v-if="checkinTask" class="progress-bar" style="margin-top:12rpx;">
         <view class="progress-fill" style="width: 67%;"></view>
@@ -99,19 +100,19 @@ function formatActivityDate(value: string) {
 
 async function loadActivities() {
   try {
-    const result = await request<any>("/public/activities?page=1&pageSize=3&status=open");
+    const result = await request<any>("/public/community/activities");
     const items = Array.isArray(result) ? result : result.items || [];
     activities.splice(0, activities.length, ...items.map((item: any) => {
       const date = formatActivityDate(item.startTime);
       return {
         id: item.id,
-        activityId: item.id,
         month: date.month,
         day: date.day,
         title: item.title,
         time: date.time,
         location: item.location || "地点待定",
-        registered: item.registeredCount || 0
+        registered: item.registeredCount || 0,
+        description: item.description || ""
       };
     }));
   } catch {
@@ -164,7 +165,14 @@ function commentPost(post: CommunityPost) {
     }
   });
 }
-function goActivity(act: any) { uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${act.activityId || act.id}`) }); }
+function goActivity(act: any) {
+  uni.showModal({
+    title: act.title || "共修活动",
+    content: [`时间：${act.time || "待定"}`, `地点：${act.location || "待定"}`, act.description || "共修活动报名流程暂未接入前台，请联系书院确认参与方式。"].join("\n"),
+    confirmText: "知道了",
+    showCancel: false
+  });
+}
 function goCheckin() { uni.navigateTo({ url:"/pages/community/checkin" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 </script>

@@ -144,7 +144,7 @@ function addPaymentSecretCheck(checks: RuntimeConfigCheck[], key: string, label:
 }
 
 function addPaymentRuntimeChecks(checks: RuntimeConfigCheck[], config: ConfigService, strict: boolean) {
-  const sandboxEnabled = config.get<string>("PAYMENT_SANDBOX_ENABLED", strict ? "false" : "true") === "true";
+  const sandboxEnabled = config.get<string>("PAYMENT_SANDBOX_ENABLED", "false") === "true";
   addCheck(
     checks,
     "PAYMENT_SANDBOX_ENABLED",

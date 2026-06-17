@@ -54,6 +54,13 @@ export class CoursesController {
   @AdminRoles(...SUPER_ADMIN)
   @Delete("course-lessons/:id") deleteLesson(@Param("id", ParseIntPipe) id: number) { return this.service.deleteCourseLesson(id); }
 
+  // ===== Course Orders =====
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("course-orders") listCourseOrders(@Query() q: any) { return this.service.listCourseOrders(q); }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("course-orders/:id/confirm-offline-payment") confirmCourseOrder(@Param("id", ParseIntPipe) id: number) { return this.service.confirmOfflineCourseOrder(id); }
+
   // ===== Community Activities =====
   @AdminRoles(...SUPER_ADMIN)
   @Get("community-activities") listActivities(@Query() q: any) { return this.service.listCommunityActivities(q); }

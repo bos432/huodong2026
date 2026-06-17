@@ -90,8 +90,12 @@ describe("payment provider service", () => {
     expect(() => service({ NODE_ENV: "production", PAYMENT_SANDBOX_ENABLED: "false" }).assertSandboxAllowed("mock 支付")).toThrow(BadRequestException);
   });
 
+  it("blocks sandbox payments by default outside production too", () => {
+    expect(() => service({ NODE_ENV: "development" }).assertSandboxAllowed("mock 支付")).toThrow(BadRequestException);
+  });
+
   it("creates and verifies sandbox callback payloads", async () => {
-    const provider = service({ NODE_ENV: "development", WECHAT_PAY_SANDBOX_SECRET: "secret" });
+    const provider = service({ NODE_ENV: "development", PAYMENT_SANDBOX_ENABLED: "true", WECHAT_PAY_SANDBOX_SECRET: "secret" });
     const pay = await provider.createPayment("wechat", { id: 12, orderNo: "OD12", amount: "9.90" } as any, {});
     const callback = provider.parseSandboxCallback("wechat", {
       orderNo: pay.orderNo,
@@ -104,7 +108,7 @@ describe("payment provider service", () => {
   });
 
   it("keeps provider payments on sandbox mode until real provider flags are enabled", async () => {
-    const provider = service({ NODE_ENV: "development", REAL_PAYMENT_ENABLED: "false", WECHAT_PAY_ENABLED: "true" });
+    const provider = service({ NODE_ENV: "development", PAYMENT_SANDBOX_ENABLED: "true", REAL_PAYMENT_ENABLED: "false", WECHAT_PAY_ENABLED: "true" });
     const pay = await provider.createPayment("wechat", { id: 7, orderNo: "OD7", amount: "19" } as any, {});
     expect(pay).toMatchObject({ provider: "wechat", mode: "sandbox", orderNo: "OD7", amount: "19.00" });
   });

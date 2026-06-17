@@ -24,6 +24,7 @@
 
       <view v-if="Number(course.price) > 0" class="card" style="margin-top:16rpx;">
         <text class="title-md" style="margin-bottom:16rpx; display:block;">支付方式</text>
+        <view class="payment-notice">课程在线支付尚未接入，当前仅支持线下收款。后台确认后才会开通学习权限。</view>
         <view v-for="(pm, i) in paymentMethods" :key="i" class="payment-option" @click="selectedPayment = i">
           <text style="font-size:32rpx;">{{ pm.icon }}</text>
           <text style="flex:1; font-size:28rpx; color:#333;">{{ pm.label }}</text>
@@ -52,8 +53,7 @@ const paying = ref(false);
 const error = ref("");
 const course = ref<any>();
 const paymentMethods = [
-  { icon: "💳", label: "微信支付", value: "wechat" },
-  { icon: "💰", label: "余额支付", value: "balance" }
+  { icon: "🏦", label: "线下收款（待后台确认）", value: "offline" }
 ];
 
 function currentCourseId() {
@@ -105,11 +105,9 @@ async function doPay() {
       uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&id=${course.value.id}&orderId=${order.id}`) });
       return;
     }
-    await request(`/public/course-orders/${order.id}/pay/mock`, {
-      method: "POST",
-      data: { transactionNo: `H5-COURSE-${Date.now()}` }
+    uni.navigateTo({
+      url: withTenantCode(`/pages/order/payment?status=pending&id=${course.value.id}&orderId=${order.id}`)
     });
-    uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&id=${course.value.id}&orderId=${order.id}`) });
   } catch (err: any) {
     uni.showToast({ title: err.message || "支付失败", icon: "none" });
   } finally {
@@ -128,6 +126,7 @@ onMounted(loadCourse);
 .course-cover { width:160rpx; height:120rpx; background:#F5E6D3; border-radius:12rpx; display:flex; align-items:center; justify-content:center; overflow:hidden; }
 .course-cover-img { width:100%; height:100%; display:block; }
 .payment-option { display:flex; align-items:center; gap:16rpx; padding:16rpx 0; border-bottom:1rpx solid #E8E0D8; }
+.payment-notice { margin-bottom:12rpx; padding:16rpx; border-radius:12rpx; background:#FFF7E8; color:#9A5A00; font-size:24rpx; line-height:1.6; }
 .radio { width:36rpx; height:36rpx; border-radius:50%; border:2rpx solid #ddd; display:flex; align-items:center; justify-content:center; font-size:20rpx; color:#fff; }
 .radio.checked { background:#C43D3D; border-color:#C43D3D; }
 .bottom-actions { position:fixed; bottom:0; left:0; right:0; padding:16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom)); background:#fff; }

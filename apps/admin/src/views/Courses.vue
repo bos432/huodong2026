@@ -51,11 +51,58 @@
       </div>
       <template #footer><el-button @click="showChapters = false">关闭</el-button><el-button type="primary" @click="saveChapters">保存章节</el-button></template>
     </el-dialog>
+
+    <el-divider />
+
+    <div class="page-header order-header">
+      <h3>课程订单</h3>
+      <div class="order-filters">
+        <el-select v-model="orderFilters.status" clearable placeholder="全部状态" style="width: 140px" @change="loadOrders">
+          <el-option label="待付款" value="pending_payment" />
+          <el-option label="已支付" value="paid" />
+          <el-option label="已关闭" value="closed" />
+        </el-select>
+        <el-input v-model="orderFilters.keyword" clearable placeholder="订单号/课程/手机号" style="width: 220px" @keyup.enter="loadOrders" @clear="loadOrders" />
+        <el-button :loading="orderLoading" @click="loadOrders">刷新</el-button>
+      </div>
+    </div>
+
+    <el-table v-loading="orderLoading" :data="courseOrders" stripe style="width:100%;" empty-text="暂无课程订单">
+      <el-table-column prop="orderNo" label="订单号" width="190" />
+      <el-table-column label="课程" min-width="180"><template #default="{row}">{{ row.course?.title || "-" }}</template></el-table-column>
+      <el-table-column label="用户" min-width="150">
+        <template #default="{row}">
+          <div>{{ row.user?.phone || "-" }}</div>
+          <small>{{ row.user?.nickname || "H5 用户" }}</small>
+        </template>
+      </el-table-column>
+      <el-table-column label="金额" width="100"><template #default="{row}">¥{{ money(row.amount) }}</template></el-table-column>
+      <el-table-column label="支付方式" width="130"><template #default="{row}">{{ paymentMethodLabel(row.paymentMethod) }}</template></el-table-column>
+      <el-table-column label="状态" width="110"><template #default="{row}"><el-tag :type="courseOrderStatusType(row.status)">{{ courseOrderStatusText(row.status) }}</el-tag></template></el-table-column>
+      <el-table-column label="付款截止" width="170"><template #default="{row}">{{ formatDateTime(row.expiresAt) }}</template></el-table-column>
+      <el-table-column label="创建时间" width="170"><template #default="{row}">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
+      <el-table-column label="操作" width="140" fixed="right">
+        <template #default="{row}">
+          <el-button size="small" type="success" :disabled="!canConfirmCourseOrder(row)" @click="confirmCourseOrder(row)">确认收款</el-button>
+        </template>
+      </el-table-column>
+    </el-table>
+    <div class="pagination">
+      <el-pagination
+        v-model:current-page="orderFilters.page"
+        v-model:page-size="orderFilters.pageSize"
+        :page-sizes="[10, 20, 50]"
+        layout="total, sizes, prev, pager, next"
+        :total="orderTotal"
+        @size-change="loadOrders"
+        @current-change="loadOrders"
+      />
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from "vue";
+import { reactive, ref, onMounted } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 
@@ -67,6 +114,10 @@ const saving = ref(false);
 const showChapters = ref(false);
 const currentCourse = ref<any>(null);
 const chapters = ref<any[]>([]);
+const courseOrders = ref<any[]>([]);
+const orderLoading = ref(false);
+const orderTotal = ref(0);
+const orderFilters = reactive({ status: "pending_payment", keyword: "", page: 1, pageSize: 20 });
 
 function formatDateTime(value?: string | Date | null) {
   if (!value) return "-";
@@ -80,6 +131,62 @@ async function load() {
     courses.value = await api.get<any, any[]>("/admin/courses");
   } catch (error: any) {
     ElMessage.error(error.message || "加载课程失败");
+  }
+}
+
+function money(value: string | number | undefined) {
+  return Number(value || 0).toFixed(2);
+}
+
+function paymentMethodLabel(value?: string) {
+  const labels: Record<string, string> = { free: "免费", wechat: "微信支付", alipay: "支付宝", balance: "余额支付", offline: "线下收款" };
+  return value ? labels[value] || value : "-";
+}
+
+function courseOrderStatusText(value?: string) {
+  const labels: Record<string, string> = { pending_payment: "待付款", paid: "已支付", closed: "已关闭" };
+  return value ? labels[value] || value : "-";
+}
+
+function courseOrderStatusType(value?: string) {
+  if (value === "paid") return "success";
+  if (value === "closed") return "info";
+  return "warning";
+}
+
+function canConfirmCourseOrder(row: any) {
+  return row.paymentMethod === "offline" && row.status === "pending_payment" && !(row.expiresAt && new Date(row.expiresAt).getTime() <= Date.now());
+}
+
+async function loadOrders() {
+  orderLoading.value = true;
+  try {
+    const result = await api.get<any, { items: any[]; total: number }>("/admin/course-orders", {
+      params: {
+        status: orderFilters.status || undefined,
+        keyword: orderFilters.keyword.trim() || undefined,
+        page: orderFilters.page,
+        pageSize: orderFilters.pageSize
+      }
+    });
+    courseOrders.value = result.items || [];
+    orderTotal.value = result.total || 0;
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载课程订单失败");
+  } finally {
+    orderLoading.value = false;
+  }
+}
+
+async function confirmCourseOrder(row: any) {
+  try {
+    await ElMessageBox.confirm(`确认课程订单 ${row.orderNo} 已完成线下收款？确认后用户会获得课程学习权限。`, "确认课程收款", { type: "warning", confirmButtonText: "确认收款", cancelButtonText: "再核对一下" });
+    await api.post(`/admin/course-orders/${row.id}/confirm-offline-payment`);
+    ElMessage.success("已确认收款，学习权限已开通");
+    await loadOrders();
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "确认收款失败");
   }
 }
 
@@ -186,10 +293,17 @@ async function saveChapters() {
   }
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  loadOrders();
+});
 </script>
 
 <style scoped>
 .courses-page { padding: 24px; }
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
+.order-header { margin-top: 12px; }
+.order-filters { display:flex; gap:12px; align-items:center; }
+.pagination { display:flex; justify-content:flex-end; padding-top:16px; }
+small { color:#667085; display:block; line-height:1.5; }
 </style>

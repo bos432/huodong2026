@@ -17,6 +17,13 @@ describe("runtime config validation", () => {
     expect(item?.value).toBe("已关闭");
   });
 
+  it("keeps sandbox payment disabled by default outside production", () => {
+    const report = inspectRuntimeConfig(config({ NODE_ENV: "development" }));
+    const item = report.checks.find((check) => check.key === "PAYMENT_SANDBOX_ENABLED");
+    expect(item?.status).toBe("ok");
+    expect(item?.value).toBe("已关闭");
+  });
+
   it("keeps database synchronize disabled by default in production", () => {
     const report = inspectRuntimeConfig(config({ NODE_ENV: "production" }));
     const item = report.checks.find((check) => check.key === "DB_SYNCHRONIZE");

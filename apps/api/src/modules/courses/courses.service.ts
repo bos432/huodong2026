@@ -1,12 +1,15 @@
-import { Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import { Repository } from "typeorm";
 import { Course } from "../../entities/course.entity";
 import { CourseChapter } from "../../entities/course-chapter.entity";
 import { CourseLesson } from "../../entities/course-lesson.entity";
+import { CourseOrder, CourseOrderStatus } from "../../entities/course-order.entity";
 import { CommunityActivity } from "../../entities/community-activity.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityPost } from "../../entities/community-post.entity";
+import { UserLearning } from "../../entities/user-learning.entity";
+import { PaymentMethod } from "../../shared/domain";
 
 @Injectable()
 export class CoursesService {
@@ -14,9 +17,11 @@ export class CoursesService {
     @InjectRepository(Course) private courses: Repository<Course>,
     @InjectRepository(CourseChapter) private chapters: Repository<CourseChapter>,
     @InjectRepository(CourseLesson) private lessons: Repository<CourseLesson>,
+    @InjectRepository(CourseOrder) private courseOrders: Repository<CourseOrder>,
     @InjectRepository(CommunityActivity) private communityActivities: Repository<CommunityActivity>,
     @InjectRepository(CheckInTask) private checkinTasks: Repository<CheckInTask>,
-    @InjectRepository(CommunityPost) private communityPosts: Repository<CommunityPost>
+    @InjectRepository(CommunityPost) private communityPosts: Repository<CommunityPost>,
+    @InjectRepository(UserLearning) private userLearning: Repository<UserLearning>
   ) {}
 
   // ===== Courses =====
@@ -91,6 +96,57 @@ export class CoursesService {
   async deleteCourseLesson(id: number) {
     await this.lessons.delete(id);
     return { success: true };
+  }
+
+  // ===== Course Orders =====
+  async listCourseOrders(query: { status?: string; courseId?: string | number; keyword?: string; page?: string | number; pageSize?: string | number }) {
+    const page = Math.max(Number(query.page || 1), 1);
+    const pageSize = Math.min(Math.max(Number(query.pageSize || 20), 1), 100);
+    const builder = this.courseOrders
+      .createQueryBuilder("courseOrder")
+      .leftJoinAndSelect("courseOrder.course", "course")
+      .leftJoinAndSelect("courseOrder.user", "user")
+      .orderBy("courseOrder.createdAt", "DESC")
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+    if (query.status) builder.andWhere("courseOrder.status = :status", { status: query.status });
+    if (query.courseId) builder.andWhere("course.id = :courseId", { courseId: Number(query.courseId) });
+    const keyword = String(query.keyword || "").trim();
+    if (keyword) {
+      builder.andWhere("(courseOrder.orderNo LIKE :keyword OR course.title LIKE :keyword OR user.phone LIKE :keyword OR user.nickname LIKE :keyword)", { keyword: `%${keyword}%` });
+    }
+    const [items, total] = await builder.getManyAndCount();
+    return { items, total, page, pageSize };
+  }
+
+  async confirmOfflineCourseOrder(orderId: number) {
+    const order = await this.courseOrders.findOne({ where: { id: orderId } });
+    if (!order) throw new NotFoundException("课程订单不存在");
+    if (order.status === CourseOrderStatus.Paid) {
+      await this.grantCourseAccess(order.user.id, order.course.id);
+      return order;
+    }
+    if (order.status !== CourseOrderStatus.PendingPayment) throw new BadRequestException("当前课程订单不能确认收款");
+    if (order.paymentMethod !== PaymentMethod.Offline) throw new BadRequestException("只有线下收款课程订单可以后台确认");
+    if (order.expiresAt && order.expiresAt.getTime() <= Date.now()) {
+      order.status = CourseOrderStatus.Closed;
+      order.closedAt = new Date();
+      order.closeReason = "课程订单超时关闭";
+      await this.courseOrders.save(order);
+      throw new BadRequestException("课程订单已超时关闭，不能确认收款");
+    }
+    order.status = CourseOrderStatus.Paid;
+    order.transactionNo = `COURSE-OFFLINE-${Date.now()}-${order.id}`;
+    order.paidAt = new Date();
+    const saved = await this.courseOrders.save(order);
+    await this.grantCourseAccess(saved.user.id, saved.course.id);
+    return saved;
+  }
+
+  private async grantCourseAccess(userId: number, courseId: number) {
+    let row = await this.userLearning.findOne({ where: { userId, courseId, lessonId: 0 } });
+    if (!row) row = this.userLearning.create({ userId, courseId, lessonId: 0, progress: 0, completedAt: null });
+    return this.userLearning.save(row);
   }
 
   // ===== Community Activities =====

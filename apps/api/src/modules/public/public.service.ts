@@ -218,7 +218,7 @@ export class PublicService {
     }
 
     const amount = Number(course.price || 0);
-    const paymentMethod = amount > 0 ? dto.paymentMethod || PaymentMethod.Wechat : PaymentMethod.Free;
+    const paymentMethod = amount > 0 ? dto.paymentMethod || PaymentMethod.Offline : PaymentMethod.Free;
     if (amount <= 0) {
       const order = await this.courseOrders.save(this.courseOrders.create({
         orderNo: this.generateCourseOrderNo(),
@@ -236,6 +236,8 @@ export class PublicService {
       await this.grantCourseAccess(user, course);
       return { owned: true, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
     }
+    if (paymentMethod !== PaymentMethod.Offline) throw new BadRequestException("课程在线支付暂未接入，请选择线下收款");
+    await this.assertPaymentMethodEnabled(PaymentMethod.Offline, null);
 
     const existing = await this.courseOrders.findOne({
       where: { user: { id: user.id }, course: { id: course.id }, status: CourseOrderStatus.PendingPayment },
@@ -266,6 +268,7 @@ export class PublicService {
   }
 
   async mockPayCourseOrder(orderId: number, dto: MockPayDto, user: User) {
+    this.paymentProvider.assertSandboxAllowed("课程 mock 支付");
     const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
     if (!order) throw new NotFoundException("课程订单不存在");
     if (order.status === CourseOrderStatus.Paid) {

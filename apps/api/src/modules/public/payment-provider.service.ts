@@ -127,9 +127,8 @@ export class PaymentProviderService {
   ) {}
 
   assertSandboxAllowed(label: string) {
-    if (this.config.get("NODE_ENV") !== "production") return;
     if (this.config.get("PAYMENT_SANDBOX_ENABLED", "false") === "true") return;
-    throw new BadRequestException(`${label} is only allowed in local or sandbox environments`);
+    throw new BadRequestException(`${label} requires PAYMENT_SANDBOX_ENABLED=true`);
   }
 
   async createPayment(provider: SupportedPaymentProvider, order: Order, dto: ProviderPayDto): Promise<ProviderPaymentResult> {
