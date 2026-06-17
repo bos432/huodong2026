@@ -136,8 +136,8 @@ const scopeTip = computed(() => {
   if (!isPlatformAdmin()) return "";
   return filters.tenantId ? "当前正在编辑选中商家的独立 H5 装修；清空商家筛选后可编辑平台全局默认装修。" : "当前正在编辑平台全局默认装修；未单独装修的商家会自动继承这套配置。";
 });
-const pageTitle = computed(() => (isPlatformAdmin() ? "H5 全局装修" : "首页装修"));
-const pageDescription = computed(() => (isPlatformAdmin() ? "配置平台默认或指定商家的 H5 首页、底部菜单、我的页面和内页布局。" : "配置本商家 H5 页面装修，保存后刷新前台立即生效。"));
+const pageTitle = computed(() => (isPlatformAdmin() ? "前台全局装修" : "前台装修"));
+const pageDescription = computed(() => (isPlatformAdmin() ? "配置平台默认或指定商家的 H5/小程序首页、底部菜单、我的页面和内页布局。" : "配置本商家 H5/小程序前台装修，保存后刷新前台立即生效。"));
 const selectedTenant = computed(() => tenants.value.find((tenant) => tenant.id === filters.tenantId));
 const saveScopeName = computed(() => (isPlatformAdmin() && filters.tenantId ? selectedTenant.value?.name || selectedTenant.value?.code || "选中商家" : isPlatformAdmin() ? "平台全局默认装修" : "当前商家装修"));
 const previewTenantCode = computed(() => (isPlatformAdmin() ? selectedTenant.value?.code || "" : currentTenantCode()));
@@ -460,7 +460,7 @@ async function submit() {
     const payload = { ...form, pageKey: filters.pageKey, title: form.title || null, subtitle: form.subtitle || null };
     if (editingId.value) await api.patch(`/admin/homepage/sections/${editingId.value}`, payload, homepageScopeParams());
     else await api.post("/admin/homepage/sections", payload, homepageScopeParams());
-    ElMessage.success(`已保存到「${saveScopeName.value}」，刷新 H5 预览即可查看最新效果`);
+    ElMessage.success(`已保存到「${saveScopeName.value}」，刷新前台预览即可查看最新效果`);
     captureFormSnapshot();
     drawer.value = false;
     load();
@@ -621,8 +621,8 @@ function removeConfigArrayItem(arrayKey: "items" | "tools" | "pages", index: num
 
 function addNavItem() {
   const items = Array.isArray(form.config.items) ? form.config.items : [];
-  if (items.length >= 4) {
-    ElMessage.warning("底部菜单最多 4 项");
+  if (items.length >= 5) {
+    ElMessage.warning("底部菜单最多 5 项");
     return;
   }
   form.config.items = [...(Array.isArray(form.config.items) ? form.config.items : []), { label: "新菜单", color: "#0f766e", link: "/pages/index/index", action: "mainPage" }];
@@ -635,7 +635,7 @@ function sanitizeNavItems(value: unknown) {
   return rows
     .map((item: any) => ({ ...item, label: String(item?.label || "").trim(), link: String(item?.link || "").trim() }))
     .filter((item: any) => item.label && item.link && !seen.has(item.link) && seen.add(item.link))
-    .slice(0, 4);
+    .slice(0, 5);
 }
 
 function addMyTool() {
@@ -778,8 +778,8 @@ onMounted(async () => {
                 <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
                 <span v-else>图片 Banner</span>
               </div>
-              <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav">
-                <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+              <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav" :style="{ '--preview-nav-count': Math.min((((row.config as any).items || []).length || 1), 5) }">
+                <span v-for="item in ((row.config as any).items || []).slice(0, 5)" :key="item.label">{{ item.label }}</span>
               </div>
               <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
                 <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
@@ -946,7 +946,7 @@ onMounted(async () => {
               <el-color-picker :model-value="item.color" @change="(value: string | null) => updateConfigArrayItem('items', index, 'color', String(value || '#0f766e'))" />
               <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('items', index)" />
             </div>
-            <el-button :icon="Plus" :disabled="Array.isArray(form.config.items) && form.config.items.length >= 4" @click="addNavItem">新增菜单</el-button>
+            <el-button :icon="Plus" :disabled="Array.isArray(form.config.items) && form.config.items.length >= 5" @click="addNavItem">新增菜单</el-button>
           </div>
         </template>
 
@@ -1049,8 +1049,8 @@ onMounted(async () => {
             <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
             <span v-else>图片 Banner</span>
           </div>
-          <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav">
-            <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+          <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav" :style="{ '--preview-nav-count': Math.min((((row.config as any).items || []).length || 1), 5) }">
+            <span v-for="item in ((row.config as any).items || []).slice(0, 5)" :key="item.label">{{ item.label }}</span>
           </div>
           <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
             <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
@@ -1122,7 +1122,7 @@ onMounted(async () => {
 .preview-section { display: flex; justify-content: space-between; align-items: center; border-radius: 8px; background: #fff; padding: 14px; margin-bottom: 10px; }
 .preview-section strong { color: #111827; }
 .preview-section span { color: #667085; font-size: 12px; }
-.preview-bottom-nav { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; margin: 10px 0 0; padding: 8px; border-radius: 12px; background: #fff; color: #667085; font-size: 12px; text-align: center; box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.08); }
+.preview-bottom-nav { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(var(--preview-nav-count, 5), 1fr); gap: 4px; margin: 10px 0 0; padding: 8px; border-radius: 12px; background: #fff; color: #667085; font-size: 12px; text-align: center; box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.08); }
 .preview-my { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #111827; color: #fff; }
 .preview-my span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,0.14); font-size: 12px; }
 .preview-inner-pages { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #fff; color: #111827; border: 1px solid #e5e7eb; }

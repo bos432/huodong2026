@@ -87,7 +87,7 @@ const menuGroups = [
       { index: "/activities", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
       { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
       { index: "/announcements", icon: "Bell", label: "公告监管", roles: ["announcement.manage"], scope: "platform" },
-      { index: "/homepage-builder", icon: "Grid", label: "H5全局装修", roles: ["homepage.manage"], scope: "platform" },
+      { index: "/homepage-builder", icon: "Grid", label: "前台全局装修", roles: ["homepage.manage"], scope: "platform" },
       { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: ["category.manage"], scope: "platform" }
     ]
   },

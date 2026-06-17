@@ -9,7 +9,21 @@ const props = defineProps<{
 }>();
 
 const items = computed(() => {
-  void props.section;
+  const configured = Array.isArray(props.section?.config?.items)
+    ? props.section.config.items
+        .map((item: any) => ({
+          label: String(item?.label || "").trim(),
+          link: String(item?.link || "").trim(),
+          action: String(item?.action || "mainPage").trim(),
+          color: String(item?.color || props.section?.layout?.activeColor || "#C43D3D"),
+          icon: String(item?.icon || "").trim(),
+          activeIcon: String(item?.activeIcon || "").trim(),
+          iconUrl: String(item?.iconUrl || "").trim()
+        }))
+        .filter((item: any) => item.label && item.link)
+        .slice(0, 5)
+    : [];
+  if (configured.length) return configured;
   return [
     { label: "书院", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", icon: "🏛", activeIcon: "🏯" },
     { label: "课程", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", icon: "📖", activeIcon: "📚" },
@@ -49,7 +63,7 @@ function isCurrent(url?: string) {
       @click="goDecoratedLink(item.link, item.action)"
     >
       <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
-      <text v-else class="custom-tabbar-icon" :style="{ background: `${item.color || '#C43D3D'}18` }">{{ isCurrent(item.link) ? item.activeIcon : item.icon }}</text>
+      <text v-else class="custom-tabbar-icon" :style="{ background: `${item.color || '#C43D3D'}18` }">{{ isCurrent(item.link) ? item.activeIcon || item.icon || item.label.slice(0, 1) : item.icon || item.label.slice(0, 1) }}</text>
       <text>{{ item.label }}</text>
     </view>
   </view>
