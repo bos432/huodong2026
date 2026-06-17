@@ -186,6 +186,16 @@ const menuGroups = [
     ]
   },
   {
+    index: "tenant-academy",
+    icon: "Reading",
+    label: "商家端 · 书院运营",
+    scope: "tenant",
+    items: [
+      { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "tenant" },
+      { index: "/community", icon: "ChatLineSquare", label: "共修管理", roles: ["community.manage"], scope: "tenant" }
+    ]
+  },
+  {
     index: "tenant-charity",
     icon: "Coin",
     label: "商家端 · 公益池",

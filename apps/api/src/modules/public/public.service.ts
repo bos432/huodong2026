@@ -214,8 +214,9 @@ export class PublicService {
     };
   }
 
-  async createCourseOrder(courseId: number, dto: CreateCourseOrderDto, user: User) {
-    const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
+  async createCourseOrder(courseId: number, dto: CreateCourseOrderDto, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const course = await this.courses.findOne({ where: this.tenantCourseWhere({ id: courseId, status: "published" }, tenant) });
     if (!course) throw new NotFoundException("课程不存在或未发布");
     if (await this.hasCourseAccess(user.id, course.id)) {
       return { owned: true, order: null, course: this.publicCourse(course) };
@@ -241,7 +242,7 @@ export class PublicService {
       return { owned: true, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
     }
     if (paymentMethod !== PaymentMethod.Offline) throw new BadRequestException("课程在线支付暂未接入，请选择线下收款");
-    await this.assertPaymentMethodEnabled(PaymentMethod.Offline, null);
+    await this.assertPaymentMethodEnabled(PaymentMethod.Offline, tenant);
 
     const existing = await this.courseOrders.findOne({
       where: { user: { id: user.id }, course: { id: course.id }, status: CourseOrderStatus.PendingPayment },
@@ -265,16 +266,20 @@ export class PublicService {
     return { owned: false, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
   }
 
-  async courseOrderDetail(orderId: number, user: User) {
+  async courseOrderDetail(orderId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
     const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
     if (!order) throw new NotFoundException("课程订单不存在");
+    this.assertCourseTenantAccess(order.course, tenant);
     return { order: this.publicCourseOrder(order), course: this.publicCourse(order.course), owned: await this.hasCourseAccess(user.id, order.course.id) };
   }
 
-  async mockPayCourseOrder(orderId: number, dto: MockPayDto, user: User) {
+  async mockPayCourseOrder(orderId: number, dto: MockPayDto, user: User, context?: PublicTenantContext) {
     this.paymentProvider.assertSandboxAllowed("课程 mock 支付");
+    const tenant = await this.resolveTenantContext(context);
     const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
     if (!order) throw new NotFoundException("课程订单不存在");
+    this.assertCourseTenantAccess(order.course, tenant);
     if (order.status === CourseOrderStatus.Paid) {
       await this.grantCourseAccess(user, order.course);
       return { order: this.publicCourseOrder(order), course: this.publicCourse(order.course), owned: true };
@@ -295,10 +300,11 @@ export class PublicService {
     return { order: this.publicCourseOrder(saved), course: this.publicCourse(saved.course), owned: true };
   }
 
-  async myCourses(user: User) {
+  async myCourses(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
     const rows = await this.userLearning.find({ where: { userId: user.id, lessonId: 0 }, order: { updatedAt: "DESC" } });
     if (!rows.length) return [];
-    const courses = await this.courses.find({ where: { id: In(rows.map((row) => row.courseId)) } });
+    const courses = await this.courses.find({ where: this.tenantCourseWhere({ id: In(rows.map((row) => row.courseId)) }, tenant) });
     return rows
       .map((row) => {
         const course = courses.find((item) => item.id === row.courseId);
@@ -947,13 +953,15 @@ export class PublicService {
     }));
   }
 
-  async myCourseOrders(user: User) {
+  async myCourseOrders(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
     const orders = await this.courseOrders.find({
       where: { user: { id: user.id } },
       order: { createdAt: "DESC" },
       take: 100
     });
-    return Promise.all(orders.map(async (order) => ({
+    const scopedOrders = tenant ? orders.filter((order) => order.course?.tenant?.id === tenant.id) : orders;
+    return Promise.all(scopedOrders.map(async (order) => ({
       ...this.publicCourseOrder(order),
       course: this.publicCourse(order.course),
       owned: await this.hasCourseAccess(user.id, order.course.id)
@@ -1843,6 +1851,14 @@ export class PublicService {
     let row = await this.userLearning.findOne({ where: { userId: user.id, courseId: course.id, lessonId: 0 } });
     if (!row) row = this.userLearning.create({ userId: user.id, courseId: course.id, lessonId: 0, progress: 0, completedAt: null });
     return this.userLearning.save(row);
+  }
+
+  private tenantCourseWhere<T extends Record<string, unknown>>(where: T, tenant?: Tenant | null) {
+    return tenant ? { ...where, tenant: { id: tenant.id } } : where;
+  }
+
+  private assertCourseTenantAccess(course: Course, tenant?: Tenant | null) {
+    if (tenant && course.tenant?.id !== tenant.id) throw new NotFoundException("课程订单不存在");
   }
 
   private publicActivity(activity: Activity) {

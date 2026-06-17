@@ -48,8 +48,8 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "charity.manage", label: "公益项目/设置", group: "公益招募" },
   { key: "charity.finance", label: "公益流水/拨付", group: "公益招募" },
   { key: "ambassador.manage", label: "文化大使招募", group: "公益招募", platformOnly: true },
-  { key: "course.manage", label: "课程管理", group: "书院运营", platformOnly: true },
-  { key: "community.manage", label: "共修管理", group: "书院运营", platformOnly: true },
+  { key: "course.manage", label: "课程管理", group: "书院运营" },
+  { key: "community.manage", label: "共修管理", group: "书院运营" },
   { key: "upload.image", label: "上传图片", group: "通用能力" },
   { key: "upload.settlement_proof", label: "上传结算凭证", group: "通用能力" }
 ] as const;
@@ -86,6 +86,8 @@ const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
   "tenant_profile.manage",
   "charity.view",
   "charity.manage",
+  "course.manage",
+  "community.manage",
   "upload.image"
 ];
 

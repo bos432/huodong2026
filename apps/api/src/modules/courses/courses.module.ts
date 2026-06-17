@@ -14,12 +14,13 @@ import { UserLearning } from "../../entities/user-learning.entity";
 import { UserFavorite } from "../../entities/user-favorite.entity";
 import { Certificate } from "../../entities/certificate.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
+import { Tenant } from "../../entities/tenant.entity";
 import { CoursesController } from "./courses.controller";
 import { PublicCoursesController } from "./public-courses.controller";
 import { CoursesService } from "./courses.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, UserLearning, UserFavorite, Certificate, AdminUser])],
+  imports: [TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, UserLearning, UserFavorite, Certificate, AdminUser, Tenant])],
   controllers: [CoursesController, PublicCoursesController],
   providers: [CoursesService],
   exports: [CoursesService]

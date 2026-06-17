@@ -13,10 +13,13 @@ import { CommunityPostLike } from "../../entities/community-post-like.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityCheckIn } from "../../entities/community-checkin.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
+import { Tenant } from "../../entities/tenant.entity";
+import { normalizeTenantCode, normalizeTenantHost } from "../../shared/tenant-scope";
 
 @Controller("public")
 export class PublicCoursesController {
   constructor(
+    @InjectRepository(Tenant) private tenants: Repository<Tenant>,
     @InjectRepository(Course) private courses: Repository<Course>,
     @InjectRepository(CourseChapter) private chapters: Repository<CourseChapter>,
     @InjectRepository(CourseLesson) private lessons: Repository<CourseLesson>,
@@ -31,8 +34,10 @@ export class PublicCoursesController {
   ) {}
 
   @Get("courses")
-  async listCourses(@Query() q: { category?: string; sort?: string }) {
+  async listCourses(@Query() q: { category?: string; sort?: string; tenantCode?: string }, @Req() req: any) {
+    const tenant = await this.resolveTenant(req, q.tenantCode);
     const where: any = { status: "published" };
+    if (tenant) where.tenant = { id: tenant.id };
     if (q.category && q.category !== "all") {
       // Simplified category filter - actual implementation should join categories table
     }
@@ -43,8 +48,9 @@ export class PublicCoursesController {
   }
 
   @Get("courses/:id")
-  async getCourse(@Param("id", ParseIntPipe) id: number) {
-    const course = await this.courses.findOne({ where: { id, status: "published" } });
+  async getCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const course = await this.courses.findOne({ where: this.tenantWhere({ id, status: "published" }, tenant) });
     if (!course) return null;
     const chapters = await this.chapters.find({ where: { courseId: id }, order: { sortOrder: "ASC" } });
     const chapterIds = chapters.map(c => c.id);
@@ -53,9 +59,10 @@ export class PublicCoursesController {
   }
 
   @Get("courses/:id/player")
-  async getCoursePlayer(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async getCoursePlayer(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
-    const course = await this.courses.findOne({ where: { id, status: "published" } });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const course = await this.courses.findOne({ where: this.tenantWhere({ id, status: "published" }, tenant) });
     if (!course) return null;
     const chapters = await this.chapters.find({ where: { courseId: id }, order: { sortOrder: "ASC" } });
     const chapterIds = chapters.map((chapter) => chapter.id);
@@ -82,9 +89,10 @@ export class PublicCoursesController {
   }
 
   @Post("courses/:id/progress")
-  async updateCourseProgress(@Param("id", ParseIntPipe) id: number, @Body() dto: { lessonId?: number; progress?: number }, @Req() req: any) {
+  async updateCourseProgress(@Param("id", ParseIntPipe) id: number, @Body() dto: { lessonId?: number; progress?: number }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
-    const course = await this.courses.findOne({ where: { id, status: "published" } });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const course = await this.courses.findOne({ where: this.tenantWhere({ id, status: "published" }, tenant) });
     if (!course) throw new BadRequestException("课程不存在或未发布");
     const lessonId = Number(dto.lessonId || 0);
     const progress = Math.max(0, Math.min(Number(dto.progress || 0), 100));
@@ -113,15 +121,17 @@ export class PublicCoursesController {
   }
 
   @Get("community/activities")
-  async listActivities() {
-    const items = await this.communityActivities.find({ where: { status: "published" }, order: { startTime: "ASC" }, take: 10 });
+  async listActivities(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const items = await this.communityActivities.find({ where: this.tenantWhere({ status: "published" }, tenant), order: { startTime: "ASC" }, take: 10 });
     return items;
   }
 
   @Get("community/posts")
-  async listPosts(@Req() req: any) {
+  async listPosts(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.optionalUserId(req.headers?.authorization);
-    const items = await this.communityPosts.find({ where: { visible: true }, order: { createdAt: "DESC" }, take: 20 });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const items = await this.communityPosts.find({ where: this.tenantWhere({ visible: true }, tenant), order: { createdAt: "DESC" }, take: 20 });
     const ids = items.map((item) => item.id);
     const likedRows = userId && ids.length ? await this.communityPostLikes.find({ where: { userId, postId: In(ids) } }) : [];
     return items.map((item) => ({
@@ -131,9 +141,10 @@ export class PublicCoursesController {
   }
 
   @Get("community/posts/:id")
-  async getPost(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async getPost(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.optionalUserId(req.headers?.authorization);
-    const post = await this.communityPosts.findOne({ where: { id, visible: true } });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const post = await this.communityPosts.findOne({ where: this.tenantWhere({ id, visible: true }, tenant) });
     if (!post) return null;
     const liked = userId ? await this.communityPostLikes.findOne({ where: { postId: id, userId } }) : null;
     return {
@@ -143,9 +154,10 @@ export class PublicCoursesController {
   }
 
   @Post("community/posts/:id/like")
-  async togglePostLike(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async togglePostLike(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
-    const post = await this.communityPosts.findOne({ where: { id, visible: true } });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const post = await this.communityPosts.findOne({ where: this.tenantWhere({ id, visible: true }, tenant) });
     if (!post) throw new BadRequestException("动态不存在或已下架");
     const row = await this.communityPostLikes.findOne({ where: { postId: id, userId } });
     if (row) {
@@ -170,9 +182,10 @@ export class PublicCoursesController {
   }
 
   @Post("community/posts/:id/comments")
-  async createPostComment(@Param("id", ParseIntPipe) id: number, @Body() dto: { content?: string }, @Req() req: any) {
+  async createPostComment(@Param("id", ParseIntPipe) id: number, @Body() dto: { content?: string }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
-    const post = await this.communityPosts.findOne({ where: { id, visible: true } });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const post = await this.communityPosts.findOne({ where: this.tenantWhere({ id, visible: true }, tenant) });
     if (!post) throw new BadRequestException("动态不存在或已下架");
     const content = String(dto.content || "").trim();
     if (!content) throw new BadRequestException("请输入评论内容");
@@ -182,15 +195,16 @@ export class PublicCoursesController {
   }
 
   @Get("checkin/today")
-  async getTodayCheckin(@Req() req: any) {
+  async getTodayCheckin(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const today = this.today();
-    const task = await this.checkinTasks.findOne({ where: { date: today, enabled: true } });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const task = await this.checkinTasks.findOne({ where: this.tenantWhere({ date: today, enabled: true }, tenant) });
     if (!task) return null;
     const userId = this.optionalUserId(req.headers?.authorization);
     const monthStart = `${today.slice(0, 7)}-01`;
     const monthEnd = `${today.slice(0, 7)}-31`;
     const rows = userId
-      ? await this.communityCheckins.find({ where: { userId, date: Between(monthStart, monthEnd) }, order: { date: "ASC" } })
+      ? await this.communityCheckins.find({ where: this.tenantWhere({ userId, date: Between(monthStart, monthEnd) }, tenant), order: { date: "ASC" } })
       : [];
     const checkedToday = Boolean(userId && rows.some((row) => row.date === today));
     return {
@@ -203,20 +217,21 @@ export class PublicCoursesController {
   }
 
   @Post("checkin/today/complete")
-  async completeTodayCheckin(@Req() req: any) {
+  async completeTodayCheckin(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
     const today = this.today();
-    const task = await this.checkinTasks.findOne({ where: { date: today, enabled: true } });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const task = await this.checkinTasks.findOne({ where: this.tenantWhere({ date: today, enabled: true }, tenant) });
     if (!task) return { checkedToday: false, message: "暂无今日打卡任务", today };
-    let row = await this.communityCheckins.findOne({ where: { userId, date: today } });
+    let row = await this.communityCheckins.findOne({ where: this.tenantWhere({ userId, date: today }, tenant) });
     if (!row) {
       try {
-        row = await this.communityCheckins.save(this.communityCheckins.create({ userId, taskId: task.id, date: today }));
+        row = await this.communityCheckins.save(this.communityCheckins.create({ userId, taskId: task.id, date: today, tenant }));
         task.completedCount = Number(task.completedCount || 0) + 1;
         await this.checkinTasks.save(task);
       } catch (error: any) {
         if (!this.isDuplicateKeyError(error)) throw error;
-        row = await this.communityCheckins.findOne({ where: { userId, date: today } });
+        row = await this.communityCheckins.findOne({ where: this.tenantWhere({ userId, date: today }, tenant) });
       }
     }
     return { checkedToday: true, checkin: row, task, today };
@@ -276,5 +291,22 @@ export class PublicCoursesController {
 
   private userAccessTokenSecret() {
     return this.config.get<string>("USER_ACCESS_TOKEN_SECRET") || this.config.get<string>("JWT_SECRET") || this.config.get<string>("H5_AUTH_SECRET") || "dev-secret-change-me";
+  }
+
+  private tenantWhere<T extends Record<string, unknown>>(where: T, tenant?: Tenant | null) {
+    return tenant ? { ...where, tenant: { id: tenant.id } } : where;
+  }
+
+  private async resolveTenant(req: any, tenantCode?: string): Promise<Tenant | null> {
+    const headerCode = req.headers?.["x-tenant-code"];
+    const code = normalizeTenantCode(tenantCode || (typeof headerCode === "string" ? headerCode : Array.isArray(headerCode) ? headerCode[0] : null));
+    if (code) return this.tenants.findOne({ where: { code, enabled: true } });
+    const host = normalizeTenantHost(req.headers?.["x-forwarded-host"] || req.headers?.host || null);
+    if (!host) return null;
+    return this.tenants
+      .createQueryBuilder("tenant")
+      .where("tenant.enabled = :enabled", { enabled: true })
+      .andWhere("JSON_EXTRACT(tenant.settings, '$.domain') = :host OR JSON_EXTRACT(tenant.settings, '$.h5Domain') = :host", { host })
+      .getOne();
   }
 }

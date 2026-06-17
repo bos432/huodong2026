@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Tenant } from "./tenant.entity";
 
 @Entity("community_posts")
 export class CommunityPost {
@@ -9,6 +10,7 @@ export class CommunityPost {
   @Column({ default: 0 }) likes!: number;
   @Column({ default: 0 }) comments!: number;
   @Column({ default: true }) visible!: boolean;
+  @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" }) tenant!: Tenant | null;
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;
 }

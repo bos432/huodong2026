@@ -9,8 +9,12 @@ import { CommunityActivity } from "../../entities/community-activity.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityPost } from "../../entities/community-post.entity";
 import { CommunityPostComment, CommunityPostCommentStatus } from "../../entities/community-post-comment.entity";
+import { Tenant } from "../../entities/tenant.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { PaymentMethod } from "../../shared/domain";
+import { applyTenantScopeToQuery, assertTenantAccessForActor, tenantRelationForActor } from "../../shared/tenant-scope";
+
+type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 
 @Injectable()
 export class CoursesService {
@@ -23,94 +27,112 @@ export class CoursesService {
     @InjectRepository(CheckInTask) private checkinTasks: Repository<CheckInTask>,
     @InjectRepository(CommunityPost) private communityPosts: Repository<CommunityPost>,
     @InjectRepository(CommunityPostComment) private communityPostComments: Repository<CommunityPostComment>,
+    @InjectRepository(Tenant) private tenants: Repository<Tenant>,
     @InjectRepository(UserLearning) private userLearning: Repository<UserLearning>
   ) {}
 
   // ===== Courses =====
-  async listCourses(query: { status?: string; categoryId?: number }) {
-    const where: any = {};
-    if (query.status) where.status = query.status;
-    if (query.categoryId) where.categoryId = query.categoryId;
-    return this.courses.find({ where, order: { sortOrder: "ASC", createdAt: "DESC" } });
+  async listCourses(query: { status?: string; categoryId?: number }, admin?: AdminContext) {
+    const builder = this.courses.createQueryBuilder("course").leftJoinAndSelect("course.tenant", "tenant").orderBy("course.sortOrder", "ASC").addOrderBy("course.createdAt", "DESC");
+    applyTenantScopeToQuery(builder, "course", admin);
+    if (query.status) builder.andWhere("course.status = :status", { status: query.status });
+    if (query.categoryId) builder.andWhere("course.categoryId = :categoryId", { categoryId: Number(query.categoryId) });
+    return builder.getMany();
   }
 
-  async getCourse(id: number) {
-    const course = await this.courses.findOne({ where: { id } });
-    if (!course) throw new NotFoundException("课程不存在");
+  async getCourse(id: number, admin?: AdminContext) {
+    const course = await this.assertCourseAccess(id, admin);
     const chapters = await this.chapters.find({ where: { courseId: id }, order: { sortOrder: "ASC" } });
     const chapterIds = chapters.map(c => c.id);
     const lessons = chapterIds.length ? await this.lessons.find({ where: chapterIds.map(id => ({ chapterId: id })), order: { sortOrder: "ASC" } }) : [];
     return { ...course, chapters: chapters.map(ch => ({ ...ch, lessons: lessons.filter(l => l.chapterId === ch.id) })) };
   }
 
-  async createCourse(dto: any) {
-    const course = this.courses.create(dto);
+  async createCourse(dto: any, admin?: AdminContext) {
+    const course = this.courses.create();
+    Object.assign(course, dto);
+    await this.assignTenant(course, dto, admin);
     return this.courses.save(course);
   }
 
-  async updateCourse(id: number, dto: any) {
-    await this.courses.update(id, dto);
-    return this.courses.findOne({ where: { id } });
+  async updateCourse(id: number, dto: any, admin?: AdminContext) {
+    const course = await this.assertCourseAccess(id, admin);
+    Object.assign(course, dto);
+    await this.assignTenant(course, dto, admin);
+    return this.courses.save(course);
   }
 
-  async deleteCourse(id: number) {
-    await this.courses.delete(id);
+  async deleteCourse(id: number, admin?: AdminContext) {
+    await this.assertCourseAccess(id, admin);
     await this.chapters.delete({ courseId: id });
+    await this.courses.delete(id);
     return { success: true };
   }
 
   // ===== Chapters =====
-  async listCourseChapters(courseId: number) {
+  async listCourseChapters(courseId: number, admin?: AdminContext) {
+    await this.assertCourseAccess(courseId, admin);
     return this.chapters.find({ where: { courseId }, order: { sortOrder: "ASC" } });
   }
 
-  async createCourseChapter(dto: any) {
+  async createCourseChapter(dto: any, admin?: AdminContext) {
+    await this.assertCourseAccess(Number(dto.courseId), admin);
     const item = this.chapters.create(dto);
     return this.chapters.save(item);
   }
 
-  async updateCourseChapter(id: number, dto: any) {
-    await this.chapters.update(id, dto);
-    return this.chapters.findOne({ where: { id } });
+  async updateCourseChapter(id: number, dto: any, admin?: AdminContext) {
+    const chapter = await this.assertChapterAccess(id, admin);
+    Object.assign(chapter, dto);
+    if (dto.courseId !== undefined) await this.assertCourseAccess(Number(dto.courseId), admin);
+    return this.chapters.save(chapter);
   }
 
-  async deleteCourseChapter(id: number) {
+  async deleteCourseChapter(id: number, admin?: AdminContext) {
+    await this.assertChapterAccess(id, admin);
     await this.chapters.delete(id);
     await this.lessons.delete({ chapterId: id });
     return { success: true };
   }
 
   // ===== Lessons =====
-  async listChapterLessons(chapterId: number) {
+  async listChapterLessons(chapterId: number, admin?: AdminContext) {
+    await this.assertChapterAccess(chapterId, admin);
     return this.lessons.find({ where: { chapterId }, order: { sortOrder: "ASC" } });
   }
 
-  async createCourseLesson(dto: any) {
+  async createCourseLesson(dto: any, admin?: AdminContext) {
+    await this.assertChapterAccess(Number(dto.chapterId), admin);
     const item = this.lessons.create(dto);
     return this.lessons.save(item);
   }
 
-  async updateCourseLesson(id: number, dto: any) {
-    await this.lessons.update(id, dto);
-    return this.lessons.findOne({ where: { id } });
+  async updateCourseLesson(id: number, dto: any, admin?: AdminContext) {
+    const lesson = await this.assertLessonAccess(id, admin);
+    Object.assign(lesson, dto);
+    if (dto.chapterId !== undefined) await this.assertChapterAccess(Number(dto.chapterId), admin);
+    return this.lessons.save(lesson);
   }
 
-  async deleteCourseLesson(id: number) {
+  async deleteCourseLesson(id: number, admin?: AdminContext) {
+    await this.assertLessonAccess(id, admin);
     await this.lessons.delete(id);
     return { success: true };
   }
 
   // ===== Course Orders =====
-  async listCourseOrders(query: { status?: string; courseId?: string | number; keyword?: string; page?: string | number; pageSize?: string | number }) {
+  async listCourseOrders(query: { status?: string; courseId?: string | number; keyword?: string; page?: string | number; pageSize?: string | number }, admin?: AdminContext) {
     const page = Math.max(Number(query.page || 1), 1);
     const pageSize = Math.min(Math.max(Number(query.pageSize || 20), 1), 100);
     const builder = this.courseOrders
       .createQueryBuilder("courseOrder")
       .leftJoinAndSelect("courseOrder.course", "course")
+      .leftJoinAndSelect("course.tenant", "tenant")
       .leftJoinAndSelect("courseOrder.user", "user")
       .orderBy("courseOrder.createdAt", "DESC")
       .skip((page - 1) * pageSize)
       .take(pageSize);
+    applyTenantScopeToQuery(builder, "course", admin);
     if (query.status) builder.andWhere("courseOrder.status = :status", { status: query.status });
     if (query.courseId) builder.andWhere("course.id = :courseId", { courseId: Number(query.courseId) });
     const keyword = String(query.keyword || "").trim();
@@ -121,9 +143,10 @@ export class CoursesService {
     return { items, total, page, pageSize };
   }
 
-  async confirmOfflineCourseOrder(orderId: number) {
+  async confirmOfflineCourseOrder(orderId: number, admin?: AdminContext) {
     const order = await this.courseOrders.findOne({ where: { id: orderId } });
     if (!order) throw new NotFoundException("课程订单不存在");
+    await this.assertCourseAccess(order.course.id, admin);
     if (order.status === CourseOrderStatus.Paid) {
       await this.grantCourseAccess(order.user.id, order.course.id);
       return order;
@@ -152,45 +175,57 @@ export class CoursesService {
   }
 
   // ===== Community Activities =====
-  async listCommunityActivities(query: any) {
-    const where: any = {};
-    if (query.status) where.status = query.status;
-    return this.communityActivities.find({ where, order: { sortOrder: "ASC", createdAt: "DESC" } });
+  async listCommunityActivities(query: any, admin?: AdminContext) {
+    const builder = this.communityActivities.createQueryBuilder("activity").leftJoinAndSelect("activity.tenant", "tenant").orderBy("activity.sortOrder", "ASC").addOrderBy("activity.createdAt", "DESC");
+    applyTenantScopeToQuery(builder, "activity", admin);
+    if (query.status) builder.andWhere("activity.status = :status", { status: query.status });
+    return builder.getMany();
   }
 
-  async createCommunityActivity(dto: any) {
-    const item = this.communityActivities.create(dto);
+  async createCommunityActivity(dto: any, admin?: AdminContext) {
+    const item = this.communityActivities.create();
+    Object.assign(item, dto);
+    await this.assignTenant(item, dto, admin);
     return this.communityActivities.save(item);
   }
 
-  async updateCommunityActivity(id: number, dto: any) {
-    await this.communityActivities.update(id, dto);
-    return this.communityActivities.findOne({ where: { id } });
+  async updateCommunityActivity(id: number, dto: any, admin?: AdminContext) {
+    const item = await this.assertCommunityActivityAccess(id, admin);
+    Object.assign(item, dto);
+    await this.assignTenant(item, dto, admin);
+    return this.communityActivities.save(item);
   }
 
-  async deleteCommunityActivity(id: number) {
+  async deleteCommunityActivity(id: number, admin?: AdminContext) {
+    await this.assertCommunityActivityAccess(id, admin);
     await this.communityActivities.delete(id);
     return { success: true };
   }
 
   // ===== Check-in Tasks =====
-  async listCheckinTasks(query: any) {
-    const where: any = {};
-    if (query.date) where.date = query.date;
-    return this.checkinTasks.find({ where, order: { date: "DESC" } });
+  async listCheckinTasks(query: any, admin?: AdminContext) {
+    const builder = this.checkinTasks.createQueryBuilder("task").leftJoinAndSelect("task.tenant", "tenant").orderBy("task.date", "DESC");
+    applyTenantScopeToQuery(builder, "task", admin);
+    if (query.date) builder.andWhere("task.date = :date", { date: query.date });
+    return builder.getMany();
   }
 
-  async createCheckinTask(dto: any) {
-    const item = this.checkinTasks.create(this.normalizeCheckinTaskDto(dto));
+  async createCheckinTask(dto: any, admin?: AdminContext) {
+    const item = this.checkinTasks.create();
+    Object.assign(item, this.normalizeCheckinTaskDto(dto));
+    await this.assignTenant(item, dto, admin);
     return this.checkinTasks.save(item);
   }
 
-  async updateCheckinTask(id: number, dto: any) {
-    await this.checkinTasks.update(id, this.normalizeCheckinTaskDto(dto));
-    return this.checkinTasks.findOne({ where: { id } });
+  async updateCheckinTask(id: number, dto: any, admin?: AdminContext) {
+    const item = await this.assertCheckinTaskAccess(id, admin);
+    Object.assign(item, this.normalizeCheckinTaskDto(dto));
+    await this.assignTenant(item, dto, admin);
+    return this.checkinTasks.save(item);
   }
 
-  async deleteCheckinTask(id: number) {
+  async deleteCheckinTask(id: number, admin?: AdminContext) {
+    await this.assertCheckinTaskAccess(id, admin);
     await this.checkinTasks.delete(id);
     return { success: true };
   }
@@ -217,32 +252,43 @@ export class CoursesService {
   }
 
   // ===== Community Posts =====
-  async listCommunityPosts(query: any) {
-    const where: any = {};
-    if (query.visible !== undefined) where.visible = query.visible;
-    return this.communityPosts.find({ where, order: { createdAt: "DESC" }, take: Math.min(query.limit || 20, 50) });
+  async listCommunityPosts(query: any, admin?: AdminContext) {
+    const builder = this.communityPosts.createQueryBuilder("post").leftJoinAndSelect("post.tenant", "tenant").orderBy("post.createdAt", "DESC").take(Math.min(query.limit || 20, 50));
+    applyTenantScopeToQuery(builder, "post", admin);
+    if (query.visible !== undefined) builder.andWhere("post.visible = :visible", { visible: query.visible === true || query.visible === "true" || query.visible === "1" });
+    return builder.getMany();
   }
 
-  async createCommunityPost(dto: any) {
-    const item = this.communityPosts.create(dto);
+  async createCommunityPost(dto: any, admin?: AdminContext) {
+    const item = this.communityPosts.create();
+    Object.assign(item, dto);
+    await this.assignTenant(item, dto, admin);
     return this.communityPosts.save(item);
   }
 
-  async deleteCommunityPost(id: number) {
+  async deleteCommunityPost(id: number, admin?: AdminContext) {
+    await this.assertCommunityPostAccess(id, admin);
     await this.communityPosts.delete(id);
     return { success: true };
   }
 
-  async listCommunityPostComments(query: { status?: CommunityPostCommentStatus; postId?: string | number }) {
-    const where: any = {};
-    if (query.status) where.status = query.status;
-    if (query.postId) where.postId = Number(query.postId);
-    return this.communityPostComments.find({ where, order: { createdAt: "DESC" }, take: 100 });
+  async listCommunityPostComments(query: { status?: CommunityPostCommentStatus; postId?: string | number }, admin?: AdminContext) {
+    const builder = this.communityPostComments
+      .createQueryBuilder("comment")
+      .innerJoin(CommunityPost, "post", "post.id = comment.postId")
+      .leftJoin("post.tenant", "tenant")
+      .orderBy("comment.createdAt", "DESC")
+      .take(100);
+    applyTenantScopeToQuery(builder, "post", admin);
+    if (query.status) builder.andWhere("comment.status = :status", { status: query.status });
+    if (query.postId) builder.andWhere("comment.postId = :postId", { postId: Number(query.postId) });
+    return builder.getMany();
   }
 
-  async reviewCommunityPostComment(id: number, dto: { status?: CommunityPostCommentStatus; reviewRemark?: string | null }) {
+  async reviewCommunityPostComment(id: number, dto: { status?: CommunityPostCommentStatus; reviewRemark?: string | null }, admin?: AdminContext) {
     const comment = await this.communityPostComments.findOne({ where: { id } });
     if (!comment) throw new NotFoundException("评论不存在");
+    await this.assertCommunityPostAccess(comment.postId, admin);
     const nextStatus = dto.status;
     if (nextStatus !== "approved" && nextStatus !== "rejected" && nextStatus !== "pending") throw new BadRequestException("评论状态不正确");
     const oldStatus = comment.status;
@@ -259,5 +305,52 @@ export class CoursesService {
     if (!post) return;
     post.comments = Math.max(0, Number(post.comments || 0) + delta);
     await this.communityPosts.save(post);
+  }
+
+  private async assertCourseAccess(id: number, admin?: AdminContext) {
+    const course = await this.courses.findOne({ where: { id }, relations: { tenant: true } });
+    if (!course) throw new NotFoundException("课程不存在");
+    assertTenantAccessForActor(course, admin, "课程不存在或不属于当前商家");
+    return course;
+  }
+
+  private async assertChapterAccess(id: number, admin?: AdminContext) {
+    const chapter = await this.chapters.findOne({ where: { id } });
+    if (!chapter) throw new NotFoundException("章节不存在");
+    await this.assertCourseAccess(chapter.courseId, admin);
+    return chapter;
+  }
+
+  private async assertLessonAccess(id: number, admin?: AdminContext) {
+    const lesson = await this.lessons.findOne({ where: { id } });
+    if (!lesson) throw new NotFoundException("课时不存在");
+    await this.assertChapterAccess(lesson.chapterId, admin);
+    return lesson;
+  }
+
+  private async assertCommunityActivityAccess(id: number, admin?: AdminContext) {
+    const item = await this.communityActivities.findOne({ where: { id } });
+    if (!item) throw new NotFoundException("共修活动不存在");
+    assertTenantAccessForActor(item, admin, "共修活动不存在或不属于当前商家");
+    return item;
+  }
+
+  private async assertCheckinTaskAccess(id: number, admin?: AdminContext) {
+    const item = await this.checkinTasks.findOne({ where: { id } });
+    if (!item) throw new NotFoundException("打卡任务不存在");
+    assertTenantAccessForActor(item, admin, "打卡任务不存在或不属于当前商家");
+    return item;
+  }
+
+  private async assertCommunityPostAccess(id: number, admin?: AdminContext) {
+    const item = await this.communityPosts.findOne({ where: { id } });
+    if (!item) throw new NotFoundException("学员动态不存在");
+    assertTenantAccessForActor(item, admin, "学员动态不存在或不属于当前商家");
+    return item;
+  }
+
+  private async assignTenant<T extends { tenant?: Tenant | null }>(row: T, dto: any, admin?: AdminContext) {
+    const tenantId = admin?.tenantId || Number(dto?.tenantId || dto?.tenant?.id || 0) || null;
+    row.tenant = tenantRelationForActor<Tenant>(admin, tenantId ? await this.tenants.findOne({ where: { id: tenantId } }) : null);
   }
 }

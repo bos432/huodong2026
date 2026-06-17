@@ -17,7 +17,7 @@ export class Course {
   @Column({ default: 0 }) hotCount!: number;
   @Column({ type: "varchar", length: 50, default: "draft" }) status!: string;
   @Column({ type: "simple-json", nullable: true }) tags!: string[] | null;
-  @ManyToOne(() => Tenant, { nullable: true, onDelete: "SET NULL" }) tenant!: Tenant | null;
+  @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" }) tenant!: Tenant | null;
   @Column({ default: 0 }) sortOrder!: number;
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;

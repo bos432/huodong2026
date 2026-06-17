@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Tenant } from "./tenant.entity";
 
 @Entity("community_activities")
 export class CommunityActivity {
@@ -11,6 +12,7 @@ export class CommunityActivity {
   @Column({ default: 0 }) registeredCount!: number;
   @Column({ type: "varchar", length: 30, default: "draft" }) status!: string;
   @Column({ default: 0 }) sortOrder!: number;
+  @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" }) tenant!: Tenant | null;
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;
 }

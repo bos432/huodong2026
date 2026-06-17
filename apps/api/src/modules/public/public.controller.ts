@@ -158,21 +158,21 @@ export class PublicController {
   }
 
   @Post("courses/:id/orders")
-  async createCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: CreateCourseOrderDto, @Req() req: any) {
+  async createCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: CreateCourseOrderDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.createCourseOrder(id, dto, user);
+    return this.service.createCourseOrder(id, dto, user, this.tenantContext(req, tenantCode));
   }
 
   @Get("course-orders/:id")
-  async courseOrderDetail(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async courseOrderDetail(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.courseOrderDetail(id, user);
+    return this.service.courseOrderDetail(id, user, this.tenantContext(req, tenantCode));
   }
 
   @Post("course-orders/:id/pay/mock")
-  async mockPayCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: MockPayDto, @Req() req: any) {
+  async mockPayCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: MockPayDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.mockPayCourseOrder(id, dto, user);
+    return this.service.mockPayCourseOrder(id, dto, user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/wallet")
@@ -188,15 +188,15 @@ export class PublicController {
   }
 
   @Get("me/courses")
-  async myCourses(@Req() req: any) {
+  async myCourses(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myCourses(user);
+    return this.service.myCourses(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/course-orders")
-  async myCourseOrders(@Req() req: any) {
+  async myCourseOrders(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myCourseOrders(user);
+    return this.service.myCourseOrders(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/certificates")
