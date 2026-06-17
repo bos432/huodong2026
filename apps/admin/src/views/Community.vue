@@ -1,11 +1,18 @@
 <template>
   <div class="community-page">
     <div class="page-header">
-      <h2>共修管理</h2>
+      <h2>书院运营</h2>
       <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="平台/全部商家" style="width: 240px" @change="changeTenant">
         <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
       </el-select>
     </div>
+    <el-alert
+      type="info"
+      title="书院动态/文章会展示在 H5 首页「书院动态」和共修页「学员动态」；用户点赞、评论后，可在这里审核评论。"
+      show-icon
+      :closable="false"
+      class="page-alert"
+    />
     <el-tabs v-model="activeTab">
       <el-tab-pane label="共修活动" name="activities">
         <el-button type="primary" size="small" style="margin-bottom:16px;" @click="showForm = true">新增活动</el-button>
@@ -31,18 +38,23 @@
           <el-table-column label="操作" width="200"><template #default="{row}"><el-button size="small" @click="editCheckin(row)">编辑</el-button><el-button size="small" type="danger" @click="deleteCheckin(row)">删除</el-button></template></el-table-column>
         </el-table>
       </el-tab-pane>
-      <el-tab-pane label="学员动态" name="posts">
-        <el-table :data="posts" stripe style="width:100%;" empty-text="暂无学员动态">
+      <el-tab-pane label="书院动态/文章" name="posts">
+        <div class="tab-toolbar">
+          <el-button type="primary" size="small" @click="showPostForm = true">发布动态/文章</el-button>
+          <span>后台发布内容与用户动态统一进入前台动态流，适合公告、文章、活动花絮和学员案例。</span>
+        </div>
+        <el-table :data="posts" stripe style="width:100%;" empty-text="暂无书院动态">
           <el-table-column prop="id" label="ID" width="60" />
           <el-table-column prop="userId" label="用户ID" width="80" />
           <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
           <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="160" show-overflow-tooltip><template #default="{row}">{{ tenantDisplayName(row) }}</template></el-table-column>
+          <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="row.visible === false ? 'info' : 'success'">{{ row.visible === false ? '隐藏' : '展示' }}</el-tag></template></el-table-column>
           <el-table-column prop="likes" label="点赞" width="60" />
           <el-table-column prop="createdAt" label="时间" width="160" />
           <el-table-column label="操作" width="100"><template #default="{row}"><el-button size="small" type="danger" @click="deletePost(row)">删除</el-button></template></el-table-column>
         </el-table>
       </el-tab-pane>
-      <el-tab-pane label="评论审核" name="comments">
+      <el-tab-pane label="点赞评论/评论审核" name="comments">
         <el-table :data="comments" stripe style="width:100%;" empty-text="暂无评论">
           <el-table-column prop="id" label="ID" width="60" />
           <el-table-column prop="postId" label="动态ID" width="80" />
@@ -93,6 +105,29 @@
       </el-form>
       <template #footer><el-button @click="showCheckinForm = false">取消</el-button><el-button type="primary" :loading="savingCheckin" @click="saveCheckin">保存</el-button></template>
     </el-dialog>
+
+    <el-dialog v-model="showPostForm" title="发布书院动态/文章" width="560px">
+      <el-form :model="postForm" label-width="92px">
+        <el-form-item v-if="isPlatformAdmin()" label="所属商家">
+          <el-select v-model="postForm.tenantId" clearable filterable placeholder="平台动态">
+            <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="展示状态">
+          <el-switch v-model="postForm.visible" active-text="前台展示" inactive-text="先隐藏" />
+        </el-form-item>
+        <el-form-item label="内容" required>
+          <el-input v-model="postForm.content" type="textarea" :rows="7" maxlength="2000" show-word-limit placeholder="可发布书院文章、活动回顾、学员案例、运营公告等内容" />
+        </el-form-item>
+        <el-form-item label="图片地址">
+          <el-input v-model="postForm.imagesText" type="textarea" :rows="3" placeholder="可选。每行一个图片地址，也支持用逗号分隔。" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showPostForm = false">取消</el-button>
+        <el-button type="primary" :loading="savingPost" @click="savePost">发布</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -119,6 +154,9 @@ const showCheckinForm = ref(false);
 const editingCheckin = ref(false);
 const checkinForm = ref<any>({ date:"", title:"", description:"" });
 const savingCheckin = ref(false);
+const showPostForm = ref(false);
+const savingPost = ref(false);
+const postForm = ref<any>({ content: "", imagesText: "", visible: true });
 const routeTenantId = () => {
   const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
   return isPlatformAdmin() && tenantId && Number.isFinite(tenantId) ? tenantId : undefined;
@@ -281,6 +319,35 @@ async function deletePost(row: any) {
   }
 }
 
+function parseImageUrls(value: string) {
+  return String(value || "")
+    .split(/[\n,，]/)
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+async function savePost() {
+  if (!postForm.value.content?.trim()) return ElMessage.error("请输入动态/文章内容");
+  try {
+    savingPost.value = true;
+    const dto: any = {
+      content: postForm.value.content.trim(),
+      images: parseImageUrls(postForm.value.imagesText),
+      visible: postForm.value.visible !== false
+    };
+    if (isPlatformAdmin()) dto.tenantId = postForm.value.tenantId || null;
+    await api.post("/admin/community-posts", dto);
+    showPostForm.value = false;
+    postForm.value = { content: "", imagesText: "", visible: true, tenantId: filters.tenantId };
+    await load();
+    ElMessage.success("书院动态已发布");
+  } catch (error: any) {
+    ElMessage.error(error.message || "发布书院动态失败");
+  } finally {
+    savingPost.value = false;
+  }
+}
+
 function statusText(status: string) {
   if (status === "approved") return "已通过";
   if (status === "rejected") return "已拒绝";
@@ -305,6 +372,10 @@ watch(showCheckinForm, (visible) => {
   if (visible && !editingCheckin.value) checkinForm.value.tenantId = filters.tenantId;
 });
 
+watch(showPostForm, (visible) => {
+  if (visible) postForm.value.tenantId = filters.tenantId;
+});
+
 watch(() => route.query.tenantId, () => {
   const nextTenantId = routeTenantId();
   if (filters.tenantId === nextTenantId) return;
@@ -321,4 +392,6 @@ onMounted(() => {
 <style scoped>
 .community-page { padding: 24px; }
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; gap: 16px; }
+.page-alert { margin-bottom: 16px; }
+.tab-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; color: #64748b; font-size: 13px; }
 </style>

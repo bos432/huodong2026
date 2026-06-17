@@ -47,7 +47,7 @@
         <text style="font-size:30rpx; color:#C43D3D; font-weight:600;">🏮 加入文化大使</text>
         <text style="font-size:26rpx; color:#C43D3D;">立即申请 ›</text>
       </view>
-      <text style="font-size:24rpx; color:#999; margin-top:6rpx;">和七维书院一起，让热爱发光</text>
+      <text style="font-size:24rpx; color:#999; margin-top:6rpx;">{{ pageBrand.slogan }}</text>
     </view>
 
     <!-- 订单记录 -->
@@ -95,7 +95,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { clearUser, ensureUser, fetchMyProfile, getUserToken, request } from "../../api";
-import { loadPageTheme } from "../../theme";
+import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import TabBar from "../../components/TabBar.vue";
 

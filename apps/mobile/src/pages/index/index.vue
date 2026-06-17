@@ -4,7 +4,10 @@
 
     <!-- 顶部导航 -->
     <view class="header-row">
-      <text class="title-xxl" style="font-family: 'STKaiti', 'KaiTi', serif;">七维书院</text>
+      <view class="brand-title">
+        <image v-if="pageBrand.logoUrl" class="brand-logo" :src="pageBrand.logoUrl" mode="aspectFit" />
+        <text class="title-xxl" style="font-family: 'STKaiti', 'KaiTi', serif;">{{ pageBrand.name }}</text>
+      </view>
       <view class="search-btn" @click="goSearch">
         <text style="font-size:44rpx;">🔍</text>
       </view>
@@ -79,7 +82,7 @@
     <view class="ambassador-card" @click="goAmbassador">
       <view class="ambassador-content">
         <text style="font-size:32rpx; color:#fff; font-weight:600;">🏮 加入文化大使</text>
-        <text style="font-size:24rpx; color:rgba(255,255,255,0.8); margin-top:8rpx;">和七维书院一起，让热爱发光</text>
+        <text style="font-size:24rpx; color:rgba(255,255,255,0.8); margin-top:8rpx;">{{ pageBrand.slogan }}</text>
       </view>
       <view class="ambassador-arrow">
         <text style="color:#fff; font-size:28rpx;">立即申请 &gt;</text>
@@ -126,7 +129,7 @@ import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
-import { loadPageTheme } from "../../theme";
+import { loadPageTheme, pageBrand } from "../../theme";
 import { resolveTenantByCurrentLocation } from "../../tenant-location";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
@@ -254,6 +257,18 @@ async function submitComment(post: CommunityPost, content: string) {
   align-items: center;
   justify-content: space-between;
   padding: 20rpx 0 16rpx;
+}
+.brand-title {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 12rpx;
+}
+.brand-logo {
+  width: 58rpx;
+  height: 58rpx;
+  border-radius: 16rpx;
+  background: rgba(255,255,255,0.68);
 }
 .search-btn {
   width: 72rpx;

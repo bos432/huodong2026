@@ -82,6 +82,10 @@ type RolloutReadiness = {
 };
 
 const defaultPageTheme = {
+  brandName: "七维书院",
+  brandLogoUrl: "",
+  brandSlogan: "和七维书院一起，让热爱发光",
+  adminTitle: "",
   backgroundColor: "#f4f6f8",
   backgroundImage: "",
   backgroundOverlayColor: "#f4f6f8",
@@ -480,6 +484,13 @@ function handleThemeBackgroundSuccess(response: any) {
   if (!data?.url) return ElMessage.error("上传成功但未返回图片地址");
   form.pageTheme.backgroundImage = data.url;
   ElMessage.success("H5 页面背景图已上传");
+}
+
+function handleBrandLogoSuccess(response: any) {
+  const data = response?.data || response;
+  if (!data?.url) return ElMessage.error("上传成功但未返回图片地址");
+  form.pageTheme.brandLogoUrl = data.url;
+  ElMessage.success("品牌 Logo 已上传");
 }
 
 function handleUploadError(error: Error) {
@@ -899,6 +910,25 @@ onMounted(async () => {
             <el-form-item label="H5 页面主题">
               <div class="theme-panel">
                 <div class="theme-controls">
+                  <div class="brand-setting-card">
+                    <div class="brand-setting-head">
+                      <strong>品牌名称与 Logo</strong>
+                      <span>保存后用于 H5 首页标题、我的页文案和后台识别。小程序需重新上传审核后生效。</span>
+                    </div>
+                    <div class="brand-setting-grid">
+                      <el-input v-model="form.pageTheme.brandName" placeholder="前台品牌名称，例如：七维书院" maxlength="40" />
+                      <el-input v-model="form.pageTheme.brandSlogan" placeholder="品牌副标题/口号" maxlength="80" />
+                      <el-input v-model="form.pageTheme.adminTitle" placeholder="后台显示名称，留空使用商家/平台名称" maxlength="40" />
+                    </div>
+                    <div class="theme-upload">
+                      <el-input v-model="form.pageTheme.brandLogoUrl" placeholder="Logo 图片地址，建议正方形透明 PNG" />
+                      <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleBrandLogoSuccess" :on-error="handleUploadError">
+                        <el-button :icon="UploadFilled">上传 Logo</el-button>
+                      </el-upload>
+                      <el-button v-if="form.pageTheme.brandLogoUrl" @click="form.pageTheme.brandLogoUrl = ''">移除</el-button>
+                    </div>
+                    <img v-if="form.pageTheme.brandLogoUrl" class="brand-logo-preview" :src="form.pageTheme.brandLogoUrl" alt="品牌 Logo 预览" />
+                  </div>
                   <div class="theme-grid">
                     <label><span>页面底色</span><el-color-picker v-model="form.pageTheme.backgroundColor" /></label>
                     <label><span>文字颜色</span><el-color-picker v-model="form.pageTheme.textColor" /></label>
@@ -931,8 +961,9 @@ onMounted(async () => {
                 </div>
                 <div class="theme-preview" :style="pageThemePreviewStyle()">
                   <div class="theme-phone-card" :style="pageThemeCardStyle()">
-                    <strong>活动报名</strong>
-                    <span>页面背景、卡片透明度和文字颜色会同步到 H5 主要页面。</span>
+                    <img v-if="form.pageTheme.brandLogoUrl" class="theme-logo" :src="form.pageTheme.brandLogoUrl" alt="Logo" />
+                    <strong>{{ form.pageTheme.brandName || "七维书院" }}</strong>
+                    <span>{{ form.pageTheme.brandSlogan || "页面背景、卡片透明度和文字颜色会同步到 H5 主要页面。" }}</span>
                     <button :style="{ background: form.pageTheme.primaryColor }">立即报名</button>
                   </div>
                 </div>
@@ -1227,6 +1258,12 @@ onMounted(async () => {
 .qr-preview { grid-column: 1 / -1; width: 180px; aspect-ratio: 1 / 1; object-fit: contain; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
 .theme-panel { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 14px; align-items: stretch; }
 .theme-controls { display: grid; gap: 12px; }
+.brand-setting-card { display: grid; gap: 10px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 12px; background: #f8fafc; }
+.brand-setting-head { display: grid; gap: 4px; }
+.brand-setting-head strong { color: #111827; }
+.brand-setting-head span { color: #64748b; font-size: 12px; line-height: 1.5; }
+.brand-setting-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.brand-logo-preview { width: 64px; height: 64px; object-fit: contain; border: 1px solid #e5e7eb; border-radius: 12px; background: #fff; padding: 6px; }
 .theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
 .theme-grid label { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; color: #475569; font-size: 13px; }
 .theme-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
@@ -1234,6 +1271,7 @@ onMounted(async () => {
 .theme-sliders > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: center; color: #475569; font-size: 13px; }
 .theme-preview { min-height: 280px; border-radius: 16px; padding: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e7eb; overflow: hidden; }
 .theme-phone-card { width: 150px; min-height: 160px; padding: 18px; display: grid; gap: 12px; align-content: center; box-shadow: 0 16px 40px rgba(15, 23, 42, 0.12); }
+.theme-logo { width: 42px; height: 42px; object-fit: contain; border-radius: 12px; background: rgba(255,255,255,0.72); }
 .theme-phone-card strong { font-size: 18px; line-height: 1.25; }
 .theme-phone-card span { color: #64748b; font-size: 12px; line-height: 1.5; }
 .theme-phone-card button { height: 34px; border: 0; border-radius: 999px; color: #fff; font-weight: 700; cursor: default; }

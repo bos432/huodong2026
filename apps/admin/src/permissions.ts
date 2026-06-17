@@ -25,7 +25,7 @@ export const adminPermissionGroups = [
   { group: "装修营销", items: [{ key: "homepage.manage", label: "首页装修" }, { key: "announcement.manage", label: "公告管理" }, { key: "operation_settings.manage", label: "运营设置" }, { key: "upload.image", label: "上传图片" }] },
   { group: "商家设置", items: [{ key: "tenant_profile.manage", label: "商家资料" }] },
   { group: "公益招募", items: [{ key: "charity.view", label: "查看公益池" }, { key: "charity.manage", label: "公益项目/设置" }, { key: "charity.finance", label: "公益流水/拨付" }, { key: "ambassador.manage", label: "文化大使招募", platformOnly: true }] },
-  { group: "书院运营", items: [{ key: "course.manage", label: "课程管理" }, { key: "community.manage", label: "共修管理" }] }
+  { group: "书院运营", items: [{ key: "course.manage", label: "课程管理" }, { key: "community.manage", label: "书院动态/共修管理" }] }
 ] as const;
 
 export const allAdminPermissionKeys = adminPermissionGroups.flatMap((group) => group.items.map((item) => item.key));

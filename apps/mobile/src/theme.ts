@@ -1,6 +1,11 @@
 import { request } from "./api";
+import { ref } from "vue";
 
 type PageTheme = {
+  brandName?: string;
+  brandLogoUrl?: string;
+  brandSlogan?: string;
+  adminTitle?: string;
   backgroundColor?: string;
   backgroundImage?: string;
   backgroundOverlayColor?: string;
@@ -14,6 +19,10 @@ type PageTheme = {
 };
 
 const defaultTheme: Required<PageTheme> = {
+  brandName: "七维书院",
+  brandLogoUrl: "",
+  brandSlogan: "和七维书院一起，让热爱发光",
+  adminTitle: "",
   backgroundColor: "#F5F0E8",
   backgroundImage: "",
   backgroundOverlayColor: "#F5F0E8",
@@ -25,6 +34,12 @@ const defaultTheme: Required<PageTheme> = {
   mutedColor: "#666666",
   primaryColor: "#C43D3D"
 };
+
+export const pageBrand = ref({
+  name: defaultTheme.brandName,
+  logoUrl: defaultTheme.brandLogoUrl,
+  slogan: defaultTheme.brandSlogan
+});
 
 function clamp(value: unknown, min: number, max: number, fallback: number) {
   const numeric = Number(value);
@@ -53,6 +68,11 @@ function normalizeTheme(theme?: PageTheme | null) {
 
 export function applyPageTheme(theme?: PageTheme | null) {
   const normalized = normalizeTheme(theme);
+  pageBrand.value = {
+    name: String(normalized.brandName || defaultTheme.brandName),
+    logoUrl: String(normalized.brandLogoUrl || ""),
+    slogan: String(normalized.brandSlogan || defaultTheme.brandSlogan)
+  };
   const cardOpacity = clamp(normalized.cardOpacity, 40, 100, defaultTheme.cardOpacity);
   const overlayOpacity = clamp(normalized.backgroundOverlayOpacity, 0, 90, defaultTheme.backgroundOverlayOpacity);
   const cardRadius = clamp(normalized.cardRadius, 0, 24, defaultTheme.cardRadius);

@@ -16,8 +16,13 @@ const changingPassword = ref(false);
 const passwordForm = reactive({ oldPassword: "", newPassword: "", confirmPassword: "" });
 const platformTenants = ref<Array<{ id: number; name?: string; code?: string; enabled?: boolean }>>([]);
 const selectedPlatformTenantId = ref(Number(localStorage.getItem("admin_selected_tenant_id") || 0));
+const shellBrand = ref<{ adminTitle?: string; brandName?: string; brandLogoUrl?: string }>({});
 const roleLabel = computed(() => roleOptions.find((item) => item.value === currentRole())?.label || "管理员");
-const shellTitle = computed(() => (isPlatformAdmin() ? "平台超级管理后台" : `${currentTenantName() || "商家"}管理后台`));
+const shellTitle = computed(() => {
+  if (shellBrand.value.adminTitle) return shellBrand.value.adminTitle;
+  if (isPlatformAdmin()) return "平台超级管理后台";
+  return `${currentTenantName() || shellBrand.value.brandName || "商家"}管理后台`;
+});
 const roleCapabilityText = computed(() => {
   const role = currentRole();
   if (isPlatformAdmin()) return "平台超管：可管理全平台商家、活动、订单、公益池、系统安全，并拥有会员余额调整权限。";
@@ -51,7 +56,7 @@ const tenantQuickLinks = [
   { label: "财务", path: "/finance" },
   { label: "装修", path: "/homepage-builder" },
   { label: "课程", path: "/courses" },
-  { label: "共修", path: "/community" },
+  { label: "动态/共修", path: "/community" },
   { label: "账号", path: "/admins" },
   { label: "日志", path: "/operation-logs" }
 ];
@@ -129,7 +134,7 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "platform" },
-      { index: "/community", icon: "ChatLineSquare", label: "共修管理", roles: ["community.manage"], scope: "platform" }
+      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "platform" }
     ]
   },
   {
@@ -225,7 +230,7 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "tenant" },
-      { index: "/community", icon: "ChatLineSquare", label: "共修管理", roles: ["community.manage"], scope: "tenant" }
+      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "tenant" }
     ]
   },
   {
@@ -281,6 +286,20 @@ async function loadPlatformTenants() {
     }
   } catch (error: any) {
     ElMessage.error(error.message || "加载商家列表失败");
+  }
+}
+
+async function loadShellBrand() {
+  try {
+    const setting = await api.get<any, any>("/admin/settings/operation");
+    const theme = setting?.pageTheme || {};
+    shellBrand.value = {
+      adminTitle: String(theme.adminTitle || ""),
+      brandName: String(theme.brandName || ""),
+      brandLogoUrl: String(theme.brandLogoUrl || "")
+    };
+  } catch {
+    shellBrand.value = {};
   }
 }
 
@@ -374,6 +393,7 @@ function logout() {
 
 onMounted(() => {
   refreshCurrentAdminContext();
+  loadShellBrand();
   loadPlatformTenants();
   syncSelectedTenantToRoute();
 });
@@ -387,7 +407,10 @@ watch(
 <template>
   <el-container class="shell">
     <el-aside width="248px" class="aside">
-      <div class="brand">{{ shellTitle }}</div>
+      <div class="brand">
+        <img v-if="shellBrand.brandLogoUrl" class="brand-logo" :src="shellBrand.brandLogoUrl" alt="Logo" />
+        <span>{{ shellTitle }}</span>
+      </div>
       <el-menu router :default-active="route.fullPath" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened>
         <el-sub-menu v-for="group in visibleMenuGroups" :key="group.index" :index="group.index">
           <template #title>
@@ -463,7 +486,9 @@ watch(
 <style scoped>
 .shell { min-height: 100vh; }
 .aside { background: #162033; overflow-x: hidden; }
-.brand { height: 60px; display: flex; align-items: center; padding: 0 20px; color: #fff; font-size: 20px; font-weight: 700; }
+.brand { height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 20px; color: #fff; font-size: 20px; font-weight: 700; }
+.brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-logo { width: 34px; height: 34px; object-fit: contain; border-radius: 10px; background: rgba(255,255,255,0.12); padding: 3px; flex: 0 0 auto; }
 .header { background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .header-title { min-width: 0; display: grid; gap: 3px; }
 .header-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
