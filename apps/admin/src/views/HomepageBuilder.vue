@@ -28,7 +28,7 @@ const moduleTypes: Array<{ type: HomepageSectionType; label: string; description
   { type: "activity_feed", label: "活动信息流", description: "活动列表" },
   { type: "image_banner", label: "图片广告", description: "运营 Banner" },
   { type: "rich_text", label: "富文本", description: "报名须知与说明" },
-  { type: "bottom_nav", label: "底部菜单", description: "H5 底部导航文案和跳转" },
+  { type: "bottom_nav", label: "前台底部导航", description: "控制前台底部 5 个菜单、图标和跳转" },
   { type: "my_page", label: "我的页", description: "我的页面头部和快捷入口" },
   { type: "inner_pages", label: "内页布局", description: "活动、报名、招商等内页" }
 ];
@@ -67,9 +67,11 @@ const defaultConfig: Record<string, Record<string, any>> = {
   rich_text: { content: "报名须知", imageUrl: "", link: "" },
   bottom_nav: {
     items: [
-      { label: "首页", link: "/pages/index/index", action: "mainPage", color: "#0f766e" },
-      { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#0f766e" },
-      { label: "我的", link: "/pages/user/my", action: "mainPage", color: "#0f766e" }
+      { label: "书院", icon: "书", activeIcon: "书", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
+      { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
+      { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D" },
+      { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D" },
+      { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D" }
     ]
   },
   my_page: {
@@ -209,7 +211,7 @@ function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
       previewRow(5, "featured_activities", { title: "精选活动", subtitle: "主办方推荐，适合优先查看" }),
       previewRow(6, "activity_tabs", { title: null }),
       previewRow(7, "activity_feed", { title: null }),
-      previewRow(8, "bottom_nav", { title: "底部菜单" })
+      previewRow(8, "bottom_nav", { title: "前台底部导航" })
     ];
   }
 
@@ -241,7 +243,7 @@ function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
       layout: { spacingBottom: 18 }
     })
   ];
-  if (!hideNav) list.push(previewRow(3, "bottom_nav", { title: "底部菜单", sortOrder: 90 }));
+  if (!hideNav) list.push(previewRow(3, "bottom_nav", { title: "前台底部导航", sortOrder: 90 }));
   return list;
 }
 
@@ -614,6 +616,13 @@ function updateConfigArrayItem(arrayKey: "items" | "tools", index: number, key: 
   syncJsonText();
 }
 
+function updateConfigArrayItemBoolean(arrayKey: "items" | "tools", index: number, key: string, value: boolean) {
+  const items = Array.isArray(form.config[arrayKey]) ? form.config[arrayKey] : [];
+  items[index] = { ...(items[index] || {}), [key]: value };
+  form.config[arrayKey] = items;
+  syncJsonText();
+}
+
 function removeConfigArrayItem(arrayKey: "items" | "tools" | "pages", index: number) {
   form.config[arrayKey] = (Array.isArray(form.config[arrayKey]) ? form.config[arrayKey] : []).filter((_, itemIndex) => itemIndex !== index);
   syncJsonText();
@@ -622,10 +631,10 @@ function removeConfigArrayItem(arrayKey: "items" | "tools" | "pages", index: num
 function addNavItem() {
   const items = Array.isArray(form.config.items) ? form.config.items : [];
   if (items.length >= 5) {
-    ElMessage.warning("底部菜单最多 5 项");
+    ElMessage.warning("前台底部导航最多 5 项");
     return;
   }
-  form.config.items = [...(Array.isArray(form.config.items) ? form.config.items : []), { label: "新菜单", color: "#0f766e", link: "/pages/index/index", action: "mainPage" }];
+  form.config.items = [...(Array.isArray(form.config.items) ? form.config.items : []), { label: "新菜单", icon: "新", activeIcon: "新", color: "#C43D3D", link: "/pages/index/index", action: "mainPage" }];
   syncJsonText();
 }
 
@@ -633,7 +642,15 @@ function sanitizeNavItems(value: unknown) {
   const seen = new Set<string>();
   const rows = Array.isArray(value) ? value : [];
   return rows
-    .map((item: any) => ({ ...item, label: String(item?.label || "").trim(), link: String(item?.link || "").trim() }))
+    .map((item: any) => ({
+      ...item,
+      label: String(item?.label || "").trim(),
+      icon: String(item?.icon || "").trim(),
+      activeIcon: String(item?.activeIcon || "").trim(),
+      link: String(item?.link || "").trim(),
+      action: String(item?.action || "mainPage").trim(),
+      enabled: item?.enabled !== false
+    }))
     .filter((item: any) => item.label && item.link && !seen.has(item.link) && seen.add(item.link))
     .slice(0, 5);
 }
@@ -779,7 +796,9 @@ onMounted(async () => {
                 <span v-else>图片 Banner</span>
               </div>
               <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav" :style="{ '--preview-nav-count': Math.min((((row.config as any).items || []).length || 1), 5) }">
-                <span v-for="item in ((row.config as any).items || []).slice(0, 5)" :key="item.label">{{ item.label }}</span>
+                <span v-for="item in ((row.config as any).items || []).filter((nav: any) => nav.enabled !== false).slice(0, 5)" :key="item.label">
+                  <b>{{ item.icon || item.label?.slice(0, 1) }}</b>{{ item.label }}
+                </span>
               </div>
               <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
                 <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
@@ -932,9 +951,18 @@ onMounted(async () => {
         </template>
 
         <template v-if="form.type === 'bottom_nav'">
+          <el-alert
+            class="editor-tip"
+            type="info"
+            show-icon
+            :closable="false"
+            title="这里控制前台页面底部固定导航，也就是手机底部的“书院 / 课程 / 共修 / 活动 / 我的”。保存后 H5 刷新生效，小程序需要重新上传审核。"
+          />
           <div class="quick-editor">
             <div v-for="(item, index) in (form.config.items || [])" :key="index" class="quick-row nav-row">
               <el-input :model-value="item.label" placeholder="菜单名称" @input="(value: string) => updateConfigArrayItem('items', index, 'label', value)" />
+              <el-input :model-value="item.icon" placeholder="图标字" @input="(value: string) => updateConfigArrayItem('items', index, 'icon', value)" />
+              <el-input :model-value="item.activeIcon" placeholder="选中图标字" @input="(value: string) => updateConfigArrayItem('items', index, 'activeIcon', value)" />
               <el-input :model-value="item.link" placeholder="跳转路径" @input="(value: string) => updateConfigArrayItem('items', index, 'link', value)" />
               <el-input :model-value="item.action" placeholder="action，如 mainPage" @input="(value: string) => updateConfigArrayItem('items', index, 'action', value)" />
               <div class="upload-line">
@@ -944,9 +972,16 @@ onMounted(async () => {
                 </el-upload>
               </div>
               <el-color-picker :model-value="item.color" @change="(value: string | null) => updateConfigArrayItem('items', index, 'color', String(value || '#0f766e'))" />
+              <el-switch :model-value="item.enabled !== false" @change="(value: string | number | boolean) => updateConfigArrayItemBoolean('items', index, 'enabled', Boolean(value))" />
               <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('items', index)" />
             </div>
             <el-button :icon="Plus" :disabled="Array.isArray(form.config.items) && form.config.items.length >= 5" @click="addNavItem">新增菜单</el-button>
+          </div>
+          <el-divider>底部导航外观</el-divider>
+          <div class="form-grid">
+            <el-form-item label="背景色"><el-color-picker v-model="form.layout.backgroundColor" show-alpha @change="syncJsonText" /></el-form-item>
+            <el-form-item label="选中色"><el-color-picker v-model="form.layout.activeColor" @change="syncJsonText" /></el-form-item>
+            <el-form-item label="未选中色"><el-color-picker v-model="form.layout.textColor" @change="syncJsonText" /></el-form-item>
           </div>
         </template>
 
@@ -1050,7 +1085,9 @@ onMounted(async () => {
             <span v-else>图片 Banner</span>
           </div>
           <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav" :style="{ '--preview-nav-count': Math.min((((row.config as any).items || []).length || 1), 5) }">
-            <span v-for="item in ((row.config as any).items || []).slice(0, 5)" :key="item.label">{{ item.label }}</span>
+            <span v-for="item in ((row.config as any).items || []).filter((nav: any) => nav.enabled !== false).slice(0, 5)" :key="item.label">
+              <b>{{ item.icon || item.label?.slice(0, 1) }}</b>{{ item.label }}
+            </span>
           </div>
           <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
             <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
@@ -1123,6 +1160,8 @@ onMounted(async () => {
 .preview-section strong { color: #111827; }
 .preview-section span { color: #667085; font-size: 12px; }
 .preview-bottom-nav { position: sticky; bottom: 0; display: grid; grid-template-columns: repeat(var(--preview-nav-count, 5), 1fr); gap: 4px; margin: 10px 0 0; padding: 8px; border-radius: 12px; background: #fff; color: #667085; font-size: 12px; text-align: center; box-shadow: 0 -8px 22px rgba(15, 23, 42, 0.08); }
+.preview-bottom-nav span { display: grid; justify-items: center; gap: 3px; min-width: 0; }
+.preview-bottom-nav b { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: #f2f4f7; color: #c43d3d; font-size: 12px; }
 .preview-my { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #111827; color: #fff; }
 .preview-my span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: rgba(255,255,255,0.14); font-size: 12px; }
 .preview-inner-pages { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #fff; color: #111827; border: 1px solid #e5e7eb; }
@@ -1139,9 +1178,10 @@ onMounted(async () => {
 .drawer-preview-canvas { max-height: calc(100vh - 220px); overflow: auto; padding: 12px; border-radius: 12px; background: #f8fafc; }
 .drawer-preview-invalid { padding: 16px; border: 1px dashed #f97316; border-radius: 10px; background: #fff; color: #c2410c; font-weight: 700; }
 .drawer-bottom-nav { position: static; margin-top: 0; }
+.editor-tip { margin-bottom: 12px; }
 .quick-editor { display: grid; gap: 10px; margin-bottom: 18px; }
 .quick-row { display: grid; grid-template-columns: 120px 1fr 42px 34px; gap: 8px; align-items: center; }
-.quick-row.nav-row { grid-template-columns: 100px 1fr 130px minmax(220px, 1fr) 42px 34px; }
+.quick-row.nav-row { grid-template-columns: 92px 72px 92px minmax(150px, 1fr) 112px minmax(170px, 1fr) 42px 58px 34px; }
 .quick-row.my-tool-row { grid-template-columns: 70px 110px 1fr 130px 42px 34px; }
 .inner-page-row { display: grid; grid-template-columns: 110px 130px 1fr 120px 34px; gap: 8px; align-items: center; }
 @media (max-width: 1280px) {

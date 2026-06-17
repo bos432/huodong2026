@@ -13,20 +13,20 @@ const defaultBottomNavSection: HomepageSectionView = {
   id: -900,
   pageKey: "home",
   type: "bottom_nav",
-  title: "底部菜单",
+  title: "前台底部导航",
   subtitle: null,
   enabled: true,
   sortOrder: 90,
   config: {
     items: [
-      { label: "首页", link: "/pages/index/index", action: "mainPage", color: "#0f766e" },
-      { label: "课程", link: "/pages/courses/index", action: "mainPage", color: "#0f766e" },
-      { label: "共修", link: "/pages/community/index", action: "mainPage", color: "#0f766e" },
-      { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#0f766e" },
-      { label: "我的", link: "/pages/user/my", action: "mainPage", color: "#0f766e" }
+      { label: "书院", icon: "书", activeIcon: "书", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
+      { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
+      { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D" },
+      { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D" },
+      { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D" }
     ]
   },
-  layout: { backgroundColor: "#ffffff", activeColor: "#0f766e", textColor: "#667085" }
+  layout: { backgroundColor: "#ffffff", activeColor: "#C43D3D", textColor: "#667085" }
 };
 
 const defaultInnerPagesSection: HomepageSectionView = {
@@ -87,7 +87,7 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   const sections = ref<HomepageSectionView[]>([]);
   const tenant = ref<HomepagePayload["tenant"] | null>(null);
 
-  const bottomNavSection = computed(() => sections.value.find((item) => item.enabled && item.type === "bottom_nav") || defaultBottomNavSection);
+  const bottomNavSection = computed(() => sections.value.find((item) => item.type === "bottom_nav") || defaultBottomNavSection);
   const innerPagesSection = computed(() => sections.value.find((item) => item.enabled && item.type === "inner_pages") || defaultInnerPagesSection);
   const innerPageLayout = computed<Record<string, any>>(() => ({ ...defaultInnerPagesSection.layout, ...(innerPagesSection.value.layout || {}) }));
   const innerPageConfig = computed<InnerPageConfig>(() => {
@@ -103,7 +103,17 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
     try {
       const endpoint = pageKey === "home" ? "/public/homepage" : `/public/page-decoration?pageKey=${encodeURIComponent(pageKey)}`;
       const payload = await request<HomepagePayload>(endpoint);
-      sections.value = payload.sections || [];
+      const pageSections = payload.sections || [];
+      if (pageKey === "home") {
+        sections.value = pageSections;
+      } else {
+        const homePayload = await request<HomepagePayload>("/public/homepage").catch(() => null);
+        const homeSections = homePayload?.sections || [];
+        const globalTypes = ["bottom_nav", "my_page", "inner_pages"];
+        const localSections = payload.fallback ? pageSections.filter((item) => !globalTypes.includes(item.type)) : pageSections;
+        const inherited = homeSections.filter((item) => globalTypes.includes(item.type) && !localSections.some((pageItem) => pageItem.type === item.type));
+        sections.value = [...localSections, ...inherited];
+      }
       tenant.value = payload.tenant || null;
     } catch {
       sections.value = [];

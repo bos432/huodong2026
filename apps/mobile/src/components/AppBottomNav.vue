@@ -9,8 +9,9 @@ const props = defineProps<{
 }>();
 
 const items = computed(() => {
-  const configured = Array.isArray(props.section?.config?.items)
-    ? props.section.config.items
+  const configuredItems = Array.isArray(props.section?.config?.items) ? props.section.config.items : null;
+  const configured = configuredItems
+    ? configuredItems
         .map((item: any) => ({
           label: String(item?.label || "").trim(),
           link: String(item?.link || "").trim(),
@@ -18,12 +19,13 @@ const items = computed(() => {
           color: String(item?.color || props.section?.layout?.activeColor || "#C43D3D"),
           icon: String(item?.icon || "").trim(),
           activeIcon: String(item?.activeIcon || "").trim(),
-          iconUrl: String(item?.iconUrl || "").trim()
+          iconUrl: String(item?.iconUrl || "").trim(),
+          enabled: item?.enabled !== false
         }))
-        .filter((item: any) => item.label && item.link)
+        .filter((item: any) => item.enabled && item.label && item.link)
         .slice(0, 5)
     : [];
-  if (configured.length) return configured;
+  if (configuredItems) return configured;
   return [
     { label: "书院", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", icon: "🏛", activeIcon: "🏯" },
     { label: "课程", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", icon: "📖", activeIcon: "📚" },

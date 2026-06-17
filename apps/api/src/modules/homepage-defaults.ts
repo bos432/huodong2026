@@ -55,9 +55,11 @@ export const H5_PAGE_LABELS: Record<string, string> = {
 
 const bottomNav = {
   items: [
-    { label: "首页", link: "/pages/index/index", action: "mainPage", color: "#0f766e" },
-    { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#0f766e" },
-    { label: "我的", link: "/pages/user/my", action: "mainPage", color: "#0f766e" }
+    { label: "书院", icon: "书", activeIcon: "书", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
+    { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
+    { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D" },
+    { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D" },
+    { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D" }
   ]
 };
 
@@ -171,7 +173,7 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
     {
       pageKey: "home",
       type: "bottom_nav",
-      title: "底部菜单",
+      title: "前台底部导航",
       subtitle: null,
       enabled: true,
       sortOrder: 90,
@@ -294,7 +296,7 @@ function defaultInnerPageSections(pageKey: string): HomepageSectionTemplate[] {
     sections.push({
       pageKey,
       type: "bottom_nav",
-      title: "底部菜单",
+      title: "前台底部导航",
       subtitle: null,
       enabled: true,
       sortOrder: 90,
