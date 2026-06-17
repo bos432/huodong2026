@@ -83,7 +83,9 @@ onMounted(load);
 <template>
   <view class="admin-page">
     <view class="top">
+      <view class="top-glow"></view>
       <view>
+        <view class="eyebrow">MERCHANT CONSOLE</view>
         <view class="hello">手机管理</view>
         <view class="sub">{{ bootstrap?.admin?.username || session?.role }} · {{ bootstrap?.admin?.tenant?.name || "平台管理员" }}</view>
       </view>
@@ -93,9 +95,9 @@ onMounted(load);
     <view v-if="loading" class="panel">加载中...</view>
     <template v-else>
       <view class="stats">
-        <view><text>{{ dashboard?.overview?.activityCount || 0 }}</text><text>活动</text></view>
+        <view><text>{{ dashboard?.overview?.activityCount || 0 }}</text><text>活动总数</text></view>
         <view><text>{{ dashboard?.todos?.pendingActivityCount || 0 }}</text><text>待审活动</text></view>
-        <view><text>{{ dashboard?.overview?.registrationCount || 0 }}</text><text>报名</text></view>
+        <view><text>{{ dashboard?.overview?.registrationCount || 0 }}</text><text>报名累计</text></view>
         <view><text>{{ dashboard?.operations?.monthRegistrationCount || 0 }}</text><text>本月报名</text></view>
       </view>
 
@@ -109,7 +111,10 @@ onMounted(load);
 
       <view v-if="!canWrite" class="notice">当前账号可查看活动，但没有手机端创建和编辑权限。</view>
 
-      <view class="section-title">最近活动</view>
+      <view class="section-title">
+        <text>最近活动</text>
+        <text class="section-more" @click="goList">全部活动 ›</text>
+      </view>
       <view v-for="item in activities" :key="item.id" class="activity" @click="canWrite ? goEdit(item.id) : previewActivity(item)">
         <view>
           <view class="name">{{ item.title }}</view>
@@ -125,25 +130,28 @@ onMounted(load);
 </template>
 
 <style scoped>
-.admin-page { min-height: 100vh; padding: 24rpx 24rpx 150rpx; background: #f4f6f8; color: #111827; }
-.top { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 30rpx 26rpx; border-radius: 8px; background: #111827; color: #fff; }
-.hello { font-size: 42rpx; font-weight: 900; }
-.sub { margin-top: 8rpx; color: rgba(255,255,255,.72); font-size: 24rpx; }
-.logout { flex: 0 0 auto; padding: 12rpx 20rpx; border-radius: 999px; background: rgba(255,255,255,.12); font-size: 24rpx; font-weight: 800; }
+.admin-page { min-height: 100vh; padding: 24rpx 24rpx 176rpx; background: radial-gradient(circle at 20% 0%, rgba(255, 232, 198, 0.9), transparent 34%), linear-gradient(180deg, #fff8ef 0%, #f5f0e8 44%, #f7f3ed 100%); color: #2f211c; }
+.top { position: relative; overflow: hidden; display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 34rpx 28rpx; border-radius: 30rpx; background: linear-gradient(135deg, #5b2f24 0%, #8f4c32 48%, #d29a5a 100%); color: #fff; box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.24); }
+.top-glow { position: absolute; right: -80rpx; top: -90rpx; width: 240rpx; height: 240rpx; border-radius: 999px; background: rgba(255,255,255,.18); }
+.eyebrow { position: relative; color: rgba(255,255,255,.66); font-size: 20rpx; font-weight: 900; letter-spacing: .14em; }
+.hello { position: relative; margin-top: 8rpx; font-size: 44rpx; font-weight: 950; }
+.sub { position: relative; margin-top: 8rpx; color: rgba(255,255,255,.78); font-size: 24rpx; }
+.logout { position: relative; flex: 0 0 auto; padding: 13rpx 22rpx; border-radius: 999px; background: rgba(255,255,255,.18); border: 1rpx solid rgba(255,255,255,.22); font-size: 24rpx; font-weight: 900; }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12rpx; margin: 22rpx 0; }
-.stats view, .panel, .activity { border-radius: 8px; background: #fff; box-shadow: 0 12rpx 34rpx rgba(15,23,42,.06); }
-.stats view { display: grid; gap: 6rpx; justify-items: center; padding: 20rpx 8rpx; }
-.stats text:first-child { color: #0f766e; font-size: 32rpx; font-weight: 900; }
-.stats text:last-child { color: #667085; font-size: 22rpx; }
+.stats view, .panel, .activity { border-radius: 24rpx; background: rgba(255,255,255,.88); border: 1rpx solid rgba(91, 47, 36, 0.06); box-shadow: 0 14rpx 34rpx rgba(91,47,36,.08); }
+.stats view { display: grid; gap: 6rpx; justify-items: center; padding: 22rpx 8rpx; }
+.stats text:first-child { color: #0f766e; font-size: 34rpx; font-weight: 950; }
+.stats text:last-child { color: #7a5b52; font-size: 21rpx; font-weight: 800; }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-bottom: 20rpx; }
-.action { height: 86rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #fff; color: #0f766e; font-size: 28rpx; font-weight: 900; }
-.action.primary { background: #0f766e; color: #fff; }
+.action { height: 88rpx; display: flex; align-items: center; justify-content: center; border-radius: 22rpx; background: rgba(255,255,255,.9); color: #0f766e; font-size: 28rpx; font-weight: 950; box-shadow: 0 10rpx 24rpx rgba(91,47,36,.06); }
+.action.primary { background: linear-gradient(135deg, #0f766e, #15907f); color: #fff; box-shadow: 0 14rpx 30rpx rgba(15,118,110,.22); }
 .action.disabled { opacity: .5; }
-.notice, .panel { padding: 24rpx; color: #667085; font-size: 25rpx; }
-.section-title { margin: 28rpx 0 14rpx; font-size: 30rpx; font-weight: 900; }
-.activity { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 16rpx; padding: 22rpx; }
-.name { font-size: 28rpx; font-weight: 900; line-height: 1.4; }
-.meta { margin-top: 8rpx; color: #667085; font-size: 23rpx; }
+.notice, .panel { padding: 24rpx; color: #7a5b52; font-size: 25rpx; }
+.section-title { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin: 30rpx 0 14rpx; color: #2f211c; font-size: 31rpx; font-weight: 950; }
+.section-more { color: #c43d3d; font-size: 24rpx; font-weight: 900; }
+.activity { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; margin-bottom: 16rpx; padding: 24rpx; }
+.name { color: #2f211c; font-size: 29rpx; font-weight: 950; line-height: 1.4; }
+.meta { margin-top: 8rpx; color: #7a5b52; font-size: 23rpx; }
 .link { margin-top: 10rpx; color: #0f766e; font-size: 23rpx; font-weight: 900; }
-.pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 999px; background: #e6f2ef; color: #0f766e; font-size: 22rpx; font-weight: 900; }
+.pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 999px; background: #e6f2ef; color: #0f766e; font-size: 22rpx; font-weight: 950; }
 </style>

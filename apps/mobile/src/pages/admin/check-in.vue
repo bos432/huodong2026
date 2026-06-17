@@ -132,23 +132,23 @@ onBeforeUnmount(stopH5Scan);
 </template>
 
 <style scoped>
-.admin-page { min-height: 100vh; padding: 24rpx 24rpx 150rpx; background: #f4f6f8; color: #111827; }
-.head { padding: 30rpx 26rpx; border-radius: 8px; background: #111827; color: #fff; }
+.admin-page { min-height: 100vh; padding: 24rpx 24rpx 150rpx; background: radial-gradient(circle at 18% 0%, rgba(255, 232, 198, 0.9), transparent 34%), linear-gradient(180deg, #fff8ef 0%, #f5f0e8 100%); color: #2f211c; }
+.head { padding: 30rpx 26rpx; border-radius: 30rpx; background: linear-gradient(135deg, #5b2f24 0%, #8f4c32 52%, #d29a5a 100%); color: #fff; box-shadow: 0 18rpx 44rpx rgba(91,47,36,.2); }
 .title { font-size: 42rpx; font-weight: 900; }
 .sub { margin-top: 8rpx; color: rgba(255,255,255,.72); font-size: 24rpx; }
-.card { margin-top: 22rpx; padding: 24rpx; border-radius: 8px; background: #fff; box-shadow: 0 12rpx 34rpx rgba(15,23,42,.06); }
-.scan, .submit { height: 86rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #0f766e; color: #fff; font-size: 28rpx; font-weight: 900; }
-.scan-panel { margin-top: 20rpx; padding: 16rpx; border-radius: 8px; background: #0f172a; color: #fff; }
-.scan-video { width: 100%; height: 420rpx; border-radius: 8px; background: #020617; object-fit: cover; }
+.card { margin-top: 22rpx; padding: 24rpx; border-radius: 24rpx; background: rgba(255,255,255,.9); box-shadow: 0 14rpx 34rpx rgba(91,47,36,.08); }
+.scan, .submit { height: 86rpx; display: flex; align-items: center; justify-content: center; border-radius: 20rpx; background: linear-gradient(135deg, #0f766e, #15907f); color: #fff; font-size: 28rpx; font-weight: 900; }
+.scan-panel { margin-top: 20rpx; padding: 16rpx; border-radius: 24rpx; background: #2f211c; color: #fff; }
+.scan-video { width: 100%; height: 420rpx; border-radius: 20rpx; background: #020617; object-fit: cover; }
 .scan-tip { margin-top: 12rpx; color: rgba(255,255,255,.74); font-size: 24rpx; line-height: 1.5; }
-.scan-close { margin-top: 14rpx; height: 68rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: rgba(255,255,255,.12); color: #fff; font-weight: 900; }
+.scan-close { margin-top: 14rpx; height: 68rpx; display: flex; align-items: center; justify-content: center; border-radius: 18rpx; background: rgba(255,255,255,.12); color: #fff; font-weight: 900; }
 .label { margin: 24rpx 0 12rpx; color: #344054; font-size: 26rpx; font-weight: 800; }
-.input, .textarea { width: 100%; box-sizing: border-box; border-radius: 6px; background: #f8fafc; color: #111827; font-size: 27rpx; }
+.input, .textarea { width: 100%; box-sizing: border-box; border-radius: 18rpx; background: #fffaf4; color: #2f211c; font-size: 27rpx; }
 .input { height: 82rpx; padding: 0 20rpx; }
 .textarea { min-height: 150rpx; padding: 18rpx 20rpx; }
 .submit { margin-top: 24rpx; }
 .submit.disabled { background: #9ca3af; }
 .success { border: 1px solid #cde8e3; background: #f3faf8; }
 .success-title { color: #0f766e; font-size: 29rpx; font-weight: 900; }
-.meta { margin-top: 10rpx; color: #667085; font-size: 24rpx; }
+.meta { margin-top: 10rpx; color: #7a5b52; font-size: 24rpx; }
 </style>

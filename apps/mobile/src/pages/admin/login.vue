@@ -44,14 +44,14 @@ if (getMobileAdminSession()) {
 </template>
 
 <style scoped>
-.admin-login { min-height: 100vh; padding: 38rpx 28rpx; background: #f4f6f8; color: #111827; }
-.hero { padding: 52rpx 28rpx; border-radius: 8px; background: #111827; color: #fff; }
-.eyebrow { color: #9ee8d8; font-size: 24rpx; font-weight: 800; }
-.title { margin-top: 12rpx; font-size: 52rpx; font-weight: 900; }
-.copy { margin-top: 14rpx; color: rgba(255,255,255,.72); font-size: 27rpx; line-height: 1.6; }
-.form { margin-top: 24rpx; padding: 26rpx; border-radius: 8px; background: #fff; box-shadow: 0 16rpx 40rpx rgba(15,23,42,.08); }
-.label { margin: 18rpx 0 10rpx; color: #344054; font-size: 25rpx; font-weight: 800; }
-.input { height: 84rpx; padding: 0 22rpx; border: 1px solid #d7dde8; border-radius: 6px; background: #fff; font-size: 28rpx; }
-.button.primary { margin-top: 30rpx; height: 86rpx; border-radius: 6px; background: #0f766e; color: #fff; font-size: 28rpx; font-weight: 900; }
+.admin-login { min-height: 100vh; padding: 38rpx 28rpx; background: radial-gradient(circle at 18% 0%, rgba(255, 232, 198, 0.95), transparent 36%), linear-gradient(180deg, #fff8ef 0%, #f5f0e8 100%); color: #2f211c; }
+.hero { padding: 54rpx 30rpx; border-radius: 32rpx; background: linear-gradient(135deg, #5b2f24 0%, #8f4c32 52%, #d29a5a 100%); color: #fff; box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.22); }
+.eyebrow { color: rgba(255,255,255,.68); font-size: 22rpx; font-weight: 900; letter-spacing: .14em; }
+.title { margin-top: 12rpx; font-size: 52rpx; font-weight: 950; }
+.copy { margin-top: 14rpx; color: rgba(255,255,255,.76); font-size: 27rpx; line-height: 1.6; }
+.form { margin-top: 24rpx; padding: 28rpx; border-radius: 28rpx; background: rgba(255,255,255,.9); box-shadow: 0 16rpx 40rpx rgba(91,47,36,.1); }
+.label { margin: 18rpx 0 10rpx; color: #7a5b52; font-size: 25rpx; font-weight: 900; }
+.input { height: 84rpx; padding: 0 22rpx; border: 1rpx solid rgba(91,47,36,.12); border-radius: 20rpx; background: #fff; font-size: 28rpx; }
+.button.primary { margin-top: 30rpx; height: 88rpx; border-radius: 22rpx; background: linear-gradient(135deg, #0f766e, #15907f); color: #fff; font-size: 28rpx; font-weight: 950; }
 .button[disabled] { opacity: .55; }
 </style>

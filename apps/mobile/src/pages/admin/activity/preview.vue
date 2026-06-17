@@ -44,13 +44,13 @@ onMounted(load);
 </template>
 
 <style scoped>
-.preview-page { min-height: 100vh; padding: 24rpx; background: #f4f6f8; color: #111827; }
-.panel { margin-bottom: 18rpx; padding: 26rpx; border-radius: 8px; background: #fff; box-shadow: 0 12rpx 34rpx rgba(15,23,42,.06); }
-.title { font-size: 34rpx; font-weight: 900; line-height: 1.4; }
-.sub { margin-top: 14rpx; color: #667085; font-size: 24rpx; }
-.link { margin-top: 12rpx; padding: 18rpx; border-radius: 6px; background: #f8fafc; color: #0f766e; font-size: 24rpx; word-break: break-all; }
+.preview-page { min-height: 100vh; padding: 24rpx; background: radial-gradient(circle at 18% 0%, rgba(255, 232, 198, 0.9), transparent 34%), linear-gradient(180deg, #fff8ef 0%, #f5f0e8 44%, #f7f3ed 100%); color: #2f211c; }
+.panel { margin-bottom: 18rpx; padding: 28rpx; border-radius: 26rpx; background: rgba(255,255,255,.9); border: 1rpx solid rgba(91, 47, 36, 0.06); box-shadow: 0 14rpx 34rpx rgba(91,47,36,.08); }
+.title { color: #2f211c; font-size: 36rpx; font-weight: 950; line-height: 1.4; }
+.sub { margin-top: 14rpx; color: #7a5b52; font-size: 24rpx; font-weight: 800; }
+.link { margin-top: 12rpx; padding: 18rpx; border-radius: 18rpx; background: #f8fbf8; border: 1rpx solid rgba(15, 118, 110, 0.12); color: #0f766e; font-size: 24rpx; word-break: break-all; }
 .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-top: 22rpx; }
-.button { height: 78rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #0f766e; color: #fff; font-weight: 900; }
+.button { height: 80rpx; display: flex; align-items: center; justify-content: center; border-radius: 20rpx; background: linear-gradient(135deg, #0f766e, #15907f); color: #fff; font-weight: 950; box-shadow: 0 12rpx 24rpx rgba(15,118,110,.2); }
 .button.secondary { background: #e6f2ef; color: #0f766e; }
-.hint { color: #667085; font-size: 25rpx; line-height: 1.6; }
+.hint { color: #7a5b52; font-size: 25rpx; line-height: 1.6; }
 </style>
