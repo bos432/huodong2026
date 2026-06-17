@@ -194,7 +194,11 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
           { label: "我的订单", icon: "单", color: "#4338ca", link: "/pages/user/orders", action: "navigate" }
         ]
       },
-      layout: { heroBackgroundColor: "#111827", heroTextColor: "#ffffff" }
+      layout: {
+        heroBackgroundColor: "linear-gradient(135deg, #FFF7EC 0%, #F5DDC2 52%, #E8B89D 100%)",
+        heroTextColor: "#5B2F24",
+        heroMutedTextColor: "rgba(91, 47, 36, 0.68)"
+      }
     },
     {
       pageKey: "home",
@@ -259,7 +263,11 @@ function defaultInnerPageSections(pageKey: string): HomepageSectionTemplate[] {
           { label: "账号设置", icon: "设", color: "#7c3aed", link: "/pages/user/settings", action: "navigate" }
         ]
       },
-      layout: { heroBackgroundColor: "#111827", heroTextColor: "#ffffff" }
+      layout: {
+        heroBackgroundColor: "linear-gradient(135deg, #FFF7EC 0%, #F5DDC2 52%, #E8B89D 100%)",
+        heroTextColor: "#5B2F24",
+        heroMutedTextColor: "rgba(91, 47, 36, 0.68)"
+      }
     }] : []),
     {
       pageKey,

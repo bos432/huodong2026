@@ -1,14 +1,22 @@
 <template>
   <view class="profile-page has-custom-nav">
     <!-- 顶部用户信息 -->
-    <view class="profile-header" :style="{ background: profileHeaderBackground, color: profileHeaderTextColor }">
+    <view
+      class="profile-header"
+      :style="{
+        background: profileHeaderBackground,
+        color: profileHeaderTextColor,
+        '--profile-header-text': profileHeaderTextColor,
+        '--profile-header-muted': profileHeaderMutedColor
+      }"
+    >
       <view class="profile-greeting" :style="{ color: profileHeaderTextColor }">{{ myPageGreeting }}</view>
       <image class="avatar-lg" :src="profile?.avatarUrl || '/static/avatar_default.png'" mode="aspectFill" />
       <text class="profile-nickname">{{ displayName }}</text>
       <view class="profile-badge">{{ memberLevelName }}</view>
       <text class="profile-expire">{{ profile?.phone ? `手机号：${profile.phone}` : "请先登录后查看权益" }}</text>
       <view class="profile-edit-btn" @click="goEdit">
-        <text class="subtle" style="color:#4A6B8A;">编辑资料  ›</text>
+        <text class="subtle profile-edit-text">编辑资料  ›</text>
       </view>
     </view>
 
@@ -98,11 +106,20 @@ const loadingProfile = ref(false);
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
+const warmHeaderBackground = "linear-gradient(135deg, #FFF7EC 0%, #F5DDC2 52%, #E8B89D 100%)";
+const warmHeaderTextColor = "#5B2F24";
+const warmHeaderMutedColor = "rgba(91, 47, 36, 0.68)";
 const profileHeaderBackground = computed(() => {
   const layout = myPageSection.value?.layout || {};
-  return String(layout.heroBackgroundColor || "linear-gradient(180deg, #F5F0E8, #E8E0D8)");
+  const background = String(layout.heroBackgroundColor || "");
+  return !background || background === "#111827" ? warmHeaderBackground : background;
 });
-const profileHeaderTextColor = computed(() => String(myPageSection.value?.layout?.heroTextColor || "#333333"));
+const profileHeaderTextColor = computed(() => {
+  const layout = myPageSection.value?.layout || {};
+  const textColor = String(layout.heroTextColor || "");
+  return !textColor || (textColor === "#ffffff" && String(layout.heroBackgroundColor || "") === "#111827") ? warmHeaderTextColor : textColor;
+});
+const profileHeaderMutedColor = computed(() => String(myPageSection.value?.layout?.heroMutedTextColor || warmHeaderMutedColor));
 const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (loadingProfile.value ? "加载中..." : "未登录"));
 const memberLevelName = computed(() => profile.value?.memberLevel?.name || "普通会员");
 const pendingRegistrationCount = computed(() => registrations.value.filter((item) => item.status === "pending_payment").length + courseOrders.value.filter((item) => item.status === "pending_payment").length);
@@ -231,17 +248,18 @@ function goAdmin() { uni.navigateTo({ url:"/pages/admin/home" }); }
   position: relative;
 }
 .profile-greeting { font-size: 38rpx; font-weight: 900; margin-bottom: 16rpx; }
-.profile-nickname { font-size: 32rpx; font-weight: 600; color: #333; margin-top: 12rpx; }
+.profile-nickname { font-size: 32rpx; font-weight: 600; color: var(--profile-header-text, #5B2F24); margin-top: 12rpx; }
 .profile-badge {
-  background: #C43D3D;
+  background: rgba(196, 61, 61, 0.94);
   color: #fff;
   font-size: 22rpx;
   padding: 4rpx 16rpx;
   border-radius: 8rpx;
   margin-top: 8rpx;
 }
-.profile-expire { font-size: 24rpx; color: #999; margin-top: 6rpx; }
+.profile-expire { font-size: 24rpx; color: var(--profile-header-muted, rgba(91, 47, 36, 0.68)); margin-top: 6rpx; }
 .profile-edit-btn { position: absolute; bottom: 16rpx; right: 32rpx; }
+.profile-edit-text { color: var(--profile-header-text, #5B2F24); font-weight: 700; }
 .profile-grid-card { margin-bottom: 16rpx; }
 .charity-card { margin-bottom: 16rpx; }
 .ambassador-entry {

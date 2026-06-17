@@ -108,7 +108,11 @@ const defaultLayout: Record<string, Record<string, any>> = {
   image_banner: { spacingBottom: 18 },
   rich_text: { spacingBottom: 18 },
   bottom_nav: { backgroundColor: "#ffffff", activeColor: "#0f766e", textColor: "#667085" },
-  my_page: { heroBackgroundColor: "#111827", heroTextColor: "#ffffff" },
+  my_page: {
+    heroBackgroundColor: "linear-gradient(135deg, #FFF7EC 0%, #F5DDC2 52%, #E8B89D 100%)",
+    heroTextColor: "#5B2F24",
+    heroMutedTextColor: "rgba(91, 47, 36, 0.68)"
+  },
   inner_pages: { headerBackgroundColor: "#ffffff", headerTextColor: "#111827", headerSubtitleColor: "#667085", stickyFilterBackground: "#f4f6f8", actionBarBackgroundColor: "#ffffff" }
 };
 const rows = ref<HomepageSectionView[]>([]);
@@ -149,6 +153,16 @@ const currentFormSnapshot = computed(() => JSON.stringify({
   layoutText: layoutText.value
 }));
 const hasUnsavedChanges = computed(() => drawer.value && formSnapshot.value !== currentFormSnapshot.value);
+const previewRows = computed(() => {
+  const list = orderedRows.value.map((item) => ({ ...item, config: cloneJson(item.config || {}), layout: cloneJson(item.layout || {}) }));
+  const draft = currentDraftPreviewRow();
+  if (draft) {
+    const index = editingId.value ? list.findIndex((item) => item.id === editingId.value) : -1;
+    if (index >= 0) list.splice(index, 1, draft);
+    else list.push(draft);
+  }
+  return list.filter((item) => item.enabled).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+});
 
 function typeLabel(type: string) {
   return moduleTypes.find((item) => item.type === type)?.label || type;
@@ -323,6 +337,33 @@ function parseJson(text: string, label: string) {
   const parsed = JSON.parse(text || "{}");
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) throw new Error(`${label} 必须是 JSON object`);
   return parsed;
+}
+
+function parseJsonOrNull(text: string) {
+  try {
+    const parsed = parseJson(text, "JSON");
+    return parsed as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+function currentDraftPreviewRow(): HomepageSectionView | null {
+  if (!drawer.value) return null;
+  const config = parseJsonOrNull(configText.value);
+  const layout = parseJsonOrNull(layoutText.value);
+  if (!config || !layout) return null;
+  return {
+    id: editingId.value || -1,
+    pageKey: filters.pageKey,
+    type: form.type,
+    title: form.title || null,
+    subtitle: form.subtitle || null,
+    enabled: form.enabled,
+    sortOrder: Number(form.sortOrder || 0),
+    config,
+    layout
+  };
 }
 
 async function submit() {
@@ -552,6 +593,11 @@ function openCurrentPreview() {
   window.open(previewUrl.value, "_blank", "noopener,noreferrer");
 }
 
+function focusLivePreview() {
+  document.querySelector(".phone-preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  ElMessage.info("右侧手机框已实时显示当前未保存内容，保存后前台 H5 才会正式生效");
+}
+
 onMounted(async () => {
   await loadTenants();
   await load();
@@ -635,7 +681,7 @@ onMounted(async () => {
         <div class="phone-frame">
           <div class="phone-status"></div>
           <div class="preview-scroll">
-            <template v-for="row in orderedRows.filter((item) => item.enabled)" :key="row.id">
+            <template v-for="row in previewRows" :key="row.id">
               <div v-if="row.type === 'search_bar'" class="preview-search">
                 <span>{{ (row.config as any).cityLabel || "本地" }}</span>
                 <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
@@ -660,7 +706,7 @@ onMounted(async () => {
               <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav">
                 <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
               </div>
-              <div v-else-if="row.type === 'my_page'" class="preview-my">
+              <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
                 <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
                 <span v-for="item in ((row.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
               </div>
@@ -687,7 +733,7 @@ onMounted(async () => {
         <el-tag v-if="hasUnsavedChanges" type="warning" effect="plain">未保存修改</el-tag>
         <div class="drawer-save-actions">
           <el-button @click="closeDrawer()">取消</el-button>
-          <el-button :icon="View" @click="openCurrentPreview">预览</el-button>
+          <el-button :icon="View" @click="focusLivePreview">查看右侧实时预览</el-button>
           <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
         </div>
       </div>

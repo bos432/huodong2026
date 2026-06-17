@@ -144,6 +144,9 @@ function toActivityOrder(row: any): UiOrder {
 
 function toCourseOrder(order: any): UiOrder {
   const owned = Boolean(order.owned || order.status === "paid");
+  const learnedCourse = courses.value.find((course) => course.id === order.course?.id);
+  const progress = Number(learnedCourse?.learning?.progress || 0);
+  const completed = owned && progress >= 100;
   return {
     key: `course-order-${order.id}`,
     type: "course",
@@ -153,13 +156,13 @@ function toCourseOrder(order: any): UiOrder {
     amount: order.amount,
     paymentMethod: order.paymentMethod,
     status: order.status,
-    statusText: courseOrderStatusText(order.status, owned),
-    statusClass: order.status === "pending_payment" ? "pending" : owned ? "done" : "muted",
+    statusText: courseOrderStatusText(order.status, owned, completed),
+    statusClass: order.status === "pending_payment" ? "pending" : completed ? "done" : owned ? "learning" : "muted",
     createdAt: order.createdAt,
     courseId: order.course?.id,
     owned,
-    progress: 0,
-    tip: order.status === "pending_payment" ? "线下付款订单已提交，后台确认收款后才会开通学习权限。" : "",
+    progress,
+    tip: order.status === "pending_payment" ? "线下付款订单已提交，后台确认收款后才会开通学习权限。" : owned ? `学习进度 ${progress}%` : "",
     actionText: owned ? "去学习" : "查看课程"
   };
 }
@@ -204,8 +207,9 @@ function registrationStatusText(status: string) {
   return map[status] || "报名记录";
 }
 
-function courseOrderStatusText(status: string, owned: boolean) {
-  if (owned) return "已开通";
+function courseOrderStatusText(status: string, owned: boolean, completed = false) {
+  if (completed) return "已完成";
+  if (owned) return "待学习";
   if (status === "pending_payment") return "待确认收款";
   if (status === "closed") return "已关闭";
   return "课程订单";
