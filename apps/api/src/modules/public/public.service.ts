@@ -36,6 +36,8 @@ import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
+import { Certificate } from "../../entities/certificate.entity";
+import { UserFavorite } from "../../entities/user-favorite.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
 import { Waitlist, WaitlistStatus } from "../../entities/waitlist.entity";
@@ -88,6 +90,8 @@ export class PublicService {
     @InjectRepository(CourseLesson) private readonly courseLessons: Repository<CourseLesson>,
     @InjectRepository(CourseOrder) private readonly courseOrders: Repository<CourseOrder>,
     @InjectRepository(UserLearning) private readonly userLearning: Repository<UserLearning>,
+    @InjectRepository(Certificate) private readonly certificates: Repository<Certificate>,
+    @InjectRepository(UserFavorite) private readonly userFavorites: Repository<UserFavorite>,
     private readonly notificationProvider: NotificationProviderService,
     private readonly paymentProvider: PaymentProviderService,
     private readonly refundCompletion: RefundCompletionService,
@@ -310,6 +314,36 @@ export class PublicService {
         };
       })
       .filter(Boolean);
+  }
+
+  async myCertificates(user: User) {
+    return this.certificates.find({ where: { userId: user.id }, order: { issuedAt: "DESC" } });
+  }
+
+  async myFavoriteCourses(user: User) {
+    const rows = await this.userFavorites.find({ where: { userId: user.id }, order: { createdAt: "DESC" } });
+    if (!rows.length) return [];
+    const courses = await this.courses.find({ where: { id: In(rows.map((row) => row.courseId)), status: "published" } });
+    return rows.map((row) => courses.find((course) => course.id === row.courseId)).filter(Boolean);
+  }
+
+  async favoriteCourseState(courseId: number, user: User) {
+    const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
+    if (!course) throw new NotFoundException("课程不存在或未发布");
+    const count = await this.userFavorites.count({ where: { userId: user.id, courseId } });
+    return { courseId, favorited: count > 0 };
+  }
+
+  async toggleFavoriteCourse(courseId: number, user: User) {
+    const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
+    if (!course) throw new NotFoundException("课程不存在或未发布");
+    const row = await this.userFavorites.findOne({ where: { userId: user.id, courseId } });
+    if (row) {
+      await this.userFavorites.delete(row.id);
+      return { courseId, favorited: false };
+    }
+    await this.userFavorites.save(this.userFavorites.create({ userId: user.id, courseId }));
+    return { courseId, favorited: true };
   }
 
   async updateMyProfile(user: User, dto: UpdateProfileDto) {

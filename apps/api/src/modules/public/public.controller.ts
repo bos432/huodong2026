@@ -193,6 +193,30 @@ export class PublicController {
     return this.service.myCourses(user);
   }
 
+  @Get("me/certificates")
+  async myCertificates(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myCertificates(user);
+  }
+
+  @Get("me/favorite-courses")
+  async myFavoriteCourses(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myFavoriteCourses(user);
+  }
+
+  @Get("me/course-favorites/:id")
+  async favoriteCourseState(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.favoriteCourseState(id, user);
+  }
+
+  @Post("me/course-favorites/:id")
+  async toggleFavoriteCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.toggleFavoriteCourse(id, user);
+  }
+
   @Patch("me/profile")
   async updateMyProfile(@Body() dto: UpdateProfileDto, @Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);

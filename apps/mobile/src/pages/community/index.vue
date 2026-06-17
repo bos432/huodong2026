@@ -36,10 +36,10 @@
       <text v-if="!checkinTask" class="subtle" style="margin-top:8rpx;">请在后台新增今天日期的打卡任务，发布后这里会自动显示。</text>
       <text v-if="checkinTask?.description" class="subtle" style="margin-top:8rpx;">{{ checkinTask.description }}</text>
       <view v-if="checkinTask" class="progress-bar" style="margin-top:12rpx;">
-        <view class="progress-fill" style="width: 67%;"></view>
+        <view class="progress-fill" :style="{ width: checkinProgress + '%' }"></view>
       </view>
       <text v-if="checkinTask" class="subtle" style="margin-top:8rpx;">今日已有 {{ checkinTask.completedCount || 0 }} 人完成打卡</text>
-      <view v-if="checkinTask" class="button block" style="margin-top:16rpx;" @click="goCheckin">去打卡</view>
+      <view v-if="checkinTask" class="button block" :class="{ disabled: checkinTask.checkedToday }" style="margin-top:16rpx;" @click="goCheckin">{{ checkinActionText }}</view>
     </view>
 
     <!-- 动态广场 -->
@@ -72,7 +72,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { onMounted } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { loadPageTheme } from "../../theme";
@@ -81,12 +81,17 @@ import EmptyState from "../../components/EmptyState.vue";
 import { request, withTenantCode } from "../../api";
 import { addCommunityComment, normalizeCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
 
-onShow(() => { loadPageTheme(); });
+onShow(() => {
+  loadPageTheme();
+  loadCheckinTask();
+});
 
 const activities = reactive<any[]>([]);
 
 const posts = reactive<CommunityPost[]>([]);
 const checkinTask = ref<any>(null);
+const checkinActionText = computed(() => checkinTask.value?.checkedToday ? "今日已完成" : "去打卡");
+const checkinProgress = computed(() => checkinTask.value?.checkedToday ? 100 : Math.min(Number(checkinTask.value?.completedCount || 0) > 0 ? 67 : 0, 100));
 
 function formatActivityDate(value: string) {
   const date = new Date(value);
@@ -140,7 +145,6 @@ async function loadCheckinTask() {
 onMounted(() => {
   loadActivities();
   loadPosts();
-  loadCheckinTask();
 });
 
 function toggleLike(post: any) {
@@ -173,7 +177,13 @@ function goActivity(act: any) {
     showCancel: false
   });
 }
-function goCheckin() { uni.navigateTo({ url:"/pages/community/checkin" }); }
+function goCheckin() {
+  if (checkinTask.value?.checkedToday) {
+    uni.showToast({ title: "今日已完成打卡", icon: "none" });
+    return;
+  }
+  uni.navigateTo({ url:"/pages/community/checkin" });
+}
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 </script>
 

@@ -11,9 +11,21 @@
   </view>
 </template>
 <script setup lang="ts">
+import { clearUser } from "../../api";
+
 function goBack() { uni.navigateBack(); }
 function goSecurity() { uni.navigateTo({ url:"/pages/user/security" }); }
-function logout() { uni.showModal({ title:"确认退出", content:"确定要退出登录吗？", success(r){ if(r.confirm) uni.reLaunch({ url:"/pages/user/login" }); } }); }
+function logout() {
+  uni.showModal({
+    title:"确认退出",
+    content:"确定要退出登录吗？",
+    success(r){
+      if (!r.confirm) return;
+      clearUser();
+      uni.reLaunch({ url:"/pages/user/login" });
+    }
+  });
+}
 </script>
 <style scoped>
 .custom-nav { display:flex; align-items:center; padding:16rpx 0; }

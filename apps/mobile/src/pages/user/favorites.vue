@@ -16,16 +16,16 @@
 </template>
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
-import { withTenantCode } from "../../api";
-import { favoriteCourseIds, fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
+import { ensureUser, request, withTenantCode } from "../../api";
+import { normalizeCourse, priceText, type CourseCard } from "../../course-data";
 
 const favorites = ref<CourseCard[]>([]);
 
 async function loadFavorites() {
   try {
-    const ids = favoriteCourseIds();
-    const courses = await fetchPublishedCourses();
-    favorites.value = courses.filter((course) => ids.includes(course.id));
+    await ensureUser();
+    const rows = await request<any[]>("/public/me/favorite-courses");
+    favorites.value = (Array.isArray(rows) ? rows : []).map(normalizeCourse);
   } catch {
     favorites.value = [];
   }

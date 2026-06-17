@@ -3,9 +3,9 @@
     <!-- 顶部用户信息 -->
     <view class="profile-header">
       <image class="avatar-lg" src="/static/avatar_default.png" mode="aspectFill" />
-      <text class="profile-nickname">游客</text>
-      <view class="profile-badge">普通会员</view>
-      <text class="profile-expire">会员到期：——</text>
+      <text class="profile-nickname">{{ displayName }}</text>
+      <view class="profile-badge">{{ memberLevelName }}</view>
+      <text class="profile-expire">{{ profile?.phone ? `手机号：${profile.phone}` : "请先登录后查看权益" }}</text>
       <view class="profile-edit-btn" @click="goEdit">
         <text class="subtle" style="color:#4A6B8A;">编辑资料  ›</text>
       </view>
@@ -79,11 +79,36 @@
 </template>
 
 <script setup lang="ts">
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
+import { ensureUser, fetchMyProfile } from "../../api";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 
-onShow(() => { loadPageTheme(); });
+const profile = ref<any>(null);
+const loadingProfile = ref(false);
+const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (loadingProfile.value ? "加载中..." : "未登录"));
+const memberLevelName = computed(() => profile.value?.memberLevel?.name || "普通会员");
+
+async function loadProfile() {
+  loadingProfile.value = true;
+  try {
+    await ensureUser();
+    profile.value = await fetchMyProfile();
+  } catch (error: any) {
+    profile.value = null;
+    if (!String(error?.message || "").includes("请先完成")) {
+      uni.showToast({ title: error.message || "加载用户失败", icon: "none" });
+    }
+  } finally {
+    loadingProfile.value = false;
+  }
+}
+
+onShow(() => {
+  loadPageTheme();
+  loadProfile();
+});
 
 const gridItems = [
   { icon:"📖", label:"我的课程", page:"courses" },

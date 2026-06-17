@@ -95,7 +95,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
-import { isFavoriteCourse, priceText, toggleFavoriteCourse } from "../../course-data";
+import { priceText } from "../../course-data";
 import EmptyState from "../../components/EmptyState.vue";
 
 const activeTab = ref("detail");
@@ -156,7 +156,13 @@ async function loadCourse() {
     const data = await request<any>(`/public/courses/${id}`);
     if (!data) throw new Error("课程不存在或未发布");
     rawCourse.value = data;
-    isFav.value = isFavoriteCourse(id);
+    try {
+      await ensureUser();
+      const favorite = await request<any>(`/public/me/course-favorites/${id}`);
+      isFav.value = Boolean(favorite?.favorited);
+    } catch {
+      isFav.value = false;
+    }
   } catch (err: any) {
     error.value = err.message || "课程加载失败";
   } finally {
@@ -179,10 +185,16 @@ function share() {
   // #endif
   uni.showToast({ title: "请使用系统分享", icon: "none" });
 }
-function toggleFavorite() {
+async function toggleFavorite() {
   if (!course.value) return;
-  isFav.value = toggleFavoriteCourse(course.value.id);
-  uni.showToast({ title: isFav.value ? "已收藏课程" : "已取消收藏", icon: "none" });
+  try {
+    await ensureUser();
+    const result = await request<any>(`/public/me/course-favorites/${course.value.id}`, { method: "POST" });
+    isFav.value = Boolean(result?.favorited);
+    uni.showToast({ title: isFav.value ? "已收藏课程" : "已取消收藏", icon: "none" });
+  } catch (err: any) {
+    uni.showToast({ title: err.message || "收藏失败", icon: "none" });
+  }
 }
 async function buyCourse() {
   if (!course.value) return;
