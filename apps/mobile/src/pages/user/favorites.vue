@@ -7,7 +7,7 @@
         <view class="course-info">
           <text class="course-title">{{ c.title }}</text>
           <text class="course-teacher">by {{ c.teacher }}</text>
-          <text class="price" style="font-size:28rpx;">¥{{ c.price }}</text>
+          <text class="price" style="font-size:28rpx;">{{ priceText(c.price) }}</text>
         </view>
       </view>
     </view>
@@ -15,12 +15,26 @@
   </view>
 </template>
 <script setup lang="ts">
-const favorites = [
-  { id:1, title:"国学入门七讲", teacher:"张明远", price:0, icon:"📜", color:"#F5E6D3" },
-  { id:5, title:"楷书入门到精通", teacher:"李墨白", price:599, icon:"🖌", color:"#E8E0D8" }
-];
+import { onMounted, ref } from "vue";
+import { withTenantCode } from "../../api";
+import { favoriteCourseIds, fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
+
+const favorites = ref<CourseCard[]>([]);
+
+async function loadFavorites() {
+  try {
+    const ids = favoriteCourseIds();
+    const courses = await fetchPublishedCourses();
+    favorites.value = courses.filter((course) => ids.includes(course.id));
+  } catch {
+    favorites.value = [];
+  }
+}
+
 function goBack() { uni.navigateBack(); }
-function goDetail(c:any) { uni.navigateTo({ url:"/pages/course/detail?id="+c.id }); }
+function goDetail(c:any) { uni.navigateTo({ url: withTenantCode("/pages/course/detail?id="+c.id) }); }
+
+onMounted(loadFavorites);
 </script>
 <style scoped>
 .custom-nav { display:flex; align-items:center; padding:16rpx 0; }

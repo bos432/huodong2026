@@ -24,13 +24,13 @@
       <text class="subtle" style="display:block; margin-bottom:16rpx;">搜索 "{{ keyword }}" 共 {{ results.length }} 个结果</text>
       <view v-for="(r, i) in results" :key="i" class="card search-result-item" @click="goCourse(r)">
         <view class="row" style="justify-content:flex-start; gap:16rpx;">
-          <view style="width:160rpx; height:100rpx; background:r.color; border-radius:12rpx; display:flex; align-items:center; justify-content:center;">
+          <view class="result-cover" :style="{ background: r.color }">
             <text style="font-size:40rpx;">{{ r.icon }}</text>
           </view>
           <view style="flex:1;">
             <text style="font-size:28rpx; font-weight:600; color:#333; display:block;">{{ r.title }}</text>
             <text class="subtle">by {{ r.teacher }}</text>
-            <text class="price" style="font-size:28rpx;">¥{{ r.price }}</text>
+            <text class="price" style="font-size:28rpx;">{{ priceText(r.price) }}</text>
           </view>
         </view>
       </view>
@@ -39,20 +39,40 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { ref, computed, onMounted } from "vue";
+import { withTenantCode } from "../../api";
+import { fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
+
 const keyword = ref("");
-const hotTags = ["国学入门","书法基础","道德经","易经","论语","静坐","家庭教育","中医养生"];
 const history = ref(["国学","书法","论语"]);
-const allCourses = [
-  { id:1, title:"国学入门七讲", teacher:"张明远", price:0, icon:"📜", color:"#F5E6D3" },
-  { id:2, title:"论语精讲100讲", teacher:"张明远", price:399, icon:"📚", color:"#F5E6D3" },
-  { id:3, title:"道德经导读", teacher:"王守拙", price:199, icon:"☯", color:"#DCE8E0" },
-  { id:4, title:"楷书入门到精通", teacher:"李墨白", price:599, icon:"🖌", color:"#E8E0D8" }
-];
-const results = computed(() => allCourses.filter(c => c.title.includes(keyword.value)));
+const allCourses = ref<CourseCard[]>([]);
+const hotTags = computed(() => {
+  const tags = allCourses.value.flatMap((course) => [course.title, course.teacher, course.category]).filter(Boolean);
+  return Array.from(new Set(tags)).slice(0, 8);
+});
+const results = computed(() => {
+  const word = keyword.value.trim().toLowerCase();
+  if (!word) return [];
+  return allCourses.value.filter((course) =>
+    course.title.toLowerCase().includes(word) ||
+    course.teacher.toLowerCase().includes(word) ||
+    course.category.toLowerCase().includes(word)
+  );
+});
+
+async function loadCourses() {
+  try {
+    allCourses.value = await fetchPublishedCourses();
+  } catch {
+    allCourses.value = [];
+  }
+}
+
 function doSearch() { if (keyword.value && !history.value.includes(keyword.value)) history.value.unshift(keyword.value); }
 function goBack() { uni.navigateBack(); }
-function goCourse(r:any) { uni.navigateTo({ url:"/pages/course/detail?id="+r.id }); }
+function goCourse(r:any) { uni.navigateTo({ url: withTenantCode("/pages/course/detail?id="+r.id) }); }
+
+onMounted(loadCourses);
 </script>
 <style scoped>
 .search-bar { display:flex; align-items:center; gap:16rpx; padding:16rpx 0; }
@@ -62,4 +82,5 @@ function goCourse(r:any) { uni.navigateTo({ url:"/pages/course/detail?id="+r.id 
 .section-title { margin:24rpx 0 16rpx; }
 .tags-cloud { display:flex; flex-wrap:wrap; gap:8rpx; }
 .search-result-item { margin-bottom:12rpx; }
+.result-cover { width:160rpx; height:100rpx; border-radius:12rpx; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 </style>

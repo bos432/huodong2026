@@ -37,13 +37,14 @@
       <scroll-view class="scroll-x" scroll-x :show-scrollbar="false" style="margin-top:16rpx;">
         <view v-for="(course, idx) in trialCourses" :key="idx" class="course-card-h" @click="goCourse(course)">
           <view class="course-cover" :style="{ background: course.color }">
-            <text style="font-size:48rpx;">{{ course.icon }}</text>
+            <image v-if="course.coverUrl" class="course-cover-img" :src="course.coverUrl" mode="aspectFill" />
+            <text v-else style="font-size:48rpx;">{{ course.icon }}</text>
           </view>
           <text class="course-title">{{ course.title }}</text>
           <text class="course-teacher">by {{ course.teacher }}</text>
           <view class="row" style="justify-content:flex-start;">
-            <text class="price" style="font-size:28rpx;">免费</text>
-            <text class="price-original" style="margin-left:8rpx;">¥{{ course.originalPrice }}</text>
+            <text class="price" style="font-size:28rpx;">{{ priceText(course.price) }}</text>
+            <text class="price-original" style="margin-left:8rpx;" v-if="Number(course.originalPrice) > 0">{{ priceText(course.originalPrice) }}</text>
           </view>
         </view>
       </scroll-view>
@@ -58,11 +59,12 @@
       <scroll-view class="scroll-x" scroll-x :show-scrollbar="false" style="margin-top:16rpx;">
         <view v-for="(course, idx) in hotCourses" :key="idx" class="course-card-h" @click="goCourse(course)">
           <view class="course-cover" :style="{ background: course.color }">
-            <text style="font-size:48rpx;">{{ course.icon }}</text>
+            <image v-if="course.coverUrl" class="course-cover-img" :src="course.coverUrl" mode="aspectFill" />
+            <text v-else style="font-size:48rpx;">{{ course.icon }}</text>
           </view>
           <text class="course-title">{{ course.title }}</text>
           <text class="course-teacher">by {{ course.teacher }}</text>
-          <text class="price" style="font-size:28rpx;">¥{{ course.price }}</text>
+          <text class="price" style="font-size:28rpx;">{{ priceText(course.price) }}</text>
         </view>
       </scroll-view>
     </view>
@@ -95,8 +97,14 @@
         <image v-for="(img, i) in post.images" :key="i" class="post-image" :src="img" mode="aspectFill" />
       </view>
       <view class="row" style="margin-top:12rpx; justify-content:flex-start; gap:24rpx;">
-        <text class="subtle">❤ {{ post.likes }}</text>
-        <text class="subtle">💬 {{ post.comments }}</text>
+        <view class="interact-btn" @click.stop="toggleLike(post)">
+          <text>{{ post.liked ? "❤️" : "🤍" }}</text>
+          <text class="subtle">{{ post.likes }}</text>
+        </view>
+        <view class="interact-btn" @click.stop="commentPost(post)">
+          <text>💬</text>
+          <text class="subtle">{{ post.comments }}</text>
+        </view>
       </view>
     </view>
 
@@ -107,12 +115,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
+import { withTenantCode } from "../../api";
+import { fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
+import { addCommunityComment, defaultCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
 
-onShow(() => { loadPageTheme(); });
+onShow(() => {
+  loadPageTheme();
+  loadCourses();
+});
 
 const jingang = [
   { icon: "🖌", label: "国学", category: "国学" },
@@ -127,40 +141,59 @@ const jingang = [
 
 const banners = [
   { title: "寻找100位七维文化大使", sub: "一起用7把钥匙，打开中国人的精神家园", bg: "#C43D3D", link: "ambassador" },
-  { title: "限时免费：国学入门课", sub: "从零开始，读懂中国智慧", bg: "#4A6B8A", link: "course" },
+  { title: "精选课程：七维书院好课", sub: "从基础到进阶，跟随老师系统学习", bg: "#4A6B8A", link: "course" },
   { title: "线上共修会报名中", sub: "与百位同修一起精进", bg: "#5B8C5A", link: "community" }
 ];
 
-const trialCourses = [
-  { id:1, title:"国学入门七讲", teacher:"张明远", price:"0", originalPrice:"199", icon:"📜", color:"#F5E6D3" },
-  { id:2, title:"书法基础课", teacher:"李墨白", price:"0", originalPrice:"299", icon:"🖌", color:"#E8E0D8" },
-  { id:3, title:"道德经导读", teacher:"王守拙", price:"0", originalPrice:"199", icon:"☯", color:"#DCE8E0" },
-  { id:4, title:"静坐入门", teacher:"刘静修", price:"0", originalPrice:"99", icon:"🧘", color:"#E0DCE8" }
-];
+const courses = ref<CourseCard[]>([]);
+const trialCourses = computed(() => {
+  const freeCourses = courses.value.filter((course) => Number(course.price) === 0);
+  return (freeCourses.length ? freeCourses : courses.value).slice(0, 4);
+});
+const hotCourses = computed(() => [...courses.value].sort((a, b) => b.hot - a.hot).slice(0, 4));
+const posts = reactive<CommunityPost[]>(defaultCommunityPosts().slice(0, 2));
 
-const hotCourses = [
-  { id:5, title:"论语精讲100讲", teacher:"张明远", price:"399", icon:"📚", color:"#F5E6D3" },
-  { id:6, title:"楷书入门到精通", teacher:"李墨白", price:"599", icon:"🖌", color:"#E8E0D8" },
-  { id:7, title:"易经入门", teacher:"周易明", price:"299", icon:"☯", color:"#DCE8E0" },
-  { id:8, title:"家庭教育智慧", teacher:"王慧心", price:"199", icon:"🏠", color:"#E0DCE8" }
-];
-
-const posts = [
-  { avatar:"/static/avatar1.png", nickname:"学而时习", time:"2小时前", content:"今日抄写《论语》学而篇第一，深感温故而知新。纸上得来终觉浅，绝知此事要躬行。", likes:12, comments:3, images:["/static/post1.png"] },
-  { avatar:"/static/avatar2.png", nickname:"书道中人", time:"昨天", content:"楷书练习第21天，终于找到一点感觉了。老师说得对，功夫在字外。", likes:8, comments:2, images:[] }
-];
+async function loadCourses() {
+  try {
+    courses.value = await fetchPublishedCourses();
+  } catch {
+    courses.value = [];
+  }
+}
 
 function goSearch() { uni.navigateTo({ url:"/pages/search/index" }); }
 function goCategory(item: any) { uni.navigateTo({ url:`/pages/courses/index?category=${item.category}` }); }
 function goBanner(b: any) {
   if (b.link === "ambassador") uni.navigateTo({ url:"/pages/ambassador/index" });
-  else if (b.link === "course") uni.navigateTo({ url:"/pages/course/detail?id=1" });
+  else if (b.link === "course") uni.navigateTo({ url: withTenantCode("/pages/course/detail?id=1") });
   else if (b.link === "community") uni.navigateTo({ url:"/pages/community/index" });
 }
-function goCourse(c: any) { uni.navigateTo({ url:`/pages/course/detail?id=${c.id}` }); }
-function goAllCourses() { uni.switchTab({ url:"/pages/courses/index" }); }
+function goCourse(c: any) { uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${c.id}`) }); }
+function goAllCourses() { uni.reLaunch({ url:"/pages/courses/index" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
-function goPost(p: any) { /* placeholder */ }
+function goPost(p: any) { uni.navigateTo({ url:`/pages/community/detail?id=${p.id || 1}` }); }
+function toggleLike(post: CommunityPost) {
+  toggleCommunityLike(post);
+  uni.showToast({ title: post.liked ? "已收藏动态" : "已取消收藏", icon: "none" });
+}
+function commentPost(post: CommunityPost) {
+  uni.showModal({
+    title: "评论动态",
+    editable: true,
+    placeholderText: "写下你的想法",
+    confirmText: "发布",
+    success: (res: any) => {
+      if (!res.confirm) return;
+      const content = String(res.content || "").trim();
+      if (!content) {
+        uni.showToast({ title: "请输入评论内容", icon: "none" });
+        return;
+      }
+      addCommunityComment(post);
+      uni.showToast({ title: "评论已发布", icon: "success" });
+    }
+  });
+}
 </script>
 
 <style scoped>
@@ -228,7 +261,9 @@ function goPost(p: any) { /* placeholder */ }
   align-items: center;
   justify-content: center;
   margin-bottom: 12rpx;
+  overflow: hidden;
 }
+.course-cover-img { width: 100%; height: 100%; display: block; }
 .course-title { font-size: 28rpx; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .course-teacher { font-size: 24rpx; color: #999; margin-top: 4rpx; display: block; }
 .ambassador-card {
@@ -243,6 +278,7 @@ function goPost(p: any) { /* placeholder */ }
 .ambassador-content { flex:1; }
 .ambassador-arrow { margin-left: 16rpx; }
 .post-card { margin-top: 8rpx; }
+.interact-btn { display: flex; align-items: center; gap: 8rpx; }
 .post-images { display: flex; gap: 8rpx; margin-top: 12rpx; flex-wrap: wrap; }
 .post-image { width: 200rpx; height: 200rpx; border-radius: 12rpx; background: #E8E0D8; }
 </style>

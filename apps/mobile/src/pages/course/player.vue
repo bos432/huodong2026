@@ -2,7 +2,7 @@
   <view class="container">
     <view class="custom-nav">
       <view class="nav-back" @click="goBack">‹ 返回</view>
-      <text class="nav-title" style="font-size:28rpx; color:#333; flex:1; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">国学入门七讲</text>
+      <text class="nav-title" style="font-size:28rpx; color:#333; flex:1; text-align:center; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;">{{ courseTitle }}</text>
       <view class="nav-more" @click="showMore">⋯</view>
     </view>
 
@@ -26,8 +26,8 @@
     </view>
 
     <view class="player-info">
-      <text class="title-md">第1章 · 国学入门</text>
-      <text class="body-text" style="margin-top:4rpx;">1.1 学而时习之</text>
+      <text class="title-md">{{ currentChapterTitle }}</text>
+      <text class="body-text" style="margin-top:4rpx;">{{ currentLessonTitle }}</text>
     </view>
 
     <!-- 目录按钮 -->
@@ -50,21 +50,44 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, onMounted, ref } from "vue";
+import { request, withTenantCode } from "../../api";
+
 const showCatalog = ref(false);
-const chapters = [
-  { title:"第一章：国学是什么", lessons:[
-    { title:"1.1 学而时习之", duration:"15:00", isFree:true },
-    { title:"1.2 国学的发展历程", duration:"20:00", isFree:true },
-    { title:"1.3 为什么今天还要学国学", duration:"18:00", isFree:false }
-  ]},
-  { title:"第二章：四书精要", lessons:[
-    { title:"2.1 《大学》之道", duration:"25:00", isFree:false },
-    { title:"2.2 《中庸》之理", duration:"22:00", isFree:false }
-  ]}
-];
+const rawCourse = ref<any>();
+const chapters = computed(() => rawCourse.value?.chapters || []);
+const courseTitle = computed(() => rawCourse.value?.title || "课程学习");
+const currentChapterTitle = computed(() => chapters.value[0]?.title || "课程目录");
+const currentLessonTitle = computed(() => chapters.value[0]?.lessons?.[0]?.title || "暂无课时，请先在后台维护课程目录");
+
+function currentCourseId() {
+  const pages = getCurrentPages();
+  const options = (pages[pages.length - 1] as any)?.options || {};
+  return Number(options.id || 0);
+}
+
+async function loadCourse() {
+  const id = currentCourseId();
+  if (!id) return;
+  try {
+    rawCourse.value = await request<any>(`/public/courses/${id}`);
+  } catch {
+    rawCourse.value = null;
+  }
+}
+
 function goBack() { uni.navigateBack(); }
-function showMore() { /* placeholder */ }
+function showMore() {
+  uni.showActionSheet({
+    itemList: ["查看课程详情", "反馈问题"],
+    success(result) {
+      if (result.tapIndex === 0) uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${currentCourseId() || 1}`) });
+      if (result.tapIndex === 1) uni.navigateTo({ url:"/pages/service/index" });
+    }
+  });
+}
+
+onMounted(loadCourse);
 </script>
 
 <style scoped>

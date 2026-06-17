@@ -17,8 +17,14 @@
   </view>
 </template>
 <script setup lang="ts">
+function currentActivityId() {
+  const pages = getCurrentPages();
+  const options = (pages[pages.length - 1] as any)?.options || {};
+  return Number(options.id || 1);
+}
+
 function goBack() { uni.navigateBack(); }
-function register() { /* placeholder */ }
+function register() { uni.navigateTo({ url:`/pages/activity/detail?id=${currentActivityId()}` }); }
 </script>
 <style scoped>
 .custom-nav { padding:16rpx 0; }

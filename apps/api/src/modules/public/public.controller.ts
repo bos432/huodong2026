@@ -4,7 +4,7 @@ import { mkdirSync } from "fs";
 import { diskStorage } from "multer";
 import { join } from "path";
 import { PublicService, PublicTenantContext } from "./public.service";
-import { AmbassadorApplicationDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
 
 const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -157,6 +157,24 @@ export class PublicController {
     return this.service.createProviderPayment(id, "alipay", dto, user, this.tenantContext(req, tenantCode));
   }
 
+  @Post("courses/:id/orders")
+  async createCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: CreateCourseOrderDto, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.createCourseOrder(id, dto, user);
+  }
+
+  @Get("course-orders/:id")
+  async courseOrderDetail(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.courseOrderDetail(id, user);
+  }
+
+  @Post("course-orders/:id/pay/mock")
+  async mockPayCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: MockPayDto, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.mockPayCourseOrder(id, dto, user);
+  }
+
   @Get("me/wallet")
   async myWallet(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
@@ -167,6 +185,12 @@ export class PublicController {
   async myProfile(@Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myProfile(user);
+  }
+
+  @Get("me/courses")
+  async myCourses(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myCourses(user);
   }
 
   @Patch("me/profile")

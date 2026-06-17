@@ -1,5 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
-import { AdminRole, canAccess, canAccessScope, isPlatformAdmin, permissions } from "./permissions";
+import { adminSession, canAccess, canAccessScope, isPlatformAdmin, permissions } from "./permissions";
 
 const Login = () => import("./views/Login.vue");
 const Layout = () => import("./views/Layout.vue");
@@ -48,38 +48,38 @@ export const router = createRouter({
       children: [
         { path: "", redirect: "/dashboard" },
         { path: "dashboard", component: Dashboard, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
-        { path: "analytics", component: Analytics, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
-        { path: "courses", component: Courses, meta: { roles: permissions.superAdmin, scope: "platform" } },{ path: "community", component: Community, meta: { roles: permissions.superAdmin, scope: "platform" } },{ path: "tenants", component: Tenants, meta: { roles: permissions.superAdmin, scope: "platform" } },
-        { path: "ambassador", component: Ambassador, meta: { roles: permissions.superAdmin, scope: "platform" } },
+        { path: "analytics", component: Analytics, meta: { roles: permissions.analytics, scope: "tenantOrPlatformAdmin" } },
+        { path: "courses", component: Courses, meta: { roles: ["course.manage"], scope: "platform" } },{ path: "community", component: Community, meta: { roles: ["community.manage"], scope: "platform" } },{ path: "tenants", component: Tenants, meta: { roles: ["tenant.manage"], scope: "platform" } },
+        { path: "ambassador", component: Ambassador, meta: { roles: ["ambassador.manage"], scope: "platform" } },
         { path: "activities", component: Activities, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
-        { path: "funnels", component: Funnels, meta: { roles: permissions.operation, scope: "tenant" } },
-        { path: "recaps", component: Recaps, meta: { roles: permissions.operation, scope: "tenant" } },
-        { path: "announcements", component: Announcements, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
-        { path: "homepage-builder", component: HomepageBuilder, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
-        { path: "notifications", component: Notifications, meta: { roles: permissions.operation, scope: "tenant" } },
-        { path: "reviews", component: Reviews, meta: { roles: permissions.operation, scope: "tenant" } },
+        { path: "funnels", component: Funnels, meta: { roles: ["activity.view"], scope: "tenant" } },
+        { path: "recaps", component: Recaps, meta: { roles: ["activity.view"], scope: "tenant" } },
+        { path: "announcements", component: Announcements, meta: { roles: ["announcement.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "homepage-builder", component: HomepageBuilder, meta: { roles: ["homepage.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "notifications", component: Notifications, meta: { roles: ["notification.manage"], scope: "tenant" } },
+        { path: "reviews", component: Reviews, meta: { roles: ["review.manage"], scope: "tenant" } },
         { path: "registrations", component: Registrations, meta: { roles: permissions.registrationView, scope: "tenantOrPlatformAdmin" } },
-        { path: "waitlists", component: Waitlists, meta: { roles: permissions.operation, scope: "tenant" } },
-        { path: "tags", component: UserTags, meta: { roles: permissions.operation, scope: "tenant" } },
-        { path: "members", component: Members, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
-        { path: "ticket-types", component: TicketTypes, meta: { roles: permissions.operation, scope: "tenant" } },
-        { path: "coupons", component: Coupons, meta: { roles: permissions.operation, scope: "tenant" } },
+        { path: "waitlists", component: Waitlists, meta: { roles: ["waitlist.manage"], scope: "tenant" } },
+        { path: "tags", component: UserTags, meta: { roles: ["tag.manage"], scope: "tenant" } },
+        { path: "members", component: Members, meta: { roles: ["member.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "ticket-types", component: TicketTypes, meta: { roles: ["ticket.manage"], scope: "tenant" } },
+        { path: "coupons", component: Coupons, meta: { roles: ["coupon.manage"], scope: "tenant" } },
         { path: "agents", component: Agents, meta: { roles: permissions.paymentAccountView, scope: "tenantOrPlatformAdmin" } },
-        { path: "agent-settlements", component: AgentSettlements, meta: { roles: permissions.finance, scope: "tenant" } },
-        { path: "orders", component: Orders, meta: { roles: permissions.finance, scope: "tenantOrPlatformAdmin" } },
-        { path: "finance", component: Finance, meta: { roles: permissions.finance, scope: "tenantOrPlatformAdmin" } },
-        { path: "charity", component: Charity, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
+        { path: "agent-settlements", component: AgentSettlements, meta: { roles: ["agent_settlement.view"], scope: "tenant" } },
+        { path: "orders", component: Orders, meta: { roles: ["order.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "finance", component: Finance, meta: { roles: ["finance.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "charity", component: Charity, meta: { roles: ["charity.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "check-in", component: CheckIn, meta: { roles: permissions.checkIn, scope: "tenant" } },
-        { path: "system-settings", component: SystemSettings, meta: { roles: permissions.superAdmin, scope: "tenantOrPlatformAdmin" } },
-        { path: "tenant-profile", component: TenantProfile, meta: { roles: permissions.superAdmin, scope: "tenant" } },
+        { path: "system-settings", component: SystemSettings, meta: { roles: ["system.manage", "operation_settings.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "tenant-profile", component: TenantProfile, meta: { roles: ["tenant_profile.manage"], scope: "tenant" } },
         { path: "operation-settings", redirect: "/system-settings" },
-        { path: "operation-logs", component: OperationLogs, meta: { roles: permissions.superAdmin, scope: "any" } },
-        { path: "admin-login-logs", component: AdminLoginLogs, meta: { roles: permissions.superAdmin, scope: "platform" } },
-        { path: "h5-code-logs", component: H5CodeLogs, meta: { roles: permissions.superAdmin, scope: "platform" } },
-        { path: "config-check", component: ConfigCheck, meta: { roles: permissions.superAdmin, scope: "platform" } },
-        { path: "ops-routine", component: OpsRoutine, meta: { roles: permissions.superAdmin, scope: "platform" } },
-        { path: "categories", component: Categories, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
-        { path: "admins", component: Admins, meta: { roles: permissions.superAdmin, scope: "any" } },
+        { path: "operation-logs", component: OperationLogs, meta: { roles: ["logs.view"], scope: "any" } },
+        { path: "admin-login-logs", component: AdminLoginLogs, meta: { roles: ["logs.view"], scope: "platform" } },
+        { path: "h5-code-logs", component: H5CodeLogs, meta: { roles: ["logs.view"], scope: "platform" } },
+        { path: "config-check", component: ConfigCheck, meta: { roles: ["system.manage"], scope: "platform" } },
+        { path: "ops-routine", component: OpsRoutine, meta: { roles: ["system.manage"], scope: "platform" } },
+        { path: "categories", component: Categories, meta: { roles: ["category.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "admins", component: Admins, meta: { roles: ["admin.manage"], scope: "any" } },
         { path: ":pathMatch(.*)*", redirect: () => fallbackPath() }
       ]
     }
@@ -87,15 +87,26 @@ export const router = createRouter({
 });
 
 function fallbackPath() {
-  if (isPlatformAdmin()) return "/dashboard";
-  if (canAccess(permissions.overview)) return "/dashboard";
-  if (canAccess(permissions.checkIn)) return "/check-in";
+  const candidates = [
+    { path: "/dashboard", roles: permissions.overview, scope: "tenantOrPlatformAdmin" },
+    { path: "/tenants", roles: ["tenant.manage"], scope: "platform" },
+    { path: "/activities", roles: ["activity.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/registrations", roles: ["registration.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/orders", roles: ["order.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/finance", roles: ["finance.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/members", roles: ["member.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/check-in", roles: permissions.checkIn, scope: "tenant" },
+    { path: "/admins", roles: ["admin.manage"], scope: "any" }
+  ];
+  const match = candidates.find((item) => canAccess(item.roles) && canAccessScope(item.scope as any));
+  if (match) return match.path;
   return "/login";
 }
 
 router.beforeEach((to) => {
+  void adminSession.version;
   if (to.path !== "/login" && !localStorage.getItem("admin_token")) return "/login";
-  if (to.path !== "/login" && to.meta.roles && !canAccess(to.meta.roles as AdminRole[])) return fallbackPath();
+  if (to.path !== "/login" && to.meta.roles && !canAccess(to.meta.roles as string[])) return fallbackPath();
   if (to.path !== "/login" && !canAccessScope(to.meta.scope as any)) return fallbackPath();
 });
 

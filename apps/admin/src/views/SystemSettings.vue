@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
-import { isPlatformAdmin } from "../permissions";
+import { currentTenantSettings, isPlatformAdmin } from "../permissions";
 
 type CheckStatus = "ok" | "warning" | "error";
 
@@ -97,6 +97,11 @@ const defaultPageTheme = {
 const router = useRouter();
 const activeTab = ref("operation");
 const canManagePlatformSettings = computed(() => isPlatformAdmin());
+const tenantSettings = ref(currentTenantSettings());
+const paymentSettingsEditable = computed(() => canManagePlatformSettings.value || tenantSettings.value.paymentAccountEditable);
+const paymentSettingsReadonlyReason = computed(() =>
+  paymentSettingsEditable.value ? "" : "平台超级管理员已关闭本商家的收款配置权限。支付方式、线下付款、退款和发票说明只能查看，修改请联系平台。"
+);
 const loadingOperation = ref(false);
 const savingOperation = ref(false);
 const loadingConfig = ref(false);
@@ -729,8 +734,8 @@ async function loadOperation() {
 
 async function saveOperation() {
   if (!form.registrationEnabled && !form.registrationDisabledMessage.trim()) return ElMessage.error("请填写暂停报名提示");
-  if (!form.offlinePaymentInstructions.trim()) return ElMessage.error("请填写线下付款说明");
-  if (!form.refundInstructions.trim()) return ElMessage.error("请填写退款说明");
+  if (paymentSettingsEditable.value && !form.offlinePaymentInstructions.trim()) return ElMessage.error("请填写线下付款说明");
+  if (paymentSettingsEditable.value && !form.refundInstructions.trim()) return ElMessage.error("请填写退款说明");
   savingOperation.value = true;
   try {
     await api.post("/admin/settings/operation", form);
@@ -740,6 +745,20 @@ async function saveOperation() {
     ElMessage.error(error.message || "保存失败");
   } finally {
     savingOperation.value = false;
+  }
+}
+
+async function refreshTenantSettings() {
+  if (canManagePlatformSettings.value) return;
+  try {
+    const data = await api.get<any, any>("/admin/mobile/bootstrap");
+    const settings = data?.admin?.tenant?.settings;
+    if (settings) {
+      localStorage.setItem("admin_tenant_settings", JSON.stringify(settings));
+      tenantSettings.value = currentTenantSettings();
+    }
+  } catch {
+    tenantSettings.value = currentTenantSettings();
   }
 }
 
@@ -759,7 +778,8 @@ function go(path: string) {
   router.push(path);
 }
 
-onMounted(() => {
+onMounted(async () => {
+  await refreshTenantSettings();
   loadOperation();
   if (canManagePlatformSettings.value) loadConfig();
 });
@@ -790,6 +810,14 @@ onMounted(() => {
             :closable="false"
             class="panel-alert"
           />
+          <el-alert
+            v-if="paymentSettingsReadonlyReason"
+            type="warning"
+            :title="paymentSettingsReadonlyReason"
+            show-icon
+            :closable="false"
+            class="panel-alert"
+          />
           <el-form label-width="128px" class="setting-form">
             <el-form-item label="报名通道">
               <div class="switch-row">
@@ -803,16 +831,16 @@ onMounted(() => {
               <el-input v-model="form.registrationDisabledMessage" type="textarea" :rows="3" maxlength="300" show-word-limit />
             </el-form-item>
             <el-form-item label="线下付款说明" required>
-              <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit />
+              <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit :disabled="!paymentSettingsEditable" />
             </el-form-item>
             <el-form-item label="支付方式">
               <div class="payment-methods-block">
                 <div class="payment-methods">
-                  <el-checkbox v-model="form.paymentMethods.free">免费报名</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.wechat">微信支付</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.alipay">支付宝</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.balance">余额支付</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.offline">线下收款 / 人工确认</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.free" :disabled="!paymentSettingsEditable">免费报名</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.wechat" :disabled="!paymentSettingsEditable">微信支付</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.alipay" :disabled="!paymentSettingsEditable">支付宝</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.balance" :disabled="!paymentSettingsEditable">余额支付</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.offline" :disabled="!paymentSettingsEditable">线下收款 / 人工确认</el-checkbox>
                 </div>
                 <div class="payment-readiness">
                   <div v-for="item in paymentReadiness" :key="item.key" class="payment-readiness-card">
@@ -911,10 +939,10 @@ onMounted(() => {
               </div>
             </el-form-item>
             <el-form-item label="退款说明" required>
-              <el-input v-model="form.refundInstructions" type="textarea" :rows="4" maxlength="1000" show-word-limit />
+              <el-input v-model="form.refundInstructions" type="textarea" :rows="4" maxlength="1000" show-word-limit :disabled="!paymentSettingsEditable" />
             </el-form-item>
             <el-form-item label="发票说明">
-              <el-input v-model="form.invoiceInstructions" type="textarea" :rows="3" maxlength="1000" show-word-limit />
+              <el-input v-model="form.invoiceInstructions" type="textarea" :rows="3" maxlength="1000" show-word-limit :disabled="!paymentSettingsEditable" />
             </el-form-item>
           </el-form>
         </div>

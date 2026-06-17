@@ -152,6 +152,11 @@ export function request<T>(url: string, options: UniApp.RequestOptions = {}): Pr
   });
 }
 
+function isInvalidUserSessionError(error: unknown) {
+  const message = error instanceof Error ? error.message : String((error as any)?.message || error || "");
+  return message.includes("登录凭证无效") || message.includes("登录已过期") || message.includes("登录已失效");
+}
+
 export function getUserId() {
   return Number(uni.getStorageSync("user_id") || 0);
 }
@@ -282,7 +287,15 @@ export async function loginWechat(code: string, nickname?: string, avatarUrl?: s
 export async function ensureUser() {
   const existing = getUserId();
   const existingToken = uni.getStorageSync(USER_TOKEN_STORAGE_KEY);
-  if (existing && existingToken) return existing;
+  if (existing && existingToken) {
+    try {
+      await request("/public/me/profile");
+      return existing;
+    } catch (error) {
+      if (!isInvalidUserSessionError(error)) throw error;
+      clearUser();
+    }
+  }
   if (existing && !existingToken) clearUser();
   if (!import.meta.env.DEV) {
     const redirect = encodeURIComponent(getCurrentRouteWithQuery());

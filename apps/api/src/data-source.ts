@@ -26,8 +26,16 @@ import { CharityFundSetting } from "./entities/charity-fund-setting.entity";
 import { CharityFundTransaction } from "./entities/charity-fund-transaction.entity";
 import { CharityProjectDisbursement } from "./entities/charity-project-disbursement.entity";
 import { CharityProject } from "./entities/charity-project.entity";
+import { Certificate } from "./entities/certificate.entity";
+import { CheckInTask } from "./entities/checkin-task.entity";
+import { CommunityActivity } from "./entities/community-activity.entity";
+import { CommunityPost } from "./entities/community-post.entity";
 import { Coupon } from "./entities/coupon.entity";
 import { ConversionEvent } from "./entities/conversion-event.entity";
+import { Course } from "./entities/course.entity";
+import { CourseChapter } from "./entities/course-chapter.entity";
+import { CourseLesson } from "./entities/course-lesson.entity";
+import { CourseOrder } from "./entities/course-order.entity";
 import { H5AuthCodeLog } from "./entities/h5-auth-code-log.entity";
 import { HomepageSection } from "./entities/homepage-section.entity";
 import { InviteCode } from "./entities/invite-code.entity";
@@ -49,6 +57,8 @@ import { Tenant } from "./entities/tenant.entity";
 import { TicketType } from "./entities/ticket-type.entity";
 import { UserTag } from "./entities/user-tag.entity";
 import { User } from "./entities/user.entity";
+import { UserFavorite } from "./entities/user-favorite.entity";
+import { UserLearning } from "./entities/user-learning.entity";
 import { UserWallet } from "./entities/user-wallet.entity";
 import { Waitlist } from "./entities/waitlist.entity";
 import { WalletTransaction } from "./entities/wallet-transaction.entity";
@@ -114,7 +124,17 @@ export default new DataSource({
     MemberPointLog,
     NotificationTemplate,
     Notification,
-    NotificationSchedule
+    NotificationSchedule,
+    Course,
+    CourseChapter,
+    CourseLesson,
+    CourseOrder,
+    CommunityActivity,
+    CheckInTask,
+    CommunityPost,
+    UserLearning,
+    UserFavorite,
+    Certificate
   ],
   migrations: [__dirname.includes("dist") ? `${__dirname}/migrations/*.js` : "apps/api/src/migrations/*.ts"],
   synchronize: false,

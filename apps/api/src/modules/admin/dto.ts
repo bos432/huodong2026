@@ -922,9 +922,9 @@ export class OperationSettingDto {
   @IsString()
   registrationDisabledMessage?: string;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  offlinePaymentInstructions!: string;
+  offlinePaymentInstructions?: string;
 
   @IsOptional()
   @IsObject()
@@ -950,9 +950,9 @@ export class OperationSettingDto {
   @IsObject()
   pageTheme?: Record<string, unknown>;
 
+  @IsOptional()
   @IsString()
-  @IsNotEmpty()
-  refundInstructions!: string;
+  refundInstructions?: string;
 
   @IsOptional()
   @IsString()
@@ -1148,6 +1148,11 @@ export class CreateAdminDto {
   @IsOptional()
   @IsInt()
   tenantId?: number;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissions?: string[];
 }
 
 export class UpdateAdminDto {
@@ -1162,6 +1167,11 @@ export class UpdateAdminDto {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  permissions?: string[];
 }
 
 export class ActivityApprovalDto {

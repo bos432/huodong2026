@@ -7,7 +7,7 @@ export class UserLearning {
   @Column() courseId!: number;
   @Column() lessonId!: number;
   @Column({ type: "decimal", precision: 5, scale: 2, default: 0 }) progress!: number;
-  @Column({ nullable: true }) completedAt!: Date | null;
+  @Column({ type: "datetime", nullable: true }) completedAt!: Date | null;
   @CreateDateColumn() createdAt!: Date;
   @UpdateDateColumn() updatedAt!: Date;
 }

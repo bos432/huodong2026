@@ -55,6 +55,7 @@ import { ActivityStatus, FieldType, OrderStatus, PaymentMethod, RegistrationStat
 import { inspectRuntimeConfig } from "../../shared/config-validation";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActor, tenantRelationForActor } from "../../shared/tenant-scope";
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
+import { defaultPermissionsForRole, effectivePermissionsForAdmin, normalizeAdminPermissions } from "./admin-permissions";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
 import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
@@ -65,7 +66,7 @@ import { buildAgentSettlementTransferCapability } from "./agent-transfer-capabil
 import { CharityFundService } from "../charity-fund.service";
 import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
 
-type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
+type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[] };
 type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean };
 const TENANT_STAFF_ROLES = [AdminRole.Operator, AdminRole.Finance, AdminRole.CheckInStaff];
 
@@ -157,8 +158,17 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     await this.recordAdminLogin({ username, adminId: admin.id, tenantId: admin.tenant?.id, clientIp: context?.clientIp, userAgent: context?.userAgent, status: "success" });
     const role = normalizeAdminRole(admin.role);
     const tenantId = admin.tenant?.id ?? null;
+    const permissions = this.effectiveAdminPermissions(admin, role, tenantId);
     const token = await this.jwt.signAsync({ sub: admin.id, username: admin.username, role, tenantId });
-    return { token, admin: { id: admin.id, username: admin.username, role, tenantId, tenant: admin.tenant ? this.publicTenant(admin.tenant) : null } };
+    return { token, admin: { id: admin.id, username: admin.username, role, tenantId, permissions, tenant: admin.tenant ? this.publicTenant(admin.tenant) : null } };
+  }
+
+  async currentAdmin(admin?: AdminContext) {
+    if (!admin?.id) throw new UnauthorizedException("当前账号不存在或已停用");
+    const row = await this.admins.findOne({ where: { id: admin.id } });
+    if (!row || !row.enabled) throw new UnauthorizedException("当前账号不存在或已停用");
+    if (row.tenant && !row.tenant.enabled) throw new UnauthorizedException("当前商家已停用，请联系平台管理员");
+    return this.publicAdmin(row);
   }
 
   async listTenants(admin?: AdminContext) {
@@ -264,7 +274,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async listAdmins(query: AdminQueryDto = {}, admin?: AdminContext) {
     const pageSize = Math.min(Math.max(Number(query.pageSize || 0), 0), 100);
     const page = Math.max(Number(query.page || 1), 1);
-    const builder = this.admins.createQueryBuilder("admin").leftJoinAndSelect("admin.tenant", "tenant").select(["admin.id", "admin.username", "admin.role", "admin.enabled", "admin.createdAt", "admin.updatedAt", "tenant.id", "tenant.code", "tenant.name", "tenant.region", "tenant.enabled", "tenant.settings"]).orderBy("admin.id", "ASC");
+    const builder = this.admins.createQueryBuilder("admin").leftJoinAndSelect("admin.tenant", "tenant").select(["admin.id", "admin.username", "admin.role", "admin.permissions", "admin.enabled", "admin.createdAt", "admin.updatedAt", "tenant.id", "tenant.code", "tenant.name", "tenant.region", "tenant.enabled", "tenant.settings"]).orderBy("admin.id", "ASC");
     if (this.isTenantScoped(admin)) builder.andWhere("tenant.id = :tenantId", { tenantId: admin?.tenantId });
     else if (query.tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
 
@@ -455,11 +465,13 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async mobileBootstrap(admin?: AdminContext) {
     const normalizedRole = normalizeAdminRole(admin?.role);
-    const canWriteActivities = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Operator;
-    const canReviewRegistrations = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Operator;
-    const canViewRegistrations = canReviewRegistrations || normalizedRole === AdminRole.Finance || normalizedRole === AdminRole.CheckInStaff;
-    const canViewOrders = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Finance;
-    const canCheckIn = normalizedRole === AdminRole.SuperAdmin || normalizedRole === AdminRole.Operator || normalizedRole === AdminRole.CheckInStaff;
+    const assignedPermissions = admin?.permissions || defaultPermissionsForRole(normalizedRole, Boolean(admin?.tenantId));
+    const hasPermission = (key: string) => assignedPermissions.includes(key);
+    const canWriteActivities = hasPermission("activity.manage");
+    const canReviewRegistrations = hasPermission("registration.manage");
+    const canViewRegistrations = hasPermission("registration.view");
+    const canViewOrders = hasPermission("order.view");
+    const canCheckIn = hasPermission("checkin.manage");
     const currentTenant = admin?.tenantId ? await this.tenants.findOneBy({ id: admin.tenantId }) : null;
     const [tenants, categories, agents, memberLevels, operationSetting] = await Promise.all([
       normalizedRole === AdminRole.SuperAdmin && !admin?.tenantId ? this.listTenants(admin) : Promise.resolve(currentTenant ? [this.publicTenant(currentTenant)] : []),
@@ -469,8 +481,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       this.getOperationSetting(admin).catch(() => null)
     ]);
     return {
-      admin: { id: admin?.id || null, username: admin?.username || "", role: normalizedRole, tenantId: admin?.tenantId || null, tenant: currentTenant ? this.publicTenant(currentTenant) : null },
-      permissions: { canWriteActivities, canReviewRegistrations, canViewRegistrations, canViewOrders, canCheckIn, canSelectTenant: normalizedRole === AdminRole.SuperAdmin && !admin?.tenantId },
+      admin: { id: admin?.id || null, username: admin?.username || "", role: normalizedRole, tenantId: admin?.tenantId || null, permissions: assignedPermissions, tenant: currentTenant ? this.publicTenant(currentTenant) : null },
+      permissions: { canWriteActivities, canReviewRegistrations, canViewRegistrations, canViewOrders, canCheckIn, canSelectTenant: hasPermission("tenant.manage") && !admin?.tenantId },
       tenants,
       categories,
       agents,
@@ -787,13 +799,15 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async createAdmin(dto: CreateAdminDto, admin?: AdminContext) {
     const username = dto.username.trim();
+    this.validateAdminUsername(username);
     this.validateAdminPassword(dto.password);
     const exists = await this.admins.findOne({ where: { username } });
     if (exists) throw new BadRequestException("管理员账号已存在");
     const tenant = await this.resolveAdminTenant(dto.tenantId, admin);
     const role = this.resolveNewAdminRole(dto.role, admin);
-    const saved = await this.admins.save(this.admins.create({ username, passwordHash: await bcrypt.hash(dto.password, 10), role, tenant }));
-    await this.logOperation(admin, "admin.create", "admin", saved.id, `创建管理员：${saved.username}`, { role: saved.role, tenantId: tenant?.id || null });
+    const permissions = this.resolveAssignedAdminPermissions(dto.permissions, role, tenant?.id ?? null);
+    const saved = await this.admins.save(this.admins.create({ username, passwordHash: await bcrypt.hash(dto.password, 10), role, tenant, permissions }));
+    await this.logOperation(admin, "admin.create", "admin", saved.id, `创建管理员：${saved.username}`, { role: saved.role, tenantId: tenant?.id || null, permissions: this.effectiveAdminPermissions(saved) });
     return this.publicAdmin(saved);
   }
 
@@ -821,9 +835,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     }
     row.role = nextRole;
     row.tenant = nextTenant;
+    if (dto.permissions !== undefined) row.permissions = this.resolveAssignedAdminPermissions(dto.permissions, nextRole, nextTenant?.id ?? null);
     if (dto.enabled !== undefined) row.enabled = dto.enabled;
     const saved = await this.admins.save(row);
-    await this.logOperation(admin, "admin.update", "admin", saved.id, `编辑管理员：${saved.username}`, { role: saved.role, tenantId: saved.tenant?.id || null, enabled: saved.enabled });
+    await this.logOperation(admin, "admin.update", "admin", saved.id, `编辑管理员：${saved.username}`, { role: saved.role, tenantId: saved.tenant?.id || null, enabled: saved.enabled, permissions: this.effectiveAdminPermissions(saved) });
     return this.publicAdmin(saved);
   }
 
@@ -2319,18 +2334,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async saveOperationSetting(dto: OperationSettingDto, admin?: AdminContext) {
     const setting = await this.ensureOperationSetting(admin);
+    const paymentSettingsEditable = await this.canEditTenantPaymentSettings(admin);
+    if (paymentSettingsEditable && !dto.offlinePaymentInstructions?.trim()) throw new BadRequestException("请填写线下付款说明");
+    if (paymentSettingsEditable && !dto.refundInstructions?.trim()) throw new BadRequestException("请填写退款说明");
+    const nextPaymentMethods = paymentSettingsEditable ? this.normalizePaymentMethods(dto.paymentMethods) : this.normalizePaymentMethods(setting.paymentMethods);
     Object.assign(setting, {
       registrationEnabled: dto.registrationEnabled ?? true,
       registrationDisabledMessage: dto.registrationDisabledMessage?.trim() || null,
-      offlinePaymentInstructions: dto.offlinePaymentInstructions.trim(),
-      paymentMethods: this.normalizePaymentMethods(dto.paymentMethods),
+      offlinePaymentInstructions: paymentSettingsEditable ? dto.offlinePaymentInstructions!.trim() : setting.offlinePaymentInstructions,
+      paymentMethods: nextPaymentMethods,
       customerServiceName: dto.customerServiceName?.trim() || null,
       customerServicePhone: dto.customerServicePhone?.trim() || null,
       customerServiceWechat: dto.customerServiceWechat?.trim() || null,
       defaultGroupQrCodeUrl: dto.defaultGroupQrCodeUrl?.trim() || null,
       pageTheme: this.isPlainObject(dto.pageTheme) ? dto.pageTheme : {},
-      refundInstructions: dto.refundInstructions.trim(),
-      invoiceInstructions: dto.invoiceInstructions?.trim() || null,
+      refundInstructions: paymentSettingsEditable ? dto.refundInstructions!.trim() : setting.refundInstructions,
+      invoiceInstructions: paymentSettingsEditable ? dto.invoiceInstructions?.trim() || null : setting.invoiceInstructions,
       smsProviderEnabled: dto.smsProviderEnabled ?? false,
       smsProvider: dto.smsProvider?.trim() || null,
       smsAccessKeyId: dto.smsAccessKeyId?.trim() || null,
@@ -2487,7 +2506,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const checkIn = await this.checkIns.save(this.checkIns.create({ registration, operator: admin, remark: remark || null }));
     await this.recordAdminConversionEvent("check_in", { activity: registration.activity, user: registration.user, registration, channel: registration.channel || null, idempotencyKey: `check_in:${checkIn.id}` });
     await this.awardPoints(registration.user, 20, "check_in", checkIn.id, "活动签到奖励");
-    await this.logOperation(currentAdmin || admin, "check_in.verify", "registration", registration.id, `签到核销：${registration.activity.title}`, { code, remark: remark || null });
+    await this.logOperation(currentAdmin || { id: admin.id, username: admin.username, role: admin.role, tenantId: admin.tenant?.id ?? null }, "check_in.verify", "registration", registration.id, `签到核销：${registration.activity.title}`, { code, remark: remark || null });
     return checkIn;
   }
 
@@ -2902,12 +2921,12 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async ensureDefaultAdmin() {
-    if ((await this.admins.count()) === 0) {
+    let defaultAdmin = await this.admins.findOne({ where: { username: "admin" } });
+    if (!defaultAdmin) {
       await this.admins.save(this.admins.create({ username: "admin", passwordHash: await bcrypt.hash("Admin123456", 10), role: AdminRole.SuperAdmin, tenant: null }));
       return;
     }
-    const defaultAdmin = await this.admins.findOne({ where: { username: "admin" } });
-    if (defaultAdmin && defaultAdmin.tenant) {
+    if (defaultAdmin.tenant) {
       defaultAdmin.tenant = null;
       await this.admins.save(defaultAdmin);
     }
@@ -2930,8 +2949,26 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) throw new BadRequestException("管理员密码需要包含大小写字母和数字");
   }
 
+  private validateAdminUsername(username: string) {
+    if (!/^[a-zA-Z0-9_.-]{3,32}$/.test(username)) throw new BadRequestException("管理员账号需为 3-32 位字母、数字、点、下划线或横线");
+  }
+
   private publicAdmin(admin: AdminUser) {
-    return { id: admin.id, username: admin.username, role: normalizeAdminRole(admin.role), tenantId: admin.tenant?.id ?? null, tenant: admin.tenant ? this.publicTenant(admin.tenant) : null, enabled: admin.enabled, createdAt: admin.createdAt, updatedAt: admin.updatedAt };
+    const role = normalizeAdminRole(admin.role);
+    const tenantId = admin.tenant?.id ?? null;
+    return { id: admin.id, username: admin.username, role, tenantId, permissions: this.effectiveAdminPermissions(admin, role, tenantId), assignedPermissions: admin.permissions, tenant: admin.tenant ? this.publicTenant(admin.tenant) : null, enabled: admin.enabled, createdAt: admin.createdAt, updatedAt: admin.updatedAt };
+  }
+
+  private effectiveAdminPermissions(admin: AdminUser, role = normalizeAdminRole(admin.role), tenantId = admin.tenant?.id ?? null) {
+    return effectivePermissionsForAdmin({ role, tenantId, permissions: admin.permissions });
+  }
+
+  private resolveAssignedAdminPermissions(value: unknown, role: string, tenantId: number | null) {
+    const normalized = normalizeAdminPermissions(value);
+    if (normalized === null) return null;
+    const platformOnly = new Set(defaultPermissionsForRole(AdminRole.SuperAdmin, false).filter((key) => !defaultPermissionsForRole(AdminRole.SuperAdmin, true).includes(key)));
+    const scoped = tenantId ? normalized.filter((key) => !platformOnly.has(key)) : normalized;
+    return scoped;
   }
 
   private async assertAdminLoginRateLimit(username: string, clientIp: string | null, userAgent: string | null) {
@@ -3379,7 +3416,13 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private async assertPaymentAccountEditable(admin?: AdminContext) {
     if (!this.isTenantScoped(admin)) return;
     const tenant = await this.tenants.findOneBy({ id: admin?.tenantId || 0 });
-    if (!this.tenantPermissions(tenant).paymentAccountEditable) throw new ForbiddenException("Payment account configuration is not enabled for current tenant");
+    if (!this.tenantPermissions(tenant).paymentAccountEditable) throw new ForbiddenException("平台超级管理员已关闭本商家的收款配置权限");
+  }
+
+  private async canEditTenantPaymentSettings(admin?: AdminContext) {
+    if (!this.isTenantScoped(admin)) return true;
+    const tenant = await this.tenants.findOneBy({ id: admin?.tenantId || 0 });
+    return this.tenantPermissions(tenant).paymentAccountEditable;
   }
 
   private async resolveAnnouncementTenant(tenantId: number | null | undefined, fallback: Tenant | null | undefined, admin?: AdminContext) {

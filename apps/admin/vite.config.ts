@@ -2,6 +2,8 @@ import { fileURLToPath, URL } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
 
+const apiProxyTarget = process.env.VITE_DEV_API_PROXY || "http://localhost:18080";
+
 export default defineConfig({
   base: "./",
   plugins: [vue()],
@@ -16,8 +18,8 @@ export default defineConfig({
     port: 5174,
     strictPort: true,
     proxy: {
-      "/api": "http://localhost:3000",
-      "/uploads": "http://localhost:3000"
+      "/api": apiProxyTarget,
+      "/uploads": apiProxyTarget
     }
   },
   build: {

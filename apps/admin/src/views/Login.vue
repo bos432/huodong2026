@@ -4,7 +4,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { Unlock } from "@element-plus/icons-vue";
 import { api } from "../api";
-import { normalizeRole } from "../permissions";
+import { setStoredAdminSession } from "../permissions";
 
 const router = useRouter();
 const form = reactive({ username: "", password: "" });
@@ -12,19 +12,10 @@ async function submit() {
   if (!form.username.trim()) return ElMessage.error("请输入用户名");
   if (!form.password) return ElMessage.error("请输入密码");
   try {
-    const data = await api.post<any, { token: string; admin?: { username: string; role: string; tenantId?: number | null; tenant?: { code?: string; name?: string; settings?: Record<string, unknown> } | null } }>("/admin/auth/login", form);
+    const data = await api.post<any, { token: string; admin?: { username: string; role: string; tenantId?: number | null; permissions?: string[]; tenant?: { code?: string; name?: string; settings?: Record<string, unknown> } | null } }>("/admin/auth/login", form);
     localStorage.setItem("admin_token", data.token);
     if (data.admin) {
-      localStorage.setItem("admin_username", data.admin.username);
-      localStorage.setItem("admin_role", normalizeRole(data.admin.role));
-      if (data.admin.tenantId) localStorage.setItem("admin_tenant_id", String(data.admin.tenantId));
-      else localStorage.removeItem("admin_tenant_id");
-      if (data.admin.tenant?.name) localStorage.setItem("admin_tenant_name", data.admin.tenant.name);
-      else localStorage.removeItem("admin_tenant_name");
-      if (data.admin.tenant?.code) localStorage.setItem("admin_tenant_code", data.admin.tenant.code);
-      else localStorage.removeItem("admin_tenant_code");
-      if (data.admin.tenant?.settings) localStorage.setItem("admin_tenant_settings", JSON.stringify(data.admin.tenant.settings));
-      else localStorage.removeItem("admin_tenant_settings");
+      setStoredAdminSession(data.admin);
     }
     router.push(data.admin?.tenantId ? "/dashboard" : "/tenants");
   } catch (error: any) {

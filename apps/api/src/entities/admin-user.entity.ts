@@ -15,6 +15,9 @@ export class AdminUser {
   @Column({ type: "varchar", length: 40, default: "admin" })
   role!: string;
 
+  @Column({ type: "json", nullable: true })
+  permissions!: string[] | null;
+
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
   tenant!: Tenant | null;
 

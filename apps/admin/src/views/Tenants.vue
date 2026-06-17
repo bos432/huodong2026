@@ -523,7 +523,7 @@ onMounted(() => {
       <div>
         <h2>{{ permissionMode ? "商家权限配置" : "商家/代理管理" }}</h2>
         <p class="subtitle">
-          {{ permissionMode ? "集中配置每个商家的活动发布审核、报名审核和收款配置权限。" : "商家/代理作为租户独立运营，活动、订单、报名、收款账户按租户隔离。" }}
+          {{ permissionMode ? "超级管理员可按商家单独控制活动发布、报名审核和收款配置权限。" : "商家/代理作为租户独立运营，活动、订单、报名、收款账户按租户隔离。" }}
         </p>
       </div>
       <div class="toolbar-actions">
@@ -540,7 +540,7 @@ onMounted(() => {
         show-icon
         :closable="false"
         title="权限配置视图"
-        description="活动发布审核决定商家活动是否必须提交平台审核；报名审核权限决定商家是否可开启用户报名审核；收款配置权限决定商家是否可维护自己的收款方式。"
+        description="活动发布审核决定商家活动是否必须提交平台审核；报名审核权限决定商家是否可开启用户报名审核；收款配置权限决定商家是否可维护收款账户、支付方式和付款说明。"
       />
       <div class="readiness-summary">
         <button
@@ -692,13 +692,13 @@ onMounted(() => {
             </div>
           </template>
         </el-table-column>
-        <el-table-column label="活动发布审核" width="150">
+        <el-table-column label="活动发布审核" width="170">
           <template #default="{ row }"><el-switch v-model="row.settings.activityPublishReviewRequired" @change="updatePermissions(row)" /></template>
         </el-table-column>
-        <el-table-column label="报名审核权限" width="150">
+        <el-table-column label="报名审核权限" width="170">
           <template #default="{ row }"><el-switch v-model="row.settings.registrationReviewEnabled" @change="updatePermissions(row)" /></template>
         </el-table-column>
-        <el-table-column label="收款配置权限" width="150">
+        <el-table-column label="收款配置权限" width="170">
           <template #default="{ row }"><el-switch v-model="row.settings.paymentAccountEditable" @change="updatePermissions(row)" /></template>
         </el-table-column>
         <el-table-column label="操作" width="700" fixed="right">
@@ -789,6 +789,7 @@ onMounted(() => {
 
         <div class="drawer-section">
           <h4>平台权限</h4>
+          <p class="permission-hint">这些权限由平台超级管理员按商家单独控制。关闭后商家端对应入口会变成只读，后端接口也会拦截或忽略越权修改。</p>
           <div class="permission-list">
             <label>
               <span>活动发布需要平台审核</span>
@@ -841,9 +842,10 @@ onMounted(() => {
           <el-form-item label="联系人"><el-input v-model="form.contactName" maxlength="100" /></el-form-item>
           <el-form-item label="联系电话"><el-input v-model="form.contactPhone" maxlength="40" /></el-form-item>
           <el-form-item><el-checkbox v-model="form.enabled">启用商家</el-checkbox></el-form-item>
-          <el-form-item class="full"><el-checkbox v-model="form.activityPublishReviewRequired">活动发布需要平台审核</el-checkbox></el-form-item>
-          <el-form-item class="full"><el-checkbox v-model="form.registrationReviewEnabled">允许商家开启报名审核</el-checkbox></el-form-item>
-          <el-form-item class="full"><el-checkbox v-model="form.paymentAccountEditable">允许商家配置收款方式</el-checkbox></el-form-item>
+          <el-form-item class="full"><el-alert type="info" show-icon :closable="false" title="以下权限由平台按商家单独控制，保存后会影响商家后台页面和后端接口。" /></el-form-item>
+          <el-form-item class="full"><el-checkbox v-model="form.activityPublishReviewRequired">活动发布需要平台审核：开启后商家发布活动必须先提交平台审核</el-checkbox></el-form-item>
+          <el-form-item class="full"><el-checkbox v-model="form.registrationReviewEnabled">允许商家开启报名审核：关闭后商家不能把活动报名设为人工审核</el-checkbox></el-form-item>
+          <el-form-item class="full"><el-checkbox v-model="form.paymentAccountEditable">允许商家配置收款方式：关闭后商家收款账户和支付说明只读</el-checkbox></el-form-item>
         </div>
       </el-form>
       <template #footer>
@@ -881,6 +883,7 @@ small { color: #64748b; }
 .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .permission-list { display: flex; flex-direction: column; gap: 10px; }
 .permission-list label { display: flex; align-items: center; justify-content: space-between; gap: 12px; color: #334155; }
+.permission-hint { margin: 0 0 10px; color: #64748b; line-height: 1.6; }
 .readiness-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 8px; margin-bottom: 14px; }
 .todo-summary { grid-template-columns: repeat(5, minmax(0, 1fr)); }
 .readiness-item { border: 1px solid #d8e0ea; border-radius: 6px; background: #fff; padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; color: #334155; cursor: pointer; }

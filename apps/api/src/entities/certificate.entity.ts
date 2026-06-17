@@ -6,6 +6,6 @@ export class Certificate {
   @Column() userId!: number;
   @Column() name!: string;
   @Column({ type: "varchar", length: 500, nullable: true }) imageUrl!: string | null;
-  @Column({ nullable: true }) threshold!: number | null;
+  @Column({ type: "int", nullable: true }) threshold!: number | null;
   @CreateDateColumn() issuedAt!: Date;
 }

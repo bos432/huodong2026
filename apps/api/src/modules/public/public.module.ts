@@ -14,6 +14,10 @@ import { Announcement } from "../../entities/announcement.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
 import { Coupon } from "../../entities/coupon.entity";
 import { ConversionEvent } from "../../entities/conversion-event.entity";
+import { Course } from "../../entities/course.entity";
+import { CourseChapter } from "../../entities/course-chapter.entity";
+import { CourseLesson } from "../../entities/course-lesson.entity";
+import { CourseOrder } from "../../entities/course-order.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { CheckIn } from "../../entities/check-in.entity";
@@ -33,6 +37,7 @@ import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
+import { UserLearning } from "../../entities/user-learning.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
 import { Waitlist } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
@@ -44,7 +49,7 @@ import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement])],
+  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning])],
   controllers: [PublicController, PaymentController],
   providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
   exports: [PublicService]

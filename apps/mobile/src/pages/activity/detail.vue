@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
@@ -14,6 +14,11 @@ const inviteCode = ref("");
 const channelCode = ref("");
 const source = ref("h5");
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
+const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
+  if (section.type === "hero") return false;
+  if (section.type === "rich_text" && section.title === "页面说明") return false;
+  return true;
+}));
 
 function registrationPaused() {
   const value = operationSetting.value?.registrationEnabled;
@@ -103,6 +108,17 @@ function hasMapInfo() {
   return hasMapPoint() || Boolean(activity.value?.locationMapUrl);
 }
 
+function canUseNativeMap() {
+  // #ifdef H5
+  return false;
+  // #endif
+  return hasMapPoint();
+}
+
+function mapActionText() {
+  return canUseNativeMap() || activity.value?.locationMapUrl ? "查看地图 / 导航" : "复制地点";
+}
+
 function showMemberAccess() {
   return Boolean(activity.value?.minMemberLevel || activity.value?.memberAccess?.priorityMemberLevel || activity.value?.memberAccess?.requiredLevel);
 }
@@ -133,7 +149,7 @@ function goService() {
 function openLocation() {
   const latitude = locationLatitude();
   const longitude = locationLongitude();
-  if (latitude !== undefined && longitude !== undefined) {
+  if (canUseNativeMap() && latitude !== undefined && longitude !== undefined) {
     uni.openLocation({
       latitude,
       longitude,
@@ -148,6 +164,7 @@ function openLocation() {
     if (typeof window !== "undefined") window.open(activity.value.locationMapUrl, "_blank");
     else copyText(activity.value.locationMapUrl);
   }
+  else copyText(activity.value?.location);
 }
 
 function subscribeNotice() {
@@ -187,7 +204,7 @@ onMounted(loadDecoration);
 </script>
 
 <template>
-  <view class="container detail">
+  <view class="container detail-page has-custom-nav">
     <view v-if="loading" class="card subtle">加载中...</view>
     <view v-else-if="error" class="card">
       <view class="subtle">{{ error }}</view>
@@ -196,21 +213,32 @@ onMounted(loadDecoration);
 
     <template v-else-if="activity">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="活动归属" />
-      <PageDecorationBlocks :sections="contentSections" />
 
-      <view class="detail-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#ffffff') }">
-        <view class="detail-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#111827') }">{{ innerPageConfig.title || "活动详情" }}</view>
-        <view class="detail-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || '#667085') }">{{ innerPageConfig.subtitle || "查看活动介绍、报名规则、服务说明和现场信息。" }}</view>
+      <view class="detail-hero">
+        <image v-if="activity.coverUrl" class="hero-image" :src="activity.coverUrl" mode="aspectFill" />
+        <view v-else class="hero-image hero-fallback">雅集</view>
+        <view class="hero-mask"></view>
+        <view class="hero-head">
+          <text class="hero-kicker">七维书院 · 活动详情</text>
+          <text class="hero-status">{{ statusText(activity.displayStatus) }}</text>
+        </view>
+        <view class="hero-bottom">
+          <view class="detail-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'transparent') }">
+            <view class="detail-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ activity.title }}</view>
+            <view class="detail-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "查看活动介绍、报名规则、服务说明和现场信息。" }}</view>
+          </view>
+        </view>
       </view>
-      <image v-if="activity.coverUrl" class="cover" :src="activity.coverUrl" mode="aspectFill" />
+
+      <PageDecorationBlocks :sections="bodyDecorationSections" />
+
       <view class="card head">
-        <view class="row"><text class="tag">{{ activity.category?.name || "活动" }}</text><text class="tag">{{ statusText(activity.displayStatus) }}</text></view>
-        <view class="title">{{ activity.title }}</view>
-        <view class="subtle desc">{{ activity.description }}</view>
+        <view class="row"><text class="tag tag-secondary">{{ activity.category?.name || "活动" }}</text><text class="tag tag-primary">{{ activity.requireReview ? "需审核" : "即时确认" }}</text></view>
+        <view class="subtle desc">{{ activity.description || "主办方正在完善活动介绍，欢迎先查看活动信息和报名规则。" }}</view>
         <view class="decision-box">
           <view>
             <view class="decision-title">{{ registerButtonText() }}</view>
-            <view class="subtle">{{ actionHint() }}</view>
+            <view class="body-text decision-copy">{{ actionHint() }}</view>
           </view>
           <view class="decision-price">{{ priceText(activity.price) }}</view>
         </view>
@@ -223,6 +251,7 @@ onMounted(loadDecoration);
       </view>
 
       <view class="card info">
+        <view class="section-title">活动信息</view>
         <view class="info-summary">
           <view><text>状态</text><text>{{ statusText(activity.displayStatus) }}</text></view>
           <view><text>名额</text><text>{{ seatsText() }}</text></view>
@@ -232,7 +261,7 @@ onMounted(loadDecoration);
         <view class="line"><text>地点</text><text>{{ activity.location }}</text></view>
         <view v-if="hasMapInfo()" class="location-map">
           <map
-            v-if="hasMapPoint()"
+            v-if="canUseNativeMap()"
             class="map-view"
             :latitude="locationLatitude()"
             :longitude="locationLongitude()"
@@ -247,7 +276,7 @@ onMounted(loadDecoration);
               <view class="subtle">{{ activity.location }}</view>
             </view>
           </view>
-          <view class="map-action" @click="openLocation">查看地图 / 导航</view>
+          <view class="map-action" @click="openLocation">{{ mapActionText() }}</view>
         </view>
         <view class="line"><text>费用</text><text>{{ priceText(activity.price) }}</text></view>
         <view v-if="activity.minMemberLevel" class="line"><text>门槛</text><text>{{ activity.minMemberLevel.name }}及以上会员</text></view>
@@ -265,6 +294,7 @@ onMounted(loadDecoration);
       </view>
 
       <view class="card action-card">
+        <view class="section-title">快捷操作</view>
         <view class="action-item" @click="makeInvite">
           <text>邀</text>
           <view>邀请好友</view>
@@ -285,7 +315,7 @@ onMounted(loadDecoration);
 
       <view class="card invite-card">
         <view class="row"><view class="title small">邀请好友</view><view class="mini-button" @click="makeInvite">生成</view></view>
-        <view class="subtle">生成专属邀请码，用于追踪分享访问和后续邀请报名。</view>
+        <view class="body-text invite-copy">生成专属邀请码，用于追踪分享访问和后续邀请报名。</view>
         <view v-if="invite" class="invite-box">
           <view class="name">邀请码：{{ invite.code }}</view>
           <view class="subtle">{{ invite.inviteText }}</view>
@@ -323,65 +353,178 @@ onMounted(loadDecoration);
 
       <view class="bottom-bar" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
         <view class="bottom-info"><text>{{ priceText(activity.price) }}</text><text>{{ activity.displayStatus === "full" ? "候补开放" : statusText(activity.displayStatus) }}</text></view>
-        <view class="button" :class="{ secondary: !canRegister() }" @click="register">{{ registerButtonText() }}</view>
+        <view class="button action-button" :class="{ secondary: !canRegister() }" @click="register">{{ registerButtonText() }}</view>
       </view>
     </template>
   </view>
 </template>
 
 <style scoped>
-.detail { padding-bottom: 132rpx; }
-.detail-head { margin-bottom: 20rpx; padding: 28rpx 24rpx; border-radius: var(--card-radius, 8px); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
-.detail-head-title { font-size: 40rpx; font-weight: 900; line-height: 1.25; }
-.detail-head-copy { margin-top: 10rpx; font-size: 25rpx; line-height: 1.5; }
-.cover { width: 100%; height: 380rpx; border-radius: 8px; background: #dde5ed; margin-bottom: 20rpx; }
+.detail-page { padding-bottom: 168rpx; }
+.detail-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 420rpx;
+  margin-bottom: 24rpx;
+  border-radius: 24rpx;
+  background: linear-gradient(135deg, #8e2d28, #c43d3d);
+  box-shadow: 0 18rpx 40rpx rgba(122, 36, 32, 0.18);
+}
+.hero-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hero-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 248, 240, 0.92);
+  font-size: 74rpx;
+  font-weight: 700;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.hero-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(26, 20, 16, 0.18), rgba(26, 20, 16, 0.72));
+}
+.hero-head,
+.hero-bottom {
+  position: relative;
+  z-index: 1;
+}
+.hero-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16rpx;
+  padding: 24rpx 24rpx 0;
+}
+.hero-kicker {
+  color: rgba(255, 248, 240, 0.78);
+  font-size: 23rpx;
+  font-weight: 700;
+  letter-spacing: 2rpx;
+}
+.hero-status {
+  min-height: 50rpx;
+  padding: 0 16rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 248, 240, 0.16);
+  color: #fff8f0;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+.hero-bottom {
+  min-height: 420rpx;
+  display: flex;
+  align-items: flex-end;
+  padding: 24rpx;
+}
+.detail-head {
+  width: 100%;
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent !important;
+}
+.detail-head-title {
+  color: #fff8f0;
+  font-size: 48rpx;
+  line-height: 1.24;
+  font-weight: 700;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.detail-head-copy {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.65;
+}
 .head { display: grid; gap: 16rpx; }
-.desc { line-height: 1.6; }
-.decision-box { display: flex; justify-content: space-between; gap: 18rpx; padding: 18rpx; border-radius: 8px; background: #f8fafc; border: 1px solid #edf0f5; }
-.decision-title { color: #172033; font-size: 30rpx; font-weight: 900; margin-bottom: 8rpx; }
-.decision-price { flex: 0 0 auto; color: var(--primary-color, #0f766e); font-size: 34rpx; font-weight: 900; }
-.small { font-size: 30rpx; margin-bottom: 16rpx; }
+.title { font-family: "STKaiti", "KaiTi", serif; }
+.desc { line-height: 1.7; }
+.decision-box {
+  display: flex;
+  justify-content: space-between;
+  gap: 18rpx;
+  padding: 22rpx;
+  border-radius: 20rpx;
+  background: #f9f4ee;
+}
+.decision-title { color: #333333; font-size: 32rpx; font-weight: 700; margin-bottom: 10rpx; font-family: "STKaiti", "KaiTi", serif; }
+.decision-copy { max-width: 420rpx; }
+.decision-price { flex: 0 0 auto; color: #c43d3d; font-size: 40rpx; font-weight: 700; }
+.small { font-size: 30rpx; margin-bottom: 16rpx; font-family: "STKaiti", "KaiTi", serif; }
+.section-title {
+  margin-bottom: 16rpx;
+  font-size: 30rpx;
+  font-weight: 700;
+  color: #333333;
+  font-family: "STKaiti", "KaiTi", serif;
+}
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; }
-.stats view { display: grid; gap: 6rpx; padding: 14rpx 8rpx; border-radius: 6px; background: var(--primary-soft, #f3faf8); text-align: center; }
-.stats text:first-child { color: var(--primary-color, #0f766e); font-weight: 800; }
-.stats text:last-child { color: var(--muted-color, #667085); font-size: 22rpx; }
+.stats view { display: grid; gap: 6rpx; padding: 16rpx 10rpx; border-radius: 18rpx; background: #fbf5ef; text-align: center; }
+.stats text:first-child { color: #c43d3d; font-weight: 700; font-size: 30rpx; }
+.stats text:last-child { color: #999999; font-size: 22rpx; }
 .info-summary { display: grid; gap: 10rpx; margin-bottom: 18rpx; }
-.info-summary view { display: grid; grid-template-columns: 92rpx 1fr; gap: 14rpx; padding: 14rpx 16rpx; border-radius: 6px; background: #f8fafc; }
-.info-summary text:first-child { color: var(--muted-color, #667085); font-size: 24rpx; }
-.info-summary text:last-child { color: #172033; font-size: 25rpx; font-weight: 700; }
-.line { display: grid; grid-template-columns: 90rpx 1fr; gap: 16rpx; margin-top: 14rpx; color: #344054; }
-.line text:first-child { color: var(--muted-color, #667085); }
-.location-map { margin-top: 18rpx; overflow: hidden; border-radius: var(--card-radius, 8px); border: 1px solid #dbe7e5; background: var(--primary-soft, #f3faf8); }
+.info-summary view { display: grid; grid-template-columns: 92rpx 1fr; gap: 14rpx; padding: 16rpx 18rpx; border-radius: 18rpx; background: #f9f4ee; }
+.info-summary text:first-child { color: #999999; font-size: 24rpx; }
+.info-summary text:last-child { color: #333333; font-size: 25rpx; font-weight: 600; }
+.line { display: grid; grid-template-columns: 90rpx 1fr; gap: 16rpx; margin-top: 14rpx; color: #666666; }
+.line text:first-child { color: #999999; }
+.location-map { margin-top: 18rpx; overflow: hidden; border-radius: 20rpx; border: 1px solid #e8e0d8; background: #fbf5ef; }
 .map-view { width: 100%; height: 300rpx; display: block; }
 .map-link { min-height: 160rpx; display: flex; align-items: center; gap: 18rpx; padding: 24rpx; }
-.map-pin { width: 64rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-color, #0f766e); color: #fff; font-size: 26rpx; font-weight: 900; flex: 0 0 auto; }
-.map-action { display: flex; align-items: center; justify-content: center; min-height: 72rpx; border-top: 1px solid #dbe7e5; color: var(--primary-color, #0f766e); font-size: 26rpx; font-weight: 800; background: var(--card-bg, #fff); }
-.member-access { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: var(--primary-soft, #f3faf8); border: 1px solid #cde8e3; }
-.member-access.blocked { background: #fff7ed; border-color: #fed7aa; }
+.map-pin { width: 64rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #c43d3d; color: #fff; font-size: 26rpx; font-weight: 700; flex: 0 0 auto; }
+.map-action { display: flex; align-items: center; justify-content: center; min-height: 72rpx; border-top: 1px solid #e8e0d8; color: #c43d3d; font-size: 26rpx; font-weight: 600; background: var(--card-bg, #fff); }
+.member-access { margin-top: 18rpx; padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); border: 1px solid rgba(74, 107, 138, 0.12); }
+.member-access.blocked { background: rgba(255, 159, 0, 0.08); border-color: rgba(255, 159, 0, 0.18); }
 .operation-notice { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: #fff7ed; border: 1px solid #fed7aa; }
-.action-card { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12rpx; }
-.action-item { display: grid; gap: 10rpx; justify-items: center; color: #344054; font-size: 24rpx; font-weight: 800; }
-.action-item text { width: 52rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 25rpx; font-weight: 900; }
-.mini-button { padding: 8rpx 18rpx; border-radius: 6px; color: var(--primary-color, #0f766e); background: var(--primary-soft, #e6f2ef); font-size: 24rpx; }
-.invite-card .subtle { line-height: 1.5; }
-.invite-box { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: #f8fafc; }
-.share-url { margin-top: 10rpx; color: var(--primary-color, #0f766e); font-size: 24rpx; word-break: break-all; }
+.action-card { display: grid; gap: 18rpx; }
+.action-card .section-title { margin-bottom: 0; }
+.action-item { display: grid; gap: 10rpx; justify-items: center; color: #666666; font-size: 24rpx; font-weight: 600; }
+.action-item text { width: 58rpx; height: 58rpx; display: flex; align-items: center; justify-content: center; border-radius: 20rpx; background: rgba(74, 107, 138, 0.12); color: #4a6b8a; font-size: 25rpx; font-weight: 700; }
+.mini-button { padding: 10rpx 18rpx; border-radius: 12rpx; color: #c43d3d; background: rgba(196, 61, 61, 0.12); font-size: 24rpx; }
+.invite-copy { margin-top: 0; }
+.invite-box { margin-top: 18rpx; padding: 18rpx; border-radius: 18rpx; background: #f9f4ee; }
+.share-url { margin-top: 10rpx; color: #4a6b8a; font-size: 24rpx; word-break: break-all; }
 .copy-hint { margin-top: 8rpx; color: #98a2b3; font-size: 22rpx; }
-.service-line { display: grid; grid-template-columns: 90rpx 1fr; gap: 16rpx; padding: 12rpx 0; border-bottom: 1px solid #edf0f5; }
-.service-line text:first-child { color: var(--muted-color, #667085); }
-.service-line text:last-child { color: var(--text-color, #111827); font-weight: 700; overflow-wrap: anywhere; }
-.service-note { margin-top: 14rpx; padding: 16rpx; border-radius: 6px; background: #f3f4f6; color: #4b5563; font-size: 25rpx; line-height: 1.6; }
-.host, .review { padding: 16rpx 0; border-bottom: 1px solid #edf0f5; }
+.service-line { display: grid; grid-template-columns: 90rpx 1fr; gap: 16rpx; padding: 12rpx 0; border-bottom: 1px solid #e8e0d8; }
+.service-line text:first-child { color: #999999; }
+.service-line text:last-child { color: #333333; font-weight: 600; overflow-wrap: anywhere; }
+.service-note { margin-top: 14rpx; padding: 16rpx; border-radius: 18rpx; background: #f9f4ee; color: #666666; font-size: 25rpx; line-height: 1.6; }
+.host, .review { padding: 16rpx 0; border-bottom: 1px solid #e8e0d8; }
 .host { display: flex; gap: 18rpx; }
 .host image { width: 88rpx; height: 88rpx; border-radius: 44rpx; background: #dde5ed; flex: 0 0 auto; }
 .host:last-child, .review:last-child { border-bottom: 0; }
-.name { font-weight: 650; margin-bottom: 8rpx; }
-.section-image { display: block; width: 100%; border-radius: 8px; margin-bottom: 18rpx; background: #dde5ed; }
-.section-content { line-height: 1.7; color: #344054; }
+.name { font-weight: 650; margin-bottom: 8rpx; color: #333333; }
+.section-image { display: block; width: 100%; border-radius: 20rpx; margin-bottom: 18rpx; background: #dde5ed; }
+.section-content { line-height: 1.7; color: #666666; }
 .reply { margin-top: 8rpx; }
 .retry { margin-top: 18rpx; }
-.bottom-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 190rpx 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: var(--card-bg, #fff); border-top: 1px solid #e5e7eb; box-shadow: 0 -10rpx 30rpx rgba(15, 23, 42, 0.08); }
+.bottom-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: 200rpx 1fr;
+  gap: 18rpx;
+  align-items: center;
+  padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
+  background: rgba(255, 255, 255, 0.98);
+  border-top: 1rpx solid #e8e0d8;
+  box-shadow: 0 -10rpx 30rpx rgba(51, 51, 51, 0.08);
+}
 .bottom-info { display: grid; gap: 4rpx; min-width: 0; }
-.bottom-info text:first-child { color: var(--primary-color, #0f766e); font-size: 34rpx; font-weight: 900; }
-.bottom-info text:last-child { color: var(--muted-color, #667085); font-size: 22rpx; }
+.bottom-info text:first-child { color: #c43d3d; font-size: 36rpx; font-weight: 700; }
+.bottom-info text:last-child { color: #999999; font-size: 22rpx; }
+.action-button { height: 92rpx; font-size: 32rpx; }
 </style>

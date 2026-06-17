@@ -101,6 +101,12 @@ export class AdminController {
     return this.service.changeOwnPassword(dto, admin);
   }
 
+  @UseGuards(JwtAuthGuard)
+  @Get("auth/me")
+  currentAdmin(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.currentAdmin(admin);
+  }
+
   @AdminRoles(...SUPER_ADMIN)
   @Get("operation-logs")
   operationLogs(@Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {

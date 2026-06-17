@@ -165,6 +165,12 @@ export class MockPayDto {
   transactionNo?: string;
 }
 
+export class CreateCourseOrderDto {
+  @IsOptional()
+  @IsIn([PaymentMethod.Wechat, PaymentMethod.Alipay, PaymentMethod.Balance, PaymentMethod.Offline])
+  paymentMethod?: PaymentMethod.Wechat | PaymentMethod.Alipay | PaymentMethod.Balance | PaymentMethod.Offline;
+}
+
 export class MockPaymentCallbackDto {
   @IsString()
   orderNo!: string;

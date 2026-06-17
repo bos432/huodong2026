@@ -1,8 +1,10 @@
 function configuredH5Origin() {
   const value = String(import.meta.env.VITE_H5_ORIGIN || "").trim();
   if (value) return value;
-  if (typeof window !== "undefined" && window.location?.origin) return window.location.origin;
-  return "http://localhost:5173";
+  if (typeof window !== "undefined" && window.location?.hostname) {
+    return `${window.location.protocol}//${window.location.hostname}:4139`;
+  }
+  return "http://127.0.0.1:4139";
 }
 
 export function h5PreviewUrl(tenantCode?: string | null, path = "/") {

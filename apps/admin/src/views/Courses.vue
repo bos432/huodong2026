@@ -5,7 +5,7 @@
       <el-button type="primary" @click="showForm = true">新增课程</el-button>
     </div>
 
-    <el-table :data="courses" stripe style="width:100%;">
+    <el-table :data="courses" stripe style="width:100%;" empty-text="暂无课程">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column label="封面" width="80">
         <template #default><div style="width:48px;height:48px;background:#f0ebe3;border-radius:8px;display:flex;align-items:center;justify-content:center;">📚</div></template>
@@ -16,7 +16,7 @@
       <el-table-column prop="status" label="状态" width="80">
         <template #default="{row}"><el-tag :type="row.status==='published'?'success':'info'">{{ row.status==='published'?'已发布':'草稿' }}</el-tag></template>
       </el-table-column>
-      <el-table-column prop="createdAt" label="创建时间" width="160" />
+      <el-table-column label="创建时间" width="170"><template #default="{row}">{{ formatDateTime(row.createdAt) }}</template></el-table-column>
       <el-table-column label="操作" width="200" fixed="right">
         <template #default="{row}">
           <el-button size="small" @click="editCourse(row)">编辑</el-button>
@@ -35,7 +35,7 @@
         <el-form-item label="状态"><el-select v-model="form.status"><el-option label="草稿" value="draft" /><el-option label="已发布" value="published" /></el-select></el-form-item>
         <el-form-item label="课程介绍"><el-input v-model="form.description" type="textarea" :rows="4" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="showForm = false">取消</el-button><el-button type="primary" @click="saveCourse">保存</el-button></template>
+      <template #footer><el-button @click="showForm = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveCourse">保存</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="showChapters" :title="'章节管理 - ' + (currentCourse?.title || '')" width="700px">
@@ -56,31 +56,60 @@
 
 <script setup lang="ts">
 import { ref, onMounted } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 
 const courses = ref<any[]>([]);
 const showForm = ref(false);
 const editing = ref(false);
 const form = ref<any>({ title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"" });
+const saving = ref(false);
 const showChapters = ref(false);
 const currentCourse = ref<any>(null);
 const chapters = ref<any[]>([]);
 
+function formatDateTime(value?: string | Date | null) {
+  if (!value) return "-";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value);
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
 async function load() {
-  const res = await api.get<any, any>("/admin/courses");
-  courses.value = res?.data || [];
+  try {
+    courses.value = await api.get<any, any[]>("/admin/courses");
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载课程失败");
+  }
 }
 
 async function saveCourse() {
-  if (editing.value && form.value.id) {
-    await api.patch("/admin/courses/" + form.value.id, form.value);
-  } else {
-    await api.post("/admin/courses", form.value);
+  if (!form.value.title?.trim()) return ElMessage.error("请输入课程名称");
+  try {
+    saving.value = true;
+    const payload = {
+      ...form.value,
+      title: form.value.title.trim(),
+      teacherName: form.value.teacherName?.trim() || null,
+      description: form.value.description?.trim() || null,
+      price: Number(form.value.price || 0),
+      originalPrice: Number(form.value.originalPrice || 0)
+    };
+    if (editing.value && form.value.id) {
+      await api.patch("/admin/courses/" + form.value.id, payload);
+    } else {
+      await api.post("/admin/courses", payload);
+    }
+    showForm.value = false;
+    editing.value = false;
+    form.value = { title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"" };
+    await load();
+    ElMessage.success("课程已保存");
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存课程失败");
+  } finally {
+    saving.value = false;
   }
-  showForm.value = false;
-  editing.value = false;
-  form.value = { title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"" };
-  load();
 }
 
 function editCourse(row: any) {
@@ -90,20 +119,29 @@ function editCourse(row: any) {
 }
 
 async function deleteCourse(row: any) {
-  await api.delete("/admin/courses/" + row.id);
-  load();
+  try {
+    await ElMessageBox.confirm(`确认删除课程「${row.title}」？`, "删除课程", { type: "warning" });
+    await api.delete("/admin/courses/" + row.id);
+    await load();
+    ElMessage.success("课程已删除");
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "删除课程失败");
+  }
 }
 
 async function manageChapters(row: any) {
-  currentCourse.value = row;
-  const res = await api.get<any, any>("/admin/courses/" + row.id + "/chapters");
-  const chs = res?.data || [];
-  for (const ch of chs) {
-    const lres = await api.get<any, any>("/admin/course-chapters/" + ch.id + "/lessons");
-    ch.lessons = lres?.data || [];
+  try {
+    currentCourse.value = row;
+    const chs = await api.get<any, any[]>("/admin/courses/" + row.id + "/chapters");
+    for (const ch of chs) {
+      ch.lessons = await api.get<any, any[]>("/admin/course-chapters/" + ch.id + "/lessons");
+    }
+    chapters.value = chs;
+    showChapters.value = true;
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载章节失败");
   }
-  chapters.value = chs;
-  showChapters.value = true;
 }
 
 function addChapter() {
@@ -115,28 +153,37 @@ function addLesson(ch: any) {
 }
 
 async function deleteChapter(ci: number) {
-  const ch = chapters.value[ci];
-  if (ch.id) await api.delete("/admin/course-chapters/" + ch.id);
-  chapters.value.splice(ci, 1);
+  try {
+    const ch = chapters.value[ci];
+    if (ch.id) await api.delete("/admin/course-chapters/" + ch.id);
+    chapters.value.splice(ci, 1);
+  } catch (error: any) {
+    ElMessage.error(error.message || "删除章节失败");
+  }
 }
 
 async function saveChapters() {
-  for (const ch of chapters.value) {
-    if (ch.id) {
-      await api.patch("/admin/course-chapters/" + ch.id, { title: ch.title, sortOrder: ch.sortOrder });
-    } else {
-      const res = await api.post("/admin/course-chapters", { courseId: currentCourse.value?.id, title: ch.title, sortOrder: ch.sortOrder });
-      ch.id = res?.data?.id;
-    }
-    for (const ls of ch.lessons) {
-      if (ls.id) {
-        await api.patch("/admin/course-lessons/" + ls.id, { title: ls.title, duration: ls.duration, isFree: ls.isFree });
-      } else if (ls.title) {
-        await api.post("/admin/course-lessons", { chapterId: ch.id, title: ls.title, duration: ls.duration, isFree: ls.isFree });
+  try {
+    for (const ch of chapters.value) {
+      if (ch.id) {
+        await api.patch("/admin/course-chapters/" + ch.id, { title: ch.title, sortOrder: ch.sortOrder });
+      } else {
+        const savedChapter = await api.post<any, any>("/admin/course-chapters", { courseId: currentCourse.value?.id, title: ch.title, sortOrder: ch.sortOrder });
+        ch.id = savedChapter?.id;
+      }
+      for (const ls of ch.lessons) {
+        if (ls.id) {
+          await api.patch("/admin/course-lessons/" + ls.id, { title: ls.title, duration: ls.duration, isFree: ls.isFree });
+        } else if (ls.title) {
+          await api.post("/admin/course-lessons", { chapterId: ch.id, title: ls.title, duration: ls.duration, isFree: ls.isFree });
+        }
       }
     }
+    await load();
+    ElMessage.success("章节已保存");
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存章节失败");
   }
-  load();
 }
 
 onMounted(load);

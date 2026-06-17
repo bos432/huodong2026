@@ -3,6 +3,7 @@ import uniPlugin from "@dcloudio/vite-plugin-uni";
 import { defineConfig } from "vite";
 
 const uni = (uniPlugin as any).default || (uniPlugin as any).uni || uniPlugin;
+const apiProxyTarget = process.env.VITE_DEV_API_PROXY || "http://localhost:18080";
 
 export default defineConfig({
   plugins: [uni()],
@@ -17,8 +18,8 @@ export default defineConfig({
     port: 5173,
     strictPort: true,
     proxy: {
-      "/api": "http://localhost:3000",
-      "/uploads": "http://localhost:3000"
+      "/api": apiProxyTarget,
+      "/uploads": apiProxyTarget
     }
   }
 });

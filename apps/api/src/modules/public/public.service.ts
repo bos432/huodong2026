@@ -18,6 +18,10 @@ import { AdminUser } from "../../entities/admin-user.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { Coupon } from "../../entities/coupon.entity";
 import { ConversionEvent, ConversionEventType } from "../../entities/conversion-event.entity";
+import { Course } from "../../entities/course.entity";
+import { CourseChapter } from "../../entities/course-chapter.entity";
+import { CourseLesson } from "../../entities/course-lesson.entity";
+import { CourseOrder, CourseOrderStatus } from "../../entities/course-order.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
@@ -32,6 +36,7 @@ import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
+import { UserLearning } from "../../entities/user-learning.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
 import { Waitlist, WaitlistStatus } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
@@ -41,7 +46,7 @@ import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults"
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
-import { AmbassadorApplicationDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
 import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -78,6 +83,11 @@ export class PublicService {
     @InjectRepository(WalletTransaction) private readonly walletTransactions: Repository<WalletTransaction>,
     @InjectRepository(ActivityChannel) private readonly activityChannels: Repository<ActivityChannel>,
     @InjectRepository(ConversionEvent) private readonly conversionEvents: Repository<ConversionEvent>,
+    @InjectRepository(Course) private readonly courses: Repository<Course>,
+    @InjectRepository(CourseChapter) private readonly courseChapters: Repository<CourseChapter>,
+    @InjectRepository(CourseLesson) private readonly courseLessons: Repository<CourseLesson>,
+    @InjectRepository(CourseOrder) private readonly courseOrders: Repository<CourseOrder>,
+    @InjectRepository(UserLearning) private readonly userLearning: Repository<UserLearning>,
     private readonly notificationProvider: NotificationProviderService,
     private readonly paymentProvider: PaymentProviderService,
     private readonly refundCompletion: RefundCompletionService,
@@ -198,6 +208,105 @@ export class PublicService {
       memberLevel: profile?.level ? { id: profile.level.id, name: profile.level.name } : null,
       points: profile?.points || 0
     };
+  }
+
+  async createCourseOrder(courseId: number, dto: CreateCourseOrderDto, user: User) {
+    const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
+    if (!course) throw new NotFoundException("课程不存在或未发布");
+    if (await this.hasCourseAccess(user.id, course.id)) {
+      return { owned: true, order: null, course: this.publicCourse(course) };
+    }
+
+    const amount = Number(course.price || 0);
+    const paymentMethod = amount > 0 ? dto.paymentMethod || PaymentMethod.Wechat : PaymentMethod.Free;
+    if (amount <= 0) {
+      const order = await this.courseOrders.save(this.courseOrders.create({
+        orderNo: this.generateCourseOrderNo(),
+        user,
+        course,
+        amount: "0.00",
+        paymentMethod,
+        status: CourseOrderStatus.Paid,
+        transactionNo: `FREE-${Date.now()}`,
+        paidAt: new Date(),
+        expiresAt: null,
+        closedAt: null,
+        closeReason: null
+      }));
+      await this.grantCourseAccess(user, course);
+      return { owned: true, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
+    }
+
+    const existing = await this.courseOrders.findOne({
+      where: { user: { id: user.id }, course: { id: course.id }, status: CourseOrderStatus.PendingPayment },
+      order: { createdAt: "DESC" }
+    });
+    if (existing && !this.isExpiredCourseOrder(existing)) return { owned: false, order: this.publicCourseOrder(existing), course: this.publicCourse(course) };
+
+    const order = await this.courseOrders.save(this.courseOrders.create({
+      orderNo: this.generateCourseOrderNo(),
+      user,
+      course,
+      amount: amount.toFixed(2),
+      paymentMethod,
+      status: CourseOrderStatus.PendingPayment,
+      transactionNo: null,
+      paidAt: null,
+      expiresAt: this.paymentExpiresAt(amount),
+      closedAt: null,
+      closeReason: null
+    }));
+    return { owned: false, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
+  }
+
+  async courseOrderDetail(orderId: number, user: User) {
+    const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
+    if (!order) throw new NotFoundException("课程订单不存在");
+    return { order: this.publicCourseOrder(order), course: this.publicCourse(order.course), owned: await this.hasCourseAccess(user.id, order.course.id) };
+  }
+
+  async mockPayCourseOrder(orderId: number, dto: MockPayDto, user: User) {
+    const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
+    if (!order) throw new NotFoundException("课程订单不存在");
+    if (order.status === CourseOrderStatus.Paid) {
+      await this.grantCourseAccess(user, order.course);
+      return { order: this.publicCourseOrder(order), course: this.publicCourse(order.course), owned: true };
+    }
+    if (order.status !== CourseOrderStatus.PendingPayment) throw new BadRequestException("当前课程订单不可支付");
+    if (this.isExpiredCourseOrder(order)) {
+      order.status = CourseOrderStatus.Closed;
+      order.closedAt = new Date();
+      order.closeReason = "课程订单超时关闭";
+      await this.courseOrders.save(order);
+      throw new BadRequestException("课程订单已超时，请重新下单");
+    }
+    order.status = CourseOrderStatus.Paid;
+    order.transactionNo = dto.transactionNo || `COURSE-MOCK-${Date.now()}`;
+    order.paidAt = new Date();
+    const saved = await this.courseOrders.save(order);
+    await this.grantCourseAccess(user, order.course);
+    return { order: this.publicCourseOrder(saved), course: this.publicCourse(saved.course), owned: true };
+  }
+
+  async myCourses(user: User) {
+    const rows = await this.userLearning.find({ where: { userId: user.id, lessonId: 0 }, order: { updatedAt: "DESC" } });
+    if (!rows.length) return [];
+    const courses = await this.courses.find({ where: { id: In(rows.map((row) => row.courseId)) } });
+    return rows
+      .map((row) => {
+        const course = courses.find((item) => item.id === row.courseId);
+        if (!course) return null;
+        return {
+          ...this.publicCourse(course),
+          learning: {
+            id: row.id,
+            progress: Number(row.progress || 0),
+            completedAt: row.completedAt,
+            updatedAt: row.updatedAt
+          }
+        };
+      })
+      .filter(Boolean);
   }
 
   async updateMyProfile(user: User, dto: UpdateProfileDto) {
@@ -1000,7 +1109,11 @@ export class PublicService {
     const header = Array.isArray(authorization) ? authorization[0] : authorization;
     const token = this.extractBearerToken(header);
     if (!token) return undefined;
-    return this.verifyUserAccessToken(token).sub;
+    try {
+      return this.verifyUserAccessToken(token).sub;
+    } catch {
+      return undefined;
+    }
   }
 
   private userLoginResponse(user: User) {
@@ -1600,6 +1713,44 @@ export class PublicService {
 
   private publicOrder(order: Order) {
     return { ...order, registration: this.publicRegistration(order.registration) };
+  }
+
+  private publicCourse(course: Course) {
+    return course;
+  }
+
+  private publicCourseOrder(order: CourseOrder) {
+    return {
+      id: order.id,
+      orderNo: order.orderNo,
+      amount: order.amount,
+      paymentMethod: order.paymentMethod,
+      status: order.status,
+      transactionNo: order.transactionNo,
+      paidAt: order.paidAt,
+      expiresAt: order.expiresAt,
+      createdAt: order.createdAt,
+      updatedAt: order.updatedAt
+    };
+  }
+
+  private generateCourseOrderNo() {
+    return `CO${Date.now()}${Math.random().toString(16).slice(2, 8).toUpperCase()}`;
+  }
+
+  private isExpiredCourseOrder(order: CourseOrder) {
+    return order.status === CourseOrderStatus.PendingPayment && Boolean(order.expiresAt && order.expiresAt.getTime() <= Date.now());
+  }
+
+  private async hasCourseAccess(userId: number, courseId: number) {
+    const count = await this.userLearning.count({ where: { userId, courseId, lessonId: 0 } });
+    return count > 0;
+  }
+
+  private async grantCourseAccess(user: User, course: Course) {
+    let row = await this.userLearning.findOne({ where: { userId: user.id, courseId: course.id, lessonId: 0 } });
+    if (!row) row = this.userLearning.create({ userId: user.id, courseId: course.id, lessonId: 0, progress: 0, completedAt: null });
+    return this.userLearning.save(row);
   }
 
   private publicActivity(activity: Activity) {

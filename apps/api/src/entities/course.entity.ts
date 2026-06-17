@@ -9,7 +9,7 @@ export class Course {
   @Column({ type: "varchar", length: 500, nullable: true }) coverUrl!: string | null;
   @Column({ type: "varchar", length: 100, nullable: true }) teacherName!: string | null;
   @Column({ type: "varchar", length: 500, nullable: true }) teacherAvatar!: string | null;
-  @Column({ nullable: true }) categoryId!: number | null;
+  @Column({ type: "int", nullable: true }) categoryId!: number | null;
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 }) price!: number;
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 }) originalPrice!: number;
   @Column({ type: "decimal", precision: 2, scale: 1, default: 0 }) rating!: number;

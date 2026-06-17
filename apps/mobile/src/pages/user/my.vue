@@ -45,7 +45,7 @@
     <view class="card order-card">
       <view class="row" style="margin-bottom:16rpx;">
         <text style="font-size:30rpx; font-weight:600; color:#333;">我的订单</text>
-        <text class="subtle" style="color:#C43D3D;">全部 ›</text>
+        <text class="subtle" style="color:#C43D3D;" @click="goOrders({ status: 'all' })">全部 ›</text>
       </view>
       <view class="order-tabs">
         <view v-for="tab in orderTabs" :key="tab.label" class="order-tab" @click="goOrders(tab)">
@@ -120,7 +120,14 @@ function goEdit() { uni.navigateTo({ url:"/pages/user/profile" }); }
 function goCharity() { uni.navigateTo({ url:"/pages/charity/index" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goWallet() { uni.navigateTo({ url:"/pages/user/wallet" }); }
-function goOrders(tab: any) { /* placeholder: could go to my-courses or order page */ }
+function goOrders(tab: any) {
+  const status = tab?.status || "all";
+  if (status === "pending") {
+    uni.showToast({ title: "暂无待付款订单", icon: "none" });
+    return;
+  }
+  uni.navigateTo({ url:"/pages/user/courses" });
+}
 function goAdmin() { uni.navigateTo({ url:"/pages/admin/home" }); }
 </script>
 

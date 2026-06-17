@@ -4,7 +4,6 @@
       <text class="title-lg">全部课程</text>
     </view>
 
-    <!-- 分类 Tab -->
     <scroll-view class="category-tabs" scroll-x :show-scrollbar="false">
       <view
         v-for="(cat, idx) in categories"
@@ -15,11 +14,12 @@
       >{{ cat.label }}</view>
     </scroll-view>
 
-    <!-- 排序 -->
     <view class="sort-bar">
       <text class="subtle">共 {{ filteredCourses.length }} 门课</text>
       <view class="sort-options">
-        <text v-for="opt in sortOptions" :key="opt.key"
+        <text
+          v-for="opt in sortOptions"
+          :key="opt.key"
           class="sort-option"
           :class="{ active: activeSort === opt.key }"
           @click="activeSort = opt.key"
@@ -27,25 +27,31 @@
       </view>
     </view>
 
-    <!-- 课程网格 -->
-    <view v-if="filteredCourses.length" class="course-grid">
+    <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-else-if="error" class="card state-card">
+      <view>{{ error }}</view>
+      <view class="button secondary retry-button" @click="loadCourses">重试</view>
+    </view>
+
+    <view v-else-if="filteredCourses.length" class="course-grid">
       <view v-for="course in filteredCourses" :key="course.id" class="course-card" @click="goDetail(course)">
         <view class="course-cover" :style="{ background: course.color }">
-          <text style="font-size:64rpx;">{{ course.icon }}</text>
+          <image v-if="course.coverUrl" class="course-cover-img" :src="course.coverUrl" mode="aspectFill" />
+          <text v-else style="font-size:64rpx;">{{ course.icon }}</text>
           <view v-if="course.tag" class="card-tag" :class="course.tag === '限时优惠' ? 'tag-warning' : 'tag-success'">{{ course.tag }}</view>
         </view>
         <view class="course-info">
           <text class="course-title">{{ course.title }}</text>
           <text class="course-teacher">by {{ course.teacher }}</text>
           <view class="row" style="justify-content:flex-start;">
-            <text class="price">¥{{ course.price }}</text>
-            <text class="price-original" style="margin-left:8rpx;" v-if="course.originalPrice">¥{{ course.originalPrice }}</text>
+            <text class="price">{{ priceText(course.price) }}</text>
+            <text class="price-original" style="margin-left:8rpx;" v-if="Number(course.originalPrice) > 0">{{ priceText(course.originalPrice) }}</text>
           </view>
           <text class="course-rating">⭐ {{ course.rating }}</text>
         </view>
       </view>
     </view>
-    <empty-state v-else icon="📚" text="暂无课程，敬请期待" />
+    <empty-state v-else icon="📚" text="暂无课程，请先在后台新增并发布课程" />
 
     <view style="height:120rpx;"></view>
     <TabBar current="courses" />
@@ -53,8 +59,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
+import { withTenantCode } from "../../api";
+import { fetchPublishedCourses, priceText } from "../../course-data";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
@@ -80,37 +88,39 @@ const sortOptions = [
 
 const activeCategory = ref("all");
 const activeSort = ref("newest");
+const loading = ref(true);
+const error = ref("");
+const allCourses = ref<any[]>([]);
 
-const allCourses = [
-  { id:1, title:"国学入门七讲", teacher:"张明远", price:"0", originalPrice:"199", icon:"📜", color:"#F5E6D3", category:"国学", rating:"4.9", tag:"限时免费", hot:120 },
-  { id:2, title:"论语精讲100讲", teacher:"张明远", price:"399", originalPrice:"599", icon:"📚", color:"#F5E6D3", category:"国学", rating:"4.8", tag:"", hot:89 },
-  { id:3, title:"道德经导读", teacher:"王守拙", price:"199", originalPrice:"299", icon:"☯", color:"#DCE8E0", category:"玄学", rating:"4.7", tag:"", hot:95 },
-  { id:4, title:"易经入门", teacher:"周易明", price:"299", originalPrice:"499", icon:"☯", color:"#DCE8E0", category:"玄学", rating:"4.8", tag:"限时优惠", hot:76 },
-  { id:5, title:"楷书入门到精通", teacher:"李墨白", price:"599", originalPrice:"899", icon:"🖌", color:"#E8E0D8", category:"书法", rating:"4.9", tag:"", hot:110 },
-  { id:6, title:"行书艺术鉴赏", teacher:"李墨白", price:"399", originalPrice:"599", icon:"🖌", color:"#E8E0D8", category:"书法", rating:"4.6", tag:"", hot:45 },
-  { id:7, title:"家庭教育智慧", teacher:"王慧心", price:"199", originalPrice:"299", icon:"🏠", color:"#E0DCE8", category:"教育", rating:"4.7", tag:"", hot:67 },
-  { id:8, title:"亲子共读指南", teacher:"刘念慈", price:"99", originalPrice:"199", icon:"👶", color:"#E0DCE8", category:"教育", rating:"4.5", tag:"", hot:34 },
-  { id:9, title:"静坐入门", teacher:"刘静修", price:"99", originalPrice:"199", icon:"🧘", color:"#E0DCE8", category:"健康", rating:"4.4", tag:"", hot:52 },
-  { id:10, title:"中医养生基础", teacher:"孙思邈", price:"299", originalPrice:"499", icon:"🌿", color:"#DCE8E0", category:"健康", rating:"4.8", tag:"限时优惠", hot:88 },
-  { id:11, title:"创业者的国学课", teacher:"陈知行", price:"499", originalPrice:"799", icon:"⛰", color:"#F0E8E0", category:"创业", rating:"4.6", tag:"", hot:43 },
-  { id:12, title:"写作进阶训练", teacher:"李墨白", price:"299", originalPrice:"399", icon:"✍", color:"#F0E8E0", category:"技能", rating:"4.5", tag:"", hot:38 }
-];
+async function loadCourses() {
+  loading.value = true;
+  error.value = "";
+  try {
+    allCourses.value = await fetchPublishedCourses();
+  } catch (err: any) {
+    error.value = err.message || "课程加载失败";
+  } finally {
+    loading.value = false;
+  }
+}
 
 const filteredCourses = computed(() => {
   let list = activeCategory.value === "all"
-    ? allCourses
-    : allCourses.filter(c => c.category === activeCategory.value);
+    ? allCourses.value
+    : allCourses.value.filter((course) => course.category === activeCategory.value);
 
-  if (activeSort.value === "newest") list = [...list].reverse();
-  else if (activeSort.value === "hottest") list = [...list].sort((a,b) => b.hot - a.hot);
-  else if (activeSort.value === "price") list = [...list].sort((a,b) => Number(a.price) - Number(b.price));
+  if (activeSort.value === "newest") list = [...list].sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)));
+  else if (activeSort.value === "hottest") list = [...list].sort((a, b) => b.hot - a.hot);
+  else if (activeSort.value === "price") list = [...list].sort((a, b) => Number(a.price) - Number(b.price));
 
   return list;
 });
 
 function goDetail(course: any) {
-  uni.navigateTo({ url: `/pages/course/detail?id=${course.id}` });
+  uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${course.id}`) });
 }
+
+onMounted(loadCourses);
 </script>
 
 <style scoped>
@@ -142,6 +152,8 @@ function goDetail(course: any) {
 .sort-options { display: flex; gap: 16rpx; }
 .sort-option { font-size: 24rpx; color: #999; }
 .sort-option.active { color: #C43D3D; }
+.state-card { text-align: center; }
+.retry-button { display: inline-flex; margin-top: 20rpx; min-width: 160rpx; }
 .course-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -161,6 +173,7 @@ function goDetail(course: any) {
   justify-content: center;
   position: relative;
 }
+.course-cover-img { width: 100%; height: 100%; display: block; }
 .card-tag {
   position: absolute;
   top: 12rpx;

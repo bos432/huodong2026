@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { computed, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { CopyDocument, Grid, Key, SwitchButton, View } from "@element-plus/icons-vue";
 import { api } from "../api";
 import H5QrDialog from "../components/H5QrDialog.vue";
-import { AdminRole, canAccess, canAccessScope, currentRole, currentTenantCode, currentTenantName, isPlatformAdmin, permissions, roleOptions } from "../permissions";
+import { AdminRole, canAccess, canAccessScope, clearStoredAdminSession, currentRole, currentTenantCode, currentTenantName, isPlatformAdmin, permissions, roleOptions, setStoredAdminSession } from "../permissions";
 import { copyToClipboard, h5PreviewUrl, openH5Preview } from "../h5-preview";
 
 const route = useRoute();
@@ -34,7 +34,7 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.overview, scope: "platform" },
-      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview, scope: "platform" }
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.analytics, scope: "platform" }
     ]
   },
   {
@@ -43,9 +43,9 @@ const menuGroups = [
     label: "平台端 · 商家",
     scope: "platform",
     items: [
-      { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/admins", icon: "UserFilled", label: "商家账号", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: permissions.superAdmin, scope: "platform" }
+      { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: ["tenant.manage"], scope: "platform" },
+      { index: "/admins", icon: "UserFilled", label: "商家账号", roles: ["admin.manage"], scope: "platform" },
+      { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: ["tenant.manage"], scope: "platform" }
     ]
   },
   {
@@ -54,12 +54,12 @@ const menuGroups = [
     label: "平台端 · 活动监管",
     scope: "platform",
     items: [
-      { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: permissions.operation, scope: "platform" },
-      { index: "/activities?status=all", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
+      { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: ["activity.approve"], scope: "platform" },
+      { index: "/activities", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
       { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
-      { index: "/announcements", icon: "Bell", label: "公告监管", roles: permissions.operation, scope: "platform" },
-      { index: "/homepage-builder", icon: "Grid", label: "H5全局装修", roles: permissions.operation, scope: "platform" },
-      { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: permissions.operation, scope: "platform" }
+      { index: "/announcements", icon: "Bell", label: "公告监管", roles: ["announcement.manage"], scope: "platform" },
+      { index: "/homepage-builder", icon: "Grid", label: "H5全局装修", roles: ["homepage.manage"], scope: "platform" },
+      { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: ["category.manage"], scope: "platform" }
     ]
   },
   {
@@ -68,9 +68,9 @@ const menuGroups = [
     label: "平台端 · 订单财务",
     scope: "platform",
     items: [
-      { index: "/orders", icon: "Wallet", label: "全局订单", roles: permissions.finance, scope: "platform" },
-      { index: "/finance", icon: "CreditCard", label: "全局对账", roles: permissions.finance, scope: "platform" },
-      { index: "/agents", icon: "Shop", label: "商家收款账户", roles: permissions.superAdmin, scope: "platform" }
+      { index: "/orders", icon: "Wallet", label: "全局订单", roles: ["order.view"], scope: "platform" },
+      { index: "/finance", icon: "CreditCard", label: "全局对账", roles: ["finance.view"], scope: "platform" },
+      { index: "/agents", icon: "Shop", label: "商家收款账户", roles: ["payment_account.view"], scope: "platform" }
     ]
   },
   {
@@ -79,7 +79,7 @@ const menuGroups = [
     label: "平台端 · 会员资产",
     scope: "platform",
     items: [
-      { index: "/members", icon: "User", label: "会员资料管理", roles: permissions.operation, scope: "platform" }
+      { index: "/members", icon: "User", label: "会员资料管理", roles: ["member.view"], scope: "platform" }
     ]
   },
   {
@@ -88,8 +88,8 @@ const menuGroups = [
     label: "平台端 · 公益与招募",
     scope: "platform",
     items: [
-      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "platform" },
-      { index: "/ambassador", icon: "Flag", label: "文化大使招募", roles: permissions.superAdmin, scope: "platform" }
+      { index: "/charity", icon: "Coin", label: "公益池", roles: ["charity.view"], scope: "platform" },
+      { index: "/ambassador", icon: "Flag", label: "文化大使招募", roles: ["ambassador.manage"], scope: "platform" }
     ]
   },
   {
@@ -98,8 +98,8 @@ const menuGroups = [
     label: "平台端 · 书院运营",
     scope: "platform",
     items: [
-      { index: "/courses", icon: "Reading", label: "课程管理", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/community", icon: "ChatLineSquare", label: "共修管理", roles: permissions.superAdmin, scope: "platform" }
+      { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "platform" },
+      { index: "/community", icon: "ChatLineSquare", label: "共修管理", roles: ["community.manage"], scope: "platform" }
     ]
   },
   {
@@ -108,12 +108,12 @@ const menuGroups = [
     label: "平台端 · 系统安全",
     scope: "platform",
     items: [
-      { index: "/system-settings", icon: "Tools", label: "系统设置", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/config-check", icon: "Monitor", label: "上线体检", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/ops-routine", icon: "List", label: "运营巡检", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/admin-login-logs", icon: "Key", label: "登录日志", roles: permissions.superAdmin, scope: "platform" },
-      { index: "/h5-code-logs", icon: "Lock", label: "验证码日志", roles: permissions.superAdmin, scope: "platform" }
+      { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.manage"], scope: "platform" },
+      { index: "/config-check", icon: "Monitor", label: "上线体检", roles: ["system.manage"], scope: "platform" },
+      { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["system.manage"], scope: "platform" },
+      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "platform" },
+      { index: "/admin-login-logs", icon: "Key", label: "登录日志", roles: ["logs.view"], scope: "platform" },
+      { index: "/h5-code-logs", icon: "Lock", label: "验证码日志", roles: ["logs.view"], scope: "platform" }
     ]
   },
   {
@@ -123,7 +123,7 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/dashboard", icon: "DataAnalysis", label: "工作台", roles: permissions.overview, scope: "tenant" },
-      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.overview, scope: "tenant" }
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.analytics, scope: "tenant" }
     ]
   },
   {
@@ -133,9 +133,9 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/activities", icon: "Calendar", label: "活动管理", roles: permissions.activityView, scope: "tenant" },
-      { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: permissions.operation, scope: "tenant" },
-      { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: permissions.operation, scope: "tenant" },
-      { index: "/coupons", icon: "Discount", label: "优惠码", roles: permissions.operation, scope: "tenant" }
+      { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: ["category.manage"], scope: "tenant" },
+      { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: ["ticket.manage"], scope: "tenant" },
+      { index: "/coupons", icon: "Discount", label: "优惠码", roles: ["coupon.manage"], scope: "tenant" }
     ]
   },
   {
@@ -145,7 +145,7 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/registrations", icon: "Tickets", label: "报名管理", roles: permissions.registrationView, scope: "tenant" },
-      { index: "/waitlists", icon: "List", label: "候补管理", roles: permissions.operation, scope: "tenant" },
+      { index: "/waitlists", icon: "List", label: "候补管理", roles: ["waitlist.manage"], scope: "tenant" },
       { index: "/check-in", icon: "Finished", label: "签到核销", roles: permissions.checkIn, scope: "tenant" }
     ]
   },
@@ -155,10 +155,10 @@ const menuGroups = [
     label: "商家端 · 订单财务",
     scope: "tenant",
     items: [
-      { index: "/orders", icon: "Wallet", label: "订单管理", roles: permissions.finance, scope: "tenant" },
-      { index: "/finance", icon: "CreditCard", label: "财务对账", roles: permissions.finance, scope: "tenant" },
+      { index: "/orders", icon: "Wallet", label: "订单管理", roles: ["order.view"], scope: "tenant" },
+      { index: "/finance", icon: "CreditCard", label: "财务对账", roles: ["finance.view"], scope: "tenant" },
       { index: "/agents", icon: "Shop", label: "收款方式", roles: permissions.paymentAccountView, scope: "tenant" },
-      { index: "/agent-settlements", icon: "Money", label: "代理结算", roles: permissions.finance, scope: "tenant" }
+      { index: "/agent-settlements", icon: "Money", label: "代理结算", roles: ["agent_settlement.view"], scope: "tenant" }
     ]
   },
   {
@@ -167,10 +167,10 @@ const menuGroups = [
     label: "商家端 · 会员运营",
     scope: "tenant",
     items: [
-      { index: "/members", icon: "User", label: "会员资料管理", roles: permissions.operation, scope: "tenant" },
-      { index: "/tags", icon: "PriceTag", label: "用户标签", roles: permissions.operation, scope: "tenant" },
-      { index: "/notifications", icon: "Message", label: "通知中心", roles: permissions.operation, scope: "tenant" },
-      { index: "/reviews", icon: "ChatDotRound", label: "评价管理", roles: permissions.operation, scope: "tenant" }
+      { index: "/members", icon: "User", label: "会员资料管理", roles: ["member.view"], scope: "tenant" },
+      { index: "/tags", icon: "PriceTag", label: "用户标签", roles: ["tag.manage"], scope: "tenant" },
+      { index: "/notifications", icon: "Message", label: "通知中心", roles: ["notification.manage"], scope: "tenant" },
+      { index: "/reviews", icon: "ChatDotRound", label: "评价管理", roles: ["review.manage"], scope: "tenant" }
     ]
   },
   {
@@ -179,10 +179,10 @@ const menuGroups = [
     label: "商家端 · 装修营销",
     scope: "tenant",
     items: [
-      { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: permissions.operation, scope: "tenant" },
-      { index: "/announcements", icon: "Bell", label: "公告管理", roles: permissions.operation, scope: "tenant" },
-      { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: permissions.operation, scope: "tenant" },
-      { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: permissions.operation, scope: "tenant" }
+      { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: ["homepage.manage"], scope: "tenant" },
+      { index: "/announcements", icon: "Bell", label: "公告管理", roles: ["announcement.manage"], scope: "tenant" },
+      { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: ["activity.view"], scope: "tenant" },
+      { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: ["activity.view"], scope: "tenant" }
     ]
   },
   {
@@ -191,7 +191,7 @@ const menuGroups = [
     label: "商家端 · 公益池",
     scope: "tenant",
     items: [
-      { index: "/charity", icon: "Coin", label: "公益池", roles: permissions.overview, scope: "tenant" }
+      { index: "/charity", icon: "Coin", label: "公益池", roles: ["charity.view"], scope: "tenant" }
     ]
   },
   {
@@ -200,10 +200,10 @@ const menuGroups = [
     label: "商家端 · 系统设置",
     scope: "tenant",
     items: [
-      { index: "/system-settings", icon: "Tools", label: "运营设置", roles: permissions.superAdmin, scope: "tenant" },
-      { index: "/tenant-profile", icon: "Shop", label: "商家资料", roles: permissions.superAdmin, scope: "tenant" },
-      { index: "/admins", icon: "UserFilled", label: "员工账号", roles: permissions.superAdmin, scope: "tenant" },
-      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: permissions.superAdmin, scope: "tenant" }
+      { index: "/system-settings", icon: "Tools", label: "运营设置", roles: ["operation_settings.manage"], scope: "tenant" },
+      { index: "/tenant-profile", icon: "Shop", label: "商家资料", roles: ["tenant_profile.manage"], scope: "tenant" },
+      { index: "/admins", icon: "UserFilled", label: "员工账号", roles: ["admin.manage"], scope: "tenant" },
+      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "tenant" }
     ]
   }
 ];
@@ -214,6 +214,19 @@ const visibleMenuGroups = computed(() =>
     .filter((group) => group.items.length)
 );
 const defaultOpeneds = computed(() => visibleMenuGroups.value.map((group) => group.index));
+
+async function refreshCurrentAdminContext() {
+  try {
+    const admin = await api.get<any, any>("/admin/auth/me");
+    if (!admin) return;
+    setStoredAdminSession(admin);
+    if ((route.meta.roles && !canAccess(route.meta.roles as string[])) || !canAccessScope(route.meta.scope as any)) {
+      router.replace(visibleMenuGroups.value[0]?.items[0]?.index || "/login");
+    }
+  } catch {
+    // Keep the current session usable; individual pages will surface request errors.
+  }
+}
 
 function menuItemLabel(item: { index: string; label: string }) {
   const role = currentRole();
@@ -269,15 +282,11 @@ async function changePassword() {
 }
 
 function logout() {
-  localStorage.removeItem("admin_token");
-  localStorage.removeItem("admin_username");
-  localStorage.removeItem("admin_role");
-  localStorage.removeItem("admin_tenant_id");
-  localStorage.removeItem("admin_tenant_name");
-  localStorage.removeItem("admin_tenant_code");
-  localStorage.removeItem("admin_tenant_settings");
+  clearStoredAdminSession();
   router.push("/login");
 }
+
+onMounted(refreshCurrentAdminContext);
 </script>
 
 <template>

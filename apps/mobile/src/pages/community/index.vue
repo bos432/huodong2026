@@ -41,7 +41,7 @@
 
     <!-- 动态广场 -->
     <view class="section-title" style="margin-top:8rpx;"><text class="title-md">📖 学员动态</text></view>
-    <view v-for="(post, idx) in posts" :key="idx" class="card post-card" @click="toggleLike(post)">
+    <view v-for="(post, idx) in posts" :key="idx" class="card post-card">
       <view class="row" style="justify-content:flex-start; gap:12rpx;">
         <image class="avatar-sm" :src="post.avatar" mode="aspectFill" />
         <view style="flex:1;">
@@ -55,7 +55,7 @@
           <text>{{ post.liked ? '❤️' : '🤍' }}</text>
           <text class="subtle">{{ post.likes }}</text>
         </view>
-        <view class="interact-btn">
+        <view class="interact-btn" @click.stop="commentPost(post)">
           <text>💬</text>
           <text class="subtle">{{ post.comments }}</text>
         </view>
@@ -68,30 +68,94 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive } from "vue";
+import { reactive } from "vue";
+import { onMounted } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
+import { request, withTenantCode } from "../../api";
+import { addCommunityComment, defaultCommunityPosts, normalizeCommunityPosts, toggleCommunityLike, type CommunityPost } from "../../community-posts";
 
 onShow(() => { loadPageTheme(); });
 
-const activities = [
+const activities = reactive<any[]>([
   { id:1, month:"7月", day:"15", title:"线上共读会：《论语》精读", time:"2026-07-15 19:30-21:00", location:"线上·腾讯会议", registered:128 },
   { id:2, month:"7月", day:"22", title:"书法打卡营（第3期）", time:"2026-07-22 10:00-12:00", location:"七维书院·线下教室", registered:56 },
   { id:3, month:"8月", day:"5", title:"中医养生沙龙", time:"2026-08-05 14:00-17:00", location:"七维书院·活动厅", registered:34 }
-];
-
-const posts = reactive([
-  { id:1, avatar:"/static/avatar1.png", nickname:"学而时习", time:"2小时前", content:"今日抄写《论语》学而篇第一，深感温故而知新。", likes:12, comments:3, liked:false },
-  { id:2, avatar:"/static/avatar2.png", nickname:"书道中人", time:"昨天", content:"楷书练习第21天，继续加油！", likes:8, comments:1, liked:false },
-  { id:3, avatar:"/static/avatar3.png", nickname:"静心养性", time:"3天前", content:"静坐第7天，感觉心静了很多。", likes:15, comments:4, liked:false }
 ]);
 
-function toggleLike(post: any) {
-  post.liked = !post.liked;
-  post.likes += post.liked ? 1 : -1;
+const posts = reactive<CommunityPost[]>(defaultCommunityPosts());
+
+function formatActivityDate(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { month: "近期", day: "•", time: value || "时间待定" };
+  const month = `${date.getMonth() + 1}月`;
+  const day = String(date.getDate());
+  const hour = String(date.getHours()).padStart(2, "0");
+  const minute = String(date.getMinutes()).padStart(2, "0");
+  return { month, day, time: `${date.getFullYear()}-${month}${day} ${hour}:${minute}` };
 }
-function goActivity(act: any) { uni.navigateTo({ url:`/pages/community/detail?id=${act.id}` }); }
+
+async function loadActivities() {
+  try {
+    const result = await request<any>("/public/activities?page=1&pageSize=3&status=open");
+    const items = Array.isArray(result) ? result : result.items || [];
+    if (!items.length) return;
+    activities.splice(0, activities.length, ...items.map((item: any) => {
+      const date = formatActivityDate(item.startTime);
+      return {
+        id: item.id,
+        activityId: item.id,
+        month: date.month,
+        day: date.day,
+        title: item.title,
+        time: date.time,
+        location: item.location || "地点待定",
+        registered: item.registeredCount || 0
+      };
+    }));
+  } catch {
+    // Keep local examples visible when the activity API is temporarily unavailable.
+  }
+}
+
+async function loadPosts() {
+  try {
+    const result = await request<any>("/public/community/posts");
+    posts.splice(0, posts.length, ...normalizeCommunityPosts(result));
+  } catch {
+    posts.splice(0, posts.length, ...defaultCommunityPosts());
+  }
+}
+
+onMounted(() => {
+  loadActivities();
+  loadPosts();
+});
+
+function toggleLike(post: any) {
+  toggleCommunityLike(post);
+  uni.showToast({ title: post.liked ? "已收藏动态" : "已取消收藏", icon: "none" });
+}
+function commentPost(post: CommunityPost) {
+  uni.showModal({
+    title: "评论动态",
+    editable: true,
+    placeholderText: "写下你的想法",
+    confirmText: "发布",
+    success: (res: any) => {
+      if (!res.confirm) return;
+      const content = String(res.content || "").trim();
+      if (!content) {
+        uni.showToast({ title: "请输入评论内容", icon: "none" });
+        return;
+      }
+      addCommunityComment(post);
+      uni.showToast({ title: "评论已发布", icon: "success" });
+    }
+  });
+}
+function goActivity(act: any) { uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${act.activityId || act.id}`) }); }
 function goCheckin() { uni.navigateTo({ url:"/pages/community/checkin" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 </script>

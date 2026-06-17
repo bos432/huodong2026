@@ -4,12 +4,14 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Edit, Key, Plus, Refresh, Search, Switch, UserFilled } from "@element-plus/icons-vue";
 import { useRoute } from "vue-router";
 import { api } from "../api";
-import { AdminRole, isPlatformAdmin, roleOptions } from "../permissions";
+import { AdminRole, availablePermissionGroups, defaultPermissionsForRole, isPlatformAdmin, normalizePermissionList, roleOptions } from "../permissions";
 
 type AdminRow = {
   id: number;
   username: string;
   role: string;
+  permissions?: string[];
+  assignedPermissions?: string[] | null;
   tenantId?: number | null;
   tenant?: { id: number; name: string; code: string } | null;
   enabled: boolean;
@@ -42,8 +44,8 @@ const route = useRoute();
 const tenantStaffRoles = [AdminRole.Operator, AdminRole.Finance, AdminRole.CheckInStaff];
 const visibleRoleOptions = computed(() => (isPlatformAdmin() ? roleOptions : roleOptions.filter((role) => tenantStaffRoles.includes(role.value))));
 const defaultCreateRole = computed(() => (isPlatformAdmin() ? AdminRole.SuperAdmin : AdminRole.Operator));
-const form = reactive({ username: "", password: "", role: defaultCreateRole.value, tenantId: undefined as number | undefined });
-const editForm = reactive({ role: defaultCreateRole.value, tenantId: undefined as number | undefined, enabled: true });
+const form = reactive({ username: "", password: "", role: defaultCreateRole.value, tenantId: undefined as number | undefined, permissions: [] as string[] });
+const editForm = reactive({ role: defaultCreateRole.value, tenantId: undefined as number | undefined, enabled: true, permissions: [] as string[] });
 const filters = reactive({ keyword: "", role: "", enabled: "", tenantId: undefined as number | undefined, includeSmoke: false, page: 1, pageSize: 20 });
 const memberKeyword = ref("");
 const selectedTenant = computed(() => tenants.value.find((tenant) => tenant.id === form.tenantId));
@@ -58,6 +60,10 @@ const accountScopeHint = computed(() => {
   if (form.role === AdminRole.SuperAdmin) return "选择商家后，超级管理员会作为该商家的商家管理员登录，仅能管理该商家数据。";
   return "选择商家后，该账号登录时只看到所选商家的数据和对应角色菜单。";
 });
+const createPermissionGroups = computed(() => availablePermissionGroups(Boolean(form.tenantId) || !isPlatformAdmin()));
+const editPermissionGroups = computed(() => availablePermissionGroups(Boolean(editForm.tenantId) || !isPlatformAdmin()));
+const createPermissionCount = computed(() => form.permissions.length);
+const editPermissionCount = computed(() => editForm.permissions.length);
 
 function queryParams() {
   return {
@@ -111,6 +117,26 @@ function roleLabel(role: string) {
   return roleOptions.find((item) => item.value === role)?.label || role;
 }
 
+function resetCreatePermissions() {
+  form.permissions = defaultPermissionsForRole(form.role, Boolean(form.tenantId) || !isPlatformAdmin());
+}
+
+function resetEditPermissions() {
+  editForm.permissions = defaultPermissionsForRole(editForm.role, Boolean(editForm.tenantId) || !isPlatformAdmin());
+}
+
+function groupKeys(group: { items: readonly { key: string }[] }) {
+  return group.items.map((item) => item.key);
+}
+
+function selectAllCreatePermissions() {
+  form.permissions = createPermissionGroups.value.flatMap((group) => groupKeys(group));
+}
+
+function selectAllEditPermissions() {
+  editForm.permissions = editPermissionGroups.value.flatMap((group) => groupKeys(group));
+}
+
 async function submit() {
   if (!form.username.trim()) return ElMessage.error("请填写账号");
   if (!visibleRoleOptions.value.some((role) => role.value === form.role)) return ElMessage.error("当前后台只能创建运营、财务或签到员工账号");
@@ -122,9 +148,10 @@ async function submit() {
       username: form.username,
       password: form.password,
       role: form.role,
-      tenantId: isPlatformAdmin() ? form.tenantId || undefined : undefined
+      tenantId: isPlatformAdmin() ? form.tenantId || undefined : undefined,
+      permissions: normalizePermissionList(form.permissions)
     });
-    Object.assign(form, { username: "", password: "", role: defaultCreateRole.value, tenantId: undefined });
+    Object.assign(form, { username: "", password: "", role: defaultCreateRole.value, tenantId: undefined, permissions: defaultPermissionsForRole(defaultCreateRole.value, !isPlatformAdmin()) });
     ElMessage.success(isPlatformAdmin() ? "已创建管理员" : "已创建员工账号");
     await load();
   } catch (error: any) {
@@ -175,7 +202,8 @@ function openEdit(row: AdminRow) {
   Object.assign(editForm, {
     role: row.role as AdminRole,
     tenantId: row.tenant?.id || undefined,
-    enabled: row.enabled
+    enabled: row.enabled,
+    permissions: normalizePermissionList(row.assignedPermissions || row.permissions || defaultPermissionsForRole(row.role, Boolean(row.tenant?.id) || !isPlatformAdmin()))
   });
   editDialog.value = true;
 }
@@ -187,7 +215,8 @@ async function saveEdit() {
     await api.patch(`/admin/admins/${editingAdmin.value.id}`, {
       role: editForm.role,
       tenantId: isPlatformAdmin() ? editForm.tenantId || undefined : undefined,
-      enabled: editForm.enabled
+      enabled: editForm.enabled,
+      permissions: normalizePermissionList(editForm.permissions)
     });
     ElMessage.success("管理员已更新");
     editDialog.value = false;
@@ -228,9 +257,12 @@ watch(() => route.query.tenantId, (value) => {
 
 onMounted(() => {
   applyTenantFromRoute();
+  resetCreatePermissions();
   load();
   loadTenants();
 });
+
+watch(() => [form.role, form.tenantId], resetCreatePermissions);
 </script>
 
 <template>
@@ -268,6 +300,22 @@ onMounted(() => {
         <el-button type="primary" :icon="Plus" :loading="saving" @click="submit">{{ isPlatformAdmin() ? "新增管理员" : "新增员工账号" }}</el-button>
       </el-form>
       <el-alert v-if="isPlatformAdmin()" class="scope-alert" type="info" show-icon :closable="false" :title="accountScopePreview" :description="accountScopeHint" />
+      <div class="permission-card">
+        <div class="permission-head">
+          <strong>细粒度权限</strong>
+          <span>已选 {{ createPermissionCount }} 项</span>
+          <el-button size="small" @click="resetCreatePermissions">按角色默认</el-button>
+          <el-button size="small" @click="selectAllCreatePermissions">全选可用权限</el-button>
+        </div>
+        <div class="permission-groups">
+          <div v-for="group in createPermissionGroups" :key="group.group" class="permission-group">
+            <div class="permission-group-title">{{ group.group }}</div>
+            <el-checkbox-group v-model="form.permissions">
+              <el-checkbox v-for="item in group.items" :key="item.key" :label="item.key">{{ item.label }}</el-checkbox>
+            </el-checkbox-group>
+          </div>
+        </div>
+      </div>
       <div class="role-help">
         <span v-for="role in visibleRoleOptions" :key="role.value"><strong>{{ role.label }}</strong>：{{ role.description }}</span>
       </div>
@@ -336,6 +384,11 @@ onMounted(() => {
           </template>
         </el-table-column>
         <el-table-column label="角色" width="150"><template #default="{ row }">{{ roleLabel(row.role) }}</template></el-table-column>
+        <el-table-column label="权限" width="130">
+          <template #default="{ row }">
+            <el-tag type="info">{{ (row.permissions || []).length }} 项</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="所属商家" min-width="180">
           <template #default="{ row }">
             <div class="account-scope">
@@ -393,6 +446,23 @@ onMounted(() => {
         <el-form-item label="状态">
           <el-switch v-model="editForm.enabled" active-text="启用" inactive-text="禁用" />
         </el-form-item>
+        <el-form-item label="细粒度权限">
+          <div class="permission-card dialog-permission-card">
+            <div class="permission-head">
+              <strong>已选 {{ editPermissionCount }} 项</strong>
+              <el-button size="small" @click="resetEditPermissions">按角色默认</el-button>
+              <el-button size="small" @click="selectAllEditPermissions">全选可用权限</el-button>
+            </div>
+            <div class="permission-groups">
+              <div v-for="group in editPermissionGroups" :key="group.group" class="permission-group">
+                <div class="permission-group-title">{{ group.group }}</div>
+                <el-checkbox-group v-model="editForm.permissions">
+                  <el-checkbox v-for="item in group.items" :key="item.key" :label="item.key">{{ item.label }}</el-checkbox>
+                </el-checkbox-group>
+              </div>
+            </div>
+          </div>
+        </el-form-item>
       </el-form>
       <el-alert type="info" show-icon :closable="false" title="管理员账号不建议物理删除" description="如果添加错了，建议改角色、改所属商家，或禁用账号，这样操作日志和历史记录还能追溯。" />
       <template #footer>
@@ -417,5 +487,15 @@ onMounted(() => {
 .scope-alert { margin-top: 10px; }
 .role-help { color: #64748b; font-size: 12px; }
 .role-help { display: grid; gap: 6px; margin-top: 10px; line-height: 1.5; }
+.permission-card { margin-top: 12px; border: 1px solid #e5e7eb; border-radius: 10px; background: #f8fafc; padding: 12px; width: 100%; }
+.dialog-permission-card { margin-top: 0; max-height: 420px; overflow: auto; }
+.permission-head { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; color: #334155; }
+.permission-head span { color: #64748b; font-size: 12px; margin-right: auto; }
+.permission-groups { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.permission-group { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 10px; }
+.permission-group-title { font-weight: 700; color: #111827; margin-bottom: 8px; }
+.permission-group :deep(.el-checkbox-group) { display: grid; gap: 6px; }
+.permission-group :deep(.el-checkbox) { margin-right: 0; height: auto; white-space: normal; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; }
+@media (max-width: 900px) { .permission-groups { grid-template-columns: 1fr; } }
 </style>

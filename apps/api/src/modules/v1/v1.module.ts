@@ -6,6 +6,7 @@ import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { Activity } from "../../entities/activity.entity";
+import { AdminUser } from "../../entities/admin-user.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { InviteCode } from "../../entities/invite-code.entity";
@@ -28,7 +29,7 @@ import { V1Service } from "./v1.service";
 import { PublicModule } from "../public/public.module";
 
 @Module({
-  imports: [PublicModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Tenant, Registration, Order, OperationSetting, CheckIn, User, InviteCode, ShareVisit, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule])],
+  imports: [PublicModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, OperationSetting, CheckIn, User, InviteCode, ShareVisit, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule])],
   controllers: [AdminV1Controller, PublicV1Controller],
   providers: [V1Service, NotificationProviderService]
 })
