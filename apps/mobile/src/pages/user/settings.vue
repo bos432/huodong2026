@@ -24,7 +24,7 @@ function logout() {
     success(r){
       if (!r.confirm) return;
       clearUser();
-      uni.reLaunch({ url:"/pages/user/login" });
+      uni.reLaunch({ url:"/pages/user/my" });
     }
   });
 }

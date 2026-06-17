@@ -82,6 +82,10 @@
       </view>
     </view>
 
+    <view v-if="isLoggedIn" class="logout-card" @click="logoutUser">
+      <text>退出当前账号</text>
+    </view>
+
     <view style="height:120rpx;"></view>
     <TabBar current="user" />
   </view>
@@ -90,7 +94,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { ensureUser, fetchMyProfile, request } from "../../api";
+import { clearUser, ensureUser, fetchMyProfile, getUserToken, request } from "../../api";
 import { loadPageTheme } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import TabBar from "../../components/TabBar.vue";
@@ -103,6 +107,7 @@ const courses = ref<any[]>([]);
 const registrations = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
 const loadingProfile = ref(false);
+const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
@@ -231,6 +236,28 @@ function goOrders(tab: any) {
   uni.navigateTo({ url:`/pages/user/orders?status=${status}` });
 }
 function goAdmin() { uni.navigateTo({ url:"/pages/admin/home" }); }
+function resetUserState() {
+  profile.value = null;
+  wallet.value = null;
+  charity.value = null;
+  adminAccess.value = null;
+  courses.value = [];
+  registrations.value = [];
+  courseOrders.value = [];
+}
+function logoutUser() {
+  uni.showModal({
+    title: "确认退出",
+    content: "退出后需要重新登录才能查看报名、订单、课程和打卡记录。",
+    confirmText: "退出登录",
+    success(res) {
+      if (!res.confirm) return;
+      clearUser();
+      resetUserState();
+      uni.showToast({ title: "已退出登录", icon: "none" });
+    }
+  });
+}
 </script>
 
 <style scoped>
@@ -290,5 +317,18 @@ function goAdmin() { uni.navigateTo({ url:"/pages/admin/home" }); }
   border-radius: 999px;
   min-width: 28rpx;
   text-align: center;
+}
+.logout-card {
+  margin: 8rpx 0 16rpx;
+  height: 88rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 24rpx;
+  background: rgba(255, 255, 255, 0.82);
+  border: 1rpx solid rgba(196, 61, 61, 0.22);
+  color: #C43D3D;
+  font-size: 28rpx;
+  font-weight: 800;
 }
 </style>
