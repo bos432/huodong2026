@@ -179,18 +179,39 @@ export class CoursesService {
   }
 
   async createCheckinTask(dto: any) {
-    const item = this.checkinTasks.create(dto);
+    const item = this.checkinTasks.create(this.normalizeCheckinTaskDto(dto));
     return this.checkinTasks.save(item);
   }
 
   async updateCheckinTask(id: number, dto: any) {
-    await this.checkinTasks.update(id, dto);
+    await this.checkinTasks.update(id, this.normalizeCheckinTaskDto(dto));
     return this.checkinTasks.findOne({ where: { id } });
   }
 
   async deleteCheckinTask(id: number) {
     await this.checkinTasks.delete(id);
     return { success: true };
+  }
+
+  private normalizeCheckinTaskDto(dto: any) {
+    if (!dto || dto.date === undefined || dto.date === null) return dto;
+    const next = { ...dto };
+    next.date = this.normalizeDateOnly(dto.date);
+    return next;
+  }
+
+  private normalizeDateOnly(value: unknown) {
+    if (value instanceof Date) return this.localDateString(value);
+    const text = String(value || "").trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) return text;
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return text.slice(0, 10);
+    return this.localDateString(date);
+  }
+
+  private localDateString(date: Date) {
+    const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
+    return formatter.format(date);
   }
 
   // ===== Community Posts =====

@@ -83,6 +83,15 @@ function formatDateTime(value?: string | Date | null) {
   return date.toLocaleString("zh-CN", { hour12: false });
 }
 
+function formatLocalDate(value?: string | Date | null) {
+  if (!value) return "";
+  if (typeof value === "string") return value.slice(0, 10);
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
 async function load() {
   try {
     const [actRows, chkRows, postRows] = await Promise.all([
@@ -149,7 +158,8 @@ async function saveCheckin() {
     const dto = { ...checkinForm.value };
     dto.title = dto.title.trim();
     dto.description = dto.description?.trim() || null;
-    if (typeof dto.date === "object" && dto.date?.toISOString) dto.date = dto.date.toISOString().split("T")[0];
+    if (typeof dto.date === "object") dto.date = formatLocalDate(dto.date);
+    else dto.date = formatLocalDate(dto.date);
     if (editingCheckin.value && dto.id) {
       await api.patch("/admin/checkin-tasks/" + dto.id, dto);
     } else {
