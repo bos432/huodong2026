@@ -153,6 +153,7 @@ const currentFormSnapshot = computed(() => JSON.stringify({
   layoutText: layoutText.value
 }));
 const hasUnsavedChanges = computed(() => drawer.value && formSnapshot.value !== currentFormSnapshot.value);
+const drawerPreviewRow = computed(() => currentDraftPreviewRow());
 const previewRows = computed(() => {
   const list = orderedRows.value.map((item) => ({ ...item, config: cloneJson(item.config || {}), layout: cloneJson(item.layout || {}) }));
   const draft = currentDraftPreviewRow();
@@ -593,11 +594,6 @@ function openCurrentPreview() {
   window.open(previewUrl.value, "_blank", "noopener,noreferrer");
 }
 
-function focusLivePreview() {
-  document.querySelector(".phone-preview")?.scrollIntoView({ behavior: "smooth", block: "start" });
-  ElMessage.info("右侧手机框已实时显示当前未保存内容，保存后前台 H5 才会正式生效");
-}
-
 onMounted(async () => {
   await loadTenants();
   await load();
@@ -733,8 +729,49 @@ onMounted(async () => {
         <el-tag v-if="hasUnsavedChanges" type="warning" effect="plain">未保存修改</el-tag>
         <div class="drawer-save-actions">
           <el-button @click="closeDrawer()">取消</el-button>
-          <el-button :icon="View" @click="focusLivePreview">查看右侧实时预览</el-button>
+          <el-button :icon="View" @click="openCurrentPreview">打开已保存H5</el-button>
           <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
+        </div>
+      </div>
+      <div class="drawer-live-preview">
+        <div class="drawer-live-preview-head">
+          <strong>当前模块实时预览</strong>
+          <span>这里显示未保存改动；保存后才会同步到前台 H5</span>
+        </div>
+        <div v-if="!drawerPreviewRow" class="drawer-preview-invalid">JSON 格式有误，修正 config / layout 后会恢复预览。</div>
+        <div v-else class="drawer-preview-canvas">
+          <div v-if="drawerPreviewRow.type === 'search_bar'" class="preview-search">
+            <span>{{ (drawerPreviewRow.config as any).cityLabel || "本地" }}</span>
+            <b>{{ (drawerPreviewRow.config as any).placeholder || "搜索活动" }}</b>
+          </div>
+          <div v-else-if="drawerPreviewRow.type === 'hero'" class="preview-hero" :style="previewHeroStyle(drawerPreviewRow)">
+            <small :style="{ opacity: clampPercent((drawerPreviewRow.config as any).textOpacity, 100) / 100 }">{{ (drawerPreviewRow.config as any).eyebrow || "Activity OS" }}</small>
+            <h4 :style="{ opacity: clampPercent((drawerPreviewRow.config as any).titleOpacity, 100) / 100 }">{{ drawerPreviewRow.title }}</h4>
+            <p :style="{ opacity: clampPercent((drawerPreviewRow.config as any).subtitleOpacity, 86) / 100 }">{{ drawerPreviewRow.subtitle }}</p>
+            <div v-if="(drawerPreviewRow.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (drawerPreviewRow.config as any).buttonOpacity, 18) }">{{ (drawerPreviewRow.config as any).primaryButtonText }}</div>
+          </div>
+          <div v-else-if="drawerPreviewRow.type === 'quick_nav'" class="preview-grid">
+            <span v-for="item in ((drawerPreviewRow.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+          </div>
+          <div v-else-if="drawerPreviewRow.type === 'image_banner'" class="preview-banner">
+            <img v-if="(drawerPreviewRow.config as any).imageUrl" :src="(drawerPreviewRow.config as any).imageUrl" />
+            <span v-else>图片 Banner</span>
+          </div>
+          <div v-else-if="drawerPreviewRow.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav">
+            <span v-for="item in ((drawerPreviewRow.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+          </div>
+          <div v-else-if="drawerPreviewRow.type === 'my_page'" class="preview-my" :style="{ background: String((drawerPreviewRow.layout as any).heroBackgroundColor || '#111827'), color: String((drawerPreviewRow.layout as any).heroTextColor || '#ffffff') }">
+            <strong>{{ (drawerPreviewRow.config as any).greeting || drawerPreviewRow.title || "我的活动" }}</strong>
+            <span v-for="item in ((drawerPreviewRow.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+          </div>
+          <div v-else-if="drawerPreviewRow.type === 'inner_pages'" class="preview-inner-pages">
+            <strong>{{ drawerPreviewRow.title || "内页布局" }}</strong>
+            <span v-for="item in ((drawerPreviewRow.config as any).pages || []).slice(0, 4)" :key="item.key">{{ item.title }}</span>
+          </div>
+          <div v-else class="preview-section" :style="previewSectionStyle(drawerPreviewRow)">
+            <strong>{{ drawerPreviewRow.title || typeLabel(drawerPreviewRow.type) }}</strong>
+            <span>{{ typeLabel(drawerPreviewRow.type) }}</span>
+          </div>
         </div>
       </div>
       <el-form label-position="top">
@@ -1004,6 +1041,13 @@ onMounted(async () => {
 .drawer-save-bar strong { display: block; color: #111827; font-size: 14px; }
 .drawer-save-bar span { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #667085; font-size: 12px; margin-top: 3px; }
 .drawer-save-actions { display: flex; gap: 8px; flex-shrink: 0; }
+.drawer-live-preview { position: sticky; top: 86px; z-index: 4; margin-bottom: 16px; padding: 12px; border: 1px solid #fed7aa; border-radius: 12px; background: #fff7ed; box-shadow: 0 10px 24px rgba(124, 45, 18, 0.08); }
+.drawer-live-preview-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; margin-bottom: 10px; }
+.drawer-live-preview-head strong { color: #7c2d12; font-size: 14px; }
+.drawer-live-preview-head span { color: #9a3412; font-size: 12px; text-align: right; }
+.drawer-preview-canvas { max-height: 260px; overflow: auto; padding: 12px; border-radius: 12px; background: #f8fafc; }
+.drawer-preview-invalid { padding: 16px; border: 1px dashed #f97316; border-radius: 10px; background: #fff; color: #c2410c; font-weight: 700; }
+.drawer-bottom-nav { position: static; margin-top: 0; }
 .quick-editor { display: grid; gap: 10px; margin-bottom: 18px; }
 .quick-row { display: grid; grid-template-columns: 120px 1fr 42px 34px; gap: 8px; align-items: center; }
 .quick-row.nav-row { grid-template-columns: 100px 1fr 130px minmax(220px, 1fr) 42px 34px; }
