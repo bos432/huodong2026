@@ -180,6 +180,7 @@ async function submitComment(post: CommunityPost, content: string) {
     await ensureUser();
     const result = await request<any>(`/public/community/posts/${post.id}/comments`, { method: "POST", data: { content } });
     uni.showToast({ title: result?.message || "评论已提交审核", icon: "none" });
+    void loadPosts();
   } catch (error: any) {
     uni.showToast({ title: error.message || "评论失败", icon: "none" });
   }

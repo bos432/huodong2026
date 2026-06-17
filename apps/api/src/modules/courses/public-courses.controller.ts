@@ -177,7 +177,10 @@ export class PublicCoursesController {
   }
 
   @Get("community/posts/:id/comments")
-  async listPostComments(@Param("id", ParseIntPipe) id: number) {
+  async listPostComments(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const post = await this.communityPosts.findOne({ where: this.tenantWhere({ id, visible: true }, tenant) });
+    if (!post) throw new NotFoundException("动态不存在或已下架");
     return this.communityPostComments.find({ where: { postId: id, status: "approved" }, order: { createdAt: "ASC" }, take: 50 });
   }
 

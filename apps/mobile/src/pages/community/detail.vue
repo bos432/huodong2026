@@ -176,7 +176,7 @@ async function submitComment(content: string) {
     await ensureUser();
     const result = await request<any>(`/public/community/posts/${post.value.id}/comments`, { method: "POST", data: { content } });
     uni.showToast({ title: result?.message || "评论已提交审核", icon: "none" });
-    rawPost.value = { ...rawPost.value, comments: Number(rawPost.value?.comments || 0) + 1 };
+    await loadPost();
   } catch (err: any) {
     uni.showToast({ title: err.message || "评论失败", icon: "none" });
   } finally {
