@@ -2564,12 +2564,17 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const admin = await this.admins.findOneBy({ id: adminId });
     if (!admin) throw new UnauthorizedException("管理员不存在");
     registration.status = RegistrationStatus.CheckedIn;
-    await this.registrations.save(registration);
-    const checkIn = await this.checkIns.save(this.checkIns.create({ registration, operator: admin, remark: remark || null }));
-    await this.recordAdminConversionEvent("check_in", { activity: registration.activity, user: registration.user, registration, channel: registration.channel || null, idempotencyKey: `check_in:${checkIn.id}` });
-    await this.awardPoints(registration.user, 20, "check_in", checkIn.id, "活动签到奖励");
+    await this.registrations.update(registration.id, { status: RegistrationStatus.CheckedIn });
+    const checkInResult = await this.checkIns
+      .createQueryBuilder()
+      .insert()
+      .values({ registration: { id: registration.id }, operator: { id: admin.id }, remark: remark || null } as any)
+      .execute();
+    const checkInId = Number(checkInResult.identifiers[0]?.id || checkInResult.raw?.insertId || 0);
+    await this.recordAdminConversionEvent("check_in", { activity: registration.activity, user: registration.user, registration, channel: registration.channel || null, idempotencyKey: `check_in:${checkInId}` });
+    await this.awardPoints(registration.user, 20, "check_in", checkInId, "活动签到奖励");
     await this.logOperation(currentAdmin || { id: admin.id, username: admin.username, role: admin.role, tenantId: admin.tenant?.id ?? null }, "check_in.verify", "registration", registration.id, `签到核销：${registration.activity.title}`, { code, remark: remark || null });
-    return checkIn;
+    return { id: checkInId, status: registration.status, registration: { id: registration.id, status: registration.status }, remark: remark || null, activity: { id: registration.activity.id, title: registration.activity.title } };
   }
 
   async listWaitlists(activityId?: number, status?: WaitlistStatus, admin?: AdminContext) {
@@ -3218,22 +3223,33 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async recordAdminConversionEvent(type: string, input: { activity?: Activity | null; user?: User | null; registration?: Registration | null; order?: Order | null; channel?: ActivityChannel | null; amount?: string | number | null; source?: string | null; idempotencyKey?: string | null }) {
-    if (input.idempotencyKey && await this.conversionEvents.findOne({ where: { idempotencyKey: input.idempotencyKey } })) return null;
-    return this.conversionEvents.save(this.conversionEvents.create({
+    if (input.idempotencyKey) {
+      const exists = await this.conversionEvents
+        .createQueryBuilder("event")
+        .where("event.idempotencyKey = :idempotencyKey", { idempotencyKey: input.idempotencyKey })
+        .getExists();
+      if (exists) return null;
+    }
+    const result = await this.conversionEvents
+      .createQueryBuilder()
+      .insert()
+      .values({
       type: type as any,
-      tenant: input.activity?.tenant || input.order?.tenant || input.registration?.tenant || input.channel?.tenant || null,
-      activity: input.activity || input.registration?.activity || input.order?.registration?.activity || null,
-      user: input.user || input.registration?.user || input.order?.registration?.user || null,
-      registration: input.registration || input.order?.registration || null,
-      order: input.order || null,
-      channel: input.channel || input.registration?.channel || null,
+      tenant: this.relationId(input.activity?.tenant || input.order?.tenant || input.registration?.tenant || input.channel?.tenant || null),
+      activity: this.relationId(input.activity || input.registration?.activity || input.order?.registration?.activity || null),
+      user: this.relationId(input.user || input.registration?.user || input.order?.registration?.user || null),
+      registration: this.relationId(input.registration || input.order?.registration || null),
+      order: this.relationId(input.order || null),
+      channel: this.relationId(input.channel || input.registration?.channel || null),
       amount: Number(input.amount || 0).toFixed(2),
       source: input.source || "admin",
       idempotencyKey: input.idempotencyKey || null,
       clientIp: null,
       userAgent: null,
       payload: null
-    }));
+    } as any)
+      .execute();
+    return { id: Number(result.identifiers[0]?.id || result.raw?.insertId || 0) };
   }
 
   private async analyticsTenantRanking(scope: { tenantId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
@@ -3909,6 +3925,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return text || null;
   }
 
+  private relationId<T extends { id?: number }>(value?: T | null) {
+    return value?.id ? { id: value.id } : null;
+  }
+
   private async ensureProfilesForExistingUsers() {
     const users = await this.users.find({ take: 500 });
     for (const user of users) await this.ensureMemberProfile(user);
@@ -3928,7 +3948,12 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       this.activityReviews.count({ where: { user: { id: user.id } } }),
       this.orders.createQueryBuilder("o").leftJoin("o.registration", "r").select("COALESCE(SUM(o.amount), 0)", "sum").where("r.userId = :userId", { userId: user.id }).andWhere("o.status IN (:...statuses)", { statuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] }).getRawOne<{ sum: string }>(),
       this.memberPointLogs.createQueryBuilder("p").select("COALESCE(SUM(p.points), 0)", "sum").where("p.userId = :userId", { userId: user.id }).getRawOne<{ sum: string }>(),
-      this.registrations.findOne({ where: { user: { id: user.id } }, order: { createdAt: "DESC" } })
+      this.registrations
+        .createQueryBuilder("registration")
+        .select("registration.createdAt", "createdAt")
+        .where("registration.userId = :userId", { userId: user.id })
+        .orderBy("registration.createdAt", "DESC")
+        .getRawOne<{ createdAt: Date }>()
     ]);
     row.points = Number(pointSum?.sum || 0);
     row.totalSpent = Number(paidAmount?.sum || 0).toFixed(2);
