@@ -35,6 +35,15 @@
       </div>
     </div>
 
+    <el-alert
+      v-if="isPlatformAdmin()"
+      class="scope-hint"
+      type="info"
+      show-icon
+      :closable="false"
+      title="平台视角可直接查看全部商家的商城订单、售后和财务；只有配置物流、优惠券、秒杀、拼团、推广码等商家运营内容时，才需要先在上方选择具体商家。"
+    />
+
     <div class="summary-row">
       <el-card v-for="item in summaryCards" :key="item.label" shadow="never" class="summary-card">
         <small>{{ item.label }}</small>
@@ -1817,6 +1826,7 @@ watch(() => [route.path, route.query.panel, route.query.tenantId], async () => {
 .page-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 20px; }
 .page-header p { margin: 6px 0 0; color: #64748b; }
 .finance-note { font-size: 12px; color: #94a3b8 !important; }
+.scope-hint { margin-bottom: 16px; }
 .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .summary-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .summary-card :deep(.el-card__body) { display: grid; gap: 6px; padding: 14px 16px; }

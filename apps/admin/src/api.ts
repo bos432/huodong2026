@@ -15,10 +15,11 @@ function requestIdFromHeaders(headers: unknown) {
 }
 
 function normalizeApiMessage(value: unknown, fallback: string) {
-  if (typeof value === "string") return value;
+  if (typeof value === "string") return value === "Forbidden resource" ? fallback : value;
   if (!value || typeof value !== "object") return fallback;
   const data = value as Record<string, unknown>;
-  const base = typeof data.message === "string" ? data.message : fallback;
+  const rawBase = typeof data.message === "string" ? data.message : fallback;
+  const base = rawBase === "Forbidden resource" ? fallback : rawBase;
   const issues = Array.isArray(data.issues)
     ? data.issues
         .map((item) => (item && typeof item === "object" ? (item as Record<string, unknown>).message : ""))
@@ -51,7 +52,8 @@ api.interceptors.response.use(
   (response) => response.data.data,
   (error) => {
     const responseMessage = error.response?.data?.message;
-    const message = error.response?.status === 403 ? "当前账号无权限，请联系超级管理员" : normalizeApiMessage(responseMessage, error.message || "请求失败");
+    const fallback = error.response?.status === 403 ? "当前账号无权限，请联系超级管理员" : error.message || "请求失败";
+    const message = normalizeApiMessage(responseMessage, fallback);
     const requestId = error.response?.data?.requestId || requestIdFromHeaders(error.response?.headers);
     return Promise.reject(new ApiClientError(message, requestId));
   }
