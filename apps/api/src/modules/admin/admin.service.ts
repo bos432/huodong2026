@@ -2548,7 +2548,15 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async checkIn(code: string, adminId: number, remark?: string, currentAdmin?: AdminContext) {
-    const registration = await this.registrations.findOne({ where: { checkInCode: code } });
+    const registration = await this.registrations
+      .createQueryBuilder("registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("registration.tenant", "tenant")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndSelect("registration.channel", "channel")
+      .where("registration.checkInCode = :code", { code })
+      .getOne();
     if (!registration) throw new NotFoundException("签到码不存在");
     if (this.isTenantScoped(currentAdmin) && registration.tenant?.id !== currentAdmin?.tenantId && registration.activity.tenant?.id !== currentAdmin?.tenantId) throw new NotFoundException("Resource not found or not in current tenant");
     if (registration.status === RegistrationStatus.CheckedIn) throw new BadRequestException("该报名已签到，请勿重复核销");
