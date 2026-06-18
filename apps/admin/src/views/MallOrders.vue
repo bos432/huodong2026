@@ -810,12 +810,14 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
+import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api, downloadFile } from "../api";
 import { isPlatformAdmin } from "../permissions";
 
 const tenants = ref<any[]>([]);
+const route = useRoute();
 const orders = ref<any[]>([]);
 const refunds = ref<any[]>([]);
 const reviews = ref<any[]>([]);
@@ -864,7 +866,11 @@ const groupBuyRecordDialogVisible = ref(false);
 const promotionDialogVisible = ref(false);
 const currentOrder = ref<any>(null);
 const logisticsCompanies = ref<any[]>([]);
-const filters = reactive({ tenantId: undefined as number | undefined, status: "", paymentMethod: "", refundStatus: "", keyword: "", startDate: "", endDate: "", page: 1, pageSize: 50 });
+const routeTenantId = () => {
+  const id = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : 0;
+  return isPlatformAdmin() && id ? id : undefined;
+};
+const filters = reactive({ tenantId: routeTenantId() as number | undefined, status: "", paymentMethod: "", refundStatus: "", keyword: "", startDate: "", endDate: "", page: 1, pageSize: 50 });
 const dateRange = ref<string[]>([]);
 const refundFilters = reactive({ status: "", keyword: "" });
 const reviewFilters = reactive({ status: "pending", keyword: "" });
@@ -1209,6 +1215,17 @@ async function loadPromotionCodes() {
   }
 }
 function reload() { loadOrders(); loadAnalytics(); loadRefunds(); loadReviews(); loadPaymentData(); }
+async function openRoutePanel() {
+  const panel = String(route.query.panel || route.path.replace("/mall-", ""));
+  if (panel === "refunds") {
+    refundFilters.status = refundFilters.status || "pending";
+    filters.refundStatus = filters.refundStatus || "pending";
+    await loadRefunds();
+  }
+  if (panel === "logistics") openLogisticsDialog();
+  if (panel === "marketing") openFlashSaleDialog();
+  if (panel === "finance") await loadPaymentData();
+}
 async function exportOrders() {
   try {
     const clean = new URLSearchParams();
@@ -1760,6 +1777,12 @@ async function togglePromotionCode(row: any) {
 onMounted(async () => {
   await loadTenants();
   reload();
+  await openRoutePanel();
+});
+watch(() => [route.path, route.query.panel, route.query.tenantId], async () => {
+  filters.tenantId = routeTenantId();
+  reload();
+  await openRoutePanel();
 });
 </script>
 

@@ -41,7 +41,13 @@ const tenantScopedRoutePaths = new Set([
   "/registrations",
   "/orders",
   "/mall-products",
+  "/mall-inventory",
+  "/mall-coupons",
   "/mall-orders",
+  "/mall-refunds",
+  "/mall-logistics",
+  "/mall-marketing",
+  "/mall-finance",
   "/finance",
   "/admins",
   "/agents",
@@ -55,6 +61,7 @@ const tenantQuickLinks = [
   { label: "活动", path: "/activities" },
   { label: "报名", path: "/registrations" },
   { label: "订单", path: "/orders" },
+  { label: "商城", path: "/mall-products" },
   { label: "商城订单", path: "/mall-orders" },
   { label: "财务", path: "/finance" },
   { label: "装修", path: "/homepage-builder" },
@@ -107,9 +114,24 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/orders", icon: "Wallet", label: "全局订单", roles: ["order.view"], scope: "platform" },
-      { index: "/mall-orders", icon: "Goods", label: "商城订单", roles: ["mall.order.view", "mall.finance.view"], scope: "platform" },
       { index: "/finance", icon: "CreditCard", label: "全局对账", roles: ["finance.view"], scope: "platform" },
       { index: "/agents", icon: "Shop", label: "商家收款账户", roles: ["payment_account.view"], scope: "platform" }
+    ]
+  },
+  {
+    index: "platform-mall",
+    icon: "Goods",
+    label: "平台端 · 商城管理",
+    scope: "platform",
+    items: [
+      { index: "/mall-products", icon: "Goods", label: "商品管理", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-inventory", icon: "Warning", label: "库存预警", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-coupons", icon: "Discount", label: "优惠券营销", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-orders", icon: "Tickets", label: "商城订单", roles: ["mall.order.view", "mall.finance.view"], scope: "platform" },
+      { index: "/mall-refunds", icon: "RefreshLeft", label: "售后退款", roles: ["mall.refund.manage", "mall.finance.view"], scope: "platform" },
+      { index: "/mall-logistics", icon: "Van", label: "物流设置", roles: ["mall.logistics.manage", "mall.order.manage"], scope: "platform" },
+      { index: "/mall-marketing", icon: "Promotion", label: "秒杀拼团/推广", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-finance", icon: "Money", label: "商城财务", roles: ["mall.finance.view"], scope: "platform" }
     ]
   },
   {
@@ -138,8 +160,7 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "platform" },
-      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "platform" },
-      { index: "/mall-products", icon: "Goods", label: "商城商品", roles: ["mall.product.manage"], scope: "platform" }
+      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "platform" }
     ]
   },
   {
@@ -199,10 +220,25 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/orders", icon: "Wallet", label: "订单管理", roles: ["order.view"], scope: "tenant" },
-      { index: "/mall-orders", icon: "Goods", label: "商城订单", roles: ["mall.order.view", "mall.finance.view"], scope: "tenant" },
       { index: "/finance", icon: "CreditCard", label: "财务对账", roles: ["finance.view"], scope: "tenant" },
       { index: "/agents", icon: "Shop", label: "收款方式", roles: permissions.paymentAccountView, scope: "tenant" },
       { index: "/agent-settlements", icon: "Money", label: "代理结算", roles: ["agent_settlement.view"], scope: "tenant" }
+    ]
+  },
+  {
+    index: "tenant-mall",
+    icon: "Goods",
+    label: "商家端 · 商城管理",
+    scope: "tenant",
+    items: [
+      { index: "/mall-products", icon: "Goods", label: "商品管理", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/mall-inventory", icon: "Warning", label: "库存预警", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/mall-coupons", icon: "Discount", label: "优惠券营销", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/mall-orders", icon: "Tickets", label: "商城订单", roles: ["mall.order.view", "mall.finance.view"], scope: "tenant" },
+      { index: "/mall-refunds", icon: "RefreshLeft", label: "售后退款", roles: ["mall.refund.manage", "mall.finance.view"], scope: "tenant" },
+      { index: "/mall-logistics", icon: "Van", label: "物流设置", roles: ["mall.logistics.manage", "mall.order.manage"], scope: "tenant" },
+      { index: "/mall-marketing", icon: "Promotion", label: "秒杀拼团/推广", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/mall-finance", icon: "Money", label: "商城财务", roles: ["mall.finance.view"], scope: "tenant" }
     ]
   },
   {
@@ -236,8 +272,7 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "tenant" },
-      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "tenant" },
-      { index: "/mall-products", icon: "Goods", label: "商城商品", roles: ["mall.product.manage"], scope: "tenant" }
+      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "tenant" }
     ]
   },
   {

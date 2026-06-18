@@ -527,7 +527,8 @@ export class MallService implements OnModuleDestroy {
       .where("sku.enabled = :enabled", { enabled: true })
       .andWhere("product.status = :status", { status: "published" })
       .andWhere("(sku.stock - sku.lockedStock) <= :threshold", { threshold })
-      .orderBy("(sku.stock - sku.lockedStock)", "ASC")
+      .addSelect("sku.stock - sku.lockedStock", "availableStock")
+      .orderBy("availableStock", "ASC")
       .addOrderBy("product.id", "DESC")
       .addOrderBy("sku.sortOrder", "ASC")
       .take(Math.min(Math.max(Number(query.pageSize || 50), 1), 200));

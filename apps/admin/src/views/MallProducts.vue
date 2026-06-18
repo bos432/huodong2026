@@ -456,6 +456,11 @@ async function openLowStockDialog() {
   lowStockDialogVisible.value = true;
   await loadLowStock();
 }
+async function openRoutePanel() {
+  const panel = String(route.query.panel || route.path.replace("/mall-", ""));
+  if (panel === "inventory") await openLowStockDialog();
+  if (panel === "coupons") openCouponDialog();
+}
 function addSku() { form.skus.push({ name: "", price: 0, originalPrice: 0, stock: 0, enabled: true }); }
 function removeSku(index: number) { if (form.skus.length > 1) form.skus.splice(index, 1); }
 function openCouponDialog() {
@@ -543,6 +548,7 @@ onMounted(async () => {
   await loadCategories();
   await loadProducts();
   await loadLowStock();
+  await openRoutePanel();
 });
 watch(() => route.query.tenantId, () => {
   filters.tenantId = routeTenantId();
@@ -550,6 +556,10 @@ watch(() => route.query.tenantId, () => {
   loadProducts();
   loadLowStock();
   if (couponDialogVisible.value) loadCoupons();
+  openRoutePanel();
+});
+watch(() => [route.path, route.query.panel], () => {
+  openRoutePanel();
 });
 </script>
 
