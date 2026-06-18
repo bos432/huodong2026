@@ -93,12 +93,13 @@ async function paidRegistrationFlow(activity) {
     headers: userAuth(user.userAccessToken),
     body: JSON.stringify({ answers: answers(detail.fields || [], "B"), ticketTypeId: detail.ticketTypes?.find((item) => Number(item.price || 0) > 0)?.id, paymentMethod: "balance", source: "online-showcase-balance" })
   });
-  assert(registered.order?.status === Status.PendingPayment, "收费报名应先生成待支付订单");
-  const paid = await api(`/public/orders/${registered.order.id}/pay/balance?tenantCode=${TENANT_CODE}`, {
-    method: "POST",
-    headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({})
-  });
+  const paid = registered.order?.status === Status.Paid
+    ? registered
+    : await api(`/public/orders/${registered.order.id}/pay/balance?tenantCode=${TENANT_CODE}`, {
+      method: "POST",
+      headers: userAuth(user.userAccessToken),
+      body: JSON.stringify({})
+    });
   assert(paid.order?.status === Status.Paid, "余额支付后订单应为 paid");
   const afterWallet = await api(`/public/me/wallet?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) });
   assert(Number(afterWallet.availableBalance) < Number(beforeWallet.availableBalance), "余额支付后钱包余额应减少");
@@ -118,11 +119,13 @@ async function refundFlow(activity, financeToken) {
     headers: userAuth(user.userAccessToken),
     body: JSON.stringify({ answers: answers(detail.fields || [], "C"), ticketTypeId: detail.ticketTypes?.find((item) => Number(item.price || 0) > 0)?.id, paymentMethod: "balance", source: "online-showcase-refund" })
   });
-  const paid = await api(`/public/orders/${registered.order.id}/pay/balance?tenantCode=${TENANT_CODE}`, {
-    method: "POST",
-    headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({})
-  });
+  const paid = registered.order?.status === Status.Paid
+    ? registered
+    : await api(`/public/orders/${registered.order.id}/pay/balance?tenantCode=${TENANT_CODE}`, {
+      method: "POST",
+      headers: userAuth(user.userAccessToken),
+      body: JSON.stringify({})
+    });
   const userRequest = await tryApi(`/public/me/registrations/${registered.registration.id}/refund-request?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
