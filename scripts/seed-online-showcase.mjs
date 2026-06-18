@@ -351,7 +351,7 @@ function activityPayload(title, price, category, description, index) {
       { label: "姓名", type: "text", required: true, sortOrder: 1, options: [] },
       { label: "手机号", type: "phone", required: true, sortOrder: 2, options: [] },
       { label: "微信号", type: "text", required: false, sortOrder: 3, options: [] },
-      { label: "学习兴趣", type: "select", required: false, sortOrder: 4, options: [{ label: category, value: category }, { label: "其他", value: "其他" }] }
+      { label: "学习兴趣", type: "single_choice", required: false, sortOrder: 4, options: [{ label: category, value: category }, { label: "其他", value: "其他" }] }
     ],
     hosts: [{ name: "七维演示讲师", title: category, avatarUrl: "", bio: "负责演示商家内容交付和用户服务。", sortOrder: 1 }],
     sections: [
