@@ -5,6 +5,7 @@ import { CurrentAdmin } from "../admin/current-admin.decorator";
 import { CoursesService } from "./courses.service";
 
 const COURSE_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator];
+const COURSE_ORDER_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance];
 const COMMUNITY_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator];
 type AdminContext = { id: number; username: string; role?: string; tenantId?: number | null };
 
@@ -56,10 +57,10 @@ export class CoursesController {
   @Delete("course-lessons/:id") deleteLesson(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: AdminContext) { return this.service.deleteCourseLesson(id, admin); }
 
   // ===== Course Orders =====
-  @AdminRoles(...COURSE_ROLES)
+  @AdminRoles(...COURSE_ORDER_ROLES)
   @Get("course-orders") listCourseOrders(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listCourseOrders(q, admin); }
 
-  @AdminRoles(...COURSE_ROLES)
+  @AdminRoles(...COURSE_ORDER_ROLES)
   @Post("course-orders/:id/confirm-offline-payment") confirmCourseOrder(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: AdminContext) { return this.service.confirmOfflineCourseOrder(id, admin); }
 
   // ===== Community Activities =====

@@ -11,4 +11,9 @@ describe("admin route permissions", () => {
     expect(resolveAdminRoutePermission("POST", "activities/:id/approve")).toBe("activity.approve");
     expect(resolveAdminRoutePermission("POST", "activities/:id/reject")).toBe("activity.approve");
   });
+
+  it("maps course order collection and offline confirmation to order permissions", () => {
+    expect(resolveAdminRoutePermission("GET", "course-orders")).toBe("order.view");
+    expect(resolveAdminRoutePermission("POST", "course-orders/:id/confirm-offline-payment")).toBe("order.manage");
+  });
 });

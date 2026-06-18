@@ -182,6 +182,8 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "orders" && verb === "GET") return "order.view";
   if (path === "orders/export") return "order.export";
   if (path.startsWith("orders")) return write ? "order.manage" : "order.view";
+  if (path === "course-orders" && verb === "GET") return "order.view";
+  if (path.startsWith("course-orders")) return write ? "order.manage" : "order.view";
   if (path.startsWith("ticket-types")) return "ticket.manage";
   if (path.startsWith("coupons")) return "coupon.manage";
   if (path === "finance/export") return "finance.export";
