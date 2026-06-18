@@ -224,22 +224,73 @@ async function ensureHomepage(token) {
         demoScenario: SCENARIO
       }
     },
-    { type: "activity_list", title: "近期活动", subtitle: "免费体验 + 收费工作坊", sortOrder: 3, config: { limit: 6, demoScenario: SCENARIO } },
-    { type: "course_list", title: "精选课程", subtitle: "体验课与系统课同步展示", sortOrder: 4, config: { limit: 4, demoScenario: SCENARIO } },
-    { type: "community_posts", title: "书院动态", subtitle: "文章、点赞、评论审核演示", sortOrder: 5, config: { limit: 8, demoScenario: SCENARIO } },
+    { type: "featured_activities", title: "近期精选活动", subtitle: "免费体验 + 收费工作坊", sortOrder: 3, config: { source: "featured", limit: 6, demoScenario: SCENARIO }, layout: { display: "horizontal", spacingBottom: 18 } },
+    { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、家庭教育、身心成长", sortOrder: 4, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12 } },
+    { type: "activity_feed", title: "全部演示活动", subtitle: "用于验证报名、支付、退款和签到闭环", sortOrder: 5, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list" } },
+    { type: "image_banner", title: "课程学习专区", subtitle: "体验课与系统课同步展示", sortOrder: 6, config: { imageUrl: cover(4), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, background: "#F7E7D0" } },
+    { type: "rich_text", title: "书院动态与评论审核", subtitle: "动态内容已在共修/动态页面生成", sortOrder: 7, config: { content: "演示数据包含 8 条书院动态，支持用户点赞、提交评论、后台审核后前台展示。", link: "/pages/community/posts", demoScenario: SCENARIO }, layout: { spacingBottom: 18 } },
     {
       type: "bottom_nav",
       title: "底部导航",
       sortOrder: 99,
       config: {
         items: [
-          { label: "首页", path: "/" },
-          { label: "活动", path: "/pages/activity/list" },
-          { label: "课程", path: "/pages/courses/index" },
-          { label: "共修", path: "/pages/community/checkin" },
-          { label: "我的", path: "/pages/user/my" }
+          { label: "书院", icon: "书", activeIcon: "书", link: "/pages/index/index", action: "mainPage", color: "#8B5A2B" },
+          { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#8B5A2B" },
+          { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#8B5A2B" },
+          { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#8B5A2B" },
+          { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#8B5A2B" }
         ],
         demoScenario: SCENARIO
+      },
+      layout: { backgroundColor: "#ffffff", activeColor: "#8B5A2B", textColor: "#7A6858" }
+    },
+    {
+      type: "my_page",
+      title: "我的书院",
+      subtitle: "报名、订单、课程、钱包和管理入口",
+      sortOrder: 100,
+      config: {
+        greeting: "我的书院",
+        tools: [
+          { label: "我的订单", icon: "单", color: "#8B5A2B", link: "/pages/user/orders", action: "navigate" },
+          { label: "我的课程", icon: "课", color: "#4A6B8A", link: "/pages/user/courses", action: "navigate" },
+          { label: "服务中心", icon: "服", color: "#7A6858", link: "/pages/service/index", action: "navigate" },
+          { label: "账号设置", icon: "设", color: "#B45309", link: "/pages/user/settings", action: "navigate" }
+        ],
+        demoScenario: SCENARIO
+      },
+      layout: {
+        heroBackgroundColor: "linear-gradient(135deg, #FFF7EC 0%, #F5DDC2 52%, #E8B89D 100%)",
+        heroTextColor: "#5B2F24",
+        heroMutedTextColor: "rgba(91, 47, 36, 0.68)"
+      }
+    },
+    {
+      type: "inner_pages",
+      title: "内页布局",
+      subtitle: "统一控制活动、公告、服务中心、报名详情等页面",
+      sortOrder: 110,
+      config: {
+        pages: [
+          { key: "activity_list", title: "活动", subtitle: "筛选近期活动，快速找到适合参加的课程和线下活动。", showBottomNav: true },
+          { key: "announcement_list", title: "公告中心", subtitle: "活动通知、报名提醒和现场须知都会集中展示在这里。", showBottomNav: true },
+          { key: "service_center", title: "服务中心", subtitle: "付款、退款、发票和客服信息，都可以在这里快速找到。", showBottomNav: true },
+          { key: "activity_detail", title: "活动详情", subtitle: "查看活动介绍、报名规则、服务说明和现场信息。", showBottomNav: false },
+          { key: "activity_register", title: "报名确认", subtitle: "确认票种、优惠和报名信息，提交后可在我的活动查看进度。", showBottomNav: false },
+          { key: "registration_detail", title: "报名详情", subtitle: "查看报名状态、订单、签到码和主办方服务信息。", showBottomNav: true },
+          { key: "review_page", title: "评价活动", subtitle: "你的反馈会帮助主办方持续改进活动体验。", showBottomNav: true },
+          { key: "login_page", title: "手机号登录", subtitle: "用于查看报名、订单、签到码和会员权益。", showBottomNav: false },
+          { key: "partner_page", title: "城市合伙人", subtitle: "区域保护、代理运营和城市书院演示入口。", showBottomNav: true }
+        ],
+        demoScenario: SCENARIO
+      },
+      layout: {
+        headerBackgroundColor: "#ffffff",
+        headerTextColor: "#5B2F24",
+        headerSubtitleColor: "#7A6858",
+        stickyFilterBackground: "#FFF7EC",
+        actionBarBackgroundColor: "#ffffff"
       }
     }
   ];
