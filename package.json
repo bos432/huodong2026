@@ -24,6 +24,7 @@
     "seed:online-showcase": "node scripts/seed-online-showcase.mjs",
     "smoke:online-showcase": "node scripts/smoke-online-showcase.mjs",
     "cleanup:online-showcase": "node scripts/cleanup-online-showcase.mjs",
+    "prelaunch:online-showcase": "node scripts/prelaunch-online-showcase.mjs",
     "smoke:tenant": "node scripts/tenant-smoke.mjs",
     "smoke:real-payment": "node scripts/real-payment-smoke-result.mjs",
     "build": "npm run build:shared && npm run build:api && npm run build:admin && npm run build:mobile:h5",
