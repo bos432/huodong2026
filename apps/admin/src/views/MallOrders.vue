@@ -893,6 +893,7 @@ const promotionForm = reactive<any>({ id: null, code: "", name: "", commissionRa
 const enabledLogisticsCompanies = computed(() => logisticsCompanies.value.filter((item) => item.enabled));
 const selectedFlashSaleSkus = computed(() => couponProducts.value.find((item) => item.id === flashSaleForm.productId)?.skus || []);
 const selectedGroupBuySkus = computed(() => couponProducts.value.find((item) => item.id === groupBuyForm.productId)?.skus || []);
+const activePanel = computed(() => String(route.query.panel || route.path.replace("/mall-", "") || "orders"));
 const statuses = [
   { label: "待线下确认", value: "pending_confirm" },
   { label: "待付款", value: "pending_payment" },
@@ -1214,9 +1215,34 @@ async function loadPromotionCodes() {
     promotionLoading.value = false;
   }
 }
-function reload() { loadOrders(); loadAnalytics(); loadRefunds(); loadReviews(); loadPaymentData(); }
+function reload() {
+  const panel = activePanel.value;
+  if (panel === "refunds") {
+    loadRefunds();
+    return;
+  }
+  if (panel === "logistics") {
+    loadLogisticsCompanies();
+    return;
+  }
+  if (panel === "marketing") {
+    loadCouponOptions();
+    loadCoupons();
+    loadFlashSales();
+    loadGroupBuys();
+    loadPromotionCodes();
+    return;
+  }
+  if (panel === "finance") {
+    loadAnalytics();
+    loadPaymentData();
+    return;
+  }
+  loadOrders();
+  loadAnalytics();
+}
 async function openRoutePanel() {
-  const panel = String(route.query.panel || route.path.replace("/mall-", ""));
+  const panel = activePanel.value;
   if (panel === "refunds") {
     refundFilters.status = refundFilters.status || "pending";
     filters.refundStatus = filters.refundStatus || "pending";
