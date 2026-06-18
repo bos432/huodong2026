@@ -19,9 +19,21 @@ function sectionStyle(section: HomepageSectionView, fallback = "#fff") {
 function heroStyle(section: HomepageSectionView) {
   const config = section.config || {};
   return {
-    ...sectionStyle(section, String(config.backgroundColor || "#0f766e")),
+    ...sectionStyle({ ...section, layout: { ...(section.layout || {}), backgroundImage: config.backgroundImage || section.layout?.backgroundImage } }, String(config.backgroundColor || "#0f766e")),
     color: "#fff"
   };
+}
+
+function itemLink(item: Record<string, unknown>) {
+  return String(item.link || item.path || "");
+}
+
+function heroButtonText(section: HomepageSectionView) {
+  return String(section.config.primaryButtonText || section.config.buttonText || "");
+}
+
+function heroButtonLink(section: HomepageSectionView) {
+  return String(section.config.primaryButtonLink || section.config.link || "/pages/activity/list");
 }
 
 function richTextLines(content: unknown) {
@@ -67,13 +79,13 @@ function formatTime(value: string) {
       <view class="decor-eyebrow">{{ section.config.eyebrow || "七维文化" }}</view>
       <view class="decor-title">{{ section.title }}</view>
       <view v-if="section.subtitle" class="decor-copy">{{ section.subtitle }}</view>
-      <view v-if="section.config.primaryButtonText" class="decor-button" @click="goDecoratedLink(String(section.config.primaryButtonLink || '/pages/activity/list'))">
-        {{ section.config.primaryButtonText }}
+      <view v-if="heroButtonText(section)" class="decor-button" @click="goDecoratedLink(heroButtonLink(section))">
+        {{ heroButtonText(section) }}
       </view>
     </view>
 
     <view v-else-if="section.type === 'quick_nav'" class="decor-quick-grid" :style="{ gridTemplateColumns: `repeat(${Number(section.layout.columns || 4)}, 1fr)` }">
-      <view v-for="item in ((section.config.items as any[]) || []).slice(0, 8)" :key="item.label" class="decor-quick-item" @click="goDecoratedLink(item.link, item.action)">
+      <view v-for="item in ((section.config.items as any[]) || []).slice(0, 8)" :key="item.label" class="decor-quick-item" @click="goDecoratedLink(itemLink(item), item.action)">
         <text class="decor-quick-icon" :style="{ background: `${item.color || '#0f766e'}18`, color: item.color || '#0f766e' }">{{ quickInitial(item.label, item.icon) }}</text>
         <text>{{ item.label }}</text>
       </view>
@@ -140,29 +152,31 @@ function formatTime(value: string) {
 </template>
 
 <style scoped>
-.decor-hero { padding: 34rpx 28rpx; background: #0f766e; }
+.decor-hero { position: relative; overflow: hidden; padding: 42rpx 32rpx; background: #0f766e; box-shadow: 0 22rpx 54rpx rgba(91, 47, 36, 0.18); }
+.decor-hero::after { content: ""; position: absolute; right: -70rpx; bottom: -90rpx; width: 260rpx; height: 260rpx; border-radius: 999px; background: rgba(255,255,255,0.12); }
 .decor-eyebrow { color: rgba(255,255,255,0.78); font-size: 23rpx; font-weight: 800; }
 .decor-title { margin-top: 10rpx; font-size: 40rpx; line-height: 1.22; font-weight: 900; }
 .decor-copy { margin-top: 12rpx; color: rgba(255,255,255,0.84); font-size: 25rpx; line-height: 1.55; }
-.decor-button { display: inline-flex; margin-top: 18rpx; padding: 12rpx 22rpx; border-radius: 999px; background: rgba(255,255,255,0.18); font-size: 24rpx; font-weight: 900; }
+.decor-button { position: relative; z-index: 1; display: inline-flex; margin-top: 22rpx; padding: 14rpx 26rpx; border-radius: 999px; background: rgba(255,255,255,0.92); color: #5b2f24; font-size: 24rpx; font-weight: 900; box-shadow: 0 10rpx 26rpx rgba(91, 47, 36, 0.18); }
 .decor-quick-grid { display: grid; gap: 14rpx; margin-bottom: 18rpx; }
-.decor-quick-item { min-height: 118rpx; display: grid; gap: 8rpx; justify-items: center; align-content: center; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); color: #344054; font-size: 23rpx; font-weight: 800; box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
-.decor-quick-icon { width: 50rpx; height: 50rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 24rpx; font-weight: 900; }
+.decor-quick-item { min-height: 122rpx; display: grid; gap: 9rpx; justify-items: center; align-content: center; border-radius: 16px; background: linear-gradient(180deg, #fff 0%, #fffbf5 100%); color: #3f3428; font-size: 23rpx; font-weight: 800; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); border: 1px solid rgba(139, 90, 43, 0.08); }
+.decor-quick-icon { width: 54rpx; height: 54rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 24rpx; font-weight: 900; }
 .decor-banner, .decor-rich, .decor-notice, .decor-search { padding: 24rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); }
-.decor-banner image, .decor-rich image { width: 100%; border-radius: 8px; }
+.decor-banner { overflow: hidden; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); }
+.decor-banner image, .decor-rich image { width: 100%; border-radius: 12px; }
 .decor-section-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; margin-bottom: 12rpx; }
 .decor-section-copy { margin: -4rpx 0 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.45; }
 .decor-rich-line { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.65; }
 .decor-notice, .decor-search { display: grid; grid-template-columns: auto 1fr; gap: 14rpx; align-items: center; color: #344054; font-size: 25rpx; }
 .decor-notice text:first-child, .decor-search text:first-child { color: var(--primary-color, #0f766e); font-weight: 900; }
-.decor-card-block { padding: 24rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); }
+.decor-card-block { padding: 26rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.07); }
 .decor-category-scroll { width: 100%; height: 68rpx; white-space: nowrap; }
 .decor-category-track, .decor-tabs { display: inline-flex; gap: 14rpx; padding-right: 24rpx; }
 .decor-tabs { width: 100%; overflow-x: auto; margin-bottom: 18rpx; }
-.decor-category, .decor-tab { flex: 0 0 auto; padding: 14rpx 24rpx; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 25rpx; font-weight: 800; }
+.decor-category, .decor-tab { flex: 0 0 auto; padding: 14rpx 24rpx; border-radius: 999px; background: #fff7ec; color: var(--primary-color, #8b5a2b); font-size: 25rpx; font-weight: 800; border: 1px solid rgba(139, 90, 43, 0.12); }
 .decor-activity-list { display: grid; gap: 16rpx; }
-.decor-activity { display: grid; grid-template-columns: 150rpx 1fr; gap: 16rpx; min-height: 150rpx; padding: 12rpx; border-radius: 8px; background: #f8fafc; }
-.decor-activity image, .decor-cover-fallback { width: 150rpx; height: 150rpx; border-radius: 8px; }
+.decor-activity { display: grid; grid-template-columns: 154rpx 1fr; gap: 16rpx; min-height: 154rpx; padding: 14rpx; border-radius: 14px; background: linear-gradient(135deg, #fff 0%, #fffaf3 100%); border: 1px solid rgba(139, 90, 43, 0.08); }
+.decor-activity image, .decor-cover-fallback { width: 154rpx; height: 154rpx; border-radius: 12px; }
 .decor-cover-fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-weight: 900; }
 .decor-activity-body { min-width: 0; display: grid; align-content: space-between; gap: 8rpx; }
 .decor-activity-title { color: var(--text-color, #111827); font-size: 27rpx; line-height: 1.35; font-weight: 900; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

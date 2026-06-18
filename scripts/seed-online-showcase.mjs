@@ -78,30 +78,30 @@ const accounts = [
 ];
 
 const activities = [
-  ["【演示】国学经典晨读体验营", 0, "国学", "清晨共读经典片段，用 60 分钟体验书院式学习节奏。"],
-  ["【演示】硬笔书法入门公开课", 0, "书法", "从握笔、坐姿、基础笔画开始，适合零基础成人和亲子家庭。"],
-  ["【演示】节气养生与身心舒展", 0, "身心健康", "结合节气生活方式、呼吸放松和轻运动，做一场温和体验课。"],
-  ["【演示】家庭教育沟通工作坊", 59, "家庭教育", "拆解亲子沟通场景，用练习帮助家长建立更稳定的表达方式。"],
-  ["【演示】东方美学书法半日课", 99, "书法", "半日沉浸式书法与东方美学体验，适合高意向用户转化。"],
-  ["【演示】个人成长与副业定位课", 199, "创业技能", "帮助学员梳理个人优势、服务定位和下一步行动计划。"]
+  ["【演示】国学经典晨读体验营", 0, "国学", "清晨共读《大学》与《论语》片段，用 60 分钟体验书院式学习节奏，适合第一次到访的新学员。"],
+  ["【演示】硬笔书法入门公开课", 0, "书法", "从握笔、坐姿、基础笔画开始，现场完成一张入门作品，适合零基础成人和亲子家庭。"],
+  ["【演示】节气养生与身心舒展", 0, "身心健康", "结合节气生活方式、呼吸放松和轻运动，做一场温和体验课，帮助用户建立健康打卡习惯。"],
+  ["【演示】家庭教育沟通工作坊", 59, "家庭教育", "拆解亲子沟通场景，用练习帮助家长建立更稳定的表达方式，适合转化为系列课。"],
+  ["【演示】东方美学书法半日课", 99, "书法", "半日沉浸式书法与东方美学体验，包含作品点评、茶歇交流和后续系统课推荐。"],
+  ["【演示】个人成长与副业定位课", 199, "创业技能", "帮助学员梳理个人优势、服务定位和第一次成交路径，适合验证付费报名和交付闭环。"]
 ];
 
 const courses = [
-  ["【演示】国学入门十分钟", 0, "七维导学老师", ["国学", "体验课"]],
-  ["【演示】书法基础体验课", 0, "书法主理人", ["书法", "免费体验"]],
-  ["【演示】传统文化系统课", 299, "七维书院讲师团", ["传统文化", "系统课"]],
-  ["【演示】家庭教育进阶课", 199, "家庭教育顾问", ["家庭教育", "进阶"]]
+  ["【演示】国学入门十分钟", 0, "七维导学老师", ["国学", "体验课", "新人必看"]],
+  ["【演示】书法基础体验课", 0, "书法主理人", ["书法", "免费体验", "作品练习"]],
+  ["【演示】传统文化系统课", 299, "七维书院讲师团", ["传统文化", "系统课", "30天学习"]],
+  ["【演示】家庭教育进阶课", 199, "家庭教育顾问", ["家庭教育", "进阶", "亲子沟通"]]
 ];
 
 const posts = [
-  "今天的晨读从《大学》开篇讲起，学员反馈最有收获的是把经典句子落回到日常选择里。",
-  "书法体验课现场：横画不只是写直，更是在练稳定、呼吸和观察力。",
-  "家庭教育沙龙复盘：先处理情绪，再处理事情，是很多家长今天带走的一句话。",
-  "节气身心课预告：这周我们会从饮食、睡眠和轻运动三个角度做生活方式练习。",
-  "学员笔记精选：学习传统文化不是背答案，而是多一个看世界的角度。",
-  "城市书院日常：下午的空间很安静，适合阅读、抄写，也适合和自己待一会儿。",
-  "共修打卡第 7 天：有人开始早睡，有人开始每天读 10 分钟书，小变化会积累。",
-  "创业技能小课预告：用一页纸梳理你的用户、产品和第一次成交路径。"
+  "今日晨读摘记：把经典句子落回日常选择里，才是真正开始学习。新同学可以先从免费晨读体验营进入。",
+  "书法体验课现场：横画不只是写直，更是在练稳定、呼吸和观察力。下周半日课会增加作品点评环节。",
+  "家庭教育沙龙复盘：先处理情绪，再处理事情，是很多家长今天带走的一句话。评论区欢迎留下你的场景。",
+  "节气身心课预告：这周从饮食、睡眠和轻运动三个角度做生活方式练习，适合加入共修打卡。",
+  "学员笔记精选：学习传统文化不是背答案，而是多一个看世界的角度。今天的笔记已经整理进课程资料。",
+  "城市书院日常：下午的空间很安静，适合阅读、抄写，也适合和自己待一会儿。欢迎预约到店体验。",
+  "共修打卡第 7 天：有人开始早睡，有人开始每天读 10 分钟书，小变化会积累，后台也能看到打卡记录。",
+  "创业技能小课预告：用一页纸梳理用户、产品和第一次成交路径，适合想做本地文化服务的人。"
 ];
 
 async function main() {
@@ -233,31 +233,47 @@ async function ensureHomepage(token) {
     {
       type: "hero",
       title: "七维书院演示中心",
-      subtitle: "活动报名、课程学习、共修打卡、动态互动完整闭环",
+      subtitle: "一座可运营的线上书院：活动报名、课程学习、共修打卡、动态互动和财务追溯完整闭环。",
       sortOrder: 1,
-      config: { imageUrl: cover(2), link: "/pages/activity/list", buttonText: "查看活动", demoScenario: SCENARIO },
-      layout: { highlighted: true }
+      config: {
+        eyebrow: "上线演示商家",
+        backgroundImage: cover(4),
+        backgroundColor: "linear-gradient(135deg, rgba(91,47,36,0.96), rgba(139,90,43,0.86))",
+        primaryButtonText: "查看近期活动",
+        primaryButtonLink: "/pages/activity/list",
+        demoScenario: SCENARIO
+      },
+      layout: { highlighted: true, borderRadius: 18, spacingBottom: 18 }
+    },
+    {
+      type: "announcement_bar",
+      title: "运营公告",
+      subtitle: "演示商家已准备活动、课程、动态、余额支付、退款与签到核销数据",
+      sortOrder: 2,
+      config: { limit: 3, pinnedFirst: true, link: "/pages/announcement/list", demoScenario: SCENARIO },
+      layout: { spacingBottom: 14, backgroundColor: "#FFF7EC", borderRadius: 14 }
     },
     {
       type: "quick_nav",
-      title: "运营功能入口",
-      subtitle: "用户能快速进入报名、课程、共修和个人中心",
-      sortOrder: 2,
+      title: "书院服务",
+      subtitle: "从体验、学习到复购服务，用户路径一眼可见",
+      sortOrder: 3,
       config: {
         items: [
-          { label: "活动报名", path: "/pages/activity/list" },
-          { label: "课程学习", path: "/pages/courses/index" },
-          { label: "共修打卡", path: "/pages/community/checkin" },
-          { label: "书院动态", path: "/pages/community/posts" }
+          { label: "活动报名", icon: "活", color: "#8B5A2B", link: "/pages/activity/list", action: "mainPage" },
+          { label: "课程学习", icon: "课", color: "#4A6B8A", link: "/pages/courses/index", action: "mainPage" },
+          { label: "共修打卡", icon: "修", color: "#5B8C5A", link: "/pages/community/checkin" },
+          { label: "书院动态", icon: "动", color: "#B45309", link: "/pages/community/index", action: "mainPage" }
         ],
         demoScenario: SCENARIO
-      }
+      },
+      layout: { columns: 4, spacingBottom: 18 }
     },
-    { type: "featured_activities", title: "近期精选活动", subtitle: "免费体验 + 收费工作坊", sortOrder: 3, config: { source: "featured", limit: 6, demoScenario: SCENARIO }, layout: { display: "horizontal", spacingBottom: 18 } },
-    { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、家庭教育、身心成长", sortOrder: 4, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12 } },
-    { type: "activity_feed", title: "全部演示活动", subtitle: "用于验证报名、支付、退款和签到闭环", sortOrder: 5, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list" } },
-    { type: "image_banner", title: "课程学习专区", subtitle: "体验课与系统课同步展示", sortOrder: 6, config: { imageUrl: cover(4), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, background: "#F7E7D0" } },
-    { type: "rich_text", title: "书院动态与评论审核", subtitle: "动态内容已在共修/动态页面生成", sortOrder: 7, config: { content: "演示数据包含 8 条书院动态，支持用户点赞、提交评论、后台审核后前台展示。", link: "/pages/community/posts", demoScenario: SCENARIO }, layout: { spacingBottom: 18 } },
+    { type: "featured_activities", title: "近期精选活动", subtitle: "免费体验课负责获客，收费工作坊负责转化", sortOrder: 4, config: { source: "featured", limit: 6, demoScenario: SCENARIO }, layout: { display: "horizontal", spacingBottom: 18, borderRadius: 16 } },
+    { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、家庭教育、身心成长", sortOrder: 5, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12 } },
+    { type: "activity_feed", title: "全部演示活动", subtitle: "覆盖免费报名、收费报名、余额支付、退款和签到核销", sortOrder: 6, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list", borderRadius: 16 } },
+    { type: "image_banner", title: "课程学习专区", subtitle: "体验课与系统课同步展示", sortOrder: 7, config: { imageUrl: cover(8), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, backgroundColor: "#F7E7D0", borderRadius: 16 } },
+    { type: "rich_text", title: "运营闭环看板", subtitle: "用户路径与后台动作已经打通", sortOrder: 8, config: { content: "用户侧：浏览首页 -> 报名活动 -> 余额支付 -> 申请退款 -> 学习课程 -> 互动评论\n后台侧：发布内容 -> 确认收款 -> 审核退款 -> 核销签到 -> 审核评论 -> 查看财务流水", link: "/pages/community/index", demoScenario: SCENARIO }, layout: { spacingBottom: 18, backgroundColor: "#FFFCF6", borderRadius: 16 } },
     {
       type: "bottom_nav",
       title: "底部导航",
@@ -384,9 +400,9 @@ function activityPayload(title, price, category, description, index) {
     ],
     hosts: [{ name: "七维演示讲师", title: category, avatarUrl: "", bio: "负责演示商家内容交付和用户服务。", sortOrder: 1 }],
     sections: [
-      { type: "highlights", title: "适合人群", content: "适合希望体验书院活动、课程学习和线下服务闭环的用户。", imageUrl: cover(index + 1), sortOrder: 1 },
-      { type: "agenda", title: "活动流程", content: "签到入场、主题讲解、互动体验、答疑交流、后续学习建议。", imageUrl: "", sortOrder: 2 },
-      { type: "notice", title: "验收说明", content: `demoScenario:${SCENARIO}，用于验证免费/收费报名、余额支付、退款和签到核销。`, imageUrl: "", sortOrder: 3 }
+      { type: "highlights", title: "你会获得什么", content: `一次完整的${category}体验：现场讲解、互动练习、老师答疑，以及后续课程/共修建议。`, imageUrl: cover(index + 1), sortOrder: 1 },
+      { type: "agenda", title: "活动流程", content: "签到入场 -> 主题导入 -> 互动体验 -> 作品/问题点评 -> 后续学习建议。", imageUrl: "", sortOrder: 2 },
+      { type: "notice", title: "服务保障", content: "报名后可在“我的”查看订单和签到码；收费报名支持余额支付演示，退款会进入后台审核并退回余额。", imageUrl: "", sortOrder: 3 }
     ]
   };
 }
@@ -404,7 +420,7 @@ async function ensureCourses(token) {
   for (const [index, [title, price, teacherName, tags]] of courses.entries()) {
     const payload = {
       title,
-      description: `${title}用于演示课程列表、课程详情、下单、后台确认、已购课程和学习进度闭环。`,
+      description: `${title}适合作为书院线上课程样板：包含试看课时、系统课时、后台确认收款、已购课程和学习进度记录。`,
       coverUrl: cover(index + 3),
       teacherName,
       teacherAvatar: "",
@@ -434,8 +450,8 @@ async function ensureCourseContent(token, courseId) {
   }
   const lessons = pickList(await api(`/admin/course-chapters/${chapter.id}/lessons`, { headers: auth(token) }));
   const lessonPayloads = [
-    { title: "课时 1：课程介绍与学习目标", duration: "08:00", isFree: true, content: "演示课时内容：了解课程目标和学习路径。" },
-    { title: "课时 2：核心方法与练习", duration: "16:00", isFree: false, content: "演示课时内容：后台确认购买后可学习并写回进度。" }
+    { title: "课时 1：课程介绍与学习目标", duration: "08:00", isFree: true, content: "本节用于试看：了解课程目标、适合人群和学习路径。" },
+    { title: "课时 2：核心方法与练习", duration: "16:00", isFree: false, content: "本节用于付费交付演示：后台确认购买后可学习，并写回学习进度。" }
   ];
   for (const payload of lessonPayloads) {
     const existing = lessons.find((item) => item.title === payload.title);
