@@ -689,6 +689,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     row.remark = this.nullableText(dto.remark);
     if (dto.assignee !== undefined) row.assignee = this.nullableText(dto.assignee);
     if (dto.priority !== undefined) row.priority = dto.priority;
+    if (dto.source !== undefined) row.source = this.nullableText(dto.source);
     if (dto.nextFollowAt !== undefined) row.nextFollowAt = dto.nextFollowAt ? this.parseDate(dto.nextFollowAt) : null;
     row.reviewedBy = admin?.id || null;
     row.reviewedAt = new Date();

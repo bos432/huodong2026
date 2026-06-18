@@ -182,7 +182,7 @@ async function loadApplications() {
 
 async function updateApplication(row: any) {
   try {
-    const saved = await api.patch(`/admin/ambassador/applications/${row.id}`, { status: row.status, remark: row.remark || "", assignee: row.assignee || "", priority: row.priority || "normal", nextFollowAt: row.nextFollowAt || "" });
+    const saved = await api.patch(`/admin/ambassador/applications/${row.id}`, { status: row.status, remark: row.remark || "", assignee: row.assignee || "", priority: row.priority || "normal", nextFollowAt: row.nextFollowAt || "", source: row.source || "" });
     Object.assign(row, saved);
     ElMessage.success("跟进状态已保存");
   } catch (error: any) {
@@ -350,9 +350,9 @@ onMounted(load);
           <el-table :data="applications" stripe empty-text="暂无申请">
             <el-table-column label="申请类型" width="130" fixed="left">
               <template #default="{ row }">
-                <el-tooltip :content="sourceTip(row.source)" placement="top">
-                  <el-tag :type="sourceMeta(row.source).type as any">{{ sourceMeta(row.source).label }}</el-tag>
-                </el-tooltip>
+                <el-select v-model="row.source" size="small" placeholder="申请类型" @change="updateApplication(row)">
+                  <el-option v-for="item in sourceOptions" :key="item.value" :label="item.label" :value="item.value" />
+                </el-select>
               </template>
             </el-table-column>
             <el-table-column prop="name" label="姓名" width="100" />
