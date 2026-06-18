@@ -91,7 +91,7 @@ async function paidRegistrationFlow(activity) {
   const registered = await api(`/public/activities/${activity.id}/register?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ answers: answers(detail.fields || [], "B"), ticketTypeId: detail.ticketTypes?.find((item) => Number(item.price || 0) > 0)?.id, source: "online-showcase-balance" })
+    body: JSON.stringify({ answers: answers(detail.fields || [], "B"), ticketTypeId: detail.ticketTypes?.find((item) => Number(item.price || 0) > 0)?.id, paymentMethod: "balance", source: "online-showcase-balance" })
   });
   assert(registered.order?.status === Status.PendingPayment, "收费报名应先生成待支付订单");
   const paid = await api(`/public/orders/${registered.order.id}/pay/balance?tenantCode=${TENANT_CODE}`, {
@@ -116,7 +116,7 @@ async function refundFlow(activity, financeToken) {
   const registered = await api(`/public/activities/${activity.id}/register?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ answers: answers(detail.fields || [], "C"), ticketTypeId: detail.ticketTypes?.find((item) => Number(item.price || 0) > 0)?.id, source: "online-showcase-refund" })
+    body: JSON.stringify({ answers: answers(detail.fields || [], "C"), ticketTypeId: detail.ticketTypes?.find((item) => Number(item.price || 0) > 0)?.id, paymentMethod: "balance", source: "online-showcase-refund" })
   });
   const paid = await api(`/public/orders/${registered.order.id}/pay/balance?tenantCode=${TENANT_CODE}`, {
     method: "POST",
