@@ -47,6 +47,14 @@ const priorityText: Record<string, string> = {
   normal: "普通",
   high: "高"
 };
+const sourceOptions = [
+  { value: "dean_recruit", label: "院长招募", type: "warning" },
+  { value: "ambassador_apply", label: "大使申请", type: "danger" },
+  { value: "aid_personal", label: "个人帮扶", type: "success" },
+  { value: "aid_project", label: "项目帮扶", type: "success" },
+  { value: "brand_story_contact", label: "品牌咨询", type: "info" },
+  { value: "", label: "文化大使旧入口", type: "info" }
+];
 
 const landingUrl = computed(() => `${window.location.origin}/#/pages/ambassador/index`);
 
@@ -188,11 +196,12 @@ async function exportApplications() {
   if (applicationFilter.status) params.status = applicationFilter.status;
   if (applicationFilter.priority) params.priority = applicationFilter.priority;
   if (applicationFilter.source.trim()) params.source = applicationFilter.source.trim();
-  await downloadFile(`/admin/ambassador/applications/export?${new URLSearchParams(params as Record<string, string>).toString()}`, "文化大使申请.xlsx");
+  await downloadFile(`/admin/ambassador/applications/export?${new URLSearchParams(params as Record<string, string>).toString()}`, "招募帮扶线索.xlsx");
 }
 
 async function copyWechatScript(row: any) {
-  const text = `你好${row.name || "老师"}，我是七维书院文化大使计划的跟进人。看到你提交的方向是「${row.expertise || "传统文化/教育"}」，想和你约一个10分钟沟通，了解你的课程/活动经验，并介绍文化大使的扶持权益。你今天或明天哪个时间方便？`;
+  const source = sourceMeta(row.source);
+  const text = `你好${row.name || "老师"}，我是七维书院${source.label}的跟进人。看到你提交的方向是「${row.expertise || "传统文化/教育"}」，想和你约一个10分钟沟通，了解你的情况和下一步合作/帮扶方式。你今天或明天哪个时间方便？`;
   await navigator.clipboard.writeText(text);
   ElMessage.success("微信跟进话术已复制");
 }
@@ -206,6 +215,20 @@ function formatTime(value?: string) {
   return value ? value.replace("T", " ").slice(0, 16) : "-";
 }
 
+function sourceMeta(value?: string | null) {
+  return sourceOptions.find((item) => item.value === String(value || "")) || { value: value || "", label: value || "未标记来源", type: "info" };
+}
+
+function sourceTip(value?: string | null) {
+  const source = String(value || "");
+  if (source === "dean_recruit") return "本地书院院长/负责人申请";
+  if (source === "ambassador_apply") return "文化大使、讲师、主理人申请";
+  if (source === "aid_personal") return "个人学习帮扶、公益名额申请";
+  if (source === "aid_project") return "公益项目方提交合作/帮扶项目";
+  if (source === "brand_story_contact") return "品牌故事页咨询线索";
+  return "旧版文化大使入口或未标记来源";
+}
+
 onMounted(load);
 </script>
 
@@ -213,8 +236,8 @@ onMounted(load);
   <div class="page" v-loading="loading">
     <div class="toolbar">
       <div>
-        <h2>文化大使招募</h2>
-        <p>管理七维文化大使英雄帖落地页、案例背书和申请线索。</p>
+        <h2>公益与招募线索</h2>
+        <p>统一管理院长招募、大使申请、个人帮扶、项目帮扶等前台提交线索。</p>
       </div>
       <div class="toolbar-actions">
         <el-button @click="load">刷新</el-button>
@@ -305,32 +328,40 @@ onMounted(load);
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="申请列表" name="applications">
+      <el-tab-pane label="申请线索" name="applications">
         <div class="table-card">
           <div class="table-head">
             <h3>申请线索</h3>
             <div class="filters">
               <el-input v-model="applicationFilter.keyword" clearable placeholder="搜索姓名/手机/城市/微信" @keyup.enter="loadApplications" />
+              <el-select v-model="applicationFilter.source" clearable placeholder="申请类型">
+                <el-option v-for="item in sourceOptions.filter((source) => source.value)" :key="item.value" :label="item.label" :value="item.value" />
+              </el-select>
               <el-select v-model="applicationFilter.status" clearable placeholder="状态">
                 <el-option v-for="(label, value) in statusText" :key="value" :label="label" :value="value" />
               </el-select>
               <el-select v-model="applicationFilter.priority" clearable placeholder="线索等级">
                 <el-option v-for="(label, value) in priorityText" :key="value" :label="label" :value="value" />
               </el-select>
-              <el-input v-model="applicationFilter.source" clearable placeholder="来源" @keyup.enter="loadApplications" />
               <el-button @click="loadApplications">筛选</el-button>
               <el-button @click="exportApplications">导出 Excel</el-button>
             </div>
           </div>
           <el-table :data="applications" stripe empty-text="暂无申请">
+            <el-table-column label="申请类型" width="130" fixed="left">
+              <template #default="{ row }">
+                <el-tooltip :content="sourceTip(row.source)" placement="top">
+                  <el-tag :type="sourceMeta(row.source).type as any">{{ sourceMeta(row.source).label }}</el-tag>
+                </el-tooltip>
+              </template>
+            </el-table-column>
             <el-table-column prop="name" label="姓名" width="100" />
             <el-table-column prop="phone" label="手机号" width="130" />
             <el-table-column prop="city" label="城市" width="110" />
-            <el-table-column prop="expertise" label="擅长领域" min-width="160" show-overflow-tooltip />
+            <el-table-column prop="expertise" label="方向/需求" min-width="180" show-overflow-tooltip />
             <el-table-column prop="wechat" label="微信号" width="140" />
-            <el-table-column prop="source" label="来源" width="110" />
             <el-table-column prop="channelCode" label="渠道码" width="120" />
-            <el-table-column prop="experience" label="经验介绍" min-width="240" show-overflow-tooltip />
+            <el-table-column prop="experience" label="申请说明" min-width="260" show-overflow-tooltip />
             <el-table-column label="等级" width="110">
               <template #default="{ row }">
                 <el-select v-model="row.priority" size="small" @change="updateApplication(row)">

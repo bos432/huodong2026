@@ -636,9 +636,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       { header: "姓名", key: "name", width: 14 },
       { header: "手机号", key: "phone", width: 18 },
       { header: "城市", key: "city", width: 16 },
-      { header: "擅长领域", key: "expertise", width: 24 },
+      { header: "方向/需求", key: "expertise", width: 24 },
       { header: "微信号", key: "wechat", width: 20 },
-      { header: "来源", key: "source", width: 16 },
+      { header: "申请类型", key: "source", width: 16 },
       { header: "渠道码", key: "channelCode", width: 18 },
       { header: "状态", key: "status", width: 14 },
       { header: "线索等级", key: "priority", width: 12 },
@@ -655,7 +655,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         city: row.city,
         expertise: row.expertise,
         wechat: row.wechat,
-        source: row.source || "",
+        source: this.ambassadorApplicationSourceText(row.source),
         channelCode: row.channelCode || "",
         status: row.status,
         priority: row.priority || "normal",
@@ -668,6 +668,17 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     sheet.getRow(1).font = { bold: true };
     sheet.views = [{ state: "frozen", ySplit: 1 }];
     return workbook.xlsx.writeBuffer();
+  }
+
+  private ambassadorApplicationSourceText(source?: string | null) {
+    const map: Record<string, string> = {
+      dean_recruit: "院长招募",
+      ambassador_apply: "大使申请",
+      aid_personal: "个人帮扶",
+      aid_project: "项目帮扶",
+      brand_story_contact: "品牌咨询"
+    };
+    return map[String(source || "")] || source || "文化大使旧入口";
   }
 
   async updateAmbassadorApplication(id: number, dto: AmbassadorApplicationStatusDto, admin?: AdminContext) {
