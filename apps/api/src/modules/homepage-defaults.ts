@@ -122,6 +122,10 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
       sortOrder: 40,
       config: {
         items: [
+          { label: "品牌故事", icon: "品", color: "#8B5A2B", link: "/pages/brand/story" },
+          { label: "院长招募", icon: "院", color: "#7A4B24", link: "/pages/recruit/dean" },
+          { label: "大使申请", icon: "使", color: "#C43D3D", link: "/pages/apply/ambassador" },
+          { label: "帮扶申请", icon: "扶", color: "#5B8C5A", link: "/pages/apply/aid" },
           { label: "全部活动", icon: "activity", color: "#0f766e", link: "/pages/activity/list" },
           { label: "公告中心", icon: "notice", color: "#c2410c", link: "/pages/announcement/list" },
           { label: "我的报名", icon: "ticket", color: "#4338ca", link: "/pages/user/my", action: "mainPage" },

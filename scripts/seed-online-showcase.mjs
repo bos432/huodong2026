@@ -260,6 +260,10 @@ async function ensureHomepage(token) {
       sortOrder: 3,
       config: {
         items: [
+          { label: "品牌故事", icon: "品", color: "#8B5A2B", link: "/pages/brand/story" },
+          { label: "院长招募", icon: "院", color: "#7A4B24", link: "/pages/recruit/dean" },
+          { label: "大使申请", icon: "使", color: "#C43D3D", link: "/pages/apply/ambassador" },
+          { label: "帮扶申请", icon: "扶", color: "#5B8C5A", link: "/pages/apply/aid" },
           { label: "活动报名", icon: "活", color: "#8B5A2B", link: "/pages/activity/list", action: "mainPage" },
           { label: "课程学习", icon: "课", color: "#4A6B8A", link: "/pages/courses/index", action: "mainPage" },
           { label: "共修打卡", icon: "修", color: "#5B8C5A", link: "/pages/community/checkin" },

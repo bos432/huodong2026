@@ -154,10 +154,10 @@ onShow(async () => {
 });
 
 const jingang = [
-  { icon: "🖌", label: "国学", category: "国学" },
-  { icon: "☯", label: "玄学", category: "玄学" },
-  { icon: "📜", label: "书法", category: "书法" },
-  { icon: "📚", label: "教育", category: "教育" },
+  { icon: "🏛", label: "品牌故事", url: "/pages/brand/story" },
+  { icon: "院", label: "院长招募", url: "/pages/recruit/dean" },
+  { icon: "使", label: "大使申请", url: "/pages/apply/ambassador" },
+  { icon: "扶", label: "帮扶申请", url: "/pages/apply/aid" },
   { icon: "🌿", label: "健康", category: "健康" },
   { icon: "⛰", label: "创业", category: "创业" },
   { icon: "⚙", label: "技能", category: "技能" },
@@ -202,7 +202,10 @@ async function loadPosts() {
 }
 
 function goSearch() { uni.navigateTo({ url:"/pages/search/index" }); }
-function goCategory(item: any) { uni.navigateTo({ url:`/pages/courses/index?category=${item.category}` }); }
+function goCategory(item: any) {
+  if (item.url) return uni.navigateTo({ url: withTenantCode(item.url) });
+  uni.navigateTo({ url:`/pages/courses/index?category=${item.category}` });
+}
 function goBanner(b: any) {
   if (b.link === "ambassador") uni.navigateTo({ url:"/pages/ambassador/index" });
   else if (b.link === "course") uni.navigateTo({ url: withTenantCode("/pages/course/detail?id=1") });
