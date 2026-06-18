@@ -917,6 +917,11 @@ export class ConfirmPaymentDto {
 }
 
 export class WalletAdjustDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number;
+
   @IsNumber()
   amount!: number;
 

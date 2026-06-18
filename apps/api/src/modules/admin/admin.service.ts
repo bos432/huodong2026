@@ -2829,7 +2829,6 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listWallets(keyword?: string, admin?: AdminContext) {
-    this.assertPlatformAdmin(admin);
     const tenant = await this.walletTenantForAdmin(admin);
     const builder = this.userWallets
       .createQueryBuilder("wallet")
@@ -2844,7 +2843,6 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getUserWallet(userId: number, admin?: AdminContext) {
-    this.assertPlatformAdmin(admin);
     const user = await this.users.findOneBy({ id: userId });
     if (!user) throw new NotFoundException("用户不存");
     await this.assertUserTenantAccess(userId, admin);
@@ -2855,7 +2853,6 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async listWalletTransactions(userId: number | undefined, admin?: AdminContext) {
-    this.assertPlatformAdmin(admin);
     const tenant = await this.walletTenantForAdmin(admin);
     const builder = this.walletTransactions
       .createQueryBuilder("tx")
@@ -2882,7 +2879,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const user = await this.users.findOneBy({ id: userId });
     if (!user) throw new NotFoundException("用户不存");
     await this.assertUserTenantAccess(userId, admin);
-    const tenant = await this.walletTenantForAdmin(admin);
+    const tenant = dto.tenantId ? await this.resolveWalletTenantForPlatform(dto.tenantId) : await this.walletTenantForAdmin(admin);
     const tenantScopeKey = this.walletTenantScopeKey(tenant);
     const direction = dto.type === "deduct" || (dto.type === "adjust" && amount < 0) ? "debit" : "credit";
     const absoluteAmount = Math.abs(amount);
@@ -3570,6 +3567,14 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!this.isTenantScoped(admin)) return null;
     const tenant = await this.tenants.findOneBy({ id: admin?.tenantId || 0 });
     if (!tenant || !tenant.enabled) throw new NotFoundException("当前商家不存在或已停用");
+    return tenant;
+  }
+
+  private async resolveWalletTenantForPlatform(tenantId?: number | null) {
+    const id = Number(tenantId || 0);
+    if (!id) return null;
+    const tenant = await this.tenants.findOneBy({ id });
+    if (!tenant || !tenant.enabled) throw new NotFoundException("钱包所属商家不存在或已停用");
     return tenant;
   }
 
