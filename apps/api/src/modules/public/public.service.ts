@@ -1065,8 +1065,10 @@ export class PublicService {
   }
 
   private async resolveWalletTenantContext(context?: PublicTenantContext) {
+    const code = normalizeTenantCode(context?.tenantCode);
+    if (code && code !== "platform") return this.resolveTenantContext(context);
     const multiTenantEnabled = this.config.get("MULTI_TENANT_ENABLED", "false") === "true";
-    if (!multiTenantEnabled || normalizeTenantCode(context?.tenantCode) === "platform") return null;
+    if (!multiTenantEnabled || code === "platform") return null;
     return this.resolveTenantContext(context);
   }
 
