@@ -131,13 +131,16 @@ async function refundFlow(activity, financeToken) {
     headers: userAuth(user.userAccessToken),
     body: JSON.stringify({})
   });
-  const refundNo = `SHOWCASE_RF_${Date.now()}_${paid.order.id}`;
-  const refundRequest = await api(`/admin/orders/${paid.order.id}/refund`, {
-    method: "POST",
-    headers: auth(financeToken),
-    body: JSON.stringify({ amount: Math.min(10, Number(paid.order.amount || activity.price || 10)), reason: "online-showcase 余额支付退款验收", refundNo })
-  });
-  const approved = await api(`/admin/refunds/${refundRequest.refund.id}/approve`, {
+  const refundRequest = userRequest.ok
+    ? userRequest.data
+    : await api(`/admin/orders/${paid.order.id}/refund`, {
+      method: "POST",
+      headers: auth(financeToken),
+      body: JSON.stringify({ amount: Math.min(10, Number(paid.order.amount || activity.price || 10)), reason: "online-showcase 余额支付退款验收", refundNo: `SHOWCASE_RF_${Date.now()}_${paid.order.id}` })
+    });
+  const refund = userRequest.ok ? await findPendingRefund(financeToken, paid.order.id, refundRequest.refund?.refundNo) : refundRequest.refund;
+  assert(refund?.id, "退款申请创建后后台退款列表缺少待审核记录");
+  const approved = await api(`/admin/refunds/${refund.id}/approve`, {
     method: "POST",
     headers: auth(financeToken),
     body: JSON.stringify({ remark: "online-showcase 退款审核通过" })
@@ -149,6 +152,11 @@ async function refundFlow(activity, financeToken) {
   const txs = pickList(await api(`/public/me/wallet/transactions?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) }));
   assert(txs.some((item) => item.type === "refund_return"), "退款返还流水缺失");
   reportStep("退款闭环", userRequest.ok ? "用户申请 -> 财务退款 -> 审核通过 -> 余额退回" : "财务退款 -> 审核通过 -> 余额退回");
+}
+
+async function findPendingRefund(financeToken, orderId, refundNo) {
+  const refunds = pickList(await api("/admin/finance/refunds?pageSize=200", { headers: auth(financeToken) }));
+  return refunds.find((item) => item.status === "pending" && item.order?.id === orderId && (!refundNo || item.refundNo === refundNo));
 }
 
 async function commentFlow(opsToken) {
