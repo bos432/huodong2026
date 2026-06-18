@@ -6,6 +6,7 @@ import {
   assert,
   auth,
   demoUsers,
+  loginPlatformAdmin,
   loginShowcaseAdmin,
   loginUser,
   pickList,
@@ -23,12 +24,18 @@ const Status = {
   PartiallyRefunded: "partially_refunded"
 };
 
+let runtimeUsers = new Map();
+
 async function main() {
   console.log(`线上演示商家 smoke target: ${API_BASE}`);
   const admin = await loginShowcaseAdmin("showcase_admin");
+  const platform = await loginPlatformAdmin();
   const ops = await loginShowcaseAdmin("showcase_ops");
   const finance = await loginShowcaseAdmin("showcase_finance");
   const checkin = await loginShowcaseAdmin("showcase_checkin");
+  const tenantId = admin.admin?.tenant?.id || admin.admin?.tenantId;
+  assert(tenantId, "演示商家管理员登录信息缺少 tenantId");
+  runtimeUsers = await prepareSmokeUsers(admin.token, platform.token, tenantId);
 
   const publicHome = await api(`/public/homepage?tenantCode=${TENANT_CODE}`, { headers: tenantHeader() });
   assert(pickList(publicHome?.sections || publicHome).length || Array.isArray(publicHome), "H5 首页装修没有返回有效内容");
@@ -53,7 +60,7 @@ async function main() {
 }
 
 async function freeRegistrationFlow(activity, checkinToken) {
-  const demo = demoUsers.find((item) => item.key === "free");
+  const demo = smokeUser("free");
   const user = await loginUser(demo.phone, demo.nickname);
   const detail = await api(`/public/activities/${activity.id}?tenantCode=${TENANT_CODE}`, { headers: tenantHeader() });
   const registered = await api(`/public/activities/${activity.id}/register?tenantCode=${TENANT_CODE}`, {
@@ -76,7 +83,7 @@ async function freeRegistrationFlow(activity, checkinToken) {
 }
 
 async function paidRegistrationFlow(activity) {
-  const demo = demoUsers.find((item) => item.key === "paid");
+  const demo = smokeUser("paid");
   const user = await loginUser(demo.phone, demo.nickname);
   const beforeWallet = await api(`/public/me/wallet?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) });
   assert(Number(beforeWallet.availableBalance || 0) >= Number(activity.price || 0), "收费报名用户余额不足，请先执行 seed");
@@ -102,7 +109,7 @@ async function paidRegistrationFlow(activity) {
 }
 
 async function refundFlow(activity, financeToken) {
-  const demo = demoUsers.find((item) => item.key === "refund");
+  const demo = smokeUser("refund");
   const user = await loginUser(demo.phone, demo.nickname);
   const beforeWallet = await api(`/public/me/wallet?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) });
   const detail = await api(`/public/activities/${activity.id}?tenantCode=${TENANT_CODE}`, { headers: tenantHeader() });
@@ -142,7 +149,7 @@ async function refundFlow(activity, financeToken) {
 }
 
 async function commentFlow(opsToken) {
-  const demo = demoUsers.find((item) => item.key === "comment");
+  const demo = smokeUser("comment");
   const user = await loginUser(demo.phone, demo.nickname);
   const posts = pickList(await api(`/public/community/posts?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) }));
   assert(posts.length >= 8, "书院动态不足 8 条");
@@ -173,7 +180,7 @@ async function commentFlow(opsToken) {
 }
 
 async function courseFlow(financeToken) {
-  const demo = demoUsers.find((item) => item.key === "course");
+  const demo = smokeUser("course");
   const user = await loginUser(demo.phone, demo.nickname);
   const courses = pickList(await api(`/public/courses?tenantCode=${TENANT_CODE}`, { headers: tenantHeader() }));
   const freeCourse = courses.find((item) => Number(item.price || 0) <= 0);
@@ -206,6 +213,38 @@ async function courseFlow(financeToken) {
   const myCourses = pickList(await api(`/public/me/courses?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) }));
   assert(myCourses.some((item) => item.id === paidCourse.id && Number(item.learning?.progress || 0) >= 0), "我的课程缺少已购课程或学习记录");
   reportStep("课程交付闭环", "下单 -> 后台确认 -> 播放权限 -> 学习进度 -> 我的课程");
+}
+
+async function prepareSmokeUsers(tenantAdminToken, platformToken, tenantId) {
+  const base = 1000 + (Date.now() % 8000);
+  const users = new Map();
+  for (const [index, template] of demoUsers.entries()) {
+    const phone = `1399000${String(base + index).padStart(4, "0")}`;
+    const nickname = `${template.nickname}-${base + index}`;
+    const profile = await api("/admin/members", {
+      method: "POST",
+      headers: auth(tenantAdminToken),
+      body: JSON.stringify({ phone, password: process.env.SHOWCASE_PASSWORD, nickname, remark: "online-showcase smoke runtime user" })
+    });
+    const userId = profile?.user?.id || profile?.id || profile?.profile?.user?.id;
+    assert(userId, `${phone} smoke 用户创建后无法识别用户ID`);
+    if (["paid", "refund", "course"].includes(template.key)) {
+      await api(`/admin/users/${userId}/wallet/adjust`, {
+        method: "POST",
+        headers: auth(platformToken),
+        body: JSON.stringify({ tenantId, amount: 800, type: "recharge", remark: "online-showcase smoke runtime recharge" })
+      });
+    }
+    users.set(template.key, { ...template, phone, nickname, userId });
+  }
+  reportStep("本次 smoke 独立用户已准备", Array.from(users.values()).map((item) => item.phone).join(" / "));
+  return users;
+}
+
+function smokeUser(key) {
+  const user = runtimeUsers.get(key);
+  assert(user, `缺少 smoke 用户：${key}`);
+  return user;
 }
 
 async function financeChecks(financeToken, orderId) {
