@@ -1,9 +1,9 @@
 <template>
   <view class="aid-page">
     <view class="hero">
-      <text class="eyebrow">帮扶申请</text>
-      <text class="title">让需要帮助的人和愿意做事的项目，被看见、被连接、被持续服务。</text>
-      <text class="copy">个人可申请学习帮扶/公益名额，项目方可提交公益项目合作需求。</text>
+      <text class="eyebrow">{{ config.eyebrow }}</text>
+      <text class="title">{{ config.title }}</text>
+      <text class="copy">{{ config.copy }}</text>
     </view>
 
     <view class="tabs">
@@ -12,26 +12,31 @@
     </view>
 
     <view class="section">
-      <text class="section-title">{{ active === 'personal' ? '个人帮扶申请' : '公益项目方申请' }}</text>
+      <text class="section-title">{{ active === 'personal' ? config.formTitle : '公益项目方申请' }}</text>
+      <view class="aid-tags">
+        <text v-for="item in config.items" :key="item" class="aid-tag">{{ item }}</text>
+      </view>
       <input v-model="form.name" class="input" :placeholder="active === 'personal' ? '姓名' : '项目联系人'" />
       <input v-model="form.phone" class="input" placeholder="手机号" type="number" maxlength="11" />
       <input v-model="form.city" class="input" placeholder="所在城市/服务区域" />
       <input v-model="form.wechat" class="input" placeholder="微信号" />
       <input v-model="form.expertise" class="input" :placeholder="active === 'personal' ? '希望获得的帮扶，例如课程名额/活动名额' : '项目名称/帮扶方向'" />
       <textarea v-model="form.experience" class="textarea" :placeholder="active === 'personal' ? '请说明你的情况、需要的帮助和可参与时间' : '请说明项目背景、服务对象、资金/资源需求和联系方式'" />
-      <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : "提交帮扶申请" }}</button>
+      <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.submitText }}</button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, watch } from "vue";
+import { onMounted, reactive, ref, watch } from "vue";
 import { request } from "../../api";
+import { useEntryPageConfig } from "../../entry-pages";
 
 const active = ref<"personal" | "project">("personal");
 const submitting = ref(false);
 const submitted = ref(false);
 const form = reactive({ name: "", phone: "", city: "", wechat: "", expertise: "", experience: "" });
+const { config, load } = useEntryPageConfig("aidApply");
 
 watch(active, () => {
   submitted.value = false;
@@ -54,13 +59,15 @@ async function submit() {
   try {
     await request("/public/ambassador/applications", { method: "POST", data: { ...form, source: active.value === "personal" ? "aid_personal" : "aid_project" } });
     submitted.value = true;
-    uni.showModal({ title: "已提交", content: "帮扶申请已进入后台，我们会尽快联系你核实信息。", showCancel: false });
+    uni.showModal({ title: "已提交", content: config.successMessage || "帮扶申请已进入后台，我们会尽快联系你核实信息。", showCancel: false });
   } catch (error: any) {
     uni.showToast({ title: error.message || "提交失败", icon: "none" });
   } finally {
     submitting.value = false;
   }
 }
+
+onMounted(load);
 </script>
 
 <style scoped>
@@ -75,6 +82,8 @@ async function submit() {
 .tab.active { background: #5b8c5a; color: #fff; }
 .section { margin-top: 24rpx; padding: 28rpx; background: #fff; }
 .section-title { display: block; margin-bottom: 18rpx; color: #24513a; font-size: 32rpx; font-weight: 950; }
+.aid-tags { display: flex; flex-wrap: wrap; gap: 12rpx; margin-bottom: 6rpx; }
+.aid-tag { padding: 10rpx 16rpx; border-radius: 999px; background: #e8f4ea; color: #3f7445; font-size: 23rpx; font-weight: 800; }
 .input, .textarea { width: 100%; box-sizing: border-box; margin-top: 16rpx; padding: 22rpx; border-radius: 16rpx; background: #f2f8f2; color: #17261d; font-size: 26rpx; }
 .textarea { min-height: 190rpx; }
 .submit { margin-top: 22rpx; height: 86rpx; border-radius: 999px; background: #5b8c5a; color: #fff; font-size: 28rpx; font-weight: 950; }

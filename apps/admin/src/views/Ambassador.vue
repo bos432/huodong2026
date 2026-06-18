@@ -26,7 +26,8 @@ const settingForm = reactive<any>({
     solutionItems: [] as string[],
     benefits: [] as string[],
     requirements: [] as string[],
-    faqs: [] as Array<{ question: string; answer: string }>
+    faqs: [] as Array<{ question: string; answer: string }>,
+    entryPages: {}
   }
 });
 const cases = ref<any[]>([]);
@@ -55,6 +56,56 @@ const sourceOptions = [
   { value: "brand_story_contact", label: "品牌咨询", type: "info" },
   { value: "", label: "文化大使旧入口", type: "info" }
 ];
+const defaultEntryPages = {
+  brandStory: {
+    eyebrow: "七维书院 · 品牌故事",
+    title: "把传统文化，做成可学习、可体验、可持续运营的现代书院。",
+    copy: "七维书院连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。",
+    primaryActionText: "申请成为院长",
+    secondaryActionText: "了解帮扶计划",
+    sectionTitle: "我们相信",
+    items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。", "书院要能运营：活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
+    flowTitle: "一套完整的书院闭环",
+    flowItems: ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地书院"],
+    joinTitle: "你可以如何参与"
+  },
+  deanRecruit: {
+    eyebrow: "院长招募",
+    title: "招募一批真正愿意把书院开在本地的人。",
+    copy: "院长不是普通代理，而是本地学习空间的负责人：组织活动、服务学员、链接老师和公益资源。",
+    sectionTitle: "适合谁",
+    items: ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同七维书院品牌与公益理念"],
+    formTitle: "提交院长申请",
+    submitText: "提交院长申请",
+    successMessage: "院长招募申请已进入后台，我们会尽快联系你。"
+  },
+  ambassadorApply: {
+    eyebrow: "大使申请",
+    title: "把你的热爱，变成能被更多人看见的文化服务。",
+    copy: "适合讲师、主理人、内容创作者、社群组织者申请成为七维文化大使。",
+    sectionTitle: "你将参与",
+    items: ["课程共创", "活动共办", "品牌露出", "学员服务", "公益参与", "长期成长"],
+    formTitle: "提交大使申请",
+    submitText: "提交大使申请",
+    successMessage: "大使申请已进入后台，我们会尽快联系你。"
+  },
+  aidApply: {
+    eyebrow: "帮扶申请",
+    title: "让需要帮助的人和愿意做事的项目，被看见、被连接、被持续服务。",
+    copy: "个人可申请学习帮扶/公益名额，项目方可提交公益项目合作需求。",
+    sectionTitle: "申请类型",
+    items: ["个人学习帮扶", "公益项目合作", "课程/活动名额支持", "本地资源连接"],
+    formTitle: "提交帮扶申请",
+    submitText: "提交帮扶申请",
+    successMessage: "帮扶申请已进入后台，我们会尽快联系你核实信息。"
+  }
+};
+const entryPageSections = [
+  { key: "brandStory", title: "品牌故事页", publicPath: "/#/pages/brand/story", itemLabel: "信念/说明", flow: true, actions: true },
+  { key: "deanRecruit", title: "院长招募页", publicPath: "/#/pages/recruit/dean", itemLabel: "适合人群", flow: false, actions: false },
+  { key: "ambassadorApply", title: "大使申请页", publicPath: "/#/pages/apply/ambassador", itemLabel: "参与权益", flow: false, actions: false },
+  { key: "aidApply", title: "帮扶申请页", publicPath: "/#/pages/apply/aid", itemLabel: "帮扶方向", flow: false, actions: false }
+] as const;
 
 const landingUrl = computed(() => `${window.location.origin}/#/pages/ambassador/index`);
 
@@ -92,7 +143,8 @@ function applySetting(row: any) {
     solutionItems: normalizeList(config.solutionItems),
     benefits: normalizeList(config.benefits),
     requirements: normalizeList(config.requirements),
-    faqs: normalizeFaqs(config.faqs)
+    faqs: normalizeFaqs(config.faqs),
+    entryPages: normalizeEntryPages(config.entryPages)
   });
 }
 
@@ -103,6 +155,18 @@ function normalizeList(value: unknown) {
 function normalizeFaqs(value: unknown) {
   if (!Array.isArray(value)) return [];
   return value.map((item: any) => ({ question: item?.question || "", answer: item?.answer || "" })).filter((item) => item.question || item.answer);
+}
+
+function normalizeEntryPages(value: any) {
+  return Object.fromEntries(Object.entries(defaultEntryPages).map(([key, defaults]) => {
+    const remote = value?.[key] || {};
+    return [key, {
+      ...defaults,
+      ...remote,
+      items: normalizeList(remote.items).length ? normalizeList(remote.items) : [...(defaults as any).items],
+      flowItems: normalizeList(remote.flowItems).length ? normalizeList(remote.flowItems) : [...((defaults as any).flowItems || [])]
+    }];
+  }));
 }
 
 async function saveSetting() {
@@ -132,6 +196,14 @@ function addFaq() {
 
 function removeFaq(index: number) {
   settingForm.config.faqs.splice(index, 1);
+}
+
+function addEntryItem(pageKey: string, field = "items") {
+  settingForm.config.entryPages[pageKey][field].push("");
+}
+
+function removeEntryItem(pageKey: string, field: string, index: number) {
+  settingForm.config.entryPages[pageKey][field].splice(index, 1);
 }
 
 function openCreateCase() {
@@ -182,7 +254,7 @@ async function loadApplications() {
 
 async function updateApplication(row: any) {
   try {
-    const saved = await api.patch(`/admin/ambassador/applications/${row.id}`, { status: row.status, remark: row.remark || "", assignee: row.assignee || "", priority: row.priority || "normal", nextFollowAt: row.nextFollowAt || "", source: row.source || "" });
+    const saved = await api.patch(`/admin/ambassador/applications/${row.id}`, { status: row.status, remark: row.remark || "", assignee: row.assignee || "", priority: row.priority || "normal", nextFollowAt: row.nextFollowAt || "" });
     Object.assign(row, saved);
     ElMessage.success("跟进状态已保存");
   } catch (error: any) {
@@ -304,6 +376,64 @@ onMounted(load);
             <el-input v-model="settingForm.config.faqs[index].answer" type="textarea" :rows="2" placeholder="回答" />
             <el-button text type="danger" @click="removeFaq(index)">删除</el-button>
           </div>
+        </div>
+
+        <div class="table-card">
+          <div class="table-head">
+            <div>
+              <h3>四入口页面内容</h3>
+              <p class="muted">修改首页“品牌故事、院长招募、大使申请、帮扶申请”进入后的 H5/小程序页面文案。</p>
+            </div>
+          </div>
+          <el-collapse class="entry-collapse">
+            <el-collapse-item v-for="page in entryPageSections" :key="page.key" :title="page.title" :name="page.key">
+              <el-alert type="info" :closable="false" class="entry-link">
+                <template #title>前台路径：{{ page.publicPath }}</template>
+              </el-alert>
+              <el-form :model="settingForm.config.entryPages[page.key]" label-width="112px">
+                <el-form-item label="顶部小标题"><el-input v-model="settingForm.config.entryPages[page.key].eyebrow" maxlength="60" /></el-form-item>
+                <el-form-item label="大标题"><el-input v-model="settingForm.config.entryPages[page.key].title" type="textarea" :rows="2" maxlength="160" /></el-form-item>
+                <el-form-item label="说明文案"><el-input v-model="settingForm.config.entryPages[page.key].copy" type="textarea" :rows="2" maxlength="260" /></el-form-item>
+                <el-form-item label="内容标题"><el-input v-model="settingForm.config.entryPages[page.key].sectionTitle" maxlength="60" /></el-form-item>
+                <el-form-item v-if="page.actions" label="按钮文案">
+                  <div class="inline-fields">
+                    <el-input v-model="settingForm.config.entryPages[page.key].primaryActionText" placeholder="主按钮" maxlength="40" />
+                    <el-input v-model="settingForm.config.entryPages[page.key].secondaryActionText" placeholder="次按钮" maxlength="40" />
+                  </div>
+                </el-form-item>
+                <el-form-item :label="page.itemLabel">
+                  <div class="entry-list">
+                    <div class="repeat-row" v-for="(_item, index) in settingForm.config.entryPages[page.key].items" :key="index">
+                      <el-input v-model="settingForm.config.entryPages[page.key].items[index]" type="textarea" :rows="2" />
+                      <el-button text type="danger" @click="removeEntryItem(page.key, 'items', index)">删除</el-button>
+                    </div>
+                    <el-button size="small" @click="addEntryItem(page.key, 'items')">新增一项</el-button>
+                  </div>
+                </el-form-item>
+                <template v-if="page.flow">
+                  <el-form-item label="闭环标题"><el-input v-model="settingForm.config.entryPages[page.key].flowTitle" maxlength="60" /></el-form-item>
+                  <el-form-item label="闭环步骤">
+                    <div class="entry-list">
+                      <div class="repeat-row" v-for="(_item, index) in settingForm.config.entryPages[page.key].flowItems" :key="index">
+                        <el-input v-model="settingForm.config.entryPages[page.key].flowItems[index]" />
+                        <el-button text type="danger" @click="removeEntryItem(page.key, 'flowItems', index)">删除</el-button>
+                      </div>
+                      <el-button size="small" @click="addEntryItem(page.key, 'flowItems')">新增步骤</el-button>
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="参与标题"><el-input v-model="settingForm.config.entryPages[page.key].joinTitle" maxlength="60" /></el-form-item>
+                </template>
+                <template v-else>
+                  <el-form-item label="表单标题"><el-input v-model="settingForm.config.entryPages[page.key].formTitle" maxlength="60" /></el-form-item>
+                  <el-form-item label="提交按钮"><el-input v-model="settingForm.config.entryPages[page.key].submitText" maxlength="40" /></el-form-item>
+                  <el-form-item label="成功提示"><el-input v-model="settingForm.config.entryPages[page.key].successMessage" type="textarea" :rows="2" maxlength="160" /></el-form-item>
+                </template>
+              </el-form>
+            </el-collapse-item>
+          </el-collapse>
+        </div>
+
+        <div class="table-card">
           <div class="save-line">
             <el-button type="primary" :loading="savingSetting" @click="saveSetting">保存落地页配置</el-button>
           </div>
@@ -350,9 +480,9 @@ onMounted(load);
           <el-table :data="applications" stripe empty-text="暂无申请">
             <el-table-column label="申请类型" width="130" fixed="left">
               <template #default="{ row }">
-                <el-select v-model="row.source" size="small" placeholder="申请类型" @change="updateApplication(row)">
-                  <el-option v-for="item in sourceOptions" :key="item.value" :label="item.label" :value="item.value" />
-                </el-select>
+                <el-tooltip :content="sourceTip(row.source)" placement="top">
+                  <el-tag :type="sourceMeta(row.source).type as any">{{ sourceMeta(row.source).label }}</el-tag>
+                </el-tooltip>
               </template>
             </el-table-column>
             <el-table-column prop="name" label="姓名" width="100" />
@@ -434,6 +564,11 @@ onMounted(load);
   margin: 6px 0 0;
   color: #667085;
 }
+.muted {
+  margin: 6px 0 0;
+  color: #667085;
+  font-size: 13px;
+}
 .toolbar-actions,
 .filters,
 .inline-fields {
@@ -474,6 +609,15 @@ onMounted(load);
 }
 .save-line {
   margin-top: 16px;
+}
+.entry-collapse {
+  margin-top: 12px;
+}
+.entry-link {
+  margin-bottom: 14px;
+}
+.entry-list {
+  width: 100%;
 }
 @media (max-width: 900px) {
   .toolbar,

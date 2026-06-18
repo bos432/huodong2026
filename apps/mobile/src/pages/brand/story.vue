@@ -1,32 +1,32 @@
 <template>
   <view class="story-page">
     <view class="hero">
-      <text class="eyebrow">七维书院 · 品牌故事</text>
-      <text class="title">把传统文化，做成可学习、可体验、可持续运营的现代书院。</text>
-      <text class="copy">七维书院连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。</text>
+      <text class="eyebrow">{{ config.eyebrow }}</text>
+      <text class="title">{{ config.title }}</text>
+      <text class="copy">{{ config.copy }}</text>
       <view class="actions">
-        <button class="primary" @click="goDean">申请成为院长</button>
-        <button class="ghost" @click="goAid">了解帮扶计划</button>
+        <button class="primary" @click="goDean">{{ config.primaryActionText }}</button>
+        <button class="ghost" @click="goAid">{{ config.secondaryActionText }}</button>
       </view>
     </view>
 
     <view class="section">
-      <text class="section-title">我们相信</text>
-      <view v-for="item in beliefs" :key="item.title" class="belief-card">
+      <text class="section-title">{{ config.sectionTitle }}</text>
+      <view v-for="item in parsedBeliefs" :key="item.title" class="belief-card">
         <text class="belief-title">{{ item.title }}</text>
         <text class="belief-copy">{{ item.copy }}</text>
       </view>
     </view>
 
     <view class="section warm">
-      <text class="section-title">一套完整的书院闭环</text>
+      <text class="section-title">{{ config.flowTitle }}</text>
       <view class="flow">
-        <view v-for="item in flow" :key="item" class="flow-item">{{ item }}</view>
+        <view v-for="item in config.flowItems" :key="item" class="flow-item">{{ item }}</view>
       </view>
     </view>
 
     <view class="section">
-      <text class="section-title">你可以如何参与</text>
+      <text class="section-title">{{ config.joinTitle }}</text>
       <view class="join-grid">
         <view class="join-card" @click="goDean">院长招募</view>
         <view class="join-card" @click="goAmbassador">大使申请</view>
@@ -37,19 +37,22 @@
 </template>
 
 <script setup lang="ts">
+import { computed, onMounted } from "vue";
 import { withTenantCode } from "../../api";
+import { useEntryPageConfig } from "../../entry-pages";
 
-const beliefs = [
-  { title: "文化要落到日常", copy: "不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。" },
-  { title: "书院要能运营", copy: "活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。" },
-  { title: "善意要可追踪", copy: "公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。" }
-];
+const { config, load } = useEntryPageConfig("brandStory");
 
-const flow = ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地书院"];
+const parsedBeliefs = computed(() => config.items.map((item) => {
+  const [title, ...copy] = String(item).split(/[：:]/);
+  return { title: title || item, copy: copy.join("：") || item };
+}));
 
 function goDean() { uni.navigateTo({ url: withTenantCode("/pages/recruit/dean") }); }
 function goAmbassador() { uni.navigateTo({ url: withTenantCode("/pages/apply/ambassador") }); }
 function goAid() { uni.navigateTo({ url: withTenantCode("/pages/apply/aid") }); }
+
+onMounted(load);
 </script>
 
 <style scoped>

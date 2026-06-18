@@ -241,11 +241,6 @@ export class AmbassadorApplicationStatusDto {
   @IsOptional()
   @IsString()
   nextFollowAt?: string;
-
-  @IsOptional()
-  @IsString()
-  @IsIn(["dean_recruit", "ambassador_apply", "aid_personal", "aid_project", "brand_story_contact", ""])
-  source?: string;
 }
 
 export class PaymentStatementImportItemDto {

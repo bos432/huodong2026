@@ -689,7 +689,6 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     row.remark = this.nullableText(dto.remark);
     if (dto.assignee !== undefined) row.assignee = this.nullableText(dto.assignee);
     if (dto.priority !== undefined) row.priority = dto.priority;
-    if (dto.source !== undefined) row.source = this.nullableText(dto.source);
     if (dto.nextFollowAt !== undefined) row.nextFollowAt = dto.nextFollowAt ? this.parseDate(dto.nextFollowAt) : null;
     row.reviewedBy = admin?.id || null;
     row.reviewedAt = new Date();
@@ -3881,6 +3880,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const merged: Record<string, unknown> = { ...defaults, ...base, ...next };
     for (const key of ["painPoints", "solutionItems", "benefits", "requirements"]) merged[key] = this.normalizeStringArray(merged[key], defaults[key] as string[]);
     merged.faqs = this.normalizeFaqs(merged.faqs, defaults.faqs as Array<{ question: string; answer: string }>);
+    merged.entryPages = this.normalizeEntryPages(merged.entryPages, defaults.entryPages as Record<string, Record<string, unknown>>);
     return merged;
   }
 
@@ -3905,7 +3905,51 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         { question: "我没有录制课程经验，怎么办？", answer: "平台会协助你梳理课程大纲、设计表达结构，并陪跑第一门课程上线。" },
         { question: "入驻后多久能看到收益？", answer: "收益取决于课程质量、运营投入和受众匹配度，平台会提供流量、工具和运营建议。" },
         { question: "早鸟费用是一次性还是每年？", answer: "默认展示为首年早鸟价，具体续费和权益可在后台文案中调整。" }
-      ]
+      ],
+      entryPages: {
+        brandStory: {
+          eyebrow: "七维书院 · 品牌故事",
+          title: "把传统文化，做成可学习、可体验、可持续运营的现代书院。",
+          copy: "七维书院连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。",
+          primaryActionText: "申请成为院长",
+          secondaryActionText: "了解帮扶计划",
+          sectionTitle: "我们相信",
+          items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。", "书院要能运营：活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
+          flowTitle: "一套完整的书院闭环",
+          flowItems: ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地书院"],
+          joinTitle: "你可以如何参与"
+        },
+        deanRecruit: {
+          eyebrow: "院长招募",
+          title: "招募一批真正愿意把书院开在本地的人。",
+          copy: "院长不是普通代理，而是本地学习空间的负责人：组织活动、服务学员、链接老师和公益资源。",
+          sectionTitle: "适合谁",
+          items: ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同七维书院品牌与公益理念"],
+          formTitle: "提交院长申请",
+          submitText: "提交院长申请",
+          successMessage: "院长招募申请已进入后台，我们会尽快联系你。"
+        },
+        ambassadorApply: {
+          eyebrow: "大使申请",
+          title: "把你的热爱，变成能被更多人看见的文化服务。",
+          copy: "适合讲师、主理人、内容创作者、社群组织者申请成为七维文化大使。",
+          sectionTitle: "你将参与",
+          items: ["课程共创", "活动共办", "品牌露出", "学员服务", "公益参与", "长期成长"],
+          formTitle: "提交大使申请",
+          submitText: "提交大使申请",
+          successMessage: "大使申请已进入后台，我们会尽快联系你。"
+        },
+        aidApply: {
+          eyebrow: "帮扶申请",
+          title: "让需要帮助的人和愿意做事的项目，被看见、被连接、被持续服务。",
+          copy: "个人可申请学习帮扶/公益名额，项目方可提交公益项目合作需求。",
+          sectionTitle: "申请类型",
+          items: ["个人学习帮扶", "公益项目合作", "课程/活动名额支持", "本地资源连接"],
+          formTitle: "提交帮扶申请",
+          submitText: "提交帮扶申请",
+          successMessage: "帮扶申请已进入后台，我们会尽快联系你核实信息。"
+        }
+      }
     };
   }
 
@@ -3924,6 +3968,19 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       })
       .filter((item) => item.question && item.answer);
     return list.length ? list.slice(0, 20) : fallback;
+  }
+
+  private normalizeEntryPages(value: unknown, fallback: Record<string, Record<string, unknown>>) {
+    const source = this.isPlainObject(value) ? (value as Record<string, unknown>) : {};
+    return Object.fromEntries(Object.entries(fallback).map(([key, defaults]) => [key, this.normalizeEntryPage(source[key], defaults)]));
+  }
+
+  private normalizeEntryPage(value: unknown, fallback: Record<string, unknown>) {
+    const source = this.isPlainObject(value) ? (value as Record<string, unknown>) : {};
+    const merged: Record<string, unknown> = { ...fallback, ...source };
+    if ("items" in fallback) merged.items = this.normalizeStringArray(merged.items, fallback.items as string[]);
+    if ("flowItems" in fallback) merged.flowItems = this.normalizeStringArray(merged.flowItems, fallback.flowItems as string[]);
+    return merged;
   }
 
   private normalizeJsonObject(value: unknown, label: string) {

@@ -1,39 +1,40 @@
 <template>
   <view class="apply-page">
     <view class="hero">
-      <text class="eyebrow">大使申请</text>
-      <text class="title">把你的热爱，变成能被更多人看见的文化服务。</text>
-      <text class="copy">适合讲师、主理人、内容创作者、社群组织者申请成为七维文化大使。</text>
+      <text class="eyebrow">{{ config.eyebrow }}</text>
+      <text class="title">{{ config.title }}</text>
+      <text class="copy">{{ config.copy }}</text>
     </view>
 
     <view class="section">
-      <text class="section-title">你将参与</text>
+      <text class="section-title">{{ config.sectionTitle }}</text>
       <view class="grid">
-        <view v-for="item in benefits" :key="item" class="card">{{ item }}</view>
+        <view v-for="item in config.items" :key="item" class="card">{{ item }}</view>
       </view>
     </view>
 
     <view class="section">
-      <text class="section-title">提交大使申请</text>
+      <text class="section-title">{{ config.formTitle }}</text>
       <input v-model="form.name" class="input" placeholder="姓名" />
       <input v-model="form.phone" class="input" placeholder="手机号" type="number" maxlength="11" />
       <input v-model="form.city" class="input" placeholder="所在城市" />
       <input v-model="form.wechat" class="input" placeholder="微信号" />
       <input v-model="form.expertise" class="input" placeholder="擅长领域，例如书法/教育/国学/健康" />
       <textarea v-model="form.experience" class="textarea" placeholder="请介绍你的经验、课程方向或可提供的服务" />
-      <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : "提交大使申请" }}</button>
+      <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.submitText }}</button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { request } from "../../api";
+import { useEntryPageConfig } from "../../entry-pages";
 
 const submitting = ref(false);
 const submitted = ref(false);
-const benefits = ["课程共创", "活动共办", "品牌露出", "学员服务", "公益参与", "长期成长"];
 const form = reactive({ name: "", phone: "", city: "", wechat: "", expertise: "", experience: "" });
+const { config, load } = useEntryPageConfig("ambassadorApply");
 
 function validate() {
   if (!form.name.trim()) return "请填写姓名";
@@ -52,13 +53,15 @@ async function submit() {
   try {
     await request("/public/ambassador/applications", { method: "POST", data: { ...form, source: "ambassador_apply" } });
     submitted.value = true;
-    uni.showModal({ title: "已提交", content: "大使申请已进入后台，我们会尽快联系你。", showCancel: false });
+    uni.showModal({ title: "已提交", content: config.successMessage || "大使申请已进入后台，我们会尽快联系你。", showCancel: false });
   } catch (error: any) {
     uni.showToast({ title: error.message || "提交失败", icon: "none" });
   } finally {
     submitting.value = false;
   }
 }
+
+onMounted(load);
 </script>
 
 <style scoped>

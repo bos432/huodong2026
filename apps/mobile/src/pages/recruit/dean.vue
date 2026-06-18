@@ -1,37 +1,38 @@
 <template>
   <view class="apply-page">
     <view class="hero dean">
-      <text class="eyebrow">院长招募</text>
-      <text class="title">招募一批真正愿意把书院开在本地的人。</text>
-      <text class="copy">院长不是普通代理，而是本地学习空间的负责人：组织活动、服务学员、链接老师和公益资源。</text>
+      <text class="eyebrow">{{ config.eyebrow }}</text>
+      <text class="title">{{ config.title }}</text>
+      <text class="copy">{{ config.copy }}</text>
     </view>
 
     <view class="section">
-      <text class="section-title">适合谁</text>
-      <view v-for="item in fit" :key="item" class="pill">{{ item }}</view>
+      <text class="section-title">{{ config.sectionTitle }}</text>
+      <view v-for="item in config.items" :key="item" class="pill">{{ item }}</view>
     </view>
 
     <view class="section form-section">
-      <text class="section-title">提交院长申请</text>
+      <text class="section-title">{{ config.formTitle }}</text>
       <input v-model="form.name" class="input" placeholder="姓名" />
       <input v-model="form.phone" class="input" placeholder="手机号" type="number" maxlength="11" />
       <input v-model="form.city" class="input" placeholder="计划运营城市/区域" />
       <input v-model="form.wechat" class="input" placeholder="微信号" />
       <input v-model="form.expertise" class="input" placeholder="你的资源优势，例如场地/老师/社群/运营" />
       <textarea v-model="form.experience" class="textarea" placeholder="请介绍你的本地资源、过往运营经验、想开书院的原因" />
-      <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : "提交院长申请" }}</button>
+      <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.submitText }}</button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref } from "vue";
+import { onMounted, reactive, ref } from "vue";
 import { request } from "../../api";
+import { useEntryPageConfig } from "../../entry-pages";
 
 const submitting = ref(false);
 const submitted = ref(false);
-const fit = ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同七维书院品牌与公益理念"];
 const form = reactive({ name: "", phone: "", city: "", wechat: "", expertise: "", experience: "" });
+const { config, load } = useEntryPageConfig("deanRecruit");
 
 function validate() {
   if (!form.name.trim()) return "请填写姓名";
@@ -50,13 +51,15 @@ async function submit() {
   try {
     await request("/public/ambassador/applications", { method: "POST", data: { ...form, source: "dean_recruit" } });
     submitted.value = true;
-    uni.showModal({ title: "已提交", content: "院长招募申请已进入后台，我们会尽快联系你。", showCancel: false });
+    uni.showModal({ title: "已提交", content: config.successMessage || "院长招募申请已进入后台，我们会尽快联系你。", showCancel: false });
   } catch (error: any) {
     uni.showToast({ title: error.message || "提交失败", icon: "none" });
   } finally {
     submitting.value = false;
   }
 }
+
+onMounted(load);
 </script>
 
 <style scoped>
