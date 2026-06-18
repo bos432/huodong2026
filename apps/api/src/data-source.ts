@@ -45,6 +45,30 @@ import { InviteCode } from "./entities/invite-code.entity";
 import { MemberLevel } from "./entities/member-level.entity";
 import { MemberPointLog } from "./entities/member-point-log.entity";
 import { MemberProfile } from "./entities/member-profile.entity";
+import { MallAddress } from "./entities/mall-address.entity";
+import { MallCartItem } from "./entities/mall-cart-item.entity";
+import { MallBrowseHistory } from "./entities/mall-browse-history.entity";
+import { MallCategory } from "./entities/mall-category.entity";
+import { MallCommission } from "./entities/mall-commission.entity";
+import { MallCouponClaim } from "./entities/mall-coupon-claim.entity";
+import { MallCoupon } from "./entities/mall-coupon.entity";
+import { MallCouponUsage } from "./entities/mall-coupon-usage.entity";
+import { MallFavorite } from "./entities/mall-favorite.entity";
+import { MallFlashSale } from "./entities/mall-flash-sale.entity";
+import { MallGroupBuy } from "./entities/mall-group-buy.entity";
+import { MallGroupBuyRecord } from "./entities/mall-group-buy-record.entity";
+import { MallInventoryLog } from "./entities/mall-inventory-log.entity";
+import { MallLogisticsCompany } from "./entities/mall-logistics-company.entity";
+import { MallOrderItem } from "./entities/mall-order-item.entity";
+import { MallOrder } from "./entities/mall-order.entity";
+import { MallPaymentCallbackLog } from "./entities/mall-payment-callback-log.entity";
+import { MallPaymentTransaction } from "./entities/mall-payment-transaction.entity";
+import { MallProduct } from "./entities/mall-product.entity";
+import { MallPromotionCode } from "./entities/mall-promotion-code.entity";
+import { MallRefund } from "./entities/mall-refund.entity";
+import { MallRefundLog } from "./entities/mall-refund-log.entity";
+import { MallReview } from "./entities/mall-review.entity";
+import { MallSku } from "./entities/mall-sku.entity";
 import { MiniprogramReleaseLog } from "./entities/miniprogram-release-log.entity";
 import { MiniprogramReleaseSetting } from "./entities/miniprogram-release-setting.entity";
 import { NotificationSchedule } from "./entities/notification-schedule.entity";
@@ -130,6 +154,30 @@ export default new DataSource({
     UserTag,
     MemberLevel,
     MemberProfile,
+    MallCategory,
+    MallCommission,
+    MallCoupon,
+    MallCouponClaim,
+    MallCouponUsage,
+    MallFavorite,
+    MallBrowseHistory,
+    MallFlashSale,
+    MallGroupBuy,
+    MallGroupBuyRecord,
+    MallLogisticsCompany,
+    MallProduct,
+    MallSku,
+    MallInventoryLog,
+    MallAddress,
+    MallCartItem,
+    MallOrder,
+    MallOrderItem,
+    MallPaymentCallbackLog,
+    MallPaymentTransaction,
+    MallRefund,
+    MallPromotionCode,
+    MallRefundLog,
+    MallReview,
     MemberPointLog,
     NotificationTemplate,
     Notification,

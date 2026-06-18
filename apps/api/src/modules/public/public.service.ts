@@ -411,6 +411,20 @@ export class PublicService {
     return { url: row.avatarUrl, path: urlPath, filename: file.filename, size: file.size, mimetype: file.mimetype };
   }
 
+  uploadMallReviewImage(file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException("请上传评价图片，支持 JPG/PNG/WebP，单张不超过 5MB");
+    const publicBase = this.config.get<string>("PUBLIC_API_ORIGIN", "").replace(/\/$/, "");
+    const path = `/uploads/mall-reviews/${file.filename}`;
+    return { url: publicBase ? `${publicBase}${path}` : path, path, filename: file.filename, size: file.size, mimetype: file.mimetype };
+  }
+
+  uploadMallRefundImage(file?: Express.Multer.File) {
+    if (!file) throw new BadRequestException("请上传售后凭证图片，支持 JPG/PNG/WebP，单张不超过 5MB");
+    const publicBase = this.config.get<string>("PUBLIC_API_ORIGIN", "").replace(/\/$/, "");
+    const path = `/uploads/mall-refunds/${file.filename}`;
+    return { url: publicBase ? `${publicBase}${path}` : path, path, filename: file.filename, size: file.size, mimetype: file.mimetype };
+  }
+
   async wechatLogin(dto: WechatLoginDto) {
     const identity = await this.resolveWechatIdentity(dto.code, dto.appId);
     const openid = identity.openid;

@@ -158,9 +158,9 @@ const jingang = [
   { icon: "院", label: "院长招募", url: "/pages/recruit/dean" },
   { icon: "使", label: "大使申请", url: "/pages/apply/ambassador" },
   { icon: "扶", label: "帮扶申请", url: "/pages/apply/aid" },
+  { icon: "🛍", label: "书院商城", url: "/pages/mall/index" },
   { icon: "🌿", label: "健康", category: "健康" },
   { icon: "⛰", label: "创业", category: "创业" },
-  { icon: "⚙", label: "技能", category: "技能" },
   { icon: "⋯", label: "更多", category: "" }
 ];
 

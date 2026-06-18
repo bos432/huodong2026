@@ -58,7 +58,7 @@ import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActo
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultPermissionsForRole, effectivePermissionsForAdmin, normalizeAdminPermissions } from "./admin-permissions";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
@@ -2827,6 +2827,18 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return { id: saved.id, passwordSet: true };
   }
 
+  async adjustMemberPoints(userId: number, dto: MemberPointAdjustDto, admin?: AdminContext) {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException("用户不存");
+    await this.assertUserTenantAccess(userId, admin);
+    const points = Math.trunc(Number(dto.points || 0));
+    if (!points) throw new BadRequestException("调整积分不能为 0");
+    const sourceId = `${userId}:${Date.now()}:${admin?.id || "system"}`;
+    const log = await this.awardPoints(user, points, "admin_point_adjust", sourceId, dto.remark || "后台调整会员积分");
+    await this.logOperation(admin, "member.points.adjust", "user", userId, `调整会员积分：${points}`, { remark: dto.remark || null });
+    return { log, profile: await this.memberProfiles.findOne({ where: { user: { id: userId } } }) };
+  }
+
   async memberDetail(userId: number, admin?: AdminContext) {
     const user = await this.users.findOneBy({ id: userId });
     if (!user) throw new NotFoundException("用户不存");
@@ -3740,10 +3752,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       ...checkIns.map((checkIn) => ({ sourceType: "check_in", sourceId: String(checkIn.id) })),
       ...reviews.map((review) => ({ sourceType: "activity_review", sourceId: String(review.id) }))
     ];
-    if (!sourcePairs.length) return [];
     const allowed = new Set(sourcePairs.map((pair) => `${pair.sourceType}:${pair.sourceId}`));
     const logs = await this.memberPointLogs.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 300 });
-    return logs.filter((log) => allowed.has(`${log.sourceType}:${log.sourceId}`)).slice(0, 100);
+    return logs.filter((log) => allowed.has(`${log.sourceType}:${log.sourceId}`) || log.sourceType.startsWith("mall_")).slice(0, 100);
   }
 
   private async ensureOperationSetting(admin?: AdminContext) {

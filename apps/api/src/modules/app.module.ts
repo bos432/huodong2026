@@ -48,6 +48,25 @@ import { InviteCode } from "../entities/invite-code.entity";
 import { MemberLevel } from "../entities/member-level.entity";
 import { MemberPointLog } from "../entities/member-point-log.entity";
 import { MemberProfile } from "../entities/member-profile.entity";
+import { MallAddress } from "../entities/mall-address.entity";
+import { MallCartItem } from "../entities/mall-cart-item.entity";
+import { MallBrowseHistory } from "../entities/mall-browse-history.entity";
+import { MallCategory } from "../entities/mall-category.entity";
+import { MallCommission } from "../entities/mall-commission.entity";
+import { MallCoupon } from "../entities/mall-coupon.entity";
+import { MallFavorite } from "../entities/mall-favorite.entity";
+import { MallInventoryLog } from "../entities/mall-inventory-log.entity";
+import { MallLogisticsCompany } from "../entities/mall-logistics-company.entity";
+import { MallOrderItem } from "../entities/mall-order-item.entity";
+import { MallOrder } from "../entities/mall-order.entity";
+import { MallPaymentCallbackLog } from "../entities/mall-payment-callback-log.entity";
+import { MallPaymentTransaction } from "../entities/mall-payment-transaction.entity";
+import { MallProduct } from "../entities/mall-product.entity";
+import { MallPromotionCode } from "../entities/mall-promotion-code.entity";
+import { MallRefund } from "../entities/mall-refund.entity";
+import { MallRefundLog } from "../entities/mall-refund-log.entity";
+import { MallReview } from "../entities/mall-review.entity";
+import { MallSku } from "../entities/mall-sku.entity";
 import { MiniprogramReleaseLog } from "../entities/miniprogram-release-log.entity";
 import { MiniprogramReleaseSetting } from "../entities/miniprogram-release-setting.entity";
 import { NotificationTemplate } from "../entities/notification-template.entity";
@@ -75,10 +94,11 @@ import { AdminModule } from "./admin/admin.module";
 import { HealthModule } from "./health/health.module";
 import { CoursesModule } from "./courses/courses.module";
 import { InstallModule } from "./install/install.module";
+import { MallModule } from "./mall/mall.module";
 import { PublicModule } from "./public/public.module";
 import { V1Module } from "./v1/v1.module";
 
-const entities = [User, UserWallet, WalletTransaction, Tenant, TenantRegion, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, H5AuthCodeLog, HomepageSection, MiniprogramReleaseSetting, MiniprogramReleaseLog, InviteCode, ShareVisit, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, UserLearning, UserFavorite, Certificate];
+const entities = [User, UserWallet, WalletTransaction, Tenant, TenantRegion, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, H5AuthCodeLog, HomepageSection, MiniprogramReleaseSetting, MiniprogramReleaseLog, InviteCode, ShareVisit, Waitlist, UserTag, MemberLevel, MemberProfile, MallCategory, MallCoupon, MallCommission, MallPromotionCode, MallFavorite, MallBrowseHistory, MallLogisticsCompany, MallProduct, MallSku, MallInventoryLog, MallAddress, MallCartItem, MallOrder, MallOrderItem, MallPaymentCallbackLog, MallPaymentTransaction, MallRefund, MallRefundLog, MallReview, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, UserLearning, UserFavorite, Certificate];
 
 loadEnv({ path: "apps/api/.env" });
 loadEnv();
@@ -110,6 +130,7 @@ const businessModules = [
   }),
   AdminModule,
   PublicModule,
+  MallModule,
   HealthModule,
     CoursesModule,
   V1Module

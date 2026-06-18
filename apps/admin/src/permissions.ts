@@ -21,6 +21,7 @@ export const adminPermissionGroups = [
   { group: "活动", items: [{ key: "activity.view", label: "查看活动" }, { key: "activity.manage", label: "创建/编辑/下架活动" }, { key: "activity.approve", label: "平台审核活动", platformOnly: true }, { key: "category.manage", label: "活动分类管理" }, { key: "ticket.manage", label: "票种管理" }, { key: "coupon.manage", label: "优惠码管理" }] },
   { group: "报名签到", items: [{ key: "registration.view", label: "查看报名" }, { key: "registration.manage", label: "审核/取消报名" }, { key: "registration.export", label: "导出报名" }, { key: "waitlist.manage", label: "候补管理" }, { key: "checkin.manage", label: "签到核销" }] },
   { group: "订单财务", items: [{ key: "order.view", label: "查看订单" }, { key: "order.manage", label: "订单备注/确认收款/关闭" }, { key: "order.refund", label: "退款处理" }, { key: "order.export", label: "导出订单" }, { key: "finance.view", label: "财务对账查看" }, { key: "finance.manage", label: "对账处理/流水导入" }, { key: "finance.export", label: "导出财务数据" }, { key: "finance.wallet_adjust", label: "会员余额调整" }, { key: "payment_account.view", label: "查看收款账户" }, { key: "payment_account.manage", label: "维护收款账户" }, { key: "agent_settlement.view", label: "查看代理结算" }, { key: "agent_settlement.manage", label: "生成/审核代理结算" }, { key: "agent_settlement.pay", label: "标记代理结算打款" }, { key: "agent_settlement.transfer", label: "代理结算转账/扫描" }, { key: "agent_settlement.export", label: "导出代理结算" }, { key: "upload.settlement_proof", label: "上传结算凭证" }] },
+  { group: "商城管理", items: [{ key: "mall.product.manage", label: "商城商品/营销管理" }, { key: "mall.logistics.manage", label: "商城物流设置" }, { key: "mall.order.view", label: "查看商城订单" }, { key: "mall.order.manage", label: "商城发货/确认收款" }, { key: "mall.refund.manage", label: "商城售后退款" }, { key: "mall.finance.view", label: "商城财务查看" }] },
   { group: "会员运营", items: [{ key: "member.view", label: "查看会员" }, { key: "member.manage", label: "创建/编辑会员" }, { key: "member.password", label: "重置会员密码" }, { key: "member_level.manage", label: "会员等级管理" }, { key: "tag.manage", label: "用户标签管理" }, { key: "notification.manage", label: "通知中心" }, { key: "review.manage", label: "评价管理" }] },
   { group: "装修营销", items: [{ key: "homepage.manage", label: "首页装修" }, { key: "announcement.manage", label: "公告管理" }, { key: "operation_settings.manage", label: "运营设置" }, { key: "upload.image", label: "上传图片" }] },
   { group: "商家设置", items: [{ key: "tenant_profile.manage", label: "商家资料" }] },
@@ -117,13 +118,13 @@ export function defaultPermissionsForRole(role?: string | null, tenantScoped = f
     "dashboard.view", "analytics.view", "activity.view", "activity.manage", "category.manage", "ticket.manage", "coupon.manage",
     "registration.view", "registration.manage", "registration.export", "waitlist.manage", "checkin.manage", "member.view",
     "member.manage", "member.password", "member_level.manage", "tag.manage", "notification.manage", "review.manage",
-    "homepage.manage", "announcement.manage", "operation_settings.manage", "tenant_profile.manage", "charity.view", "charity.manage",
+    "mall.product.manage", "mall.logistics.manage", "mall.order.view", "mall.order.manage", "homepage.manage", "announcement.manage", "operation_settings.manage", "tenant_profile.manage", "charity.view", "charity.manage",
     "course.manage", "community.manage", "upload.image"
   ];
   if (normalized === AdminRole.Finance) return [
     "dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export",
     "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "payment_account.view", "agent_settlement.view",
-    "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "charity.view", "charity.finance", "upload.settlement_proof"
+    "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "charity.view", "charity.finance", "upload.settlement_proof"
   ];
   if (normalized === AdminRole.CheckInStaff) return ["activity.view", "registration.view", "checkin.manage"];
   return [];

@@ -33,6 +33,8 @@ const AdminLoginLogs = () => import("./views/AdminLoginLogs.vue");
 const H5CodeLogs = () => import("./views/H5CodeLogs.vue");
 const Courses = () => import("./views/Courses.vue");
 const Community = () => import("./views/Community.vue");
+const MallProducts = () => import("./views/MallProducts.vue");
+const MallOrders = () => import("./views/MallOrders.vue");
 const ConfigCheck = () => import("./views/ConfigCheck.vue");
 const MiniprogramRelease = () => import("./views/MiniprogramRelease.vue");
 const OperationGuide = () => import("./views/OperationGuide.vue");
@@ -55,6 +57,8 @@ export const router = createRouter({
         { path: "analytics", component: Analytics, meta: { roles: permissions.analytics, scope: "tenantOrPlatformAdmin" } },
         { path: "courses", component: Courses, meta: { roles: ["course.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "community", component: Community, meta: { roles: ["community.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-products", component: MallProducts, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-orders", component: MallOrders, meta: { roles: ["mall.order.view", "mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "tenants", component: Tenants, meta: { roles: ["tenant.manage"], scope: "platform" } },
         { path: "tenant-regions", component: TenantRegions, meta: { roles: ["tenant_region.manage"], scope: "platform" } },
         { path: "ambassador", component: Ambassador, meta: { roles: ["ambassador.manage"], scope: "platform" } },
@@ -104,6 +108,7 @@ function fallbackPath() {
     { path: "/registrations", roles: ["registration.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/orders", roles: ["order.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/finance", roles: ["finance.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/mall-orders", roles: ["mall.order.view", "mall.finance.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/members", roles: ["member.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/check-in", roles: permissions.checkIn, scope: "tenant" },
     { path: "/admins", roles: ["admin.manage"], scope: "any" }

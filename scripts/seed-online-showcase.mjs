@@ -44,6 +44,11 @@ const permissions = [
   "finance.view",
   "finance.export",
   "finance.wallet_adjust",
+  "mall.product.manage",
+  "mall.order.view",
+  "mall.order.manage",
+  "mall.refund.manage",
+  "mall.finance.view",
   "payment_account.view",
   "payment_account.manage",
   "agent_settlement.view",
@@ -73,7 +78,7 @@ const permissions = [
 const accounts = [
   { username: "showcase_admin", role: "super_admin", permissions },
   { username: "showcase_ops", role: "operator", permissions: permissions.filter((item) => !item.startsWith("finance") && !item.startsWith("agent_settlement") && !item.startsWith("payment_account") && item !== "order.refund" && item !== "order.export") },
-  { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "member.view", "upload.settlement_proof"] },
+  { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "member.view", "upload.settlement_proof"] },
   { username: "showcase_checkin", role: "checkin_staff", permissions: ["dashboard.view", "activity.view", "registration.view", "checkin.manage"] }
 ];
 
@@ -118,6 +123,7 @@ async function main() {
   await ensureActivities(showcaseAdmin.token);
   await ensureCourses(showcaseAdmin.token);
   await ensureCommunity(showcaseAdmin.token);
+  await ensureMall(showcaseAdmin.token);
   await ensureMembersAndWallets(showcaseAdmin.token, platform.token, tenant.id);
 
   console.log("\n线上演示商家数据已准备完成。");
@@ -203,7 +209,7 @@ async function ensureOperationSettings(token) {
       registrationEnabled: true,
       registrationDisabledMessage: "",
       offlinePaymentInstructions: "演示商家支持免费报名、余额支付和线下收款确认。真实微信/支付宝未配置时不能假成功。",
-      paymentMethods: { free: true, balance: true, offline: true, wechat: false, alipay: false },
+      paymentMethods: { free: true, balance: true, offline: true, wechat: true, alipay: false },
       customerServiceName: "七维演示客服",
       customerServicePhone: "13990009999",
       customerServiceWechat: "qiwai_showcase_service",
@@ -303,6 +309,7 @@ async function ensureHomepage(token) {
         greeting: "我的书院",
         tools: [
           { label: "我的订单", icon: "单", color: "#8B5A2B", link: "/pages/user/orders", action: "navigate" },
+          { label: "商城订单", icon: "商", color: "#C2410C", link: "/pages/user/mall-orders", action: "navigate" },
           { label: "我的课程", icon: "课", color: "#4A6B8A", link: "/pages/user/courses", action: "navigate" },
           { label: "服务中心", icon: "服", color: "#7A6858", link: "/pages/service/index", action: "navigate" },
           { label: "账号设置", icon: "设", color: "#B45309", link: "/pages/user/settings", action: "navigate" }
@@ -492,6 +499,123 @@ async function ensureCommunity(token) {
     });
   }
   reportStep("共修、打卡和书院动态已创建/更新");
+}
+
+async function ensureMall(token) {
+  const categoryNames = ["书院文创", "学习用品", "公益好物"];
+  const existingCategories = pickList(await api("/admin/mall/categories", { headers: auth(token) }));
+  const categories = [];
+  for (const [index, name] of categoryNames.entries()) {
+    const payload = { name, sortOrder: index + 1, enabled: true };
+    const row = existingCategories.find((item) => item.name === name);
+    const saved = row
+      ? await api(`/admin/mall/categories/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) })
+      : await api("/admin/mall/categories", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
+    categories.push(saved);
+  }
+  const existing = pickList(await api("/admin/mall/products?pageSize=200", { headers: auth(token) }));
+  const products = [
+    ["【演示】七维书院读书手账", "学习用品", 39, 69, "适合晨读、课程笔记和共修打卡记录，演示商城余额支付与线下收款。"],
+    ["【演示】东方美学书签套装", "书院文创", 19, 39, "铜版纸书签 6 枚装，适合作为活动伴手礼和课程赠品。"],
+    ["【演示】节气香囊公益礼盒", "公益好物", 59, 99, "用于公益好物演示，售后、发货、库存流水均可追踪。"],
+    ["【演示】书法入门练习套装", "学习用品", 89, 129, "含练习纸、基础字帖和控笔练习说明，适合书法体验课转化。"]
+  ];
+  for (const [index, [title, categoryName, price, originalPrice, description]] of products.entries()) {
+    const category = categories.find((item) => item.name === categoryName);
+    const payload = {
+      categoryId: category?.id,
+      title,
+      coverUrl: cover(index + 10),
+      description,
+      price,
+      originalPrice,
+      status: "published",
+      featured: index < 2,
+      sortOrder: index + 1,
+      deliveryNote: "默认 48 小时内发货，偏远地区请联系客服。",
+      afterSaleNote: "未发货可申请退款；已发货如需退货退款请先联系书院确认。",
+      skus: [
+        { name: "标准款", price, originalPrice, stock: 120, enabled: true },
+        { name: "礼盒款", price: price + 20, originalPrice: originalPrice + 30, stock: 60, enabled: true }
+      ]
+    };
+    const row = existing.find((item) => item.title === title);
+    if (row) await api(`/admin/mall/products/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify({ ...payload, skus: payload.skus.map((sku, skuIndex) => ({ ...sku, id: row.skus?.[skuIndex]?.id })) }) });
+    else await api("/admin/mall/products", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
+  }
+  const seededProducts = pickList(await api("/admin/mall/products?pageSize=200", { headers: auth(token) }));
+  const stationeryCategory = categories.find((item) => item.name === "学习用品");
+  const calligraphyProduct = seededProducts.find((item) => item.title === "【演示】书法入门练习套装");
+  const couponPayload = { code: "SHOWCASE10", name: "演示商城满 50 减 10", minAmount: 50, discountAmount: 10, scope: "all", usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" };
+  const couponPayloads = [
+    couponPayload,
+    { code: "STUDY8", name: "学习用品满 80 减 8", minAmount: 80, discountAmount: 8, scope: "category", scopeCategoryId: stationeryCategory?.id, usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
+    { code: "CALLIGRAPHY12", name: "书法套装专享满 80 减 12", minAmount: 80, discountAmount: 12, scope: "product", scopeProductId: calligraphyProduct?.id, usageLimit: 0, perUserLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
+    { code: "ONCE5", name: "新人每人限用满 50 减 5", minAmount: 50, discountAmount: 5, scope: "all", usageLimit: 0, perUserLimit: 1, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" }
+  ];
+  const existingCoupons = pickList(await api("/admin/mall/coupons?pageSize=200", { headers: auth(token) }));
+  for (const payload of couponPayloads) {
+    if ((payload.scope === "category" && !payload.scopeCategoryId) || (payload.scope === "product" && !payload.scopeProductId)) continue;
+    const coupon = existingCoupons.find((item) => item.code === payload.code);
+    if (coupon) await api(`/admin/mall/coupons/${coupon.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
+    else await api("/admin/mall/coupons", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
+  }
+  const promotionPayload = { code: "SHOWMALL5", name: "演示商城推广码 5%", commissionRate: 0.05, enabled: true, remark: `demoScenario:${SCENARIO} 商城推广佣金验收` };
+  const existingPromotions = pickList(await api("/admin/mall/promotion-codes?pageSize=200", { headers: auth(token) }));
+  const promotion = existingPromotions.find((item) => item.code === promotionPayload.code);
+  if (promotion) await api(`/admin/mall/promotion-codes/${promotion.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(promotionPayload) });
+  else await api("/admin/mall/promotion-codes", { method: "POST", headers: auth(token), body: JSON.stringify(promotionPayload) });
+  if (calligraphyProduct?.skus?.[0]?.id) {
+    const sku = calligraphyProduct.skus[0];
+    const flashSalePayload = {
+      productId: calligraphyProduct.id,
+      skuId: sku.id,
+      title: "【演示】书法套装限时秒杀",
+      salePrice: 69,
+      saleStock: 300,
+      perUserLimit: 1,
+      startsAt: "2026-01-01 00:00:00",
+      endsAt: "2027-12-31 23:59:59",
+      status: "active",
+      sortOrder: 1
+    };
+    const existingFlashSales = pickList(await api("/admin/mall/flash-sales?pageSize=200", { headers: auth(token) }));
+    const flashSale = existingFlashSales.find((item) => item.title === flashSalePayload.title);
+    if (flashSale) await api(`/admin/mall/flash-sales/${flashSale.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(flashSalePayload) });
+    else await api("/admin/mall/flash-sales", { method: "POST", headers: auth(token), body: JSON.stringify(flashSalePayload) });
+  }
+  if (calligraphyProduct?.skus?.[0]?.id) {
+    const sku = calligraphyProduct.skus[1] || calligraphyProduct.skus[0];
+    const groupBuyPayload = {
+      productId: calligraphyProduct.id,
+      skuId: sku.id,
+      title: "【演示】书法套装二人成团",
+      groupPrice: 79,
+      minPeople: 2,
+      groupStock: 300,
+      perUserLimit: 1,
+      startsAt: "2026-01-01 00:00:00",
+      endsAt: "2027-12-31 23:59:59",
+      status: "active",
+      sortOrder: 2
+    };
+    const existingGroupBuys = pickList(await api("/admin/mall/group-buys?pageSize=200", { headers: auth(token) }));
+    const groupBuy = existingGroupBuys.find((item) => item.title === groupBuyPayload.title);
+    if (groupBuy) await api(`/admin/mall/group-buys/${groupBuy.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(groupBuyPayload) });
+    else await api("/admin/mall/group-buys", { method: "POST", headers: auth(token), body: JSON.stringify(groupBuyPayload) });
+  }
+  const logisticsPayloads = [
+    { name: "顺丰演示", code: "SF", servicePhone: "95338", trackingUrl: "https://www.sf-express.com/chn/sc/waybill/waybill-detail/", sortOrder: 1, enabled: true },
+    { name: "中通演示", code: "ZTO", servicePhone: "95311", trackingUrl: "https://www.zto.com/express/expressCheck.html", sortOrder: 2, enabled: true },
+    { name: "京东演示", code: "JD", servicePhone: "950616", trackingUrl: "https://www.jdl.com/orderSearch/", sortOrder: 3, enabled: true }
+  ];
+  const existingLogistics = pickList(await api("/admin/mall/logistics-companies?pageSize=200", { headers: auth(token) }));
+  for (const payload of logisticsPayloads) {
+    const row = existingLogistics.find((item) => item.name === payload.name);
+    if (row) await api(`/admin/mall/logistics-companies/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
+    else await api("/admin/mall/logistics-companies", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
+  }
+  reportStep("商城分类、商品、优惠券、推广码、秒杀、拼团与物流设置已创建/更新", "4 个商品，含全场/分类/指定商品券，1 个推广码，1 个秒杀活动，1 个拼团活动，3 个物流公司，覆盖 SKU、库存、余额/线下支付");
 }
 
 async function ensureMembersAndWallets(tenantAdminToken, platformToken, tenantId) {

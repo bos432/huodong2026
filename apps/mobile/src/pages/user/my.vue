@@ -106,6 +106,7 @@ const adminAccess = ref<any>(null);
 const courses = ref<any[]>([]);
 const registrations = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
+const mallOrders = ref<any[]>([]);
 const loadingProfile = ref(false);
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
@@ -127,7 +128,7 @@ const profileHeaderTextColor = computed(() => {
 const profileHeaderMutedColor = computed(() => String(myPageSection.value?.layout?.heroMutedTextColor || warmHeaderMutedColor));
 const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (loadingProfile.value ? "加载中..." : "未登录"));
 const memberLevelName = computed(() => profile.value?.memberLevel?.name || "普通会员");
-const pendingRegistrationCount = computed(() => registrations.value.filter((item) => item.status === "pending_payment").length + courseOrders.value.filter((item) => item.status === "pending_payment").length);
+const pendingRegistrationCount = computed(() => registrations.value.filter((item) => item.status === "pending_payment").length + courseOrders.value.filter((item) => item.status === "pending_payment").length + mallOrders.value.filter((item) => ["pending_payment", "pending_confirm"].includes(item.status)).length);
 const learningCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) < 100).length);
 const completedCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) >= 100).length);
 
@@ -139,14 +140,15 @@ async function loadProfile() {
   loadingProfile.value = true;
   try {
     await ensureUser();
-    const [profileData, walletData, charityData, adminData, courseRows, registrationRows, courseOrderRows] = await Promise.all([
+    const [profileData, walletData, charityData, adminData, courseRows, registrationRows, courseOrderRows, mallOrderRows] = await Promise.all([
       fetchMyProfile(),
       request<any>("/public/me/wallet").catch(() => null),
       request<any>("/public/me/charity").catch(() => null),
       request<any>("/public/me/admin-access").catch(() => ({ canAccess: false })),
       request<any[]>("/public/me/courses").catch(() => []),
       request<any[]>("/public/me/registrations").catch(() => []),
-      request<any[]>("/public/me/course-orders").catch(() => [])
+      request<any[]>("/public/me/course-orders").catch(() => []),
+      request<any[]>("/public/me/mall/orders").catch(() => [])
     ]);
     profile.value = profileData;
     wallet.value = walletData;
@@ -155,6 +157,7 @@ async function loadProfile() {
     courses.value = Array.isArray(courseRows) ? courseRows : [];
     registrations.value = Array.isArray(registrationRows) ? registrationRows : [];
     courseOrders.value = Array.isArray(courseOrderRows) ? courseOrderRows : [];
+    mallOrders.value = Array.isArray(mallOrderRows) ? mallOrderRows : [];
   } catch (error: any) {
     profile.value = null;
     wallet.value = null;
@@ -163,6 +166,7 @@ async function loadProfile() {
     courses.value = [];
     registrations.value = [];
     courseOrders.value = [];
+    mallOrders.value = [];
     if (!String(error?.message || "").includes("请先完成")) {
       uni.showToast({ title: error.message || "加载用户失败", icon: "none" });
     }
@@ -180,11 +184,11 @@ onShow(() => {
 const defaultGridItems = [
   { icon:"📖", label:"我的课程", page:"courses" },
   { icon:"🕐", label:"学习记录", page:"learning" },
-  { icon:"❤", label:"我的收藏", page:"favorites" },
-  { icon:"🏅", label:"我的证书", page:"certificates" },
-  { icon:"🎫", label:"优惠券", page:"" },
+  { icon:"❤", label:"商城收藏", page:"mallFavorites" },
+  { icon:"👣", label:"浏览足迹", page:"mallHistory" },
+  { icon:"🛒", label:"购物车", page:"mallCart" },
+  { icon:"🛍", label:"商城订单", page:"mallOrders" },
   { icon:"💬", label:"联系客服", page:"service" },
-  { icon:"📣", label:"推广中心", page:"ambassador" },
   { icon:"⚙", label:"设置", page:"settings" }
 ];
 const gridItems = computed(() => {
@@ -203,7 +207,7 @@ const orderTabs = computed(() => [
   { icon:"💳", label:"待付款", count: pendingRegistrationCount.value, status:"pending" },
   { icon:"📚", label:"待学习", count: learningCourseCount.value, status:"learning" },
   { icon:"✅", label:"已完成", count: completedCourseCount.value, status:"completed" },
-  { icon:"📋", label:"全部", count: registrations.value.length + courses.value.length, status:"all" }
+  { icon:"📋", label:"全部", count: registrations.value.length + courses.value.length + mallOrders.value.length, status:"all" }
 ]);
 
 function goGrid(item: any) {
@@ -220,7 +224,12 @@ function goGrid(item: any) {
     courses: "/pages/user/courses",
     learning: "/pages/user/learning",
     favorites: "/pages/user/favorites",
+    mallFavorites: "/pages/mall/favorites",
+    mallHistory: "/pages/mall/history",
     certificates: "/pages/user/certificates",
+    mallCart: "/pages/mall/cart",
+    mallOrders: "/pages/user/mall-orders",
+    mallAddresses: "/pages/mall/addresses",
     service: "/pages/service/index",
     ambassador: "/pages/ambassador/index",
     settings: "/pages/user/settings"
@@ -244,6 +253,7 @@ function resetUserState() {
   courses.value = [];
   registrations.value = [];
   courseOrders.value = [];
+  mallOrders.value = [];
 }
 function logoutUser() {
   uni.showModal({

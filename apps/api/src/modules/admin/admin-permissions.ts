@@ -28,6 +28,12 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "finance.manage", label: "对账处理/流水导入", group: "订单财务" },
   { key: "finance.export", label: "导出财务数据", group: "订单财务" },
   { key: "finance.wallet_adjust", label: "会员余额调整", group: "订单财务" },
+  { key: "mall.product.manage", label: "商城商品/营销管理", group: "商城管理" },
+  { key: "mall.logistics.manage", label: "商城物流设置", group: "商城管理" },
+  { key: "mall.order.view", label: "查看商城订单", group: "商城管理" },
+  { key: "mall.order.manage", label: "商城发货/确认收款", group: "商城管理" },
+  { key: "mall.refund.manage", label: "商城售后退款", group: "商城管理" },
+  { key: "mall.finance.view", label: "商城财务查看", group: "商城管理" },
   { key: "payment_account.view", label: "查看收款账户", group: "订单财务" },
   { key: "payment_account.manage", label: "维护收款账户", group: "订单财务" },
   { key: "agent_settlement.view", label: "查看代理结算", group: "订单财务" },
@@ -82,6 +88,10 @@ const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
   "tag.manage",
   "notification.manage",
   "review.manage",
+  "mall.product.manage",
+  "mall.logistics.manage",
+  "mall.order.view",
+  "mall.order.manage",
   "homepage.manage",
   "announcement.manage",
   "operation_settings.manage",
@@ -106,6 +116,10 @@ const FINANCE_PERMISSIONS: AdminPermissionKey[] = [
   "finance.manage",
   "finance.export",
   "finance.wallet_adjust",
+  "mall.order.view",
+  "mall.order.manage",
+  "mall.refund.manage",
+  "mall.finance.view",
   "payment_account.view",
   "agent_settlement.view",
   "agent_settlement.manage",
@@ -156,6 +170,16 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path.startsWith("admins")) return "admin.manage";
   if (path === "operation-logs" || path.startsWith("auth/login-logs") || path.startsWith("auth/h5-code-logs")) return "logs.view";
   if (path.startsWith("miniprogram-release")) return "miniprogram_release.manage";
+  if (path === "mall/products" || path.startsWith("mall/products/") || path.startsWith("mall/categories") || path.startsWith("mall/skus") || path.startsWith("mall/coupons")) return "mall.product.manage";
+  if (path.startsWith("mall/logistics-companies")) return "mall.logistics.manage";
+  if (path.startsWith("mall/inventory-logs")) return "mall.product.manage";
+  if (path === "mall/orders/export") return "mall.finance.view";
+  if (path === "mall/orders/summary") return "mall.finance.view";
+  if (path === "mall/orders/close-expired") return "mall.finance.view";
+  if (path === "mall/orders" && verb === "GET") return "mall.order.view";
+  if (path.startsWith("mall/orders")) return "mall.order.manage";
+  if (path === "mall/refunds" && verb === "GET") return "mall.finance.view";
+  if (path.startsWith("mall/refunds")) return "mall.refund.manage";
   if (path.startsWith("system/") || path === "settings/operation") return path === "settings/operation" ? (verb === "GET" ? "operation_settings.manage" : "operation_settings.manage") : "system.manage";
   if (path === "settings/charity") return write ? "charity.manage" : "charity.view";
   if (path.startsWith("charity/projects")) return path.includes("disbursements") ? "charity.finance" : write ? "charity.manage" : "charity.view";

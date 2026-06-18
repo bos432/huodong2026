@@ -289,6 +289,41 @@ export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: s
   });
 }
 
+export function uploadMallReviewImage(filePath: string): Promise<{ url: string; path: string }> {
+  return uploadPublicImage("/public/me/mall/review-images", filePath);
+}
+
+export function uploadMallRefundImage(filePath: string): Promise<{ url: string; path: string }> {
+  return uploadPublicImage("/public/me/mall/refund-images", filePath);
+}
+
+function uploadPublicImage(path: string, filePath: string): Promise<{ url: string; path: string }> {
+  const token = getUserToken();
+  return new Promise((resolve, reject) => {
+    uni.uploadFile({
+      url: `${API_BASE}${appendTenantCode(path, getCurrentTenantCode())}`,
+      filePath,
+      name: "file",
+      header: token ? { Authorization: `Bearer ${token}` } : {},
+      success(res) {
+        let body: any = res.data;
+        if (typeof body === "string") {
+          try {
+            body = JSON.parse(body);
+          } catch {
+            body = null;
+          }
+        }
+        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(body.data);
+        else reject(new ApiClientError(body?.message || "上传失败", body?.requestId || headerValue(res.header, "x-request-id")));
+      },
+      fail(error) {
+        reject(error);
+      }
+    });
+  });
+}
+
 export async function loginWechat(code: string, nickname?: string, avatarUrl?: string) {
   let appId = "";
   // #ifdef MP-WEIXIN

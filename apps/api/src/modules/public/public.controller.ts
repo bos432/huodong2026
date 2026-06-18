@@ -11,8 +11,14 @@ const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
   "image/png": ".png",
   "image/webp": ".webp"
 };
+const REVIEW_IMAGE_EXTENSION_BY_MIME = AVATAR_EXTENSION_BY_MIME;
+const REFUND_IMAGE_EXTENSION_BY_MIME = AVATAR_EXTENSION_BY_MIME;
 const AVATAR_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "avatars");
+const MALL_REVIEW_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "mall-reviews");
+const MALL_REFUND_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "mall-refunds");
 mkdirSync(AVATAR_UPLOAD_DIR, { recursive: true });
+mkdirSync(MALL_REVIEW_UPLOAD_DIR, { recursive: true });
+mkdirSync(MALL_REFUND_UPLOAD_DIR, { recursive: true });
 
 @Controller("public")
 export class PublicController {
@@ -269,6 +275,44 @@ export class PublicController {
   async uploadMyAvatar(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.uploadMyAvatar(user, file);
+  }
+
+  @Post("me/mall/review-images")
+  @UseInterceptors(FileInterceptor("file", {
+    storage: diskStorage({
+      destination: MALL_REVIEW_UPLOAD_DIR,
+      filename: (_req, file, callback) => {
+        const suffix = REVIEW_IMAGE_EXTENSION_BY_MIME[file.mimetype] || ".jpg";
+        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
+      }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, callback) => {
+      callback(null, Boolean(REVIEW_IMAGE_EXTENSION_BY_MIME[file.mimetype]));
+    }
+  }))
+  async uploadMallReviewImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+    await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.uploadMallReviewImage(file);
+  }
+
+  @Post("me/mall/refund-images")
+  @UseInterceptors(FileInterceptor("file", {
+    storage: diskStorage({
+      destination: MALL_REFUND_UPLOAD_DIR,
+      filename: (_req, file, callback) => {
+        const suffix = REFUND_IMAGE_EXTENSION_BY_MIME[file.mimetype] || ".jpg";
+        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
+      }
+    }),
+    limits: { fileSize: 5 * 1024 * 1024 },
+    fileFilter: (_req, file, callback) => {
+      callback(null, Boolean(REFUND_IMAGE_EXTENSION_BY_MIME[file.mimetype]));
+    }
+  }))
+  async uploadMallRefundImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+    await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.uploadMallRefundImage(file);
   }
 
   @Get("me/wallet/transactions")

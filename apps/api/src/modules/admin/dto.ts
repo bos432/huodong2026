@@ -934,6 +934,15 @@ export class WalletAdjustDto {
   remark?: string;
 }
 
+export class MemberPointAdjustDto {
+  @IsNumber()
+  points!: number;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
 export class CreateMemberDto {
   @IsOptional()
   @IsString()
