@@ -90,6 +90,11 @@ const permissionCards = computed(() => {
       label: "收款配置权限",
       value: settings.paymentAccountEditable ? "可配置" : "只读",
       tone: settings.paymentAccountEditable ? "success" : "warning"
+    },
+    {
+      label: "商城授权",
+      value: settings.mallEnabled ? "已开通" : "未开通",
+      tone: settings.mallEnabled ? "success" : "warning"
     }
   ];
 });

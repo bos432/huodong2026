@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable, NotFoundException, OnModuleDestroy } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException, OnModuleDestroy } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { createHmac } from "crypto";
@@ -3241,6 +3241,7 @@ export class MallService implements OnModuleDestroy {
     if (admin?.tenantId) {
       const tenant = await this.tenants.findOne({ where: { id: admin.tenantId, enabled: true } });
       if (!tenant) throw new NotFoundException("商家不存在或已停用");
+      this.assertMallEnabled(tenant);
       return tenant;
     }
     const id = Number(tenantId || 0);
@@ -3248,6 +3249,7 @@ export class MallService implements OnModuleDestroy {
     if (!id) throw new BadRequestException("请选择所属商家");
     const tenant = await this.tenants.findOne({ where: { id, enabled: true } });
     if (!tenant) throw new NotFoundException("商家不存在或已停用");
+    this.assertMallEnabled(tenant);
     return tenant;
   }
 
@@ -3255,7 +3257,13 @@ export class MallService implements OnModuleDestroy {
     const code = normalizeTenantCode(context?.tenantCode);
     const tenant = code ? await this.tenants.findOne({ where: { code, enabled: true } }) : context?.tenantId ? await this.tenants.findOne({ where: { id: context.tenantId, enabled: true } }) : null;
     if (!tenant) throw new NotFoundException("请先选择书院/商家后再进入商城");
+    this.assertMallEnabled(tenant);
     return tenant;
+  }
+
+  private assertMallEnabled(tenant: Tenant) {
+    const settings = tenant.settings && typeof tenant.settings === "object" && !Array.isArray(tenant.settings) ? tenant.settings : {};
+    if (settings.mallEnabled === false) throw new ForbiddenException("当前商家未开通商城，请先在商家/代理列表授权商城");
   }
 
   private async assertPaymentMethodEnabled(method: PaymentMethod, tenant: Tenant) {

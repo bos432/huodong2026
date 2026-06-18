@@ -147,7 +147,8 @@ async function ensureTenant(token) {
       brandLogoUrl: cover(0),
       activityPublishReviewRequired: false,
       registrationReviewEnabled: false,
-      paymentAccountEditable: true
+      paymentAccountEditable: true,
+      mallEnabled: true
     },
     remark: `demoScenario:${SCENARIO}`
   };
@@ -158,7 +159,7 @@ async function ensureTenant(token) {
   await api(`/admin/tenants/${tenant.id}/permissions`, {
     method: "POST",
     headers: auth(token),
-    body: JSON.stringify({ activityPublishReviewRequired: false, registrationReviewEnabled: false, paymentAccountEditable: true })
+    body: JSON.stringify({ activityPublishReviewRequired: false, registrationReviewEnabled: false, paymentAccountEditable: true, mallEnabled: true })
   });
   reportStep("演示商家已创建/更新", `${tenant.name}(${tenant.code})`);
   return tenant;

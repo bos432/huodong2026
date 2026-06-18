@@ -4,7 +4,7 @@ import { ElMessage } from "element-plus";
 import { Edit, Plus, Refresh } from "@element-plus/icons-vue";
 import { useRoute } from "vue-router";
 import { api } from "../api";
-import { canAccess, currentTenantSettings, isPlatformAdmin, permissions } from "../permissions";
+import { canAccess, currentTenantSettings, isPlatformAdmin } from "../permissions";
 
 type Agent = {
   id: number;
@@ -90,9 +90,9 @@ const enabledAgentCount = computed(() => agents.value.filter((item) => item.enab
 const enabledAccountCount = computed(() => accounts.value.filter((item) => item.enabled).length);
 const readyAccountCount = computed(() => accounts.value.filter((item) => accountReadiness(item).status === "ready").length);
 const paymentAccountEditable = computed(() => currentTenantSettings().paymentAccountEditable);
-const canEditPaymentAccounts = computed(() => canAccess(permissions.superAdmin) && paymentAccountEditable.value && (!isPlatformAdmin() || Boolean(filters.tenantId)));
+const canEditPaymentAccounts = computed(() => canAccess(["payment_account.manage"]) && paymentAccountEditable.value && (!isPlatformAdmin() || Boolean(filters.tenantId)));
 const paymentAccountReadonlyReason = computed(() => {
-  if (!canAccess(permissions.superAdmin)) return "当前账号只能查看收款方式，如需新增或修改，请联系商家管理员。";
+  if (!canAccess(["payment_account.manage"])) return "当前账号只能查看收款方式，如需新增或修改，请联系商家管理员。";
   if (!paymentAccountEditable.value) return "平台超级管理员已关闭本商家的收款配置权限，当前仅可查看收款方式。";
   if (isPlatformAdmin() && !filters.tenantId) return "平台超级管理员请先选择商家，再新增或编辑该商家的收款账户。";
   return "";

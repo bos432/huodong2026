@@ -707,6 +707,10 @@ export class TenantPermissionDto {
   @IsOptional()
   @IsBoolean()
   paymentAccountEditable?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  mallEnabled?: boolean;
 }
 
 export class TenantRegionDto {

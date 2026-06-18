@@ -5,7 +5,7 @@ import { ElMessage } from "element-plus";
 import { CopyDocument, Grid, Key, SwitchButton, View } from "@element-plus/icons-vue";
 import { api } from "../api";
 import H5QrDialog from "../components/H5QrDialog.vue";
-import { AdminRole, canAccess, canAccessScope, clearStoredAdminSession, currentRole, currentTenantCode, currentTenantName, isPlatformAdmin, permissions, roleOptions, setStoredAdminSession } from "../permissions";
+import { AdminRole, canAccess, canAccessScope, clearStoredAdminSession, currentRole, currentTenantCode, currentTenantName, currentTenantSettings, isPlatformAdmin, permissions, roleOptions, setStoredAdminSession } from "../permissions";
 import { copyToClipboard, h5PreviewUrl, openH5Preview } from "../h5-preview";
 
 const route = useRoute();
@@ -17,6 +17,7 @@ const passwordForm = reactive({ oldPassword: "", newPassword: "", confirmPasswor
 const platformTenants = ref<Array<{ id: number; name?: string; code?: string; enabled?: boolean }>>([]);
 const selectedPlatformTenantId = ref(Number(localStorage.getItem("admin_selected_tenant_id") || 0));
 const shellBrand = ref<{ adminTitle?: string; brandName?: string; brandLogoUrl?: string }>({});
+const tenantSettings = computed(() => currentTenantSettings());
 const roleLabel = computed(() => roleOptions.find((item) => item.value === currentRole())?.label || "管理员");
 const shellTitle = computed(() => {
   if (shellBrand.value.adminTitle) return shellBrand.value.adminTitle;
@@ -63,6 +64,7 @@ const tenantQuickLinks = [
   { label: "订单", path: "/orders" },
   { label: "商城", path: "/mall-products" },
   { label: "商城订单", path: "/mall-orders" },
+  { label: "商城收款", path: "/agents", requiresMallEnabled: true },
   { label: "财务", path: "/finance" },
   { label: "装修", path: "/homepage-builder" },
   { label: "课程", path: "/courses" },
@@ -131,6 +133,7 @@ const menuGroups = [
       { index: "/mall-refunds", icon: "RefreshLeft", label: "售后退款", roles: ["mall.refund.manage", "mall.finance.view"], scope: "platform" },
       { index: "/mall-logistics", icon: "Van", label: "物流设置", roles: ["mall.logistics.manage", "mall.order.manage"], scope: "platform" },
       { index: "/mall-marketing", icon: "Promotion", label: "秒杀拼团/推广", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/agents", icon: "Shop", label: "商城收款配置", roles: permissions.paymentAccountView, scope: "platform", requiresMallEnabled: true },
       { index: "/mall-finance", icon: "Money", label: "商城财务", roles: ["mall.finance.view"], scope: "platform" }
     ]
   },
@@ -238,6 +241,7 @@ const menuGroups = [
       { index: "/mall-refunds", icon: "RefreshLeft", label: "售后退款", roles: ["mall.refund.manage", "mall.finance.view"], scope: "tenant" },
       { index: "/mall-logistics", icon: "Van", label: "物流设置", roles: ["mall.logistics.manage", "mall.order.manage"], scope: "tenant" },
       { index: "/mall-marketing", icon: "Promotion", label: "秒杀拼团/推广", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/agents", icon: "Shop", label: "商城收款配置", roles: permissions.paymentAccountView, scope: "tenant", requiresMallEnabled: true },
       { index: "/mall-finance", icon: "Money", label: "商城财务", roles: ["mall.finance.view"], scope: "tenant" }
     ]
   },
@@ -298,12 +302,24 @@ const menuGroups = [
     ]
   }
 ];
+const visibleTenantQuickLinks = computed(() => tenantQuickLinks.filter((item) => !mallMenuDisabled(item)));
 const visibleMenuGroups = computed(() =>
   menuGroups
     .filter((group) => canAccessScope(group.scope as any))
-    .map((group) => ({ ...group, items: group.items.filter((item) => canAccess(item.roles) && canAccessScope((item as any).scope)) }))
+    .map((group) => ({ ...group, items: group.items.filter((item) => canShowMenuItem(item)) }))
     .filter((group) => group.items.length)
 );
+
+function canShowMenuItem(item: { roles?: string[]; scope?: string; index?: string; requiresMallEnabled?: boolean }) {
+  return canAccess(item.roles) && canAccessScope(item.scope as any) && !mallMenuDisabled(item);
+}
+
+function mallMenuDisabled(item: { path?: string; index?: string; requiresMallEnabled?: boolean }) {
+  if (isPlatformAdmin()) return false;
+  const target = item.path || item.index || "";
+  const mallScoped = target.startsWith("/mall-") || Boolean(item.requiresMallEnabled);
+  return mallScoped && !tenantSettings.value.mallEnabled;
+}
 
 async function refreshCurrentAdminContext() {
   try {
@@ -484,7 +500,7 @@ watch(
             <el-button>进入{{ selectedScopeName }}</el-button>
             <template #dropdown>
               <el-dropdown-menu>
-                <el-dropdown-item v-for="item in tenantQuickLinks" :key="item.path" :command="item.path">{{ item.label }}</el-dropdown-item>
+                <el-dropdown-item v-for="item in visibleTenantQuickLinks" :key="item.path" :command="item.path">{{ item.label }}</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>

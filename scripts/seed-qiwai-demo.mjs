@@ -166,6 +166,7 @@ async function upsertTenant(connection, tenant) {
     activityPublishReviewRequired: true,
     registrationReviewEnabled: true,
     paymentAccountEditable: true,
+    mallEnabled: true,
     demoScenario: "qiwai-cultural-saas"
   });
   await connection.execute(

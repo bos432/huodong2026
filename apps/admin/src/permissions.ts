@@ -157,6 +157,7 @@ export type TenantPermissionSettings = {
   activityPublishReviewRequired: boolean;
   registrationReviewEnabled: boolean;
   paymentAccountEditable: boolean;
+  mallEnabled: boolean;
 };
 
 export function currentTenantSettings(): TenantPermissionSettings {
@@ -164,7 +165,8 @@ export function currentTenantSettings(): TenantPermissionSettings {
   const defaults = {
     activityPublishReviewRequired: true,
     registrationReviewEnabled: false,
-    paymentAccountEditable: true
+    paymentAccountEditable: true,
+    mallEnabled: true
   };
   const raw = localStorage.getItem("admin_tenant_settings");
   if (!raw) return defaults;
@@ -173,7 +175,8 @@ export function currentTenantSettings(): TenantPermissionSettings {
     return {
       activityPublishReviewRequired: parsed.activityPublishReviewRequired === undefined ? defaults.activityPublishReviewRequired : Boolean(parsed.activityPublishReviewRequired),
       registrationReviewEnabled: parsed.registrationReviewEnabled === undefined ? defaults.registrationReviewEnabled : Boolean(parsed.registrationReviewEnabled),
-      paymentAccountEditable: parsed.paymentAccountEditable === undefined ? defaults.paymentAccountEditable : Boolean(parsed.paymentAccountEditable)
+      paymentAccountEditable: parsed.paymentAccountEditable === undefined ? defaults.paymentAccountEditable : Boolean(parsed.paymentAccountEditable),
+      mallEnabled: parsed.mallEnabled === undefined ? defaults.mallEnabled : Boolean(parsed.mallEnabled)
     };
   } catch {
     return defaults;

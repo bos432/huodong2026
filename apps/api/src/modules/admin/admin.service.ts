@@ -68,7 +68,7 @@ import { CharityFundService } from "../charity-fund.service";
 import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[] };
-type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean };
+type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean; mallEnabled: boolean };
 const TENANT_STAFF_ROLES = [AdminRole.Operator, AdminRole.Finance, AdminRole.CheckInStaff];
 
 @Injectable()
@@ -3463,7 +3463,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private defaultTenantPermissions(): TenantPermissionSettings {
-    return { activityPublishReviewRequired: true, registrationReviewEnabled: false, paymentAccountEditable: true };
+    return { activityPublishReviewRequired: true, registrationReviewEnabled: false, paymentAccountEditable: true, mallEnabled: true };
   }
 
   private tenantPermissions(tenant?: Tenant | null): TenantPermissionSettings {
@@ -3472,7 +3472,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return {
       activityPublishReviewRequired: settings.activityPublishReviewRequired === undefined ? defaults.activityPublishReviewRequired : Boolean(settings.activityPublishReviewRequired),
       registrationReviewEnabled: settings.registrationReviewEnabled === undefined ? defaults.registrationReviewEnabled : Boolean(settings.registrationReviewEnabled),
-      paymentAccountEditable: settings.paymentAccountEditable === undefined ? defaults.paymentAccountEditable : Boolean(settings.paymentAccountEditable)
+      paymentAccountEditable: settings.paymentAccountEditable === undefined ? defaults.paymentAccountEditable : Boolean(settings.paymentAccountEditable),
+      mallEnabled: settings.mallEnabled === undefined ? defaults.mallEnabled : Boolean(settings.mallEnabled)
     };
   }
 
@@ -3480,7 +3481,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const base = this.isPlainObject(current) ? current : {};
     const next = this.isPlainObject(input) ? input : {};
     const merged: Record<string, unknown> = { ...base };
-    for (const key of ["activityPublishReviewRequired", "registrationReviewEnabled", "paymentAccountEditable"]) {
+    for (const key of ["activityPublishReviewRequired", "registrationReviewEnabled", "paymentAccountEditable", "mallEnabled"]) {
       if (next[key] !== undefined) merged[key] = Boolean(next[key]);
     }
     return { ...this.defaultTenantPermissions(), ...merged };

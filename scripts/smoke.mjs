@@ -362,7 +362,7 @@ async function main() {
       contactName: "Smoke Operator",
       contactPhone: "13800000000",
       enabled: true,
-      settings: { activityPublishReviewRequired: true, registrationReviewEnabled: true, paymentAccountEditable: true }
+      settings: { activityPublishReviewRequired: true, registrationReviewEnabled: true, paymentAccountEditable: true, mallEnabled: true }
     })
   });
   const tenantContentAdminName = `smoke_content_admin_${String(runId).slice(-6)}`;

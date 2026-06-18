@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
-import { ArrowRight, CopyDocument, Edit, Grid, Money, Plus, Refresh, UserFilled, View } from "@element-plus/icons-vue";
+import { ArrowDown, ArrowRight, CopyDocument, Edit, Grid, Money, Plus, Refresh, UserFilled, View } from "@element-plus/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import { api, downloadFile } from "../api";
 import H5QrDialog from "../components/H5QrDialog.vue";
@@ -34,6 +34,7 @@ type TenantRow = {
     activityPublishReviewRequired: boolean;
     registrationReviewEnabled: boolean;
     paymentAccountEditable: boolean;
+    mallEnabled: boolean;
   };
 };
 
@@ -61,12 +62,14 @@ const form = reactive({
   activityPublishReviewRequired: true,
   registrationReviewEnabled: false,
   paymentAccountEditable: true,
+  mallEnabled: true,
   remark: ""
 });
 
 const readinessOptions = [
   { label: "全部状态", value: "" },
   { label: "待开账号", value: "need_admin" },
+  { label: "商城未开通", value: "mall_closed" },
   { label: "待配收款", value: "need_payment" },
   { label: "收款关闭", value: "payment_closed" },
   { label: "可运营", value: "ready" },
@@ -151,6 +154,8 @@ async function batchUpdate(action: string, value?: boolean) {
     case "registration_disabled": msg = "禁止选中的 " + ids.length + " 个商家开启报名审核？"; break;
     case "payment_enabled": msg = "允许选中的 " + ids.length + " 个商家配置收款方式？"; break;
     case "payment_disabled": msg = "禁止选中的 " + ids.length + " 个商家配置收款方式？"; break;
+    case "mall_enabled": msg = "给选中的 " + ids.length + " 个商家开通商城运营？"; break;
+    case "mall_disabled": msg = "关闭选中的 " + ids.length + " 个商家的商城运营？关闭后商家端商城菜单和前台商城会不可用。"; break;
   }
   if (!confirm(msg)) return;
   try {
@@ -167,6 +172,8 @@ async function batchUpdate(action: string, value?: boolean) {
         case "registration_disabled": pSettings.registrationReviewEnabled = false; break;
         case "payment_enabled": pSettings.paymentAccountEditable = true; break;
         case "payment_disabled": pSettings.paymentAccountEditable = false; break;
+        case "mall_enabled": pSettings.mallEnabled = true; break;
+        case "mall_disabled": pSettings.mallEnabled = false; break;
       }
       for (var i = 0; i < ids.length; i++) {
         await api.post("/admin/tenants/" + ids[i] + "/permissions", pSettings);
@@ -238,7 +245,7 @@ function resetTenantFilters() {
 
 function openCreate() {
   editingId.value = null;
-  Object.assign(form, { code: "", name: "", region: "", contactName: "", contactPhone: "", enabled: true, activityPublishReviewRequired: true, registrationReviewEnabled: false, paymentAccountEditable: true, remark: "" });
+  Object.assign(form, { code: "", name: "", region: "", contactName: "", contactPhone: "", enabled: true, activityPublishReviewRequired: true, registrationReviewEnabled: false, paymentAccountEditable: true, mallEnabled: true, remark: "" });
   dialog.value = true;
 }
 
@@ -254,6 +261,7 @@ function openEdit(row: TenantRow) {
     activityPublishReviewRequired: row.settings?.activityPublishReviewRequired ?? true,
     registrationReviewEnabled: row.settings?.registrationReviewEnabled ?? false,
     paymentAccountEditable: row.settings?.paymentAccountEditable ?? true,
+    mallEnabled: row.settings?.mallEnabled ?? true,
     remark: row.remark || ""
   });
   dialog.value = true;
@@ -318,6 +326,7 @@ function goTenantNextAction(row: TenantRow) {
   const status = tenantReadinessKey(row);
   if (status === "disabled") return openEdit(row);
   if (status === "need_admin") return goCreateTenantAdmin(row);
+  if (status === "mall_closed") return openDetail(row);
   if (status === "need_payment" || status === "payment_closed") return goConfigurePayment(row);
   if (tenantHasFinanceRisk(row)) return goTenantFinanceRisk(row);
   if (Number(row.pendingActivityCount || 0) > 0) return goTenantPendingActivities(row);
@@ -353,6 +362,7 @@ function tenantAttentionScore(row: TenantRow) {
   const readinessWeight: Record<string, number> = {
     disabled: 1000,
     need_admin: 900,
+    mall_closed: 850,
     need_payment: 800,
     payment_closed: 700,
     ready: 0
@@ -370,6 +380,7 @@ function tenantAttentionStatus(row: TenantRow) {
   const status = tenantReadinessKey(row);
   if (status === "disabled") return { label: "已停用", type: "info" as const };
   if (status === "need_admin") return { label: "先开账号", type: "danger" as const };
+  if (status === "mall_closed") return { label: "开通商城", type: "warning" as const };
   if (status === "need_payment") return { label: "先配收款", type: "warning" as const };
   if (status === "payment_closed") return { label: "确认收款权限", type: "info" as const };
   if (tenantHasFinanceRisk(row)) return { label: "财务优先", type: "danger" as const };
@@ -413,9 +424,16 @@ function paymentAccountStatus(row: TenantRow) {
   return { label: "未建主体", type: "danger" as const };
 }
 
+function mallAuthorizationStatus(row: TenantRow) {
+  if (!row.enabled) return { label: "商家停用", type: "info" as const };
+  if (row.settings?.mallEnabled === false) return { label: "未开通", type: "warning" as const };
+  return { label: "已授权", type: "success" as const };
+}
+
 function tenantReadinessKey(row: TenantRow) {
   if (!row.enabled) return "disabled";
   if (Number(row.enabledAdminCount || 0) <= 0) return "need_admin";
+  if (row.settings?.mallEnabled === false) return "mall_closed";
   if (Number(row.enabledPaymentAccountCount || 0) <= 0) {
     return row.settings?.paymentAccountEditable ? "need_payment" : "payment_closed";
   }
@@ -431,6 +449,7 @@ function tenantReadinessStatus(row: TenantRow) {
   const status = tenantReadinessKey(row);
   if (status === "disabled") return { label: "已停用", type: "info" as const };
   if (status === "need_admin") return { label: "待开账号", type: "danger" as const };
+  if (status === "mall_closed") return { label: "商城未开通", type: "warning" as const };
   if (status === "need_payment") return { label: "待配收款", type: "warning" as const };
   if (status === "payment_closed") return { label: "收款关闭", type: "info" as const };
   return { label: "可运营", type: "success" as const };
@@ -440,6 +459,7 @@ function tenantNextAction(row: TenantRow) {
   const status = tenantReadinessKey(row);
   if (status === "disabled") return "商家已停用，恢复启用后再继续开通";
   if (status === "need_admin") return "先创建商家管理员账号，让商家可登录后台";
+  if (status === "mall_closed") return "平台先开通商城授权，商家端才会显示商品、订单、营销和收款配置";
   if (status === "need_payment") return "配置并启用收款主体和收款账户";
   if (status === "payment_closed") return "平台已关闭收款配置权限，需确认是否由平台代配置";
   if (tenantHasFinanceRisk(row)) return "先处理待审退款或异常支付回调，再继续运营";
@@ -483,7 +503,8 @@ async function submit() {
       settings: {
         activityPublishReviewRequired: form.activityPublishReviewRequired,
         registrationReviewEnabled: form.registrationReviewEnabled,
-        paymentAccountEditable: form.paymentAccountEditable
+        paymentAccountEditable: form.paymentAccountEditable,
+        mallEnabled: form.mallEnabled
       }
     };
     if (editingId.value) await api.patch(`/admin/tenants/${editingId.value}`, payload);
@@ -611,6 +632,8 @@ onMounted(() => {
                 <el-dropdown-item command="registration_disabled">禁止报名审核</el-dropdown-item>
                 <el-dropdown-item divided command="payment_enabled">可配置收款</el-dropdown-item>
                 <el-dropdown-item command="payment_disabled">禁止配置收款</el-dropdown-item>
+                <el-dropdown-item divided command="mall_enabled">开通商城</el-dropdown-item>
+                <el-dropdown-item command="mall_disabled">关闭商城</el-dropdown-item>
               </el-dropdown-menu>
             </template>
           </el-dropdown>
@@ -692,6 +715,14 @@ onMounted(() => {
             </div>
           </template>
         </el-table-column>
+        <el-table-column label="商城授权" width="130">
+          <template #default="{ row }">
+            <div class="status-actions">
+              <el-tag :type="mallAuthorizationStatus(row).type">{{ mallAuthorizationStatus(row).label }}</el-tag>
+              <el-switch v-model="row.settings.mallEnabled" @change="updatePermissions(row)" />
+            </div>
+          </template>
+        </el-table-column>
         <el-table-column label="活动发布审核" width="170">
           <template #default="{ row }"><el-switch v-model="row.settings.activityPublishReviewRequired" @change="updatePermissions(row)" /></template>
         </el-table-column>
@@ -764,6 +795,10 @@ onMounted(() => {
             <el-tag :type="paymentAccountStatus(drawerRow).type">{{ paymentAccountStatus(drawerRow).label }}</el-tag>
           </div>
           <div class="detail-item">
+            <span>商城授权</span>
+            <el-tag :type="mallAuthorizationStatus(drawerRow).type">{{ mallAuthorizationStatus(drawerRow).label }}</el-tag>
+          </div>
+          <div class="detail-item">
             <span>审核待办</span>
             <el-tag :type="tenantPendingReviewStatus(drawerRow).type">{{ tenantPendingReviewStatus(drawerRow).label }}</el-tag>
           </div>
@@ -802,6 +837,10 @@ onMounted(() => {
             <label>
               <span>允许商家配置收款方式</span>
               <el-switch v-model="drawerRow.settings.paymentAccountEditable" @change="updatePermissions(drawerRow)" />
+            </label>
+            <label>
+              <span>开通商城运营：开启后商家端显示商城菜单，前台商城和商城接口可用</span>
+              <el-switch v-model="drawerRow.settings.mallEnabled" @change="updatePermissions(drawerRow)" />
             </label>
           </div>
         </div>
@@ -846,6 +885,7 @@ onMounted(() => {
           <el-form-item class="full"><el-checkbox v-model="form.activityPublishReviewRequired">活动发布需要平台审核：开启后商家发布活动必须先提交平台审核</el-checkbox></el-form-item>
           <el-form-item class="full"><el-checkbox v-model="form.registrationReviewEnabled">允许商家开启报名审核：关闭后商家不能把活动报名设为人工审核</el-checkbox></el-form-item>
           <el-form-item class="full"><el-checkbox v-model="form.paymentAccountEditable">允许商家配置收款方式：关闭后商家收款账户和支付说明只读</el-checkbox></el-form-item>
+          <el-form-item class="full"><el-checkbox v-model="form.mallEnabled">开通商城运营：商家可管理商品、订单、营销、物流，并使用自己的收款配置</el-checkbox></el-form-item>
         </div>
       </el-form>
       <template #footer>

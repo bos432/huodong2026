@@ -16,6 +16,7 @@ type TenantProfile = {
     activityPublishReviewRequired: boolean;
     registrationReviewEnabled: boolean;
     paymentAccountEditable: boolean;
+    mallEnabled: boolean;
   };
 };
 
