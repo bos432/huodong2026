@@ -173,6 +173,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "activities" && verb === "GET") return "activity.view";
   if (path === "activities/:id" && verb === "GET") return "activity.view";
   if (path.includes("approval-logs") || path.includes("channel-report") || path.endsWith("/channels") && verb === "GET") return "activity.view";
+  if (path.includes("/refund") || path.startsWith("refunds/")) return "order.refund";
   if (path.includes("/approve") || path.includes("/reject")) return "activity.approve";
   if (path.startsWith("activities")) return "activity.manage";
   if (path === "registrations" && verb === "GET") return "registration.view";
@@ -180,7 +181,6 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path.startsWith("registrations")) return "registration.manage";
   if (path === "orders" && verb === "GET") return "order.view";
   if (path === "orders/export") return "order.export";
-  if (path.includes("/refund") || path.startsWith("refunds/")) return "order.refund";
   if (path.startsWith("orders")) return write ? "order.manage" : "order.view";
   if (path.startsWith("ticket-types")) return "ticket.manage";
   if (path.startsWith("coupons")) return "coupon.manage";
