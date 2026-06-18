@@ -221,12 +221,13 @@ async function prepareSmokeUsers(tenantAdminToken, platformToken, tenantId) {
   for (const [index, template] of demoUsers.entries()) {
     const phone = `1399000${String(base + index).padStart(4, "0")}`;
     const nickname = `${template.nickname}-${base + index}`;
-    const profile = await api("/admin/members", {
+    await api("/admin/members", {
       method: "POST",
       headers: auth(tenantAdminToken),
       body: JSON.stringify({ phone, password: process.env.SHOWCASE_PASSWORD, nickname, remark: "online-showcase smoke runtime user" })
     });
-    const userId = profile?.user?.id || profile?.id || profile?.profile?.user?.id;
+    const loggedIn = await loginUser(phone, nickname);
+    const userId = loggedIn.user?.id;
     assert(userId, `${phone} smoke 用户创建后无法识别用户ID`);
     if (["paid", "refund", "course"].includes(template.key)) {
       await api(`/admin/users/${userId}/wallet/adjust`, {

@@ -12,6 +12,7 @@ import {
   futureDate,
   loginPlatformAdmin,
   loginShowcaseAdmin,
+  loginUser,
   pickList,
   reportStep,
   tenantHeader,
@@ -452,7 +453,8 @@ async function ensureMembersAndWallets(tenantAdminToken, platformToken, tenantId
       headers: auth(tenantAdminToken),
       body: JSON.stringify({ phone: user.phone, password: showcasePassword, nickname: user.nickname, remark: `demoScenario:${SCENARIO}` })
     });
-    const userId = profile?.user?.id || profile?.id || profile?.profile?.user?.id;
+    const loggedIn = await loginUser(user.phone, user.nickname);
+    const userId = loggedIn.user?.id;
     assert(userId, `${user.phone} 会员创建后无法识别用户ID`);
     if (["paid", "refund", "course"].includes(user.key)) {
       await api(`/admin/users/${userId}/wallet/adjust`, {
