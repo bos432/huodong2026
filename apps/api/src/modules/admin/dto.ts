@@ -11,6 +11,16 @@ export class LoginDto {
   password!: string;
 }
 
+export class SupportQueryDto {
+  @IsString()
+  keyword!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number;
+}
+
 export class CategoryDto {
   @IsString()
   @IsNotEmpty()
@@ -222,8 +232,8 @@ export class AmbassadorApplicationQueryDto {
 
 export class AmbassadorApplicationStatusDto {
   @IsString()
-  @IsIn(["pending", "contacted", "approved", "rejected"])
-  status!: "pending" | "contacted" | "approved" | "rejected";
+  @IsIn(["pending", "contacted", "screened", "interview", "approved", "activated", "rejected"])
+  status!: "pending" | "contacted" | "screened" | "interview" | "approved" | "activated" | "rejected";
 
   @IsOptional()
   @IsString()
@@ -241,6 +251,201 @@ export class AmbassadorApplicationStatusDto {
   @IsOptional()
   @IsString()
   nextFollowAt?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  cityResourceScore?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  communityScore?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  contentScore?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  charityScore?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(5)
+  deliveryScore?: number;
+}
+
+export class AmbassadorApplicationFollowupDto {
+  @IsOptional()
+  @IsString()
+  method?: string;
+
+  @IsOptional()
+  @IsString()
+  result?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  content!: string;
+
+  @IsOptional()
+  @IsString()
+  nextFollowAt?: string;
+}
+
+export class VolunteerTaskQueryDto {
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+}
+
+export class VolunteerProfileQueryDto {
+  @IsOptional()
+  @IsString()
+  keyword?: string;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+
+  @IsOptional()
+  @IsString()
+  level?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+}
+
+export class VolunteerProfileStatusDto {
+  @IsString()
+  @IsIn(["pending", "approved", "rejected", "inactive"])
+  status!: "pending" | "approved" | "rejected" | "inactive";
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+
+  @IsOptional()
+  @IsIn(["participant", "volunteer", "ambassador", "city_builder"])
+  level?: "participant" | "volunteer" | "ambassador" | "city_builder";
+}
+
+export class VolunteerCertificateDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+}
+
+export class VolunteerTaskDto {
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  type!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  city!: string;
+
+  @IsOptional()
+  @IsString()
+  address?: string;
+
+  @IsOptional()
+  @IsString()
+  startAt?: string;
+
+  @IsOptional()
+  @IsString()
+  endAt?: string;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  quota?: number;
+
+  @IsOptional()
+  @IsIn(["draft", "open", "closed", "completed", "archived"])
+  status?: "draft" | "open" | "closed" | "completed" | "archived";
+
+  @IsOptional()
+  @IsString()
+  requirement?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+}
+
+export class VolunteerTaskApplicationStatusDto {
+  @IsString()
+  @IsIn(["pending", "approved", "rejected", "completed", "cancelled"])
+  status!: "pending" | "approved" | "rejected" | "completed" | "cancelled";
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
+export class VolunteerServiceRecordDto {
+  @IsNumber()
+  @Min(1)
+  applicationId!: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(0)
+  hours?: number;
+
+  @IsOptional()
+  @IsString()
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  proofUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  feedback?: string;
+}
+
+export class VolunteerServiceRecordQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  profileId?: number;
+
+  @IsOptional()
+  @IsString()
+  keyword?: string;
+
+  @IsOptional()
+  @IsString()
+  city?: string;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
 }
 
 export class PaymentStatementImportItemDto {
@@ -593,8 +798,8 @@ export class CharityProjectDto {
   targetAmount!: number;
 
   @IsOptional()
-  @IsIn(["fundraising", "pending_execution", "executing", "completed", "archived"])
-  status?: "fundraising" | "pending_execution" | "executing" | "completed" | "archived";
+  @IsIn(["fundraising", "pending_execution", "executing", "pending_acceptance", "completed", "archived"])
+  status?: "fundraising" | "pending_execution" | "executing" | "pending_acceptance" | "completed" | "archived";
 
   @IsOptional()
   @IsString()
@@ -625,6 +830,32 @@ export class CharityDisbursementDto {
   @IsOptional()
   @IsString()
   remark?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  publicVisible?: boolean;
+}
+
+export class CharityProjectUpdateDto {
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  content!: string;
+
+  @IsOptional()
+  @IsString()
+  proofUrl?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  publicVisible?: boolean;
+
+  @IsOptional()
+  @IsString()
+  publishedAt?: string;
 }
 
 export class AdminQueryDto {
@@ -711,6 +942,14 @@ export class TenantPermissionDto {
   @IsOptional()
   @IsBoolean()
   mallEnabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  packagePlan?: string;
+
+  @IsOptional()
+  @IsString()
+  packageExpiresAt?: string;
 }
 
 export class TenantRegionDto {
@@ -752,6 +991,10 @@ export class TenantRegionDto {
   radiusMeters!: number;
 
   @IsOptional()
+  @IsArray()
+  boundaryPoints?: unknown[];
+
+  @IsOptional()
   @IsBoolean()
   exclusive?: boolean;
 
@@ -767,6 +1010,49 @@ export class TenantRegionDto {
   @IsOptional()
   @IsString()
   remark?: string;
+}
+
+export class TenantRegionBulkImportDto {
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => TenantRegionDto)
+  items!: TenantRegionDto[];
+}
+
+export class TenantRegionHitLogQueryDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number;
+
+  @IsOptional()
+  @IsString()
+  matched?: string;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  startDate?: string;
+
+  @IsOptional()
+  @IsString()
+  endDate?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  page?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  pageSize?: number;
 }
 
 export class TenantProfileDto {
@@ -1023,6 +1309,10 @@ export class OperationSettingDto {
   @IsOptional()
   @IsObject()
   pageTheme?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  launchConfig?: Record<string, unknown>;
 
   @IsOptional()
   @IsString()

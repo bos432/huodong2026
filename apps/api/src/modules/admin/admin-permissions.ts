@@ -6,6 +6,7 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "tenant.manage", label: "商家管理", group: "平台管理", platformOnly: true },
   { key: "tenant_region.manage", label: "区域保护", group: "平台管理", platformOnly: true },
   { key: "admin.manage", label: "后台账号管理", group: "平台管理" },
+  { key: "support.view", label: "客服查询台", group: "平台管理" },
   { key: "logs.view", label: "操作/登录/验证码日志", group: "系统安全" },
   { key: "system.manage", label: "系统设置/上线体检", group: "系统安全" },
   { key: "miniprogram_release.manage", label: "小程序发布管理", group: "系统安全", platformOnly: true },
@@ -28,12 +29,19 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "finance.manage", label: "对账处理/流水导入", group: "订单财务" },
   { key: "finance.export", label: "导出财务数据", group: "订单财务" },
   { key: "finance.wallet_adjust", label: "会员余额调整", group: "订单财务" },
+  { key: "mall.merchant.manage", label: "商城店铺/授权管理", group: "商城管理", platformOnly: true },
+  { key: "mall.merchant.view", label: "查看可管理商城店铺", group: "商城管理" },
   { key: "mall.product.manage", label: "商城商品/营销管理", group: "商城管理" },
+  { key: "mall.product.audit", label: "商城商品审核", group: "商城管理", platformOnly: true },
+  { key: "mall.review.manage", label: "商城评价管理", group: "商城管理" },
   { key: "mall.logistics.manage", label: "商城物流设置", group: "商城管理" },
   { key: "mall.order.view", label: "查看商城订单", group: "商城管理" },
   { key: "mall.order.manage", label: "商城发货/确认收款", group: "商城管理" },
   { key: "mall.refund.manage", label: "商城售后退款", group: "商城管理" },
   { key: "mall.finance.view", label: "商城财务查看", group: "商城管理" },
+  { key: "mall.payment.manage", label: "商城支付配置", group: "商城管理" },
+  { key: "mall.settlement.manage", label: "商城结算管理", group: "商城管理" },
+  { key: "mall.statistics.view", label: "商城统计查看", group: "商城管理" },
   { key: "payment_account.view", label: "查看收款账户", group: "订单财务" },
   { key: "payment_account.manage", label: "维护收款账户", group: "订单财务" },
   { key: "agent_settlement.view", label: "查看代理结算", group: "订单财务" },
@@ -71,6 +79,7 @@ const PLATFORM_ONLY_PERMISSION_SET = new Set<string>(ADMIN_PERMISSION_DEFINITION
 const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
   "dashboard.view",
   "analytics.view",
+  "support.view",
   "activity.view",
   "activity.manage",
   "category.manage",
@@ -88,7 +97,9 @@ const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
   "tag.manage",
   "notification.manage",
   "review.manage",
+  "mall.merchant.view",
   "mall.product.manage",
+  "mall.review.manage",
   "mall.logistics.manage",
   "mall.order.view",
   "mall.order.manage",
@@ -106,6 +117,7 @@ const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
 const FINANCE_PERMISSIONS: AdminPermissionKey[] = [
   "dashboard.view",
   "analytics.view",
+  "support.view",
   "activity.view",
   "registration.view",
   "order.view",
@@ -116,10 +128,14 @@ const FINANCE_PERMISSIONS: AdminPermissionKey[] = [
   "finance.manage",
   "finance.export",
   "finance.wallet_adjust",
+  "mall.merchant.view",
   "mall.order.view",
   "mall.order.manage",
   "mall.refund.manage",
   "mall.finance.view",
+  "mall.payment.manage",
+  "mall.settlement.manage",
+  "mall.statistics.view",
   "payment_account.view",
   "agent_settlement.view",
   "agent_settlement.manage",
@@ -159,22 +175,40 @@ export function hasAdminPermission(input: { role?: string | null; tenantId?: num
 }
 
 export function resolveAdminRoutePermission(method: string, routePath?: string) {
-  const path = String(routePath || "").replace(/^\/admin\/?/, "").replace(/^\/+/, "");
+  const path = String(routePath || "").replace(/^\/?(api\/)?admin\/?/, "").replace(/^\/+/, "");
   const verb = method.toUpperCase();
   const write = ["POST", "PATCH", "PUT", "DELETE"].includes(verb);
   if (path === "dashboard") return "dashboard.view";
   if (path.startsWith("analytics/")) return "analytics.view";
   if (path === "tenants" || path === "tenants/:id" || path === "tenants/:id/permissions" || path === "tenants/export") return "tenant.manage";
-  if (path.startsWith("tenant-regions")) return "tenant_region.manage";
+  if (path.startsWith("tenant-regions") || path.startsWith("tenant-region-hit-logs")) return "tenant_region.manage";
   if (path === "tenant/profile") return verb === "GET" ? "tenant_profile.manage" : "tenant_profile.manage";
   if (path.startsWith("admins")) return "admin.manage";
+  if (path === "support/search") return "support.view";
   if (path === "operation-logs" || path.startsWith("auth/login-logs") || path.startsWith("auth/h5-code-logs")) return "logs.view";
   if (path.startsWith("miniprogram-release")) return "miniprogram_release.manage";
-  if (path === "mall/products" || path.startsWith("mall/products/") || path.startsWith("mall/categories") || path.startsWith("mall/skus") || path.startsWith("mall/coupons")) return "mall.product.manage";
+  if (path === "mall/accessible-merchants") return "mall.merchant.view";
+  if (path === "mall/payment-merchants") return "mall.payment.manage";
+  if (path.startsWith("mall/merchants") || path.startsWith("mall/merchant-access")) return "mall.merchant.manage";
+  if (path.startsWith("mall/product-audits") || path.includes("/approve") && path.startsWith("mall/products") || path.includes("/reject") && path.startsWith("mall/products")) return "mall.product.audit";
+  if (path === "mall/products" || path.startsWith("mall/products/") || path.startsWith("mall/categories") || path.startsWith("mall/skus") || path.startsWith("mall/coupons") || path.startsWith("mall/coupon-usages")) return "mall.product.manage";
   if (path.startsWith("mall/logistics-companies")) return "mall.logistics.manage";
   if (path.startsWith("mall/inventory-logs")) return "mall.product.manage";
+  if (path.startsWith("mall/flash-sales") || path.startsWith("mall/promotion-codes")) return "mall.product.manage";
+  if (path.startsWith("mall/reviews")) return "mall.review.manage";
+  if (path === "mall/group-buys/fail-expired") return "mall.finance.view";
+  if (path.startsWith("mall/group-buys") || path.startsWith("mall/group-buy-records")) return "mall.product.manage";
   if (path === "mall/orders/export") return "mall.finance.view";
   if (path === "mall/orders/summary") return "mall.finance.view";
+  if (path === "mall/analytics") return "mall.statistics.view";
+  if (path === "mall/settlements" && verb === "GET") return "mall.finance.view";
+  if (path === "mall/settlements/export") return "mall.finance.view";
+  if (path.startsWith("mall/settlements")) return "mall.settlement.manage";
+  if (path === "mall/payment-readiness" && verb === "GET") return "mall.finance.view";
+  if (path === "mall/merchant-payment-credentials") return "mall.payment.manage";
+  if (path.startsWith("mall/merchant-payment-accounts")) return "mall.payment.manage";
+  if (path.startsWith("mall/payment-transactions") || path.startsWith("mall/payment-callback-logs") || path.startsWith("mall/refund-logs")) return "mall.finance.view";
+  if (path.startsWith("mall/commissions")) return write ? "mall.settlement.manage" : "mall.finance.view";
   if (path === "mall/orders/close-expired") return "mall.finance.view";
   if (path === "mall/orders" && verb === "GET") return "mall.order.view";
   if (path.startsWith("mall/orders")) return "mall.order.manage";
@@ -186,6 +220,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "charity/transactions") return "charity.finance";
   if (path.startsWith("charity/")) return "charity.view";
   if (path.startsWith("ambassador/")) return "ambassador.manage";
+  if (path.startsWith("volunteer/")) return "ambassador.manage";
   if (path === "mobile/bootstrap") return "activity.view";
   if (path === "agents") return write ? "payment_account.manage" : "payment_account.view";
   if (path.startsWith("agent-payment-accounts")) return write ? "payment_account.manage" : "payment_account.view";
@@ -197,6 +232,11 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "activities" && verb === "GET") return "activity.view";
   if (path === "activities/:id" && verb === "GET") return "activity.view";
   if (path.includes("approval-logs") || path.includes("channel-report") || path.endsWith("/channels") && verb === "GET") return "activity.view";
+  if (path === "agent-settlements" || path.includes("transfer-capability") || path.includes("/details")) return "agent_settlement.view";
+  if (path.includes("/mark-paid")) return "agent_settlement.pay";
+  if (path.includes("/sandbox-transfer") || path.includes("/real-transfer") || path === "agent-settlement-transfers/scan") return "agent_settlement.transfer";
+  if (path === "agent-settlements/export") return "agent_settlement.export";
+  if (path.startsWith("agent-settlements")) return "agent_settlement.manage";
   if (path.includes("/refund") || path.startsWith("refunds/")) return "order.refund";
   if (path.includes("/approve") || path.includes("/reject")) return "activity.approve";
   if (path.startsWith("activities")) return "activity.manage";
@@ -213,11 +253,6 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "finance/export") return "finance.export";
   if (path.includes("wallet/adjust")) return "finance.wallet_adjust";
   if (path.startsWith("finance/")) return write ? "finance.manage" : "finance.view";
-  if (path === "agent-settlements" || path.includes("transfer-capability") || path.includes("/details")) return "agent_settlement.view";
-  if (path.includes("/mark-paid")) return "agent_settlement.pay";
-  if (path.includes("/sandbox-transfer") || path.includes("/real-transfer") || path === "agent-settlement-transfers/scan") return "agent_settlement.transfer";
-  if (path === "agent-settlements/export") return "agent_settlement.export";
-  if (path.startsWith("agent-settlements")) return "agent_settlement.manage";
   if (path === "check-ins") return "checkin.manage";
   if (path.startsWith("waitlists")) return "waitlist.manage";
   if (path === "members" && verb === "GET") return "member.view";

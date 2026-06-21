@@ -6,6 +6,7 @@ import { CharityAccrualBasis, CharityFundSetting } from "../entities/charity-fun
 import { CharityFundTransaction } from "../entities/charity-fund-transaction.entity";
 import { CharityProjectDisbursement } from "../entities/charity-project-disbursement.entity";
 import { CharityProject, CharityProjectStatus } from "../entities/charity-project.entity";
+import { CharityProjectUpdate } from "../entities/charity-project-update.entity";
 import { Order } from "../entities/order.entity";
 import { Refund } from "../entities/refund.entity";
 import { Tenant } from "../entities/tenant.entity";
@@ -34,7 +35,8 @@ export type CharityProjectInput = {
   executedAt?: string | null;
   publicVisible?: boolean;
 };
-export type CharityDisbursementInput = { amount: number; proofUrl?: string | null; remark?: string | null };
+export type CharityDisbursementInput = { amount: number; proofUrl?: string | null; remark?: string | null; publicVisible?: boolean };
+export type CharityProjectUpdateInput = { title: string; content: string; proofUrl?: string | null; publicVisible?: boolean; publishedAt?: string | null };
 
 @Injectable()
 export class CharityFundService {
@@ -43,6 +45,7 @@ export class CharityFundService {
     @InjectRepository(CharityFundTransaction) private readonly transactions: Repository<CharityFundTransaction>,
     @InjectRepository(CharityProject) private readonly projects: Repository<CharityProject>,
     @InjectRepository(CharityProjectDisbursement) private readonly disbursements: Repository<CharityProjectDisbursement>,
+    @InjectRepository(CharityProjectUpdate) private readonly projectUpdates: Repository<CharityProjectUpdate>,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     @InjectRepository(AdminUser) private readonly admins: Repository<AdminUser>
   ) {}
@@ -54,7 +57,17 @@ export class CharityFundService {
 
   async publicProjects(limit = 20) {
     const rows = await this.projects.find({ where: { publicVisible: true }, order: { createdAt: "DESC" }, take: limit });
-    return rows.map((row) => this.projectView(row));
+    return this.projectViews(rows, true);
+  }
+
+  async publicProjectUpdates(projectId: number) {
+    const project = await this.projects.findOne({ where: { id: projectId, publicVisible: true } });
+    if (!project) throw new NotFoundException("公益项目不存在");
+    const [updates, disbursements] = await Promise.all([
+      this.projectUpdates.find({ where: { project: { id: projectId }, publicVisible: true }, order: { publishedAt: "DESC", createdAt: "DESC" } }),
+      this.disbursements.find({ where: { project: { id: projectId }, publicVisible: true }, order: { createdAt: "DESC" } })
+    ]);
+    return { project: this.projectView(project), updates: updates.map((row) => this.projectUpdateView(row)), disbursements: disbursements.map((row) => this.disbursementView(row)) };
   }
 
   async userContribution(user: User) {
@@ -126,7 +139,7 @@ export class CharityFundService {
     const builder = this.projects.createQueryBuilder("project").leftJoinAndSelect("project.tenant", "tenant").orderBy("project.createdAt", "DESC");
     this.applyScope(builder, "project", admin);
     const rows = await builder.getMany();
-    return rows.map((row) => this.projectView(row));
+    return this.projectViews(rows, false);
   }
 
   async saveProject(input: CharityProjectInput, id?: number, admin?: AdminContext) {
@@ -165,6 +178,7 @@ export class CharityFundService {
         operator,
         amount: amount.toFixed(2),
         proofUrl: this.cleanText(input.proofUrl, 500) || null,
+        publicVisible: input.publicVisible === undefined ? true : Boolean(input.publicVisible),
         remark: input.remark?.trim() || null
       }));
       project.disbursedAmount = (Number(project.disbursedAmount || 0) + amount).toFixed(2);
@@ -190,6 +204,36 @@ export class CharityFundService {
       }));
       return { project: this.projectView(savedProject), disbursement };
     });
+  }
+
+  async adminProjectUpdates(projectId: number, admin?: AdminContext) {
+    const project = await this.projects.findOne({ where: { id: projectId } });
+    if (!project) throw new NotFoundException("公益项目不存在");
+    this.assertProjectScope(project, admin);
+    const [updates, disbursements] = await Promise.all([
+      this.projectUpdates.find({ where: { project: { id: projectId } }, order: { publishedAt: "DESC", createdAt: "DESC" } }),
+      this.disbursements.find({ where: { project: { id: projectId } }, order: { createdAt: "DESC" } })
+    ]);
+    return { project: this.projectView(project), updates: updates.map((row) => this.projectUpdateView(row)), disbursements: disbursements.map((row) => this.disbursementView(row)) };
+  }
+
+  async saveProjectUpdate(projectId: number, input: CharityProjectUpdateInput, id?: number, admin?: AdminContext) {
+    const project = await this.projects.findOne({ where: { id: projectId } });
+    if (!project) throw new NotFoundException("公益项目不存在");
+    this.assertProjectScope(project, admin);
+    const update = id ? await this.projectUpdates.findOne({ where: { id, project: { id: projectId } } }) : this.projectUpdates.create({ project });
+    if (!update) throw new NotFoundException("公益项目动态不存在");
+    const title = this.cleanText(input.title, 120);
+    const content = typeof input.content === "string" ? input.content.trim() : "";
+    if (!title) throw new BadRequestException("请输入动态标题");
+    if (!content) throw new BadRequestException("请输入动态内容");
+    update.project = project;
+    update.title = title;
+    update.content = content;
+    update.proofUrl = this.cleanText(input.proofUrl, 500) || null;
+    update.publicVisible = input.publicVisible === undefined ? update.publicVisible ?? true : Boolean(input.publicVisible);
+    update.publishedAt = input.publishedAt ? this.parseDate(input.publishedAt) : update.publishedAt || new Date();
+    return this.projectUpdateView(await this.projectUpdates.save(update));
   }
 
   async recordOrderAccrual(order: Order, operator = "system") {
@@ -347,6 +391,20 @@ export class CharityFundService {
     return charityBasisAmount({ paidAmount: Number(order.amount || 0), originalAmount: Number(order.originalAmount || order.amount || 0), manualBasisAmount: Number(setting.manualBasisAmount || 0), ratePercent: Number(setting.ratePercent), accrualBasis: setting.accrualBasis });
   }
 
+  private async projectViews(projects: CharityProject[], publicOnly: boolean) {
+    const ids = projects.map((row) => row.id);
+    if (!ids.length) return [];
+    const [updates, disbursements] = await Promise.all([
+      this.projectUpdates.createQueryBuilder("update").leftJoinAndSelect("update.project", "project").where("update.projectId IN (:...ids)", { ids }).andWhere(publicOnly ? "update.publicVisible = :visible" : "1=1", { visible: true }).orderBy("update.publishedAt", "DESC").addOrderBy("update.createdAt", "DESC").getMany(),
+      this.disbursements.createQueryBuilder("disbursement").leftJoinAndSelect("disbursement.project", "project").leftJoinAndSelect("disbursement.operator", "operator").where("disbursement.projectId IN (:...ids)", { ids }).andWhere(publicOnly ? "disbursement.publicVisible = :visible" : "1=1", { visible: true }).orderBy("disbursement.createdAt", "DESC").getMany()
+    ]);
+    return projects.map((project) => ({
+      ...this.projectView(project),
+      updates: updates.filter((row: any) => row.project?.id === project.id).slice(0, 3).map((row) => this.projectUpdateView(row)),
+      disbursements: disbursements.filter((row: any) => row.project?.id === project.id).slice(0, 5).map((row) => this.disbursementView(row))
+    }));
+  }
+
   private projectView(project: CharityProject) {
     const target = Number(project.targetAmount || 0);
     const disbursed = Number(project.disbursedAmount || 0);
@@ -354,6 +412,14 @@ export class CharityFundService {
       ...project,
       progressPercent: target > 0 ? Math.min(Number(((disbursed / target) * 100).toFixed(2)), 100) : 0
     };
+  }
+
+  private projectUpdateView(row: CharityProjectUpdate) {
+    return { ...row, project: row.project ? { id: row.project.id, title: row.project.title } : null };
+  }
+
+  private disbursementView(row: CharityProjectDisbursement) {
+    return { ...row, project: row.project ? { id: row.project.id, title: row.project.title } : null, operator: row.operator ? { id: row.operator.id, username: row.operator.username } : null };
   }
 
   private transactionView(tx: CharityFundTransaction) {
@@ -412,6 +478,12 @@ export class CharityFundService {
   private cleanText(value: unknown, maxLength: number) {
     const text = typeof value === "string" ? value.trim() : "";
     return text.slice(0, maxLength);
+  }
+
+  private parseDate(value: string) {
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) throw new BadRequestException("日期格式不正确");
+    return date;
   }
 
   private roundMoney(value: number) {

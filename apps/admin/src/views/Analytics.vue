@@ -32,6 +32,15 @@ const riskTotal = computed(() => {
   return (risk.pendingRefundCount || 0) + (risk.callbackRiskCount || 0) + (risk.pendingReconciliationCount || 0);
 });
 
+const operationAdvice = computed(() => overview.value?.operationAdvice || []);
+
+function adviceTagType(level?: string) {
+  if (level === "success") return "success";
+  if (level === "warning") return "warning";
+  if (level === "danger") return "danger";
+  return "info";
+}
+
 function queryParams() {
   return Object.fromEntries(Object.entries(filters).filter(([, value]) => value));
 }
@@ -81,6 +90,16 @@ onMounted(load);
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
         <small>{{ item.sub }}</small>
+      </div>
+    </div>
+
+    <div class="table-card advice-card">
+      <h3>运营建议</h3>
+      <div class="advice-list">
+        <div v-for="item in operationAdvice" :key="`${item.title}-${item.message}`" class="advice-item">
+          <el-tag :type="adviceTagType(item.level)" effect="light">{{ item.title }}</el-tag>
+          <span>{{ item.message }}</span>
+        </div>
       </div>
     </div>
 
@@ -159,10 +178,14 @@ onMounted(load);
 .dashboard-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 18px; }
 h3 { margin: 0 0 16px; }
 .sub-title { margin-top: 20px; }
+.advice-card { margin-bottom: 18px; }
+.advice-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.advice-item { min-height: 72px; display: grid; align-content: start; gap: 10px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+.advice-item span:last-child { color: #475467; line-height: 1.6; }
 .risk-list { display: grid; gap: 12px; }
 .risk-list div { display: flex; align-items: center; justify-content: space-between; min-height: 72px; padding: 14px 16px; border: 1px solid #fee2e2; border-left: 4px solid #dc2626; border-radius: 8px; background: #fffafa; }
 .risk-list span { color: #475467; }
 .risk-list strong { color: #dc2626; font-size: 24px; }
 @media (max-width: 1000px) { .metric-grid, .dashboard-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .metric-grid, .dashboard-grid { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .metric-grid, .dashboard-grid, .advice-list { grid-template-columns: 1fr; } }
 </style>

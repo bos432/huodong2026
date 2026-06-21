@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { MallGroupBuy } from "./mall-group-buy.entity";
+import { MallMerchant } from "./mall-merchant.entity";
 import { MallOrder } from "./mall-order.entity";
 import { MallProduct } from "./mall-product.entity";
 import { MallSku } from "./mall-sku.entity";
@@ -19,6 +20,9 @@ export class MallGroupBuyRecord {
 
   @ManyToOne(() => Tenant, { eager: true, nullable: false, onDelete: "CASCADE" })
   tenant!: Tenant;
+
+  @ManyToOne(() => MallMerchant, { eager: true, nullable: true, onDelete: "SET NULL" })
+  merchant!: MallMerchant | null;
 
   @ManyToOne(() => MallGroupBuy, { eager: true, nullable: false, onDelete: "CASCADE" })
   groupBuy!: MallGroupBuy;

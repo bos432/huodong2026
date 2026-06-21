@@ -1,0 +1,173 @@
+{
+  "passed": false,
+  "checkedAt": "2026-06-19T00:00:00.000Z",
+  "apiBase": "https://rd.chaimen666.com/api",
+  "tenantCode": "qiwai-showcase",
+  "scenario": "online-showcase",
+  "checks": {
+    "merchantSetup": {
+      "status": "pending",
+      "note": "Platform created tenant-owned and agent-owned mall stores, then granted each store account access."
+    },
+    "storeProducts": {
+      "status": "pending",
+      "note": "Authorized store accounts created or updated products and SKU stock in their own stores."
+    },
+    "productAudit": {
+      "status": "pending",
+      "note": "A store with product audit enabled submits products to platform review, and store accounts cannot self-approve."
+    },
+    "adminIsolation": {
+      "status": "pending",
+      "note": "Store accounts can only list and operate products for authorized stores."
+    },
+    "publicStorefront": {
+      "status": "pending",
+      "note": "H5/public mall exposes store list, store homepage, and merchant-scoped product feeds."
+    },
+    "categoryMerchantAvailabilityGuard": {
+      "status": "pending",
+      "note": "Categories without at least one published product with an enabled SKU in an open mall store, or from a store that later becomes disabled/mall-closed, are hidden from public mall category entrypoints; products without enabled SKUs are hidden from public product feeds and direct detail calls return an operator-readable reason."
+    },
+    "paymentReadiness": {
+      "status": "pending",
+      "note": "Store-level payment readiness reports platform collection vs merchant direct collection with operator-readable reasons."
+    },
+    "paymentAccountManagement": {
+      "status": "pending",
+      "note": "Authorized merchant/agent store accounts can manage their own payment accounts, cannot access other stores, cannot enable incomplete payment accounts, can keep incomplete accounts as disabled drafts, and cannot disable the last enabled WeChat account after merchant-direct mall opening."
+    },
+    "merchantOperationReadiness": {
+      "status": "pending",
+      "note": "Store operation summaries expose product, access, payment, order, refund, and launch-readiness signals for platform and authorized store accounts."
+    },
+    "merchantIdentityGuard": {
+      "status": "pending",
+      "note": "Stores with business data cannot change code, owning tenant, or bound agent; platform must create a new store for a new business subject."
+    },
+    "disabledMerchantOperationGuard": {
+      "status": "pending",
+      "note": "Disabled or mall-closed stores cannot continue writing products, categories, marketing, payment accounts, or logistics through implicit single-store selection, and are hidden from public storefront APIs."
+    },
+    "merchantOpenGuard": {
+      "status": "pending",
+      "note": "Mall stores cannot be opened until at least one enabled admin access is assigned, and open stores without published products remain hidden from public store lists, direct store links, and merchant-scoped product feeds."
+    },
+    "merchantDirectOpenGuard": {
+      "status": "pending",
+      "note": "Merchant-direct stores cannot be opened for public mall operation until the store has a complete enabled WeChat payment account; Alipay accounts can be prepared as disabled/enabled reserve configuration but do not unlock the first-batch WeChat direct-collection gate."
+    },
+    "cartMerchantAvailabilityGuard": {
+      "status": "pending",
+      "note": "Cart items from a store that later becomes disabled or mall-closed are marked non-purchasable with a user-readable reason, and users cannot add or update those cart items for checkout."
+    },
+    "favoriteBrowseMerchantAvailabilityGuard": {
+      "status": "pending",
+      "note": "Products from a store that later becomes disabled or mall-closed are removed from user favorites and browse history, and direct product detail/review/favorite/browse calls are rejected with a user-readable reason."
+    },
+    "productSkuAvailabilityGuard": {
+      "status": "pending",
+      "note": "Products whose SKUs are all disabled are hidden from public product feeds and removed from user favorites/browse history; direct detail, review, favorite, and browse calls are rejected with a user-readable reason."
+    },
+    "paymentModeSwitchGuard": {
+      "status": "pending",
+      "note": "Stores with unfinished orders, pending/failed refunds, open settlements, or completed-but-unsettled business data cannot switch between platform collection and merchant direct collection until finance closes the operational evidence chain."
+    },
+    "merchantCloseGuard": {
+      "status": "pending",
+      "note": "Open mall stores with unfinished orders, pending/failed refunds, open settlements, or completed-but-unsettled business data cannot be disabled or closed until operation and finance evidence is complete."
+    },
+    "merchantAccessTenantGuard": {
+      "status": "pending",
+      "note": "Tenant-scoped admin accounts cannot be authorized to manage stores owned by another tenant, and an open mall store cannot disable its last enabled admin access before another operator is assigned."
+    },
+    "couponStoreIsolation": {
+      "status": "pending",
+      "note": "Store-owned coupons are only listed, claimed, validated, and applied inside the owning store; other stores cannot see or use them."
+    },
+    "couponMerchantAvailabilityGuard": {
+      "status": "pending",
+      "note": "Coupons from a store that later becomes disabled or mall-closed are hidden from user coupon wallets, and claim/validate/store coupon entry calls are rejected with user-readable reasons."
+    },
+    "promotionStoreIsolation": {
+      "status": "pending",
+      "note": "Store-owned promotion codes can only be used by the owning store, and commission list, summary, export, and batch settlement are store-scoped."
+    },
+    "flashGroupStoreIsolation": {
+      "status": "pending",
+      "note": "Store-owned flash sale and group-buy activities only appear in the owning store public APIs, and cannot be applied to another store's SKU."
+    },
+    "marketingProductAvailabilityGuard": {
+      "status": "pending",
+      "note": "Flash-sale and group-buy activities whose product is later taken offline are hidden from public activity lists and team entrypoints, and forced quote calls are rejected."
+    },
+    "logisticsStoreIsolation": {
+      "status": "pending",
+      "note": "Store-owned logistics companies are only listed for the owning store, and order tracking falls back to the child order store configuration."
+    },
+    "crossStoreCheckout": {
+      "status": "pending",
+      "note": "Cross-store cart creates one checkout group and per-store child orders/payment tasks."
+    },
+    "crossStoreBalanceGuard": {
+      "status": "pending",
+      "note": "Cross-store checkout rejects balance payment with an operator-readable reason to avoid partial wallet deductions across child orders."
+    },
+    "checkoutGroupIdempotencyGuard": {
+      "status": "pending",
+      "note": "Repeating the same cross-store checkout clientOrderKey returns the original checkout group, child orders, and payment tasks without creating duplicates."
+    },
+    "paymentTaskRouting": {
+      "status": "pending",
+      "note": "Each checkout payment task exposes collection mode, receiver, route, split-payment requirement, and operator-readable next action."
+    },
+    "directIdOperationIsolation": {
+      "status": "pending",
+      "note": "Store accounts cannot bypass list filters by directly reading or operating another store's product, order, refund, stock, or marketing IDs."
+    },
+    "batchOperationScope": {
+      "status": "pending",
+      "note": "Tenant finance batch jobs only run inside authorized merchant stores, while platform/system jobs can run mall-wide."
+    },
+    "orderFulfillment": {
+      "status": "pending",
+      "note": "Each child order can be confirmed, shipped, and confirmed received by the correct store/user."
+    },
+    "checkoutGroupStatusSync": {
+      "status": "pending",
+      "note": "After all child orders are fulfilled, the checkout group and its payment tasks are refreshed to completed for accurate operations visibility."
+    },
+    "checkoutGroupAdminTrace": {
+      "status": "pending",
+      "note": "Admin users can trace a checkout group across child orders, refunds, payment transactions, callbacks, refund logs, commissions, and summaries without leaking other stores."
+    },
+    "userPrivatePayloadSafety": {
+      "status": "pending",
+      "note": "User-side mall favorites, browse history, addresses, orders, checkout groups, refunds, and payment tasks return safe DTOs without internal payment, tenant, or admin fields."
+    },
+    "reviewStoreIsolation": {
+      "status": "pending",
+      "note": "User reviews are written with the child order store and store accounts can only list and moderate their own reviews."
+    },
+    "settlementLifecycle": {
+      "status": "pending",
+      "note": "Platform finance can generate, approve, and mark paid settlement sheets per store; store accounts cannot self-settle."
+    },
+    "settlementPaidEvidenceGuard": {
+      "status": "pending",
+      "note": "Settlement completion requires a payout reference, offline voucher number, proof URL, or chargeback/offset reference before finance can mark it completed."
+    },
+    "settlementPaymentModeAccounting": {
+      "status": "pending",
+      "note": "Merchant-direct stores still settle platform-wallet balance orders by platform-collected net amount minus service fee, instead of zeroing payable by store payment mode."
+    },
+    "settlementRefundChargebackAccounting": {
+      "status": "pending",
+      "note": "After a platform-collected order has already been settled and paid to the store, a later approved refund creates a refund-only negative settlement for finance chargeback or future offset."
+    },
+    "operationalAdmin": {
+      "status": "pending",
+      "note": "Admin statistics, payment logs, settlement lists, settlement export, and store isolation are verified."
+    }
+  }
+}

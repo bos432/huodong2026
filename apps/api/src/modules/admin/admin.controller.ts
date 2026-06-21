@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
@@ -91,9 +91,27 @@ export class AdminController {
   }
 
   @AdminRoles(...SUPER_ADMIN)
+  @Get("tenant-region-hit-logs/summary")
+  tenantRegionHitLogSummary(@Query() query: TenantRegionHitLogQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.tenantRegionHitLogSummary(query, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("tenant-region-hit-logs")
+  tenantRegionHitLogs(@Query() query: TenantRegionHitLogQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listTenantRegionHitLogs(query, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
   @Post("tenant-regions")
   createTenantRegion(@Body() dto: TenantRegionDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.saveTenantRegion(dto, undefined, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("tenant-regions/bulk-import")
+  bulkImportTenantRegions(@Body() dto: TenantRegionBulkImportDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.bulkImportTenantRegions(dto, admin);
   }
 
   @AdminRoles(...SUPER_ADMIN)
@@ -229,6 +247,12 @@ export class AdminController {
   }
 
   @AdminRoles(...OVERVIEW_ROLES)
+  @Get("support/search")
+  supportSearch(@Query() query: SupportQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null; permissions?: string[] }) {
+    return this.service.supportSearch(query, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
   @Get("charity/summary")
   charitySummary(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.charitySummary(admin);
@@ -262,6 +286,24 @@ export class AdminController {
   @Post("charity/projects/:id/disbursements")
   addCharityDisbursement(@Param("id", ParseIntPipe) id: number, @Body() dto: CharityDisbursementDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.addCharityDisbursement(id, dto, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("charity/projects/:id/updates")
+  charityProjectUpdates(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.charityProjectUpdates(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("charity/projects/:id/updates")
+  createCharityProjectUpdate(@Param("id", ParseIntPipe) id: number, @Body() dto: CharityProjectUpdateDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveCharityProjectUpdate(id, dto, undefined, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Patch("charity/projects/:projectId/updates/:id")
+  updateCharityProjectUpdate(@Param("projectId", ParseIntPipe) projectId: number, @Param("id", ParseIntPipe) id: number, @Body() dto: CharityProjectUpdateDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveCharityProjectUpdate(projectId, dto, id, admin);
   }
 
   @AdminRoles(...OPERATION_ROLES)
@@ -325,6 +367,102 @@ export class AdminController {
   @Patch("ambassador/applications/:id")
   updateAmbassadorApplication(@Param("id", ParseIntPipe) id: number, @Body() dto: AmbassadorApplicationStatusDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.updateAmbassadorApplication(id, dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("ambassador/applications/:id/followups")
+  ambassadorApplicationFollowups(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.ambassadorApplicationFollowups(id, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("ambassador/applications/:id/followups")
+  createAmbassadorApplicationFollowup(@Param("id", ParseIntPipe) id: number, @Body() dto: AmbassadorApplicationFollowupDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createAmbassadorApplicationFollowup(id, dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/tasks")
+  volunteerTasks(@Query() query: VolunteerTaskQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.volunteerTasks(query, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/profiles")
+  volunteerProfiles(@Query() query: VolunteerProfileQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.volunteerProfilesList(query, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/profiles/export")
+  async exportVolunteerProfiles(@Query() query: VolunteerProfileQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {
+    const buffer = await this.service.exportVolunteerProfiles(query, admin);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=volunteer-profiles.xlsx");
+    res.end(Buffer.from(buffer));
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("volunteer/profiles/:id")
+  updateVolunteerProfile(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerProfileStatusDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateVolunteerProfile(id, dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/profiles/:id/certificates")
+  volunteerProfileCertificates(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.volunteerProfileCertificates(id, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("volunteer/profiles/:id/certificates")
+  issueVolunteerCertificate(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerCertificateDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.issueVolunteerCertificate(id, dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("volunteer/tasks")
+  createVolunteerTask(@Body() dto: VolunteerTaskDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveVolunteerTask(dto, undefined, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("volunteer/tasks/:id")
+  updateVolunteerTask(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveVolunteerTask(dto, id, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/task-applications")
+  volunteerTaskApplications(@Query("status") status?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.volunteerTaskApplications(status, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("volunteer/task-applications/:id")
+  updateVolunteerTaskApplication(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskApplicationStatusDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateVolunteerTaskApplication(id, dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("volunteer/service-records")
+  createVolunteerServiceRecord(@Body() dto: VolunteerServiceRecordDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createVolunteerServiceRecord(dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/service-records")
+  volunteerServiceRecords(@Query() query: VolunteerServiceRecordQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.volunteerServiceRecordsList(query, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/service-records/export")
+  async exportVolunteerServiceRecords(@Query() query: VolunteerServiceRecordQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {
+    const buffer = await this.service.exportVolunteerServiceRecords(query, admin);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=volunteer-service-records.xlsx");
+    res.end(Buffer.from(buffer));
   }
 
   @AdminRoles(...ACTIVITY_VIEW_ROLES)

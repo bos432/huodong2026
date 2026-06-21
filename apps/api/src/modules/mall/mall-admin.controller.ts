@@ -1,21 +1,180 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Res } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
+import { mkdirSync } from "fs";
+import { diskStorage } from "multer";
+import { extname, join } from "path";
 import { AdminRole, AdminRoles } from "../admin/admin-roles";
 import { CurrentAdmin } from "../admin/current-admin.decorator";
-import { MallCategoryDto, MallCommissionBatchSettleDto, MallCommissionSettleDto, MallCouponDto, MallFlashSaleDto, MallGroupBuyDto, MallInventoryAdjustDto, MallListQueryDto, MallLogisticsCompanyDto, MallOrderCloseDto, MallProductDto, MallPromotionCodeDto, MallRefundReviewDto, MallReviewModerationDto, MallShipDto } from "./mall.dto";
+import { MallCategoryDto, MallCommissionBatchSettleDto, MallCommissionSettleDto, MallCouponDto, MallFlashSaleDto, MallGroupBuyDto, MallInventoryAdjustDto, MallListQueryDto, MallLogisticsCompanyDto, MallMerchantAccessDto, MallMerchantDto, MallMerchantPaymentAccountDto, MallOrderCloseDto, MallProductDto, MallPromotionCodeDto, MallRefundReviewDto, MallReviewModerationDto, MallSettlementGenerateDto, MallSettlementPaidDto, MallSettlementReviewDto, MallShipDto } from "./mall.dto";
 import { MallService } from "./mall.service";
 
 const MALL_OPERATION_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator];
 const MALL_FINANCE_ROLES = [AdminRole.SuperAdmin, AdminRole.Finance];
+const MALL_PAYMENT_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance];
+const PAYMENT_CREDENTIAL_EXTENSIONS = new Set([".pem", ".key", ".crt", ".cer", ".p12", ".pfx"]);
+
+function paymentCredentialExtension(file: Express.Multer.File) {
+  return extname(file.originalname || "").toLowerCase();
+}
+
+function paymentCredentialDirectory() {
+  const dir = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "payment-credentials");
+  mkdirSync(dir, { recursive: true });
+  return dir;
+}
+const PAYMENT_CREDENTIAL_DIRECTORY = paymentCredentialDirectory();
 
 @Controller("admin/mall")
 export class MallAdminController {
   constructor(private readonly service: MallService) {}
 
   @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("merchants")
+  merchants(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminMerchants(query, admin);
+  }
+
+  @AdminRoles(...MALL_PAYMENT_ROLES)
+  @Get("accessible-merchants")
+  accessibleMerchants(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminMerchants(query, admin);
+  }
+
+  @AdminRoles(...MALL_PAYMENT_ROLES)
+  @Get("payment-merchants")
+  paymentMerchants(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminMerchants(query, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchants")
+  createMerchant(@Body() dto: MallMerchantDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveMerchant(dto, undefined, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Patch("merchants/:id")
+  updateMerchant(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveMerchant(dto, id, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Get("merchant-access")
+  merchantAccess(@Query() query: MallListQueryDto & { adminId?: number }, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminMerchantAccess(query, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchant-access")
+  createMerchantAccess(@Body() dto: MallMerchantAccessDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveMerchantAccess(dto, undefined, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Patch("merchant-access/:id")
+  updateMerchantAccess(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantAccessDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveMerchantAccess(dto, id, admin);
+  }
+
+  @AdminRoles(...MALL_PAYMENT_ROLES)
+  @Get("merchant-payment-accounts")
+  merchantPaymentAccounts(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminMerchantPaymentAccounts(query, admin);
+  }
+
+  @AdminRoles(...MALL_PAYMENT_ROLES)
+  @Post("merchant-payment-accounts")
+  createMerchantPaymentAccount(@Body() dto: MallMerchantPaymentAccountDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveMerchantPaymentAccount(dto, undefined, admin);
+  }
+
+  @AdminRoles(...MALL_PAYMENT_ROLES)
+  @Patch("merchant-payment-accounts/:id")
+  updateMerchantPaymentAccount(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantPaymentAccountDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveMerchantPaymentAccount(dto, id, admin);
+  }
+
+  @AdminRoles(...MALL_PAYMENT_ROLES)
+  @Post("merchant-payment-credentials")
+  @UseInterceptors(FileInterceptor("file", {
+    storage: diskStorage({
+      destination: PAYMENT_CREDENTIAL_DIRECTORY,
+      filename: (_req, file, callback) => {
+        const suffix = PAYMENT_CREDENTIAL_EXTENSIONS.has(paymentCredentialExtension(file)) ? paymentCredentialExtension(file) : ".pem";
+        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
+      }
+    }),
+    limits: { fileSize: 2 * 1024 * 1024 },
+    fileFilter: (_req, file, callback) => {
+      callback(null, PAYMENT_CREDENTIAL_EXTENSIONS.has(paymentCredentialExtension(file)));
+    }
+  }))
+  uploadMerchantPaymentCredential(@UploadedFile() file: Express.Multer.File) {
+    return this.service.uploadedMerchantPaymentCredential(file);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("product-audits")
+  productAudits(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminProductAudits(query, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("products/:id/approve")
+  approveProduct(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.approveProduct(id, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("products/:id/reject")
+  rejectProduct(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.rejectProduct(id, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Get("settlements")
+  settlements(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminSettlements(query, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Get("settlements/export")
+  async exportSettlements(@Query() query: MallListQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {
+    const buffer = await this.service.exportAdminSettlements(query, admin);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=mall-settlements.xlsx");
+    res.end(Buffer.from(buffer));
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("settlements/generate")
+  generateSettlement(@Body() dto: MallSettlementGenerateDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.generateSettlement(dto, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("settlements/:id/approve")
+  approveSettlement(@Param("id", ParseIntPipe) id: number, @Body() dto: MallSettlementReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.approveSettlement(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("settlements/:id/reject")
+  rejectSettlement(@Param("id", ParseIntPipe) id: number, @Body() dto: MallSettlementReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.rejectSettlement(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("settlements/:id/mark-paid")
+  markSettlementPaid(@Param("id", ParseIntPipe) id: number, @Body() dto: MallSettlementPaidDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.markSettlementPaid(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
   @Get("categories")
-  categories(@Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.adminCategories(admin, tenantId ? Number(tenantId) : undefined);
+  categories(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminCategories(query, admin);
   }
 
   @AdminRoles(...MALL_OPERATION_ROLES)

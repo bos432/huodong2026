@@ -6,7 +6,7 @@ import { readFileSync } from "fs";
 import { gunzipSync, inflateRawSync } from "zlib";
 import { Order } from "../../entities/order.entity";
 import { ProviderPayDto } from "./dto";
-import type { NormalizedPaymentCallback, PaymentProviderAdapter, PaymentProviderRuntimeConfig, ProviderPaymentResult, ProviderRefundNotificationResult, ProviderRefundQueryRequest, ProviderRefundQueryResult, ProviderRefundRequest, ProviderRefundResult, ProviderStatementFetchRequest, ProviderStatementFetchResult, ProviderStatementItem, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
+import type { NormalizedPaymentCallback, PaymentProviderAdapter, PaymentProviderRuntimeConfig, ProviderPaymentCreateOptions, ProviderPaymentResult, ProviderRefundNotificationResult, ProviderRefundQueryRequest, ProviderRefundQueryResult, ProviderRefundRequest, ProviderRefundResult, ProviderStatementFetchRequest, ProviderStatementFetchResult, ProviderStatementItem, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 type PaymentDraft = {
   provider: SupportedPaymentProvider;
@@ -123,9 +123,9 @@ abstract class BaseRealPaymentAdapter implements PaymentProviderAdapter {
     protected readonly runtimeConfig?: PaymentProviderRuntimeConfig
   ) {}
 
-  createPayment(order: Order, dto: ProviderPayDto): Promise<ProviderPaymentResult> | ProviderPaymentResult {
+  createPayment(order: Order, dto: ProviderPayDto, options?: ProviderPaymentCreateOptions): Promise<ProviderPaymentResult> | ProviderPaymentResult {
     void dto;
-    const draft = this.paymentDraft(order, this.notifyUrl());
+    const draft = this.paymentDraft(order, options?.notifyUrl?.trim() || this.notifyUrl());
     void draft;
     throw new NotImplementedException(`${this.provider} real payment SDK create call is not implemented yet`);
   }
@@ -171,6 +171,10 @@ abstract class BaseRealPaymentAdapter implements PaymentProviderAdapter {
     const value = this.runtimeConfig?.values[key] || this.config.get<string>(key);
     if (!value) throw new NotImplementedException(`${this.provider} real payment requires ${key}`);
     return value;
+  }
+
+  protected optional(key: string) {
+    return this.runtimeConfig?.values[key] || this.config.get<string>(key) || "";
   }
 
   protected flagEnabled(key: string) {
@@ -271,15 +275,16 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
     super("wechat", config, runtimeConfig);
   }
 
-  async createPayment(order: Order, dto: ProviderPayDto): Promise<ProviderPaymentResult> {
-    const config = this.wechatConfig();
-    if (!this.flagEnabled("REAL_PAYMENT_SDK_IMPLEMENTED")) return super.createPayment(order, dto);
+  async createPayment(order: Order, dto: ProviderPayDto, options?: ProviderPaymentCreateOptions): Promise<ProviderPaymentResult> {
+    const config = this.wechatConfig({ notifyUrl: options?.notifyUrl });
+    if (!this.flagEnabled("REAL_PAYMENT_SDK_IMPLEMENTED")) return super.createPayment(order, dto, options);
+    const notifyUrl = config.notifyUrl;
     const draft = buildWechatPaymentRequestDraft(order, dto, {
       appId: config.appId,
       mchId: config.mchId,
       certSerialNo: config.certSerialNo,
       privateKey: this.readConfiguredFile(config.privateKeyPath, "WECHAT_PAY_PRIVATE_KEY_PATH"),
-      notifyUrl: config.notifyUrl
+      notifyUrl
     });
     const payload = await executeRealPaymentHttpRequestDraft(draft, undefined, { publicKey: this.readConfiguredFile(config.platformCertPath, "WECHAT_PAY_PLATFORM_CERT_PATH") });
     return normalizeWechatPaymentCreatePayload(order, payload, dto, {
@@ -289,7 +294,7 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
   }
 
   parseCallback(context: RealPaymentCallbackContext): NormalizedPaymentCallback {
-    const config = this.wechatConfig();
+    const config = this.wechatConfig({ requireNotifyUrl: false });
     const signature = this.wechatSignature(context);
     const platformCert = this.readConfiguredFile(config.platformCertPath, "WECHAT_PAY_PLATFORM_CERT_PATH");
     if (!this.verifyRsaSha256(signature.message, signature.signature, platformCert)) {
@@ -305,7 +310,7 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
   }
 
   async requestRefund(request: ProviderRefundRequest): Promise<ProviderRefundResult> {
-    const config = this.wechatConfig();
+    const config = this.wechatConfig({ requireNotifyUrl: false });
     if (!this.flagEnabled("REAL_REFUND_QUERY_IMPLEMENTED")) return super.requestRefund(request);
     const draft = buildWechatRefundRequestDraft(request, {
       mchId: config.mchId,
@@ -317,7 +322,7 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
   }
 
   async queryRefund(request: ProviderRefundQueryRequest): Promise<ProviderRefundQueryResult> {
-    const config = this.wechatConfig();
+    const config = this.wechatConfig({ requireNotifyUrl: false });
     if (!this.flagEnabled("REAL_REFUND_QUERY_IMPLEMENTED")) return super.queryRefund(request);
     const draft = buildWechatRefundQueryRequestDraft(request, {
       mchId: config.mchId,
@@ -329,7 +334,7 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
   }
 
   parseRefundNotification(context: RealPaymentCallbackContext): ProviderRefundNotificationResult {
-    const config = this.wechatConfig();
+    const config = this.wechatConfig({ requireNotifyUrl: false });
     if (!this.flagEnabled("REAL_REFUND_QUERY_IMPLEMENTED")) return super.parseRefundNotification(context);
     const signature = this.wechatSignature(context);
     const platformCert = this.readConfiguredFile(config.platformCertPath, "WECHAT_PAY_PLATFORM_CERT_PATH");
@@ -340,7 +345,7 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
   }
 
   async fetchStatement(request: ProviderStatementFetchRequest): Promise<ProviderStatementFetchResult> {
-    const config = this.wechatConfig();
+    const config = this.wechatConfig({ requireNotifyUrl: false });
     if (!this.flagEnabled("REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED")) return super.fetchStatement(request);
     const draft = buildWechatStatementDownloadUrlRequestDraft(request, {
       mchId: config.mchId,
@@ -356,7 +361,8 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
     return this.required("WECHAT_PAY_NOTIFY_URL");
   }
 
-  private wechatConfig() {
+  private wechatConfig(options: { notifyUrl?: string | null; requireNotifyUrl?: boolean } = {}) {
+    const notifyUrl = options.notifyUrl?.trim() || (options.requireNotifyUrl === false ? this.optional("WECHAT_PAY_NOTIFY_URL") : this.required("WECHAT_PAY_NOTIFY_URL"));
     return {
       appId: this.required("WECHAT_PAY_APP_ID"),
       mchId: this.required("WECHAT_PAY_MCH_ID"),
@@ -364,7 +370,7 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
       privateKeyPath: this.required("WECHAT_PAY_PRIVATE_KEY_PATH"),
       certSerialNo: this.required("WECHAT_PAY_CERT_SERIAL_NO"),
       platformCertPath: this.required("WECHAT_PAY_PLATFORM_CERT_PATH"),
-      notifyUrl: this.notifyUrl()
+      notifyUrl
     };
   }
 
@@ -398,20 +404,21 @@ export class AlipayAdapter extends BaseRealPaymentAdapter {
     super("alipay", config, runtimeConfig);
   }
 
-  async createPayment(order: Order, dto: ProviderPayDto): Promise<ProviderPaymentResult> {
+  async createPayment(order: Order, dto: ProviderPayDto, options?: ProviderPaymentCreateOptions): Promise<ProviderPaymentResult> {
     const config = this.alipayConfig();
-    if (!this.flagEnabled("REAL_PAYMENT_SDK_IMPLEMENTED")) return super.createPayment(order, dto);
+    const notifyUrl = options?.notifyUrl?.trim() || config.notifyUrl;
+    if (!this.flagEnabled("REAL_PAYMENT_SDK_IMPLEMENTED")) return super.createPayment(order, dto, options);
     if (["wap", "page"].includes(alipayPaymentScene(dto))) {
       return buildAlipaySignedPaymentResult(order, dto, {
         appId: config.appId,
         privateKey: this.readConfiguredFile(config.privateKeyPath, "ALIPAY_PRIVATE_KEY_PATH"),
-        notifyUrl: config.notifyUrl
+        notifyUrl
       });
     }
     const draft = buildAlipayPaymentRequestDraft(order, dto, {
       appId: config.appId,
       privateKey: this.readConfiguredFile(config.privateKeyPath, "ALIPAY_PRIVATE_KEY_PATH"),
-      notifyUrl: config.notifyUrl
+      notifyUrl
     });
     const payload = await executeRealPaymentHttpRequestDraft(draft, undefined, { publicKey: this.readConfiguredFile(config.publicCertPath, "ALIPAY_PUBLIC_CERT_PATH") });
     return normalizeAlipayPaymentCreatePayload(order, unwrapAlipayPaymentCreatePayload(payload));
@@ -733,6 +740,7 @@ export function buildWechatRefundRequestDraft(request: ProviderRefundRequest, op
     out_trade_no: request.order.orderNo,
     out_refund_no: request.refundNo,
     reason: request.reason?.trim() || undefined,
+    notify_url: request.notifyUrl?.trim() || undefined,
     amount: {
       refund: amountToCents(amount, "wechat real refund amount"),
       total: amountToCents(request.order.amount, "wechat real refund order amount"),

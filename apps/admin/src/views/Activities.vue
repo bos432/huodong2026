@@ -46,6 +46,14 @@ const channels = ref<any[]>([]);
 const channelReport = ref<any[]>([]);
 const channelForm = reactive({ name: "", code: "", source: "", remark: "" });
 const form = reactive<any>(defaultForm());
+const activityFormSteps = [
+  { name: "base", label: "基础信息" },
+  { name: "fields", label: "报名字段" },
+  { name: "hosts", label: "主理人" },
+  { name: "sections", label: "详情模块" }
+];
+const activeActivityStep = ref(activityFormSteps[0].name);
+const activeActivityStepIndex = computed(() => Math.max(activityFormSteps.findIndex((item) => item.name === activeActivityStep.value), 0));
 const pageTitle = computed(() => (isPlatformAdmin() ? "活动审核" : "活动管理"));
 const defaultActivityStatus = () => (isPlatformAdmin() ? ActivityStatus.PendingApproval : ActivityStatus.Open);
 const routeStatus = () => {
@@ -278,6 +286,7 @@ function changePageSize(pageSize: number) {
 function create() {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
   editingId.value = null;
+  activeActivityStep.value = activityFormSteps[0].name;
   Object.assign(form, {
     ...defaultForm(),
     requireReview: registrationReviewEnabled.value
@@ -312,7 +321,16 @@ function openActivityEditor(data: any) {
     sections: data.sections?.length ? data.sections.map((section: any) => ({ ...section, imageUrl: section.imageUrl || "" })) : defaultForm().sections
   });
   if (!registrationReviewEnabled.value) form.requireReview = false;
+  activeActivityStep.value = activityFormSteps[0].name;
   drawer.value = true;
+}
+
+function previousActivityStep() {
+  activeActivityStep.value = activityFormSteps[Math.max(activeActivityStepIndex.value - 1, 0)].name;
+}
+
+function nextActivityStep() {
+  activeActivityStep.value = activityFormSteps[Math.min(activeActivityStepIndex.value + 1, activityFormSteps.length - 1)].name;
 }
 
 async function focusRouteActivity() {
@@ -886,8 +904,11 @@ onMounted(async () => {
             <span>已按东方哲学与传统文化、教育培训效果承诺、健康养生宣传等常见风险做基础体检。</span>
           </div>
         </el-alert>
-        <el-tabs>
-          <el-tab-pane label="基础信息">
+        <el-steps class="activity-wizard" :active="activeActivityStepIndex" finish-status="success" simple>
+          <el-step v-for="item in activityFormSteps" :key="item.name" :title="item.label" />
+        </el-steps>
+        <el-tabs v-model="activeActivityStep">
+          <el-tab-pane label="基础信息" name="base">
             <div class="form-grid">
               <el-form-item label="标题" required><el-input v-model="form.title" maxlength="100" show-word-limit /></el-form-item>
               <el-form-item label="分类"><el-select v-model="form.categoryId" clearable><el-option v-for="category in categories" :key="category.id" :label="category.name" :value="category.id" /></el-select></el-form-item>
@@ -936,7 +957,7 @@ onMounted(async () => {
             </div>
           </el-tab-pane>
 
-          <el-tab-pane label="报名字段">
+          <el-tab-pane label="报名字段" name="fields">
             <div v-for="(field, index) in form.fields" :key="index" class="field-row">
               <el-input v-model="field.label" placeholder="字段名称" />
               <el-select v-model="field.type"><el-option v-for="(text, value) in fieldTypeText" :key="value" :label="text" :value="value" /></el-select>
@@ -951,7 +972,7 @@ onMounted(async () => {
             <el-button :icon="Plus" @click="addField">增加字段</el-button>
           </el-tab-pane>
 
-          <el-tab-pane label="主理人">
+          <el-tab-pane label="主理人" name="hosts">
             <div v-for="(host, index) in form.hosts" :key="index" class="host-row">
               <el-input v-model="host.name" placeholder="姓名" />
               <el-input v-model="host.title" placeholder="身份/头衔" />
@@ -963,7 +984,7 @@ onMounted(async () => {
             <el-button :icon="Plus" @click="addHost">增加主理人</el-button>
           </el-tab-pane>
 
-          <el-tab-pane label="详情模块">
+          <el-tab-pane label="详情模块" name="sections">
             <div v-for="(section, index) in form.sections" :key="index" class="section-row">
               <el-select v-model="section.type"><el-option v-for="item in sectionTypeOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select>
               <el-input v-model="section.title" placeholder="模块标题" />
@@ -983,6 +1004,8 @@ onMounted(async () => {
         </el-tabs>
       </el-form>
       <template #footer>
+        <el-button :disabled="activeActivityStepIndex === 0" @click="previousActivityStep">上一步</el-button>
+        <el-button :disabled="activeActivityStepIndex === activityFormSteps.length - 1" @click="nextActivityStep">下一步</el-button>
         <el-button @click="drawer=false">取消</el-button>
         <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
       </template>
@@ -1014,6 +1037,7 @@ onMounted(async () => {
 .compliance-issues strong { color: #111827; }
 .compliance-issues span { color: #7c2d12; font-weight: 600; }
 .compliance-issues em { color: #475569; font-style: normal; }
+.activity-wizard { margin-bottom: 14px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
 .field-row { display: grid; grid-template-columns: 1fr 150px 80px 120px 40px 90px; gap: 8px; align-items: center; margin-bottom: 10px; }
 .host-row { display: grid; grid-template-columns: 1fr 1fr 1.5fr 120px 40px; gap: 8px; align-items: center; margin-bottom: 14px; }

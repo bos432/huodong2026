@@ -17,7 +17,8 @@ export class RolesGuard implements CanActivate {
     const row = request.user?.id ? await this.admins.findOne({ where: { id: request.user.id } }) : null;
     if (!row || !row.enabled) throw new UnauthorizedException("当前账号不存在或已停用");
     if (row.tenant && !row.tenant.enabled) throw new UnauthorizedException("当前商家已停用，请联系平台管理员");
-    const role = normalizeAdminRole(row.role);
+    const tokenRole = normalizeAdminRole(request.user?.role);
+    const role = normalizeAdminRole(row.role || tokenRole);
     const tenantId = row.tenant?.id ?? null;
     request.user = { id: row.id, username: row.username, role, tenantId, permissions: effectivePermissionsForAdmin({ role, tenantId, permissions: row.permissions }) };
     const permission = resolveAdminRoutePermission(request.method, request.route?.path || request.url);

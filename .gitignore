@@ -5,6 +5,7 @@ dist
 deploy/.env.production
 deploy/real-payment-smoke-result.json
 deploy/tenant-smoke-result.json
+deploy/mall-multi-merchant-smoke-result.json
 .DS_Store
 coverage
 logs

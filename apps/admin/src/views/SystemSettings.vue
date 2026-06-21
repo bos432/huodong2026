@@ -194,6 +194,8 @@ const deployment = reactive({
   realRefundQueryImplemented: false,
   realPaymentStatementFetchImplemented: false,
   agentRealTransferImplemented: false,
+  mallRealWechatPaymentImplemented: false,
+  mallMerchantDirectPaymentImplemented: false,
   realPaymentPreflightPassed: false,
   realPaymentPreflightResultFile: "deploy/real-payment-smoke-result.json",
   realPaymentPreflightMaxAgeHours: 168,
@@ -204,6 +206,10 @@ const deployment = reactive({
   multiTenantPreflightPassed: false,
   multiTenantPreflightResultFile: "deploy/tenant-smoke-result.json",
   multiTenantPreflightMaxAgeHours: 168,
+  mallMultiMerchantEnabled: false,
+  mallMultiMerchantPreflightPassed: false,
+  mallMultiMerchantSmokeResultFile: "deploy/mall-multi-merchant-smoke-result.json",
+  mallMultiMerchantSmokeMaxAgeHours: 168,
   wechatPayEnabled: false,
   wechatPayAppId: "",
   wechatPayMchId: "",
@@ -212,6 +218,10 @@ const deployment = reactive({
   wechatPayCertSerialNo: "",
   wechatPayPlatformCertPath: "",
   wechatPayNotifyUrl: "",
+  mallWechatPayNotifyUrl: "",
+  mallWechatPayRefundNotifyUrl: "",
+  mallWechatPayDirectNotifyUrlTemplate: "",
+  mallWechatPayDirectRefundNotifyUrlTemplate: "",
   alipayEnabled: false,
   alipayAppId: "",
   alipayPrivateKeyPath: "",
@@ -291,6 +301,8 @@ const generatedEnv = computed(() => {
     envLine("REAL_REFUND_QUERY_IMPLEMENTED", boolValue(deployment.realRefundQueryImplemented)),
     envLine("REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED", boolValue(deployment.realPaymentStatementFetchImplemented)),
     envLine("AGENT_REAL_TRANSFER_IMPLEMENTED", boolValue(deployment.agentRealTransferImplemented)),
+    envLine("MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED", boolValue(deployment.mallRealWechatPaymentImplemented)),
+    envLine("MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED", boolValue(deployment.mallMerchantDirectPaymentImplemented)),
     envLine("REAL_PAYMENT_PREFLIGHT_PASSED", boolValue(deployment.realPaymentPreflightPassed)),
     envLine("REAL_PAYMENT_PREFLIGHT_RESULT_FILE", deployment.realPaymentPreflightResultFile),
     envLine("REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS", deployment.realPaymentPreflightMaxAgeHours),
@@ -301,6 +313,10 @@ const generatedEnv = computed(() => {
     envLine("MULTI_TENANT_PREFLIGHT_PASSED", boolValue(deployment.multiTenantPreflightPassed)),
     envLine("MULTI_TENANT_PREFLIGHT_RESULT_FILE", deployment.multiTenantPreflightResultFile),
     envLine("MULTI_TENANT_PREFLIGHT_MAX_AGE_HOURS", deployment.multiTenantPreflightMaxAgeHours),
+    envLine("MALL_MULTI_MERCHANT_ENABLED", boolValue(deployment.mallMultiMerchantEnabled)),
+    envLine("MALL_MULTI_MERCHANT_PREFLIGHT_PASSED", boolValue(deployment.mallMultiMerchantPreflightPassed)),
+    envLine("MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE", deployment.mallMultiMerchantSmokeResultFile),
+    envLine("MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS", deployment.mallMultiMerchantSmokeMaxAgeHours),
     envLine("WECHAT_PAY_ENABLED", boolValue(deployment.wechatPayEnabled)),
     envLine("WECHAT_PAY_APP_ID", deployment.wechatPayAppId),
     envLine("WECHAT_PAY_MCH_ID", deployment.wechatPayMchId),
@@ -309,6 +325,10 @@ const generatedEnv = computed(() => {
     envLine("WECHAT_PAY_CERT_SERIAL_NO", deployment.wechatPayCertSerialNo),
     envLine("WECHAT_PAY_PLATFORM_CERT_PATH", deployment.wechatPayPlatformCertPath),
     envLine("WECHAT_PAY_NOTIFY_URL", deployment.wechatPayNotifyUrl),
+    envLine("MALL_WECHAT_PAY_NOTIFY_URL", deployment.mallWechatPayNotifyUrl),
+    envLine("MALL_WECHAT_PAY_REFUND_NOTIFY_URL", deployment.mallWechatPayRefundNotifyUrl),
+    envLine("MALL_WECHAT_PAY_DIRECT_NOTIFY_URL_TEMPLATE", deployment.mallWechatPayDirectNotifyUrlTemplate),
+    envLine("MALL_WECHAT_PAY_DIRECT_REFUND_NOTIFY_URL_TEMPLATE", deployment.mallWechatPayDirectRefundNotifyUrlTemplate),
     envLine("ALIPAY_ENABLED", boolValue(deployment.alipayEnabled)),
     envLine("ALIPAY_APP_ID", deployment.alipayAppId),
     envLine("ALIPAY_PRIVATE_KEY_PATH", deployment.alipayPrivateKeyPath),
@@ -344,12 +364,16 @@ const configGroups = computed(() => {
         "REAL_REFUND_QUERY_IMPLEMENTED",
         "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED",
         "AGENT_REAL_TRANSFER_IMPLEMENTED",
+        "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED",
+        "MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED",
         "REAL_PAYMENT_PREFLIGHT_PASSED",
         "MULTI_TENANT_ENABLED",
         "MULTI_TENANT_SCHEMA_IMPLEMENTED",
         "MULTI_TENANT_ACCESS_FILTER_IMPLEMENTED",
         "MULTI_TENANT_PUBLIC_BOUNDARY_IMPLEMENTED",
         "MULTI_TENANT_PREFLIGHT_PASSED",
+        "MALL_MULTI_MERCHANT_ENABLED",
+        "MALL_MULTI_MERCHANT_PREFLIGHT_PASSED",
         "OFFLINE_PAYMENT_EXPIRE_MINUTES",
         "ORDER_CLOSE_WORKER_ENABLED"
       ]
@@ -412,6 +436,7 @@ const rolloutReadiness = computed<RolloutReadiness[]>(() => [
     ["realPaymentCallbackVerificationImplemented", "REAL_PAYMENT_CALLBACK_VERIFICATION_IMPLEMENTED"],
     ["realRefundQueryImplemented", "REAL_REFUND_QUERY_IMPLEMENTED"],
     ["realPaymentStatementFetchImplemented", "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED"],
+    ["mallRealWechatPaymentImplemented", "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED"],
     ["realPaymentPreflightPassed", "REAL_PAYMENT_PREFLIGHT_PASSED"]
   ], deployment.wechatPayEnabled || deployment.alipayEnabled ? [] : ["WECHAT_PAY_ENABLED 或 ALIPAY_ENABLED"]),
   buildRolloutReadiness("wechatPay", "微信支付", deployment.wechatPayEnabled, "用于微信 Native/H5/JSAPI 真实下单、回调验签和退款/账单链路。", [
@@ -434,6 +459,16 @@ const rolloutReadiness = computed<RolloutReadiness[]>(() => [
     ["realPaymentEnabled", "REAL_PAYMENT_ENABLED"],
     ["realPaymentPreflightPassed", "REAL_PAYMENT_PREFLIGHT_PASSED"]
   ]),
+  buildRolloutReadiness("mallWechatPay", "商城微信支付", deployment.mallRealWechatPaymentImplemented, "多商户商城使用真实微信支付前，平台代收商城订单的下单、回调、退款和账单必须完成小额预发验收。", [
+    ["realPaymentEnabled", "REAL_PAYMENT_ENABLED"],
+    ["wechatPayEnabled", "WECHAT_PAY_ENABLED"],
+    ["realPaymentPreflightPassed", "REAL_PAYMENT_PREFLIGHT_PASSED"]
+  ]),
+  buildRolloutReadiness("merchantDirectPay", "店铺直收支付", deployment.mallMerchantDirectPaymentImplemented, "商家/代理店铺使用自己的微信商户号直收前，必须完成独立下单、独立回调、退款回调和店铺隔离验收。", [
+    ["mallMultiMerchantPreflightPassed", "MALL_MULTI_MERCHANT_PREFLIGHT_PASSED"],
+    ["mallRealWechatPaymentImplemented", "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED"],
+    ["realPaymentPreflightPassed", "REAL_PAYMENT_PREFLIGHT_PASSED"]
+  ]),
   buildRolloutReadiness("preflightEvidence", "预发验收结果", deployment.realPaymentPreflightPassed, "真实支付、退款、账单、代理账户路由和代理真实打款都需要留存新鲜通过记录。", [
     ["realPaymentPreflightResultFile", "REAL_PAYMENT_PREFLIGHT_RESULT_FILE"],
     ["realPaymentPreflightMaxAgeHours", "REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS"]
@@ -447,6 +482,13 @@ const rolloutReadiness = computed<RolloutReadiness[]>(() => [
   buildRolloutReadiness("tenantEvidence", "多机构预发验收", deployment.multiTenantPreflightPassed, "启用多机构前必须跑通 A/B 机构后台、公开端、导出、支付边界和结算边界验收。", [
     ["multiTenantPreflightResultFile", "MULTI_TENANT_PREFLIGHT_RESULT_FILE"],
     ["multiTenantPreflightMaxAgeHours", "MULTI_TENANT_PREFLIGHT_MAX_AGE_HOURS"]
+  ]),
+  buildRolloutReadiness("mallMultiMerchant", "多商户商城", deployment.mallMultiMerchantEnabled, "打开后 H5/小程序会按平台型商城运营；上线前必须完成店铺授权、跨店拆单、支付、履约、结算和导出隔离验收。", [
+    ["mallMultiMerchantPreflightPassed", "MALL_MULTI_MERCHANT_PREFLIGHT_PASSED"]
+  ]),
+  buildRolloutReadiness("mallMultiMerchantEvidence", "商城预发验收", deployment.mallMultiMerchantPreflightPassed, "开放多商户商城前必须在目标 API 执行 smoke:mall-multi-merchant 并保留新鲜通过的结果文件。", [
+    ["mallMultiMerchantSmokeResultFile", "MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE"],
+    ["mallMultiMerchantSmokeMaxAgeHours", "MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS"]
   ])
 ]);
 
@@ -715,6 +757,24 @@ function downloadGeneratedEnv() {
   URL.revokeObjectURL(url);
 }
 
+function applyDeploymentConfig(value: unknown) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return;
+  const input = value as Record<string, unknown>;
+  for (const key of Object.keys(deployment) as Array<keyof typeof deployment>) {
+    if (input[key] !== undefined && input[key] !== null) {
+      (deployment as Record<string, unknown>)[key] = input[key];
+    }
+  }
+}
+
+function deploymentPayload() {
+  const payload: Record<string, unknown> = {};
+  for (const key of Object.keys(deployment) as Array<keyof typeof deployment>) {
+    payload[key] = deployment[key];
+  }
+  return payload;
+}
+
 async function loadOperation() {
   loadingOperation.value = true;
   try {
@@ -738,6 +798,17 @@ async function loadOperation() {
       smsSignName: data.smsSignName || "",
       smsTemplateId: data.smsTemplateId || ""
     });
+    if (canManagePlatformSettings.value) {
+      applyDeploymentConfig({
+        smsEnabled: Boolean(data.smsProviderEnabled),
+        smsProvider: data.smsProvider || deployment.smsProvider,
+        smsAccessKeyId: data.smsAccessKeyId || "",
+        smsAccessKeySecret: data.smsAccessKeySecret || "",
+        smsSignName: data.smsSignName || "",
+        smsTemplateId: data.smsTemplateId || ""
+      });
+      applyDeploymentConfig(data.launchConfig || {});
+    }
   } finally {
     loadingOperation.value = false;
   }
@@ -749,9 +820,11 @@ async function saveOperation() {
   if (paymentSettingsEditable.value && !form.refundInstructions.trim()) return ElMessage.error("请填写退款说明");
   savingOperation.value = true;
   try {
-    await api.post("/admin/settings/operation", form);
+    const payload = canManagePlatformSettings.value ? { ...form, launchConfig: deploymentPayload() } : form;
+    await api.post("/admin/settings/operation", payload);
     ElMessage.success("系统设置已保存");
     await loadOperation();
+    if (canManagePlatformSettings.value) await loadConfig();
   } catch (error: any) {
     ElMessage.error(error.message || "保存失败");
   } finally {
@@ -981,8 +1054,8 @@ onMounted(async () => {
 
       <el-tab-pane v-if="canManagePlatformSettings" label="部署配置" name="deployment">
         <el-alert
-          type="warning"
-          title="部署级配置不会保存到数据库。这里生成 deploy/.env.production 内容，部署到服务器后重启 API 生效。"
+          type="info"
+          title="部署级资料会保存到后台，用于上线体检和商城支付就绪检查；右侧仍可生成 deploy/.env.production 作为部署兜底。"
           show-icon
           :closable="false"
           class="panel-alert"
@@ -1109,6 +1182,8 @@ onMounted(async () => {
                 <el-form-item label="退款查询"><el-switch v-model="deployment.realRefundQueryImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="账单拉取"><el-switch v-model="deployment.realPaymentStatementFetchImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="代理打款"><el-switch v-model="deployment.agentRealTransferImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="商城微信"><el-switch v-model="deployment.mallRealWechatPaymentImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
+                <el-form-item label="店铺直收"><el-switch v-model="deployment.mallMerchantDirectPaymentImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="预发通过"><el-switch v-model="deployment.realPaymentPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
                 <el-form-item label="验收文件"><el-input v-model="deployment.realPaymentPreflightResultFile" /></el-form-item>
                 <el-form-item label="有效期"><el-input-number v-model="deployment.realPaymentPreflightMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
@@ -1119,6 +1194,10 @@ onMounted(async () => {
                 <el-form-item label="机构预发"><el-switch v-model="deployment.multiTenantPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
                 <el-form-item label="机构验收文件"><el-input v-model="deployment.multiTenantPreflightResultFile" /></el-form-item>
                 <el-form-item label="机构有效期"><el-input-number v-model="deployment.multiTenantPreflightMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
+                <el-form-item label="多商户商城"><el-switch v-model="deployment.mallMultiMerchantEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="商城预发"><el-switch v-model="deployment.mallMultiMerchantPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
+                <el-form-item label="商城验收文件"><el-input v-model="deployment.mallMultiMerchantSmokeResultFile" /></el-form-item>
+                <el-form-item label="商城有效期"><el-input-number v-model="deployment.mallMultiMerchantSmokeMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
                 <el-form-item label="微信支付"><el-switch v-model="deployment.wechatPayEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
                 <el-form-item label="微信 AppId"><el-input v-model="deployment.wechatPayAppId" /></el-form-item>
                 <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" /></el-form-item>
@@ -1127,6 +1206,10 @@ onMounted(async () => {
                 <el-form-item label="微信证书序列号"><el-input v-model="deployment.wechatPayCertSerialNo" /></el-form-item>
                 <el-form-item label="微信平台证书"><el-input v-model="deployment.wechatPayPlatformCertPath" /></el-form-item>
                 <el-form-item label="微信回调 URL"><el-input v-model="deployment.wechatPayNotifyUrl" /></el-form-item>
+                <el-form-item label="商城微信回调"><el-input v-model="deployment.mallWechatPayNotifyUrl" placeholder="https://api.example.com/payment/mall/wechat/callback" /></el-form-item>
+                <el-form-item label="商城退款回调"><el-input v-model="deployment.mallWechatPayRefundNotifyUrl" placeholder="https://api.example.com/payment/mall/wechat/refund-callback" /></el-form-item>
+                <el-form-item label="直收回调模板"><el-input v-model="deployment.mallWechatPayDirectNotifyUrlTemplate" placeholder="https://api.example.com/payment/mall/merchants/{merchantId}/wechat/callback" /></el-form-item>
+                <el-form-item label="直收退款模板"><el-input v-model="deployment.mallWechatPayDirectRefundNotifyUrlTemplate" placeholder="https://api.example.com/payment/mall/merchants/{merchantId}/wechat/refund-callback" /></el-form-item>
                 <el-form-item label="支付宝"><el-switch v-model="deployment.alipayEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
                 <el-form-item label="支付宝 AppId"><el-input v-model="deployment.alipayAppId" /></el-form-item>
                 <el-form-item label="支付宝私钥路径"><el-input v-model="deployment.alipayPrivateKeyPath" /></el-form-item>

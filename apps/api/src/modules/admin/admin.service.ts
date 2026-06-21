@@ -5,7 +5,7 @@ import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcryptjs";
 import ExcelJS from "exceljs";
 import { mkdirSync } from "fs";
-import { DataSource, In, LessThanOrEqual, MoreThan, Repository } from "typeorm";
+import { Brackets, DataSource, In, LessThanOrEqual, MoreThan, Repository, SelectQueryBuilder } from "typeorm";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityCategory } from "../../entities/activity-category.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
@@ -24,12 +24,14 @@ import { AgentSettlementTransfer } from "../../entities/agent-settlement-transfe
 import { AgentSettlement } from "../../entities/agent-settlement.entity";
 import { Agent } from "../../entities/agent.entity";
 import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { AmbassadorApplicationFollowup } from "../../entities/ambassador-application-followup.entity";
 import { AmbassadorCase } from "../../entities/ambassador-case.entity";
 import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { Coupon } from "../../entities/coupon.entity";
 import { ConversionEvent } from "../../entities/conversion-event.entity";
+import { Course } from "../../entities/course.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
@@ -45,7 +47,8 @@ import { Registration } from "../../entities/registration.entity";
 import { Refund } from "../../entities/refund.entity";
 import { ShareVisit } from "../../entities/share-visit.entity";
 import { Tenant } from "../../entities/tenant.entity";
-import { TenantRegion } from "../../entities/tenant-region.entity";
+import { TenantRegionHitLog } from "../../entities/tenant-region-hit-log.entity";
+import { TenantRegion, TenantRegionBoundaryPoint } from "../../entities/tenant-region.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { UserTag } from "../../entities/user-tag.entity";
 import { User } from "../../entities/user.entity";
@@ -54,11 +57,16 @@ import { Waitlist, WaitlistStatus } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { ActivityStatus, FieldType, OrderStatus, PaymentMethod, RegistrationStatus, checkActivityContentCompliance } from "../../shared/domain";
 import { inspectRuntimeConfig } from "../../shared/config-validation";
+import { configWithLaunchOverrides, normalizeLaunchConfig } from "../../shared/launch-config";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActor, tenantRelationForActor } from "../../shared/tenant-scope";
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultPermissionsForRole, effectivePermissionsForAdmin, normalizeAdminPermissions } from "./admin-permissions";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { financeDailyReport, financeRiskAlerts } from "./finance-operations";
+import { tenantOperationHealth } from "./tenant-health";
+import { tenantRegionShapesConflict } from "./tenant-region-geometry";
+import { normalizeTenantPackageExpiresAt, normalizeTenantPackagePlan, tenantPackagePermissionTemplate, tenantRenewalReminder, tenantSubscriptionStatus, tenantSubscriptionWriteRestriction } from "./tenant-subscription";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
@@ -66,9 +74,14 @@ import { paymentStatementOrderWhere } from "./payment-statement-import";
 import { buildAgentSettlementTransferCapability } from "./agent-transfer-capability";
 import { CharityFundService } from "../charity-fund.service";
 import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
+import { Certificate } from "../../entities/certificate.entity";
+import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
+import { VolunteerServiceRecord } from "../../entities/volunteer-service-record.entity";
+import { VolunteerTaskApplication } from "../../entities/volunteer-task-application.entity";
+import { VolunteerTask } from "../../entities/volunteer-task.entity";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[] };
-type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean; mallEnabled: boolean };
+type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean; mallEnabled: boolean; packagePlan: string; packageExpiresAt: string | null };
 const TENANT_STAFF_ROLES = [AdminRole.Operator, AdminRole.Finance, AdminRole.CheckInStaff];
 
 @Injectable()
@@ -78,6 +91,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   constructor(
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     @InjectRepository(TenantRegion) private readonly tenantRegions: Repository<TenantRegion>,
+    @InjectRepository(TenantRegionHitLog) private readonly tenantRegionHitLogs: Repository<TenantRegionHitLog>,
     @InjectRepository(AdminUser) private readonly admins: Repository<AdminUser>,
     @InjectRepository(AdminLoginLog) private readonly adminLoginLogs: Repository<AdminLoginLog>,
     @InjectRepository(AdminOperationLog) private readonly operationLogs: Repository<AdminOperationLog>,
@@ -88,6 +102,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(AmbassadorLandingSetting) private readonly ambassadorSettings: Repository<AmbassadorLandingSetting>,
     @InjectRepository(AmbassadorCase) private readonly ambassadorCases: Repository<AmbassadorCase>,
     @InjectRepository(AmbassadorApplication) private readonly ambassadorApplications: Repository<AmbassadorApplication>,
+    @InjectRepository(AmbassadorApplicationFollowup) private readonly ambassadorFollowups: Repository<AmbassadorApplicationFollowup>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(ActivityChannel) private readonly activityChannels: Repository<ActivityChannel>,
@@ -108,6 +123,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(TicketType) private readonly ticketTypes: Repository<TicketType>,
     @InjectRepository(Coupon) private readonly coupons: Repository<Coupon>,
     @InjectRepository(ConversionEvent) private readonly conversionEvents: Repository<ConversionEvent>,
+    @InjectRepository(Course) private readonly courses: Repository<Course>,
     @InjectRepository(H5AuthCodeLog) private readonly h5AuthCodeLogs: Repository<H5AuthCodeLog>,
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
@@ -122,6 +138,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(Notification) private readonly notifications: Repository<Notification>,
     @InjectRepository(ShareVisit) private readonly shareVisits: Repository<ShareVisit>,
     @InjectRepository(CharityFundTransaction) private readonly charityTransactionsRepo: Repository<CharityFundTransaction>,
+    @InjectRepository(Certificate) private readonly certificates: Repository<Certificate>,
+    @InjectRepository(VolunteerProfile) private readonly volunteerProfiles: Repository<VolunteerProfile>,
+    @InjectRepository(VolunteerTask) private readonly volunteerTasksRepo: Repository<VolunteerTask>,
+    @InjectRepository(VolunteerTaskApplication) private readonly volunteerTaskApplicationsRepo: Repository<VolunteerTaskApplication>,
+    @InjectRepository(VolunteerServiceRecord) private readonly volunteerServiceRecords: Repository<VolunteerServiceRecord>,
     private readonly jwt: JwtService,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
@@ -185,7 +206,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
             .leftJoin("account.agent", "agent")
             .leftJoin("agent.tenant", "agentTenant")
             .where("(tenant.id = :tenantId OR agentTenant.id = :tenantId)", { tenantId: tenant.id });
-        const [adminCount, enabledAdminCount, agentCount, enabledAgentCount, paymentAccountCount, enabledPaymentAccountCount, totalActivityCount, totalRegistrationCount, totalOrderCount, pendingActivityCount, pendingRegistrationCount, pendingRefundCount, callbackRiskCount] = await Promise.all([
+        const [adminCount, enabledAdminCount, agentCount, enabledAgentCount, paymentAccountCount, enabledPaymentAccountCount, totalActivityCount, pendingActivityCount, totalRegistrationCount, pendingRegistrationCount, totalOrderCount, totalCourseCount, publishedCourseCount, pendingRefundCount, callbackRiskCount, pendingReconciliationCount, homepageSectionCount, operationSetting] = await Promise.all([
           this.admins.count({ where: { tenant: { id: tenant.id } } }),
           this.admins.count({ where: { tenant: { id: tenant.id }, enabled: true } }),
           this.agents.count({ where: { tenant: { id: tenant.id } } }),
@@ -202,18 +223,34 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
             .andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId: tenant.id })
             .getCount(),
           this.orders.count({ where: { tenant: { id: tenant.id } } }),
+          this.courses.count({ where: { tenant: { id: tenant.id } } }),
+          this.courses.count({ where: { tenant: { id: tenant.id }, status: "published" } }),
           this.refunds.count({ where: { tenant: { id: tenant.id }, status: "pending" } }),
           this.paymentCallbackLogs
             .createQueryBuilder("callback")
             .where("(callback.signatureValid = :invalid OR callback.resultStatus IN (:...statuses))", { invalid: false, statuses: ["failed", "error"] })
             .andWhere("callback.tenantId = :tenantId", { tenantId: tenant.id })
-            .getCount()
+            .getCount(),
+          this.paymentTransactions.count({ where: { tenant: { id: tenant.id }, reconciliationStatus: "pending" } }),
+          this.homepageSections.count({ where: { tenant: { id: tenant.id }, enabled: true } }),
+          this.operationSettings
+            .createQueryBuilder("setting")
+            .leftJoinAndSelect("setting.tenant", "settingTenant")
+            .where("(setting.id = :tenantId OR settingTenant.id = :tenantId)", { tenantId: tenant.id })
+            .getOne()
         ]);
-        return [tenant.id, { adminCount, enabledAdminCount, agentCount, enabledAgentCount, paymentAccountCount, enabledPaymentAccountCount, pendingActivityCount, pendingRegistrationCount, pendingRefundCount, callbackRiskCount }] as const;
+        const counts = { adminCount, enabledAdminCount, agentCount, enabledAgentCount, paymentAccountCount, enabledPaymentAccountCount, totalActivityCount, totalRegistrationCount, totalOrderCount, totalCourseCount, publishedCourseCount, pendingActivityCount, pendingRegistrationCount, pendingRefundCount, callbackRiskCount, pendingReconciliationCount, homepageSectionCount };
+        const subscriptionStatus = tenantSubscriptionStatus(this.tenantPermissions(tenant));
+        return [tenant.id, { ...counts, launchReadiness: this.tenantLaunchReadiness(tenant, counts, operationSetting), operationHealth: tenantOperationHealth({ enabled: tenant.enabled, subscriptionStatus, ...counts }) }] as const;
       })
     );
     const adminCountMap = new Map(adminCounts);
-    return rows.map((tenant) => ({ ...this.publicTenant(tenant), ...(adminCountMap.get(tenant.id) || { adminCount: 0, enabledAdminCount: 0, agentCount: 0, enabledAgentCount: 0, paymentAccountCount: 0, enabledPaymentAccountCount: 0, pendingActivityCount: 0, pendingRegistrationCount: 0, pendingRefundCount: 0, callbackRiskCount: 0 }) }));
+    return rows.map((tenant) => {
+      const emptyCounts = { adminCount: 0, enabledAdminCount: 0, agentCount: 0, enabledAgentCount: 0, paymentAccountCount: 0, enabledPaymentAccountCount: 0, totalActivityCount: 0, totalRegistrationCount: 0, totalOrderCount: 0, totalCourseCount: 0, publishedCourseCount: 0, pendingActivityCount: 0, pendingRegistrationCount: 0, pendingRefundCount: 0, callbackRiskCount: 0, pendingReconciliationCount: 0, homepageSectionCount: 0 };
+      const subscriptionStatus = tenantSubscriptionStatus(this.tenantPermissions(tenant));
+      const counts = adminCountMap.get(tenant.id) || { ...emptyCounts, launchReadiness: this.tenantLaunchReadiness(tenant, emptyCounts, null), operationHealth: tenantOperationHealth({ enabled: tenant.enabled, subscriptionStatus, ...emptyCounts }) };
+      return { ...this.publicTenant(tenant), ...counts };
+    });
   }
 
   async saveTenant(dto: TenantDto, id?: number, admin?: AdminContext) {
@@ -256,6 +293,103 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return rows.map((row) => this.publicTenantRegion(row));
   }
 
+  async listTenantRegionHitLogs(query: TenantRegionHitLogQueryDto = {}, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const page = Math.max(Number(query.page || 1), 1);
+    const pageSize = Math.min(Math.max(Number(query.pageSize || 20), 1), 100);
+    const builder = this.tenantRegionHitLogQuery(query, true)
+      .orderBy("log.createdAt", "DESC")
+      .addOrderBy("log.id", "DESC")
+      .skip((page - 1) * pageSize)
+      .take(pageSize);
+    const [rows, total] = await builder.getManyAndCount();
+    return {
+      items: rows.map((row) => this.publicTenantRegionHitLog(row)),
+      total,
+      page,
+      pageSize
+    };
+  }
+
+  async tenantRegionHitLogSummary(query: TenantRegionHitLogQueryDto = {}, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const overview = await this.tenantRegionHitLogQuery(query)
+      .select("COUNT(log.id)", "total")
+      .addSelect("SUM(CASE WHEN log.matched = true THEN 1 ELSE 0 END)", "matched")
+      .getRawOne<{ total: string; matched: string }>();
+    const total = Number(overview?.total || 0);
+    const matched = Number(overview?.matched || 0);
+    const unmatched = Math.max(total - matched, 0);
+    const [sources, tenants, regions] = await Promise.all([
+      this.tenantRegionHitLogQuery(query)
+        .select("COALESCE(log.source, 'public_tenant_resolve')", "source")
+        .addSelect("COUNT(log.id)", "count")
+        .addSelect("SUM(CASE WHEN log.matched = true THEN 1 ELSE 0 END)", "matchedCount")
+        .groupBy("COALESCE(log.source, 'public_tenant_resolve')")
+        .orderBy("count", "DESC")
+        .limit(10)
+        .getRawMany<{ source: string; count: string; matchedCount: string }>(),
+      this.tenantRegionHitLogQuery(query)
+        .andWhere("log.matched = :tenantStatsMatched", { tenantStatsMatched: true })
+        .andWhere("(tenant.id IS NOT NULL OR regionTenant.id IS NOT NULL)")
+        .select("COALESCE(tenant.id, regionTenant.id)", "tenantId")
+        .addSelect("COALESCE(tenant.name, regionTenant.name)", "tenantName")
+        .addSelect("COALESCE(tenant.code, regionTenant.code)", "tenantCode")
+        .addSelect("COALESCE(tenant.region, regionTenant.region)", "tenantRegion")
+        .addSelect("COUNT(log.id)", "count")
+        .groupBy("COALESCE(tenant.id, regionTenant.id)")
+        .addGroupBy("COALESCE(tenant.name, regionTenant.name)")
+        .addGroupBy("COALESCE(tenant.code, regionTenant.code)")
+        .addGroupBy("COALESCE(tenant.region, regionTenant.region)")
+        .orderBy("count", "DESC")
+        .limit(10)
+        .getRawMany<{ tenantId: string; tenantName: string; tenantCode: string; tenantRegion: string; count: string }>(),
+      this.tenantRegionHitLogQuery(query)
+        .andWhere("log.matched = :regionStatsMatched", { regionStatsMatched: true })
+        .andWhere("region.id IS NOT NULL")
+        .select("region.id", "regionId")
+        .addSelect("region.name", "regionName")
+        .addSelect("region.province", "province")
+        .addSelect("region.city", "city")
+        .addSelect("region.district", "district")
+        .addSelect("COALESCE(tenant.name, regionTenant.name)", "tenantName")
+        .addSelect("COALESCE(tenant.code, regionTenant.code)", "tenantCode")
+        .addSelect("COUNT(log.id)", "count")
+        .groupBy("region.id")
+        .addGroupBy("region.name")
+        .addGroupBy("region.province")
+        .addGroupBy("region.city")
+        .addGroupBy("region.district")
+        .addGroupBy("COALESCE(tenant.name, regionTenant.name)")
+        .addGroupBy("COALESCE(tenant.code, regionTenant.code)")
+        .orderBy("count", "DESC")
+        .limit(10)
+        .getRawMany<{ regionId: string; regionName: string; province: string; city: string; district: string; tenantName: string; tenantCode: string; count: string }>()
+    ]);
+    return {
+      total,
+      matched,
+      unmatched,
+      matchRate: this.ratio(matched, total),
+      sources: sources.map((row) => {
+        const count = Number(row.count || 0);
+        const matchedCount = Number(row.matchedCount || 0);
+        return { source: row.source || "public_tenant_resolve", count, matchedCount, matchRate: this.ratio(matchedCount, count) };
+      }),
+      tenants: tenants.map((row) => ({
+        tenant: { id: Number(row.tenantId), name: row.tenantName, code: row.tenantCode, region: row.tenantRegion },
+        count: Number(row.count || 0),
+        share: this.ratio(Number(row.count || 0), matched)
+      })),
+      regions: regions.map((row) => ({
+        region: { id: Number(row.regionId), name: row.regionName, province: row.province, city: row.city, district: row.district },
+        tenant: { name: row.tenantName, code: row.tenantCode },
+        count: Number(row.count || 0),
+        share: this.ratio(Number(row.count || 0), matched)
+      }))
+    };
+  }
+
   async saveTenantRegion(dto: TenantRegionDto, id?: number, admin?: AdminContext) {
     this.assertPlatformAdmin(admin);
     const tenant = await this.tenants.findOne({ where: { id: Number(dto.tenantId), enabled: true } });
@@ -263,7 +397,12 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const region = id ? await this.tenantRegions.findOne({ where: { id } }) : this.tenantRegions.create();
     if (!region) throw new NotFoundException("区域不存在");
     const normalized = this.normalizeTenantRegionDto(dto);
-    await this.assertTenantRegionNoConflict({ ...normalized, tenantId: tenant.id, id: region.id || null });
+    await this.assertTenantRegionNoConflict({
+      ...normalized,
+      boundaryPoints: normalized.boundaryPoints === undefined ? region.boundaryPoints : normalized.boundaryPoints,
+      tenantId: tenant.id,
+      id: region.id || null
+    });
     Object.assign(region, {
       tenant,
       province: normalized.province,
@@ -273,6 +412,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       latitude: normalized.latitude.toFixed(6),
       longitude: normalized.longitude.toFixed(6),
       radiusMeters: normalized.radiusMeters,
+      ...(!id || normalized.boundaryPoints !== undefined ? { boundaryPoints: normalized.boundaryPoints ?? null } : {}),
       exclusive: normalized.exclusive,
       priority: normalized.priority,
       enabled: normalized.enabled,
@@ -285,10 +425,32 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       latitude: saved.latitude,
       longitude: saved.longitude,
       radiusMeters: saved.radiusMeters,
+      boundaryPoints: saved.boundaryPoints,
       exclusive: saved.exclusive,
       enabled: saved.enabled
     });
     return this.publicTenantRegion(saved);
+  }
+
+  async bulkImportTenantRegions(dto: TenantRegionBulkImportDto, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const items = Array.isArray(dto.items) ? dto.items : [];
+    if (!items.length) throw new BadRequestException("请提供要导入的区域保护数据");
+    if (items.length > 200) throw new BadRequestException("单次最多导入 200 条区域保护数据");
+    const results = [];
+    for (let index = 0; index < items.length; index += 1) {
+      try {
+        const region = await this.saveTenantRegion(items[index], undefined, admin);
+        results.push({ index, success: true, region });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        results.push({ index, success: false, message });
+      }
+    }
+    const succeeded = results.filter((item) => item.success).length;
+    const failed = results.length - succeeded;
+    await this.logOperation(admin, "tenant_region.bulk_import", "tenant_region", null, `批量导入区域保护：成功 ${succeeded} 条，失败 ${failed} 条`, { total: results.length, succeeded, failed });
+    return { total: results.length, succeeded, failed, items: results };
   }
 
   async deleteTenantRegion(id: number, admin?: AdminContext) {
@@ -566,6 +728,14 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return this.charityFund.addDisbursement(projectId, dto, admin);
   }
 
+  charityProjectUpdates(projectId: number, admin?: AdminContext) {
+    return this.charityFund.adminProjectUpdates(projectId, admin);
+  }
+
+  saveCharityProjectUpdate(projectId: number, dto: CharityProjectUpdateDto, id?: number, admin?: AdminContext) {
+    return this.charityFund.saveProjectUpdate(projectId, dto, id, admin);
+  }
+
   charitySetting(admin?: AdminContext) {
     return this.charityFund.getSetting(admin);
   }
@@ -676,6 +846,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       ambassador_apply: "大使申请",
       aid_personal: "个人帮扶",
       aid_project: "项目帮扶",
+      volunteer_apply: "志愿者",
       brand_story_contact: "品牌咨询"
     };
     return map[String(source || "")] || source || "文化大使旧入口";
@@ -690,11 +861,361 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (dto.assignee !== undefined) row.assignee = this.nullableText(dto.assignee);
     if (dto.priority !== undefined) row.priority = dto.priority;
     if (dto.nextFollowAt !== undefined) row.nextFollowAt = dto.nextFollowAt ? this.parseDate(dto.nextFollowAt) : null;
+    for (const key of ["cityResourceScore", "communityScore", "contentScore", "charityScore", "deliveryScore"] as const) {
+      if (dto[key] !== undefined) row[key] = Math.min(Math.max(Number(dto[key] || 0), 0), 5);
+    }
     row.reviewedBy = admin?.id || null;
     row.reviewedAt = new Date();
     const saved = await this.ambassadorApplications.save(row);
+    if (["approved", "activated"].includes(saved.status) || saved.source === "volunteer_apply") await this.ensureVolunteerProfileFromApplication(saved);
     await this.logOperation(admin, "ambassador.application.update", "ambassador_application", saved.id, `跟进文化大使申请：${saved.name}`, { status: saved.status });
     return saved;
+  }
+
+  async ambassadorApplicationFollowups(id: number, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const application = await this.ambassadorApplications.findOneBy({ id });
+    if (!application) throw new NotFoundException("申请记录不存在");
+    return this.ambassadorFollowups.find({ where: { application: { id } }, order: { createdAt: "DESC" } });
+  }
+
+  async createAmbassadorApplicationFollowup(id: number, dto: AmbassadorApplicationFollowupDto, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const application = await this.ambassadorApplications.findOneBy({ id });
+    if (!application) throw new NotFoundException("申请记录不存在");
+    const content = String(dto.content || "").trim();
+    if (!content) throw new BadRequestException("请填写跟进内容");
+    const operator = admin?.id ? await this.admins.findOne({ where: { id: admin.id } }) : null;
+    const followup = await this.ambassadorFollowups.save(this.ambassadorFollowups.create({
+      application,
+      operator,
+      method: this.cleanText(dto.method, 40) || "wechat",
+      result: this.cleanText(dto.result, 40) || "contacted",
+      content,
+      nextFollowAt: dto.nextFollowAt ? this.parseDate(dto.nextFollowAt) : null
+    }));
+    application.remark = content;
+    application.status = dto.result === "approved" ? "approved" : dto.result === "activated" ? "activated" : application.status === "pending" ? "contacted" : application.status;
+    application.nextFollowAt = followup.nextFollowAt;
+    application.reviewedBy = admin?.id || null;
+    application.reviewedAt = new Date();
+    await this.ambassadorApplications.save(application);
+    await this.logOperation(admin, "ambassador.application.followup", "ambassador_application", application.id, `新增线索跟进：${application.name}`, { result: followup.result });
+    return followup;
+  }
+
+  async volunteerTasks(query: VolunteerTaskQueryDto = {}, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const builder = this.volunteerTasksRepo.createQueryBuilder("task").orderBy("task.startAt", "ASC").addOrderBy("task.id", "DESC");
+    if (query.status) builder.andWhere("task.status = :status", { status: query.status });
+    if (query.city) builder.andWhere("task.city LIKE :city", { city: `%${query.city.trim()}%` });
+    return builder.take(500).getMany();
+  }
+
+  async volunteerProfilesList(query: VolunteerProfileQueryDto = {}, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const builder = this.volunteerProfiles
+      .createQueryBuilder("profile")
+      .leftJoinAndSelect("profile.user", "user")
+      .leftJoinAndSelect("profile.application", "application")
+      .orderBy("profile.updatedAt", "DESC")
+      .addOrderBy("profile.id", "DESC");
+    const keyword = String(query.keyword || "").trim();
+    if (keyword) {
+      builder.andWhere("(profile.name LIKE :keyword OR profile.phone LIKE :keyword OR profile.city LIKE :keyword OR profile.expertise LIKE :keyword OR profile.serviceIntent LIKE :keyword)", { keyword: `%${keyword}%` });
+    }
+    const status = String(query.status || "").trim();
+    if (status) builder.andWhere("profile.status = :status", { status });
+    const level = String(query.level || "").trim();
+    if (level) builder.andWhere("profile.level = :level", { level });
+    const city = String(query.city || "").trim();
+    if (city) builder.andWhere("profile.city LIKE :city", { city: `%${city}%` });
+    const rows = await builder.take(500).getMany();
+    const userIds = rows.map((row) => row.user?.id).filter((id): id is number => Boolean(id));
+    if (!userIds.length) return rows.map((row) => ({ ...row, certificateCount: 0, latestCertificate: null }));
+    const certificates = await this.certificates.find({ where: { userId: In(userIds) }, order: { issuedAt: "DESC" } });
+    return rows.map((row) => {
+      const owned = certificates.filter((item) => item.userId === row.user?.id);
+      return { ...row, certificateCount: owned.length, latestCertificate: owned[0] || null };
+    });
+  }
+
+  async updateVolunteerProfile(id: number, dto: VolunteerProfileStatusDto, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const profile = await this.volunteerProfiles.findOne({ where: { id } });
+    if (!profile) throw new NotFoundException("志愿者档案不存在");
+    profile.status = dto.status;
+    if (dto.level) profile.level = dto.level;
+    profile.remark = this.nullableText(dto.remark);
+    const saved = await this.volunteerProfiles.save(profile);
+    await this.logOperation(admin, "volunteer.profile.update", "volunteer_profile", saved.id, `更新志愿者档案：${saved.name}`, { status: saved.status, level: saved.level });
+    return saved;
+  }
+
+  async volunteerProfileCertificates(id: number, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const profile = await this.volunteerProfiles.findOne({ where: { id } });
+    if (!profile) throw new NotFoundException("志愿者档案不存在");
+    if (!profile.user) return [];
+    return this.certificates.find({ where: { userId: profile.user.id }, order: { issuedAt: "DESC" } });
+  }
+
+  async issueVolunteerCertificate(id: number, dto: VolunteerCertificateDto = {}, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const profile = await this.volunteerProfiles.findOne({ where: { id } });
+    if (!profile) throw new NotFoundException("志愿者档案不存在");
+    if (!profile.user) throw new BadRequestException("志愿者档案尚未绑定用户账号，需用户登录后申请或报名志愿任务后再发放证书");
+    const certificate = await this.ensureVolunteerCertificate(profile, admin, dto.name);
+    if (!certificate) throw new BadRequestException("志愿者档案尚未绑定用户账号，无法发放证书");
+    return certificate;
+  }
+
+  async exportVolunteerProfiles(query: VolunteerProfileQueryDto = {}, admin?: AdminContext) {
+    const rows = await this.volunteerProfilesList(query, admin);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("volunteer-profiles");
+    sheet.columns = [
+      { header: "ID", key: "id", width: 8 },
+      { header: "姓名", key: "name", width: 14 },
+      { header: "手机号", key: "phone", width: 18 },
+      { header: "城市", key: "city", width: 16 },
+      { header: "擅长领域", key: "expertise", width: 24 },
+      { header: "可服务时间", key: "availableTime", width: 22 },
+      { header: "服务意向", key: "serviceIntent", width: 24 },
+      { header: "审核状态", key: "status", width: 14 },
+      { header: "成长等级", key: "level", width: 14 },
+      { header: "累计时长", key: "serviceHours", width: 12 },
+      { header: "来源线索", key: "applicationId", width: 12 },
+      { header: "备注", key: "remark", width: 36 },
+      { header: "创建时间", key: "createdAt", width: 22 },
+      { header: "更新时间", key: "updatedAt", width: 22 }
+    ];
+    rows.forEach((row) =>
+      sheet.addRow({
+        id: row.id,
+        name: row.name,
+        phone: row.phone,
+        city: row.city,
+        expertise: row.expertise || "",
+        availableTime: row.availableTime || "",
+        serviceIntent: row.serviceIntent || "",
+        status: this.volunteerProfileStatusText(row.status),
+        level: this.volunteerLevelText(row.level),
+        serviceHours: Number(row.serviceHours || 0),
+        applicationId: row.application?.id || "",
+        remark: row.remark || "",
+        createdAt: this.excelDateTime(row.createdAt),
+        updatedAt: this.excelDateTime(row.updatedAt)
+      })
+    );
+    sheet.getRow(1).font = { bold: true };
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    return workbook.xlsx.writeBuffer();
+  }
+
+  async saveVolunteerTask(dto: VolunteerTaskDto, id?: number, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const task = id ? await this.volunteerTasksRepo.findOneBy({ id }) : this.volunteerTasksRepo.create();
+    if (!task) throw new NotFoundException("志愿任务不存在");
+    task.title = this.cleanText(dto.title, 120);
+    task.type = this.cleanText(dto.type, 40);
+    task.city = this.cleanText(dto.city, 80);
+    if (!task.title || !task.type || !task.city) throw new BadRequestException("请填写任务标题、类型和城市");
+    task.address = this.cleanText(dto.address, 160) || null;
+    task.startAt = dto.startAt ? this.parseDate(dto.startAt) : null;
+    task.endAt = dto.endAt ? this.parseDate(dto.endAt) : null;
+    task.quota = Math.max(Number(dto.quota || task.quota || 1), 1);
+    task.status = dto.status || task.status || "open";
+    task.requirement = this.nullableText(dto.requirement);
+    task.description = this.nullableText(dto.description);
+    const saved = await this.volunteerTasksRepo.save(task);
+    await this.logOperation(admin, id ? "volunteer.task.update" : "volunteer.task.create", "volunteer_task", saved.id, `${id ? "更新" : "新增"}志愿任务：${saved.title}`, { status: saved.status });
+    return saved;
+  }
+
+  async volunteerTaskApplications(status?: string, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const builder = this.volunteerTaskApplicationsRepo.createQueryBuilder("application").leftJoinAndSelect("application.task", "task").leftJoinAndSelect("application.profile", "profile").leftJoinAndSelect("application.user", "user").orderBy("application.id", "DESC");
+    if (status) builder.andWhere("application.status = :status", { status });
+    return builder.take(500).getMany();
+  }
+
+  async updateVolunteerTaskApplication(id: number, dto: VolunteerTaskApplicationStatusDto, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const row = await this.volunteerTaskApplicationsRepo.findOne({ where: { id } });
+    if (!row) throw new NotFoundException("志愿任务报名不存在");
+    row.status = dto.status;
+    row.remark = this.nullableText(dto.remark);
+    const saved = await this.volunteerTaskApplicationsRepo.save(row);
+    await this.logOperation(admin, "volunteer.application.update", "volunteer_task_application", saved.id, `更新志愿任务报名：${saved.name}`, { status: saved.status });
+    return saved;
+  }
+
+  async createVolunteerServiceRecord(dto: VolunteerServiceRecordDto, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const application = await this.volunteerTaskApplicationsRepo.findOne({ where: { id: Number(dto.applicationId) } });
+    if (!application) throw new NotFoundException("志愿任务报名不存在");
+    const profile = application.profile || await this.ensureVolunteerProfileFromTaskApplication(application);
+    const hours = Math.max(Number(dto.hours || 0), 0);
+    const record = await this.volunteerServiceRecords.save(this.volunteerServiceRecords.create({
+      profile,
+      task: application.task || null,
+      application,
+      hours: hours.toFixed(2),
+      title: this.cleanText(dto.title, 160) || application.task?.title || "志愿服务",
+      proofUrl: this.cleanText(dto.proofUrl, 500) || null,
+      feedback: this.nullableText(dto.feedback)
+    }));
+    application.status = "completed";
+    await this.volunteerTaskApplicationsRepo.save(application);
+    profile.serviceHours = (Number(profile.serviceHours || 0) + hours).toFixed(2);
+    profile.level = this.volunteerLevel(Number(profile.serviceHours || 0));
+    profile.status = "approved";
+    await this.volunteerProfiles.save(profile);
+    await this.ensureVolunteerCertificate(profile, admin);
+    await this.logOperation(admin, "volunteer.service.create", "volunteer_service_record", record.id, `登记志愿服务：${profile.name}`, { hours: record.hours });
+    return record;
+  }
+
+  async volunteerServiceRecordsList(query: VolunteerServiceRecordQueryDto = {}, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const builder = this.volunteerServiceRecords
+      .createQueryBuilder("record")
+      .leftJoinAndSelect("record.profile", "profile")
+      .leftJoinAndSelect("record.task", "task")
+      .leftJoinAndSelect("record.application", "application")
+      .orderBy("record.id", "DESC");
+    if (query.profileId) builder.andWhere("profile.id = :profileId", { profileId: query.profileId });
+    const keyword = String(query.keyword || "").trim();
+    if (keyword) builder.andWhere("(record.title LIKE :keyword OR profile.name LIKE :keyword OR profile.phone LIKE :keyword OR task.title LIKE :keyword OR record.feedback LIKE :keyword)", { keyword: `%${keyword}%` });
+    const city = String(query.city || "").trim();
+    if (city) builder.andWhere("profile.city LIKE :city", { city: `%${city}%` });
+    if (query.startDate) builder.andWhere("record.createdAt >= :startDate", { startDate: this.parseDate(query.startDate) });
+    if (query.endDate) builder.andWhere("record.createdAt <= :endDate", { endDate: this.parseDate(query.endDate) });
+    return builder.take(500).getMany();
+  }
+
+  async exportVolunteerServiceRecords(query: VolunteerServiceRecordQueryDto = {}, admin?: AdminContext) {
+    const rows = await this.volunteerServiceRecordsList(query, admin);
+    const workbook = new ExcelJS.Workbook();
+    const sheet = workbook.addWorksheet("volunteer-service-records");
+    sheet.columns = [
+      { header: "ID", key: "id", width: 8 },
+      { header: "志愿者", key: "name", width: 14 },
+      { header: "手机号", key: "phone", width: 18 },
+      { header: "城市", key: "city", width: 16 },
+      { header: "服务标题", key: "title", width: 24 },
+      { header: "关联任务", key: "task", width: 24 },
+      { header: "服务时长", key: "hours", width: 12 },
+      { header: "证明材料", key: "proofUrl", width: 36 },
+      { header: "服务评价/说明", key: "feedback", width: 36 },
+      { header: "登记时间", key: "createdAt", width: 22 }
+    ];
+    rows.forEach((row) =>
+      sheet.addRow({
+        id: row.id,
+        name: row.profile?.name || "",
+        phone: row.profile?.phone || "",
+        city: row.profile?.city || "",
+        title: row.title,
+        task: row.task?.title || "",
+        hours: Number(row.hours || 0),
+        proofUrl: row.proofUrl || "",
+        feedback: row.feedback || "",
+        createdAt: this.excelDateTime(row.createdAt)
+      })
+    );
+    sheet.getRow(1).font = { bold: true };
+    sheet.views = [{ state: "frozen", ySplit: 1 }];
+    return workbook.xlsx.writeBuffer();
+  }
+
+  private async ensureVolunteerProfileFromApplication(application: AmbassadorApplication) {
+    const existing = await this.volunteerProfiles.findOne({ where: [{ application: { id: application.id } }, { phone: application.phone }] });
+    if (existing) return existing;
+    return this.volunteerProfiles.save(this.volunteerProfiles.create({
+      user: null,
+      application,
+      name: application.name,
+      phone: application.phone,
+      city: application.city,
+      expertise: application.expertise,
+      availableTime: null,
+      serviceIntent: application.source === "volunteer_apply" ? application.expertise : application.source || "公益招募",
+      status: ["approved", "activated"].includes(application.status) ? "approved" : "pending",
+      level: "participant",
+      serviceHours: "0.00",
+      remark: application.remark || application.experience || null
+    }));
+  }
+
+  private async ensureVolunteerProfileFromTaskApplication(application: VolunteerTaskApplication) {
+    if (application.profile) return application.profile;
+    let profile = await this.volunteerProfiles.findOne({ where: { phone: application.phone } });
+    if (!profile) {
+      profile = await this.volunteerProfiles.save(this.volunteerProfiles.create({
+        user: application.user || null,
+        application: null,
+        name: application.name,
+        phone: application.phone,
+        city: application.city,
+        expertise: application.task?.type || null,
+        availableTime: null,
+        serviceIntent: application.task?.title || "志愿任务",
+        status: "approved",
+        level: "participant",
+        serviceHours: "0.00",
+        remark: application.message || null
+      }));
+    }
+    application.profile = profile;
+    await this.volunteerTaskApplicationsRepo.save(application);
+    return profile;
+  }
+
+  private volunteerLevel(hours: number) {
+    if (hours >= 80) return "city_builder";
+    if (hours >= 30) return "ambassador";
+    if (hours >= 8) return "volunteer";
+    return "participant";
+  }
+
+  private async ensureVolunteerCertificate(profile: VolunteerProfile, admin?: AdminContext, customName?: string) {
+    if (!profile.user) return null;
+    const name = this.cleanText(customName, 120) || this.volunteerCertificateName(profile);
+    const existing = await this.certificates.findOne({ where: { userId: profile.user.id, name } });
+    if (existing) return existing;
+    const certificate = await this.certificates.save(this.certificates.create({
+      userId: profile.user.id,
+      name,
+      imageUrl: null,
+      threshold: Math.floor(Number(profile.serviceHours || 0))
+    }));
+    await this.logOperation(admin, "volunteer.certificate.issue", "certificate", certificate.id, `发放志愿证书：${profile.name}`, { userId: profile.user.id, profileId: profile.id, name });
+    return certificate;
+  }
+
+  private volunteerCertificateName(profile: VolunteerProfile) {
+    const level = this.volunteerLevelText(profile.level || "participant");
+    const hours = Number(profile.serviceHours || 0).toFixed(1);
+    return `七维书院·${level}志愿服务证书（${hours}小时）`;
+  }
+
+  private volunteerProfileStatusText(status?: string | null) {
+    const map: Record<string, string> = { pending: "待审核", approved: "已通过", rejected: "已拒绝", inactive: "已停用" };
+    return map[String(status || "")] || status || "";
+  }
+
+  private volunteerLevelText(level?: string | null) {
+    const map: Record<string, string> = { participant: "公益参与者", volunteer: "公益志愿者", ambassador: "公益大使", city_builder: "城市共建者" };
+    return map[String(level || "")] || level || "";
+  }
+
+  private excelDateTime(value?: Date | string | null) {
+    if (!value) return "";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "";
+    return date.toISOString().slice(0, 19).replace("T", " ");
   }
 
   async analyticsOverview(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
@@ -789,6 +1310,207 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  async supportSearch(query: SupportQueryDto, admin?: AdminContext) {
+    const keyword = String(query.keyword || "").trim();
+    if (keyword.length < 2) throw new BadRequestException("请输入至少 2 个字符的手机号、订单号、报名人或活动关键词");
+    const like = `%${keyword}%`;
+    const tenantId = this.isTenantScoped(admin) ? Number(admin?.tenantId || 0) : Number(query.tenantId || 0);
+    const tenantFilter = Number.isFinite(tenantId) && tenantId > 0 ? tenantId : 0;
+    if (!this.isTenantScoped(admin) && tenantFilter) {
+      const tenant = await this.tenants.findOneBy({ id: tenantFilter });
+      if (!tenant) throw new NotFoundException("筛选商家不存在");
+    }
+
+    const userBuilder = this.users
+      .createQueryBuilder("user")
+      .where("(user.phone LIKE :keyword OR user.nickname LIKE :keyword)", { keyword: like })
+      .orderBy("user.updatedAt", "DESC")
+      .take(10);
+    if (tenantFilter) {
+      userBuilder.andWhere(
+        `EXISTS (
+          SELECT 1 FROM registrations scopedRegistration
+          LEFT JOIN activities scopedActivity ON scopedActivity.id = scopedRegistration.activityId
+          WHERE scopedRegistration.userId = user.id
+          AND (scopedRegistration.tenantId = :tenantId OR scopedActivity.tenantId = :tenantId)
+        )`,
+        { tenantId: tenantFilter }
+      );
+    }
+
+    const registrationBuilder = this.registrations
+      .createQueryBuilder("registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("registration.tenant", "tenant")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndMapOne("registration.order", Order, "linkedOrder", "linkedOrder.registrationId = registration.id")
+      .where("(activity.title LIKE :keyword OR user.phone LIKE :keyword OR user.nickname LIKE :keyword OR registration.checkInCode LIKE :keyword OR linkedOrder.orderNo LIKE :keyword OR JSON_EXTRACT(registration.answers, '$') LIKE :keyword)", { keyword: like })
+      .orderBy("registration.createdAt", "DESC")
+      .take(20);
+    this.applyTenantScope(registrationBuilder, "registration", admin);
+    if (tenantFilter && !this.isTenantScoped(admin)) registrationBuilder.andWhere("(tenant.id = :tenantId OR activityTenant.id = :tenantId)", { tenantId: tenantFilter });
+
+    const orderBuilder = this.orders
+      .createQueryBuilder("order")
+      .leftJoinAndSelect("order.registration", "registration")
+      .leftJoinAndSelect("order.tenant", "tenant")
+      .leftJoinAndSelect("order.agent", "agent")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndSelect("order.ticketType", "ticketType")
+      .where("(order.orderNo LIKE :keyword OR order.transactionNo LIKE :keyword OR activity.title LIKE :keyword OR user.phone LIKE :keyword OR user.nickname LIKE :keyword)", { keyword: like })
+      .orderBy("order.createdAt", "DESC")
+      .take(20);
+    this.applyTenantScope(orderBuilder, "order", admin);
+    if (tenantFilter && !this.isTenantScoped(admin)) orderBuilder.andWhere("(tenant.id = :tenantId OR activityTenant.id = :tenantId)", { tenantId: tenantFilter });
+
+    const refundBuilder = this.refunds
+      .createQueryBuilder("refund")
+      .leftJoinAndSelect("refund.order", "order")
+      .leftJoinAndSelect("refund.tenant", "tenant")
+      .leftJoinAndSelect("order.registration", "registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("registration.user", "user")
+      .where("(refund.refundNo LIKE :keyword OR order.orderNo LIKE :keyword OR activity.title LIKE :keyword OR user.phone LIKE :keyword OR user.nickname LIKE :keyword)", { keyword: like })
+      .orderBy("refund.createdAt", "DESC")
+      .take(20);
+    this.applyTenantScope(refundBuilder, "refund", admin);
+    if (tenantFilter && !this.isTenantScoped(admin)) refundBuilder.andWhere("(tenant.id = :tenantId OR order.tenantId = :tenantId OR activityTenant.id = :tenantId)", { tenantId: tenantFilter });
+
+    const [users, registrations, orders, refunds] = await Promise.all([userBuilder.getMany(), registrationBuilder.getMany(), orderBuilder.getMany(), refundBuilder.getMany()]);
+    const userIds = Array.from(
+      new Set([
+        ...users.map((user) => user.id),
+        ...registrations.map((registration) => registration.user?.id).filter(Boolean),
+        ...orders.map((order) => order.registration?.user?.id).filter(Boolean),
+        ...refunds.map((refund) => refund.order?.registration?.user?.id).filter(Boolean)
+      ].map(Number))
+    );
+    const phones = Array.from(new Set(users.map((user) => user.phone).filter(Boolean) as string[]));
+
+    const notificationBuilder = this.notifications
+      .createQueryBuilder("notification")
+      .leftJoinAndSelect("notification.user", "user")
+      .leftJoinAndSelect("notification.activity", "activity")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .where(
+        new Brackets((qb) => {
+          qb.where("(notification.title LIKE :keyword OR notification.content LIKE :keyword OR activity.title LIKE :keyword)", { keyword: like });
+          if (userIds.length) qb.orWhere("user.id IN (:...userIds)", { userIds });
+        })
+      )
+      .orderBy("notification.createdAt", "DESC")
+      .take(20);
+    if (tenantFilter) {
+      notificationBuilder.andWhere(userIds.length ? "(activityTenant.id = :tenantId OR user.id IN (:...userIds))" : "activityTenant.id = :tenantId", { tenantId: tenantFilter, userIds });
+    }
+
+    const authCodeBuilder = this.h5AuthCodeLogs.createQueryBuilder("log").where("log.phone LIKE :keyword", { keyword: like }).orderBy("log.createdAt", "DESC").take(20);
+    if (tenantFilter) {
+      if (!phones.length) {
+        authCodeBuilder.andWhere("1 = 0");
+      } else {
+        authCodeBuilder.andWhere("log.phone IN (:...phones)", { phones });
+      }
+    }
+
+    const [notifications, h5AuthCodeLogs] = await Promise.all([notificationBuilder.getMany(), authCodeBuilder.getMany()]);
+    const pendingPayments = orders.filter((order) => order.status === OrderStatus.PendingPayment).length;
+    const pendingRefunds = refunds.filter((refund) => ["pending", "processing", "failed"].includes(refund.status)).length;
+    const rejectedRegistrations = registrations.filter((registration) => [RegistrationStatus.Rejected, RegistrationStatus.Cancelled].includes(registration.status)).length;
+
+    return {
+      keyword,
+      scope: tenantFilter ? { type: "tenant", tenantId: tenantFilter } : { type: "platform", tenantId: null },
+      summary: {
+        userCount: users.length,
+        registrationCount: registrations.length,
+        orderCount: orders.length,
+        refundCount: refunds.length,
+        pendingPayments,
+        pendingRefunds
+      },
+      users: users.map((user) => ({ id: user.id, phone: user.phone, nickname: user.nickname, lastLoginAt: user.lastLoginAt, createdAt: user.createdAt })),
+      registrations: registrations.map((registration: Registration & { order?: Order }) => ({
+        id: registration.id,
+        status: registration.status,
+        checkInCode: registration.checkInCode,
+        reviewRemark: registration.reviewRemark,
+        cancelReason: registration.cancelReason,
+        createdAt: registration.createdAt,
+        updatedAt: registration.updatedAt,
+        tenant: registration.tenant || registration.activity?.tenant ? { id: (registration.tenant || registration.activity.tenant)?.id, name: (registration.tenant || registration.activity.tenant)?.name } : null,
+        activity: registration.activity ? { id: registration.activity.id, title: registration.activity.title, startTime: registration.activity.startTime } : null,
+        user: registration.user ? { id: registration.user.id, phone: registration.user.phone, nickname: registration.user.nickname } : null,
+        order: registration.order ? { id: registration.order.id, orderNo: registration.order.orderNo, status: registration.order.status, amount: registration.order.amount, paymentMethod: registration.order.paymentMethod } : null
+      })),
+      orders: orders.map((order) => ({
+        id: order.id,
+        orderNo: order.orderNo,
+        status: order.status,
+        amount: order.amount,
+        paymentMethod: order.paymentMethod,
+        transactionNo: order.transactionNo,
+        paidAt: order.paidAt,
+        expiresAt: order.expiresAt,
+        createdAt: order.createdAt,
+        tenant: order.tenant || order.registration?.activity?.tenant ? { id: (order.tenant || order.registration.activity.tenant)?.id, name: (order.tenant || order.registration.activity.tenant)?.name } : null,
+        agent: order.agent ? { id: order.agent.id, name: order.agent.name } : null,
+        activity: order.registration?.activity ? { id: order.registration.activity.id, title: order.registration.activity.title } : null,
+        user: order.registration?.user ? { id: order.registration.user.id, phone: order.registration.user.phone, nickname: order.registration.user.nickname } : null,
+        ticketType: order.ticketType ? { id: order.ticketType.id, name: order.ticketType.name } : null
+      })),
+      refunds: refunds.map((refund) => ({
+        id: refund.id,
+        refundNo: refund.refundNo,
+        amount: refund.amount,
+        status: refund.status,
+        reason: refund.reason,
+        reviewRemark: refund.reviewRemark,
+        providerRefundStatus: refund.providerRefundStatus,
+        providerRefundFailureReason: refund.providerRefundFailureReason,
+        createdAt: refund.createdAt,
+        completedAt: refund.completedAt,
+        order: refund.order ? { id: refund.order.id, orderNo: refund.order.orderNo, status: refund.order.status, amount: refund.order.amount } : null,
+        user: refund.order?.registration?.user ? { id: refund.order.registration.user.id, phone: refund.order.registration.user.phone, nickname: refund.order.registration.user.nickname } : null,
+        activity: refund.order?.registration?.activity ? { id: refund.order.registration.activity.id, title: refund.order.registration.activity.title } : null
+      })),
+      notifications: notifications.map((notification) => ({
+        id: notification.id,
+        channel: notification.channel,
+        title: notification.title,
+        status: notification.status,
+        provider: notification.provider,
+        providerMessageId: notification.providerMessageId,
+        errorMessage: notification.errorMessage,
+        retryCount: notification.retryCount,
+        sentAt: notification.sentAt,
+        failedAt: notification.failedAt,
+        createdAt: notification.createdAt,
+        user: notification.user ? { id: notification.user.id, phone: notification.user.phone, nickname: notification.user.nickname } : null,
+        activity: notification.activity ? { id: notification.activity.id, title: notification.activity.title } : null
+      })),
+      h5AuthCodeLogs: h5AuthCodeLogs.map((log) => ({
+        id: log.id,
+        phone: log.phone,
+        mode: log.mode,
+        status: log.status,
+        provider: log.provider,
+        providerMessageId: log.providerMessageId,
+        message: log.message,
+        createdAt: log.createdAt
+      })),
+      advice: [
+        pendingPayments ? `有 ${pendingPayments} 笔待付款订单，优先确认用户是否已支付或是否需要重新引导付款。` : "",
+        pendingRefunds ? `有 ${pendingRefunds} 笔待处理/异常退款，建议财务先核对退款状态。` : "",
+        rejectedRegistrations ? `有 ${rejectedRegistrations} 条被拒绝或取消的报名，客服解释时需查看审核备注或取消原因。` : ""
+      ].filter(Boolean)
+    };
+  }
+
   async listActivityChannels(activityId: number, admin?: AdminContext) {
     const activity = await this.activities.findOneBy({ id: activityId });
     if (!activity) throw new NotFoundException("活动不存在");
@@ -826,10 +1548,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return { activity: { id: activity.id, title: activity.title }, channels: rows.map((row) => this.channelReportRow(row)) };
   }
 
-  configCheck(admin?: AdminContext) {
+  async configCheck(admin?: AdminContext) {
     this.assertPlatformAdmin(admin);
+    const platformSetting = await this.operationSettings.findOne({ where: { id: 1 } });
     return {
-      ...inspectRuntimeConfig(this.config),
+      ...inspectRuntimeConfig(configWithLaunchOverrides(this.config, platformSetting?.launchConfig)),
       release: this.releaseInfo()
     };
   }
@@ -950,6 +1673,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async createAnnouncement(dto: AnnouncementDto, admin?: AdminContext) {
     const tenant = await this.resolveAnnouncementTenant(dto.tenantId, undefined, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
     const saved = await this.announcements.save(
       this.announcements.create({
         tenant,
@@ -969,6 +1693,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     this.assertTenantAccess(row, admin);
     if (!row) throw new NotFoundException("公告不存在");
     const tenant = await this.resolveAnnouncementTenant(dto.tenantId, row.tenant, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
     Object.assign(row, {
       tenant,
       title: dto.title.trim(),
@@ -986,6 +1711,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const row = await this.announcements.findOneBy({ id });
     this.assertTenantAccess(row, admin);
     if (!row) throw new NotFoundException("公告不存在");
+    this.assertTenantSubscriptionWritable(row.tenant, admin);
     await this.announcements.delete(id);
     await this.logOperation(this.operationActorForTenant(admin, row.tenant), "announcement.delete", "announcement", id, `删除公告：${row.title}`, { type: row.type, enabled: row.enabled, pinned: row.pinned, tenantId: row.tenant?.id || null });
     return { id, deleted: true };
@@ -1003,6 +1729,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async createHomepageSection(dto: HomepageSectionDto, admin?: AdminContext, tenantId?: number, pageKey?: string) {
     const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
     const normalizedPageKey = normalizePageKey(dto.pageKey || pageKey);
     const section = this.homepageSections.create({
       tenant: targetTenant,
@@ -1022,6 +1749,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async updateHomepageSection(id: number, dto: HomepageSectionDto, admin?: AdminContext, tenantId?: number, pageKey?: string) {
     const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
     const normalizedPageKey = normalizePageKey(dto.pageKey || pageKey);
     const section = await this.homepageSections.findOneBy({ id });
     if (!section) throw new NotFoundException("首页模块不存");
@@ -1041,6 +1769,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async deleteHomepageSection(id: number, admin?: AdminContext, tenantId?: number, pageKey?: string) {
     const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
     const normalizedPageKey = normalizePageKey(pageKey);
     const section = await this.homepageSections.findOneBy({ id });
     if (!section) throw new NotFoundException("首页模块不存");
@@ -1052,6 +1781,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async reorderHomepageSections(items: HomepageReorderItemDto[], admin?: AdminContext, tenantId?: number, pageKey?: string) {
     const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
     const normalizedPageKey = normalizePageKey(pageKey);
     if (!items.length) return this.listHomepageSections(admin, tenantId, normalizedPageKey);
     const ids = items.map((item) => item.id);
@@ -1070,6 +1800,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async resetHomepageSections(admin?: AdminContext, tenantId?: number, pageKey?: string) {
     const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
     const normalizedPageKey = normalizePageKey(pageKey);
     const builder = this.homepageSections.createQueryBuilder().delete().where("pageKey = :pageKey", { pageKey: normalizedPageKey });
     if (targetTenant) builder.andWhere("tenantId = :tenantId", { tenantId: targetTenant.id });
@@ -1080,14 +1811,18 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
-  createCategory(dto: CategoryDto, admin?: AdminContext) {
+  async createCategory(dto: CategoryDto, admin?: AdminContext) {
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : null;
+    this.assertTenantSubscriptionWritable(tenant, admin);
     return this.categories.save(this.categories.create({ ...this.normalizeCategoryDto(dto), tenant: this.tenantRelation(admin) }));
   }
 
   async updateCategory(id: number, dto: CategoryDto, admin?: AdminContext) {
-    const category = await this.categories.findOneBy({ id });
+    const category = await this.categories.findOne({ where: { id }, relations: ["tenant"] });
     this.assertTenantAccess(category, admin);
     if (!category) throw new NotFoundException("分类不存");
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : category.tenant;
+    this.assertTenantSubscriptionWritable(tenant, admin);
     Object.assign(category, this.normalizeCategoryDto(dto));
     category.tenant = this.tenantRelation(admin, category.tenant);
     return this.categories.save(category);
@@ -1129,9 +1864,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async removeCategory(id: number, admin?: AdminContext) {
-    const category = await this.categories.findOneBy({ id });
+    const category = await this.categories.findOne({ where: { id }, relations: ["tenant"] });
     this.assertTenantAccess(category, admin);
     if (!category) throw new NotFoundException("分类不存");
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : category.tenant;
+    this.assertTenantSubscriptionWritable(tenant, admin);
     category.enabled = false;
     return this.categories.save(category);
   }
@@ -1283,6 +2020,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!activity) throw new NotFoundException("活动不存");
     this.assertTenantAccess(activity, admin);
     const tenant = await this.resolveActivityTenant(admin, activity.tenant, dto.tenantId);
+    this.assertTenantSubscriptionWritable(tenant, admin);
     const permissions = this.tenantPermissions(tenant);
     if (dto.requireReview && this.isTenantScoped(admin) && !permissions.registrationReviewEnabled) throw new BadRequestException("当前商家未开启报名审核权限");
     const fromStatus = id ? activity.status : null;
@@ -1516,6 +2254,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const activity = await this.activities.findOneBy({ id: dto.activityId });
     if (!activity) throw new NotFoundException("活动不存");
     this.assertTenantAccess(activity, admin);
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : activity.tenant;
+    this.assertTenantSubscriptionWritable(tenant, admin);
     const row = id ? await this.ticketTypes.findOneBy({ id }) : this.ticketTypes.create();
     if (!row) throw new NotFoundException("票种不存");
     this.assertTenantAccess(row, admin);
@@ -1535,6 +2275,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const activity = dto.activityId ? await this.activities.findOneBy({ id: dto.activityId }) : null;
     if (dto.activityId && !activity) throw new NotFoundException("活动不存");
     this.assertTenantAccess(activity, admin);
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : activity?.tenant || null;
+    this.assertTenantSubscriptionWritable(tenant, admin);
     const row = id ? await this.coupons.findOneBy({ id }) : this.coupons.create();
     if (!row) throw new NotFoundException("优惠码不存在");
     this.assertTenantAccess(row, admin);
@@ -1556,6 +2298,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async financeDashboard(query: OrderQueryDto = {}, admin?: AdminContext) {
+    const today = this.businessDayRange();
     const [orderCount, paidOrderCount, pendingOrderCount, refundCount, pendingRefundCount, completedRefundCount, pendingReconciliationCount, pendingStatementCount, failedCallbackCount, transactions, refunds, reconciliationItems, callbackLogs, statementRecords, agentSummary] = await Promise.all([
       this.countOrdersForAgent(query, undefined, admin),
       this.countOrdersForAgent(query, OrderStatus.Paid, admin),
@@ -1573,10 +2316,26 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       this.listPaymentStatements(query, 8, admin),
       this.agentFinanceSummary(query, admin)
     ]);
-    const paidAmount = await this.transactionSumForAgent(query, "success", admin);
-    const refundAmount = await this.refundSumForAgent(query, "completed", admin);
+    const [paidAmount, refundAmount, todayPaidOrderCount, todayPendingOrderCount, todayRefundCount, todayPendingRefundCount, todayPaidAmount, todayRefundAmount] = await Promise.all([
+      this.transactionSumForAgent(query, "success", admin),
+      this.refundSumForAgent(query, "completed", admin),
+      this.countTransactionsForAgentInRange(query, "success", admin, today.start, today.end),
+      this.countOrdersForAgentInRange(query, OrderStatus.PendingPayment, admin, today.start, today.end),
+      this.countRefundsForAgentInRange(query, undefined, admin, today.start, today.end),
+      this.countRefundsForAgentInRange(query, "pending", admin, today.start, today.end),
+      this.transactionSumForAgentInRange(query, "success", admin, today.start, today.end),
+      this.refundSumForAgentInRange(query, "completed", admin, today.start, today.end)
+    ]);
     const income = Number(paidAmount?.sum || 0);
     const refundsTotal = Number(refundAmount?.sum || 0);
+    const dailyMetrics = {
+      paidOrderCount: todayPaidOrderCount,
+      pendingOrderCount: todayPendingOrderCount,
+      refundCount: todayRefundCount,
+      pendingRefundCount: todayPendingRefundCount,
+      paidAmount: Number(todayPaidAmount?.sum || 0),
+      refundAmount: Number(todayRefundAmount?.sum || 0)
+    };
     return {
       totals: {
         orderCount,
@@ -1592,6 +2351,17 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         refundAmount: refundsTotal.toFixed(2),
         netAmount: (income - refundsTotal).toFixed(2)
       },
+      dailyReport: {
+        rangeStart: today.start.toISOString(),
+        rangeEnd: today.end.toISOString(),
+        ...financeDailyReport(dailyMetrics)
+      },
+      riskAlerts: financeRiskAlerts({
+        ...dailyMetrics,
+        pendingReconciliationCount,
+        pendingStatementCount,
+        failedCallbackCount
+      }),
       recentTransactions: transactions,
       recentRefunds: refunds,
       reconciliationItems,
@@ -2264,12 +3034,30 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       { header: "联系人", key: "contactName", width: 14 },
       { header: "联系电话", key: "contactPhone", width: 18 },
       { header: "状态", key: "status", width: 10 },
+      { header: "套餐", key: "packagePlan", width: 14 },
+      { header: "套餐到期", key: "packageExpiresAt", width: 14 },
+      { header: "套餐状态", key: "packageStatus", width: 14 },
+      { header: "续费提醒", key: "renewalReminder", width: 18 },
+      { header: "续费动作", key: "renewalAction", width: 34 },
+      { header: "经营健康", key: "operationHealthStatus", width: 14 },
+      { header: "健康评分", key: "operationHealthScore", width: 10 },
+      { header: "健康风险", key: "operationHealthRisks", width: 34 },
+      { header: "健康提醒", key: "operationHealthWarnings", width: 34 },
+      { header: "健康建议", key: "operationHealthActions", width: 40 },
+      { header: "上线结论", key: "launchStatus", width: 14 },
+      { header: "上线评分", key: "launchScore", width: 10 },
+      { header: "上线阻塞项", key: "launchBlockers", width: 34 },
+      { header: "上线提醒项", key: "launchWarnings", width: 34 },
+      { header: "下一步动作", key: "launchActions", width: 40 },
       { header: "管理员数", key: "adminCount", width: 10 },
       { header: "活动数", key: "activityCount", width: 10 },
+      { header: "课程数", key: "courseCount", width: 10 },
+      { header: "已发布课程", key: "publishedCourseCount", width: 12 },
       { header: "报名数", key: "registrationCount", width: 10 },
       { header: "订单数", key: "orderCount", width: 10 },
       { header: "待审活动", key: "pendingActivity", width: 12 },
       { header: "待审退款", key: "pendingRefund", width: 10 },
+      { header: "对账差异", key: "pendingReconciliation", width: 10 },
       { header: "内部备注", key: "remark", width: 28 },
       { header: "创建时间", key: "createdAt", width: 18 }
     ];
@@ -2282,12 +3070,30 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         contactName: r.contactName || "",
         contactPhone: r.contactPhone || "",
         status: r.enabled ? "启用" : "停用",
+        packagePlan: r.subscriptionStatus?.planLabel || "",
+        packageExpiresAt: r.subscriptionStatus?.expiresAt || "长期有效",
+        packageStatus: r.subscriptionStatus?.label || "",
+        renewalReminder: r.renewalReminder?.label || "",
+        renewalAction: r.renewalReminder?.message || "",
+        operationHealthStatus: r.operationHealth?.label || "",
+        operationHealthScore: Number(r.operationHealth?.score || 0),
+        operationHealthRisks: (r.operationHealth?.risks || []).join("；"),
+        operationHealthWarnings: (r.operationHealth?.warnings || []).join("；"),
+        operationHealthActions: (r.operationHealth?.actions || []).join("；"),
+        launchStatus: r.launchReadiness?.label || "",
+        launchScore: Number(r.launchReadiness?.score || 0),
+        launchBlockers: (r.launchReadiness?.blockers || []).join("；"),
+        launchWarnings: (r.launchReadiness?.warnings || []).join("；"),
+        launchActions: (r.launchReadiness?.actions || []).join("；"),
         adminCount: Number(r.adminCount || 0),
         activityCount: Number(r.totalActivityCount || 0),
+        courseCount: Number(r.totalCourseCount || 0),
+        publishedCourseCount: Number(r.publishedCourseCount || 0),
         registrationCount: Number(r.totalRegistrationCount || 0),
         orderCount: Number(r.totalOrderCount || 0),
         pendingActivity: Number(r.pendingActivityCount || 0),
         pendingRefund: Number(r.pendingRefundCount || 0),
+        pendingReconciliation: Number(r.pendingReconciliationCount || 0),
         remark: r.remark || "",
         createdAt: r.createdAt || ""
       });
@@ -2399,22 +3205,16 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async saveOperationSetting(dto: OperationSettingDto, admin?: AdminContext) {
     const setting = await this.ensureOperationSetting(admin);
+    if (this.isTenantScoped(admin)) this.assertTenantSubscriptionWritable(setting.tenant || (await this.currentTenantForAdmin(admin)), admin);
     const paymentSettingsEditable = await this.canEditTenantPaymentSettings(admin);
-    if (paymentSettingsEditable && !dto.offlinePaymentInstructions?.trim()) throw new BadRequestException("请填写线下付款说明");
-    if (paymentSettingsEditable && !dto.refundInstructions?.trim()) throw new BadRequestException("请填写退款说明");
-    const nextPaymentMethods = paymentSettingsEditable ? this.normalizePaymentMethods(dto.paymentMethods) : this.normalizePaymentMethods(setting.paymentMethods);
     Object.assign(setting, {
       registrationEnabled: dto.registrationEnabled ?? true,
       registrationDisabledMessage: dto.registrationDisabledMessage?.trim() || null,
-      offlinePaymentInstructions: paymentSettingsEditable ? dto.offlinePaymentInstructions!.trim() : setting.offlinePaymentInstructions,
-      paymentMethods: nextPaymentMethods,
       customerServiceName: dto.customerServiceName?.trim() || null,
       customerServicePhone: dto.customerServicePhone?.trim() || null,
       customerServiceWechat: dto.customerServiceWechat?.trim() || null,
       defaultGroupQrCodeUrl: dto.defaultGroupQrCodeUrl?.trim() || null,
       pageTheme: this.isPlainObject(dto.pageTheme) ? dto.pageTheme : {},
-      refundInstructions: paymentSettingsEditable ? dto.refundInstructions!.trim() : setting.refundInstructions,
-      invoiceInstructions: paymentSettingsEditable ? dto.invoiceInstructions?.trim() || null : setting.invoiceInstructions,
       smsProviderEnabled: dto.smsProviderEnabled ?? false,
       smsProvider: dto.smsProvider?.trim() || null,
       smsAccessKeyId: dto.smsAccessKeyId?.trim() || null,
@@ -2422,8 +3222,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       smsSignName: dto.smsSignName?.trim() || null,
       smsTemplateId: dto.smsTemplateId?.trim() || null
     });
+    if (paymentSettingsEditable) {
+      this.assertOperationPaymentSettingPayload(dto);
+      Object.assign(setting, {
+        offlinePaymentInstructions: dto.offlinePaymentInstructions.trim(),
+        paymentMethods: this.normalizePaymentMethods(dto.paymentMethods),
+        refundInstructions: dto.refundInstructions.trim(),
+        invoiceInstructions: dto.invoiceInstructions?.trim() || null
+      });
+    } else {
+      setting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
+    }
+    if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined) {
+      setting.launchConfig = normalizeLaunchConfig(dto.launchConfig);
+    }
     const saved = await this.operationSettings.save(setting);
-    await this.logOperation(admin, "settings.operation.update", "operation_setting", saved.id, "更新运营设置", { registrationEnabled: saved.registrationEnabled, customerServicePhone: saved.customerServicePhone, customerServiceWechat: saved.customerServiceWechat, smsProviderEnabled: saved.smsProviderEnabled });
+    await this.logOperation(admin, "settings.operation.update", "operation_setting", saved.id, "更新运营设置", { registrationEnabled: saved.registrationEnabled, customerServicePhone: saved.customerServicePhone, customerServiceWechat: saved.customerServiceWechat, smsProviderEnabled: saved.smsProviderEnabled, launchConfigSaved: !this.isTenantScoped(admin) && dto.launchConfig !== undefined });
     return saved;
   }
 
@@ -2663,6 +3477,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async createUserTag(input: UserTagDto, admin?: AdminContext) {
+    if (this.isTenantScoped(admin)) this.assertTenantSubscriptionWritable(await this.currentTenantForAdmin(admin), admin);
     const user = await this.users.findOneBy({ id: input.userId });
     if (!user) throw new NotFoundException("用户不存");
     await this.assertUserTenantAccess(user.id, admin);
@@ -2683,6 +3498,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const activity = await this.activities.findOneBy({ id: input.activityId });
     if (!activity) throw new NotFoundException("活动不存");
     this.assertTenantAccess(activity, admin);
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : activity.tenant;
+    this.assertTenantSubscriptionWritable(tenant, admin);
     if (!input.name?.trim()) throw new BadRequestException("标签名称不能为空");
     const userIds = await this.userIdsForActivity(activity.id, admin);
     let createdCount = 0;
@@ -2709,9 +3526,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   async deleteUserTag(id: number, admin?: AdminContext) {
-    const tag = await this.userTags.findOneBy({ id });
+    const tag = await this.userTags.findOne({ where: { id }, relations: ["tenant"] });
     if (!tag) throw new NotFoundException("标签不存");
     this.assertTenantAccess(tag, admin);
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : tag.tenant;
+    this.assertTenantSubscriptionWritable(tenant, admin);
     await this.userTags.delete({ id });
     return tag;
   }
@@ -3033,7 +3852,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private validateAdminPassword(password: string) {
-    if (!password || password.length < 8) throw new BadRequestException("管理员密码至少需要 8 位");
+    if (!password || password.length < 10) throw new BadRequestException("管理员密码至少需要 10 位");
     if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) throw new BadRequestException("管理员密码需要包含大小写字母和数字");
   }
 
@@ -3372,8 +4191,56 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return { level: "muted", label: "持续观察", message: "数据已有起步，继续观察报名、收入和签到变化。" };
   }
 
+  private tenantLaunchReadiness(
+    tenant: Tenant,
+    counts: {
+      enabledAdminCount: number;
+      enabledPaymentAccountCount: number;
+      totalActivityCount: number;
+      pendingActivityCount: number;
+      pendingRegistrationCount: number;
+      pendingRefundCount: number;
+      callbackRiskCount: number;
+      homepageSectionCount: number;
+    },
+    setting?: OperationSetting | null
+  ) {
+    const blockers: string[] = [];
+    const warnings: string[] = [];
+    const actions: string[] = [];
+    const settings = this.tenantPermissions(tenant);
+    const subscription = tenantSubscriptionStatus(settings);
+
+    if (!tenant.enabled) blockers.push("商家已停用");
+    if (subscription.status === "expired") blockers.push("商家套餐已到期");
+    if (Number(counts.enabledAdminCount || 0) <= 0) blockers.push("缺少可登录商家管理员");
+    if (Number(counts.enabledPaymentAccountCount || 0) <= 0) blockers.push(settings.paymentAccountEditable ? "缺少启用的收款账户" : "收款配置权限关闭且未配置启用账户");
+    if (Number(counts.totalActivityCount || 0) <= 0) blockers.push("尚未创建活动");
+    if (Number(counts.callbackRiskCount || 0) > 0) blockers.push("存在异常支付回调");
+
+    if (!setting) warnings.push("运营设置未初始化");
+    else {
+      if (!setting.registrationEnabled) warnings.push("全站报名开关已暂停");
+      if (!setting.customerServicePhone && !setting.customerServiceWechat) warnings.push("缺少客服手机号或客服微信");
+      if (!setting.offlinePaymentInstructions?.trim()) warnings.push("缺少线下付款说明");
+      if (!setting.refundInstructions?.trim()) warnings.push("缺少退款说明");
+    }
+    if (Number(counts.homepageSectionCount || 0) <= 0) warnings.push("首页装修未启用模块");
+    if (subscription.status === "expiring_soon") warnings.push(`商家套餐 ${subscription.daysRemaining} 天后到期`);
+    if (Number(counts.pendingActivityCount || 0) > 0) warnings.push(`有 ${counts.pendingActivityCount} 个待审核活动`);
+    if (Number(counts.pendingRegistrationCount || 0) > 0) warnings.push(`有 ${counts.pendingRegistrationCount} 个待审核报名`);
+    if (Number(counts.pendingRefundCount || 0) > 0) warnings.push(`有 ${counts.pendingRefundCount} 个待处理退款`);
+
+    actions.push(...blockers, ...warnings);
+    const score = Math.max(0, Math.min(100, 100 - blockers.length * 22 - warnings.length * 7));
+    const status = blockers.length ? "no_go" : warnings.length ? "warn" : "go";
+    const label = status === "go" ? "可上线" : status === "warn" ? "可灰度" : "暂不可上线";
+    return { score, status, label, blockers, warnings, actions: actions.slice(0, 6) };
+  }
+
   private publicTenant(tenant: Tenant) {
-    return { id: tenant.id, code: tenant.code, name: tenant.name, region: tenant.region, contactName: tenant.contactName, contactPhone: tenant.contactPhone, remark: tenant.remark, enabled: tenant.enabled, settings: this.tenantPermissions(tenant), createdAt: tenant.createdAt, updatedAt: tenant.updatedAt };
+    const settings = this.tenantPermissions(tenant);
+    return { id: tenant.id, code: tenant.code, name: tenant.name, region: tenant.region, contactName: tenant.contactName, contactPhone: tenant.contactPhone, remark: tenant.remark, enabled: tenant.enabled, settings, subscriptionStatus: tenantSubscriptionStatus(settings), renewalReminder: tenantRenewalReminder(settings), packageTemplate: tenantPackagePermissionTemplate(settings.packagePlan), createdAt: tenant.createdAt, updatedAt: tenant.updatedAt };
   }
 
   private publicTenantRegion(region: TenantRegion) {
@@ -3387,6 +4254,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       latitude: Number(region.latitude),
       longitude: Number(region.longitude),
       radiusMeters: region.radiusMeters,
+      boundaryPoints: region.boundaryPoints || null,
       exclusive: region.exclusive,
       priority: region.priority,
       enabled: region.enabled,
@@ -3396,10 +4264,70 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
+  private tenantRegionHitLogQuery(query: TenantRegionHitLogQueryDto = {}, withRelations = false) {
+    const builder = this.tenantRegionHitLogs.createQueryBuilder("log");
+    if (withRelations) {
+      builder.leftJoinAndSelect("log.tenant", "tenant").leftJoinAndSelect("log.region", "region").leftJoinAndSelect("region.tenant", "regionTenant");
+    } else {
+      builder.leftJoin("log.tenant", "tenant").leftJoin("log.region", "region").leftJoin("region.tenant", "regionTenant");
+    }
+    this.applyTenantRegionHitLogFilters(builder, query);
+    return builder;
+  }
+
+  private applyTenantRegionHitLogFilters(builder: SelectQueryBuilder<TenantRegionHitLog>, query: TenantRegionHitLogQueryDto = {}) {
+    if (query.tenantId) builder.andWhere("(tenant.id = :tenantId OR regionTenant.id = :tenantId)", { tenantId: query.tenantId });
+    if (query.matched === "true") builder.andWhere("log.matched = :matched", { matched: true });
+    if (query.matched === "false") builder.andWhere("log.matched = :matched", { matched: false });
+    if (query.source?.trim()) builder.andWhere("log.source = :source", { source: query.source.trim() });
+    const startDate = this.tenantRegionHitLogDate(query.startDate, "开始日期");
+    const endDate = this.tenantRegionHitLogDate(query.endDate, "结束日期", true);
+    if (startDate && endDate && startDate.getTime() >= endDate.getTime()) throw new BadRequestException("开始日期必须早于结束日期");
+    if (startDate) builder.andWhere("log.createdAt >= :startDate", { startDate });
+    if (endDate) builder.andWhere("log.createdAt < :endDate", { endDate });
+  }
+
+  private tenantRegionHitLogDate(value?: string, label = "日期", endExclusive = false) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    let date: Date;
+    if (/^\d{4}-\d{2}-\d{2}$/.test(text)) {
+      date = new Date(`${text}T00:00:00`);
+      if (endExclusive) date.setDate(date.getDate() + 1);
+    } else {
+      date = new Date(text);
+    }
+    if (Number.isNaN(date.getTime())) throw new BadRequestException(`${label}格式无效`);
+    return date;
+  }
+
+  private ratio(part: number, total: number) {
+    if (!total) return 0;
+    return Number((part / total).toFixed(4));
+  }
+
+  private publicTenantRegionHitLog(log: TenantRegionHitLog) {
+    const tenant = log.tenant || log.region?.tenant || null;
+    return {
+      id: log.id,
+      matched: log.matched,
+      tenant: tenant ? this.publicTenant(tenant) : null,
+      region: log.region ? { id: log.region.id, name: log.region.name, province: log.region.province, city: log.region.city, district: log.region.district } : null,
+      latitude: Number(log.latitude),
+      longitude: Number(log.longitude),
+      distanceMeters: log.distanceMeters,
+      source: log.source,
+      clientIp: log.clientIp,
+      userAgent: log.userAgent,
+      createdAt: log.createdAt
+    };
+  }
+
   private normalizeTenantRegionDto(dto: TenantRegionDto) {
     const latitude = Number(dto.latitude);
     const longitude = Number(dto.longitude);
     const radiusMeters = Math.round(Number(dto.radiusMeters || 0));
+    const boundaryPoints = this.normalizeTenantRegionBoundaryPoints(dto.boundaryPoints);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new BadRequestException("纬度范围应为 -90 到 90");
     if (!Number.isFinite(longitude) || longitude < -180 || longitude > 180) throw new BadRequestException("经度范围应为 -180 到 180");
     if (!Number.isFinite(radiusMeters) || radiusMeters < 100 || radiusMeters > 200000) throw new BadRequestException("保护半径应为 100 米到 200 公里");
@@ -3411,6 +4339,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       latitude,
       longitude,
       radiusMeters,
+      boundaryPoints,
       exclusive: dto.exclusive !== false,
       priority: Number.isFinite(Number(dto.priority)) ? Number(dto.priority) : 0,
       enabled: dto.enabled !== false,
@@ -3418,29 +4347,41 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async assertTenantRegionNoConflict(input: { id?: number | null; tenantId: number; latitude: number; longitude: number; radiusMeters: number; exclusive: boolean; enabled: boolean }) {
+  private normalizeTenantRegionBoundaryPoints(value: unknown): TenantRegionBoundaryPoint[] | null | undefined {
+    if (value === undefined) return undefined;
+    if (value === null || value === "") return null;
+    if (!Array.isArray(value)) throw new BadRequestException("多边形边界点格式无效");
+    if (!value.length) return null;
+    if (value.length < 3) throw new BadRequestException("多边形边界至少需要 3 个点");
+    if (value.length > 200) throw new BadRequestException("多边形边界最多支持 200 个点");
+    return value.map((item) => {
+      if (!item || typeof item !== "object") throw new BadRequestException("多边形边界点格式无效");
+      const point = item as Record<string, unknown>;
+      const lat = Number(point.lat ?? point.latitude);
+      const lng = Number(point.lng ?? point.longitude);
+      if (!Number.isFinite(lat) || lat < -90 || lat > 90) throw new BadRequestException("多边形边界纬度范围应为 -90 到 90");
+      if (!Number.isFinite(lng) || lng < -180 || lng > 180) throw new BadRequestException("多边形边界经度范围应为 -180 到 180");
+      return { lat: Number(lat.toFixed(6)), lng: Number(lng.toFixed(6)) };
+    });
+  }
+
+  private async assertTenantRegionNoConflict(input: { id?: number | null; tenantId: number; latitude: number; longitude: number; radiusMeters: number; boundaryPoints?: TenantRegionBoundaryPoint[] | null; exclusive: boolean; enabled: boolean }) {
     if (!input.exclusive || !input.enabled) return;
     const candidates = await this.tenantRegions
       .createQueryBuilder("region")
       .leftJoinAndSelect("region.tenant", "tenant")
       .where("region.enabled = :enabled", { enabled: true })
       .andWhere("region.exclusive = :exclusive", { exclusive: true })
-      .andWhere("tenant.id <> :tenantId", { tenantId: input.tenantId })
-      .getMany();
-    const conflict = candidates.find((region) => {
-      const distance = this.geoDistanceMeters(input.latitude, input.longitude, Number(region.latitude), Number(region.longitude));
-      return distance < input.radiusMeters + Number(region.radiusMeters || 0);
+      .andWhere("tenant.id <> :tenantId", { tenantId: input.tenantId });
+    if (input.id) candidates.andWhere("region.id <> :id", { id: input.id });
+    const regions = await candidates.getMany();
+    const conflict = regions.find((region) => {
+      return tenantRegionShapesConflict(
+        { latitude: input.latitude, longitude: input.longitude, radiusMeters: input.radiusMeters, boundaryPoints: input.boundaryPoints || null },
+        { latitude: Number(region.latitude), longitude: Number(region.longitude), radiusMeters: Number(region.radiusMeters || 0), boundaryPoints: region.boundaryPoints || null }
+      );
     });
     if (conflict) throw new BadRequestException(`区域与「${conflict.tenant.name} / ${conflict.name}」排他范围重叠，请调整半径、位置或关闭排他`);
-  }
-
-  private geoDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
-    const toRad = (value: number) => (value * Math.PI) / 180;
-    const earthRadius = 6371000;
-    const dLat = toRad(lat2 - lat1);
-    const dLng = toRad(lng2 - lng1);
-    const a = Math.sin(dLat / 2) ** 2 + Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) ** 2;
-    return 2 * earthRadius * Math.asin(Math.sqrt(a));
   }
 
   private isTenantScoped(admin?: AdminContext) {
@@ -3463,7 +4404,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private defaultTenantPermissions(): TenantPermissionSettings {
-    return { activityPublishReviewRequired: true, registrationReviewEnabled: false, paymentAccountEditable: true, mallEnabled: true };
+    return { ...tenantPackagePermissionTemplate("standard").permissions, packagePlan: "standard", packageExpiresAt: null };
   }
 
   private tenantPermissions(tenant?: Tenant | null): TenantPermissionSettings {
@@ -3473,7 +4414,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       activityPublishReviewRequired: settings.activityPublishReviewRequired === undefined ? defaults.activityPublishReviewRequired : Boolean(settings.activityPublishReviewRequired),
       registrationReviewEnabled: settings.registrationReviewEnabled === undefined ? defaults.registrationReviewEnabled : Boolean(settings.registrationReviewEnabled),
       paymentAccountEditable: settings.paymentAccountEditable === undefined ? defaults.paymentAccountEditable : Boolean(settings.paymentAccountEditable),
-      mallEnabled: settings.mallEnabled === undefined ? defaults.mallEnabled : Boolean(settings.mallEnabled)
+      mallEnabled: settings.mallEnabled === undefined ? defaults.mallEnabled : Boolean(settings.mallEnabled),
+      packagePlan: normalizeTenantPackagePlan(settings.packagePlan),
+      packageExpiresAt: normalizeTenantPackageExpiresAt(settings.packageExpiresAt)
     };
   }
 
@@ -3481,9 +4424,17 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const base = this.isPlainObject(current) ? current : {};
     const next = this.isPlainObject(input) ? input : {};
     const merged: Record<string, unknown> = { ...base };
-    for (const key of ["activityPublishReviewRequired", "registrationReviewEnabled", "paymentAccountEditable", "mallEnabled"]) {
+    const permissionKeys = ["activityPublishReviewRequired", "registrationReviewEnabled", "paymentAccountEditable", "mallEnabled"];
+    const hasExplicitPermission = permissionKeys.some((key) => next[key] !== undefined);
+    if (next.packagePlan !== undefined) {
+      const template = tenantPackagePermissionTemplate(next.packagePlan);
+      merged.packagePlan = template.plan;
+      if (!hasExplicitPermission) Object.assign(merged, template.permissions);
+    }
+    for (const key of permissionKeys) {
       if (next[key] !== undefined) merged[key] = Boolean(next[key]);
     }
+    if (next.packageExpiresAt !== undefined) merged.packageExpiresAt = normalizeTenantPackageExpiresAt(next.packageExpiresAt);
     return { ...this.defaultTenantPermissions(), ...merged };
   }
 
@@ -3583,17 +4534,30 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private async assertPaymentAccountEditable(admin?: AdminContext) {
     if (!this.isTenantScoped(admin)) return;
     const tenant = await this.tenants.findOneBy({ id: admin?.tenantId || 0 });
+    this.assertTenantSubscriptionWritable(tenant, admin);
     if (!this.tenantPermissions(tenant).paymentAccountEditable) throw new ForbiddenException("平台超级管理员已关闭本商家的收款配置权限");
   }
 
   private async canEditTenantPaymentSettings(admin?: AdminContext) {
     if (!this.isTenantScoped(admin)) return true;
     const tenant = await this.tenants.findOneBy({ id: admin?.tenantId || 0 });
+    this.assertTenantSubscriptionWritable(tenant, admin);
     return this.tenantPermissions(tenant).paymentAccountEditable;
   }
 
+  private assertTenantSubscriptionWritable(tenant?: Tenant | null, admin?: AdminContext) {
+    if (!this.isTenantScoped(admin)) return;
+    if (!tenant || !tenant.enabled) throw new NotFoundException("当前商家不存在或已停用");
+    const restriction = tenantSubscriptionWriteRestriction(this.tenantPermissions(tenant));
+    if (restriction) throw new ForbiddenException(restriction.message);
+  }
+
   private async resolveAnnouncementTenant(tenantId: number | null | undefined, fallback: Tenant | null | undefined, admin?: AdminContext) {
-    if (this.isTenantScoped(admin)) return this.tenantRelation(admin, fallback);
+    if (this.isTenantScoped(admin)) {
+      const tenant = await this.tenants.findOneBy({ id: admin?.tenantId || 0 });
+      if (!tenant || !tenant.enabled) throw new NotFoundException("当前商家不存在或已停用");
+      return tenant;
+    }
     if (tenantId === null) return null;
     const id = Number(tenantId || fallback?.id || 0);
     if (!id) return null;
@@ -3758,6 +4722,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return logs.filter((log) => allowed.has(`${log.sourceType}:${log.sourceId}`) || log.sourceType.startsWith("mall_")).slice(0, 100);
   }
 
+  private assertOperationPaymentSettingPayload(dto: OperationSettingDto): asserts dto is OperationSettingDto & { offlinePaymentInstructions: string; refundInstructions: string } {
+    if (!dto.offlinePaymentInstructions?.trim()) throw new BadRequestException("请填写线下付款说明");
+    if (!dto.refundInstructions?.trim()) throw new BadRequestException("请填写退款说明");
+  }
+
   private async ensureOperationSetting(admin?: AdminContext) {
     const id = this.isTenantScoped(admin) ? admin?.tenantId || 1 : 1;
     let setting = await this.operationSettings.findOne({ where: { id } });
@@ -3774,6 +4743,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       customerServiceWechat: "activity_service",
       defaultGroupQrCodeUrl: null,
       pageTheme: {},
+      launchConfig: {},
       refundInstructions: "如需取消报名或申请退款，请先联系主办方客服。已签到或活动开始后的退款规则以活动报名须知为准",
       invoiceInstructions: "如需发票，请在付款后联系客服登记抬头、税号和接收邮箱",
       smsProviderEnabled: false,
@@ -4138,6 +5108,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return date;
   }
 
+  private cleanText(value: unknown, maxLength: number) {
+    const text = typeof value === "string" ? value.trim() : "";
+    return text.slice(0, maxLength);
+  }
+
   private async getRegistration(id: number, admin?: AdminContext) {
     const registration = await this.registrations.findOne({ where: { id } });
     if (!registration) throw new NotFoundException("报名记录不存");
@@ -4316,9 +5291,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (query.agentId) builder.andWhere(`${alias}.id = :agentId`, { agentId: query.agentId });
   }
 
+  private applyCreatedAtRange(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, alias: string, start: Date, end: Date) {
+    builder.andWhere(`${alias}.createdAt >= :${alias}RangeStart`, { [`${alias}RangeStart`]: start });
+    builder.andWhere(`${alias}.createdAt < :${alias}RangeEnd`, { [`${alias}RangeEnd`]: end });
+  }
+
   private applyFinanceTenantFilter(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, query: Pick<OrderQueryDto, "tenantId">, admin?: AdminContext, recordAlias = "order") {
     if (this.isTenantScoped(admin) || !query.tenantId) return;
     builder.andWhere(`(${recordAlias}.tenantId = :financeTenantId OR order.tenantId = :financeTenantId OR registration.tenantId = :financeTenantId OR activity.tenantId = :financeTenantId)`, { financeTenantId: query.tenantId });
+  }
+
+  private businessDayRange(now = new Date()) {
+    const start = new Date(now);
+    start.setHours(0, 0, 0, 0);
+    const end = new Date(start);
+    end.setDate(start.getDate() + 1);
+    return { start, end };
   }
 
   private countOrdersForAgent(query: OrderQueryDto, status?: OrderStatus, admin?: AdminContext) {
@@ -4330,9 +5318,28 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return builder.getCount();
   }
 
+  private countOrdersForAgentInRange(query: OrderQueryDto, status: OrderStatus | undefined, admin: AdminContext | undefined, start: Date, end: Date) {
+    const builder = this.orders.createQueryBuilder("order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity");
+    if (status) builder.where("order.status = :status", { status });
+    this.applyCreatedAtRange(builder, "order", start, end);
+    this.applyTenantScope(builder, "order", admin);
+    this.applyFinanceTenantFilter(builder, query, admin, "order");
+    this.applyAgentFilter(builder, query);
+    return builder.getCount();
+  }
+
   private countTransactionsForAgent(query: OrderQueryDto, reconciliationStatus?: string, admin?: AdminContext) {
     const builder = this.paymentTransactions.createQueryBuilder("transaction").leftJoin("transaction.order", "order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity");
     if (reconciliationStatus) builder.where("transaction.reconciliationStatus = :reconciliationStatus", { reconciliationStatus });
+    this.applyTenantScope(builder, "transaction", admin);
+    this.applyFinanceTenantFilter(builder, query, admin, "transaction");
+    this.applyAgentFilter(builder, query);
+    return builder.getCount();
+  }
+
+  private countTransactionsForAgentInRange(query: OrderQueryDto, status: string, admin: AdminContext | undefined, start: Date, end: Date) {
+    const builder = this.paymentTransactions.createQueryBuilder("transaction").leftJoin("transaction.order", "order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").where("transaction.status = :status", { status });
+    this.applyCreatedAtRange(builder, "transaction", start, end);
     this.applyTenantScope(builder, "transaction", admin);
     this.applyFinanceTenantFilter(builder, query, admin, "transaction");
     this.applyAgentFilter(builder, query);
@@ -4357,6 +5364,16 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return builder.getCount();
   }
 
+  private countRefundsForAgentInRange(query: OrderQueryDto, status: string | undefined, admin: AdminContext | undefined, start: Date, end: Date) {
+    const builder = this.refunds.createQueryBuilder("refund").leftJoin("refund.order", "order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity");
+    if (status) builder.where("refund.status = :status", { status });
+    this.applyCreatedAtRange(builder, "refund", start, end);
+    this.applyTenantScope(builder, "refund", admin);
+    this.applyFinanceTenantFilter(builder, query, admin, "refund");
+    this.applyAgentFilter(builder, query);
+    return builder.getCount();
+  }
+
   private countCallbackLogsForAgent(query: OrderQueryDto, resultStatus?: string, admin?: AdminContext) {
     const builder = this.paymentCallbackLogs.createQueryBuilder("callback").leftJoin("callback.order", "order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity");
     if (resultStatus) builder.where("callback.resultStatus = :resultStatus", { resultStatus });
@@ -4374,8 +5391,26 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return builder.getRawOne<{ sum: string }>();
   }
 
+  private transactionSumForAgentInRange(query: OrderQueryDto, status: string, admin: AdminContext | undefined, start: Date, end: Date) {
+    const builder = this.paymentTransactions.createQueryBuilder("transaction").leftJoin("transaction.order", "order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").select("COALESCE(SUM(transaction.amount), 0)", "sum").where("transaction.status = :status", { status });
+    this.applyCreatedAtRange(builder, "transaction", start, end);
+    this.applyTenantScope(builder, "transaction", admin);
+    this.applyFinanceTenantFilter(builder, query, admin, "transaction");
+    this.applyAgentFilter(builder, query);
+    return builder.getRawOne<{ sum: string }>();
+  }
+
   private refundSumForAgent(query: OrderQueryDto, status: string, admin?: AdminContext) {
     const builder = this.refunds.createQueryBuilder("refund").leftJoin("refund.order", "order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").select("COALESCE(SUM(refund.amount), 0)", "sum").where("refund.status = :status", { status });
+    this.applyTenantScope(builder, "refund", admin);
+    this.applyFinanceTenantFilter(builder, query, admin, "refund");
+    this.applyAgentFilter(builder, query);
+    return builder.getRawOne<{ sum: string }>();
+  }
+
+  private refundSumForAgentInRange(query: OrderQueryDto, status: string, admin: AdminContext | undefined, start: Date, end: Date) {
+    const builder = this.refunds.createQueryBuilder("refund").leftJoin("refund.order", "order").leftJoin("order.agent", "agent").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").select("COALESCE(SUM(refund.amount), 0)", "sum").where("refund.status = :status", { status });
+    this.applyCreatedAtRange(builder, "refund", start, end);
     this.applyTenantScope(builder, "refund", admin);
     this.applyFinanceTenantFilter(builder, query, admin, "refund");
     this.applyAgentFilter(builder, query);

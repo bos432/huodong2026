@@ -13,6 +13,26 @@
       <view class="category-chip" :class="{ active: !categoryId }" @click="selectCategory(0)">全部</view>
       <view v-for="item in categories" :key="item.id" class="category-chip" :class="{ active: categoryId === item.id }" @click="selectCategory(item.id)">{{ item.name }}</view>
     </scroll-view>
+    <view class="store-section">
+      <view class="section-head compact">
+        <view>
+          <text class="section-kicker dark">多商户商城</text>
+          <text class="section-title dark">选择店铺逛好物</text>
+        </view>
+        <text class="section-more dark">{{ selectedMerchantId ? "当前店铺货架" : "全部店铺商品流" }}</text>
+      </view>
+      <scroll-view class="merchant-row" scroll-x :show-scrollbar="false">
+        <view class="merchant-chip" :class="{ active: !selectedMerchantId }" @click="selectMerchant(0)">
+          <text class="merchant-name">全部店铺</text>
+          <text class="merchant-meta">跨店购物车可合并结算</text>
+        </view>
+        <view v-for="merchant in merchants" :key="merchant.id" class="merchant-chip" :class="{ active: selectedMerchantId === merchant.id }" @click="selectMerchant(merchant.id)">
+          <text class="merchant-name">{{ merchant.name }}</text>
+          <text class="merchant-meta">{{ merchant.ownerType === "agent" ? "代理店铺" : "商家店铺" }}{{ merchant.region ? ` · ${merchant.region}` : "" }}</text>
+          <text class="merchant-entry" @click.stop="goMerchant(merchant)">进店 ›</text>
+        </view>
+      </scroll-view>
+    </view>
     <view class="search-row">
       <input v-model="keyword" confirm-type="search" placeholder="搜索商品或品牌" @confirm="load" />
       <view class="search-btn" @click="load">搜索</view>
@@ -88,6 +108,7 @@
         <image v-if="item.coverUrl" class="cover" :src="item.coverUrl" mode="aspectFill" />
         <view v-else class="cover placeholder">书院好物</view>
         <text v-if="item.brandName" class="brand">{{ item.brandName }}</text>
+        <text v-if="item.merchant?.name" class="merchant-tag">{{ item.merchant.name }}</text>
         <text class="title">{{ item.title }}</text>
         <view class="row">
           <view class="price-stack">
@@ -113,9 +134,11 @@ import TabBar from "../../components/TabBar.vue";
 
 const categories = ref<any[]>([]);
 const products = ref<any[]>([]);
+const merchants = ref<any[]>([]);
 const flashSales = ref<any[]>([]);
 const groupBuys = ref<any[]>([]);
 const categoryId = ref(0);
+const selectedMerchantId = ref(0);
 const loading = ref(false);
 const keyword = ref("");
 const sort = ref<"featured" | "newest" | "hot">("featured");
@@ -131,11 +154,15 @@ function availableProductStock(item: any) { return Math.max(Number(item.stock ||
 async function load() {
   loading.value = true;
   try {
-    categories.value = await request<any[]>("/public/mall/categories").catch(() => []);
-    flashSales.value = await request<any[]>("/public/mall/flash-sales").catch(() => []);
-    groupBuys.value = await request<any[]>("/public/mall/group-buys").catch(() => []);
+    merchants.value = await request<any[]>("/public/mall/merchants").catch(() => []);
+    const scope = selectedMerchantId.value ? `merchantId=${selectedMerchantId.value}` : "";
+    categories.value = await request<any[]>(`/public/mall/categories${scope ? `?${scope}` : ""}`).catch(() => []);
+    const activityScope = selectedMerchantId.value ? `?merchantId=${selectedMerchantId.value}` : "";
+    flashSales.value = await request<any[]>(`/public/mall/flash-sales${activityScope}`).catch(() => []);
+    groupBuys.value = await request<any[]>(`/public/mall/group-buys${activityScope}`).catch(() => []);
     const params = [`pageSize=50`];
     params.push(`sort=${sort.value}`);
+    if (selectedMerchantId.value) params.push(`merchantId=${selectedMerchantId.value}`);
     if (categoryId.value) params.push(`categoryId=${categoryId.value}`);
     const searchText = keyword.value.trim();
     if (searchText) {
@@ -152,6 +179,11 @@ async function load() {
   }
 }
 function selectCategory(id: number) { categoryId.value = id; load(); }
+function selectMerchant(id: number) {
+  selectedMerchantId.value = id;
+  categoryId.value = 0;
+  load();
+}
 function selectSort(value: "featured" | "newest" | "hot") { sort.value = value; load(); }
 function saveRecentKeyword(value: string) {
   recentKeywords.value = [value, ...recentKeywords.value.filter((item) => item !== value)].slice(0, 5);
@@ -162,6 +194,7 @@ function useRecent(value: string) {
   load();
 }
 function goDetail(item: any) { uni.navigateTo({ url: withTenantCode(`/pages/mall/detail?id=${item.id}`) }); }
+function goMerchant(item: any) { if (item?.id) uni.navigateTo({ url: withTenantCode(`/pages/mall/merchant?id=${item.id}`) }); }
 function goFlashCheckout(sale: any) { uni.navigateTo({ url: withTenantCode(`/pages/mall/checkout?skuId=${sale.sku?.id || sale.skuId}&quantity=1&flashSaleId=${sale.id}`) }); }
 function goGroupBuyCheckout(group: any) { uni.navigateTo({ url: withTenantCode(`/pages/mall/checkout?skuId=${group.sku?.id || group.skuId}&quantity=1&groupBuyId=${group.id}`) }); }
 function goCart() { uni.navigateTo({ url: withTenantCode("/pages/mall/cart") }); }
@@ -199,9 +232,21 @@ onShow(() => {
 .flash-section { margin: 18rpx 0 26rpx; padding: 22rpx; border-radius: 30rpx; background: linear-gradient(135deg, #111827, #7f1d1d 56%, #ea580c); box-shadow: 0 18rpx 42rpx rgba(127,29,29,.18); color:#fff; overflow:hidden; }
 .group-section { background: linear-gradient(135deg, #0f172a, #0f766e 58%, #f59e0b); box-shadow: 0 18rpx 42rpx rgba(15,118,110,.16); }
 .section-head { display:flex; align-items:flex-end; justify-content:space-between; gap:16rpx; margin-bottom:18rpx; }
+.section-head.compact { margin-bottom:14rpx; }
 .section-kicker { display:block; color:#fed7aa; font-size:22rpx; font-weight:900; letter-spacing:4rpx; }
+.section-kicker.dark { color:#9a3412; }
 .section-title { display:block; margin-top:4rpx; color:#fff; font-size:34rpx; font-weight:900; }
+.section-title.dark { color:#1f2937; }
 .section-more { color:rgba(255,255,255,.72); font-size:23rpx; }
+.section-more.dark { color:#94a3b8; }
+.store-section { margin: 0 0 22rpx; padding: 22rpx; border-radius: 30rpx; background: rgba(255,255,255,.82); border: 1rpx solid rgba(154,52,18,.08); box-shadow: 0 14rpx 32rpx rgba(124,45,18,.06); }
+.merchant-row { white-space: nowrap; }
+.merchant-chip { display:inline-grid; gap:6rpx; min-width:250rpx; max-width:330rpx; margin-right:14rpx; padding:18rpx 20rpx; border-radius:24rpx; background:#fff7ed; color:#9a3412; border:1rpx solid #fed7aa; vertical-align:top; }
+.merchant-chip.active { background:linear-gradient(135deg,#7c2d12,#ea580c); color:#fff; border-color:transparent; box-shadow:0 14rpx 30rpx rgba(194,65,12,.18); }
+.merchant-name { font-size:27rpx; font-weight:900; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.merchant-meta { font-size:22rpx; opacity:.72; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.merchant-entry { width:fit-content; margin-top:4rpx; padding:6rpx 14rpx; border-radius:999rpx; background:rgba(255,255,255,.72); color:#9a3412; font-size:21rpx; font-weight:900; }
+.merchant-chip.active .merchant-entry { background:rgba(255,247,237,.22); color:#fff7ed; }
 .flash-scroll { white-space:nowrap; }
 .flash-card { display:inline-flex; width:610rpx; margin-right:18rpx; padding:14rpx; border-radius:24rpx; background:rgba(255,255,255,.12); border:1rpx solid rgba(255,255,255,.18); backdrop-filter: blur(12rpx); vertical-align:top; }
 .flash-cover { width:180rpx; height:180rpx; border-radius:18rpx; background:#fed7aa; color:#9a3412; display:flex; align-items:center; justify-content:center; font-weight:900; flex:0 0 auto; }
@@ -220,6 +265,7 @@ onShow(() => {
 .soldout-badge { position:absolute; z-index:2; top:22rpx; right:22rpx; padding:6rpx 14rpx; border-radius:999rpx; color:#fff; background:rgba(15,23,42,.72); font-size:21rpx; font-weight:900; }
 .cover { width: 100%; height: 230rpx; border-radius: 18rpx; background: #fed7aa; display: grid; place-items: center; color: #9a3412; font-size: 26rpx; font-weight: 900; }
 .brand { display: inline-flex; width: fit-content; margin-top: 14rpx; padding: 6rpx 12rpx; border-radius: 999rpx; color: #9a3412; background: #fff7ed; font-size: 21rpx; font-weight: 800; }
+.merchant-tag { display:inline-flex; width:fit-content; margin-top:10rpx; padding:5rpx 11rpx; border-radius:999rpx; color:#0f766e; background:#ecfdf5; font-size:21rpx; font-weight:800; }
 .title { display: block; margin-top: 14rpx; font-size: 28rpx; font-weight: 800; color: #1f2937; min-height: 72rpx; line-height: 1.3; }
 .row { display:flex; justify-content:space-between; align-items:center; margin-top: 10rpx; }
 .price-stack { display:flex; align-items:baseline; gap:8rpx; flex-wrap:wrap; }

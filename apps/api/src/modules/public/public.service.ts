@@ -1,5 +1,6 @@
 ﻿import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcryptjs";
@@ -34,13 +35,18 @@ import { PaymentTransaction } from "../../entities/payment-transaction.entity";
 import { Refund } from "../../entities/refund.entity";
 import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
-import { TenantRegion } from "../../entities/tenant-region.entity";
+import { TenantRegionHitLog } from "../../entities/tenant-region-hit-log.entity";
+import { TenantRegion, TenantRegionBoundaryPoint } from "../../entities/tenant-region.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
 import { UserFavorite } from "../../entities/user-favorite.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
+import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
+import { VolunteerServiceRecord } from "../../entities/volunteer-service-record.entity";
+import { VolunteerTaskApplication } from "../../entities/volunteer-task-application.entity";
+import { VolunteerTask } from "../../entities/volunteer-task.entity";
 import { Waitlist, WaitlistStatus } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { ActivityStatus, OrderStatus, PaymentMethod, RegistrationAnswer, RegistrationStatus } from "../../shared/domain";
@@ -49,19 +55,23 @@ import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults"
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
-import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto } from "./dto";
 import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
 type PublicTrackingContext = { channelCode?: string | null; source?: string | null; inviteCode?: string | null; clientIp?: string | null; userAgent?: string | null };
+type TenantLocationTrackingContext = { source?: string | null; clientIp?: string | null; userAgent?: string | null };
 
 @Injectable()
 export class PublicService {
+  private readonly logger = new Logger(PublicService.name);
+
   constructor(
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(AdminUser) private readonly adminUsers: Repository<AdminUser>,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
     @InjectRepository(TenantRegion) private readonly tenantRegions: Repository<TenantRegion>,
+    @InjectRepository(TenantRegionHitLog) private readonly tenantRegionHitLogs: Repository<TenantRegionHitLog>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
     @InjectRepository(ActivityViewLog) private readonly activityViewLogs: Repository<ActivityViewLog>,
@@ -94,6 +104,10 @@ export class PublicService {
     @InjectRepository(UserLearning) private readonly userLearning: Repository<UserLearning>,
     @InjectRepository(Certificate) private readonly certificates: Repository<Certificate>,
     @InjectRepository(UserFavorite) private readonly userFavorites: Repository<UserFavorite>,
+    @InjectRepository(VolunteerProfile) private readonly volunteerProfiles: Repository<VolunteerProfile>,
+    @InjectRepository(VolunteerTask) private readonly volunteerTasksRepo: Repository<VolunteerTask>,
+    @InjectRepository(VolunteerTaskApplication) private readonly volunteerTaskApplicationsRepo: Repository<VolunteerTaskApplication>,
+    @InjectRepository(VolunteerServiceRecord) private readonly volunteerServiceRecords: Repository<VolunteerServiceRecord>,
     private readonly notificationProvider: NotificationProviderService,
     private readonly paymentProvider: PaymentProviderService,
     private readonly refundCompletion: RefundCompletionService,
@@ -335,6 +349,32 @@ export class PublicService {
     return this.certificates.find({ where: { userId: user.id }, order: { issuedAt: "DESC" } });
   }
 
+  async myCertificateDownload(user: User, id: number) {
+    const certificate = await this.certificates.findOne({ where: { id, userId: user.id } });
+    if (!certificate) throw new NotFoundException("证书不存在");
+    const displayName = user.nickname || user.phone || `用户${user.id}`;
+    const issuedAt = certificate.issuedAt ? new Date(certificate.issuedAt) : new Date();
+    const issuedDate = Number.isNaN(issuedAt.getTime()) ? "" : issuedAt.toLocaleDateString("zh-CN");
+    const safeTitle = this.escapeSvg(certificate.name);
+    const safeName = this.escapeSvg(displayName);
+    const safeDate = this.escapeSvg(issuedDate);
+    const svg = `<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="840" viewBox="0 0 1200 840">
+  <rect width="1200" height="840" fill="#fbf7ef"/>
+  <rect x="54" y="54" width="1092" height="732" rx="26" fill="#fffdf8" stroke="#9f6b43" stroke-width="6"/>
+  <rect x="84" y="84" width="1032" height="672" rx="18" fill="none" stroke="#d8b98c" stroke-width="2"/>
+  <text x="600" y="172" text-anchor="middle" fill="#214b4e" font-size="42" font-weight="700">七维书院</text>
+  <text x="600" y="250" text-anchor="middle" fill="#8b4a3e" font-size="58" font-weight="800">志愿服务证书</text>
+  <text x="600" y="344" text-anchor="middle" fill="#263d3c" font-size="34">授予</text>
+  <text x="600" y="420" text-anchor="middle" fill="#101828" font-size="52" font-weight="800">${safeName}</text>
+  <text x="600" y="506" text-anchor="middle" fill="#475467" font-size="30">感谢你参与公益服务与城市共建</text>
+  <text x="600" y="566" text-anchor="middle" fill="#8b4a3e" font-size="34" font-weight="700">${safeTitle}</text>
+  <line x1="370" y1="646" x2="830" y2="646" stroke="#d8b98c" stroke-width="2"/>
+  <text x="600" y="696" text-anchor="middle" fill="#667085" font-size="26">发放日期：${safeDate}</text>
+</svg>`;
+    return { filename: `${certificate.name || "certificate"}.svg`, svg };
+  }
+
   async myFavoriteCourses(user: User) {
     const rows = await this.userFavorites.find({ where: { userId: user.id }, order: { createdAt: "DESC" } });
     if (!rows.length) return [];
@@ -471,7 +511,7 @@ export class PublicService {
     return tenants.map((tenant) => this.publicHomepageTenant(tenant));
   }
 
-  async resolveTenantByLocation(latitudeText?: string, longitudeText?: string) {
+  async resolveTenantByLocation(latitudeText?: string, longitudeText?: string, tracking: TenantLocationTrackingContext = {}) {
     const latitude = Number(latitudeText);
     const longitude = Number(longitudeText);
     if (!Number.isFinite(latitude) || latitude < -90 || latitude > 90) throw new BadRequestException("定位纬度无效");
@@ -485,13 +525,20 @@ export class PublicService {
       .addOrderBy("region.id", "ASC")
       .getMany();
     const matches = regions
-      .map((region) => ({
-        region,
-        distanceMeters: Math.round(this.geoDistanceMeters(latitude, longitude, Number(region.latitude), Number(region.longitude)))
-      }))
-      .filter((item) => item.distanceMeters <= Number(item.region.radiusMeters || 0))
+      .map((region) => {
+        const distanceMeters = Math.round(this.geoDistanceMeters(latitude, longitude, Number(region.latitude), Number(region.longitude)));
+        const boundaryPoints = this.tenantRegionBoundaryPoints(region);
+        return {
+          region,
+          distanceMeters,
+          matchedByPolygon: boundaryPoints.length >= 3 && this.pointInPolygon(latitude, longitude, boundaryPoints),
+          matchedByRadius: boundaryPoints.length < 3 && distanceMeters <= Number(region.radiusMeters || 0)
+        };
+      })
+      .filter((item) => item.matchedByPolygon || item.matchedByRadius)
       .sort((a, b) => b.region.priority - a.region.priority || a.distanceMeters - b.distanceMeters || a.region.id - b.region.id);
     const match = matches[0] || null;
+    void this.recordTenantRegionHitLog(latitude, longitude, match, tracking);
     return {
       matched: Boolean(match),
       fallback: !match,
@@ -514,6 +561,10 @@ export class PublicService {
 
   charityProjects() {
     return this.charityFund.publicProjects();
+  }
+
+  charityProjectUpdates(projectId: number) {
+    return this.charityFund.publicProjectUpdates(projectId);
   }
 
   async ambassadorLanding() {
@@ -545,6 +596,78 @@ export class PublicService {
     const row = this.ambassadorApplications.create({ name, phone, city, expertise, experience, wechat, source, channelCode, status: "pending" });
     const saved = await this.ambassadorApplications.save(row);
     return { id: saved.id, status: saved.status, submittedAt: saved.createdAt };
+  }
+
+  async volunteerTasks(city?: string) {
+    const builder = this.volunteerTasksRepo.createQueryBuilder("task").where("task.status = :status", { status: "open" }).orderBy("task.startAt", "ASC").addOrderBy("task.id", "DESC").take(100);
+    if (city?.trim()) builder.andWhere("task.city LIKE :city", { city: `%${city.trim()}%` });
+    const rows = await builder.getMany();
+    return rows.map((task) => ({ ...task, appliedCount: 0 }));
+  }
+
+  async applyVolunteer(dto: VolunteerApplyDto, user?: User | null) {
+    const phone = this.normalizePhone(dto.phone);
+    const name = String(dto.name || "").trim();
+    const city = String(dto.city || "").trim();
+    if (!name) throw new BadRequestException("请填写姓名");
+    if (!city) throw new BadRequestException("请填写城市");
+    let profile = await this.volunteerProfiles.findOne({ where: { phone } });
+    if (!profile) {
+      profile = this.volunteerProfiles.create({ user: user || null, name, phone, city, expertise: this.cleanTrackingText(dto.expertise, 160) || null, availableTime: this.cleanTrackingText(dto.availableTime, 160) || null, serviceIntent: this.cleanTrackingText(dto.serviceIntent, 160) || null, status: "pending", level: "participant", serviceHours: "0.00", remark: this.cleanTrackingText(dto.message, 500) || null });
+    } else {
+      profile.user = profile.user || user || null;
+      profile.name = name;
+      profile.city = city;
+      profile.expertise = this.cleanTrackingText(dto.expertise, 160) || profile.expertise;
+      profile.availableTime = this.cleanTrackingText(dto.availableTime, 160) || profile.availableTime;
+      profile.serviceIntent = this.cleanTrackingText(dto.serviceIntent, 160) || profile.serviceIntent;
+      profile.remark = this.cleanTrackingText(dto.message, 500) || profile.remark;
+    }
+    const savedProfile = await this.volunteerProfiles.save(profile);
+    const application = await this.ambassadorApplications.save(this.ambassadorApplications.create({
+      name,
+      phone,
+      city,
+      expertise: savedProfile.serviceIntent || savedProfile.expertise || "志愿服务",
+      experience: this.cleanTrackingText(dto.message, 500) || "申请成为公益志愿者",
+      wechat: phone,
+      source: "volunteer_apply",
+      channelCode: null,
+      status: "pending"
+    }));
+    savedProfile.application = application;
+    await this.volunteerProfiles.save(savedProfile);
+    return { id: savedProfile.id, applicationId: application.id, status: savedProfile.status, submittedAt: savedProfile.createdAt };
+  }
+
+  async applyVolunteerTask(taskId: number, dto: VolunteerTaskApplyDto, user?: User | null) {
+    const task = await this.volunteerTasksRepo.findOne({ where: { id: taskId, status: "open" } });
+    if (!task) throw new NotFoundException("志愿任务不存在或暂未开放");
+    const phone = this.normalizePhone(dto.phone);
+    const name = String(dto.name || "").trim();
+    const city = String(dto.city || "").trim();
+    if (!name) throw new BadRequestException("请填写姓名");
+    if (!city) throw new BadRequestException("请填写城市");
+    let profile = await this.volunteerProfiles.findOne({ where: { phone } });
+    if (!profile) {
+      profile = await this.volunteerProfiles.save(this.volunteerProfiles.create({ user: user || null, name, phone, city, expertise: task.type, availableTime: null, serviceIntent: task.title, status: "pending", level: "participant", serviceHours: "0.00", remark: this.cleanTrackingText(dto.message, 500) || null }));
+    }
+    const existing = await this.volunteerTaskApplicationsRepo.findOne({ where: { task: { id: task.id }, phone, status: "pending" } });
+    if (existing) return { id: existing.id, status: existing.status, submittedAt: existing.createdAt };
+    const application = await this.volunteerTaskApplicationsRepo.save(this.volunteerTaskApplicationsRepo.create({ task, profile, user: user || null, name, phone, city, status: "pending", message: this.cleanTrackingText(dto.message, 500) || null }));
+    return { id: application.id, status: application.status, submittedAt: application.createdAt };
+  }
+
+  async myVolunteer(user: User) {
+    const where: any[] = [{ user: { id: user.id } }];
+    if (user.phone) where.push({ phone: user.phone });
+    const profile = await this.volunteerProfiles.findOne({ where });
+    if (!profile) return { profile: null, applications: [], records: [] };
+    const [applications, records] = await Promise.all([
+      this.volunteerTaskApplicationsRepo.find({ where: { profile: { id: profile.id } }, order: { createdAt: "DESC" } }),
+      this.volunteerServiceRecords.find({ where: { profile: { id: profile.id } }, order: { createdAt: "DESC" } })
+    ]);
+    return { profile, applications, records };
   }
 
   myCharity(user: User) {
@@ -693,10 +816,59 @@ export class PublicService {
       latitude: Number(region.latitude),
       longitude: Number(region.longitude),
       radiusMeters: region.radiusMeters,
+      boundaryPoints: region.boundaryPoints || null,
       exclusive: region.exclusive,
       priority: region.priority,
       distanceMeters: distanceMeters ?? null
     };
+  }
+
+  private async recordTenantRegionHitLog(
+    latitude: number,
+    longitude: number,
+    match: { region: TenantRegion; distanceMeters: number } | null,
+    tracking: TenantLocationTrackingContext
+  ) {
+    try {
+      await this.tenantRegionHitLogs.save(
+        this.tenantRegionHitLogs.create({
+          tenant: match?.region.tenant || null,
+          region: match?.region || null,
+          latitude: latitude.toFixed(6),
+          longitude: longitude.toFixed(6),
+          matched: Boolean(match),
+          distanceMeters: match?.distanceMeters ?? null,
+          source: this.trimLength(tracking.source || "public_tenant_resolve", 40),
+          clientIp: this.trimLength(tracking.clientIp, 64),
+          userAgent: this.trimLength(tracking.userAgent, 255)
+        })
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`Failed to record tenant region hit log: ${message}`);
+    }
+  }
+
+  private trimLength(value: unknown, maxLength: number) {
+    const text = typeof value === "string" ? value.trim() : "";
+    return text ? text.slice(0, maxLength) : null;
+  }
+
+  private tenantRegionBoundaryPoints(region: TenantRegion) {
+    return Array.isArray(region.boundaryPoints) ? region.boundaryPoints : [];
+  }
+
+  private pointInPolygon(latitude: number, longitude: number, points: TenantRegionBoundaryPoint[]) {
+    let inside = false;
+    for (let i = 0, j = points.length - 1; i < points.length; j = i++) {
+      const yi = points[i].lat;
+      const xi = points[i].lng;
+      const yj = points[j].lat;
+      const xj = points[j].lng;
+      const intersects = yi > latitude !== yj > latitude && longitude < ((xj - xi) * (latitude - yi)) / (yj - yi) + xi;
+      if (intersects) inside = !inside;
+    }
+    return inside;
   }
 
   private geoDistanceMeters(lat1: number, lng1: number, lat2: number, lng2: number) {
@@ -926,9 +1098,9 @@ export class PublicService {
   }
 
   async providerPaymentCallback(provider: SupportedPaymentProvider, dto: ProviderPaymentCallbackDto | Record<string, unknown>, rawContext?: Omit<RealPaymentCallbackContext, "body">) {
-    const realProvider = this.paymentProvider.usesRealProvider(provider);
+    const realProvider = await this.paymentProvider.usesRealProvider(provider);
     const context = { body: dto as Record<string, unknown>, headers: rawContext?.headers, rawBody: rawContext?.rawBody };
-    const extractedOrderNo = realProvider ? this.paymentProvider.extractRealCallbackOrderNo(provider, context) : null;
+    const extractedOrderNo = realProvider ? await this.paymentProvider.extractRealCallbackOrderNo(provider, context) : null;
     const preloadedOrder = extractedOrderNo ? await this.orders.findOne({ where: { orderNo: extractedOrderNo } }) : null;
     if (realProvider && !preloadedOrder) {
       const callbackLog = await this.createPaymentCallbackLog(provider, { ...(dto as Record<string, unknown>), orderNo: extractedOrderNo }, null, null);
@@ -968,9 +1140,9 @@ export class PublicService {
   }
 
   async providerRefundNotification(provider: SupportedPaymentProvider, dto: Record<string, unknown>, rawContext?: Omit<RealPaymentCallbackContext, "body">) {
-    if (!this.paymentProvider.usesRealProvider(provider)) throw new BadRequestException("真实退款通知需要先启用真实支付渠道");
+    if (!(await this.paymentProvider.usesRealProvider(provider))) throw new BadRequestException("真实退款通知需要先启用真实支付渠道");
     const context = { body: dto, headers: rawContext?.headers, rawBody: rawContext?.rawBody };
-    const extractedOrderNo = this.paymentProvider.extractRealRefundNotificationOrderNo(provider, context);
+    const extractedOrderNo = await this.paymentProvider.extractRealRefundNotificationOrderNo(provider, context);
     const order = await this.orders.findOne({ where: { orderNo: extractedOrderNo } });
     if (!order) throw new NotFoundException("订单不存在");
     const notification = await this.paymentProvider.parseRealRefundNotificationForOrder(provider, order, context);
@@ -1256,6 +1428,11 @@ export class PublicService {
     const user = await this.users.findOneBy({ id: payload.sub });
     if (!user) throw new UnauthorizedException("登录已失效，请重新登录");
     return user;
+  }
+
+  async optionalUserFromAuthorization(authorization?: string | string[] | null) {
+    const id = this.optionalUserIdFromAuthorization(authorization);
+    return id ? this.users.findOneBy({ id }) : null;
   }
 
   optionalUserIdFromAuthorization(authorization?: string | string[] | null) {
@@ -1587,6 +1764,15 @@ export class PublicService {
     return String(value || "").trim().replace(/[^\w\u4e00-\u9fa5:.-]/g, "").slice(0, max);
   }
 
+  private escapeSvg(value: unknown) {
+    return String(value || "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#39;");
+  }
+
   private async recordPaymentDiscrepancy(order: Order, transactionNo: string, provider: string, amount: number, discrepancyType: string, remark: string) {
     const existingTransaction = await this.paymentTransactions.findOne({ where: { transactionNo } });
     if (existingTransaction) return existingTransaction;
@@ -1699,11 +1885,11 @@ export class PublicService {
     const methods = this.normalizePaymentMethods(setting.paymentMethods);
     if (method === PaymentMethod.Free && methods.free) return;
     if (method === PaymentMethod.Wechat && methods.wechat) {
-      this.assertProviderPaymentReady("wechat", method);
+      await this.assertProviderPaymentReady("wechat", method);
       return;
     }
     if (method === PaymentMethod.Alipay && methods.alipay) {
-      this.assertProviderPaymentReady("alipay", method);
+      await this.assertProviderPaymentReady("alipay", method);
       return;
     }
     if (method === PaymentMethod.Balance && methods.balance) return;
@@ -1711,8 +1897,8 @@ export class PublicService {
     throw new BadRequestException(`${this.paymentMethodLabel(method)}暂未开放，请选择其他支付方式`);
   }
 
-  private assertProviderPaymentReady(provider: SupportedPaymentProvider, method: PaymentMethod) {
-    if (this.paymentProvider.canCreatePayment(provider)) return;
+  private async assertProviderPaymentReady(provider: SupportedPaymentProvider, method: PaymentMethod) {
+    if (await this.paymentProvider.canCreatePayment(provider)) return;
     throw new BadRequestException(`${this.paymentMethodLabel(method)}尚未完成真实支付配置，请选择线下收款或联系主办方`);
   }
 
@@ -1959,7 +2145,8 @@ export class PublicService {
 
   private publicOperationSetting(setting: OperationSetting) {
     const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
-    return { ...publicSetting, paymentMethods: this.normalizePaymentMethods(setting.paymentMethods) };
+    publicSetting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
+    return publicSetting;
   }
 
   private mergeAmbassadorConfig(input?: Record<string, unknown> | null) {

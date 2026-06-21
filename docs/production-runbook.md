@@ -25,29 +25,31 @@ BUILD_TIME=<iso-build-time>
 
 ## 1.1 生产域名
 
-生产环境必须在 `deploy/.env.production` 中替换真实 HTTPS 域名：
+生产环境必须在后台“系统设置 / 部署配置”中维护真实 HTTPS 域名，并可同步生成或校对 `deploy/.env.production` 兜底值：
 
 - `CORS_ORIGIN`：填写真实 H5 和后台域名。
 - `PUBLIC_H5_ORIGIN`：填写真实 H5 入口。
 - `PUBLIC_ADMIN_ORIGIN`：填写真实后台入口。
 - `PUBLIC_API_ORIGIN`：填写真实 API 入口或反向代理地址。
 
-不要继续使用 `localhost`、`127.0.0.1`、`0.0.0.0` 或 `example.com`；这些值会被 `npm run doctor`、`npm run preflight` 和 API 生产配置校验拦截。
+不要继续使用 `localhost`、`127.0.0.1`、`0.0.0.0` 或 `example.com`；这些值会被后台上线体检、`npm run doctor`、`npm run preflight` 和 API 生产配置校验拦截。
 
 ## 2. 发布流程
 
 1. 本地或 CI 执行 `npm run test`。
 2. 执行 `npm run build`。
 3. 后台构建脚本已固定使用 Vite `--configLoader runner`；CI 若单独构建后台，应继续执行 `npm --prefix apps/admin run build`，不要改回裸 `vite build`。
-4. 执行 `npm run init:production-env` 生成或补齐 `deploy/.env.production`；已有文件会保留已填写的真实值，只补模板新增字段或替换仍为占位值的本地密钥。之后确认真实域名、`BUILD_COMMIT`、短信服务商和备份配置均已替换。
+4. 执行 `npm run init:production-env` 生成或补齐 `deploy/.env.production`；已有文件会保留已填写的真实值，只补模板新增字段或替换仍为占位值的本地密钥。之后登录后台“系统设置 / 部署配置”，确认真实域名、`BUILD_COMMIT`、短信服务商、支付商户资料、证书路径、回调 URL 和备份配置均已保存；`.env.production` 作为兜底校对。
 5. 确认 `MULTI_TENANT_ENABLED=false`，除非 Tenant 表、核心表 `tenantId` 迁移、后台权限过滤、公开端边界和跨机构预发验收已经全部完成。
-6. 执行 `npm run preflight`。
-7. 生产数据库备份：`npm run db:backup`。
-8. 如有 migration，执行 `npm --prefix apps/api run migration:show`，确认后执行 `npm --prefix apps/api run migration:run`。
-9. 发布：`docker compose --env-file deploy/.env.production up -d --build`。
-10. 检查 `/api/health/ready` 返回 `ready: true`。
-11. 检查 `/api/health` 中的 `release.version` 和 `release.commit` 与发布记录一致。
-12. 顺序执行 `npm run smoke` 和 `npm run smoke:flow`。两条烟测都会改写共享测试数据，其中 `npm run smoke` 会临时切换全站报名开关，不要并发运行。
+6. 确认 `MALL_MULTI_MERCHANT_ENABLED=false`，除非多商户商城店铺授权、跨店拆单、支付、履约、结算凭证、已结算后退款扣回/冲抵、导出隔离和 `smoke:mall-multi-merchant` 预发验收已经全部通过。
+7. 执行 `npm run preflight`。
+8. 生产数据库备份：`npm run db:backup`。
+9. 如有 migration，执行 `npm --prefix apps/api run migration:show`，确认后执行 `npm --prefix apps/api run migration:run`。
+10. 发布：`docker compose --env-file deploy/.env.production up -d --build`。
+11. 检查 `/api/health/ready` 返回 `ready: true`。
+12. 检查 `/api/health` 中的 `release.version` 和 `release.commit` 与发布记录一致。
+13. 顺序执行 `npm run smoke` 和 `npm run smoke:flow`。两条烟测都会改写共享测试数据，其中 `npm run smoke` 会临时切换全站报名开关，不要并发运行。
+14. 如本次开放或变更多商户商城，执行 `npm run smoke:mall-multi-merchant`，确认 `deploy/mall-multi-merchant-smoke-result.json` 为 `passed=true`；设置 `MALL_MULTI_MERCHANT_PREFLIGHT_PASSED=true` 后重新执行 `npm run preflight`，再执行 `npm run prelaunch:online-showcase` 做真实支付和多商户商城上线门禁。
 
 ## 3. 健康检查
 
@@ -98,7 +100,9 @@ API 每个响应都会带 `X-Request-Id`，错误响应体也会包含 `requestI
 
 生产环境默认使用线下收款，保持 `PAYMENT_SANDBOX_ENABLED=false` 和 `REAL_PAYMENT_ENABLED=false`。
 
-真实微信/支付宝支付上线前，必须先完成官方 SDK 签名、证书验签、退款回调、真实对账单拉取、代理真实打款和预发验收。实施步骤见 `docs/real-payment-integration-plan.md`。预发验收结果写入 `deploy/real-payment-smoke-result.json`，可用 `npm run smoke:real-payment -- --init` 生成模板；结果文件中每个启用渠道的支付场景（微信 Native/H5/JSAPI、支付宝 precreate/WAP/PAGE）及其证据字段必须全部验证为 passed，`agentTransfer` 也必须保留代理、结算单、转账单号、服务商回执号、成功查询、失败用例和回滚记录；未通过前不要打开 `REAL_PAYMENT_ENABLED`，也不要在生产流量中启用沙箱支付端点。
+真实微信/支付宝支付上线前，必须先在后台补齐商户资料、密钥/证书路径、商城平台代收回调、店铺直收回调模板、官方 SDK 签名、证书验签、退款回调、真实对账单拉取、代理真实打款、商城微信支付、店铺直收支付和预发验收状态。实施步骤见 `docs/real-payment-integration-plan.md`。预发验收结果写入 `deploy/real-payment-smoke-result.json`，可用 `npm run smoke:real-payment -- --init` 生成模板；结果文件中每个启用渠道的支付场景（微信 Native/H5/JSAPI、支付宝 precreate/WAP/PAGE）及其证据字段必须全部验证为 passed，`mallPaymentCreate`、`mallPaymentCallback`、`mallPaymentRouteGuard`、`mallRefund` 和 `agentTransfer` 也必须保留店铺/代理、订单/结算单、服务商流水、商户直收支付/退款错路由拒绝、成功查询、失败用例、打款回执和回滚记录；未通过前不要打开 `REAL_PAYMENT_ENABLED`、`MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED` 或 `MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED`，也不要在生产流量中启用沙箱支付端点。
+
+多商户商城开放前，必须先执行 `npm run smoke:mall-multi-merchant` 并保留 `deploy/mall-multi-merchant-smoke-result.json`。该结果需要覆盖店铺主体、店铺授权、商品审核、前台店铺页、跨店购物车、子订单履约、店铺结算、结算完成凭证、已结算后退款扣回/冲抵、支付日志、统计和结算导出；`npm run preflight` 和 `npm run prelaunch:online-showcase` 会检查结果文件是否通过、仍在有效期内且 API 地址匹配。未通过前保持 `MALL_MULTI_MERCHANT_ENABLED=false`。
 
 ## 6. 备份与恢复
 
@@ -150,7 +154,7 @@ RESTORE_CONFIRM=activity_registration BACKUP_FILE=backups/mysql/activity_registr
 - 检查后台登录失败和限流记录。
 - 检查操作日志中高风险动作。
 - 抽查管理员角色，确认 `finance`、`operator`、`checkin_staff` 没有被误授予超级管理员权限。
-- 抽样验证免费活动、付费活动、签到、评价、导出、服务商账单导入、上传目录公开访问和代理结算打款凭证。
+- 抽样验证免费活动、付费活动、签到、评价、导出、服务商账单导入、上传目录公开访问、代理结算打款凭证和服务商回执。
 
 每月：
 

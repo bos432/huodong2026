@@ -12,6 +12,7 @@ const notifications = ref<any[]>([]);
 const schedules = ref<any[]>([]);
 const providers = ref<any[]>([]);
 const activities = ref<any[]>([]);
+const tags = ref<any[]>([]);
 const loading = ref(false);
 const drawer = ref(false);
 const scheduleDrawer = ref(false);
@@ -36,6 +37,7 @@ const scheduleForm = reactive({
 const sendForm = reactive({
   templateId: undefined as number | undefined,
   activityId: undefined as number | undefined,
+  tagName: "",
   channel: "site",
   title: "",
   content: "",
@@ -44,6 +46,19 @@ const sendForm = reactive({
 
 const selectedTemplate = computed(() => templates.value.find((item) => item.id === sendForm.templateId));
 const canSendActivityReminder = computed(() => Boolean(sendForm.activityId && (sendForm.templateId || (sendForm.title.trim() && sendForm.content.trim()))));
+const tagOptions = computed(() => {
+  const map = new Map<string, { name: string; count: number; color: string }>();
+  for (const tag of tags.value) {
+    const name = String(tag?.name || "").trim();
+    if (!name) continue;
+    const existing = map.get(name);
+    if (existing) existing.count += 1;
+    else map.set(name, { name, count: 1, color: tag.color || "default" });
+  }
+  return Array.from(map.values()).sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+});
+const selectedTag = computed(() => tagOptions.value.find((item) => item.name === sendForm.tagName));
+const canSendTaggedNotification = computed(() => Boolean(sendForm.tagName && (sendForm.templateId || (sendForm.title.trim() && sendForm.content.trim()))));
 const tenantId = currentTenantId();
 
 function routeActivityId() {
@@ -64,18 +79,20 @@ function applyRouteActivity() {
 async function load() {
   loading.value = true;
   try {
-    const [tpls, records, acts, rules, providerRows] = await Promise.all([
+    const [tpls, records, acts, rules, providerRows, tagRows] = await Promise.all([
       api.get<any, any[]>("/admin/notification-templates"),
       api.get<any, any[]>("/admin/notifications"),
       api.get<any, any[]>("/admin/activities"),
       api.get<any, any[]>("/admin/notification-schedules"),
-      api.get<any, any[]>("/admin/notification-providers")
+      api.get<any, any[]>("/admin/notification-providers"),
+      api.get<any, any[]>("/admin/tags")
     ]);
     templates.value = tpls;
     notifications.value = records;
     activities.value = Array.isArray(acts) ? acts : (acts as any).items || [];
     schedules.value = rules;
     providers.value = providerRows;
+    tags.value = tagRows;
     applyRouteActivity();
   } finally {
     loading.value = false;
@@ -222,6 +239,24 @@ async function sendActivityReminder() {
   load();
 }
 
+async function sendTaggedNotification() {
+  if (!sendForm.tagName) {
+    ElMessage.warning("请先选择会员分群标签");
+    return;
+  }
+  const label = selectedTag.value ? `${selectedTag.value.name}（${selectedTag.value.count}人）` : sendForm.tagName;
+  await ElMessageBox.confirm(`确认向会员分群「${label}」批量发送通知？发送前请确认标题、内容、渠道和服务商配置。`, "发送分群通知", { type: "warning", confirmButtonText: "确认发送", cancelButtonText: "再预览一下" });
+  const result = await api.post<any, { matchedCount: number; sentCount: number; failedCount: number }>("/admin/notifications/send-by-tag", {
+    ...sendForm,
+    activityId: sendForm.activityId || undefined,
+    templateId: sendForm.templateId || undefined,
+    tagName: sendForm.tagName
+  });
+  ElMessage.success(`已处理 ${result.matchedCount} 位会员，成功 ${result.sentCount} 条，失败 ${result.failedCount} 条`);
+  resetSendForm();
+  load();
+}
+
 async function retryNotification(row: any) {
   await ElMessageBox.confirm(`确认重试发送「${row.title}」？如果服务商配置仍异常，可能会再次失败并记录重试次数。`, "重试通知", { type: "info", confirmButtonText: "确认重试", cancelButtonText: "取消" });
   await api.post(`/admin/notifications/${row.id}/retry`);
@@ -230,7 +265,7 @@ async function retryNotification(row: any) {
 }
 
 function resetSendForm() {
-  Object.assign(sendForm, { templateId: undefined, activityId: undefined, channel: "site", title: "", content: "", remark: "" });
+  Object.assign(sendForm, { templateId: undefined, activityId: undefined, tagName: "", channel: "site", title: "", content: "", remark: "" });
 }
 
 function templateTenantId(row: any) {
@@ -302,6 +337,12 @@ watch(
               <el-option v-for="item in activities" :key="item.id" :label="item.title" :value="item.id" />
             </el-select>
           </el-form-item>
+          <el-form-item label="会员分群">
+            <el-select v-model="sendForm.tagName" clearable filterable placeholder="可选：按用户标签批量发送">
+              <el-option v-for="item in tagOptions" :key="item.name" :label="`${item.name}（${item.count}人）`" :value="item.name" />
+            </el-select>
+            <small v-if="selectedTag" class="field-tip">当前分群预计触达 {{ selectedTag.count }} 位会员；商家后台发送分群通知需同时选择关联活动。</small>
+          </el-form-item>
           <el-form-item label="渠道">
             <el-select v-model="sendForm.channel">
               <el-option label="站内通知" value="site" />
@@ -317,6 +358,7 @@ watch(
             <el-button @click="previewNotification">预览</el-button>
             <el-button type="primary" @click="send">发送单条</el-button>
             <el-button type="success" :disabled="!canSendActivityReminder" @click="sendActivityReminder">发送活动提醒</el-button>
+            <el-button type="warning" :disabled="!canSendTaggedNotification" @click="sendTaggedNotification">发送分群通知</el-button>
           </div>
         </el-form>
       </div>
@@ -479,6 +521,7 @@ watch(
 .tips { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
 .page-hint { margin-bottom: 16px; }
 .tips span { color: #667085; font-size: 13px; }
+.field-tip { display: block; margin-top: 6px; color: #667085; line-height: 1.5; }
 .provider-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .provider { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; display: grid; gap: 6px; min-height: 118px; }
 .provider span, .provider small { color: #667085; font-size: 12px; }

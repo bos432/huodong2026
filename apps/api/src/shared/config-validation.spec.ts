@@ -114,6 +114,8 @@ describe("runtime config validation", () => {
     expect(report.checks.find((check) => check.key === "REAL_REFUND_QUERY_IMPLEMENTED")?.status).toBe("warning");
     expect(report.checks.find((check) => check.key === "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED")?.status).toBe("warning");
     expect(report.checks.find((check) => check.key === "AGENT_REAL_TRANSFER_IMPLEMENTED")?.status).toBe("warning");
+    expect(report.checks.find((check) => check.key === "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED")?.status).toBe("warning");
+    expect(report.checks.find((check) => check.key === "MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED")?.status).toBe("warning");
     expect(report.checks.find((check) => check.key === "REAL_PAYMENT_PREFLIGHT_PASSED")?.status).toBe("warning");
   });
 
@@ -128,6 +130,8 @@ describe("runtime config validation", () => {
         REAL_REFUND_QUERY_IMPLEMENTED: "true",
         REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED: "true",
         AGENT_REAL_TRANSFER_IMPLEMENTED: "true",
+        MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED: "true",
+        MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED: "true",
         REAL_PAYMENT_PREFLIGHT_PASSED: "true"
       })
     );
@@ -136,6 +140,8 @@ describe("runtime config validation", () => {
     expect(report.checks.find((check) => check.key === "REAL_REFUND_QUERY_IMPLEMENTED")?.status).toBe("ok");
     expect(report.checks.find((check) => check.key === "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED")?.status).toBe("ok");
     expect(report.checks.find((check) => check.key === "AGENT_REAL_TRANSFER_IMPLEMENTED")?.status).toBe("ok");
+    expect(report.checks.find((check) => check.key === "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED")?.status).toBe("ok");
+    expect(report.checks.find((check) => check.key === "MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED")?.status).toBe("ok");
     expect(report.checks.find((check) => check.key === "REAL_PAYMENT_PREFLIGHT_PASSED")?.status).toBe("ok");
   });
 
@@ -163,5 +169,27 @@ describe("runtime config validation", () => {
     expect(report.checks.find((check) => check.key === "MULTI_TENANT_ACCESS_FILTER_IMPLEMENTED")?.status).toBe("ok");
     expect(report.checks.find((check) => check.key === "MULTI_TENANT_PUBLIC_BOUNDARY_IMPLEMENTED")?.status).toBe("ok");
     expect(report.checks.find((check) => check.key === "MULTI_TENANT_PREFLIGHT_PASSED")?.status).toBe("ok");
+  });
+
+  it("keeps multi-merchant mall disabled by default in production", () => {
+    const report = inspectRuntimeConfig(config({ NODE_ENV: "production" }));
+    expect(report.checks.find((check) => check.key === "MALL_MULTI_MERCHANT_ENABLED")?.status).toBe("ok");
+  });
+
+  it("warns when multi-merchant mall is enabled before smoke evidence is marked complete", () => {
+    const report = inspectRuntimeConfig(config({ NODE_ENV: "production", MALL_MULTI_MERCHANT_ENABLED: "true" }));
+    expect(report.checks.find((check) => check.key === "MALL_MULTI_MERCHANT_ENABLED")?.status).toBe("warning");
+    expect(report.checks.find((check) => check.key === "MALL_MULTI_MERCHANT_PREFLIGHT_PASSED")?.status).toBe("warning");
+  });
+
+  it("marks multi-merchant mall preflight ok when smoke evidence is declared", () => {
+    const report = inspectRuntimeConfig(
+      config({
+        NODE_ENV: "production",
+        MALL_MULTI_MERCHANT_ENABLED: "true",
+        MALL_MULTI_MERCHANT_PREFLIGHT_PASSED: "true"
+      })
+    );
+    expect(report.checks.find((check) => check.key === "MALL_MULTI_MERCHANT_PREFLIGHT_PASSED")?.status).toBe("ok");
   });
 });

@@ -30,6 +30,17 @@ const pageHintDescription = computed(() =>
     ? "可按商家监管订单流水、退款、回调和服务商账单；处理差异前请确认所属商家和收款账户。"
     : "退款审核、对账处理会影响订单、报名和收入统计。处理前请先核对服务商流水、线下沟通记录和订单状态。"
 );
+const dailyStatusText: Record<string, string> = {
+  ok: "正常",
+  warning: "需关注",
+  danger: "需处理"
+};
+const dailyStatusType: Record<string, string> = {
+  ok: "success",
+  warning: "warning",
+  danger: "danger"
+};
+const riskAlerts = computed(() => data.value?.riskAlerts || []);
 
 const refundStatusText: Record<string, string> = {
   pending: "待审核",
@@ -287,6 +298,12 @@ function callbackType(status: string) {
   return callbackStatusType[status] || "info";
 }
 
+function riskAlertType(level: string) {
+  if (level === "danger") return "error";
+  if (level === "warning") return "warning";
+  return "info";
+}
+
 function formatTime(value?: string) {
   if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
@@ -346,6 +363,43 @@ watch(
             </el-select>
           </el-form-item>
         </el-form>
+      </div>
+
+      <div class="operation-grid" v-loading="loading">
+        <div class="daily-card">
+          <div class="daily-head">
+            <div>
+              <span>今日经营日报</span>
+              <strong>¥{{ money(data.dailyReport?.netAmount) }}</strong>
+            </div>
+            <el-tag :type="dailyStatusType[data.dailyReport?.status] || 'info'">{{ dailyStatusText[data.dailyReport?.status] || "未生成" }}</el-tag>
+          </div>
+          <div class="daily-metrics">
+            <div><span>实收</span><strong>¥{{ money(data.dailyReport?.paidAmount) }}</strong></div>
+            <div><span>退款</span><strong>¥{{ money(data.dailyReport?.refundAmount) }}</strong></div>
+            <div><span>已支付</span><strong>{{ data.dailyReport?.paidOrderCount || 0 }}</strong></div>
+            <div><span>待支付</span><strong>{{ data.dailyReport?.pendingOrderCount || 0 }}</strong></div>
+            <div><span>退款率</span><strong>{{ data.dailyReport?.refundRatePercent || "0.00" }}%</strong></div>
+            <div><span>待审退款</span><strong>{{ data.dailyReport?.pendingRefundCount || 0 }}</strong></div>
+          </div>
+        </div>
+        <div class="risk-panel">
+          <div class="risk-head">
+            <span>异常提醒</span>
+            <el-tag>{{ riskAlerts.length }}</el-tag>
+          </div>
+          <el-empty v-if="!riskAlerts.length" description="暂无待处理异常" />
+          <div v-else class="risk-list">
+            <el-alert v-for="item in riskAlerts" :key="item.key" :type="riskAlertType(item.level)" :closable="false" show-icon>
+              <template #title>
+                <div class="risk-title">
+                  <strong>{{ item.title }}</strong>
+                  <span>{{ item.action }}</span>
+                </div>
+              </template>
+            </el-alert>
+          </div>
+        </div>
       </div>
 
       <div class="metric-grid" v-loading="loading">
@@ -509,6 +563,20 @@ watch(
 .toolbar-actions { display: flex; align-items: center; gap: 10px; }
 .page-hint { margin-bottom: 16px; }
 .filter-card { margin-bottom: 16px; padding-bottom: 0; }
+.operation-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr); gap: 16px; margin-bottom: 18px; }
+.daily-card, .risk-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; min-width: 0; }
+.daily-head, .risk-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+.daily-head div { display: grid; gap: 6px; }
+.daily-head span, .risk-head span { color: #667085; font-size: 13px; }
+.daily-head strong { color: #111827; font-size: 26px; line-height: 1.2; }
+.daily-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.daily-metrics div { min-height: 70px; border: 1px solid #edf0f5; border-radius: 8px; padding: 12px; display: grid; gap: 6px; }
+.daily-metrics span { color: #667085; font-size: 13px; }
+.daily-metrics strong { color: #111827; font-size: 18px; line-height: 1.2; overflow-wrap: anywhere; }
+.risk-list { display: grid; gap: 10px; }
+.risk-title { display: grid; gap: 4px; }
+.risk-title strong { font-size: 14px; line-height: 1.35; }
+.risk-title span { color: #667085; font-size: 12px; line-height: 1.45; }
 .metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .metric { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; display: grid; gap: 8px; min-height: 98px; }
 .metric span { color: #667085; font-size: 13px; }
@@ -516,6 +584,8 @@ watch(
 .records { margin-top: 16px; }
 .table-actions { display: flex; gap: 8px; }
 h3 { margin: 0 0 16px; }
+@media (max-width: 1200px) { .operation-grid { grid-template-columns: 1fr; } }
 @media (max-width: 1200px) { .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
-@media (max-width: 760px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 760px) { .daily-metrics, .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 560px) { .daily-metrics, .metric-grid { grid-template-columns: 1fr; } }
 </style>

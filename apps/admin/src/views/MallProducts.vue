@@ -2,20 +2,66 @@
   <div class="mall-page">
     <div class="page-header">
       <div>
-        <h2>商城商品</h2>
-        <p>管理商品分类、SKU、价格、库存和上下架。商品按商家隔离，前台只展示已上架商品。</p>
+        <h2>{{ pageTitle }}</h2>
+        <p>{{ pageSubtitle }}</p>
       </div>
       <div class="header-actions">
         <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="选择商家" style="width: 220px" @change="handleTenantChange">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
         </el-select>
-        <el-button @click="categoryDialogVisible = true">分类管理</el-button>
-        <el-button @click="openCouponDialog">优惠券</el-button>
+        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部店铺" style="width: 220px" @change="handleMerchantChange">
+          <el-option v-for="merchant in merchants" :key="merchant.id" :label="merchantLabel(merchant)" :value="merchant.id" />
+        </el-select>
+        <el-button @click="openCategoryManagement">店铺分类</el-button>
+        <el-button :disabled="selectedMerchant && !selectedMerchantOpen" @click="openCouponDialog">优惠券</el-button>
         <el-button :type="lowStockItems.length ? 'danger' : 'default'" @click="openLowStockDialog">低库存提醒{{ lowStockItems.length ? `（${lowStockItems.length}）` : "" }}</el-button>
         <el-button @click="exportProductSales">导出销售统计</el-button>
-        <el-button type="primary" @click="createProduct">新增商品</el-button>
+        <el-button type="primary" :disabled="selectedMerchant && !selectedMerchantOpen" @click="createProduct">新增商品</el-button>
       </div>
     </div>
+
+    <el-alert
+      v-if="deepLinkWarning"
+      class="deep-link-alert"
+      type="error"
+      show-icon
+      :closable="false"
+      title="商品管理店铺链接不可用"
+      :description="deepLinkWarning"
+    />
+
+    <el-card v-if="selectedMerchant && !deepLinkWarning" shadow="never" class="merchant-context-card">
+      <div class="merchant-context-main">
+        <div>
+          <strong>当前运营店铺：{{ selectedMerchant.name || selectedMerchant.code }}</strong>
+          <p>{{ selectedMerchant.tenant?.name || selectedMerchant.tenant?.code || "平台店铺" }} · {{ merchantOwnerText(selectedMerchant) }} · {{ selectedMerchant.region || "未设置区域" }}</p>
+        </div>
+        <div class="merchant-context-tags">
+          <el-tag :type="selectedMerchant.mallEnabled === false || selectedMerchant.status !== 'active' ? 'info' : 'success'">{{ selectedMerchant.mallEnabled === false || selectedMerchant.status !== 'active' ? "商城未开放" : "商城已开放" }}</el-tag>
+          <el-tag type="warning" effect="plain">{{ paymentModeText(selectedMerchant.paymentMode) }}</el-tag>
+          <el-tag v-if="merchantProductAuditRequired(selectedMerchant)" type="warning" effect="plain">商品需审核</el-tag>
+        </div>
+      </div>
+      <div class="merchant-context-actions">
+        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-payments')">收款配置</el-button>
+        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-categories')">店铺分类</el-button>
+        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-orders')">订单管理</el-button>
+        <el-button size="small" type="warning" plain @click="goMerchantAdmin('/mall-refunds')">售后处理</el-button>
+        <el-button size="small" type="success" plain @click="goMerchantAdmin('/mall-marketing')">营销工具</el-button>
+        <el-button size="small" type="info" plain @click="goMerchantAdmin('/mall-statistics')">经营统计</el-button>
+        <el-button size="small" @click="openMerchantH5">打开 H5 店铺</el-button>
+        <el-button size="small" @click="copyMerchantPageLink">复制当前后台链接</el-button>
+      </div>
+    </el-card>
+    <el-alert
+      v-if="selectedMerchant && !deepLinkWarning && !selectedMerchantOpen"
+      class="merchant-disabled-alert"
+      type="warning"
+      show-icon
+      :closable="false"
+      title="当前店铺未开放商城"
+      :description="selectedMerchantDisabledReason"
+    />
 
     <div class="filter-bar">
       <el-select v-model="filters.categoryId" clearable placeholder="全部分类" style="width: 160px" @change="applyProductFilters">
@@ -23,6 +69,7 @@
       </el-select>
       <el-select v-model="filters.status" clearable placeholder="全部状态" style="width: 140px" @change="applyProductFilters">
         <el-option label="草稿" value="draft" />
+        <el-option label="待审核" value="pending_review" />
         <el-option label="已上架" value="published" />
         <el-option label="已下架" value="offline" />
       </el-select>
@@ -50,6 +97,7 @@
         </template>
       </el-table-column>
       <el-table-column v-if="isPlatformAdmin()" label="商家" min-width="160"><template #default="{ row }">{{ row.tenant?.name || row.tenant?.code }}</template></el-table-column>
+      <el-table-column label="店铺" min-width="160"><template #default="{ row }">{{ row.merchant?.name || "默认店铺" }}</template></el-table-column>
       <el-table-column label="价格" width="110"><template #default="{ row }">¥{{ money(row.price) }}</template></el-table-column>
       <el-table-column label="销售" width="130">
         <template #default="{ row }">
@@ -63,8 +111,10 @@
       <el-table-column label="创建时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
       <el-table-column label="操作" width="300" fixed="right">
         <template #default="{ row }">
-          <el-button size="small" @click="editProduct(row)">编辑</el-button>
-          <el-button size="small" type="warning" plain @click="openStockAdjust(row)">调整库存</el-button>
+          <el-button v-if="canAuditProducts && row.status === 'pending_review'" size="small" type="success" @click="approveProduct(row)">通过</el-button>
+          <el-button v-if="canAuditProducts && row.status === 'pending_review'" size="small" type="danger" plain @click="rejectProduct(row)">驳回</el-button>
+          <el-button size="small" :disabled="!rowMerchantOperational(row)" @click="editProduct(row)">编辑</el-button>
+          <el-button size="small" type="warning" plain :disabled="!rowMerchantOperational(row)" @click="openStockAdjust(row)">调整库存</el-button>
           <el-button size="small" @click="openInventoryLogs(row)">库存流水</el-button>
         </template>
       </el-table-column>
@@ -73,8 +123,13 @@
     <el-dialog v-model="productDialogVisible" :title="form.id ? '编辑商品' : '新增商品'" width="760px" destroy-on-close>
       <el-form label-width="96px">
         <el-form-item v-if="isPlatformAdmin()" label="所属商家" required>
-          <el-select v-model="form.tenantId" filterable placeholder="请选择商家" @change="loadCategories">
+          <el-select v-model="form.tenantId" filterable placeholder="请选择商家" @change="handleFormTenantChange">
             <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="所属店铺" required>
+          <el-select v-model="form.merchantId" filterable placeholder="请选择要发布商品的店铺" @change="loadCategories">
+            <el-option v-for="merchant in formMerchants" :key="merchant.id" :label="merchantLabel(merchant)" :value="merchant.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="商品名称" required><el-input v-model="form.title" /></el-form-item>
@@ -82,7 +137,12 @@
         <el-form-item label="分类"><el-select v-model="form.categoryId" clearable placeholder="未分类"><el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" /></el-select></el-form-item>
         <el-form-item label="封面图"><el-input v-model="form.coverUrl" placeholder="图片 URL，后续可接上传组件" /></el-form-item>
         <el-form-item label="商品介绍"><el-input v-model="form.description" type="textarea" :rows="4" /></el-form-item>
-        <el-form-item label="状态"><el-select v-model="form.status"><el-option label="草稿" value="draft" /><el-option label="已上架" value="published" /><el-option label="已下架" value="offline" /></el-select></el-form-item>
+        <el-form-item label="状态">
+          <el-select v-model="form.status">
+            <el-option v-for="option in productStatusOptions" :key="option.value" :label="option.label" :value="option.value" :disabled="option.disabled" />
+          </el-select>
+          <span v-if="productStatusHint" class="form-hint">{{ productStatusHint }}</span>
+        </el-form-item>
         <el-form-item label="推荐"><el-switch v-model="form.featured" /></el-form-item>
         <el-form-item label="排序"><el-input-number v-model="form.sortOrder" :precision="0" /><span class="form-hint">数字越小越靠前，推荐商品仍优先展示</span></el-form-item>
         <el-form-item label="配送说明"><el-input v-model="form.deliveryNote" /></el-form-item>
@@ -100,34 +160,8 @@
       </el-form>
       <template #footer>
         <el-button @click="productDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveProduct">保存</el-button>
+        <el-button type="primary" :loading="saving" :disabled="formMerchant && !merchantOperational(formMerchant)" @click="saveProduct">保存</el-button>
       </template>
-    </el-dialog>
-
-    <el-dialog v-model="categoryDialogVisible" title="商城分类" width="760px">
-      <div class="category-header">
-        <el-input v-model="categoryForm.name" placeholder="分类名称" />
-        <el-input v-model="categoryForm.iconUrl" placeholder="图标 URL，可选" />
-        <el-input-number v-model="categoryForm.sortOrder" :precision="0" placeholder="排序" />
-        <el-button type="primary" @click="saveCategory">新增分类</el-button>
-      </div>
-      <el-table :data="categories" size="small">
-        <el-table-column label="分类名称" min-width="150">
-          <template #default="{ row }"><el-input v-model="row.name" /></template>
-        </el-table-column>
-        <el-table-column label="图标 URL" min-width="220">
-          <template #default="{ row }"><el-input v-model="row.iconUrl" placeholder="可选" /></template>
-        </el-table-column>
-        <el-table-column label="排序" width="110">
-          <template #default="{ row }"><el-input-number v-model="row.sortOrder" :precision="0" /></template>
-        </el-table-column>
-        <el-table-column label="启用" width="80">
-          <template #default="{ row }"><el-switch v-model="row.enabled" /></template>
-        </el-table-column>
-        <el-table-column label="操作" width="90">
-          <template #default="{ row }"><el-button size="small" type="primary" @click="updateCategory(row)">保存</el-button></template>
-        </el-table-column>
-      </el-table>
     </el-dialog>
 
     <el-dialog v-model="couponDialogVisible" title="商城优惠券" width="980px">
@@ -155,7 +189,7 @@
         <el-switch v-model="couponForm.enabled" active-text="启用" />
         <el-date-picker v-model="couponForm.startsAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="开始时间" />
         <el-date-picker v-model="couponForm.endsAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="结束时间" />
-        <el-button type="primary" :loading="couponSaving" @click="saveCoupon">{{ couponForm.id ? "保存优惠券" : "新增优惠券" }}</el-button>
+        <el-button type="primary" :loading="couponSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveCoupon">{{ couponForm.id ? "保存优惠券" : "新增优惠券" }}</el-button>
         <el-button v-if="couponForm.id" @click="resetCouponForm">取消编辑</el-button>
       </div>
       <el-table v-loading="couponLoading" :data="coupons" size="small" border>
@@ -169,7 +203,7 @@
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
             <el-button size="small" @click="editCoupon(row)">编辑</el-button>
-            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain @click="toggleCoupon(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
+            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="toggleCoupon(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -219,7 +253,7 @@
           <template #default="{ row }">{{ Number(row.availableStock || 0) === 0 ? "立即补货或下架" : "关注销售速度，准备补货" }}</template>
         </el-table-column>
         <el-table-column label="操作" width="120">
-          <template #default="{ row }"><el-button size="small" type="warning" plain @click="openLowStockAdjust(row)">调整库存</el-button></template>
+          <template #default="{ row }"><el-button size="small" type="warning" plain :disabled="!rowMerchantOperational(row)" @click="openLowStockAdjust(row)">调整库存</el-button></template>
         </el-table-column>
       </el-table>
     </el-dialog>
@@ -246,28 +280,29 @@
       </el-form>
       <template #footer>
         <el-button @click="stockDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="stockAdjusting" @click="submitStockAdjust">确认调整</el-button>
+        <el-button type="primary" :loading="stockAdjusting" :disabled="stockMerchant && !merchantOperational(stockMerchant)" @click="submitStockAdjust">确认调整</el-button>
       </template>
     </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { api, downloadFile } from "../api";
-import { isPlatformAdmin } from "../permissions";
+import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
+import { hasPermission, isPlatformAdmin } from "../permissions";
 
 const route = useRoute();
 const router = useRouter();
 const products = ref<any[]>([]);
 const categories = ref<any[]>([]);
 const tenants = ref<any[]>([]);
+const merchants = ref<any[]>([]);
 const loading = ref(false);
 const saving = ref(false);
 const productDialogVisible = ref(false);
-const categoryDialogVisible = ref(false);
 const couponDialogVisible = ref(false);
 const inventoryDialogVisible = ref(false);
 const lowStockDialogVisible = ref(false);
@@ -280,44 +315,200 @@ const coupons = ref<any[]>([]);
 const lowStockItems = ref<any[]>([]);
 const inventorySkus = ref<any[]>([]);
 const stockSkus = ref<any[]>([]);
+const stockMerchant = ref<any | null>(null);
 const lowStockThreshold = ref(10);
+const deepLinkWarning = ref("");
 const routeTenantId = () => {
   const id = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : 0;
   return isPlatformAdmin() && id ? id : undefined;
 };
-const filters = reactive({ tenantId: routeTenantId() as number | undefined, categoryId: undefined as number | undefined, status: "", keyword: "" });
-const categoryForm = reactive({ name: "", iconUrl: "", sortOrder: 0 });
+const routeMerchantId = () => {
+  const id = typeof route.query.merchantId === "string" ? Number(route.query.merchantId) : 0;
+  return id || undefined;
+};
+const routeCategoryId = () => {
+  const id = typeof route.query.categoryId === "string" ? Number(route.query.categoryId) : 0;
+  return id || undefined;
+};
+const routeKeyword = () => typeof route.query.keyword === "string" ? route.query.keyword : "";
+const filters = reactive({ tenantId: routeTenantId() as number | undefined, merchantId: routeMerchantId() as number | undefined, categoryId: routeCategoryId() as number | undefined, status: "", keyword: routeKeyword() });
 const couponFilters = reactive({ keyword: "", enabled: "", status: "" });
 const couponForm = reactive<any>({ id: null, code: "", name: "", minAmount: 0, discountAmount: 0, usageLimit: 0, enabled: true, startsAt: null, endsAt: null });
 const form = reactive<any>({ skus: [] });
-const inventoryFilters = reactive({ tenantId: undefined as number | undefined, skuId: undefined as number | undefined, keyword: "" });
+const inventoryFilters = reactive({ tenantId: undefined as number | undefined, merchantId: undefined as number | undefined, skuId: undefined as number | undefined, keyword: "" });
 const stockForm = reactive({ productTitle: "", skuId: undefined as number | undefined, stock: 0, remark: "" });
+const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
+const formMerchants = computed(() => merchants.value.filter((merchant) => !form.tenantId || merchant.tenant?.id === form.tenantId));
+const formMerchant = computed(() => formMerchants.value.find((merchant) => merchant.id === form.merchantId) || selectedMerchant.value);
+const selectedMerchantOpen = computed(() => merchantOperational(selectedMerchant.value));
+const selectedMerchantDisabledReason = computed(() => merchantDisabledReason(selectedMerchant.value));
+const canAuditProducts = computed(() => isPlatformAdmin() && hasPermission("mall.product.audit"));
+const isAuditPage = computed(() => route.path === "/mall-product-audits" || String(route.query.panel || "") === "product-audits");
+const pageTitle = computed(() => isAuditPage.value ? "商城商品审核" : "商城商品");
+const pageSubtitle = computed(() =>
+  isAuditPage.value
+    ? "审核商家/代理店铺提交的商品。通过后前台展示，驳回后退回草稿，店铺可修改后重新提交。"
+    : "管理商品、SKU、价格、库存和上下架。分类已拆到「店铺分类」独立维护，商品按店铺隔离，前台只展示已上架商品。"
+);
+const productStatusOptions = computed(() => {
+  const auditRequired = merchantProductAuditRequired(formMerchant.value);
+  if (auditRequired && !isPlatformAdmin()) {
+    return [
+      { label: "草稿", value: "draft", disabled: false },
+      { label: "提交平台审核", value: "pending_review", disabled: false },
+      ...(form.status === "published" ? [{ label: "已上架（保存修改将重新审核）", value: "published", disabled: false }] : []),
+      { label: "已下架", value: "offline", disabled: false }
+    ];
+  }
+  return [
+    { label: "草稿", value: "draft", disabled: false },
+    { label: "待审核", value: "pending_review", disabled: false },
+    { label: "已上架", value: "published", disabled: false },
+    { label: "已下架", value: "offline", disabled: false }
+  ];
+});
+const productStatusHint = computed(() => {
+  const auditRequired = merchantProductAuditRequired(formMerchant.value);
+  if (!auditRequired) return "该店铺免审核：保存为已上架后会直接在 H5/小程序展示。";
+  if (isPlatformAdmin()) return "该店铺开启商品审核：平台账号可直接上架，也可保存为待审核。";
+  if (form.status === "published") return "该店铺开启商品审核：保存已上架商品的修改后会重新进入待审核，平台通过前不展示。";
+  return "该店铺开启商品审核：提交后进入待审核，平台通过后才在 H5/小程序展示。";
+});
 
 function tenantLabel(tenant: any) { return `${tenant.name || tenant.code}（${tenant.code}）`; }
+function merchantLabel(merchant: any) {
+  const owner = merchant.ownerType === "agent" ? "代理店铺" : "商家店铺";
+  const status = merchant.mallEnabled === false || merchant.status !== "active" ? " · 未开放" : "";
+  return `${merchant.name || merchant.code}（${owner}${merchant.region ? ` · ${merchant.region}` : ""}${status}）`;
+}
+function merchantOwnerText(merchant: any) { return merchant?.ownerType === "agent" ? "代理店铺" : "商家店铺"; }
+function merchantOperational(merchant: any) { return !!merchant && merchant.status === "active" && merchant.mallEnabled !== false; }
+function merchantDisabledReason(merchant: any) {
+  if (!merchant) return "请先选择要运营的店铺。平台可在「商城店铺」为商家/代理开店并授权账号。";
+  if (merchant.status !== "active") return "当前店铺已被平台停用，不能新增商品、调整库存或配置优惠券；分类请到「店铺分类」查看历史配置。";
+  if (merchant.mallEnabled === false) return "当前店铺未开放商城，不能新增商品、调整库存或配置优惠券；请联系平台管理员在「商城店铺」开通商城后再操作。";
+  return "";
+}
+function requireOpenMerchant(action: string, merchant = selectedMerchant.value) {
+  if (deepLinkWarning.value) {
+    ElMessage.error("当前店铺链接不可用，请先确认店铺授权后再操作。");
+    return false;
+  }
+  if (!merchant) {
+    ElMessage.error(`请先选择要${action}的店铺。平台可在「商城店铺」为商家/代理开店并授权账号。`);
+    return false;
+  }
+  if (!merchantOperational(merchant)) {
+    ElMessage.error(merchantDisabledReason(merchant));
+    return false;
+  }
+  return true;
+}
+function rowMerchant(row: any) { return row?.merchant?.status || row?.merchant?.mallEnabled !== undefined ? row.merchant : selectedMerchant.value; }
+function rowMerchantOperational(row: any) { return merchantOperational(rowMerchant(row)); }
+function merchantProductAuditRequired(merchant: any) { return merchant?.productAuditRequired !== false; }
+function paymentModeText(value: string) { return value === "merchant_direct" ? "商户直收" : "平台代收"; }
 function money(value: any) { return Number(value || 0).toFixed(2); }
-function statusText(status: string) { return ({ draft: "草稿", published: "已上架", offline: "已下架" } as any)[status] || status; }
+function statusText(status: string) { return ({ draft: "草稿", pending_review: "待审核", published: "已上架", offline: "已下架" } as any)[status] || status; }
 function couponStatusText(status: string) { return ({ active: "可使用", not_started: "未开始", expired: "已过期", exhausted: "已用完", disabled: "已停用" } as any)[status] || status || "-"; }
 function couponStatusTag(status: string) { return ({ active: "success", not_started: "warning", expired: "info", exhausted: "danger", disabled: "info" } as any)[status] || "info"; }
 function inventoryTypeText(type: string) { return ({ lock: "锁定", release: "释放", deduct: "扣减", return: "回补", adjust: "调整" } as any)[type] || type; }
 function formatTime(value: any) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-"; }
 function formatDate(value: any) { return value ? new Date(value).toLocaleDateString("zh-CN") : "长期"; }
+function merchantLinkWarning(requestedMerchantId: number) {
+  return `当前链接指定的店铺 #${requestedMerchantId} 对当前账号不可见，或已被商家/关键词筛选条件过滤。为避免误操作，系统不会自动切换到其它店铺；请联系平台管理员确认店铺授权，或清空筛选后重试。`;
+}
+function clearProductScopeData() {
+  products.value = [];
+  categories.value = [];
+  lowStockItems.value = [];
+  coupons.value = [];
+  inventoryLogs.value = [];
+}
+function blockInvalidMerchantLink() {
+  if (!deepLinkWarning.value) return false;
+  clearProductScopeData();
+  return true;
+}
+function merchantPageUrl(path = route.path) {
+  if (!selectedMerchant.value) return "";
+  const query = new URLSearchParams();
+  if (selectedMerchant.value.tenant?.id) query.set("tenantId", String(selectedMerchant.value.tenant.id));
+  query.set("merchantId", String(selectedMerchant.value.id));
+  return `${window.location.origin}/admin${path}?${query.toString()}`;
+}
+function merchantH5Url() {
+  if (!selectedMerchant.value) return "";
+  return h5RoutePreviewUrl(selectedMerchant.value.tenant?.code || "", `/pages/mall/merchant?id=${selectedMerchant.value.id}`);
+}
+function goMerchantAdmin(path: string) {
+  if (!selectedMerchant.value) return;
+  router.push({ path, query: { tenantId: selectedMerchant.value.tenant?.id, merchantId: selectedMerchant.value.id } });
+}
+function openCategoryManagement() {
+  const query: Record<string, string> = {};
+  const tenantId = selectedMerchant.value?.tenant?.id || filters.tenantId;
+  const merchantId = selectedMerchant.value?.id || filters.merchantId;
+  if (tenantId) query.tenantId = String(tenantId);
+  if (merchantId) query.merchantId = String(merchantId);
+  router.push({ path: "/mall-categories", query });
+}
+function openMerchantH5() {
+  const url = merchantH5Url();
+  if (url) window.open(url, "_blank", "noopener,noreferrer");
+}
+async function copyMerchantPageLink() {
+  const url = merchantPageUrl();
+  if (!url) return;
+  await copyToClipboard(url);
+  ElMessage.success("当前店铺后台链接已复制，可发给已授权的商家/代理账号。");
+}
+function normalizedProductStatus() {
+  if (merchantProductAuditRequired(formMerchant.value) && !isPlatformAdmin() && form.status === "published") return "pending_review";
+  return form.status || "draft";
+}
 
 async function loadTenants() {
   tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
 }
+async function loadMerchants(tenantId = filters.tenantId, honorRouteMerchant = tenantId === filters.tenantId) {
+  merchants.value = await api.get<any, any[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? tenantId : undefined, enabled: "true" } });
+  const requestedMerchantId = honorRouteMerchant ? routeMerchantId() : undefined;
+  if (honorRouteMerchant) deepLinkWarning.value = "";
+  if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) {
+    filters.merchantId = requestedMerchantId;
+  } else if (requestedMerchantId) {
+    filters.merchantId = undefined;
+    deepLinkWarning.value = merchantLinkWarning(requestedMerchantId);
+    clearProductScopeData();
+    return false;
+  } else if (filters.merchantId && !merchants.value.some((merchant) => merchant.id === filters.merchantId)) filters.merchantId = undefined;
+  if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
+  return true;
+}
+function currentMallParams(extra: Record<string, any> = {}) {
+  return {
+    tenantId: isPlatformAdmin() ? filters.tenantId || selectedMerchant.value?.tenant?.id : undefined,
+    merchantId: filters.merchantId || undefined,
+    ...extra
+  };
+}
 async function loadCategories() {
-  if (isPlatformAdmin() && !(form.tenantId || filters.tenantId)) {
+  if (blockInvalidMerchantLink()) return;
+  const merchantId = form.merchantId || filters.merchantId;
+  if (!merchantId) {
     categories.value = [];
     return;
   }
-  categories.value = await api.get<any, any[]>("/admin/mall/categories", { params: { tenantId: isPlatformAdmin() ? form.tenantId || filters.tenantId : undefined } });
+  categories.value = await api.get<any, any[]>("/admin/mall/categories", { params: currentMallParams({ tenantId: isPlatformAdmin() ? form.tenantId || selectedMerchant.value?.tenant?.id || filters.tenantId : undefined, merchantId }) });
 }
 async function loadProducts() {
+  if (blockInvalidMerchantLink()) return;
   loading.value = true;
   try {
     const result = await api.get<any, any>("/admin/mall/products", {
       params: {
-        tenantId: isPlatformAdmin() ? filters.tenantId : undefined,
+        ...currentMallParams(),
         categoryId: filters.categoryId || undefined,
         status: filters.status || undefined,
         keyword: filters.keyword.trim() || undefined,
@@ -332,14 +523,16 @@ async function loadProducts() {
   }
 }
 async function applyProductFilters() {
+  if (blockInvalidMerchantLink()) return;
   await loadProducts();
   await loadLowStock();
 }
 async function loadLowStock() {
+  if (blockInvalidMerchantLink()) return;
   try {
     const result = await api.get<any, any>("/admin/mall/products/low-stock", {
       params: {
-        tenantId: isPlatformAdmin() ? filters.tenantId : undefined,
+        ...currentMallParams(),
         categoryId: filters.categoryId || undefined,
         keyword: filters.keyword.trim() || undefined,
         lowStockThreshold: lowStockThreshold.value,
@@ -352,9 +545,10 @@ async function loadLowStock() {
   }
 }
 async function loadCoupons() {
+  if (blockInvalidMerchantLink()) return;
   couponLoading.value = true;
   try {
-    coupons.value = await api.get<any, any[]>("/admin/mall/coupons", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, keyword: couponFilters.keyword.trim() || undefined, enabled: couponFilters.enabled || undefined, status: couponFilters.status || undefined } });
+    coupons.value = await api.get<any, any[]>("/admin/mall/coupons", { params: currentMallParams({ keyword: couponFilters.keyword.trim() || undefined, enabled: couponFilters.enabled || undefined, status: couponFilters.status || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载优惠券失败");
   } finally {
@@ -362,9 +556,12 @@ async function loadCoupons() {
   }
 }
 async function exportProductSales() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前商品管理店铺链接不可用，请先确认店铺授权后再导出。");
   try {
     const params = new URLSearchParams();
-    if (isPlatformAdmin() && filters.tenantId) params.set("tenantId", String(filters.tenantId));
+    const scopedTenantId = filters.tenantId || selectedMerchant.value?.tenant?.id;
+    if (isPlatformAdmin() && scopedTenantId) params.set("tenantId", String(scopedTenantId));
+    if (filters.merchantId) params.set("merchantId", String(filters.merchantId));
     if (filters.categoryId) params.set("categoryId", String(filters.categoryId));
     if (filters.status) params.set("status", filters.status);
     if (filters.keyword.trim()) params.set("keyword", filters.keyword.trim());
@@ -373,42 +570,74 @@ async function exportProductSales() {
     ElMessage.error(error.message || "导出销售统计失败");
   }
 }
-function handleTenantChange() {
+async function handleTenantChange() {
+  deepLinkWarning.value = "";
   const query = { ...route.query };
   if (filters.tenantId) query.tenantId = String(filters.tenantId);
   else delete query.tenantId;
+  delete query.merchantId;
+  delete query.categoryId;
+  filters.merchantId = undefined;
+  await router.replace({ path: route.path, query });
+  await loadMerchants(filters.tenantId, false);
+  filters.categoryId = undefined;
+  await loadCategories();
+  await loadProducts();
+  if (couponDialogVisible.value) loadCoupons();
+}
+function handleMerchantChange() {
+  deepLinkWarning.value = "";
+  const merchant = selectedMerchant.value;
+  if (merchant?.tenant?.id && isPlatformAdmin()) filters.tenantId = merchant.tenant.id;
+  const query = { ...route.query };
+  if (filters.tenantId) query.tenantId = String(filters.tenantId);
+  else delete query.tenantId;
+  if (filters.merchantId) query.merchantId = String(filters.merchantId);
+  else delete query.merchantId;
+  delete query.categoryId;
   router.replace({ path: route.path, query });
   filters.categoryId = undefined;
   loadCategories();
   loadProducts();
+  loadLowStock();
   if (couponDialogVisible.value) loadCoupons();
 }
+async function handleFormTenantChange() {
+  form.merchantId = undefined;
+  await loadMerchants(form.tenantId, false);
+  await loadCategories();
+}
 function resetForm() {
-  Object.assign(form, { id: null, tenantId: filters.tenantId, title: "", brandName: "", categoryId: undefined, coverUrl: "", description: "", status: "draft", featured: false, sortOrder: 0, deliveryNote: "默认快递发货，偏远地区请联系客服", afterSaleNote: "支持未发货退款，已发货请联系书院处理", skus: [{ name: "默认规格", price: 0, originalPrice: 0, stock: 100, enabled: true }] });
+  Object.assign(form, { id: null, tenantId: filters.tenantId || selectedMerchant.value?.tenant?.id, merchantId: filters.merchantId, title: "", brandName: "", categoryId: undefined, coverUrl: "", description: "", status: "draft", featured: false, sortOrder: 0, deliveryNote: "默认快递发货，偏远地区请联系客服", afterSaleNote: "支持未发货退款，已发货请联系书院处理", skus: [{ name: "默认规格", price: 0, originalPrice: 0, stock: 100, enabled: true }] });
 }
 function createProduct() {
+  if (!requireOpenMerchant("发布商品")) return;
   resetForm();
   productDialogVisible.value = true;
   loadCategories();
 }
 function editProduct(row: any) {
-  Object.assign(form, { ...row, tenantId: row.tenant?.id, categoryId: row.category?.id, skus: (row.skus || []).map((sku: any) => ({ ...sku, price: Number(sku.price), originalPrice: Number(sku.originalPrice), stock: Number(sku.stock) })) });
+  if (!requireOpenMerchant("编辑商品", rowMerchant(row))) return;
+  Object.assign(form, { ...row, tenantId: row.tenant?.id, merchantId: row.merchant?.id, categoryId: row.category?.id, skus: (row.skus || []).map((sku: any) => ({ ...sku, price: Number(sku.price), originalPrice: Number(sku.originalPrice), stock: Number(sku.stock) })) });
   productDialogVisible.value = true;
   loadCategories();
 }
 async function openInventoryLogs(row: any) {
   inventorySkus.value = row.skus || [];
   inventoryFilters.tenantId = row.tenant?.id || filters.tenantId;
+  inventoryFilters.merchantId = row.merchant?.id || filters.merchantId;
   inventoryFilters.skuId = inventorySkus.value[0]?.id;
   inventoryFilters.keyword = "";
   inventoryDialogVisible.value = true;
   await loadInventoryLogs();
 }
 async function loadInventoryLogs() {
+  if (blockInvalidMerchantLink()) return;
   try {
     inventoryLogs.value = await api.get<any, any[]>("/admin/mall/inventory-logs", {
       params: {
         tenantId: isPlatformAdmin() ? inventoryFilters.tenantId : undefined,
+        merchantId: inventoryFilters.merchantId || filters.merchantId || undefined,
         skuId: inventoryFilters.skuId,
         keyword: inventoryFilters.keyword.trim() || undefined
       }
@@ -421,12 +650,16 @@ function selectedAdjustSku() {
   return stockSkus.value.find((sku) => sku.id === stockForm.skuId);
 }
 function openStockAdjust(row: any) {
+  if (!requireOpenMerchant("调整库存", rowMerchant(row))) return;
+  stockMerchant.value = rowMerchant(row);
   stockSkus.value = row.skus || [];
   const firstSku = stockSkus.value[0];
   Object.assign(stockForm, { productTitle: row.title, skuId: firstSku?.id, stock: Number(firstSku?.stock || 0), remark: "" });
   stockDialogVisible.value = true;
 }
 function openLowStockAdjust(row: any) {
+  if (!requireOpenMerchant("调整库存", rowMerchant(row))) return;
+  stockMerchant.value = rowMerchant(row);
   stockSkus.value = [{ ...row, product: row.product }];
   Object.assign(stockForm, { productTitle: row.product?.title || "-", skuId: row.id, stock: Number(row.stock || 0), remark: "低库存预警补货" });
   stockDialogVisible.value = true;
@@ -436,6 +669,7 @@ function handleAdjustSkuChange() {
   stockForm.stock = Number(sku?.stock || 0);
 }
 async function submitStockAdjust() {
+  if (!requireOpenMerchant("调整库存", stockMerchant.value || selectedMerchant.value)) return;
   if (!stockForm.skuId) return ElMessage.error("请选择规格");
   if (!stockForm.remark.trim()) return ElMessage.error("请填写调整原因");
   stockAdjusting.value = true;
@@ -457,14 +691,20 @@ async function openLowStockDialog() {
   await loadLowStock();
 }
 async function openRoutePanel() {
+  if (blockInvalidMerchantLink()) return;
   const panel = String(route.query.panel || route.path.replace("/mall-", ""));
+  if (panel === "product-audits") {
+    filters.status = "pending_review";
+    await loadProducts();
+  }
   if (panel === "inventory") await openLowStockDialog();
+  if (panel === "categories") openCategoryManagement();
   if (panel === "coupons") openCouponDialog();
 }
 function addSku() { form.skus.push({ name: "", price: 0, originalPrice: 0, stock: 0, enabled: true }); }
 function removeSku(index: number) { if (form.skus.length > 1) form.skus.splice(index, 1); }
 function openCouponDialog() {
-  if (isPlatformAdmin() && !filters.tenantId) return ElMessage.error("请先在顶部选择商家，再管理该商家的优惠券");
+  if (!requireOpenMerchant("运营优惠券")) return;
   resetCouponForm();
   couponDialogVisible.value = true;
   loadCoupons();
@@ -476,12 +716,13 @@ function editCoupon(row: any) {
   Object.assign(couponForm, { id: row.id, code: row.code, name: row.name, minAmount: Number(row.minAmount || 0), discountAmount: Number(row.discountAmount || 0), usageLimit: Number(row.usageLimit || 0), enabled: row.enabled, startsAt: row.startsAt, endsAt: row.endsAt });
 }
 async function saveCoupon() {
+  if (!requireOpenMerchant("运营优惠券")) return;
   if (!couponForm.code?.trim()) return ElMessage.error("请输入优惠券码");
   if (!couponForm.name?.trim()) return ElMessage.error("请输入优惠券名称");
   if (Number(couponForm.discountAmount || 0) <= 0) return ElMessage.error("优惠金额必须大于 0");
   couponSaving.value = true;
   try {
-    const payload = { ...couponForm, code: couponForm.code.trim(), name: couponForm.name.trim(), tenantId: isPlatformAdmin() ? filters.tenantId : undefined };
+    const payload = { ...couponForm, code: couponForm.code.trim(), name: couponForm.name.trim(), ...currentMallParams() };
     if (couponForm.id) await api.patch(`/admin/mall/coupons/${couponForm.id}`, payload);
     else await api.post("/admin/mall/coupons", payload);
     ElMessage.success("优惠券已保存");
@@ -494,23 +735,48 @@ async function saveCoupon() {
   }
 }
 async function toggleCoupon(row: any) {
+  if (!requireOpenMerchant("运营优惠券", rowMerchant(row))) return;
   try {
-    await api.patch(`/admin/mall/coupons/${row.id}`, { ...row, tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined, enabled: !row.enabled });
+    await api.patch(`/admin/mall/coupons/${row.id}`, { ...row, tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined, merchantId: row.merchant?.id || filters.merchantId || undefined, enabled: !row.enabled });
     ElMessage.success(row.enabled ? "优惠券已停用" : "优惠券已启用");
     await loadCoupons();
   } catch (error: any) {
     ElMessage.error(error.message || "操作失败");
   }
 }
+async function approveProduct(row: any) {
+  try {
+    await ElMessageBox.confirm(`确认通过商品「${row.title}」的上架审核？通过后会在前台展示。`, "通过商品审核", { confirmButtonText: "通过", cancelButtonText: "取消", type: "success" });
+    await api.post(`/admin/mall/products/${row.id}/approve`);
+    ElMessage.success("商品审核已通过");
+    await loadProducts();
+  } catch (error: any) {
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(error.message || "商品审核通过失败");
+  }
+}
+async function rejectProduct(row: any) {
+  try {
+    await ElMessageBox.confirm(`确认驳回商品「${row.title}」？商品会退回草稿，店铺可修改后重新提交。`, "驳回商品审核", { confirmButtonText: "驳回", cancelButtonText: "取消", type: "warning" });
+    await api.post(`/admin/mall/products/${row.id}/reject`);
+    ElMessage.success("商品已驳回为草稿");
+    await loadProducts();
+  } catch (error: any) {
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(error.message || "商品审核驳回失败");
+  }
+}
 async function saveProduct() {
+  if (!requireOpenMerchant("保存商品", formMerchant.value)) return;
   if (!form.title?.trim()) return ElMessage.error("请输入商品名称");
-  if (isPlatformAdmin() && !form.tenantId) return ElMessage.error("请选择所属商家");
+  if (!form.merchantId) return ElMessage.error("请选择要发布商品的店铺");
   saving.value = true;
   try {
-    const payload = { ...form, title: form.title.trim(), brandName: form.brandName?.trim() || undefined, sortOrder: Number(form.sortOrder || 0), tenantId: isPlatformAdmin() ? form.tenantId : undefined, categoryId: form.categoryId || null };
+    const submitStatus = normalizedProductStatus();
+    const payload = { ...form, status: submitStatus, title: form.title.trim(), brandName: form.brandName?.trim() || undefined, sortOrder: Number(form.sortOrder || 0), tenantId: isPlatformAdmin() ? form.tenantId : undefined, merchantId: form.merchantId, categoryId: form.categoryId || null };
     if (form.id) await api.patch(`/admin/mall/products/${form.id}`, payload);
     else await api.post("/admin/mall/products", payload);
-    ElMessage.success("商品已保存");
+    ElMessage.success(submitStatus === "pending_review" && merchantProductAuditRequired(formMerchant.value) && !isPlatformAdmin() ? "商品已提交平台审核，通过后会在 H5/小程序展示。" : "商品已保存");
     productDialogVisible.value = false;
     await loadProducts();
   } catch (error: any) {
@@ -519,42 +785,25 @@ async function saveProduct() {
     saving.value = false;
   }
 }
-async function saveCategory() {
-  if (!categoryForm.name.trim()) return ElMessage.error("请输入分类名称");
-  if (isPlatformAdmin() && !filters.tenantId) return ElMessage.error("请先在顶部选择商家");
-  try {
-    await api.post("/admin/mall/categories", { name: categoryForm.name.trim(), iconUrl: categoryForm.iconUrl.trim() || undefined, sortOrder: Number(categoryForm.sortOrder || 0), tenantId: isPlatformAdmin() ? filters.tenantId : undefined });
-    Object.assign(categoryForm, { name: "", iconUrl: "", sortOrder: 0 });
-    await loadCategories();
-    ElMessage.success("分类已新增");
-  } catch (error: any) {
-    ElMessage.error(error.message || "新增分类失败");
-  }
-}
-async function updateCategory(row: any) {
-  if (!row.name?.trim()) return ElMessage.error("请输入分类名称");
-  try {
-    await api.patch(`/admin/mall/categories/${row.id}`, { name: row.name.trim(), iconUrl: row.iconUrl || undefined, sortOrder: Number(row.sortOrder || 0), enabled: row.enabled, tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined });
-    await loadCategories();
-    await loadProducts();
-    ElMessage.success("分类已保存");
-  } catch (error: any) {
-    ElMessage.error(error.message || "保存分类失败");
-  }
-}
-
 onMounted(async () => {
   await loadTenants();
+  const merchantScopeReady = await loadMerchants();
+  if (!merchantScopeReady) return;
   await loadCategories();
   await loadProducts();
   await loadLowStock();
   await openRoutePanel();
 });
-watch(() => route.query.tenantId, () => {
+watch(() => [route.query.tenantId, route.query.merchantId, route.query.categoryId, route.query.keyword], async () => {
   filters.tenantId = routeTenantId();
-  loadCategories();
-  loadProducts();
-  loadLowStock();
+  filters.merchantId = routeMerchantId();
+  filters.categoryId = routeCategoryId();
+  filters.keyword = routeKeyword();
+  const merchantScopeReady = await loadMerchants();
+  if (!merchantScopeReady) return;
+  await loadCategories();
+  await loadProducts();
+  await loadLowStock();
   if (couponDialogVisible.value) loadCoupons();
   openRoutePanel();
 });
@@ -569,6 +818,14 @@ watch(() => [route.path, route.query.panel], () => {
 .page-header p { margin: 6px 0 0; color: #64748b; }
 .header-actions { display: flex; gap: 10px; align-items: center; }
 .filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 16px; }
+.deep-link-alert { margin-bottom: 16px; }
+.merchant-disabled-alert { margin-bottom: 16px; }
+.merchant-context-card { margin-bottom: 16px; border-color: #dbeafe; background: linear-gradient(135deg, #eff6ff, #fff); }
+.merchant-context-card :deep(.el-card__body) { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.merchant-context-main { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.merchant-context-main strong { color: #0f172a; }
+.merchant-context-main p { margin: 4px 0 0; color: #64748b; }
+.merchant-context-tags, .merchant-context-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .low-stock-alert { margin-bottom: 16px; }
 .product-cell { display: flex; align-items: center; gap: 12px; }
 .product-cell img, .cover-placeholder { width: 54px; height: 54px; border-radius: 12px; object-fit: cover; background: #f1f5f9; display: grid; place-items: center; color: #9a3412; font-weight: 800; }
@@ -576,7 +833,6 @@ watch(() => [route.path, route.query.panel], () => {
 .el-table small { display: block; margin-top: 4px; color: #64748b; }
 .form-hint { margin-left: 10px; color: #94a3b8; font-size: 12px; }
 .sku-row { display: grid; grid-template-columns: 1.3fr 130px 130px 120px 70px 64px; gap: 8px; align-items: center; margin-bottom: 10px; }
-.category-header { display: grid; grid-template-columns: minmax(140px, 1fr) minmax(180px, 1.4fr) 120px auto; gap: 10px; margin-bottom: 12px; align-items: center; }
 .coupon-toolbar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
 .coupon-form { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 14px; align-items: center; }
 .inventory-toolbar { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; flex-wrap: wrap; }

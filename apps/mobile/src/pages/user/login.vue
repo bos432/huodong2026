@@ -106,14 +106,19 @@ onMounted(loadDecoration);
 <template>
   <view class="container login-page has-custom-nav">
     <TenantContextBadge :tenant="tenant" label="当前城市" hint="登录后沿用" />
-    <PageDecorationBlocks :sections="contentSections" />
 
-    <view class="login-head">
-      <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#172033') }">{{ innerPageConfig.title || "手机号登录" }}</view>
-      <view class="subtle" :style="{ color: String(innerPageLayout.headerSubtitleColor || '#667085') }">{{ innerPageConfig.subtitle || "用于查看报名、订单、签到码和会员权益。" }}</view>
+    <view class="login-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
+      <view class="hero-mark">七维</view>
+      <view class="hero-copy">
+        <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "手机号登录" }}</view>
+        <view class="subtle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "用于查看报名、订单、签到码和会员权益。" }}</view>
+      </view>
     </view>
 
+    <PageDecorationBlocks :sections="contentSections" />
+
     <view class="card login-card">
+      <view class="card-kicker">欢迎回来</view>
       <view class="field">
         <view class="label">手机号</view>
         <input v-model="phone" class="input" type="number" maxlength="11" placeholder="请输入手机号" />
@@ -151,18 +156,70 @@ onMounted(loadDecoration);
 
 <style scoped>
 .login-page { display: grid; align-content: start; gap: 20rpx; padding-bottom: 160rpx; }
-.login-head { padding: 38rpx 6rpx 10rpx; }
-.login-head .title { margin-bottom: 12rpx; }
-.login-card { display: grid; gap: 24rpx; }
+.login-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 300rpx;
+  display: flex;
+  align-items: flex-end;
+  gap: 22rpx;
+  padding: 34rpx 28rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+}
+.login-hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(34, 24, 19, 0.04), rgba(34, 24, 19, 0.24));
+  pointer-events: none;
+}
+.hero-mark,
+.hero-copy {
+  position: relative;
+  z-index: 1;
+}
+.hero-mark {
+  flex: 0 0 auto;
+  width: 96rpx;
+  height: 96rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 28rpx;
+  background: rgba(255, 248, 240, 0.16);
+  color: #fff8f0;
+  font-size: 30rpx;
+  font-weight: 700;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.hero-copy { min-width: 0; }
+.hero-copy .title {
+  font-size: 48rpx;
+  line-height: 1.22;
+  font-weight: 700;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.hero-copy .subtle {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.6;
+}
+.login-card { display: grid; gap: 24rpx; border-radius: 24rpx; }
+.card-kicker {
+  color: #4a6b8a;
+  font-size: 24rpx;
+  font-weight: 800;
+}
 .field { display: grid; gap: 12rpx; }
 .label { font-size: 28rpx; font-weight: 650; }
-.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8rpx; padding: 6rpx; border-radius: 6px; background: #f3f4f6; }
-.login-tab { height: 68rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #667085; font-size: 26rpx; font-weight: 800; }
-.login-tab.active { background: #fff; color: #0f766e; box-shadow: 0 4rpx 16rpx rgba(15, 118, 110, 0.12); }
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8rpx; padding: 8rpx; border-radius: 18rpx; background: #f9f4ee; }
+.login-tab { height: 72rpx; display: flex; align-items: center; justify-content: center; border-radius: 14rpx; color: #666666; font-size: 26rpx; font-weight: 800; }
+.login-tab.active { background: #fff; color: #c43d3d; box-shadow: 0 8rpx 22rpx rgba(91, 47, 36, 0.08); }
 .code-row { display: grid; grid-template-columns: 1fr 190rpx; gap: 12rpx; align-items: center; }
-.mini-button { height: 78rpx; border-radius: 6px; background: #0f766e; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; }
+.mini-button { height: 78rpx; border-radius: 16rpx; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 700; }
 .mini-button.disabled { background: #9ca3af; }
-.notice { padding: 18rpx; border-radius: 6px; background: #f3faf8; color: #0f766e; font-size: 26rpx; }
+.notice { padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); color: #4a6b8a; font-size: 26rpx; }
 .wechat-button { background: #16a34a; }
-.admin-login-entry { display: flex; align-items: center; justify-content: center; min-height: 62rpx; padding: 8rpx 18rpx; border-radius: 6px; background: #f3f4f6; color: #667085; font-size: 24rpx; font-weight: 800; }
+.admin-login-entry { display: flex; align-items: center; justify-content: center; min-height: 68rpx; padding: 8rpx 18rpx; border-radius: 16rpx; background: #f9f4ee; color: #4a6b8a; font-size: 24rpx; font-weight: 800; }
 </style>

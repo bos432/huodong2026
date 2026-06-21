@@ -43,6 +43,9 @@ export class OperationSetting {
   @Column({ type: "json", nullable: true })
   pageTheme!: Record<string, unknown> | null;
 
+  @Column({ type: "json", nullable: true })
+  launchConfig!: Record<string, unknown> | null;
+
   @Column({ type: "text" })
   refundInstructions!: string;
 

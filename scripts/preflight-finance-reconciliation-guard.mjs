@@ -24,6 +24,7 @@ const statementMigration = read("apps/api/src/migrations/1780518000000-PaymentSt
 const adminDto = read("apps/api/src/modules/admin/dto.ts");
 const adminController = read("apps/api/src/modules/admin/admin.controller.ts");
 const adminService = read("apps/api/src/modules/admin/admin.service.ts");
+const financeOperations = read("apps/api/src/modules/admin/finance-operations.ts");
 const statementImport = read("apps/api/src/modules/admin/payment-statement-import.ts");
 const paymentProvider = read("apps/api/src/modules/public/payment-provider.service.ts");
 const realAdapters = read("apps/api/src/modules/public/real-payment-adapters.ts");
@@ -116,8 +117,16 @@ checkSourceIncludesAll(adminController, [
 checkSourceIncludesAll(adminService, [
   "@InjectRepository(PaymentStatementRecord)",
   "financeDashboard(query",
+  "financeDailyReport",
+  "financeRiskAlerts",
+  "businessDayRange",
+  "countTransactionsForAgentInRange",
+  "transactionSumForAgentInRange",
+  "refundSumForAgentInRange",
   "this.listPaymentStatements(query, 8, admin)",
   "pendingStatementCount",
+  "dailyReport",
+  "riskAlerts",
   "listPaymentStatements(query",
   'this.applyTenantScope(builder, "statement", admin)',
   'this.applyAgentFilter(builder, query, "orderAgent")',
@@ -149,6 +158,18 @@ checkSourceIncludesAll(adminService, [
   "const statementSheet = workbook.addWorksheet",
   "statementRecords.forEach"
 ], "admin finance service");
+
+checkSourceIncludesAll(financeOperations, [
+  "financeDailyReport",
+  "financeRiskAlerts",
+  "refundRatePercent",
+  "pending_refunds",
+  "pending_reconciliation",
+  "failed_callbacks",
+  "pending_statements",
+  "high_refund_rate",
+  "pending_payments"
+], "finance daily report and risk alerts");
 
 checkSourceIncludesAll(statementImport, [
   "paymentStatementOrderWhere",
@@ -198,6 +219,11 @@ checkSourceIncludesAll(paymentProviderSpec, [
 
 checkSourceIncludesAll(adminFinanceView, [
   "/admin/finance/dashboard",
+  "dailyReport",
+  "riskAlerts",
+  "今日经营日报",
+  "异常提醒",
+  "退款率",
   "/admin/finance/reconciliation/scan",
   "/admin/finance/refunds/provider-scan",
   "/admin/finance/statements/import",

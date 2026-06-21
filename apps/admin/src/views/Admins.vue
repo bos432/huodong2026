@@ -108,7 +108,7 @@ function applyTenantFromRoute() {
 }
 
 function validatePassword(password: string) {
-  if (password.length < 8) return "密码至少需要 8 位";
+  if (password.length < 10) return "密码至少需要 10 位";
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) return "密码需要包含大小写字母和数字";
   return "";
 }
@@ -186,7 +186,7 @@ function useMember(row: any) {
 async function resetPassword(row: AdminRow) {
   const { value } = await ElMessageBox.prompt(`为 ${row.username} 设置新密码`, "重置密码", {
     inputType: "password",
-    inputPlaceholder: "至少 8 位，包含大小写字母和数字",
+    inputPlaceholder: "至少 10 位，包含大小写字母和数字",
     confirmButtonText: "确认重置",
     cancelButtonText: "取消"
   });

@@ -1,5 +1,6 @@
-import { PaymentMethod, RegistrationAnswer } from "../../shared/domain";
-import { IsArray, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min } from "class-validator";
+import { Type } from "class-transformer";
+import { FieldType, PaymentMethod, RegistrationAnswer } from "../../shared/domain";
+import { Allow, IsArray, IsEnum, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Max, Min, ValidateNested } from "class-validator";
 
 export class H5LoginDto {
   @IsString()
@@ -116,8 +117,73 @@ export class AmbassadorApplicationDto {
   channelCode?: string;
 }
 
+export class VolunteerApplyDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  city!: string;
+
+  @IsOptional()
+  @IsString()
+  expertise?: string;
+
+  @IsOptional()
+  @IsString()
+  availableTime?: string;
+
+  @IsOptional()
+  @IsString()
+  serviceIntent?: string;
+
+  @IsOptional()
+  @IsString()
+  message?: string;
+}
+
+export class VolunteerTaskApplyDto {
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  city!: string;
+
+  @IsOptional()
+  @IsString()
+  message?: string;
+}
+
+class RegistrationAnswerDto implements RegistrationAnswer {
+  @Type(() => Number)
+  @IsInt()
+  fieldId!: number;
+
+  @IsString()
+  label!: string;
+
+  @IsEnum(FieldType)
+  type!: FieldType;
+
+  @Allow()
+  value!: string | string[];
+}
+
 export class RegisterDto {
   @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => RegistrationAnswerDto)
   answers!: RegistrationAnswer[];
 
   @IsOptional()

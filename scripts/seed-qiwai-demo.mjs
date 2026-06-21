@@ -200,12 +200,13 @@ async function upsertAdmins(connection, tenant, tenantId) {
   for (const [username, role] of users) {
     await connection.execute(
       `
-        INSERT INTO admin_users (username, passwordHash, role, tenantId, enabled, createdAt, updatedAt)
-        VALUES (?, ?, ?, ?, true, NOW(), NOW())
+        INSERT INTO admin_users (username, passwordHash, role, tenantId, permissions, enabled, createdAt, updatedAt)
+        VALUES (?, ?, ?, ?, NULL, true, NOW(), NOW())
         ON DUPLICATE KEY UPDATE
           passwordHash = VALUES(passwordHash),
           role = VALUES(role),
           tenantId = VALUES(tenantId),
+          permissions = NULL,
           enabled = true,
           updatedAt = NOW()
       `,

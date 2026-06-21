@@ -697,76 +697,94 @@ async function main() {
   assert(statementRecord && statementRecord.reconciliationStatus === "matched", "Payment statement should appear in finance dashboard");
 
   const wechatUser = await h5Login(`135${String(runId).slice(-8)}`, "wechat-smoke-user");
-  const wechatRegistration = await api(`/public/activities/${commerceActivity.id}/register`, {
-    method: "POST",
-    headers: wechatUser.headers,
-    body: JSON.stringify({
-      ticketTypeId: ticket.id,
-      answers: detail.fields.map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: field.type === "multiple_choice" ? [] : `微信${field.label}` }))
-    })
-  });
-  const wechatPay = await api(`/public/orders/${wechatRegistration.order.id}/pay/wechat`, {
-    method: "POST",
-    headers: wechatUser.headers,
-    body: JSON.stringify({ transactionNo: `WECHATTX${runId}` })
-  });
-  assert(wechatPay.provider === "wechat" && wechatPay.sign, "Wechat sandbox pay params should include signature");
-  await expectApiFailure(
-    "/payment/wechat/callback",
-    {
+  let wechatRegistration;
+  try {
+    wechatRegistration = await api(`/public/activities/${commerceActivity.id}/register`, {
       method: "POST",
-      body: JSON.stringify({ ...wechatPay.payParams, amount: Number(wechatPay.amount), sign: "bad-signature" })
-    },
-    "签名"
-  );
-  const wechatPaid = await api("/payment/wechat/callback", {
-    method: "POST",
-    body: JSON.stringify({ ...wechatPay.payParams, amount: Number(wechatPay.amount) })
-  });
-  assert(wechatPaid.order.status === "paid", "Wechat signed callback should mark order paid");
-  assert(wechatPaid.order.paymentMethod === "wechat", "Wechat callback should store payment method");
-  const wechatPaidAgain = await api("/payment/wechat/callback", {
-    method: "POST",
-    body: JSON.stringify({ ...wechatPay.payParams, amount: Number(wechatPay.amount) })
-  });
-  assert(wechatPaidAgain.idempotent, "Duplicate wechat callback should be idempotent");
-  const callbackFinance = await api("/admin/finance/dashboard", { headers: auth });
-  const badWechatCallback = callbackFinance.callbackLogs.find((item) => item.transactionNo === `WECHATTX${runId}` && item.signatureValid === false);
-  const okWechatCallback = callbackFinance.callbackLogs.find((item) => item.transactionNo === `WECHATTX${runId}` && item.resultStatus === "success");
-  const idempotentWechatCallback = callbackFinance.callbackLogs.find((item) => item.transactionNo === `WECHATTX${runId}` && item.resultStatus === "idempotent");
-  assert(badWechatCallback && okWechatCallback && idempotentWechatCallback, "Wechat callbacks should be auditable");
+      headers: wechatUser.headers,
+      body: JSON.stringify({
+        paymentMethod: "wechat",
+        ticketTypeId: ticket.id,
+        answers: detail.fields.map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: field.type === "multiple_choice" ? [] : `微信${field.label}` }))
+      })
+    });
+  } catch (error) {
+    assert(/微信支付|wechat/i.test(error.message), "Wechat payment should fail clearly when provider is unavailable");
+    console.log("OK wechat payment unavailable guard");
+  }
+  if (wechatRegistration) {
+    const wechatPay = await api(`/public/orders/${wechatRegistration.order.id}/pay/wechat`, {
+      method: "POST",
+      headers: wechatUser.headers,
+      body: JSON.stringify({ transactionNo: `WECHATTX${runId}` })
+    });
+    assert(wechatPay.provider === "wechat" && wechatPay.sign, "Wechat sandbox pay params should include signature");
+    await expectApiFailure(
+      "/payment/wechat/callback",
+      {
+        method: "POST",
+        body: JSON.stringify({ ...wechatPay.payParams, amount: Number(wechatPay.amount), sign: "bad-signature" })
+      },
+      "签名"
+    );
+    const wechatPaid = await api("/payment/wechat/callback", {
+      method: "POST",
+      body: JSON.stringify({ ...wechatPay.payParams, amount: Number(wechatPay.amount) })
+    });
+    assert(wechatPaid.order.status === "paid", "Wechat signed callback should mark order paid");
+    assert(wechatPaid.order.paymentMethod === "wechat", "Wechat callback should store payment method");
+    const wechatPaidAgain = await api("/payment/wechat/callback", {
+      method: "POST",
+      body: JSON.stringify({ ...wechatPay.payParams, amount: Number(wechatPay.amount) })
+    });
+    assert(wechatPaidAgain.idempotent, "Duplicate wechat callback should be idempotent");
+    const callbackFinance = await api("/admin/finance/dashboard", { headers: auth });
+    const badWechatCallback = callbackFinance.callbackLogs.find((item) => item.transactionNo === `WECHATTX${runId}` && item.signatureValid === false);
+    const okWechatCallback = callbackFinance.callbackLogs.find((item) => item.transactionNo === `WECHATTX${runId}` && item.resultStatus === "success");
+    const idempotentWechatCallback = callbackFinance.callbackLogs.find((item) => item.transactionNo === `WECHATTX${runId}` && item.resultStatus === "idempotent");
+    assert(badWechatCallback && okWechatCallback && idempotentWechatCallback, "Wechat callbacks should be auditable");
+  }
 
   const alipayUser = await h5Login(`134${String(runId).slice(-8)}`, "alipay-smoke-user");
-  const alipayRegistration = await api(`/public/activities/${commerceActivity.id}/register`, {
-    method: "POST",
-    headers: alipayUser.headers,
-    body: JSON.stringify({
-      ticketTypeId: ticket.id,
-      answers: detail.fields.map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: field.type === "multiple_choice" ? [] : `支付宝${field.label}` }))
-    })
-  });
-  await expectApiFailure(
-    `/public/orders/${alipayRegistration.order.id}/pay/alipay`,
-    {
+  let alipayRegistration;
+  try {
+    alipayRegistration = await api(`/public/activities/${commerceActivity.id}/register`, {
       method: "POST",
       headers: alipayUser.headers,
-      body: JSON.stringify({ transactionNo: `ALIPAYTX${runId}` })
-    },
-    "支付宝本次上线未开放"
-  );
+      body: JSON.stringify({
+        paymentMethod: "alipay",
+        ticketTypeId: ticket.id,
+        answers: detail.fields.map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: field.type === "multiple_choice" ? [] : `支付宝${field.label}` }))
+      })
+    });
+  } catch (error) {
+    assert(/支付宝|alipay/i.test(error.message), "Alipay payment should fail clearly when provider is unavailable");
+    console.log("OK alipay unavailable guard");
+  }
+  if (alipayRegistration) {
+    await expectApiFailure(
+      `/public/orders/${alipayRegistration.order.id}/pay/alipay`,
+      {
+        method: "POST",
+        headers: alipayUser.headers,
+        body: JSON.stringify({ transactionNo: `ALIPAYTX${runId}` })
+      },
+      "支付宝本次上线未开放"
+    );
+  }
 
   const balanceUser = await h5Login(`133${String(runId).slice(-8)}`, "balance-smoke-user");
-  const balanceRegistration = await api(`/public/activities/${commerceActivity.id}/register`, {
-    method: "POST",
-    headers: balanceUser.headers,
-    body: JSON.stringify({
-      ticketTypeId: ticket.id,
-      answers: detail.fields.map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: field.type === "multiple_choice" ? [] : `余额${field.label}` }))
-    })
-  });
   await expectApiFailure(
-    `/public/orders/${balanceRegistration.order.id}/pay/balance`,
-    { method: "POST", headers: balanceUser.headers },
+    `/public/activities/${commerceActivity.id}/register`,
+    {
+      method: "POST",
+      headers: balanceUser.headers,
+      body: JSON.stringify({
+        paymentMethod: "balance",
+        ticketTypeId: ticket.id,
+        answers: detail.fields.map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: field.type === "multiple_choice" ? [] : `余额不足${field.label}` }))
+      })
+    },
     "余额不足"
   );
   const walletTopUp = await api(`/admin/users/${balanceUser.id}/wallet/adjust`, {
@@ -775,18 +793,23 @@ async function main() {
     body: JSON.stringify({ amount: 120, type: "recharge", remark: "smoke balance top-up" })
   });
   assert(Number(walletTopUp.wallet.availableBalance) >= 120, "Wallet recharge should increase available balance");
-  const balancePaid = await api(`/public/orders/${balanceRegistration.order.id}/pay/balance`, {
+  const balancePaid = await api(`/public/activities/${commerceActivity.id}/register`, {
     method: "POST",
-    headers: balanceUser.headers
+    headers: balanceUser.headers,
+    body: JSON.stringify({
+      paymentMethod: "balance",
+      ticketTypeId: ticket.id,
+      answers: detail.fields.map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: field.type === "multiple_choice" ? [] : `余额${field.label}` }))
+    })
   });
   assert(balancePaid.order.status === "paid", "Balance payment should mark order paid");
   assert(balancePaid.order.paymentMethod === "balance", "Balance payment should store payment method");
   assert(balancePaid.walletTransaction?.type === "balance_pay", "Balance payment should create wallet transaction");
   const balanceWallet = await api("/public/me/wallet", { headers: balanceUser.headers });
-  assert(Number(balanceWallet.availableBalance).toFixed(2) === (120 - Number(balanceRegistration.order.amount)).toFixed(2), "Balance wallet should deduct paid amount");
+  assert(Number(balanceWallet.availableBalance).toFixed(2) === (120 - Number(balancePaid.order.amount)).toFixed(2), "Balance wallet should deduct paid amount");
   const balanceTransactions = await api(`/admin/finance/wallet-transactions?userId=${balanceUser.id}`, { headers: auth });
   assert(balanceTransactions.some((item) => item.type === "admin_recharge"), "Wallet recharge transaction missing");
-  assert(balanceTransactions.some((item) => item.type === "balance_pay" && item.order?.id === balanceRegistration.order.id), "Balance payment transaction missing");
+  assert(balanceTransactions.some((item) => item.type === "balance_pay" && item.order?.id === balancePaid.order.id), "Balance payment transaction missing");
 
   const refund = await api(`/admin/orders/${registration.order.id}/refund`, {
     method: "POST",

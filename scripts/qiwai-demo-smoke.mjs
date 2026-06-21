@@ -156,10 +156,13 @@ async function h5Login(phone, nickname) {
     body: JSON.stringify({ phone })
   });
   assert(code.verificationToken, "H5 verification token missing");
-  return api("/public/auth/h5-login", {
+  const login = await api("/public/auth/h5-login", {
     method: "POST",
     body: JSON.stringify({ phone, nickname, verificationToken: code.verificationToken, verificationCode: code.devCode || "000000" })
   });
+  const token = login.userAccessToken || login.token;
+  assert(token, "H5 user access token missing");
+  return { ...(login.user || login), userAccessToken: token, headers: auth(token) };
 }
 
 function answers(fields, suffix) {
@@ -207,8 +210,8 @@ async function settlementPeriodForOrder(flow) {
   assert(transaction?.createdAt, "payment transaction for settlement order should be visible");
   const start = new Date(transaction.createdAt);
   return {
-    periodStart: formatUtcDateTime(new Date(start.getTime() - 5 * 60 * 1000)),
-    periodEnd: formatUtcDateTime(new Date(start.getTime() + 5 * 60 * 1000))
+    periodStart: formatDateTime(new Date(start.getTime() - 10 * 1000)),
+    periodEnd: formatDateTime(new Date(start.getTime() + 10 * 1000))
   };
 }
 
@@ -294,7 +297,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
   const user = await h5Login(`139${String(Date.now()).slice(-8)}`, `七维${tenant.name}验收用户${Date.now()}`);
   const registered = await api(`/public/activities/${activity.id}/register?tenantCode=${encodeURIComponent(tenant.code)}`, {
     method: "POST",
-    headers: tenantHeader(tenant.code),
+    headers: { ...tenantHeader(tenant.code), ...user.headers },
     body: JSON.stringify({ userId: user.id, answers: answers(detail.fields || [], tenant.name) })
   });
   assert(registered.registration?.status === RegistrationStatus.PendingPayment, `${tenant.code} paid registration should be pending payment`);
@@ -306,7 +309,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
     body: JSON.stringify({ remark: "七维样板验收线下收款" })
   });
 
-  const afterPayment = await api(`/public/users/${user.id}/registrations/${registered.registration.id}?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: tenantHeader(tenant.code) });
+  const afterPayment = await api(`/public/users/${user.id}/registrations/${registered.registration.id}?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: { ...tenantHeader(tenant.code), ...user.headers } });
   assert(afterPayment.order?.status === OrderStatus.Paid, `${tenant.code} paid order should become paid`);
   assert(afterPayment.registration?.status === RegistrationStatus.Approved, `${tenant.code} paid registration should become approved`);
 
@@ -314,7 +317,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
   const registrationItems = Array.isArray(registrations) ? registrations : registrations.items || [];
   assert(registrationItems.some((item) => item.id === registered.registration.id), `${tenant.code} ops should see paid registration`);
 
-  const code = await api(`/public/users/${user.id}/registrations/${registered.registration.id}/check-in-code?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: tenantHeader(tenant.code) });
+  const code = await api(`/public/users/${user.id}/registrations/${registered.registration.id}/check-in-code?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: { ...tenantHeader(tenant.code), ...user.headers } });
   assert(code.code, `${tenant.code} check-in code missing`);
   await api("/admin/check-ins", {
     method: "POST",
@@ -322,7 +325,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
     body: JSON.stringify({ code: code.code, remark: "七维样板验收签到" })
   });
 
-  const afterCheckin = await api(`/public/users/${user.id}/registrations/${registered.registration.id}?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: tenantHeader(tenant.code) });
+  const afterCheckin = await api(`/public/users/${user.id}/registrations/${registered.registration.id}?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: { ...tenantHeader(tenant.code), ...user.headers } });
   assert(afterCheckin.registration?.status === RegistrationStatus.CheckedIn, `${tenant.code} registration should become checked in`);
 
   const tagName = "活动活跃用户";

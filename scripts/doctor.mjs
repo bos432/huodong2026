@@ -93,6 +93,7 @@ function configChecks(env) {
   }
   rows.push(...realPaymentRolloutChecks(env, production));
   rows.push(...multiTenantRolloutChecks(env, production));
+  rows.push(...mallMultiMerchantRolloutChecks(env, production));
   rows.push(providerCheck("SMS provider", env.SMS_PROVIDER_ENABLED, env, ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"], false));
   rows.push(providerCheck("Email provider", env.EMAIL_PROVIDER_ENABLED, env, ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"], production));
   rows.push(providerCheck("WeChat message provider", env.WECHAT_MESSAGE_PROVIDER_ENABLED, env, ["WECHAT_APP_ID", "WECHAT_APP_SECRET"], production));
@@ -172,6 +173,8 @@ function realPaymentRolloutChecks(env, production) {
     rolloutFlagCheck("REAL_REFUND_QUERY_IMPLEMENTED", env.REAL_REFUND_QUERY_IMPLEMENTED, production, preflightPassed, advice),
     rolloutFlagCheck("REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED", env.REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED, production, preflightPassed, advice),
     rolloutFlagCheck("AGENT_REAL_TRANSFER_IMPLEMENTED", env.AGENT_REAL_TRANSFER_IMPLEMENTED, production, preflightPassed, advice),
+    rolloutFlagCheck("MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED", env.MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED, production, preflightPassed, advice),
+    rolloutFlagCheck("MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED", env.MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED, production, preflightPassed, advice),
     rolloutFlagCheck("REAL_PAYMENT_PREFLIGHT_PASSED", env.REAL_PAYMENT_PREFLIGHT_PASSED, production, preflightPassed, "real payment preflight not declared"),
     resultFileCheck("REAL_PAYMENT_PREFLIGHT_RESULT_FILE", env.REAL_PAYMENT_PREFLIGHT_RESULT_FILE, "deploy/real-payment-smoke-result.json"),
     maxAgeCheck("REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS", env.REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS)
@@ -189,6 +192,17 @@ function multiTenantRolloutChecks(env, production) {
     rolloutFlagCheck("MULTI_TENANT_PREFLIGHT_PASSED", env.MULTI_TENANT_PREFLIGHT_PASSED, production, preflightPassed, "multi-tenant preflight not declared"),
     resultFileCheck("MULTI_TENANT_PREFLIGHT_RESULT_FILE", env.MULTI_TENANT_PREFLIGHT_RESULT_FILE, "deploy/tenant-smoke-result.json"),
     maxAgeCheck("MULTI_TENANT_PREFLIGHT_MAX_AGE_HOURS", env.MULTI_TENANT_PREFLIGHT_MAX_AGE_HOURS)
+  ];
+}
+
+function mallMultiMerchantRolloutChecks(env, production) {
+  const preflightPassed = env.MALL_MULTI_MERCHANT_PREFLIGHT_PASSED === "true";
+  const advice = "requires MALL_MULTI_MERCHANT_PREFLIGHT_PASSED=true and fresh smoke:mall-multi-merchant evidence";
+  return [
+    rolloutFlagCheck("MALL_MULTI_MERCHANT_ENABLED", env.MALL_MULTI_MERCHANT_ENABLED, production, preflightPassed, advice),
+    rolloutFlagCheck("MALL_MULTI_MERCHANT_PREFLIGHT_PASSED", env.MALL_MULTI_MERCHANT_PREFLIGHT_PASSED, production, preflightPassed, "multi-merchant mall preflight not declared"),
+    resultFileCheck("MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE", env.MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE, "deploy/mall-multi-merchant-smoke-result.json"),
+    maxAgeCheck("MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS", env.MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS)
   ];
 }
 

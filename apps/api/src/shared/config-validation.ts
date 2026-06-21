@@ -59,6 +59,7 @@ export function inspectRuntimeConfig(config: ConfigService): RuntimeConfigInspec
   addPaymentRuntimeChecks(checks, config, isProduction);
   addRealPaymentRuntimeChecks(checks, config, isProduction);
   addMultiTenantRuntimeChecks(checks, config);
+  addMallMultiMerchantRuntimeChecks(checks, config);
   addSmsProviderCheck(checks, config);
   addProviderCheck(checks, config, "EMAIL_PROVIDER_ENABLED", ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"], "邮件服务");
   addProviderCheck(checks, config, "WECHAT_MESSAGE_PROVIDER_ENABLED", ["WECHAT_APP_ID", "WECHAT_APP_SECRET"], "微信订阅消息");
@@ -197,7 +198,9 @@ function addRealPaymentImplementationWarnings(checks: RuntimeConfigCheck[], conf
   addImplementationCheck(checks, config, "REAL_REFUND_QUERY_IMPLEMENTED", "退款查询补偿实现", "退款请求/查询合同、财务扫描入口、签名请求草稿、HTTP 执行底座、响应验签底座、退款通知解析底座、退款通知公网入口第一版和本地退款完成共享服务已完成；打开标记前仍需完成真实商户预发样例和回滚方案。");
   addImplementationCheck(checks, config, "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED", "真实账单自动拉取", "微信/支付宝账单下载地址签名请求、下载执行和 CSV 文本解析底座已完成；打开标记前仍需真实商户账单样例、压缩包/大文件格式验证和回滚方案。");
   addImplementationCheck(checks, config, "AGENT_REAL_TRANSFER_IMPLEMENTED", "代理真实自动打款", "代理结算、打款能力评估、沙箱打款和真实转账合同已完成，但支付机构真实转账 SDK 未实现，后台不应开放真实打款按钮。");
-  addImplementationCheck(checks, config, "REAL_PAYMENT_PREFLIGHT_PASSED", "真实支付预发验收", "真实支付或代理真实打款上线前必须保留新鲜的预发验收结果文件，并覆盖多场景支付、回调、退款、账单、代理账户路由、代理真实打款和回滚记录。");
+  addImplementationCheck(checks, config, "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED", "商城微信支付联调", "商城平台代收微信下单、回调、退款和账单链路尚未声明完成；多商户商城开放真实微信支付前必须完成小额预发验收。");
+  addImplementationCheck(checks, config, "MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED", "店铺直收支付联调", "商家/代理店铺直收微信下单、独立回调和退款回调尚未声明完成；未通过 mallPaymentRouteGuard 防串店验收前只能配置收款账户并展示 readiness，不可开放真实直收。");
+  addImplementationCheck(checks, config, "REAL_PAYMENT_PREFLIGHT_PASSED", "真实支付预发验收", "真实支付或代理真实打款上线前必须保留新鲜的预发验收结果文件，并覆盖多场景支付、回调、退款、账单、代理账户路由、商城 mallPaymentRouteGuard、代理真实打款和回滚记录。");
 }
 
 function addImplementationCheck(checks: RuntimeConfigCheck[], config: ConfigService, key: string, label: string, warning: string) {
@@ -220,6 +223,20 @@ function addMultiTenantRuntimeChecks(checks: RuntimeConfigCheck[], config: Confi
   addImplementationCheck(checks, config, "MULTI_TENANT_ACCESS_FILTER_IMPLEMENTED", "多机构权限过滤", "后台管理员机构归属、查询过滤、写入归属校验和导出过滤尚未声明完成。");
   addImplementationCheck(checks, config, "MULTI_TENANT_PUBLIC_BOUNDARY_IMPLEMENTED", "多机构公开端边界", "H5 活动列表、报名、支付回调和公开查询的机构定位规则尚未声明完成。");
   addImplementationCheck(checks, config, "MULTI_TENANT_PREFLIGHT_PASSED", "多机构预发验收", "预发环境尚未跑通 smoke:tenant:seed 和 smoke:tenant，或未保留可供 preflight 校验的验收结果文件。");
+}
+
+function addMallMultiMerchantRuntimeChecks(checks: RuntimeConfigCheck[], config: ConfigService) {
+  const enabled = config.get<string>("MALL_MULTI_MERCHANT_ENABLED", "false") === "true";
+  addCheck(
+    checks,
+    "MALL_MULTI_MERCHANT_ENABLED",
+    "多商户商城开关",
+    enabled ? "warning" : "ok",
+    enabled ? "多商户商城已声明启用；必须确认店铺授权、跨店拆单、店铺收款、履约、结算和导出隔离 smoke 已在目标环境通过。" : "多商户商城未启用，不会对外开放平台型商城入口。",
+    enabled ? "已启用" : "未启用"
+  );
+  if (!enabled) return;
+  addImplementationCheck(checks, config, "MALL_MULTI_MERCHANT_PREFLIGHT_PASSED", "多商户商城预发验收", "预发环境尚未跑通 smoke:mall-multi-merchant，或未保留可供 preflight 校验的验收结果文件。");
 }
 
 function addRequiredPaymentFields(checks: RuntimeConfigCheck[], config: ConfigService, label: string, keys: string[], strict: boolean) {

@@ -4,22 +4,34 @@
       <text class="eyebrow">书院严选购物车</text>
       <text class="title">把想要的好物先放进来，确认地址后一起结算</text>
     </view>
-    <view v-for="item in cartItems" :key="item.id" class="cart-card">
-      <image v-if="item.product?.coverUrl" class="cover" :src="item.product.coverUrl" mode="aspectFill" />
-      <view v-else class="cover placeholder">好物</view>
-      <view class="info">
-        <text class="name">{{ item.product?.title }}</text>
-        <text class="sku" :class="{ danger: !canCheckoutItem(item) }">{{ item.sku?.name }} · {{ canCheckoutItem(item) ? `可购 ${item.availableStock}` : "库存不足或已售罄" }}</text>
-        <view class="row">
-          <text class="price">¥{{ money(item.sku?.price) }}</text>
-          <view class="qty">
-            <text @click.stop="changeQty(item, -1)">-</text>
-            <text>{{ item.quantity }}</text>
-            <text @click.stop="changeQty(item, 1)">+</text>
+    <view v-if="cartGroups.length > 1" class="cross-store-tip">
+      跨店购物车将按 {{ cartGroups.length }} 个店铺拆成子订单，支付、发货、售后都会分别处理。
+    </view>
+    <view v-for="group in cartGroups" :key="group.key" class="store-cart-group">
+      <view class="store-head">
+        <view>
+          <text class="store-name">{{ group.name }}</text>
+          <text class="store-meta">{{ group.ownerText }} · {{ group.items.length }} 件商品</text>
+        </view>
+        <text class="store-amount">¥{{ money(group.amount) }}</text>
+      </view>
+      <view v-for="item in group.items" :key="item.id" class="cart-card">
+        <image v-if="item.product?.coverUrl" class="cover" :src="item.product.coverUrl" mode="aspectFill" />
+        <view v-else class="cover placeholder">好物</view>
+        <view class="info">
+          <text class="name">{{ item.product?.title }}</text>
+          <text class="sku" :class="{ danger: !canCheckoutItem(item) }">{{ item.sku?.name }} · {{ cartItemStatusText(item) }}</text>
+          <view class="row">
+            <text class="price">¥{{ money(item.sku?.price) }}</text>
+            <view class="qty">
+              <text @click.stop="changeQty(item, -1)">-</text>
+              <text>{{ item.quantity }}</text>
+              <text @click.stop="changeQty(item, 1)">+</text>
+            </view>
           </view>
         </view>
+        <text class="delete" @click="remove(item)">删除</text>
       </view>
-      <text class="delete" @click="remove(item)">删除</text>
     </view>
     <EmptyState v-if="!cartItems.length && !loading" icon="🛒" text="购物车还是空的，去商城挑一件好物吧" />
     <view class="bottom-bar">
@@ -42,9 +54,31 @@ const cartItems = ref<any[]>([]);
 const loading = ref(false);
 const checkingOut = ref(false);
 const totalAmount = computed(() => cartItems.value.reduce((sum, item) => sum + Number(item.sku?.price || 0) * Number(item.quantity || 0), 0));
+const cartGroups = computed(() => {
+  const groups = new Map<string, { key: string; name: string; ownerText: string; amount: number; items: any[] }>();
+  for (const item of cartItems.value) {
+    const merchant = item.merchant || item.product?.merchant || item.sku?.merchant || null;
+    const key = merchant?.id ? `merchant_${merchant.id}` : "merchant_default";
+    const group = groups.get(key) || {
+      key,
+      name: merchant?.name || "默认店铺",
+      ownerText: merchant?.ownerType === "agent" ? "代理店铺" : "商家店铺",
+      amount: 0,
+      items: []
+    };
+    group.amount += Number(item.sku?.price || 0) * Number(item.quantity || 0);
+    group.items.push(item);
+    groups.set(key, group);
+  }
+  return Array.from(groups.values());
+});
 const canCheckout = computed(() => !checkingOut.value && cartItems.value.length > 0 && cartItems.value.every(canCheckoutItem));
 function money(value: any) { return Number(value || 0).toFixed(2); }
-function canCheckoutItem(item: any) { return Number(item.availableStock || 0) >= Number(item.quantity || 0); }
+function canCheckoutItem(item: any) { return item.purchasable !== false && Number(item.availableStock || 0) >= Number(item.quantity || 0); }
+function cartItemStatusText(item: any) {
+  if (item.unavailableReason) return item.unavailableReason;
+  return canCheckoutItem(item) ? `可购 ${item.availableStock}` : "库存不足或已售罄";
+}
 async function load() {
   loading.value = true;
   try {
@@ -73,7 +107,10 @@ async function remove(item: any) {
 function checkout() {
   if (checkingOut.value) return;
   if (!cartItems.value.length) return;
-  if (!canCheckout.value) return uni.showToast({ title: "购物车有库存不足商品，请调整后结算", icon: "none" });
+  if (!canCheckout.value) {
+    const invalid = cartItems.value.find((item) => !canCheckoutItem(item));
+    return uni.showToast({ title: invalid?.unavailableReason || "购物车有不可购买商品，请调整后结算", icon: "none" });
+  }
   checkingOut.value = true;
   const ids = cartItems.value.map((item) => item.id).join(",");
   uni.navigateTo({ url: withTenantCode(`/pages/mall/checkout?cartItemIds=${ids}`) });
@@ -87,7 +124,13 @@ onShow(load);
 .hero { padding:30rpx; border-radius:30rpx; background:linear-gradient(135deg,#7c2d12,#c2410c); color:#fff; margin-bottom:22rpx; display:grid; gap:10rpx; }
 .eyebrow { font-size:24rpx; opacity:.84; }
 .title { font-size:36rpx; font-weight:900; line-height:1.3; }
+.cross-store-tip { margin-bottom:20rpx; padding:18rpx 22rpx; border-radius:22rpx; background:#fff7ed; color:#9a3412; border:1rpx solid #fed7aa; font-size:25rpx; line-height:1.5; font-weight:900; }
 .cart-card { position:relative; display:flex; gap:18rpx; background:#fff; border-radius:26rpx; padding:18rpx; margin-bottom:18rpx; box-shadow:0 12rpx 30rpx rgba(124,45,18,.08); }
+.store-cart-group { margin-bottom:22rpx; padding:18rpx; border-radius:30rpx; background:rgba(255,255,255,.7); border:1rpx solid rgba(154,52,18,.08); box-shadow:0 12rpx 28rpx rgba(124,45,18,.05); }
+.store-head { display:flex; justify-content:space-between; align-items:center; gap:16rpx; margin-bottom:14rpx; }
+.store-name { display:block; color:#1f2937; font-size:30rpx; font-weight:900; }
+.store-meta { display:block; margin-top:4rpx; color:#94a3b8; font-size:23rpx; }
+.store-amount { color:#c2410c; font-size:30rpx; font-weight:900; }
 .cover { width:160rpx; height:160rpx; border-radius:20rpx; background:#fed7aa; display:grid; place-items:center; color:#9a3412; font-weight:900; }
 .info { flex:1; min-width:0; display:grid; gap:8rpx; }
 .name { font-size:28rpx; font-weight:900; color:#1f2937; line-height:1.35; }

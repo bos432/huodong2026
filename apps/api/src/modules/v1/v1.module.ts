@@ -22,6 +22,7 @@ import { Registration } from "../../entities/registration.entity";
 import { ShareVisit } from "../../entities/share-visit.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { User } from "../../entities/user.entity";
+import { UserTag } from "../../entities/user-tag.entity";
 import { AdminV1Controller } from "./v1-admin.controller";
 import { NotificationProviderService } from "./notification-provider.service";
 import { PublicV1Controller } from "./v1-public.controller";
@@ -29,7 +30,7 @@ import { V1Service } from "./v1.service";
 import { PublicModule } from "../public/public.module";
 
 @Module({
-  imports: [PublicModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, OperationSetting, CheckIn, User, InviteCode, ShareVisit, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule])],
+  imports: [PublicModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule])],
   controllers: [AdminV1Controller, PublicV1Controller],
   providers: [V1Service, NotificationProviderService]
 })

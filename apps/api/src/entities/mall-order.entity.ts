@@ -1,6 +1,8 @@
 import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, RelationId, UpdateDateColumn } from "typeorm";
 import { PaymentMethod } from "../shared/domain";
+import { MallCheckoutGroup } from "./mall-checkout-group.entity";
 import { MallCoupon } from "./mall-coupon.entity";
+import { MallMerchant } from "./mall-merchant.entity";
 import { Tenant } from "./tenant.entity";
 import { User } from "./user.entity";
 
@@ -17,6 +19,12 @@ export class MallOrder {
 
   @ManyToOne(() => Tenant, { eager: true, nullable: false, onDelete: "CASCADE" })
   tenant!: Tenant;
+
+  @ManyToOne(() => MallMerchant, { eager: true, nullable: true, onDelete: "SET NULL" })
+  merchant!: MallMerchant | null;
+
+  @ManyToOne(() => MallCheckoutGroup, { eager: true, nullable: true, onDelete: "SET NULL" })
+  checkoutGroup!: MallCheckoutGroup | null;
 
   @ManyToOne(() => User, { eager: true, nullable: false, onDelete: "CASCADE" })
   user!: User;

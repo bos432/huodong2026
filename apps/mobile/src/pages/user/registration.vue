@@ -340,20 +340,29 @@ onMounted(() => {
     </view>
     <template v-else-if="detail">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
-      <PageDecorationBlocks :sections="contentSections" />
 
-      <view class="page-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#ffffff') }">
-        <view class="page-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#111827') }">{{ innerPageConfig.title || "报名详情" }}</view>
-        <view class="page-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || '#667085') }">{{ innerPageConfig.subtitle || "查看报名状态、订单、签到码、入群二维码和主办方服务信息。" }}</view>
-      </view>
-
-      <view class="card">
-        <view class="row">
-          <view class="title small">{{ detail.registration.activity.title }}</view>
-          <text class="tag">{{ registrationStatusText[detail.registration.status as RegistrationStatus] }}</text>
+      <view class="registration-hero" :class="statusClass(detail.registration.status as RegistrationStatus)">
+        <image v-if="detail.registration.activity.coverUrl" class="hero-image" :src="detail.registration.activity.coverUrl" mode="aspectFill" />
+        <view v-else class="hero-image hero-fallback">报名</view>
+        <view class="hero-mask"></view>
+        <view class="hero-head">
+          <text class="hero-kicker">七维书院 · 报名详情</text>
+          <text class="hero-status">{{ registrationStatusText[detail.registration.status as RegistrationStatus] }}</text>
         </view>
-        <view class="subtle location">{{ detail.registration.activity.location }}</view>
+        <view class="hero-bottom">
+          <view class="page-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'transparent') }">
+            <view class="page-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ detail.registration.activity.title }}</view>
+            <view class="page-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "查看报名状态、订单、签到码、入群二维码和主办方服务信息。" }}</view>
+          </view>
+          <view class="hero-summary">
+            <view><text>报名</text><text>{{ registrationStatusText[detail.registration.status as RegistrationStatus] }}</text></view>
+            <view v-if="detail.order"><text>订单</text><text>{{ orderStatusText[orderStatus as OrderStatus] }}</text></view>
+            <view><text>地点</text><text>{{ detail.registration.activity.location }}</text></view>
+          </view>
+        </view>
       </view>
+
+      <PageDecorationBlocks :sections="contentSections" />
 
       <view class="card status-card" :class="statusClass(detail.registration.status as RegistrationStatus)">
         <view class="status-label">当前状态</view>
@@ -464,40 +473,153 @@ onMounted(() => {
 <style scoped>
 .registration { padding-bottom: 36rpx; }
 .registration.has-custom-nav { padding-bottom: 160rpx; }
-.page-head { margin-bottom: 20rpx; padding: 28rpx 24rpx; border-radius: var(--card-radius, 8px); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
-.page-head-title { font-size: 40rpx; font-weight: 900; line-height: 1.25; }
-.page-head-copy { margin-top: 10rpx; font-size: 25rpx; line-height: 1.5; }
-.small { font-size: 30rpx; }
-.location { margin-top: 12rpx; }
-.status-card { display: grid; gap: 14rpx; border-color: transparent; background: #111827; color: #fff; }
-.status-label { color: rgba(255,255,255,0.72); font-size: 23rpx; font-weight: 800; }
-.status-title { font-size: 36rpx; line-height: 1.25; font-weight: 900; }
-.status-copy { color: rgba(255,255,255,0.76); font-size: 26rpx; line-height: 1.55; }
+.registration-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 500rpx;
+  margin-bottom: 24rpx;
+  border-radius: 24rpx;
+  background: #4a6b8a;
+  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+}
+.hero-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hero-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 248, 240, 0.92);
+  font-size: 72rpx;
+  font-weight: 700;
+  font-family: "STKaiti", "KaiTi", serif;
+  background: #4a6b8a;
+}
+.hero-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(34, 24, 19, 0.16), rgba(34, 24, 19, 0.76));
+}
+.hero-head,
+.hero-bottom {
+  position: relative;
+  z-index: 1;
+}
+.hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 24rpx 24rpx 0;
+}
+.hero-kicker {
+  color: rgba(255, 248, 240, 0.78);
+  font-size: 23rpx;
+  font-weight: 700;
+}
+.hero-status {
+  flex: 0 0 auto;
+  min-height: 50rpx;
+  padding: 0 16rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 248, 240, 0.16);
+  color: #fff8f0;
+  font-size: 22rpx;
+  font-weight: 700;
+}
+.hero-bottom {
+  min-height: 476rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 22rpx;
+  padding: 24rpx;
+}
+.page-head {
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent !important;
+}
+.page-head-title {
+  color: #fff8f0;
+  font-size: 48rpx;
+  font-weight: 700;
+  line-height: 1.24;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.page-head-copy {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.65;
+}
+.hero-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+}
+.hero-summary view {
+  min-width: 0;
+  display: grid;
+  gap: 6rpx;
+  padding: 16rpx 14rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 248, 240, 0.16);
+  border: 1px solid rgba(255, 248, 240, 0.16);
+}
+.hero-summary text:first-child {
+  color: rgba(255, 248, 240, 0.68);
+  font-size: 22rpx;
+}
+.hero-summary text:last-child {
+  color: #fff8f0;
+  font-size: 25rpx;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.small {
+  font-size: 30rpx;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.status-card { display: grid; gap: 14rpx; border-color: transparent; background: #fffaf4; color: #333333; border-left: 8rpx solid #4a6b8a; }
+.status-label { color: #4a6b8a; font-size: 23rpx; font-weight: 800; }
+.status-title { font-size: 36rpx; line-height: 1.25; font-weight: 900; font-family: "STKaiti", "KaiTi", serif; }
+.status-copy { color: #666666; font-size: 26rpx; line-height: 1.55; }
 .status-meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12rpx; }
-.status-meta view { display: grid; gap: 6rpx; padding: 14rpx; border-radius: 6px; background: rgba(255,255,255,0.1); }
-.status-meta text:first-child { color: rgba(255,255,255,0.66); font-size: 22rpx; }
-.status-meta text:last-child { color: #fff; font-size: 25rpx; font-weight: 800; }
-.status-action { height: 72rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: #fff; color: #111827; font-size: 26rpx; font-weight: 900; }
-.status-card.is-payment { background: #9a3412; }
-.status-card.is-review { background: #3730a3; }
-.status-card.is-approved { background: var(--primary-color, #0f766e); }
-.status-card.is-checkin { background: #166534; }
-.status-card.is-muted { background: #475467; }
+.status-meta view { display: grid; gap: 6rpx; padding: 14rpx; border-radius: 16rpx; background: #f9f4ee; }
+.status-meta text:first-child { color: #999999; font-size: 22rpx; }
+.status-meta text:last-child { color: #333333; font-size: 25rpx; font-weight: 800; }
+.status-action { height: 72rpx; display: flex; align-items: center; justify-content: center; border-radius: 16rpx; background: #c43d3d; color: #fff; font-size: 26rpx; font-weight: 900; }
+.status-card.is-payment { border-left-color: #c43d3d; }
+.status-card.is-review { border-left-color: #4a6b8a; }
+.status-card.is-approved { border-left-color: #5b8c5a; }
+.status-card.is-checkin { border-left-color: #5b8c5a; }
+.status-card.is-muted { border-left-color: #999999; }
 .line { display: grid; grid-template-columns: 150rpx 1fr; gap: 16rpx; margin-top: 14rpx; }
 .line text:first-child { color: var(--muted-color, #667085); }
 .line.strong { font-weight: 800; }
-.line.strong text:last-child { color: var(--primary-color, #0f766e); }
-.notice { margin-top: 16rpx; padding: 18rpx; background: #fff7ed; border-radius: 6px; color: #9a3412; line-height: 1.5; }
+.line.strong text:last-child { color: #c43d3d; }
+.notice { margin-top: 16rpx; padding: 18rpx; background: #fff7ed; border-radius: 18rpx; color: #9a3412; line-height: 1.5; }
 .notice.danger { background: #fef2f2; color: #b91c1c; }
 .notice.muted { background: #f3f4f6; color: #4b5563; }
 .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; margin-top: 18rpx; }
-.step { padding: 14rpx 8rpx; background: #edf0f5; border-radius: 6px; text-align: center; color: var(--muted-color, #667085); font-size: 22rpx; }
-.step.active { background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-weight: 650; }
+.step { padding: 14rpx 8rpx; background: #f9f4ee; border-radius: 16rpx; text-align: center; color: #999999; font-size: 22rpx; }
+.step.active { background: rgba(196, 61, 61, 0.12); color: #c43d3d; font-weight: 650; }
 .group-card .row { align-items: flex-start; }
-.mini-button { flex: 0 0 auto; padding: 10rpx 18rpx; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 800; }
-.group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: var(--card-radius, 8px); border: 1px solid #e5e7eb; background: var(--card-bg, #fff); }
+.mini-button { flex: 0 0 auto; padding: 10rpx 18rpx; border-radius: 999px; background: rgba(74, 107, 138, 0.12); color: #4a6b8a; font-size: 24rpx; font-weight: 800; }
+.group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: var(--card-bg, #fff); }
 .code { text-align: center; }
-.code-qr { display: block; width: 360rpx; margin: 18rpx auto 0; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
+.code-qr { display: block; width: 360rpx; margin: 18rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: #fff; }
 .code-text { margin-top: 16rpx; font-size: 34rpx; word-break: break-all; }
 .code-tip { margin-top: 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.5; }
 .copy-code { display: inline-flex; margin-top: 18rpx; }

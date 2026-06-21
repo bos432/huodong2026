@@ -23,6 +23,8 @@
 
 ## 配置开关
 
+平台级真实支付资料优先在后台“系统设置 / 部署配置”维护，保存后会写入 `operation_settings.launchConfig`，并参与上线体检、商城支付 readiness 和平台级真实支付 adapter runtime config。`deploy/.env.production` 中的同名字段仍保留为首次部署引导、容器启动兜底和应急回滚使用；后台未填写某个字段时才回退读取环境变量。
+
 真实支付正式启用前，生产环境保持：
 
 ```bash
@@ -41,6 +43,8 @@ REAL_PAYMENT_CALLBACK_VERIFICATION_IMPLEMENTED=false
 REAL_REFUND_QUERY_IMPLEMENTED=false
 REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED=false
 AGENT_REAL_TRANSFER_IMPLEMENTED=false
+MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED=false
+MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED=false
 REAL_PAYMENT_PREFLIGHT_PASSED=false
 REAL_PAYMENT_PREFLIGHT_RESULT_FILE=deploy/real-payment-smoke-result.json
 REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS=168
@@ -83,6 +87,15 @@ ALIPAY_TRANSFER_REMARK=<默认转账备注>
 }
 ```
 
+商城平台代收和店铺直收还应在后台补齐以下回调资料；平台代收可以显式填写商城回调，也可以由标准活动支付回调推导，店铺直收建议使用带 `{merchantId}` 的模板，避免不同店铺回调串路由：
+
+```bash
+MALL_WECHAT_PAY_NOTIFY_URL=https://api.example.com/payment/mall/wechat/callback
+MALL_WECHAT_PAY_REFUND_NOTIFY_URL=https://api.example.com/payment/mall/wechat/refund-callback
+MALL_WECHAT_PAY_DIRECT_NOTIFY_URL_TEMPLATE=https://api.example.com/payment/mall/merchants/{merchantId}/wechat/callback
+MALL_WECHAT_PAY_DIRECT_REFUND_NOTIFY_URL_TEMPLATE=https://api.example.com/payment/mall/merchants/{merchantId}/wechat/refund-callback
+```
+
 ## 后端改造步骤
 
 1. 已完成：在 `PaymentProviderService` 中新增真实 provider 合同，保持 `PublicService` 只处理订单校验、幂等更新和对账差异。
@@ -99,8 +112,8 @@ ALIPAY_TRANSFER_REMARK=<默认转账备注>
 12. 已完成：新增真实转账请求/查询合同和失败保护入口；微信真实打款不会在请求未成功或查询未确认成功时标记结算单已打款，失败会保留结构化回执和审计。
 13. 下一步：确认微信商家转账产品已开通，补齐 `WECHAT_TRANSFER_APP_ID`、`WECHAT_TRANSFER_SCENE_ID` 和代理 OpenID/实名，完成小额预发成功查询、失败用例和回滚记录；支付宝单笔转账另行排期。
 14. 进行中：已新增服务商账单原始记录表、手动导入入口、自动拉取 provider 合同、后台触发入口、微信/支付宝账单下载地址签名请求、下载执行、CSV 文本解析、gzip 解包、zip 包内 CSV/TXT 提取、异常列名兼容、1200 行大文件解析回归、代理账户路由和跨机构拒绝用例；导入后会匹配本地订单并把金额不一致、未知订单、订单状态异常落入现有财务对账差异。下一步用真实商户账单样例验证服务商真实列名差异和预发账号路由。
-15. 已完成挡板：上线体检和 `npm run preflight` 已加入真实支付 SDK、回调验签、退款查询、账单拉取和代理真实打款实现状态检查；这些标记默认必须保持 `false`，只有代码实现和预发验收完成后才逐项改为 `true`。
-16. 已完成验收留档底座：新增 `npm run smoke:real-payment -- --init` 生成 `deploy/real-payment-smoke-result.json` 模板，预发跑通真实支付后把支付下单、多场景覆盖、支付回调、重复回调、异常金额、退款请求、退款通知、退款查询、账单拉取、代理账户路由、代理真实打款和回滚方案标记为 passed。代理真实打款必须留存 provider、代理、结算单、幂等转账单号、服务商转账单号、金额、成功查询、失败用例和回滚记录。`REAL_PAYMENT_ENABLED=true` 或任何真实支付实现标记改为 `true` 时，`npm run preflight` 会要求 `REAL_PAYMENT_PREFLIGHT_PASSED=true` 且结果文件新鲜有效。
+15. 已完成挡板：上线体检和 `npm run preflight` 已加入真实支付 SDK、回调验签、退款查询、账单拉取、代理真实打款、商城微信支付和店铺直收支付实现状态检查；这些标记默认必须保持 `false`，只有代码实现和预发验收完成后才逐项改为 `true`。
+16. 已完成验收留档底座：新增 `npm run smoke:real-payment -- --init` 生成 `deploy/real-payment-smoke-result.json` 模板，预发跑通真实支付后把支付下单、多场景覆盖、支付回调、重复回调、异常金额、退款请求、退款通知、退款查询、账单拉取、代理账户路由、商城支付、商城回调防串店、商城退款、店铺直收、代理真实打款和回滚方案标记为 passed。店铺直收必须额外留存 `mallPaymentRouteGuard` 证据，证明商户直收支付/退款误走平台回调、走错店铺回调都会被拒绝。代理真实打款必须留存 provider、代理、结算单、幂等转账单号、服务商转账单号、金额、成功查询、失败用例和回滚记录。`REAL_PAYMENT_ENABLED=true` 或任何真实支付实现标记改为 `true` 时，`npm run preflight` 会要求 `REAL_PAYMENT_PREFLIGHT_PASSED=true` 且结果文件新鲜有效。
 
 ## 验收清单
 

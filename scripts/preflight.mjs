@@ -96,6 +96,88 @@ const requiredAgentTransferEvidenceFields = [
   "rollbackRecord"
 ];
 
+const requiredMallPaymentEvidenceFields = [
+  "provider",
+  "merchantId",
+  "merchantScope",
+  "paymentMode",
+  "collectionMode",
+  "receiverType",
+  "callbackPath",
+  "orderNo",
+  "transactionNo",
+  "callbackLogId",
+  "refundNo",
+  "providerRefundNo",
+  "rollbackRecord"
+];
+
+const requiredMallPaymentRouteGuardEvidenceFields = [
+  "provider",
+  "merchantId",
+  "paymentMode",
+  "paymentCallbackPath",
+  "refundCallbackPath",
+  "platformPaymentRouteRejected",
+  "wrongMerchantPaymentRouteRejected",
+  "platformRefundRouteRejected",
+  "wrongMerchantRefundRouteRejected",
+  "callbackLogIds",
+  "operatorMessage",
+  "rollbackRecord"
+];
+
+const requiredMallPaymentRouteRejectionFields = [
+  "platformPaymentRouteRejected",
+  "wrongMerchantPaymentRouteRejected",
+  "platformRefundRouteRejected",
+  "wrongMerchantRefundRouteRejected"
+];
+
+const requiredMallMultiMerchantChecks = [
+  "merchantSetup",
+  "storeProducts",
+  "productAudit",
+  "adminIsolation",
+  "publicStorefront",
+  "categoryMerchantAvailabilityGuard",
+  "paymentReadiness",
+  "paymentAccountManagement",
+  "merchantOperationReadiness",
+  "merchantIdentityGuard",
+  "disabledMerchantOperationGuard",
+  "merchantOpenGuard",
+  "merchantDirectOpenGuard",
+  "cartMerchantAvailabilityGuard",
+  "favoriteBrowseMerchantAvailabilityGuard",
+  "productSkuAvailabilityGuard",
+  "paymentModeSwitchGuard",
+  "merchantCloseGuard",
+  "merchantAccessTenantGuard",
+  "couponStoreIsolation",
+  "couponMerchantAvailabilityGuard",
+  "promotionStoreIsolation",
+  "flashGroupStoreIsolation",
+  "marketingProductAvailabilityGuard",
+  "logisticsStoreIsolation",
+  "crossStoreCheckout",
+  "crossStoreBalanceGuard",
+  "checkoutGroupIdempotencyGuard",
+  "paymentTaskRouting",
+  "directIdOperationIsolation",
+  "batchOperationScope",
+  "orderFulfillment",
+  "checkoutGroupStatusSync",
+  "checkoutGroupAdminTrace",
+  "userPrivatePayloadSafety",
+  "reviewStoreIsolation",
+  "settlementLifecycle",
+  "settlementPaidEvidenceGuard",
+  "settlementPaymentModeAccounting",
+  "settlementRefundChargebackAccounting",
+  "operationalAdmin"
+];
+
 const dockerComposeMysqlOnlyKeys = new Set([
   "MYSQL_ROOT_PASSWORD",
   "MYSQL_DATABASE",
@@ -113,6 +195,12 @@ const dockerComposeBackupOnlyKeys = new Set([
 function hasEvidenceValue(value) {
   if (typeof value === "string") return value.trim().length > 0;
   return value !== undefined && value !== null;
+}
+
+function isAffirmativeEvidence(value) {
+  if (value === true) return true;
+  if (typeof value !== "string") return false;
+  return ["true", "passed", "ok", "yes"].includes(value.trim().toLowerCase());
 }
 
 function checkRealPaymentSceneCoverage(result, relativeResultFile) {
@@ -135,6 +223,107 @@ function checkRealPaymentAgentTransfer(result, relativeResultFile) {
   const evidence = result?.checks?.agentTransfer?.evidence || {};
   for (const field of requiredAgentTransferEvidenceFields) {
     check(hasEvidenceValue(evidence[field]), `Real payment smoke result file (${relativeResultFile}) must include agentTransfer.evidence.${field}.`);
+  }
+}
+
+function checkRealPaymentMallPayment(result, relativeResultFile) {
+  for (const checkKey of ["mallPaymentCreate", "mallPaymentCallback", "mallRefund"]) {
+    check(result?.checks?.[checkKey]?.status === "passed", `Real payment smoke result file (${relativeResultFile}) must include passed check: ${checkKey}.`);
+    const evidence = result?.checks?.[checkKey]?.evidence || {};
+    for (const field of requiredMallPaymentEvidenceFields) {
+      check(hasEvidenceValue(evidence[field]), `Real payment smoke result file (${relativeResultFile}) must include ${checkKey}.evidence.${field}.`);
+    }
+    checkMallPaymentRoutingEvidence(checkKey, evidence, relativeResultFile);
+  }
+}
+
+function checkRealPaymentMallRouteGuard(result, relativeResultFile) {
+  check(result?.checks?.mallPaymentRouteGuard?.status === "passed", `Real payment smoke result file (${relativeResultFile}) must include passed check: mallPaymentRouteGuard.`);
+  const evidence = result?.checks?.mallPaymentRouteGuard?.evidence || {};
+  for (const field of requiredMallPaymentRouteGuardEvidenceFields) {
+    check(hasEvidenceValue(evidence[field]), `Real payment smoke result file (${relativeResultFile}) must include mallPaymentRouteGuard.evidence.${field}.`);
+  }
+  const merchantId = String(evidence.merchantId || "").trim();
+  const paymentMode = String(evidence.paymentMode || "").trim();
+  const paymentCallbackPath = String(evidence.paymentCallbackPath || "").trim();
+  const refundCallbackPath = String(evidence.refundCallbackPath || "").trim();
+  const expectedPaymentPath = merchantId ? `/payment/mall/merchants/${merchantId}/wechat/callback` : "";
+  const expectedRefundPath = merchantId ? `/payment/mall/merchants/${merchantId}/wechat/refund-callback` : "";
+  check(paymentMode === "merchant_direct", `Real payment smoke result file (${relativeResultFile}) mallPaymentRouteGuard.paymentMode must be merchant_direct.`);
+  if (merchantId) {
+    check(paymentCallbackPath.includes(expectedPaymentPath), `Real payment smoke result file (${relativeResultFile}) mallPaymentRouteGuard.paymentCallbackPath must include ${expectedPaymentPath}.`);
+    check(refundCallbackPath.includes(expectedRefundPath), `Real payment smoke result file (${relativeResultFile}) mallPaymentRouteGuard.refundCallbackPath must include ${expectedRefundPath}.`);
+  }
+  for (const field of requiredMallPaymentRouteRejectionFields) {
+    check(isAffirmativeEvidence(evidence[field]), `Real payment smoke result file (${relativeResultFile}) mallPaymentRouteGuard.evidence.${field} must be true or passed.`);
+  }
+}
+
+function checkMallPaymentRoutingEvidence(checkKey, evidence, relativeResultFile) {
+  const merchantId = String(evidence.merchantId || "").trim();
+  const paymentMode = String(evidence.paymentMode || "").trim();
+  const collectionMode = String(evidence.collectionMode || "").trim();
+  const receiverType = String(evidence.receiverType || "").trim();
+  const merchantScope = String(evidence.merchantScope || "").trim();
+  const callbackPath = String(evidence.callbackPath || "").trim();
+  const isRefund = checkKey === "mallRefund";
+  const platformPath = isRefund ? "/payment/mall/wechat/refund-callback" : "/payment/mall/wechat/callback";
+  const directPath = merchantId ? (isRefund ? `/payment/mall/merchants/${merchantId}/wechat/refund-callback` : `/payment/mall/merchants/${merchantId}/wechat/callback`) : "";
+  if (paymentMode === "merchant_direct" || collectionMode === "merchant_direct") {
+    check(Boolean(merchantId), `Real payment smoke result file (${relativeResultFile}) ${checkKey} merchant_direct must include evidence.merchantId.`);
+    check(Boolean(directPath) && callbackPath.includes(directPath), `Real payment smoke result file (${relativeResultFile}) ${checkKey} merchant_direct callbackPath must include ${directPath}.`);
+    check(receiverType === "merchant", `Real payment smoke result file (${relativeResultFile}) ${checkKey} merchant_direct receiverType must be merchant.`);
+    check(["merchant", "agent"].includes(merchantScope), `Real payment smoke result file (${relativeResultFile}) ${checkKey} merchant_direct merchantScope must be merchant or agent.`);
+  }
+  if (paymentMode === "platform_collect" || collectionMode === "platform_collect") {
+    check(callbackPath.includes(platformPath) && !callbackPath.includes("/payment/mall/merchants/"), `Real payment smoke result file (${relativeResultFile}) ${checkKey} platform_collect callbackPath must use ${platformPath}.`);
+    check(receiverType === "platform", `Real payment smoke result file (${relativeResultFile}) ${checkKey} platform_collect receiverType must be platform.`);
+    check(merchantScope === "platform", `Real payment smoke result file (${relativeResultFile}) ${checkKey} platform_collect merchantScope must be platform.`);
+  }
+}
+
+function normalizeBaseUrl(value) {
+  return String(value || "").trim().replace(/\/+$/, "");
+}
+
+function expectedApiBases(env) {
+  const publicApiOrigin = normalizeBaseUrl(env.PUBLIC_API_ORIGIN);
+  if (isPlaceholderValue(publicApiOrigin)) return [];
+  return Array.from(new Set([publicApiOrigin, `${publicApiOrigin}/api`].map(normalizeBaseUrl)));
+}
+
+function checkMallMultiMerchantSmokeResult(env, envPath) {
+  const relativeResultFile = env.MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE || "deploy/mall-multi-merchant-smoke-result.json";
+  const resultFile = resolveRootPath(relativeResultFile);
+  const maxAgeHours = Number(env.MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS || 168);
+  check(Number.isFinite(maxAgeHours) && maxAgeHours > 0, `${envPath} must set MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS to a positive number.`);
+  check(fs.existsSync(resultFile), `${envPath} requires a fresh multi-merchant mall smoke result file (${relativeResultFile}). Run npm run smoke:mall-multi-merchant before opening the mall.`);
+  if (!fs.existsSync(resultFile)) return;
+
+  let result;
+  try {
+    result = JSON.parse(fs.readFileSync(resultFile, "utf8"));
+  } catch (error) {
+    check(false, `Multi-merchant mall smoke result file is not valid JSON: ${relativeResultFile} (${error.message}).`);
+    return;
+  }
+
+  check(result?.passed === true, `Multi-merchant mall smoke result file (${relativeResultFile}) must have passed=true.`);
+  const checkedAt = Date.parse(result?.checkedAt || "");
+  check(Number.isFinite(checkedAt), `Multi-merchant mall smoke result file (${relativeResultFile}) must include a valid checkedAt timestamp.`);
+  if (Number.isFinite(checkedAt) && Number.isFinite(maxAgeHours)) {
+    const ageHours = (Date.now() - checkedAt) / 3600000;
+    check(ageHours >= 0, `Multi-merchant mall smoke result file (${relativeResultFile}) has a future checkedAt timestamp.`);
+    check(ageHours <= maxAgeHours, `Multi-merchant mall smoke result file (${relativeResultFile}) is older than ${maxAgeHours} hours. Re-run npm run smoke:mall-multi-merchant.`);
+  }
+
+  const apiBases = expectedApiBases(env);
+  if (apiBases.length) {
+    check(apiBases.includes(normalizeBaseUrl(result?.apiBase)), `Multi-merchant mall smoke result file (${relativeResultFile}) must target the production API (${apiBases.join(" or ")}), got ${result?.apiBase || "empty"}.`);
+  }
+  check(result?.tenantCode === "qiwai-showcase", `Multi-merchant mall smoke result file (${relativeResultFile}) must target qiwai-showcase.`);
+  for (const key of requiredMallMultiMerchantChecks) {
+    check(result?.checks?.[key]?.status === "passed", `Multi-merchant mall smoke result file (${relativeResultFile}) must include passed check: ${key}.`);
   }
 }
 
@@ -197,10 +386,12 @@ function checkRealPaymentSmokeResult(env, envPath) {
     check(ageHours <= maxAgeHours, `Real payment smoke result file (${relativeResultFile}) is older than ${maxAgeHours} hours. Re-run staging provider tests.`);
   }
 
-  for (const key of ["paymentCreate", "paymentSceneCoverage", "paymentCallback", "duplicateCallback", "amountMismatchCallback", "refundRequest", "refundNotification", "refundQuery", "statementFetch", "agentAccountRouting", "rollbackPlan"]) {
+  for (const key of ["paymentCreate", "paymentSceneCoverage", "paymentCallback", "duplicateCallback", "amountMismatchCallback", "refundRequest", "refundNotification", "refundQuery", "statementFetch", "agentAccountRouting", "mallPaymentCreate", "mallPaymentCallback", "mallPaymentRouteGuard", "mallRefund", "rollbackPlan"]) {
     check(result?.checks?.[key]?.status === "passed", `Real payment smoke result file (${relativeResultFile}) must include passed check: ${key}.`);
   }
   checkRealPaymentSceneCoverage(result, relativeResultFile);
+  checkRealPaymentMallPayment(result, relativeResultFile);
+  checkRealPaymentMallRouteGuard(result, relativeResultFile);
   checkRealPaymentAgentTransfer(result, relativeResultFile);
   check(result?.rollback?.documented === true, `Real payment smoke result file (${relativeResultFile}) must include rollback.documented=true.`);
 }
@@ -257,8 +448,19 @@ function checkProductionEnv() {
     check(env.REAL_REFUND_QUERY_IMPLEMENTED === "true", `${envPath} enables REAL_PAYMENT_ENABLED but official refund query/notification handling is still marked incomplete.`);
     check(env.REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED === "true", `${envPath} enables REAL_PAYMENT_ENABLED but official statement download/parser is still marked incomplete.`);
     check(env.AGENT_REAL_TRANSFER_IMPLEMENTED === "true", `${envPath} enables REAL_PAYMENT_ENABLED but real agent transfer SDK is still marked incomplete; keep automatic transfer UI disabled.`);
+    if (env.MALL_MULTI_MERCHANT_ENABLED === "true" && env.WECHAT_PAY_ENABLED === "true") {
+      check(env.MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED === "true", `${envPath} enables multi-merchant mall with WeChat real payment but MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED is not true.`);
+    }
   }
-  if (env.REAL_PAYMENT_ENABLED === "true" || env.REAL_PAYMENT_PREFLIGHT_PASSED === "true" || env.REAL_PAYMENT_SDK_IMPLEMENTED === "true" || env.REAL_REFUND_QUERY_IMPLEMENTED === "true" || env.REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED === "true" || env.AGENT_REAL_TRANSFER_IMPLEMENTED === "true") {
+  if (env.MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED === "true") {
+    check(env.REAL_PAYMENT_ENABLED === "true", `${envPath} declares MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED but REAL_PAYMENT_ENABLED is not true.`);
+    check(env.WECHAT_PAY_ENABLED === "true", `${envPath} declares MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED but WECHAT_PAY_ENABLED is not true.`);
+  }
+  if (env.MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED === "true") {
+    check(env.MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED === "true", `${envPath} enables merchant direct mall payment but MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED is not true.`);
+    check(env.MALL_MULTI_MERCHANT_PREFLIGHT_PASSED === "true", `${envPath} enables merchant direct mall payment but MALL_MULTI_MERCHANT_PREFLIGHT_PASSED is not true.`);
+  }
+  if (env.REAL_PAYMENT_ENABLED === "true" || env.REAL_PAYMENT_PREFLIGHT_PASSED === "true" || env.REAL_PAYMENT_SDK_IMPLEMENTED === "true" || env.REAL_REFUND_QUERY_IMPLEMENTED === "true" || env.REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED === "true" || env.AGENT_REAL_TRANSFER_IMPLEMENTED === "true" || env.MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED === "true" || env.MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED === "true") {
     check(env.REAL_PAYMENT_PREFLIGHT_PASSED === "true", `${envPath} declares real payment implementation or enables real payment but REAL_PAYMENT_PREFLIGHT_PASSED is not true.`);
     checkRealPaymentSmokeResult(env, envPath);
   }
@@ -269,6 +471,10 @@ function checkProductionEnv() {
     check(env.MULTI_TENANT_PREFLIGHT_PASSED === "true", `${envPath} enables MULTI_TENANT_ENABLED but tenant isolation preflight is still marked incomplete.`);
   }
   if (env.MULTI_TENANT_ENABLED === "true" || env.MULTI_TENANT_PREFLIGHT_PASSED === "true") checkTenantSmokeResult(env, envPath);
+  if (env.MALL_MULTI_MERCHANT_ENABLED === "true") {
+    check(env.MALL_MULTI_MERCHANT_PREFLIGHT_PASSED === "true", `${envPath} enables MALL_MULTI_MERCHANT_ENABLED but multi-merchant mall preflight is still marked incomplete.`);
+  }
+  if (env.MALL_MULTI_MERCHANT_ENABLED === "true" || env.MALL_MULTI_MERCHANT_PREFLIGHT_PASSED === "true") checkMallMultiMerchantSmokeResult(env, envPath);
   warn(env.SMS_PROVIDER_ENABLED === "true", `${envPath} does not enable SMS_PROVIDER_ENABLED; H5 SMS provider settings may be maintained in the admin console, but production traffic must verify the backend settings page before release.`);
   if (env.SMS_PROVIDER_ENABLED === "true") {
     const missingSmsEnvKeys = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"].filter((key) => !env[key]);

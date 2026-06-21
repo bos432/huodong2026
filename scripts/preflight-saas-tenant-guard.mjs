@@ -22,17 +22,30 @@ const files = {
   adminPackage: read("apps/admin/package.json"),
   tenantScope: read("apps/api/src/shared/tenant-scope.ts"),
   tenantEntity: read("apps/api/src/entities/tenant.entity.ts"),
+  tenantRegionEntity: read("apps/api/src/entities/tenant-region.entity.ts"),
+  tenantRegionHitLogEntity: read("apps/api/src/entities/tenant-region-hit-log.entity.ts"),
+  tenantRegionHitLogMigration: read("apps/api/src/migrations/1781889000000-CreateTenantRegionHitLogs.ts"),
+  tenantRegionBoundaryMigration: read("apps/api/src/migrations/1781889100000-AddTenantRegionBoundaryPoints.ts"),
   categoryEntity: read("apps/api/src/entities/activity-category.entity.ts"),
   userTagEntity: read("apps/api/src/entities/user-tag.entity.ts"),
   homepageSectionEntity: read("apps/api/src/entities/homepage-section.entity.ts"),
   activityApprovalLogEntity: read("apps/api/src/entities/activity-approval-log.entity.ts"),
   notificationTemplateEntity: read("apps/api/src/entities/notification-template.entity.ts"),
   adminRoles: read("apps/api/src/modules/admin/admin-roles.ts"),
+  adminPermissions: read("apps/api/src/modules/admin/admin-permissions.ts"),
+  dataSource: read("apps/api/src/data-source.ts"),
+  appModule: read("apps/api/src/modules/app.module.ts"),
   adminService: read("apps/api/src/modules/admin/admin.service.ts"),
+  adminModule: read("apps/api/src/modules/admin/admin.module.ts"),
+  adminDto: read("apps/api/src/modules/admin/dto.ts"),
+  tenantRegionGeometry: read("apps/api/src/modules/admin/tenant-region-geometry.ts"),
+  tenantHealth: read("apps/api/src/modules/admin/tenant-health.ts"),
+  tenantSubscription: read("apps/api/src/modules/admin/tenant-subscription.ts"),
   adminController: read("apps/api/src/modules/admin/admin.controller.ts"),
   jwtStrategy: read("apps/api/src/modules/admin/jwt.strategy.ts"),
   publicController: read("apps/api/src/modules/public/public.controller.ts"),
   publicService: read("apps/api/src/modules/public/public.service.ts"),
+  publicModule: read("apps/api/src/modules/public/public.module.ts"),
   v1AdminController: read("apps/api/src/modules/v1/v1-admin.controller.ts"),
   v1PublicController: read("apps/api/src/modules/v1/v1-public.controller.ts"),
   v1Service: read("apps/api/src/modules/v1/v1.service.ts"),
@@ -41,12 +54,15 @@ const files = {
   router: read("apps/admin/src/router.ts"),
   layout: read("apps/admin/src/views/Layout.vue"),
   tenantsView: read("apps/admin/src/views/Tenants.vue"),
+  tenantRegionsView: read("apps/admin/src/views/TenantRegions.vue"),
+  tenantRegionHitLogsView: read("apps/admin/src/views/TenantRegionHitLogs.vue"),
   adminsView: read("apps/admin/src/views/Admins.vue"),
   activitiesView: read("apps/admin/src/views/Activities.vue"),
   ordersView: read("apps/admin/src/views/Orders.vue"),
   registrationsView: read("apps/admin/src/views/Registrations.vue"),
   financeView: read("apps/admin/src/views/Finance.vue"),
   dashboardView: read("apps/admin/src/views/Dashboard.vue"),
+  analyticsView: read("apps/admin/src/views/Analytics.vue"),
   recapsView: read("apps/admin/src/views/Recaps.vue"),
   announcementsView: read("apps/admin/src/views/Announcements.vue"),
   homepageBuilderView: read("apps/admin/src/views/HomepageBuilder.vue"),
@@ -118,6 +134,9 @@ includesAll(files.adminService, [
   "registrationReviewEnabled",
   "paymentAccountEditable",
   "mallEnabled",
+  "packagePlan",
+  "packageExpiresAt",
+  "tenantSubscriptionStatus",
   'failureReason: "tenant_disabled"',
   "assertPlatformAdmin",
   "assertTenantAccess",
@@ -136,11 +155,272 @@ includesAll(files.adminService, [
   "enabledAdminCount",
   "paymentAccountCount",
   "enabledPaymentAccountCount",
+  "totalCourseCount",
+  "publishedCourseCount",
   "pendingActivityCount",
   "pendingRegistrationCount",
   "pendingRefundCount",
-  "callbackRiskCount"
+  "callbackRiskCount",
+  "pendingReconciliationCount",
+  "operationHealth"
 ], "admin service tenant overview");
+
+includesAll(files.tenantHealth, [
+  "tenantOperationHealth",
+  "TenantOperationHealthInput",
+  "enabledPaymentAccountCount",
+  "totalActivityCount",
+  "totalCourseCount",
+  "publishedCourseCount",
+  "pendingReconciliationCount",
+  "健康"
+], "tenant operation health scoring");
+
+includesAll(files.tenantSubscription, [
+  "tenantPackagePermissionTemplate",
+  "tenantRenewalReminder",
+  "PLAN_PERMISSION_TEMPLATES",
+  "activityPublishReviewRequired",
+  "registrationReviewEnabled",
+  "paymentAccountEditable",
+  "mallEnabled",
+  "tenantSubscriptionWriteRestriction",
+  "续费提醒",
+  "商家套餐已到期",
+  "续费或延长到期日后才能继续运营写入"
+], "tenant subscription templates and write restriction");
+
+includesAll(files.tenantRegionEntity, [
+  "TenantRegionBoundaryPoint",
+  "boundaryPoints",
+  'type: "json"',
+  "lat: number",
+  "lng: number"
+], "tenant region polygon boundary entity");
+
+includesAll(files.tenantRegionBoundaryMigration, [
+  "AddTenantRegionBoundaryPoints1781889100000",
+  "tenant_regions",
+  "boundaryPoints",
+  'type: "json"',
+  "addColumn",
+  "dropColumn"
+], "tenant region polygon boundary migration");
+
+includesAll(files.tenantRegionHitLogEntity, [
+  '@Entity("tenant_region_hit_logs")',
+  "TenantRegionHitLog",
+  "TenantRegion",
+  "latitude",
+  "longitude",
+  "matched",
+  "distanceMeters",
+  "source",
+  "clientIp",
+  "userAgent",
+  "createdAt"
+], "tenant region hit log entity");
+
+includesAll(files.tenantRegionHitLogMigration, [
+  "CreateTenantRegionHitLogs1781889000000",
+  "tenant_region_hit_logs",
+  "tenantId",
+  "regionId",
+  "IDX_tenant_region_hit_logs_tenantId",
+  "IDX_tenant_region_hit_logs_regionId",
+  "IDX_tenant_region_hit_logs_matched_createdAt",
+  "tenant_regions",
+  "onDelete: \"SET NULL\""
+], "tenant region hit log migration");
+
+includesAll(files.dataSource + files.appModule + files.adminModule + files.publicModule, [
+  "TenantRegionHitLog"
+], "tenant region hit log repository registration");
+
+includesAll(files.publicController, [
+  '@Get("tenants/resolve")',
+  '@Query("source") source',
+  "clientIp: this.clientIp(req)",
+  "userAgent"
+], "public tenant resolve location tracking input");
+
+includesAll(files.publicService, [
+  "resolveTenantByLocation(latitudeText?: string, longitudeText?: string, tracking: TenantLocationTrackingContext = {})",
+  "void this.recordTenantRegionHitLog(latitude, longitude, match, tracking)",
+  "tenantRegionBoundaryPoints",
+  "pointInPolygon",
+  "matchedByPolygon",
+  "matchedByRadius",
+  "recordTenantRegionHitLog",
+  "public_tenant_resolve",
+  "Failed to record tenant region hit log",
+  "tenantRegionHitLogs.save"
+], "public tenant region hit log recording");
+
+includesAll(files.adminDto, [
+  "boundaryPoints?: unknown[]",
+  "TenantRegionBulkImportDto",
+  "items!: TenantRegionDto[]"
+], "tenant region polygon boundary dto");
+
+includesAll(files.adminService, [
+  "normalizeTenantRegionBoundaryPoints",
+  "多边形边界至少需要 3 个点",
+  "多边形边界最多支持 200 个点",
+  "boundaryPoints: saved.boundaryPoints",
+  "boundaryPoints: region.boundaryPoints || null"
+], "admin tenant region polygon boundary management");
+
+includesAll(files.adminService, [
+  "assertTenantRegionNoConflict",
+  "region.id <> :id",
+  "tenantRegionShapesConflict",
+  "排他范围重叠"
+], "admin tenant region exclusive conflict service guard");
+
+includesAll(files.tenantRegionGeometry, [
+  "tenantRegionShapesConflict",
+  "tenantRegionPolygonsConflict",
+  "tenantRegionPolygonCircleConflict",
+  "tenantRegionPolygonDistanceToPointMeters",
+  "pointInTenantRegionPolygon",
+  "tenantRegionPolygonEdgesIntersect",
+  "geoDistanceMeters"
+], "admin tenant region polygon exclusive conflict geometry");
+
+includesAll(files.adminController, [
+  '@Post("tenant-regions/bulk-import")',
+  "TenantRegionBulkImportDto",
+  "bulkImportTenantRegions"
+], "admin tenant region bulk import endpoint");
+
+includesAll(files.adminService, [
+  "bulkImportTenantRegions(dto: TenantRegionBulkImportDto",
+  "单次最多导入 200 条区域保护数据",
+  "saveTenantRegion(items[index], undefined, admin)",
+  "tenant_region.bulk_import",
+  "succeeded",
+  "failed"
+], "admin tenant region bulk import service");
+
+includesAll(files.tenantRegionsView, [
+  "BoundaryPoint",
+  "coordinateText",
+  "boundaryPointRows",
+  "currentMapUrl",
+  "parseCoordinateInput",
+  "applyCoordinateAsCenter",
+  "addCoordinateAsBoundaryPoint",
+  "syncBoundaryTextFromRows",
+  "applyBoundaryTextToRows",
+  "importFileInput",
+  "downloadImportTemplate",
+  "loadImportFile",
+  "parseRegionCsv",
+  "parseCsvRows",
+  "normalizeImportBoundaryPoints",
+  "选择 CSV/TSV 文件",
+  "下载 CSV 模板",
+  "boundaryPointsText",
+  "parseBoundaryPoints",
+  "formatBoundaryPoints",
+  "openBulkImport",
+  "bulkImport",
+  "/admin/tenant-regions/bulk-import",
+  "多边形边界点 JSON",
+  "批量导入区域保护",
+  "多边形"
+], "admin tenant region polygon and bulk import UI");
+
+includesAll(files.adminController, [
+  '@Get("tenant-region-hit-logs/summary")',
+  '@Get("tenant-region-hit-logs")',
+  "TenantRegionHitLogQueryDto",
+  "tenantRegionHitLogSummary",
+  "listTenantRegionHitLogs"
+], "admin tenant region hit log endpoint");
+
+includesAll(files.adminService, [
+  "listTenantRegionHitLogs(query: TenantRegionHitLogQueryDto",
+  "tenantRegionHitLogSummary(query: TenantRegionHitLogQueryDto",
+  "tenantRegionHitLogQuery(query",
+  "applyTenantRegionHitLogFilters",
+  "startDate",
+  "endDate",
+  "publicTenantRegionHitLog",
+  "leftJoinAndSelect(\"log.tenant\"",
+  "leftJoinAndSelect(\"log.region\"",
+  "query.matched === \"true\"",
+  "query.matched === \"false\"",
+  "query.source?.trim()",
+  "COALESCE(log.source, 'public_tenant_resolve')",
+  "COALESCE(tenant.id, regionTenant.id)",
+  "matchRate"
+], "admin tenant region hit log listing and summary");
+
+includesAll(files.adminPermissions, [
+  "tenant-region-hit-logs",
+  "tenant_region.manage"
+], "tenant region hit log permission mapping");
+
+includesAll(files.router + files.layout, [
+  "TenantRegionHitLogs",
+  "tenant-region-hit-logs",
+  "定位命中日志",
+  "tenant_region.manage"
+], "admin tenant region hit log route and menu");
+
+includesAll(files.tenantRegionHitLogsView, [
+  "/admin/tenant-region-hit-logs",
+  "/admin/tenant-region-hit-logs/summary",
+  "summary.total",
+  "summary.matched",
+  "summary.unmatched",
+  "summary.sources",
+  "summary.tenants",
+  "summary.regions",
+  "filters.dateRange",
+  "filters.matched",
+  "filters.source",
+  "pageSize",
+  "clientIp",
+  "userAgent",
+  "public_tenant_resolve",
+  "mapUrl"
+], "admin tenant region hit log page");
+
+includesAll(files.adminService, [
+  "tenantPackagePermissionTemplate",
+  "packageTemplate",
+  "renewalReminder",
+  "renewalAction",
+  "tenantSubscriptionWriteRestriction",
+  "assertTenantSubscriptionWritable",
+  "assertPaymentAccountEditable",
+  "canEditTenantPaymentSettings",
+  "saveActivity(dto: ActivityDto",
+  "createAnnouncement(dto: AnnouncementDto",
+  "createHomepageSection(dto: HomepageSectionDto",
+  "saveOperationSetting(dto: OperationSettingDto",
+  "createCategory(dto: CategoryDto",
+  "updateCategory(id: number",
+  "removeCategory(id: number",
+  "saveTicketType(dto: TicketTypeDto",
+  "saveCoupon(dto: CouponDto",
+  "createUserTag(input: UserTagDto",
+  "createActivityUserTags(input: BulkActivityTagDto",
+  "deleteUserTag(id: number"
+], "admin service tenant subscription write restriction");
+
+includesAll(files.adminService, [
+  "operationHealthStatus",
+  "operationHealthScore",
+  "operationHealthRisks",
+  "operationHealthWarnings",
+  "operationHealthActions",
+  "publishedCourseCount",
+  "pendingReconciliation"
+], "tenant export operation health");
 
 includesAll(files.adminService, [
   "listActivities(query: ActivityQueryDto",
@@ -379,6 +659,25 @@ includesAll(files.tenantsView, [
   "tenantAdminStatus",
   "paymentAccountStatus",
   "tenantFilterStorageKey",
+  "packageOptions",
+  "packagePermissionTemplates",
+  "applyPackagePermissionTemplate",
+  "套用套餐权限模板",
+  "subscriptionStatus",
+  "operationHealth",
+  "tenantHealthStatus",
+  "tenantHealthScore",
+  "tenantHealthIssues",
+  "tenantHasOperationHealthRisk",
+  "publishedCourseCount",
+  "pendingReconciliationCount",
+  "经营健康",
+  "经营健康分",
+  "tenantHasSubscriptionRisk",
+  "tenantSubscriptionTag",
+  "tenantRenewalTag",
+  "renewalReminder",
+  "续费提醒",
   "exportTenants",
   "permissionMode",
   "batchUpdate",
@@ -524,6 +823,14 @@ includesAll(files.dashboardView, [
   "openActivityOrders",
   "openActivityRecap"
 ], "dashboard view activity performance finance metrics");
+
+includesAll(files.analyticsView, [
+  "operationAdvice",
+  "adviceTagType",
+  "运营建议",
+  "item.message",
+  "/admin/analytics/overview"
+], "analytics view operation advice");
 
 includesAll(files.activitiesView, [
   "routeActivityId",

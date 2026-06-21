@@ -257,21 +257,33 @@ watch(couponCode, () => {
     </view>
     <template v-else-if="activity">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
-      <PageDecorationBlocks :sections="contentSections" />
 
-      <view class="page-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#ffffff') }">
-        <view class="page-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#111827') }">{{ innerPageConfig.title || "报名确认" }}</view>
-        <view class="page-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || '#667085') }">{{ innerPageConfig.subtitle || "确认票种、优惠和报名信息，提交后可在我的活动查看进度。" }}</view>
+      <view class="register-hero">
+        <image v-if="activity.coverUrl" class="hero-image" :src="activity.coverUrl" mode="aspectFill" />
+        <view v-else class="hero-image hero-fallback">报名</view>
+        <view class="hero-mask"></view>
+        <view class="hero-head">
+          <text class="hero-kicker">七维书院 · 报名确认</text>
+          <text class="hero-status">{{ seatsText }}</text>
+        </view>
+        <view class="hero-bottom">
+          <view class="page-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'transparent') }">
+            <view class="page-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ activity.title }}</view>
+            <view class="page-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "确认票种、优惠和报名信息，提交后可在我的活动查看进度。" }}</view>
+          </view>
+          <view class="hero-summary">
+            <view><text>票种</text><text>{{ selectedTicketName }}</text></view>
+            <view><text>费用</text><text>{{ payableText }}</text></view>
+            <view><text>进度</text><text>{{ formProgressText }}</text></view>
+          </view>
+        </view>
       </view>
 
+      <PageDecorationBlocks :sections="contentSections" />
+
       <view class="card intro-card">
-        <view class="step-label">报名确认</view>
-        <view class="title">{{ activity.title }}</view>
-        <view class="intro-grid">
-          <view><text>票种</text><text>{{ selectedTicketName }}</text></view>
-          <view><text>费用</text><text>{{ payableText }}</text></view>
-          <view><text>名额</text><text>{{ seatsText }}</text></view>
-        </view>
+        <view class="section-kicker">提交前确认</view>
+        <view class="title small">报名说明</view>
         <view class="subtle hint">{{ paymentHint }}</view>
         <view v-if="registrationPaused" class="operation-notice">
           <view class="member-title">报名通道暂停</view>
@@ -372,58 +384,178 @@ watch(couponCode, () => {
 </template>
 
 <style scoped>
-.register { padding-bottom: 160rpx; }
+.register { padding-bottom: 168rpx; }
 .error-actions { margin-top: 18rpx; }
-.page-head { margin-bottom: 20rpx; padding: 28rpx 24rpx; border-radius: var(--card-radius, 8px); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
-.page-head-title { font-size: 40rpx; font-weight: 900; line-height: 1.25; }
-.page-head-copy { margin-top: 10rpx; font-size: 25rpx; line-height: 1.5; }
+.register-hero {
+  position: relative;
+  overflow: hidden;
+  min-height: 500rpx;
+  margin-bottom: 24rpx;
+  border-radius: 24rpx;
+  background: #8e2d28;
+  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+}
+.hero-image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.hero-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: rgba(255, 248, 240, 0.92);
+  font-size: 72rpx;
+  font-weight: 700;
+  font-family: "STKaiti", "KaiTi", serif;
+  background: #8e2d28;
+}
+.hero-mask {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(34, 24, 19, 0.18), rgba(34, 24, 19, 0.76));
+}
+.hero-head,
+.hero-bottom {
+  position: relative;
+  z-index: 1;
+}
+.hero-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+  padding: 24rpx 24rpx 0;
+}
+.hero-kicker {
+  color: rgba(255, 248, 240, 0.78);
+  font-size: 23rpx;
+  font-weight: 700;
+}
+.hero-status {
+  flex: 0 0 auto;
+  max-width: 290rpx;
+  min-height: 50rpx;
+  padding: 0 16rpx;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999px;
+  background: rgba(255, 248, 240, 0.16);
+  color: #fff8f0;
+  font-size: 22rpx;
+  font-weight: 700;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.hero-bottom {
+  min-height: 476rpx;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: 22rpx;
+  padding: 24rpx;
+}
+.page-head {
+  margin-bottom: 0;
+  padding: 0;
+  border-radius: 0;
+  box-shadow: none;
+  background: transparent !important;
+}
+.page-head-title {
+  color: #fff8f0;
+  font-size: 48rpx;
+  font-weight: 700;
+  line-height: 1.24;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.page-head-copy {
+  margin-top: 12rpx;
+  font-size: 25rpx;
+  line-height: 1.65;
+}
+.hero-summary {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12rpx;
+}
+.hero-summary view {
+  min-width: 0;
+  display: grid;
+  gap: 6rpx;
+  padding: 16rpx 14rpx;
+  border-radius: 18rpx;
+  background: rgba(255, 248, 240, 0.16);
+  border: 1px solid rgba(255, 248, 240, 0.16);
+}
+.hero-summary text:first-child {
+  color: rgba(255, 248, 240, 0.68);
+  font-size: 22rpx;
+}
+.hero-summary text:last-child {
+  color: #fff8f0;
+  font-size: 25rpx;
+  font-weight: 800;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .intro-card { display: grid; gap: 16rpx; }
-.step-label { color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 800; }
-.hint { margin-top: 12rpx; }
-.intro-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10rpx; }
-.intro-grid view { min-width: 0; display: grid; gap: 6rpx; padding: 14rpx 12rpx; border-radius: 6px; background: #f8fafc; }
-.intro-grid text:first-child { color: var(--muted-color, #667085); font-size: 22rpx; }
-.intro-grid text:last-child { color: #172033; font-size: 25rpx; font-weight: 800; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.member-access { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: var(--primary-soft, #f3faf8); border: 1px solid #cde8e3; }
-.member-access.blocked { background: #fff7ed; border-color: #fed7aa; }
-.operation-notice { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: #fff7ed; border: 1px solid #fed7aa; }
-.member-title { color: #172033; font-weight: 700; margin-bottom: 8rpx; }
+.section-kicker {
+  color: #4a6b8a;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+.small {
+  font-size: 30rpx;
+  font-family: "STKaiti", "KaiTi", serif;
+}
+.hint { margin-top: 0; line-height: 1.7; }
+.member-access { margin-top: 2rpx; padding: 20rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); border: 1px solid rgba(74, 107, 138, 0.12); }
+.member-access.blocked { background: rgba(255, 159, 0, 0.08); border-color: rgba(255, 159, 0, 0.18); }
+.operation-notice { margin-top: 2rpx; padding: 20rpx; border-radius: 18rpx; background: #fff7ed; border: 1px solid #fed7aa; }
+.member-title { color: #333333; font-weight: 700; margin-bottom: 8rpx; font-family: "STKaiti", "KaiTi", serif; }
 .price-card { display: grid; gap: 18rpx; }
 .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
-.discount-title { padding-top: 4rpx; color: #344054; font-size: 26rpx; font-weight: 800; }
+.discount-title { padding-top: 4rpx; color: #4a6b8a; font-size: 26rpx; font-weight: 800; }
 .form-card { display: grid; gap: 22rpx; }
 .form-heading { margin-bottom: 2rpx; }
-.progress-pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 23rpx; font-weight: 800; }
+.progress-pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 999px; background: rgba(196, 61, 61, 0.12); color: #c43d3d; font-size: 23rpx; font-weight: 800; }
 .field { margin-bottom: 28rpx; }
 .field:last-child { margin-bottom: 0; }
-.field.missing { padding: 18rpx; margin-left: -18rpx; margin-right: -18rpx; border-radius: 6px; background: #fff7ed; border: 1px solid #fed7aa; }
+.field.missing { padding: 18rpx; margin-left: -18rpx; margin-right: -18rpx; border-radius: 18rpx; background: #fff7ed; border: 1px solid #fed7aa; }
 .label { font-size: 28rpx; font-weight: 650; margin-bottom: 12rpx; }
 .label text { color: #dc2626; }
 .field-label { display: flex; align-items: center; gap: 8rpx; }
 .optional { color: #98a2b3 !important; font-size: 22rpx; font-weight: 500; }
 .choice { display: flex; align-items: center; gap: 10rpx; margin: 12rpx 0; }
 .ticket-list { display: grid; gap: 12rpx; }
-.ticket { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 18rpx; border: 1px solid #d7dde8; border-radius: 6px; background: var(--card-bg, #fff); }
-.ticket.active { border-color: var(--primary-color, #0f766e); background: var(--primary-soft, #f3faf8); }
+.ticket { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 20rpx; border: 1px solid #e8e0d8; border-radius: 18rpx; background: #fffaf4; }
+.ticket.active { border-color: #c43d3d; background: rgba(196, 61, 61, 0.08); }
 .ticket-name { font-size: 28rpx; font-weight: 650; margin-bottom: 6rpx; }
-.ticket-price { color: var(--primary-color, #0f766e); font-weight: 800; }
+.ticket-price { flex: 0 0 auto; color: #c43d3d; font-weight: 800; }
 .coupon-row { display: grid; grid-template-columns: 1fr 150rpx; gap: 12rpx; align-items: center; }
 .coupon-input { min-width: 0; }
-.mini-button { height: 78rpx; border-radius: 6px; background: var(--primary-color, #0f766e); color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; }
+.mini-button { height: 78rpx; border-radius: 16rpx; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 700; }
 .mini-button.disabled { background: #9ca3af; }
 .error { color: #dc2626; font-size: 24rpx; }
 .points-row { display: grid; gap: 10rpx; }
-.summary { display: grid; gap: 10rpx; padding-top: 12rpx; border-top: 1px solid #edf0f5; }
+.summary { display: grid; gap: 10rpx; padding: 18rpx; border-radius: 18rpx; background: #f9f4ee; }
 .summary view { display: flex; justify-content: space-between; color: var(--muted-color, #667085); font-size: 26rpx; }
 .summary .payable { color: #172033; font-weight: 800; font-size: 32rpx; }
-.summary .payable text:last-child { color: var(--primary-color, #0f766e); }
+.summary .payable text:last-child { color: #c43d3d; }
 .payment-methods { display: grid; gap: 12rpx; padding-top: 10rpx; }
 .method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }
-.method { min-width: 0; padding: 18rpx; border: 1px solid #d7dde8; border-radius: 6px; background: var(--card-bg, #fff); }
-.method.active { border-color: var(--primary-color, #0f766e); background: var(--primary-soft, #f3faf8); }
+.method { min-width: 0; padding: 18rpx; border: 1px solid #e8e0d8; border-radius: 18rpx; background: #fffaf4; }
+.method.active { border-color: #4a6b8a; background: rgba(74, 107, 138, 0.08); }
 .method-name { color: #172033; font-size: 27rpx; font-weight: 850; }
-.submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 190rpx 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: var(--card-bg, #fff); border-top: 1px solid #e5e7eb; box-shadow: 0 -10rpx 30rpx rgba(15, 23, 42, 0.08); }
+.submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 210rpx) 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid #e8e0d8; box-shadow: 0 -10rpx 30rpx rgba(51, 51, 51, 0.08); }
 .submit-summary { min-width: 0; display: grid; gap: 4rpx; }
-.submit-summary text:first-child { color: #667085; font-size: 22rpx; }
-.submit-summary text:last-child { color: var(--primary-color, #0f766e); font-size: 34rpx; font-weight: 900; }
+.submit-summary text:first-child { color: #999999; font-size: 22rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.submit-summary text:last-child { color: #c43d3d; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.submit-bar .button { height: 92rpx; font-size: 32rpx; }
 </style>

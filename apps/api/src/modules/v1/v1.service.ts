@@ -24,6 +24,7 @@ import { Registration } from "../../entities/registration.entity";
 import { ShareVisit } from "../../entities/share-visit.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { User } from "../../entities/user.entity";
+import { UserTag } from "../../entities/user-tag.entity";
 import { OrderStatus, RegistrationStatus } from "../../shared/domain";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, assertTenantOwnedResourceAccess, isTenantScopedActor, normalizeTenantCode, normalizeTenantHost, tenantRelationForActor } from "../../shared/tenant-scope";
 import { NotificationProviderService } from "./notification-provider.service";
@@ -89,6 +90,10 @@ export interface SendActivityReminderInput {
   statuses?: RegistrationStatus[];
 }
 
+export interface SendTaggedNotificationInput extends SendNotificationInput {
+  tagName: string;
+}
+
 export interface NotificationScheduleInput {
   activityId: number;
   templateId?: number;
@@ -129,6 +134,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(NotificationTemplate) private readonly notificationTemplates: Repository<NotificationTemplate>,
     @InjectRepository(Notification) private readonly notifications: Repository<Notification>,
     @InjectRepository(NotificationSchedule) private readonly notificationSchedules: Repository<NotificationSchedule>,
+    @InjectRepository(UserTag) private readonly userTags: Repository<UserTag>,
     @InjectRepository(OperationSetting) private readonly operationSettings: Repository<OperationSetting>,
     private readonly notificationProvider: NotificationProviderService,
     private readonly config: ConfigService
@@ -688,6 +694,51 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
     return {
       activityId,
+      sentCount: rows.filter((row) => row.status === "sent").length,
+      failedCount: rows.filter((row) => row.status === "failed").length,
+      records: rows
+    };
+  }
+
+  async sendTaggedNotification(input: SendTaggedNotificationInput, admin?: AdminContext) {
+    const tagName = String(input.tagName || "").trim();
+    if (!tagName) throw new BadRequestException("请选择会员分群标签");
+    if (isTenantScopedActor(admin) && !input.activityId) throw new BadRequestException("商家按标签批量通知需选择关联活动，用于确认通知归属和变量范围");
+
+    const activity = input.activityId ? await this.activities.findOneBy({ id: input.activityId }) : null;
+    if (input.activityId && !activity) throw new NotFoundException("活动不存在");
+    if (activity) assertTenantAccessForActor(activity, admin, "Activity not found or not in current tenant");
+
+    const builder = this.userTags
+      .createQueryBuilder("tag")
+      .leftJoinAndSelect("tag.user", "user")
+      .leftJoinAndSelect("tag.tenant", "tenant")
+      .where("tag.name = :tagName", { tagName })
+      .orderBy("tag.createdAt", "ASC")
+      .take(300);
+    if (isTenantScopedActor(admin)) builder.andWhere("tenant.id = :tenantId", { tenantId: admin?.tenantId });
+    const tags = await builder.getMany();
+    const users = Array.from(new Map(tags.map((tag) => [tag.user.id, tag.user])).values());
+    if (!users.length) throw new BadRequestException("当前标签下没有可通知的会员");
+
+    const rows: Notification[] = [];
+    for (const user of users) {
+      const prepared = await this.prepareNotification({ ...input, activityId: activity?.id || input.activityId, userId: user.id }, admin);
+      rows.push(
+        await this.createAndDeliverNotification({
+          channel: prepared.channel,
+          title: prepared.title,
+          content: prepared.content,
+          user,
+          activity,
+          remark: input.remark || `会员分群通知：${tagName}`
+        })
+      );
+    }
+
+    return {
+      tagName,
+      matchedCount: users.length,
       sentCount: rows.filter((row) => row.status === "sent").length,
       failedCount: rows.filter((row) => row.status === "failed").length,
       records: rows

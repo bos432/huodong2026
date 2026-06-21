@@ -10,6 +10,7 @@ import {
   ReviewModerationInput,
   SendActivityReminderInput,
   SendNotificationInput,
+  SendTaggedNotificationInput,
   V1Service
 } from "./v1.service";
 
@@ -114,6 +115,11 @@ export class AdminV1Controller {
   @Post("notifications/send")
   sendNotification(@Body() body: SendNotificationInput, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.sendNotification(body, admin);
+  }
+
+  @Post("notifications/send-by-tag")
+  sendTaggedNotification(@Body() body: SendTaggedNotificationInput, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.sendTaggedNotification(body, admin);
   }
 
   @Post("notifications/preview")

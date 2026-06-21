@@ -1,7 +1,7 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Tenant } from "./tenant.entity";
 
-export type CharityProjectStatus = "fundraising" | "pending_execution" | "executing" | "completed" | "archived";
+export type CharityProjectStatus = "fundraising" | "pending_execution" | "executing" | "pending_acceptance" | "completed" | "archived";
 
 @Entity("charity_projects")
 export class CharityProject {

@@ -21,6 +21,10 @@ function service(values: Record<string, string>, accounts: any[] = []) {
     findOne({ where }: any) {
       return Promise.resolve(accounts.find((account) => account.agent.id === where.agent.id && account.provider === where.provider && account.enabled === where.enabled) || null);
     }
+  } as any, {
+    findOne() {
+      return Promise.resolve(null);
+    }
   } as any);
 }
 
@@ -177,17 +181,17 @@ describe("payment provider service", () => {
     await expect(provider.parseRealPaymentCallback("alipay", { body: { out_trade_no: "OD7" }, rawBody: "out_trade_no=OD7" })).rejects.toThrow(BadRequestException);
   });
 
-  it("extracts real callback order numbers before account-specific verification", () => {
+  it("extracts real callback order numbers before account-specific verification", async () => {
     const provider = service({ ...realAlipayConfig, WECHAT_PAY_ENABLED: "true" });
-    expect(provider.extractRealCallbackOrderNo("alipay", { body: { out_trade_no: "OD7" } })).toBe("OD7");
-    expect(provider.extractRealCallbackOrderNo("wechat", { body: { orderNo: "OD8" } })).toBe("OD8");
-    expect(() => provider.extractRealCallbackOrderNo("wechat", { body: { resource: {} } })).toThrow(BadRequestException);
+    await expect(provider.extractRealCallbackOrderNo("alipay", { body: { out_trade_no: "OD7" } })).resolves.toBe("OD7");
+    await expect(provider.extractRealCallbackOrderNo("wechat", { body: { orderNo: "OD8" } })).resolves.toBe("OD8");
+    await expect(provider.extractRealCallbackOrderNo("wechat", { body: { resource: {} } })).rejects.toThrow(BadRequestException);
   });
 
-  it("ignores external tenant hints when extracting real callback order numbers", () => {
+  it("ignores external tenant hints when extracting real callback order numbers", async () => {
     const provider = service({ ...realAlipayConfig, WECHAT_PAY_ENABLED: "true" });
-    expect(provider.extractRealCallbackOrderNo("alipay", { body: { tenantId: 99, tenantCode: "other", out_trade_no: "OD7" } })).toBe("OD7");
-    expect(provider.extractRealCallbackOrderNo("wechat", { body: { tenantId: 99, tenantCode: "other", orderNo: "OD8" } })).toBe("OD8");
+    await expect(provider.extractRealCallbackOrderNo("alipay", { body: { tenantId: 99, tenantCode: "other", out_trade_no: "OD7" } })).resolves.toBe("OD7");
+    await expect(provider.extractRealCallbackOrderNo("wechat", { body: { tenantId: 99, tenantCode: "other", orderNo: "OD8" } })).resolves.toBe("OD8");
   });
 
   it("normalizes alipay callbacks after certificate verification succeeds", async () => {
@@ -239,6 +243,20 @@ describe("payment provider service", () => {
         body: { ...body, sign: rsaSign(signContent) },
         rawBody: "app_id=ali-app&out_trade_no=OD7"
       })
+    ).resolves.toMatchObject({ orderNo: "OD7", transactionNo: "TRADE7", amount: "19.90", signatureValid: true });
+  });
+
+  it("uses merchant runtime config for mall merchant-direct callback verification", async () => {
+    const provider = service({ NODE_ENV: "production", REAL_PAYMENT_ENABLED: "true", ALIPAY_ENABLED: "true" });
+    const body = { app_id: "ali-app", charset: "utf-8", sign_type: "RSA2", trade_no: "TRADE7", out_trade_no: "OD7", total_amount: "19.90", trade_status: "TRADE_SUCCESS" };
+    const signContent = "app_id=ali-app&charset=utf-8&out_trade_no=OD7&total_amount=19.90&trade_no=TRADE7&trade_status=TRADE_SUCCESS";
+    await expect(
+      provider.parseRealPaymentCallbackForOrder(
+        "alipay",
+        { id: 7, orderNo: "OD7", agent: null, tenant: { id: 10 } } as any,
+        { body: { ...body, sign: rsaSign(signContent) }, rawBody: "app_id=ali-app&out_trade_no=OD7" },
+        { scope: "merchant", agentId: null, merchantId: 5, values: realAlipayConfig }
+      )
     ).resolves.toMatchObject({ orderNo: "OD7", transactionNo: "TRADE7", amount: "19.90", signatureValid: true });
   });
 
@@ -437,6 +455,22 @@ describe("payment provider service", () => {
         headers: { "wechatpay-timestamp": timestamp, "wechatpay-nonce": nonce, "wechatpay-signature": signature, "wechatpay-serial": "serial" }
       })
     ).resolves.toMatchObject({ provider: "wechat", orderNo: "OD7", refundNo: "RF7", providerRefundNo: "WXRF7", status: "success" });
+  });
+
+  it("parses platform wechat real refund notifications before order lookup", async () => {
+    const body = { resource: wechatEncryptResource({ out_trade_no: "MALL7", out_refund_no: "MRF7", refund_id: "WXMALLRF7", status: "SUCCESS" }, realWechatConfig.WECHAT_PAY_API_V3_KEY, "refund") };
+    const rawBody = JSON.stringify(body);
+    const timestamp = "1710000001";
+    const nonce = "nonce-refund";
+    const signature = rsaSign(`${timestamp}\n${nonce}\n${rawBody}\n`);
+    const provider = service({ ...realWechatConfig, REAL_REFUND_QUERY_IMPLEMENTED: "true" });
+    await expect(
+      provider.parseRealRefundNotification("wechat", {
+        body,
+        rawBody,
+        headers: { "wechatpay-timestamp": timestamp, "wechatpay-nonce": nonce, "wechatpay-signature": signature, "wechatpay-serial": "serial" }
+      })
+    ).resolves.toMatchObject({ provider: "wechat", orderNo: "MALL7", refundNo: "MRF7", providerRefundNo: "WXMALLRF7", status: "success" });
   });
 
   it("normalizes alipay real refund notification payloads", () => {
@@ -650,6 +684,34 @@ describe("payment provider service", () => {
       await expect(provider.createPayment("wechat", { orderNo: "OD7", amount: "19.00", registration: { activity: { title: "Test Activity" } } } as any, {})).resolves.toMatchObject({ provider: "wechat", mode: "real", orderNo: "OD7", payParams: { tradeType: "NATIVE", codeUrl: "weixin://wxpay/bizpayurl?pr=abc" } });
       expect(captured.url).toBe("https://api.mch.weixin.qq.com/v3/pay/transactions/native");
       expect(JSON.parse(captured.init.body)).toMatchObject({ out_trade_no: "OD7", description: "Test Activity" });
+      await expect(provider.createPayment("wechat", { orderNo: "MALL7", amount: "19.00", registration: { activity: { title: "Mall Order" } } } as any, {}, { notifyUrl: "https://api.example.com/payment/mall/wechat/callback", callbackPath: "/payment/mall/wechat/callback" })).resolves.toMatchObject({ callbackPath: "/payment/mall/wechat/callback", payParams: { callbackPath: "/payment/mall/wechat/callback" } });
+      expect(JSON.parse(captured.init.body)).toMatchObject({ out_trade_no: "MALL7", notify_url: "https://api.example.com/payment/mall/wechat/callback" });
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
+  });
+
+  it("uses merchant-specific notify override for agent wechat payments", async () => {
+    const originalFetch = globalThis.fetch;
+    const responseBody = JSON.stringify({ code_url: "weixin://wxpay/bizpayurl?pr=agent" });
+    const timestamp = "1710000000";
+    const nonce = "nonce";
+    const signature = rsaSign(`${timestamp}\n${nonce}\n${responseBody}\n`);
+    let captured: any = null;
+    globalThis.fetch = (async (url: string, init: any) => {
+      captured = { url, init };
+      return { ok: true, status: 200, statusText: "OK", headers: responseHeaders({ "wechatpay-timestamp": timestamp, "wechatpay-nonce": nonce, "wechatpay-signature": signature }), text: async () => responseBody };
+    }) as any;
+    try {
+      const { WECHAT_PAY_NOTIFY_URL: _notifyUrl, ...agentWechatConfig } = { ...realWechatConfig, WECHAT_PAY_PRIVATE_KEY_PATH: privateKeyPath };
+      const provider = service(
+        { NODE_ENV: "production", REAL_PAYMENT_ENABLED: "true", WECHAT_PAY_ENABLED: "true", REAL_PAYMENT_SDK_IMPLEMENTED: "true" },
+        [{ agent: { id: 3 }, tenant: { id: 10 }, provider: "wechat", enabled: true, config: agentWechatConfig }]
+      );
+      await expect(
+        provider.createPayment("wechat", { orderNo: "MALLAGENT7", amount: "29.00", agent: { id: 3 }, tenant: { id: 10 }, registration: { activity: { title: "Agent Mall Order" } } } as any, {}, { notifyUrl: "https://api.example.com/payment/mall/merchants/7/wechat/callback", callbackPath: "/payment/mall/merchants/7/wechat/callback" })
+      ).resolves.toMatchObject({ callbackPath: "/payment/mall/merchants/7/wechat/callback" });
+      expect(JSON.parse(captured.init.body)).toMatchObject({ out_trade_no: "MALLAGENT7", notify_url: "https://api.example.com/payment/mall/merchants/7/wechat/callback" });
     } finally {
       globalThis.fetch = originalFetch;
     }
@@ -710,7 +772,7 @@ describe("payment provider service", () => {
   });
 
   it("builds signed wechat real refund request drafts without sending network calls", () => {
-    const request = { provider: "wechat", order: { orderNo: "OD7", amount: "19.00" }, refundNo: "RF7", amount: "5.00", reason: "user request" } as any;
+    const request = { provider: "wechat", order: { orderNo: "OD7", amount: "19.00" }, refundNo: "RF7", amount: "5.00", reason: "user request", notifyUrl: "https://api.example.com/payment/mall/wechat/refund-callback" } as any;
     const draft = buildWechatRefundRequestDraft(request, {
       mchId: "mch",
       certSerialNo: "serial",
@@ -720,7 +782,7 @@ describe("payment provider service", () => {
       nonce: "nonce"
     });
     expect(draft).toMatchObject({ provider: "wechat", method: "POST", path: "/v3/refund/domestic/refunds", url: "https://wechat.example.test/v3/refund/domestic/refunds" });
-    expect(JSON.parse(draft.body || "{}")).toMatchObject({ out_trade_no: "OD7", out_refund_no: "RF7", reason: "user request", amount: { refund: 500, total: 1900, currency: "CNY" } });
+    expect(JSON.parse(draft.body || "{}")).toMatchObject({ out_trade_no: "OD7", out_refund_no: "RF7", reason: "user request", notify_url: "https://api.example.com/payment/mall/wechat/refund-callback", amount: { refund: 500, total: 1900, currency: "CNY" } });
     expect(draft.headers.Authorization).toContain('mchid="mch"');
     expect(draft.headers.Authorization).toContain('serial_no="serial"');
   });
@@ -778,9 +840,9 @@ describe("payment provider service", () => {
     }) as any;
     try {
       const provider = service({ ...realWechatConfig, REAL_REFUND_QUERY_IMPLEMENTED: "true", WECHAT_PAY_PRIVATE_KEY_PATH: privateKeyPath });
-      await expect(provider.requestRefund({ provider: "wechat", order: { orderNo: "OD7", amount: "19.00" } as any, refundNo: "RF7", amount: "5.00", reason: "user request" })).resolves.toMatchObject({ provider: "wechat", orderNo: "OD7", refundNo: "RF7", providerRefundNo: "WXRF7", status: "processing" });
+      await expect(provider.requestRefund({ provider: "wechat", order: { orderNo: "OD7", amount: "19.00" } as any, refundNo: "RF7", amount: "5.00", reason: "user request", notifyUrl: "https://api.example.com/payment/mall/merchants/7/wechat/refund-callback" })).resolves.toMatchObject({ provider: "wechat", orderNo: "OD7", refundNo: "RF7", providerRefundNo: "WXRF7", status: "processing" });
       expect(captured.url).toBe("https://api.mch.weixin.qq.com/v3/refund/domestic/refunds");
-      expect(JSON.parse(captured.init.body)).toMatchObject({ out_trade_no: "OD7", out_refund_no: "RF7" });
+      expect(JSON.parse(captured.init.body)).toMatchObject({ out_trade_no: "OD7", out_refund_no: "RF7", notify_url: "https://api.example.com/payment/mall/merchants/7/wechat/refund-callback" });
     } finally {
       globalThis.fetch = originalFetch;
     }

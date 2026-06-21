@@ -3,7 +3,29 @@
     <view class="status-card">
       <text class="status">{{ statusText(order.status) }}</text>
       <text class="status-tip">{{ statusTip(order) }}</text>
+      <text class="store-name">履约店铺：{{ merchantName(order) }}</text>
       <text class="order-no">{{ order.orderNo }}</text>
+    </view>
+
+    <view v-if="sameGroupOrders.length > 1" class="card checkout-group-card">
+      <text class="section-title">跨店拆单</text>
+      <text class="muted">本次结算已按店铺拆成 {{ sameGroupOrders.length }} 个子订单，请逐个查看付款、发货和售后状态。</text>
+      <view
+        v-for="item in sameGroupOrders"
+        :key="item.id"
+        class="group-order-row"
+        :class="{ current: isCurrentGroupOrder(item) }"
+        @click="goGroupOrder(item)"
+      >
+        <view class="group-order-main">
+          <text class="line">{{ merchantName(item) }}<text v-if="isCurrentGroupOrder(item)" class="current-pill">当前</text></text>
+          <text class="muted">{{ item.orderNo }} · {{ paymentText(item.paymentMethod) }}</text>
+        </view>
+        <view class="group-order-side">
+          <text class="status">{{ statusText(item.status) }}</text>
+          <text class="price">¥{{ money(item.amount) }}</text>
+        </view>
+      </view>
     </view>
 
     <view class="card">
@@ -23,14 +45,14 @@
 
     <view v-if="order.groupBuyTeams?.length" class="card group-card">
       <text class="section-title">拼团信息</text>
-      <view v-for="team in order.groupBuyTeams" :key="team.id || team.teamNo" class="group-box">
+      <view v-for="team in order.groupBuyTeams" :key="team.teamNo" class="group-box">
         <view class="group-head">
-          <text class="line">{{ team.title || team.groupBuy?.title || "拼团活动" }}</text>
+          <text class="line">{{ team.title || "拼团活动" }}</text>
           <text class="group-status" :class="team.teamStatus">{{ groupBuyTeamStatusText(team.teamStatus) }}</text>
         </view>
         <text class="muted">团号：{{ team.teamNo }}</text>
         <text class="muted">成团进度：{{ Number(team.paidPeople || 0) }} / {{ Number(team.minPeople || 2) }} 人</text>
-        <text v-if="team.groupBuy?.endsAt" class="muted">截止时间：{{ dateText(team.groupBuy.endsAt) }}</text>
+        <text v-if="team.endsAt" class="muted">截止时间：{{ dateText(team.endsAt) }}</text>
       </view>
     </view>
 
@@ -69,7 +91,6 @@
         <text>{{ order.promotionCode }}</text>
       </view>
       <text v-if="order.buyerRemark" class="muted remark">买家备注：{{ order.buyerRemark }}</text>
-      <text v-if="order.adminRemark" class="muted remark">后台备注：{{ order.adminRemark }}</text>
     </view>
 
     <view v-if="order.expressNo" class="card">
@@ -84,8 +105,8 @@
     <view v-if="order.refund" class="card refund-card">
       <text class="section-title">售后状态</text>
       <text class="line">{{ refundText(order.refund.status) }} · ¥{{ money(order.refund.amount) }}</text>
-      <text v-if="order.refund.providerRefundStatus || order.refund.providerRefundNo" class="muted">退款渠道：{{ refundProviderText(order.refund) }}</text>
-      <text class="muted">{{ order.refund.reason || order.refund.reviewRemark || "暂无说明" }}</text>
+      <text v-if="order.refund.refundProgressText" class="muted">退款进度：{{ refundProviderText(order.refund) }}</text>
+      <text class="muted">{{ refundSummaryText(order.refund) || "暂无说明" }}</text>
       <view v-if="order.refund.images?.length" class="image-list refund-images">
         <image v-for="image in order.refund.images" :key="image" class="proof-image" :src="image" mode="aspectFill" @click="previewImages(order.refund.images, image)" />
       </view>
@@ -97,6 +118,7 @@
       <button v-if="['pending_payment','pending_confirm'].includes(order.status)" class="ghost" @click="cancelOrder">取消订单</button>
       <button v-if="order.status === 'shipped'" @click="confirmReceived">确认收货</button>
       <button v-if="canRequestRefund" @click="requestRefund">申请售后</button>
+      <text v-else-if="refundActionTip" class="refund-action-tip">{{ refundActionTip }}</text>
     </view>
 
     <view v-if="reviewDialogVisible" class="review-mask" @click.self="closeReviewDialog">
@@ -150,6 +172,7 @@
 import { computed, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, uploadMallRefundImage, uploadMallReviewImage, withTenantCode } from "../../api";
+import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
 
 const orderId = ref(0);
 const order = ref<any>({});
@@ -159,8 +182,15 @@ const uploadingReviewImage = ref(false);
 const uploadingRefundImage = ref(false);
 const reviewForm = ref<any>({ orderItemId: 0, productTitle: "", rating: 5, content: "", images: [] });
 const refundForm = ref<any>({ reason: "", images: [] });
+const groupOrders = ref<any[]>([]);
 const address = computed(() => order.value.addressSnapshot || {});
-const canRequestRefund = computed(() => ["paid", "shipped", "completed"].includes(order.value?.status) && !["pending", "processing", "failed"].includes(order.value?.refund?.status));
+const canRequestRefund = computed(() => canSubmitRefund(order.value));
+const refundActionTip = computed(() => refundActionText(order.value));
+const sameGroupOrders = computed(() => {
+  const groupNo = order.value?.checkoutGroup?.groupNo;
+  if (!groupNo) return [];
+  return groupOrders.value.filter((item) => item.checkoutGroup?.groupNo === groupNo);
+});
 const progressSteps = computed(() => {
   const value = order.value || {};
   const status = value.status;
@@ -177,13 +207,46 @@ function paymentText(value: string) { return ({ wechat: "微信支付", balance:
 function refundText(value: string) { return ({ pending: "待审核", processing: "处理中", approved: "已通过", rejected: "已拒绝", failed: "失败" } as any)[value] || value; }
 function groupBuyTeamStatusText(value: string) { return ({ forming: "组团中", success: "已成团", failed: "未成团" } as any)[value] || value || "-"; }
 function refundProviderText(value: any) {
-  const provider = ({ wechat: "微信原路", balance: "余额", offline: "线下" } as any)[order.value.paymentMethod] || order.value.paymentMethod || "退款";
-  return `${provider} · ${value.providerRefundStatus || "-"} ${value.providerRefundNo || ""}`;
+  return `${value.refundChannelText || "退款处理"} · ${value.refundProgressText || "处理中"}`;
+}
+function refundSummaryText(value: any) {
+  if (!value) return "";
+  if (value.status === "rejected" && value.userReviewRemark) return value.userReviewRemark;
+  return value.reason || value.refundProgressText || value.userReviewRemark || "";
 }
 function reviewText(value: string) { return ({ pending: "待审核", approved: "已展示", rejected: "未通过" } as any)[value] || value; }
 function dateText(value: string) { return value ? String(value).slice(0, 16).replace("T", " ") : ""; }
+function merchantName(value: any) { return value?.merchant?.name || value?.tenant?.name || "商城店铺"; }
+function canSubmitRefund(value: any) {
+  return ["paid", "shipped", "completed"].includes(value?.status) && (!value?.refund || value.refund.status === "rejected");
+}
+function refundActionText(value: any) {
+  const status = value?.refund?.status;
+  if (status === "pending") return "售后待审核，请等待后台处理";
+  if (status === "processing") return "退款处理中，请等待支付渠道结果";
+  if (status === "approved") return "售后已完成，不能重复申请";
+  if (status === "failed") return "退款异常，后台正在处理";
+  if (status === "rejected") return "售后已拒绝，可重新申请";
+  return "";
+}
+function refundStatusTip(value: any) {
+  const status = value?.refund?.status;
+  if (status === "pending") return "售后已提交，等待后台审核。";
+  if (status === "processing") return "退款已提交支付渠道，请等待到账结果。";
+  if (status === "failed") return "退款处理异常，后台财务会重试或联系处理，请勿重复申请。";
+  if (status === "approved") return "售后已完成，款项已按支付方式处理。";
+  if (status === "rejected") return "售后未通过，如仍有问题可补充原因后重新申请。";
+  return "";
+}
+function isCurrentGroupOrder(value: any) { return Number(value?.id || 0) === Number(orderId.value || 0); }
+function goGroupOrder(value: any) {
+  if (!value?.id || isCurrentGroupOrder(value)) return;
+  uni.redirectTo({ url: withTenantCode(`/pages/user/mall-order-detail?id=${value.id}`) });
+}
 function statusTip(value: any) {
   const status = value?.status;
+  const refundTip = refundStatusTip(value);
+  if (refundTip) return refundTip;
   if (status === "pending_payment") return value.paymentMethod === "wechat" ? "请完成微信支付；支付回调成功后订单会自动进入待发货。" : "请完成余额支付；取消后库存会释放。";
   if (status === "pending_confirm") return "线下收款订单已提交，等待后台财务确认。";
   if (status === "paid") return "收款已确认，等待商家发货。";
@@ -198,6 +261,15 @@ async function load() {
   if (!orderId.value) return;
   await ensureUser();
   order.value = await request<any>(`/public/me/mall/orders/${orderId.value}`);
+  await loadGroupOrders();
+}
+async function loadGroupOrders() {
+  const groupNo = order.value?.checkoutGroup?.groupNo;
+  if (!groupNo) {
+    groupOrders.value = [];
+    return;
+  }
+  groupOrders.value = (await request<any[]>("/public/me/mall/orders")).filter((item) => item.checkoutGroup?.groupNo === groupNo);
 }
 async function confirmReceived() {
   try {
@@ -219,8 +291,9 @@ async function payBalance() {
 }
 async function payWechat() {
   try {
-    await request(`/public/mall/orders/${orderId.value}/pay/wechat`, { method: "POST", data: { paymentScene: "h5" } });
-    uni.showToast({ title: "微信支付已发起，请完成付款", icon: "none" });
+    const pay = await request<any>(`/public/mall/orders/${orderId.value}/pay/wechat`, { method: "POST", data: { paymentScene: preferredMallWechatPaymentScene() } });
+    const redirected = await handleMallWechatPayResult(pay);
+    if (redirected) return;
     load();
   } catch (error: any) {
     uni.showToast({ title: error.message || "发起微信支付失败", icon: "none" });
@@ -244,6 +317,10 @@ function cancelOrder() {
   });
 }
 function requestRefund() {
+  if (!canRequestRefund.value) {
+    uni.showToast({ title: refundActionTip.value || "当前订单不能申请售后", icon: "none" });
+    return;
+  }
   refundForm.value = { reason: "", images: [] };
   refundDialogVisible.value = true;
 }
@@ -358,6 +435,7 @@ onShow(() => load().catch((error: any) => uni.showToast({ title: error.message |
 .status-card { padding:34rpx; border-radius:30rpx; background:linear-gradient(135deg,#7c2d12,#ea580c); color:#fff; margin-bottom:20rpx; display:grid; gap:10rpx; }
 .status { font-size:38rpx; font-weight:900; }
 .status-tip { font-size:26rpx; line-height:1.45; opacity:.92; }
+.store-name { width:fit-content; padding:8rpx 14rpx; border-radius:999rpx; background:rgba(255,255,255,.16); color:#fff; font-size:23rpx; font-weight:900; }
 .order-no { font-size:24rpx; opacity:.82; }
 .card { background:#fff; border-radius:26rpx; padding:24rpx; margin-bottom:18rpx; box-shadow:0 12rpx 30rpx rgba(15,23,42,.06); }
 .section-title { display:block; font-size:30rpx; font-weight:900; color:#1f2937; margin-bottom:16rpx; }
@@ -370,6 +448,12 @@ onShow(() => load().catch((error: any) => uni.showToast({ title: error.message |
 .step.active .dot { background:#c2410c; box-shadow:0 0 0 8rpx #ffedd5; }
 .warning { display:block; margin-top:18rpx; padding:14rpx; border-radius:16rpx; background:#fff7ed; color:#9a3412; font-size:24rpx; line-height:1.45; }
 .deadline { display:block; margin-top:18rpx; padding:14rpx; border-radius:16rpx; background:#ecfeff; color:#0f766e; font-size:24rpx; font-weight:800; line-height:1.45; }
+.checkout-group-card { border:1rpx solid rgba(14,116,144,.14); background:linear-gradient(180deg,#ffffff,#f8fafc); }
+.group-order-row { margin-top:16rpx; padding:18rpx; border-radius:22rpx; border:1rpx solid #e2e8f0; background:#fff; display:flex; justify-content:space-between; align-items:center; gap:18rpx; }
+.group-order-row.current { border-color:#fed7aa; background:#fff7ed; }
+.group-order-main { flex:1; min-width:0; }
+.group-order-side { display:grid; justify-items:end; gap:6rpx; flex:0 0 auto; }
+.current-pill { margin-left:10rpx; padding:4rpx 12rpx; border-radius:999rpx; background:#9a3412; color:#fff; font-size:21rpx; font-weight:900; vertical-align:middle; }
 .group-card { border:1rpx solid rgba(194,65,12,.12); }
 .group-box { display:grid; gap:8rpx; padding:18rpx; border-radius:22rpx; background:linear-gradient(135deg,#fff7ed,#fff); border:1rpx solid #ffedd5; }
 .group-box + .group-box { margin-top:14rpx; }
@@ -396,6 +480,7 @@ onShow(() => load().catch((error: any) => uni.showToast({ title: error.message |
 .logistics-link { display:inline-flex; padding:10rpx 20rpx; border-radius:999rpx; background:#ecfeff; color:#0f766e; font-size:24rpx; font-weight:900; }
 .logistics-link.muted-action { background:#f1f5f9; color:#475569; }
 .action-bar { position:fixed; left:0; right:0; bottom:0; padding:18rpx 28rpx 34rpx; background:#fff; display:flex; justify-content:flex-end; gap:16rpx; box-shadow:0 -10rpx 30rpx rgba(15,23,42,.08); }
+.refund-action-tip { display:flex; align-items:center; padding:0 20rpx; border-radius:999rpx; background:#fff7ed; color:#9a3412; font-size:25rpx; font-weight:900; }
 button { margin:0; border-radius:999px; background:#9a3412; color:#fff; font-size:27rpx; font-weight:900; }
 button.ghost { background:#f1f5f9; color:#475569; }
 .review-mask { position:fixed; inset:0; z-index:20; background:rgba(15,23,42,.46); display:flex; align-items:flex-end; }

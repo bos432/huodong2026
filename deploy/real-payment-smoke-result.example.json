@@ -111,6 +111,81 @@
       "status": "pending",
       "note": "Agent order used the locked agent payment account for pay, callback and refund."
     },
+    "mallPaymentCreate": {
+      "status": "pending",
+      "note": "Verify mall order creates a real provider payment task with the intended store collection mode.",
+      "evidence": {
+        "provider": "",
+        "merchantId": "",
+        "merchantScope": "",
+        "paymentMode": "",
+        "collectionMode": "",
+        "receiverType": "",
+        "callbackPath": "",
+        "orderNo": "",
+        "transactionNo": "",
+        "callbackLogId": "",
+        "refundNo": "",
+        "providerRefundNo": "",
+        "rollbackRecord": ""
+      }
+    },
+    "mallPaymentCallback": {
+      "status": "pending",
+      "note": "Verify real mall payment callback is signed, idempotent, matched to the mall order and scoped to the store.",
+      "evidence": {
+        "provider": "",
+        "merchantId": "",
+        "merchantScope": "",
+        "paymentMode": "",
+        "collectionMode": "",
+        "receiverType": "",
+        "callbackPath": "",
+        "orderNo": "",
+        "transactionNo": "",
+        "callbackLogId": "",
+        "refundNo": "",
+        "providerRefundNo": "",
+        "rollbackRecord": ""
+      }
+    },
+    "mallPaymentRouteGuard": {
+      "status": "pending",
+      "note": "Verify merchant-direct mall payment and refund callbacks reject the platform route and the wrong store route before enabling direct collection.",
+      "evidence": {
+        "provider": "wechat",
+        "merchantId": "",
+        "paymentMode": "merchant_direct",
+        "paymentCallbackPath": "",
+        "refundCallbackPath": "",
+        "platformPaymentRouteRejected": false,
+        "wrongMerchantPaymentRouteRejected": false,
+        "platformRefundRouteRejected": false,
+        "wrongMerchantRefundRouteRejected": false,
+        "callbackLogIds": "",
+        "operatorMessage": "",
+        "rollbackRecord": ""
+      }
+    },
+    "mallRefund": {
+      "status": "pending",
+      "note": "Verify mall after-sale refund reaches provider or the documented offline fallback and updates mall finance logs.",
+      "evidence": {
+        "provider": "",
+        "merchantId": "",
+        "merchantScope": "",
+        "paymentMode": "",
+        "collectionMode": "",
+        "receiverType": "",
+        "callbackPath": "",
+        "orderNo": "",
+        "transactionNo": "",
+        "callbackLogId": "",
+        "refundNo": "",
+        "providerRefundNo": "",
+        "rollbackRecord": ""
+      }
+    },
     "agentTransfer": {
       "status": "pending",
       "note": "Verify agent automatic transfer in staging after the provider transfer product is enabled.",

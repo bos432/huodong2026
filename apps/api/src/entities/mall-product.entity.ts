@@ -1,8 +1,9 @@
 import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { MallCategory } from "./mall-category.entity";
+import { MallMerchant } from "./mall-merchant.entity";
 import { Tenant } from "./tenant.entity";
 
-export type MallProductStatus = "draft" | "published" | "offline";
+export type MallProductStatus = "draft" | "pending_review" | "published" | "offline";
 
 @Entity("mall_products")
 export class MallProduct {
@@ -11,6 +12,9 @@ export class MallProduct {
 
   @ManyToOne(() => Tenant, { eager: true, nullable: false, onDelete: "CASCADE" })
   tenant!: Tenant;
+
+  @ManyToOne(() => MallMerchant, { eager: true, nullable: true, onDelete: "SET NULL" })
+  merchant!: MallMerchant | null;
 
   @ManyToOne(() => MallCategory, { eager: true, nullable: true, onDelete: "SET NULL" })
   category!: MallCategory | null;

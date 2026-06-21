@@ -1,6 +1,6 @@
 # 移动端 2.0 页面状态清单
 
-更新时间：2026-06-18
+更新时间：2026-06-20
 
 ## 判断口径
 
@@ -14,43 +14,44 @@
 - `apps/mobile/src/pages/index/index.vue`
 - `apps/mobile/src/pages/activity/list.vue`
 - `apps/mobile/src/pages/activity/detail.vue`
-- `apps/mobile/src/pages/community/index.vue`
-- `apps/mobile/src/pages/courses/index.vue`
-- `apps/mobile/src/pages/user/my.vue`
-
-## 混合状态
-
 - `apps/mobile/src/pages/activity/register.vue`
 - `apps/mobile/src/pages/announcement/list.vue`
-- `apps/mobile/src/pages/partner/index.vue`
-- `apps/mobile/src/pages/service/index.vue`
-- `apps/mobile/src/pages/user/login.vue`
-- `apps/mobile/src/pages/user/registration.vue`
-- `apps/mobile/src/pages/user/review.vue`
-
-说明：
-
-- 这批页面多数已经接入 `usePageDecoration`、`TenantSwitcher`、`TenantContextBadge`、`PageDecorationBlocks` 等 2.0 装修能力。
-- 但视觉主框架仍偏旧后台装修风，和首页的新中式 2.0 不完全统一。
-
-## 仍是 1.0
-
 - `apps/mobile/src/pages/charity/index.vue`
 - `apps/mobile/src/pages/community/checkin.vue`
 - `apps/mobile/src/pages/community/detail.vue`
 - `apps/mobile/src/pages/course/detail.vue`
 - `apps/mobile/src/pages/course/player.vue`
+- `apps/mobile/src/pages/community/index.vue`
 - `apps/mobile/src/pages/order/confirm.vue`
 - `apps/mobile/src/pages/order/payment.vue`
+- `apps/mobile/src/pages/partner/index.vue`
 - `apps/mobile/src/pages/search/index.vue`
+- `apps/mobile/src/pages/service/index.vue`
+- `apps/mobile/src/pages/courses/index.vue`
+- `apps/mobile/src/pages/user/my.vue`
 - `apps/mobile/src/pages/user/certificates.vue`
 - `apps/mobile/src/pages/user/courses.vue`
 - `apps/mobile/src/pages/user/favorites.vue`
 - `apps/mobile/src/pages/user/learning.vue`
+- `apps/mobile/src/pages/user/login.vue`
 - `apps/mobile/src/pages/user/profile.vue`
+- `apps/mobile/src/pages/user/registration.vue`
+- `apps/mobile/src/pages/user/review.vue`
 - `apps/mobile/src/pages/user/security.vue`
 - `apps/mobile/src/pages/user/settings.vue`
 - `apps/mobile/src/pages/user/wallet.vue`
+
+## 混合状态
+
+- 暂无。原混合状态页面已于 2026-06-20 完成移动端 2.0 视觉收口。
+
+说明：
+
+- 历史混合状态页面保留既有 `usePageDecoration`、`TenantSwitcher`、`TenantContextBadge`、`PageDecorationBlocks` 等能力，并已完成首页同系视觉统一。
+
+## 仍是 1.0
+
+- 暂无普通学员页面处于 1.0 状态。
 
 ## 独立运营台 2.0
 
@@ -85,18 +86,14 @@
 
 ## 当前优先级建议
 
-如果按用户主链路继续推进，建议优先顺序是：
+普通学员侧移动端 2.0 视觉收口已完成，后续优先级应转入：
 
-1. `activity/register`
-2. `user/registration`
-3. `user/login`
-4. `service/index`
-5. `announcement/list`
-6. `community/detail` / `community/checkin`
-7. `course/detail` / `order/confirm` / `order/payment`
+1. 构建、预检和浏览器主流程验收。
+2. 若验收发现页面或接口问题，回到对应计划内页面或业务闭环修复。
+3. `apps/mobile/src/pages/ambassador/index.vue` 保持独立专题页定位，只有在新增明确设计要求时再调整。
 
 ## 上线验收结论
 
-- 可上线：主首页、活动列表、活动详情、课程列表、共修列表、我的首页、商家手机管理台基础运营页。
-- 可上线但需备注：报名确认、报名详情、登录、服务中心、公告、课程详情、课程订单、我的课程等页面仍需继续做 2.0 细节统一，但不应阻塞基础运营。
+- 可上线：主首页、活动列表、活动详情、报名确认、报名详情、登录、服务中心、公告、课程列表、课程详情、课程订单、课程播放、共修列表、社区详情、打卡、公益池、搜索、我的首页和用户中心子页、商家手机管理台基础运营页。
+- 可上线但需备注：`apps/mobile/src/pages/ambassador/index.vue` 是独立专题落地页，不按普通学员 2.0 页面口径强制统一。
 - 不可上线必须修：真实收钱链路、退款链路、课程播放进度、学员动态评论审核、跨商家数据隔离、区域定位分发等核心闭环一旦发现异常，必须先修再正式运营收费。

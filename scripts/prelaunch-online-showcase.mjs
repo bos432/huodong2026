@@ -13,7 +13,9 @@ import {
 
 const root = process.cwd();
 const resultFile = optionalEnv("REAL_PAYMENT_PREFLIGHT_RESULT_FILE", "deploy/real-payment-smoke-result.json");
+const mallSmokeResultFile = optionalEnv("MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE", "deploy/mall-multi-merchant-smoke-result.json");
 const maxAgeHours = Number(optionalEnv("REAL_PAYMENT_PREFLIGHT_MAX_AGE_HOURS", "168"));
+const mallSmokeMaxAgeHours = Number(optionalEnv("MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS", String(maxAgeHours || 168)));
 const allowHttp = optionalEnv("PRELAUNCH_ALLOW_HTTP", "false") === "true";
 
 const requiredChecks = [
@@ -27,6 +29,10 @@ const requiredChecks = [
   "refundQuery",
   "statementFetch",
   "agentAccountRouting",
+  "mallPaymentCreate",
+  "mallPaymentCallback",
+  "mallPaymentRouteGuard",
+  "mallRefund",
   "agentTransfer",
   "rollbackPlan"
 ];
@@ -56,6 +62,88 @@ const requiredAgentTransferEvidenceFields = [
   "rollbackRecord"
 ];
 
+const requiredMallPaymentEvidenceFields = [
+  "provider",
+  "merchantId",
+  "merchantScope",
+  "paymentMode",
+  "collectionMode",
+  "receiverType",
+  "callbackPath",
+  "orderNo",
+  "transactionNo",
+  "callbackLogId",
+  "refundNo",
+  "providerRefundNo",
+  "rollbackRecord"
+];
+
+const requiredMallPaymentRouteGuardEvidenceFields = [
+  "provider",
+  "merchantId",
+  "paymentMode",
+  "paymentCallbackPath",
+  "refundCallbackPath",
+  "platformPaymentRouteRejected",
+  "wrongMerchantPaymentRouteRejected",
+  "platformRefundRouteRejected",
+  "wrongMerchantRefundRouteRejected",
+  "callbackLogIds",
+  "operatorMessage",
+  "rollbackRecord"
+];
+
+const requiredMallPaymentRouteRejectionFields = [
+  "platformPaymentRouteRejected",
+  "wrongMerchantPaymentRouteRejected",
+  "platformRefundRouteRejected",
+  "wrongMerchantRefundRouteRejected"
+];
+
+const requiredMallSmokeChecks = [
+  "merchantSetup",
+  "storeProducts",
+  "productAudit",
+  "adminIsolation",
+  "publicStorefront",
+  "categoryMerchantAvailabilityGuard",
+  "paymentReadiness",
+  "paymentAccountManagement",
+  "merchantOperationReadiness",
+  "merchantIdentityGuard",
+  "disabledMerchantOperationGuard",
+  "merchantOpenGuard",
+  "merchantDirectOpenGuard",
+  "cartMerchantAvailabilityGuard",
+  "favoriteBrowseMerchantAvailabilityGuard",
+  "productSkuAvailabilityGuard",
+  "paymentModeSwitchGuard",
+  "merchantCloseGuard",
+  "merchantAccessTenantGuard",
+  "couponStoreIsolation",
+  "couponMerchantAvailabilityGuard",
+  "promotionStoreIsolation",
+  "flashGroupStoreIsolation",
+  "marketingProductAvailabilityGuard",
+  "logisticsStoreIsolation",
+  "crossStoreCheckout",
+  "crossStoreBalanceGuard",
+  "checkoutGroupIdempotencyGuard",
+  "paymentTaskRouting",
+  "directIdOperationIsolation",
+  "batchOperationScope",
+  "orderFulfillment",
+  "checkoutGroupStatusSync",
+  "checkoutGroupAdminTrace",
+  "userPrivatePayloadSafety",
+  "reviewStoreIsolation",
+  "settlementLifecycle",
+  "settlementPaidEvidenceGuard",
+  "settlementPaymentModeAccounting",
+  "settlementRefundChargebackAccounting",
+  "operationalAdmin"
+];
+
 const errors = [];
 const warnings = [];
 
@@ -82,11 +170,17 @@ function hasEvidenceValue(value) {
   return value !== undefined && value !== null;
 }
 
+function isAffirmativeEvidence(value) {
+  if (value === true) return true;
+  if (typeof value !== "string") return false;
+  return ["true", "passed", "ok", "yes"].includes(value.trim().toLowerCase());
+}
+
 function readJson(filePath) {
   try {
     return JSON.parse(fs.readFileSync(filePath, "utf8"));
   } catch (error) {
-    fail(`真实支付联调结果文件不是合法 JSON：${resultFile}（${error.message}）`);
+    fail(`验收结果文件不是合法 JSON：${path.relative(root, filePath) || filePath}（${error.message}）`);
     return null;
   }
 }
@@ -122,6 +216,67 @@ function validateAgentTransfer(result) {
   }
 }
 
+function validateMallPayment(result) {
+  for (const checkKey of ["mallPaymentCreate", "mallPaymentCallback", "mallRefund"]) {
+    const evidence = result?.checks?.[checkKey]?.evidence || {};
+    for (const field of requiredMallPaymentEvidenceFields) {
+      if (!hasEvidenceValue(evidence[field])) {
+        fail(`商城真实支付联调缺少证据字段：${checkKey}.evidence.${field}`);
+      }
+    }
+    validateMallPaymentRouting(checkKey, evidence);
+  }
+  validateMallPaymentRouteGuard(result);
+}
+
+function validateMallPaymentRouteGuard(result) {
+  const evidence = result?.checks?.mallPaymentRouteGuard?.evidence || {};
+  for (const field of requiredMallPaymentRouteGuardEvidenceFields) {
+    if (!hasEvidenceValue(evidence[field])) {
+      fail(`商城商户直收回调防串店验收缺少证据字段：mallPaymentRouteGuard.evidence.${field}`);
+    }
+  }
+  const merchantId = String(evidence.merchantId || "").trim();
+  const paymentMode = String(evidence.paymentMode || "").trim();
+  const paymentCallbackPath = String(evidence.paymentCallbackPath || "").trim();
+  const refundCallbackPath = String(evidence.refundCallbackPath || "").trim();
+  const expectedPaymentPath = merchantId ? `/payment/mall/merchants/${merchantId}/wechat/callback` : "";
+  const expectedRefundPath = merchantId ? `/payment/mall/merchants/${merchantId}/wechat/refund-callback` : "";
+  if (paymentMode !== "merchant_direct") fail("商城商户直收回调防串店验收 paymentMode 必须是 merchant_direct");
+  if (merchantId) {
+    if (!paymentCallbackPath.includes(expectedPaymentPath)) fail(`商城商户直收支付回调路径必须包含 ${expectedPaymentPath}`);
+    if (!refundCallbackPath.includes(expectedRefundPath)) fail(`商城商户直收退款回调路径必须包含 ${expectedRefundPath}`);
+  }
+  for (const field of requiredMallPaymentRouteRejectionFields) {
+    if (!isAffirmativeEvidence(evidence[field])) {
+      fail(`商城商户直收回调防串店验收 ${field} 必须为 true 或 passed`);
+    }
+  }
+}
+
+function validateMallPaymentRouting(checkKey, evidence) {
+  const merchantId = String(evidence.merchantId || "").trim();
+  const paymentMode = String(evidence.paymentMode || "").trim();
+  const collectionMode = String(evidence.collectionMode || "").trim();
+  const receiverType = String(evidence.receiverType || "").trim();
+  const merchantScope = String(evidence.merchantScope || "").trim();
+  const callbackPath = String(evidence.callbackPath || "").trim();
+  const isRefund = checkKey === "mallRefund";
+  const platformPath = isRefund ? "/payment/mall/wechat/refund-callback" : "/payment/mall/wechat/callback";
+  const directPath = merchantId ? (isRefund ? `/payment/mall/merchants/${merchantId}/wechat/refund-callback` : `/payment/mall/merchants/${merchantId}/wechat/callback`) : "";
+  if (paymentMode === "merchant_direct" || collectionMode === "merchant_direct") {
+    if (!merchantId) fail(`商城真实支付联调 ${checkKey} 商户直收缺少 merchantId`);
+    if (!directPath || !callbackPath.includes(directPath)) fail(`商城真实支付联调 ${checkKey} 商户直收 callbackPath 必须包含 ${directPath}`);
+    if (receiverType !== "merchant") fail(`商城真实支付联调 ${checkKey} 商户直收 receiverType 必须是 merchant`);
+    if (!["merchant", "agent"].includes(merchantScope)) fail(`商城真实支付联调 ${checkKey} 商户直收 merchantScope 必须是 merchant 或 agent`);
+  }
+  if (paymentMode === "platform_collect" || collectionMode === "platform_collect") {
+    if (!callbackPath.includes(platformPath) || callbackPath.includes("/payment/mall/merchants/")) fail(`商城真实支付联调 ${checkKey} 平台代收 callbackPath 必须使用 ${platformPath}`);
+    if (receiverType !== "platform") fail(`商城真实支付联调 ${checkKey} 平台代收 receiverType 必须是 platform`);
+    if (merchantScope !== "platform") fail(`商城真实支付联调 ${checkKey} 平台代收 merchantScope 必须是 platform`);
+  }
+}
+
 function validateRealPaymentEvidence() {
   const fullPath = resolveRootPath(resultFile);
   if (!fs.existsSync(fullPath)) {
@@ -151,8 +306,41 @@ function validateRealPaymentEvidence() {
     if (result?.checks?.[key]?.status !== "passed") fail(`真实支付联调缺少通过项：${key}`);
   }
   validatePaymentSceneCoverage(result);
+  validateMallPayment(result);
   validateAgentTransfer(result);
   if (result?.rollback?.documented !== true) fail("真实支付联调结果必须包含 rollback.documented=true");
+}
+
+function validateMallMultiMerchantSmokeEvidence() {
+  const fullPath = resolveRootPath(mallSmokeResultFile);
+  if (!fs.existsSync(fullPath)) {
+    fail(`缺少多商户商城 smoke 结果文件：${mallSmokeResultFile}`);
+    console.log("     请先执行：npm run smoke:mall-multi-merchant");
+    return;
+  }
+
+  const result = readJson(fullPath);
+  if (!result) return;
+
+  if (result.passed !== true) fail(`多商户商城 smoke 结果文件 ${mallSmokeResultFile} 必须 passed=true`);
+  else ok(`多商户商城 smoke 已标记通过：${mallSmokeResultFile}`);
+
+  const checkedAt = Date.parse(result.checkedAt || "");
+  if (!Number.isFinite(checkedAt)) {
+    fail(`多商户商城 smoke 结果文件 ${mallSmokeResultFile} 缺少合法 checkedAt`);
+  } else {
+    const ageHours = (Date.now() - checkedAt) / 3600000;
+    if (ageHours < 0) fail(`多商户商城 smoke 结果文件 ${mallSmokeResultFile} 的 checkedAt 在未来`);
+    else if (!Number.isFinite(mallSmokeMaxAgeHours) || mallSmokeMaxAgeHours <= 0) fail("MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS 必须是正数");
+    else if (ageHours > mallSmokeMaxAgeHours) fail(`多商户商城 smoke 结果已超过 ${mallSmokeMaxAgeHours} 小时，请重新执行 npm run smoke:mall-multi-merchant`);
+    else ok(`多商户商城 smoke 结果仍在有效期内：${ageHours.toFixed(1)} 小时前`);
+  }
+
+  if (result.tenantCode !== TENANT_CODE) fail(`多商户商城 smoke tenantCode 应为 ${TENANT_CODE}，当前为 ${result.tenantCode || "空"}`);
+  if (result.apiBase !== API_BASE) fail(`多商户商城 smoke API_BASE 应为 ${API_BASE}，当前为 ${result.apiBase || "空"}，请在当前线上地址重新执行 npm run smoke:mall-multi-merchant`);
+  for (const key of requiredMallSmokeChecks) {
+    if (result?.checks?.[key]?.status !== "passed") fail(`多商户商城 smoke 缺少通过项：${key}`);
+  }
 }
 
 async function validateOnlineReadiness() {
@@ -181,6 +369,9 @@ async function validateOnlineReadiness() {
   }
 
   const readiness = readinessResult.data;
+  if (readiness.real?.mallWechatImplemented !== true) {
+    fail("商城真实微信支付下单/回调路由尚未接入服务商，不能正式开放商城微信支付。可继续使用余额/线下支付或沙箱验收。");
+  }
   if (readiness.status === "real_ready") ok("后台微信支付就绪状态：真实配置就绪");
   else fail(`后台微信支付未达到真实就绪：${readiness.statusText || readiness.status}`);
 
@@ -188,6 +379,11 @@ async function validateOnlineReadiness() {
     ok(`微信支付回调地址：${readiness.real.notifyUrl}`);
   } else {
     fail("微信支付回调地址为空");
+  }
+  if (readiness.real?.refundNotifyUrl) {
+    ok(`微信退款回调地址：${readiness.real.refundNotifyUrl}`);
+  } else {
+    fail("微信退款回调地址为空");
   }
 
   for (const issue of readiness.issues || []) fail(`微信支付配置缺口：${issue}`);
@@ -210,8 +406,9 @@ function printChecklist() {
   console.log("5. npm --prefix apps/mobile run build:h5");
   console.log("6. npm run seed:online-showcase");
   console.log("7. npm run smoke:online-showcase");
-  console.log("8. npm run smoke:real-payment");
-  console.log("9. npm run prelaunch:online-showcase");
+  console.log("8. npm run smoke:mall-multi-merchant");
+  console.log("9. npm run smoke:real-payment");
+  console.log("10. npm run prelaunch:online-showcase");
 }
 
 async function main() {
@@ -219,6 +416,7 @@ async function main() {
   console.log(`验收目标：真实微信支付配置、联调证据、前台支付展示、回滚证据全部满足后才建议开启。\n`);
 
   validateRealPaymentEvidence();
+  validateMallMultiMerchantSmokeEvidence();
   await validateOnlineReadiness();
   printChecklist();
 

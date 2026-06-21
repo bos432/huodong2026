@@ -114,23 +114,154 @@ onMounted(load);
 </template>
 
 <style scoped>
-.profile-page { min-height: 100vh; padding: 24rpx 24rpx 160rpx; background: var(--page-bg-layer, #f4f6f8); color: var(--text-color, #111827); }
-.hero, .card { border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(15, 23, 42, 0.06); }
-.hero { display: flex; align-items: center; gap: 22rpx; padding: 30rpx; margin-bottom: 20rpx; }
-.avatar, .avatar.fallback { width: 112rpx; height: 112rpx; border-radius: 999px; flex: 0 0 auto; }
-.fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 38rpx; font-weight: 950; }
-.name { font-size: 36rpx; font-weight: 950; }
-.sub, .muted { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.5; }
-.card { padding: 26rpx; margin-bottom: 20rpx; }
-.field { display: grid; gap: 12rpx; margin-bottom: 24rpx; }
-.label { color: var(--text-color, #111827); font-size: 27rpx; font-weight: 900; }
-.avatar-row { display: flex; align-items: center; gap: 18rpx; }
-.small-avatar { width: 78rpx; height: 78rpx; border-radius: 999px; }
-.mini-button { padding: 14rpx 22rpx; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 25rpx; font-weight: 900; }
-.input { height: 82rpx; padding: 0 20rpx; border-radius: 6px; background: #f8fafc; font-size: 27rpx; }
-.button { height: 84rpx; display: flex; align-items: center; justify-content: center; border-radius: 6px; background: var(--primary-color, #0f766e); color: #fff; font-size: 28rpx; font-weight: 950; }
-.button.disabled { opacity: .55; }
-.security-entry { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
-.entry-title { font-size: 31rpx; font-weight: 950; }
-.arrow { flex: 0 0 auto; color: var(--primary-color, #0f766e); font-size: 25rpx; font-weight: 900; }
+.profile-page {
+  min-height: 100vh;
+  padding: 24rpx 24rpx 160rpx;
+  background:
+    linear-gradient(180deg, #f7efe3 0%, #fbf7ef 40%, #f4eadc 100%);
+  color: #263d3c;
+}
+
+.hero,
+.card {
+  border: 1rpx solid rgba(199, 181, 157, 0.58);
+  border-radius: 24rpx;
+  background: rgba(255, 252, 246, 0.96);
+  box-shadow: 0 12rpx 34rpx rgba(72, 55, 38, 0.08);
+}
+
+.hero {
+  display: flex;
+  align-items: center;
+  gap: 22rpx;
+  padding: 30rpx;
+  margin-bottom: 20rpx;
+  background:
+    linear-gradient(135deg, rgba(33, 75, 78, 0.96), rgba(129, 55, 48, 0.9)),
+    #214b4e;
+  color: #fffaf2;
+}
+
+.avatar,
+.avatar.fallback {
+  width: 112rpx;
+  height: 112rpx;
+  flex: 0 0 auto;
+  border-radius: 50%;
+}
+
+.fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f1e3d0;
+  color: #8b4a3e;
+  font-size: 38rpx;
+  font-weight: 950;
+}
+
+.hero .fallback {
+  background: rgba(255, 250, 242, 0.18);
+  color: #fffaf2;
+}
+
+.name {
+  font-size: 36rpx;
+  font-weight: 950;
+}
+
+.sub,
+.muted {
+  color: #7f7467;
+  font-size: 25rpx;
+  line-height: 1.5;
+}
+
+.hero .sub {
+  color: rgba(255, 250, 242, 0.76);
+}
+
+.card {
+  padding: 26rpx;
+  margin-bottom: 20rpx;
+}
+
+.field {
+  display: grid;
+  gap: 12rpx;
+  margin-bottom: 24rpx;
+}
+
+.label {
+  color: #263d3c;
+  font-size: 27rpx;
+  font-weight: 900;
+}
+
+.avatar-row {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+}
+
+.small-avatar {
+  width: 78rpx;
+  height: 78rpx;
+  border-radius: 50%;
+}
+
+.mini-button {
+  padding: 14rpx 22rpx;
+  border-radius: 999rpx;
+  background: #f1e3d0;
+  color: #8b4a3e;
+  font-size: 25rpx;
+  font-weight: 900;
+}
+
+.input {
+  height: 82rpx;
+  padding: 0 20rpx;
+  border: 1rpx solid rgba(199, 181, 157, 0.45);
+  border-radius: 18rpx;
+  background: #fbf7ef;
+  color: #263d3c;
+  font-size: 27rpx;
+}
+
+.button {
+  height: 84rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 999rpx;
+  background: #b84435;
+  color: #fffaf2;
+  font-size: 28rpx;
+  font-weight: 950;
+}
+
+.button.disabled {
+  opacity: .55;
+}
+
+.security-entry {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16rpx;
+}
+
+.entry-title {
+  color: #263d3c;
+  font-size: 31rpx;
+  font-weight: 950;
+}
+
+.arrow {
+  flex: 0 0 auto;
+  color: #4a6b8a;
+  font-size: 25rpx;
+  font-weight: 900;
+}
 </style>

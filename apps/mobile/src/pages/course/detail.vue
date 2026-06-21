@@ -1,7 +1,8 @@
 <template>
-  <view class="container">
+  <view class="container course-detail-page">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">‹ 返回</view>
+      <view class="nav-back" @click="goBack">返回</view>
+      <view class="nav-title">课程详情</view>
       <view class="nav-share" @click="share">分享</view>
     </view>
 
@@ -14,23 +15,23 @@
     <template v-else-if="course">
       <view class="course-cover-full" :style="{ background: course.color }">
         <image v-if="course.coverUrl" class="course-cover-img" :src="course.coverUrl" mode="aspectFill" />
-        <text v-else style="font-size:120rpx;">{{ course.icon }}</text>
-        <view class="play-btn">▶</view>
+        <text v-else class="course-icon">{{ course.icon }}</text>
+        <view class="play-btn">播</view>
       </view>
 
-      <view class="course-info-section">
+      <view class="card course-info-section">
         <text class="title-xl">{{ course.title }}</text>
-        <view class="row" style="justify-content:flex-start; gap:16rpx; margin-top:12rpx;">
+        <view class="row teacher-row">
           <image class="avatar-sm" :src="course.teacherAvatar || '/static/avatar1.png'" mode="aspectFill" />
           <text class="body-text">{{ course.teacher }}</text>
           <view class="tag tag-secondary">讲师</view>
         </view>
-        <view class="row" style="justify-content:flex-start; gap:8rpx; margin-top:8rpx;">
-          <text style="color:#FF9F00; font-size:28rpx;">⭐ {{ course.rating }}（{{ course.reviewCount }}人评价）</text>
+        <view class="row rating-row">
+          <text class="rating-text">评分 {{ course.rating }}（{{ course.reviewCount }}人评价）</text>
         </view>
-        <view class="row" style="justify-content:flex-start; gap:16rpx; margin-top:12rpx;">
-          <text class="price" style="font-size:48rpx;">{{ priceText(course.price) }}</text>
-          <text class="price-original" style="font-size:28rpx; margin-top:12rpx;" v-if="Number(course.originalPrice) > 0">{{ priceText(course.originalPrice) }}</text>
+        <view class="row price-row">
+          <text class="price course-price">{{ priceText(course.price) }}</text>
+          <text class="price-original course-original-price" v-if="Number(course.originalPrice) > 0">{{ priceText(course.originalPrice) }}</text>
           <view v-if="course.tag" class="tag" :class="course.tag === '限时优惠' ? 'tag-warning' : 'tag-success'">{{ course.tag }}</view>
         </view>
       </view>
@@ -45,18 +46,18 @@
         >{{ tab.label }}</view>
       </view>
 
-      <view v-if="activeTab === 'detail'" class="card">
-        <text class="body-text" style="white-space:pre-line;">{{ course.description || "课程介绍正在完善中。" }}</text>
+      <view v-if="activeTab === 'detail'" class="card tab-card">
+        <text class="course-description">{{ course.description || "课程介绍正在完善中。" }}</text>
       </view>
 
-      <view v-if="activeTab === 'catalog'" class="card">
+      <view v-if="activeTab === 'catalog'" class="card tab-card">
         <view v-if="chapters.length">
-          <view v-for="(chapter, ci) in chapters" :key="ci" style="margin-bottom:16rpx;">
-            <text style="font-size:28rpx; font-weight:600; color:#333;">{{ chapter.title }}</text>
+          <view v-for="(chapter, ci) in chapters" :key="ci" class="chapter-block">
+            <text class="chapter-title">{{ chapter.title }}</text>
             <view v-for="(lesson, li) in chapter.lessons" :key="li" class="lesson-item">
-              <view class="row" style="justify-content:flex-start; gap:12rpx;">
+              <view class="row lesson-row">
                 <text>{{ lesson.isFree ? "🔓" : "🔒" }}</text>
-                <text class="body-text" style="flex:1;">{{ lesson.title }}</text>
+                <text class="body-text lesson-title">{{ lesson.title }}</text>
                 <text class="subtle">{{ lesson.duration || "-" }}</text>
               </view>
             </view>
@@ -65,26 +66,26 @@
         <empty-state v-else icon="📖" text="暂无章节，请先在后台维护课程目录" />
       </view>
 
-      <view v-if="activeTab === 'reviews'" class="card">
+      <view v-if="activeTab === 'reviews'" class="card tab-card">
         <view v-for="(rv, ri) in reviews" :key="ri" class="review-item">
-          <view class="row" style="justify-content:flex-start; gap:12rpx;">
+          <view class="row review-author">
             <image class="avatar-sm" :src="rv.avatar" mode="aspectFill" />
             <view>
-              <text class="body-text" style="font-weight:600;">{{ rv.nickname }}</text>
-              <text style="font-size:22rpx; color:#FF9F00;">{{ "⭐".repeat(rv.rating) }}</text>
+              <text class="review-name">{{ rv.nickname }}</text>
+              <text class="review-stars">{{ "★".repeat(rv.rating) }}</text>
             </view>
           </view>
-          <text class="body-text" style="margin-top:8rpx; display:block;">{{ rv.content }}</text>
-          <text class="subtle" style="display:block; margin-top:4rpx;">{{ rv.time }}</text>
+          <text class="review-content">{{ rv.content }}</text>
+          <text class="subtle review-time">{{ rv.time }}</text>
         </view>
       </view>
 
       <view class="bottom-actions">
         <view class="bottom-action" @click="toggleFavorite">
-          <text style="font-size:36rpx;">{{ isFav ? "❤️" : "🤍" }}</text>
+          <text class="favorite-icon">{{ isFav ? "❤️" : "🤍" }}</text>
           <text class="subtle">收藏</text>
         </view>
-        <view class="button" style="flex:1; margin-left:24rpx;" @click="buyCourse">
+        <view class="button buy-button" @click="buyCourse">
           {{ Number(course.price) > 0 ? `立即购买 ${priceText(course.price)}` : "免费加入" }}
         </view>
       </view>
@@ -219,77 +220,109 @@ onMounted(loadCourse);
 </script>
 
 <style scoped>
+.course-detail-page { padding-bottom: 150rpx; }
 .custom-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16rpx 0;
 }
-.nav-back, .nav-share { font-size: 28rpx; color: #4A6B8A; }
+.nav-back, .nav-share { min-width: 104rpx; min-height: 58rpx; display: flex; align-items: center; color: #4a6b8a; font-size: 27rpx; font-weight: 800; }
+.nav-share { justify-content: flex-end; }
+.nav-title { color: #333333; font-size: 32rpx; font-weight: 900; font-family: "STKaiti", "KaiTi", serif; }
 .state-card { text-align: center; }
 .retry-button { display: inline-flex; margin-top: 20rpx; min-width: 160rpx; }
 .course-cover-full {
   width: 100%;
   height: 420rpx;
-  background: #F5E6D3;
-  border-radius: 20rpx;
+  background: #f5e6d3;
+  border-radius: 24rpx;
   display: flex;
   align-items: center;
   justify-content: center;
   position: relative;
   margin-bottom: 24rpx;
   overflow: hidden;
+  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.14);
 }
 .course-cover-img { width: 100%; height: 100%; display: block; }
+.course-icon { font-size: 120rpx; }
 .play-btn {
   position: absolute;
   width: 100rpx;
   height: 100rpx;
-  background: rgba(0,0,0,0.4);
+  background: rgba(255, 248, 240, 0.18);
+  border: 1px solid rgba(255, 248, 240, 0.28);
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 40rpx;
+  font-size: 30rpx;
+  font-weight: 900;
+  font-family: "STKaiti", "KaiTi", serif;
 }
-.course-info-section { margin-bottom: 24rpx; }
+.course-info-section { margin-bottom: 24rpx; border-radius: 24rpx; box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
+.title-xl { font-family: "STKaiti", "KaiTi", serif; line-height: 1.24; }
+.teacher-row, .rating-row, .price-row { justify-content:flex-start; gap:16rpx; margin-top:12rpx; flex-wrap: wrap; }
+.rating-row { gap:8rpx; margin-top:8rpx; }
+.rating-text { color:#c43d3d; font-size:28rpx; font-weight: 800; }
+.course-price { font-size:48rpx; }
+.course-original-price { font-size:28rpx; margin-top:12rpx; }
 .detail-tabs {
   display: flex;
-  gap: 0;
+  gap: 8rpx;
   margin-bottom: 24rpx;
-  border-bottom: 2rpx solid #E8E0D8;
+  padding: 8rpx;
+  border-radius: 18rpx;
+  background: #f9f4ee;
 }
 .detail-tab {
   flex: 1;
   text-align: center;
   padding: 16rpx 0;
   font-size: 28rpx;
-  color: #666;
+  color: #666666;
+  border-radius: 14rpx;
 }
 .detail-tab.active {
-  color: #C43D3D;
-  font-weight: 600;
-  border-bottom: 4rpx solid #C43D3D;
+  color: #c43d3d;
+  font-weight: 800;
+  background: #fff;
+  box-shadow: 0 8rpx 22rpx rgba(91, 47, 36, 0.08);
 }
+.tab-card { border-radius: 24rpx; box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
+.course-description { display: block; color: #666666; font-size: 28rpx; line-height: 1.7; white-space: pre-line; }
+.chapter-block { margin-bottom:16rpx; }
+.chapter-block:last-child { margin-bottom:0; }
+.chapter-title { font-size:28rpx; font-weight:800; color:#333333; }
 .lesson-item {
   padding: 12rpx 0;
-  border-bottom: 1rpx solid #E8E0D8;
+  border-bottom: 1rpx solid #e8e0d8;
 }
+.lesson-row { justify-content:flex-start; gap:12rpx; }
+.lesson-title { flex:1; }
 .review-item {
   padding: 16rpx 0;
-  border-bottom: 1rpx solid #E8E0D8;
+  border-bottom: 1rpx solid #e8e0d8;
 }
+.review-item:last-child { border-bottom: 0; }
+.review-author { justify-content:flex-start; gap:12rpx; }
+.review-name { display: block; color: #333333; font-size: 28rpx; font-weight: 800; }
+.review-stars { display: block; margin-top: 4rpx; font-size:22rpx; color:#c43d3d; letter-spacing: 0; }
+.review-content { display:block; margin-top:8rpx; color:#666666; font-size: 27rpx; line-height: 1.6; }
+.review-time { display:block; margin-top:4rpx; }
 .bottom-actions {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.98);
   display: flex;
   align-items: center;
   padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
-  border-top: 1rpx solid #E8E0D8;
+  border-top: 1rpx solid #e8e0d8;
+  box-shadow: 0 -10rpx 30rpx rgba(51, 51, 51, 0.08);
 }
 .bottom-action {
   display: flex;
@@ -297,4 +330,6 @@ onMounted(loadCourse);
   align-items: center;
   gap: 4rpx;
 }
+.favorite-icon { font-size:36rpx; }
+.buy-button { flex:1; margin-left:24rpx; }
 </style>

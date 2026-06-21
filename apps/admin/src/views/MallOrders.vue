@@ -2,13 +2,16 @@
   <div class="mall-page">
     <div class="page-header">
       <div>
-        <h2>商城订单 / 售后</h2>
-        <p>处理余额支付、线下收款确认、发货、售后退款，并核对收货地址和订单明细。</p>
-        <p class="finance-note">财务口径：实收=已确认收款订单金额，净收=实收-已通过退款；余额/线下按支付方式拆分。</p>
+        <h2>{{ pageHeader.title }}</h2>
+        <p>{{ pageHeader.desc }}</p>
+        <p class="finance-note">{{ pageHeader.note }}</p>
       </div>
       <div class="header-actions">
-        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width:220px" @change="reload">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width:220px" @change="handleTenantChange">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
+        </el-select>
+        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部店铺" style="width:220px" @change="handleMerchantChange">
+          <el-option v-for="merchant in merchants" :key="merchant.id" :label="merchantLabel(merchant)" :value="merchant.id" />
         </el-select>
         <el-select v-model="filters.status" clearable placeholder="全部状态" style="width:150px" @change="loadOrders">
           <el-option v-for="item in statuses" :key="item.value" :label="item.label" :value="item.value" />
@@ -21,15 +24,16 @@
         </el-select>
         <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="width:250px" @change="onDateRangeChange" />
         <el-input v-model="filters.keyword" clearable placeholder="订单号/手机号" style="width:220px" @keyup.enter="loadOrders" @clear="loadOrders" />
-        <el-button @click="openLogisticsDialog">物流设置</el-button>
-        <el-button type="success" plain @click="openCouponDialog">优惠券管理</el-button>
-        <el-button type="danger" plain @click="openFlashSaleDialog">秒杀管理</el-button>
-        <el-button type="warning" plain @click="openGroupBuyDialog">拼团管理</el-button>
+        <el-input v-model="filters.checkoutGroupNo" clearable placeholder="跨店结算组号" style="width:180px" @keyup.enter="loadOrders" @clear="loadOrders" />
+        <el-button :disabled="selectedMerchant && !selectedMerchantOpen" @click="openLogisticsDialog">物流设置</el-button>
+        <el-button type="success" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openCouponDialog">优惠券管理</el-button>
+        <el-button type="danger" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openFlashSaleDialog">秒杀管理</el-button>
+        <el-button type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openGroupBuyDialog">拼团管理</el-button>
         <el-button type="warning" plain @click="openGroupBuyRecordDialog">参团记录</el-button>
-        <el-button type="primary" plain @click="openPromotionDialog">推广码管理</el-button>
-        <el-button :loading="closingExpired" type="warning" plain @click="closeExpiredOrders">清理超时订单</el-button>
-        <el-button :loading="failingGroupBuys" type="warning" plain @click="failExpiredGroupBuys">处理未成团</el-button>
-        <el-button :loading="completingShipped" type="success" plain @click="completeExpiredShippedOrders">自动完成已发货</el-button>
+        <el-button type="primary" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openPromotionDialog">推广码管理</el-button>
+        <el-button :loading="closingExpired" type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="closeExpiredOrders">清理超时订单</el-button>
+        <el-button :loading="failingGroupBuys" type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="failExpiredGroupBuys">处理未成团</el-button>
+        <el-button :loading="completingShipped" type="success" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="completeExpiredShippedOrders">自动完成已发货</el-button>
         <el-button @click="exportOrders">导出订单</el-button>
         <el-button :loading="loading" @click="reload">刷新</el-button>
       </div>
@@ -44,12 +48,98 @@
       title="平台视角可直接查看全部商家的商城订单、售后和财务；只有配置物流、优惠券、秒杀、拼团、推广码等商家运营内容时，才需要先在上方选择具体商家。"
     />
 
+    <el-alert
+      v-if="deepLinkWarning"
+      class="deep-link-alert"
+      type="error"
+      show-icon
+      :closable="false"
+      title="订单管理店铺链接不可用"
+      :description="deepLinkWarning"
+    />
+
+    <el-card v-if="selectedMerchant && !deepLinkWarning" shadow="never" class="merchant-context-card">
+      <div class="merchant-context-main">
+        <div>
+          <strong>当前运营店铺：{{ selectedMerchant.name || selectedMerchant.code }}</strong>
+          <p>{{ selectedMerchant.tenant?.name || selectedMerchant.tenant?.code || "平台店铺" }} · {{ merchantOwnerText(selectedMerchant) }} · {{ selectedMerchant.region || "未设置区域" }}</p>
+        </div>
+        <div class="merchant-context-tags">
+          <el-tag :type="selectedMerchant.mallEnabled === false || selectedMerchant.status !== 'active' ? 'info' : 'success'">{{ selectedMerchant.mallEnabled === false || selectedMerchant.status !== 'active' ? "商城未开放" : "商城已开放" }}</el-tag>
+          <el-tag type="warning" effect="plain">{{ paymentModeText(selectedMerchant.paymentMode) }}</el-tag>
+          <el-tag v-if="merchantProductAuditRequired(selectedMerchant)" type="warning" effect="plain">商品需审核</el-tag>
+        </div>
+      </div>
+      <div class="merchant-context-actions">
+        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-products')">商品管理</el-button>
+        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-payments')">收款配置</el-button>
+        <el-button size="small" type="warning" plain @click="goMerchantAdmin('/mall-refunds')">售后处理</el-button>
+        <el-button size="small" type="success" plain @click="goMerchantAdmin('/mall-marketing')">营销工具</el-button>
+        <el-button size="small" type="info" plain @click="goMerchantAdmin('/mall-statistics')">经营统计</el-button>
+        <el-button size="small" @click="openMerchantH5">打开 H5 店铺</el-button>
+        <el-button size="small" @click="copyMerchantPageLink">复制当前后台链接</el-button>
+      </div>
+    </el-card>
+    <el-alert
+      v-if="selectedMerchant && !deepLinkWarning && !selectedMerchantOpen"
+      class="merchant-disabled-alert"
+      type="warning"
+      show-icon
+      :closable="false"
+      title="当前店铺未开放商城"
+      :description="selectedMerchantDisabledReason"
+    />
+
     <div class="summary-row">
       <el-card v-for="item in summaryCards" :key="item.label" shadow="never" class="summary-card">
         <small>{{ item.label }}</small>
         <strong>{{ item.value }}</strong>
       </el-card>
     </div>
+
+    <el-card v-if="checkoutGroupTraceNo" v-loading="checkoutGroupTraceLoading" shadow="never" class="checkout-trace-card">
+      <template #header>
+        <div class="card-header-line">
+          <span>跨店结算组追踪：{{ checkoutGroupTraceNo }}</span>
+          <el-button size="small" :loading="checkoutGroupTraceLoading" @click="loadCheckoutGroupTrace">刷新本组</el-button>
+        </div>
+      </template>
+      <el-alert
+        class="checkout-trace-tip"
+        type="info"
+        :closable="false"
+        show-icon
+        title="本卡片按结算组号独立汇总子订单、售后、支付、退款和佣金，不受顶部状态/日期筛选影响；如需追完整跨店交易，平台视角请保持“全部店铺”。"
+      />
+      <div class="checkout-trace-grid">
+        <div v-for="item in checkoutGroupTraceCards" :key="item.label">
+          <small>{{ item.label }}</small>
+          <strong>{{ item.value }}</strong>
+        </div>
+      </div>
+      <el-table :data="checkoutGroupTrace.orders" size="small" border>
+        <el-table-column label="子订单" min-width="180">
+          <template #default="{ row }">
+            <strong>{{ row.orderNo }}</strong>
+            <div class="muted-line">{{ row.checkoutGroup?.status ? checkoutGroupStatusText(row.checkoutGroup.status) : "非跨店订单" }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="店铺" min-width="160"><template #default="{ row }">{{ row.merchant?.name || "默认店铺" }}</template></el-table-column>
+        <el-table-column label="用户" width="130"><template #default="{ row }">{{ row.user?.phone || row.user?.nickname || "-" }}</template></el-table-column>
+        <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column label="支付" width="100"><template #default="{ row }">{{ paymentText(row.paymentMethod) }}</template></el-table-column>
+        <el-table-column label="金额" width="110"><template #default="{ row }">¥{{ money(row.amount) }}</template></el-table-column>
+        <el-table-column label="售后" min-width="160"><template #default="{ row }">{{ refundSummary(row.refund) }}</template></el-table-column>
+        <el-table-column label="操作" width="100"><template #default="{ row }"><el-button size="small" text type="primary" @click.stop="openDetail(row)">打开订单</el-button></template></el-table-column>
+      </el-table>
+      <div class="checkout-trace-foot">
+        <el-tag effect="plain">售后 {{ checkoutGroupTrace.refunds.length }} 条</el-tag>
+        <el-tag effect="plain">支付流水 {{ checkoutGroupTrace.paymentTransactions.length }} 条</el-tag>
+        <el-tag effect="plain">支付回调 {{ checkoutGroupTrace.paymentCallbackLogs.length }} 条</el-tag>
+        <el-tag effect="plain">退款日志 {{ checkoutGroupTrace.refundLogs.length }} 条</el-tag>
+        <el-tag effect="plain">佣金 {{ checkoutGroupTrace.commissions.length }} 条 / ¥{{ money(checkoutGroupTrace.commissionSummary.totalAmount) }}</el-tag>
+      </div>
+    </el-card>
 
     <el-card shadow="never" class="analytics-card">
       <template #header>
@@ -115,6 +205,9 @@
         <el-tag :type="paymentReadinessTagType(paymentReadiness.status)">{{ paymentReadiness.statusText }}</el-tag>
       </div>
       <div class="readiness-metrics">
+        <span>收款模式：{{ paymentReadiness.collectionMode === "merchant_direct" ? "商户直收" : "平台代收" }}</span>
+        <span v-if="paymentReadiness.merchant">店铺：{{ paymentReadiness.merchant.name }}</span>
+        <span v-if="paymentReadiness.collectionMode === 'merchant_direct'">直收账户：{{ paymentReadiness.direct?.account?.merchantNo || paymentReadiness.direct?.account?.merchantName || "未绑定" }}</span>
         <span>前台开关：{{ paymentReadiness.enabledInOperation ? "已开启" : "未开启" }}</span>
         <span>沙箱：{{ paymentReadiness.sandbox?.enabled && paymentReadiness.sandbox?.secretReady ? "可用" : "未就绪" }}</span>
         <span>真实支付：{{ paymentReadiness.real?.realPaymentEnabled && paymentReadiness.real?.wechatEnabled ? "已开启" : "未开启" }}</span>
@@ -125,14 +218,67 @@
       </div>
     </el-card>
 
+    <el-card shadow="never" class="settlement-card">
+      <template #header>
+        <div class="card-header-line">
+          <span>店铺结算单</span>
+          <span>
+            <el-select v-model="settlementFilters.status" clearable placeholder="全部结算状态" size="small" style="width:150px" @change="loadSettlements">
+              <el-option label="草稿" value="draft" />
+              <el-option label="已审核" value="approved" />
+              <el-option label="已打款" value="paid" />
+              <el-option label="已拒绝" value="rejected" />
+            </el-select>
+            <el-button size="small" :loading="settlementLoading" @click="loadSettlements">刷新结算</el-button>
+            <el-button size="small" @click="exportSettlements">导出结算</el-button>
+          </span>
+        </div>
+      </template>
+      <el-alert class="settlement-tip" type="info" :closable="false" show-icon :title="canManageMallSettlements ? '生成结算单前请先选择上方日期范围；系统只统计已完成商城订单，并扣减已通过售后。正数为应打款，负数为应扣回/冲抵。' : '当前账号可查看店铺结算状态；生成、审核、打款和扣回由平台财务处理。'" />
+      <el-table v-if="settlementPending.length" :data="settlementPending" size="small" border class="settlement-pending">
+        <el-table-column label="待生成店铺" min-width="170"><template #default="{ row }">{{ row.merchant?.name || "默认店铺" }}</template></el-table-column>
+        <el-table-column label="模式" width="110"><template #default="{ row }">{{ row.paymentMode === "merchant_direct" ? "商户直收" : "平台代收" }}</template></el-table-column>
+        <el-table-column label="订单" width="90"><template #default="{ row }">{{ row.orderCount }}</template></el-table-column>
+        <el-table-column label="订单金额" width="110"><template #default="{ row }">¥{{ money(row.orderAmount) }}</template></el-table-column>
+        <el-table-column label="退款" width="100"><template #default="{ row }">¥{{ money(row.refundAmount) }}</template></el-table-column>
+        <el-table-column label="服务费" width="120"><template #default="{ row }">¥{{ money(row.serviceFeeAmount) }}</template></el-table-column>
+        <el-table-column label="应打款/扣回" width="130"><template #default="{ row }">{{ settlementAmountText(row.payableAmount) }}</template></el-table-column>
+        <el-table-column v-if="canManageMallSettlements" label="操作" width="130"><template #default="{ row }"><el-button size="small" type="primary" plain :disabled="!row.merchant?.id" @click="generateSettlement(row)">生成结算单</el-button></template></el-table-column>
+      </el-table>
+      <el-table :data="mallSettlements" size="small" stripe>
+        <el-table-column prop="settlementNo" label="结算单号" width="180" />
+        <el-table-column label="店铺" min-width="160"><template #default="{ row }">{{ row.merchant?.name || "-" }}</template></el-table-column>
+        <el-table-column label="周期" width="190"><template #default="{ row }">{{ row.periodStart }} 至 {{ row.periodEnd }}</template></el-table-column>
+        <el-table-column label="模式" width="110"><template #default="{ row }">{{ row.paymentMode === "merchant_direct" ? "商户直收" : "平台代收" }}</template></el-table-column>
+        <el-table-column label="应打款/扣回" width="130"><template #default="{ row }">{{ settlementAmountText(row.payableAmount) }}</template></el-table-column>
+        <el-table-column label="服务费" width="110"><template #default="{ row }">¥{{ money(row.serviceFeeAmount) }}</template></el-table-column>
+        <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="settlementStatusType(row.status)">{{ settlementStatusText(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column label="审核/打款" min-width="210"><template #default="{ row }">{{ row.reviewedBy || row.generatedBy || "-" }}<div class="muted-line">{{ row.paidReference || row.remark || "-" }}</div></template></el-table-column>
+        <el-table-column v-if="canManageMallSettlements" label="操作" width="230">
+          <template #default="{ row }">
+            <el-button size="small" type="success" plain :disabled="row.status !== 'draft'" @click="approveSettlement(row)">审核</el-button>
+            <el-button size="small" type="danger" plain :disabled="row.status !== 'draft'" @click="rejectSettlement(row)">拒绝</el-button>
+            <el-button size="small" type="primary" plain :disabled="row.status !== 'approved'" @click="markSettlementPaid(row)">{{ settlementFinishActionText(row) }}</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
+
     <el-table v-loading="loading" :data="orders" stripe @row-click="openDetail">
       <el-table-column prop="orderNo" label="订单号" width="190" />
+      <el-table-column label="结算组" width="180">
+        <template #default="{ row }">
+          <span>{{ row.checkoutGroup?.groupNo || "-" }}</span>
+          <div v-if="row.checkoutGroup?.status" class="muted-line">{{ checkoutGroupStatusText(row.checkoutGroup.status) }}</div>
+        </template>
+      </el-table-column>
       <el-table-column label="商品" min-width="260">
         <template #default="{ row }">
           <div v-for="item in row.items || []" :key="item.id" class="item-line">{{ item.productTitle }} / {{ item.skuName }} × {{ item.quantity }}</div>
         </template>
       </el-table-column>
       <el-table-column label="用户" min-width="140"><template #default="{ row }">{{ row.user?.phone || row.user?.nickname || "-" }}</template></el-table-column>
+      <el-table-column label="店铺" min-width="150"><template #default="{ row }">{{ row.merchant?.name || "默认店铺" }}</template></el-table-column>
       <el-table-column label="收货人" min-width="170"><template #default="{ row }">{{ receiverText(row) }}</template></el-table-column>
       <el-table-column label="金额" width="130">
         <template #default="{ row }">
@@ -171,7 +317,13 @@
     </div>
     <el-table :data="refunds" stripe @row-click="openRefundOrder">
       <el-table-column prop="refundNo" label="售后单号" width="190" />
-      <el-table-column label="订单号" width="180"><template #default="{ row }">{{ row.order?.orderNo }}</template></el-table-column>
+      <el-table-column label="订单/结算组" width="190">
+        <template #default="{ row }">
+          <strong>{{ row.order?.orderNo }}</strong>
+          <div class="muted-line">{{ row.order?.checkoutGroup?.groupNo || "非跨店订单" }}</div>
+        </template>
+      </el-table-column>
+      <el-table-column label="店铺" min-width="150"><template #default="{ row }">{{ row.merchant?.name || row.order?.merchant?.name || "默认店铺" }}</template></el-table-column>
       <el-table-column label="用户" width="140"><template #default="{ row }">{{ row.user?.phone || "-" }}</template></el-table-column>
       <el-table-column label="类型" width="100"><template #default="{ row }">{{ refundTypeText(row.type) }}</template></el-table-column>
       <el-table-column label="金额" width="100"><template #default="{ row }">¥{{ money(row.amount) }}</template></el-table-column>
@@ -231,6 +383,7 @@
             <template #default="{ row }">
               <strong>{{ row.order?.orderNo || "-" }}</strong>
               <small>{{ row.transactionNo }}</small>
+              <small>{{ row.order?.checkoutGroup?.groupNo || "非跨店订单" }}</small>
             </template>
           </el-table-column>
           <el-table-column label="渠道" width="90"><template #default="{ row }">{{ paymentText(row.paymentMethod || row.provider) }}</template></el-table-column>
@@ -238,6 +391,7 @@
           <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'success' ? 'success' : 'danger'">{{ paymentStatusText(row.status) }}</el-tag></template></el-table-column>
           <el-table-column label="说明" min-width="180"><template #default="{ row }">{{ row.remark || row.discrepancyType || "-" }}</template></el-table-column>
           <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
+          <el-table-column label="操作" width="90"><template #default="{ row }"><el-button size="small" text type="primary" :disabled="!relatedOrderIdentity(row)" @click.stop="openRelatedOrder(row)">打开订单</el-button></template></el-table-column>
         </el-table>
       </el-card>
       <el-card shadow="never">
@@ -247,6 +401,7 @@
             <template #default="{ row }">
               <strong>{{ row.orderNo || row.order?.orderNo || "-" }}</strong>
               <small>{{ row.transactionNo || "-" }}</small>
+              <small>{{ row.order?.checkoutGroup?.groupNo || "非跨店订单" }}</small>
             </template>
           </el-table-column>
           <el-table-column label="渠道" width="90"><template #default="{ row }">{{ paymentText(row.provider) }}</template></el-table-column>
@@ -255,6 +410,7 @@
           <el-table-column label="结果" width="100"><template #default="{ row }"><el-tag :type="callbackStatusType(row.resultStatus)">{{ callbackStatusText(row.resultStatus) }}</el-tag></template></el-table-column>
           <el-table-column label="原因" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.resultMessage || "-" }}</template></el-table-column>
           <el-table-column label="处理时间" width="170"><template #default="{ row }">{{ formatTime(row.processedAt || row.createdAt) }}</template></el-table-column>
+          <el-table-column label="操作" width="90"><template #default="{ row }"><el-button size="small" text type="primary" :disabled="!relatedOrderIdentity(row)" @click.stop="openRelatedOrder(row)">打开订单</el-button></template></el-table-column>
         </el-table>
       </el-card>
       <el-card shadow="never">
@@ -264,6 +420,7 @@
             <template #default="{ row }">
               <strong>{{ row.refund?.refundNo || "-" }}</strong>
               <small>{{ row.order?.orderNo || row.providerRefundNo || "-" }}</small>
+              <small>{{ row.order?.checkoutGroup?.groupNo || "非跨店订单" }}</small>
             </template>
           </el-table-column>
           <el-table-column label="渠道" width="90"><template #default="{ row }">{{ refundProviderName(row.provider) }}</template></el-table-column>
@@ -271,6 +428,7 @@
           <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="refundLogStatusType(row.status)">{{ refundLogStatusText(row.status) }}</el-tag></template></el-table-column>
           <el-table-column label="说明" min-width="190" show-overflow-tooltip><template #default="{ row }">{{ row.message || "-" }}</template></el-table-column>
           <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
+          <el-table-column label="操作" width="90"><template #default="{ row }"><el-button size="small" text type="primary" :disabled="!relatedOrderIdentity(row)" @click.stop="openRelatedOrder(row)">打开订单</el-button></template></el-table-column>
         </el-table>
       </el-card>
       <el-card shadow="never">
@@ -314,6 +472,7 @@
             <template #default="{ row }">
               <strong>{{ row.order?.orderNo || "-" }}</strong>
               <small>{{ row.code }}</small>
+              <small>{{ row.order?.checkoutGroup?.groupNo || "非跨店订单" }}</small>
             </template>
           </el-table-column>
           <el-table-column label="推广人/代理" min-width="140"><template #default="{ row }">{{ row.promoterUser?.phone || row.agent?.name || "-" }}</template></el-table-column>
@@ -326,53 +485,15 @@
               <div class="muted-line">{{ row.settledAt ? formatTime(row.settledAt) : "" }}</div>
             </template>
           </el-table-column>
-          <el-table-column label="操作" width="100">
+          <el-table-column label="操作" width="160">
             <template #default="{ row }">
+              <el-button size="small" text type="primary" :disabled="!relatedOrderIdentity(row)" @click.stop="openRelatedOrder(row)">打开</el-button>
               <el-button size="small" type="success" plain :disabled="row.status !== 'pending'" @click="settleCommission(row)">结算</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
     </div>
-
-    <el-divider>商品评价审核</el-divider>
-    <div class="refund-toolbar">
-      <el-select v-model="reviewFilters.status" clearable placeholder="全部评价状态" style="width:150px" @change="loadReviews">
-        <el-option label="待审核" value="pending" />
-        <el-option label="已展示" value="approved" />
-        <el-option label="已拒绝" value="rejected" />
-      </el-select>
-      <el-input v-model="reviewFilters.keyword" clearable placeholder="商品/订单号/手机号/内容" style="width:260px" @keyup.enter="loadReviews" @clear="loadReviews" />
-      <el-button @click="loadReviews">刷新评价</el-button>
-    </div>
-    <el-table :data="reviews" stripe>
-      <el-table-column label="商品" min-width="220"><template #default="{ row }">{{ row.product?.title }} / {{ row.sku?.name }}</template></el-table-column>
-      <el-table-column label="用户" width="140"><template #default="{ row }">{{ row.user?.phone || row.user?.nickname || "-" }}</template></el-table-column>
-      <el-table-column label="评分" width="90"><template #default="{ row }">{{ "★".repeat(Number(row.rating || 5)) }}</template></el-table-column>
-      <el-table-column prop="content" label="评价内容" min-width="240" show-overflow-tooltip />
-      <el-table-column label="晒图" min-width="150">
-        <template #default="{ row }">
-          <div v-if="row.images?.length" class="review-image-list">
-            <el-image v-for="image in row.images" :key="image" class="review-thumb" :src="image" :preview-src-list="row.images" preview-teleported fit="cover" />
-          </div>
-          <span v-else class="muted-line">无晒图</span>
-        </template>
-      </el-table-column>
-      <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'pending' ? 'warning' : row.status === 'approved' ? 'success' : 'info'">{{ reviewText(row.status) }}</el-tag></template></el-table-column>
-      <el-table-column label="审核备注" min-width="180"><template #default="{ row }">{{ row.reviewRemark || "-" }}</template></el-table-column>
-      <el-table-column label="商家回复" min-width="220">
-        <template #default="{ row }">
-          {{ row.merchantReply || "-" }}
-          <div v-if="row.repliedAt" class="muted-line">{{ row.repliedBy || "-" }} {{ formatTime(row.repliedAt) }}</div>
-        </template>
-      </el-table-column>
-      <el-table-column label="操作" width="190">
-        <template #default="{ row }">
-          <el-button size="small" type="success" :disabled="row.status === 'approved'" @click.stop="moderateReview(row, 'approved')">通过</el-button>
-          <el-button size="small" type="danger" :disabled="row.status === 'rejected'" @click.stop="moderateReview(row, 'rejected')">拒绝</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
 
     <el-drawer v-model="detailVisible" title="商城订单详情" size="560px">
       <template v-if="currentOrder">
@@ -390,6 +511,29 @@
           <el-descriptions-item label="后台备注">{{ currentOrder.adminRemark || "-" }}</el-descriptions-item>
           <el-descriptions-item label="关闭原因">{{ currentOrder.closeReason || "-" }}</el-descriptions-item>
         </el-descriptions>
+
+        <template v-if="currentOrder.checkoutGroup?.groupNo">
+          <h3>跨店拆单</h3>
+          <el-alert type="info" :closable="false" class="ship-alert">
+            <template #default>结算组 {{ currentOrder.checkoutGroup.groupNo }}，同组子订单按店铺独立支付、发货和售后。客服可在这里切换查看每个店铺子订单。</template>
+          </el-alert>
+          <el-table v-loading="checkoutGroupLoading" :data="checkoutGroupOrders" size="small" border>
+            <el-table-column label="子订单" min-width="170">
+              <template #default="{ row }">
+                <strong>{{ row.orderNo }}</strong>
+                <div class="muted-line">{{ row.merchant?.name || "默认店铺" }}</div>
+              </template>
+            </el-table-column>
+            <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column>
+            <el-table-column label="金额" width="100"><template #default="{ row }">¥{{ money(row.amount) }}</template></el-table-column>
+            <el-table-column label="处理建议" min-width="150"><template #default="{ row }">{{ orderActionTip(row) }}</template></el-table-column>
+            <el-table-column label="操作" width="90">
+              <template #default="{ row }">
+                <el-button size="small" text type="primary" :disabled="row.id === currentOrder.id" @click="selectCheckoutGroupOrder(row)">查看</el-button>
+              </template>
+            </el-table-column>
+          </el-table>
+        </template>
 
         <h3>订单进度</h3>
         <div class="timeline">
@@ -461,7 +605,7 @@
         <el-input v-model="logisticsForm.trackingUrl" placeholder="查询网址，可选" />
         <el-input-number v-model="logisticsForm.sortOrder" :precision="0" placeholder="排序" />
         <el-switch v-model="logisticsForm.enabled" active-text="启用" />
-        <el-button type="primary" :loading="logisticsSaving" @click="saveLogisticsCompany">{{ logisticsForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="logisticsSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveLogisticsCompany">{{ logisticsForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="logisticsForm.id" @click="resetLogisticsForm">取消编辑</el-button>
       </div>
       <el-table v-loading="logisticsLoading" :data="logisticsCompanies" size="small" border>
@@ -472,8 +616,8 @@
         <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? "启用" : "停用" }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="editLogisticsCompany(row)">编辑</el-button>
-            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain @click="toggleLogisticsCompany(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
+            <el-button size="small" :disabled="selectedMerchant && !selectedMerchantOpen" @click="editLogisticsCompany(row)">编辑</el-button>
+            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="toggleLogisticsCompany(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -515,7 +659,7 @@
         <el-date-picker v-model="couponForm.startsAt" type="datetime" placeholder="开始时间" value-format="YYYY-MM-DD HH:mm:ss" />
         <el-date-picker v-model="couponForm.endsAt" type="datetime" placeholder="结束时间" value-format="YYYY-MM-DD HH:mm:ss" />
         <el-switch v-model="couponForm.enabled" active-text="启用" inactive-text="停用" />
-        <el-button type="primary" :loading="couponSaving" @click="saveCoupon">{{ couponForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="couponSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveCoupon">{{ couponForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="couponForm.id" @click="resetCouponForm">取消编辑</el-button>
       </div>
       <el-table v-loading="couponLoading" :data="coupons" size="small" border>
@@ -539,8 +683,8 @@
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="couponStatusType(row.runtimeStatus)">{{ couponStatusText(row.runtimeStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="editCoupon(row)">编辑</el-button>
-            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain @click="toggleCoupon(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
+            <el-button size="small" :disabled="selectedMerchant && !selectedMerchantOpen" @click="editCoupon(row)">编辑</el-button>
+            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="toggleCoupon(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -603,7 +747,7 @@
           <el-option label="停用" value="disabled" />
         </el-select>
         <el-input-number v-model="flashSaleForm.sortOrder" :precision="0" placeholder="排序" />
-        <el-button type="primary" :loading="flashSaleSaving" @click="saveFlashSale">{{ flashSaleForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="flashSaleSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveFlashSale">{{ flashSaleForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="flashSaleForm.id" @click="resetFlashSaleForm">取消编辑</el-button>
       </div>
       <el-table v-loading="flashSaleLoading" :data="flashSales" size="small" border>
@@ -630,8 +774,8 @@
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="flashSaleStatusType(row.runtimeStatus)">{{ flashSaleStatusText(row.runtimeStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="editFlashSale(row)">编辑</el-button>
-            <el-button size="small" :type="row.status === 'active' ? 'warning' : 'success'" plain @click="toggleFlashSale(row)">{{ row.status === "active" ? "停用" : "启用" }}</el-button>
+            <el-button size="small" :disabled="selectedMerchant && !selectedMerchantOpen" @click="editFlashSale(row)">编辑</el-button>
+            <el-button size="small" :type="row.status === 'active' ? 'warning' : 'success'" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="toggleFlashSale(row)">{{ row.status === "active" ? "停用" : "启用" }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -670,7 +814,7 @@
           <el-option label="停用" value="disabled" />
         </el-select>
         <el-input-number v-model="groupBuyForm.sortOrder" :precision="0" placeholder="排序" />
-        <el-button type="primary" :loading="groupBuySaving" @click="saveGroupBuy">{{ groupBuyForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="groupBuySaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveGroupBuy">{{ groupBuyForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="groupBuyForm.id" @click="resetGroupBuyForm">取消编辑</el-button>
       </div>
       <el-table v-loading="groupBuyLoading" :data="groupBuys" size="small" border>
@@ -697,8 +841,8 @@
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="flashSaleStatusType(row.runtimeStatus)">{{ flashSaleStatusText(row.runtimeStatus) }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="editGroupBuy(row)">编辑</el-button>
-            <el-button size="small" :type="row.status === 'active' ? 'warning' : 'success'" plain @click="toggleGroupBuy(row)">{{ row.status === "active" ? "停用" : "启用" }}</el-button>
+            <el-button size="small" :disabled="selectedMerchant && !selectedMerchantOpen" @click="editGroupBuy(row)">编辑</el-button>
+            <el-button size="small" :type="row.status === 'active' ? 'warning' : 'success'" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="toggleGroupBuy(row)">{{ row.status === "active" ? "停用" : "启用" }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -786,7 +930,7 @@
         <el-input-number v-model="promotionForm.promoterUserId" :min="1" :precision="0" placeholder="推广用户ID（可选）" />
         <el-switch v-model="promotionForm.enabled" active-text="启用" inactive-text="停用" />
         <el-input v-model="promotionForm.remark" placeholder="运营备注，可选" />
-        <el-button type="primary" :loading="promotionSaving" @click="savePromotionCode">{{ promotionForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="promotionSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="savePromotionCode">{{ promotionForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="promotionForm.id" @click="resetPromotionForm">取消编辑</el-button>
       </div>
       <el-table v-loading="promotionLoading" :data="promotionCodes" size="small" border>
@@ -809,8 +953,8 @@
         <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" @click="editPromotionCode(row)">编辑</el-button>
-            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain @click="togglePromotionCode(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
+            <el-button size="small" :disabled="selectedMerchant && !selectedMerchantOpen" @click="editPromotionCode(row)">编辑</el-button>
+            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="togglePromotionCode(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -820,21 +964,25 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api, downloadFile } from "../api";
-import { isPlatformAdmin } from "../permissions";
+import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
+import { currentTenantId, hasPermission, isPlatformAdmin } from "../permissions";
 
 const tenants = ref<any[]>([]);
 const route = useRoute();
+const router = useRouter();
 const orders = ref<any[]>([]);
 const refunds = ref<any[]>([]);
-const reviews = ref<any[]>([]);
 const paymentTransactions = ref<any[]>([]);
 const paymentCallbackLogs = ref<any[]>([]);
 const refundLogs = ref<any[]>([]);
 const commissions = ref<any[]>([]);
 const commissionPromoterSummary = ref<any[]>([]);
+const mallSettlements = ref<any[]>([]);
+const settlementPending = ref<any[]>([]);
+const canManageMallSettlements = computed(() => !currentTenantId() && hasPermission("mall.settlement.manage"));
 const coupons = ref<any[]>([]);
 const couponUsages = ref<any[]>([]);
 const couponCategories = ref<any[]>([]);
@@ -844,6 +992,7 @@ const groupBuys = ref<any[]>([]);
 const groupBuyRecords = ref<any[]>([]);
 const promotionCodes = ref<any[]>([]);
 const agents = ref<any[]>([]);
+const merchants = ref<any[]>([]);
 const orderSummary = ref<any>({});
 const commissionSummary = ref<any>({});
 const mallAnalytics = ref<any>({});
@@ -861,6 +1010,7 @@ const groupBuyLoading = ref(false);
 const groupBuySaving = ref(false);
 const groupBuyRecordLoading = ref(false);
 const promotionLoading = ref(false);
+const settlementLoading = ref(false);
 const promotionSaving = ref(false);
 const closingExpired = ref(false);
 const failingGroupBuys = ref(false);
@@ -874,18 +1024,37 @@ const groupBuyDialogVisible = ref(false);
 const groupBuyRecordDialogVisible = ref(false);
 const promotionDialogVisible = ref(false);
 const currentOrder = ref<any>(null);
+const checkoutGroupOrders = ref<any[]>([]);
+const checkoutGroupLoading = ref(false);
+const checkoutGroupTraceLoading = ref(false);
+const checkoutGroupTrace = ref<any>({
+  orders: [],
+  summary: {},
+  refunds: [],
+  paymentTransactions: [],
+  paymentCallbackLogs: [],
+  refundLogs: [],
+  commissions: [],
+  commissionSummary: {}
+});
 const logisticsCompanies = ref<any[]>([]);
+const deepLinkWarning = ref("");
 const routeTenantId = () => {
   const id = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : 0;
   return isPlatformAdmin() && id ? id : undefined;
 };
-const filters = reactive({ tenantId: routeTenantId() as number | undefined, status: "", paymentMethod: "", refundStatus: "", keyword: "", startDate: "", endDate: "", page: 1, pageSize: 50 });
+const routeMerchantId = () => {
+  const id = typeof route.query.merchantId === "string" ? Number(route.query.merchantId) : 0;
+  return id || undefined;
+};
+const routeKeyword = () => typeof route.query.keyword === "string" ? route.query.keyword : "";
+const filters = reactive({ tenantId: routeTenantId() as number | undefined, merchantId: routeMerchantId() as number | undefined, status: "", paymentMethod: "", refundStatus: "", keyword: routeKeyword(), checkoutGroupNo: "", startDate: "", endDate: "", page: 1, pageSize: 50 });
 const dateRange = ref<string[]>([]);
 const refundFilters = reactive({ status: "", keyword: "" });
-const reviewFilters = reactive({ status: "pending", keyword: "" });
 const paymentFilters = reactive({ status: "" });
 const callbackFilters = reactive({ status: "" });
 const commissionFilters = reactive({ status: "" });
+const settlementFilters = reactive({ status: "" });
 const couponFilters = reactive({ status: "", keyword: "" });
 const couponUsageFilters = reactive({ status: "", keyword: "" });
 const flashSaleFilters = reactive({ status: "", keyword: "" });
@@ -900,9 +1069,24 @@ const flashSaleForm = reactive<any>({ id: null, title: "", productId: null, skuI
 const groupBuyForm = reactive<any>({ id: null, title: "", productId: null, skuId: null, groupPrice: 0, minPeople: 2, groupStock: 1, perUserLimit: 1, startsAt: "", endsAt: "", status: "draft", sortOrder: 0 });
 const promotionForm = reactive<any>({ id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, enabled: true, remark: "" });
 const enabledLogisticsCompanies = computed(() => logisticsCompanies.value.filter((item) => item.enabled));
+const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
+const selectedMerchantOpen = computed(() => merchantOperational(selectedMerchant.value));
+const selectedMerchantDisabledReason = computed(() => merchantDisabledReason(selectedMerchant.value));
 const selectedFlashSaleSkus = computed(() => couponProducts.value.find((item) => item.id === flashSaleForm.productId)?.skus || []);
 const selectedGroupBuySkus = computed(() => couponProducts.value.find((item) => item.id === groupBuyForm.productId)?.skus || []);
 const activePanel = computed(() => String(route.query.panel || route.path.replace("/mall-", "") || "orders"));
+const pageHeader = computed(() => {
+  const headers: Record<string, { title: string; desc: string; note: string }> = {
+    refunds: { title: "商城售后退款", desc: "处理仅退款、退货退款、微信原路退款、余额退回和线下退款备注。", note: "售后口径：待处理要及时审核，已通过退款会同步影响订单、库存、余额/支付流水和结算。" },
+    logistics: { title: "商城物流设置", desc: "维护快递公司、单号查询链接、手动发货和确认收货履约。", note: "履约口径：已收款订单先发货，已发货订单可由用户确认收货或按规则自动完成。" },
+    marketing: { title: "商城营销管理", desc: "管理优惠券、秒杀、拼团、推广码和参团记录。", note: "营销口径：优惠、活动库存、推广佣金会进入订单、库存和财务结算链路。" },
+    "payment-logs": { title: "商城支付日志", desc: "核对支付流水、微信回调、退款日志和推广佣金，定位真实收钱链路问题。", note: "支付口径：支付成功必须有流水和回调留痕；重复回调应幂等，异常要能导出追踪。" },
+    settlements: { title: "商城结算管理", desc: "按店铺生成、审核、打款/扣回商城结算单，区分平台代收和商户直收。", note: "结算口径：平台代收生成应打款；已结算后退款会生成负向扣回/冲抵金额，商户直收记录平台服务费。" },
+    statistics: { title: "商城统计看板", desc: "查看订单、实收、净收、支付方式、热销商品和优惠券转化。", note: "统计口径：近 30 天按当前商家/店铺筛选；正式运营对账仍以订单、流水、结算导出为准。" },
+    finance: { title: "商城财务总览", desc: "集中查看订单财务、支付日志、退款、佣金和店铺结算。", note: "财务口径：实收=已确认收款订单金额，净收=实收-已通过退款；余额/线下/微信按支付方式拆分。" }
+  };
+  return headers[activePanel.value] || { title: "商城订单 / 售后", desc: "处理余额支付、线下收款确认、发货、售后退款，并核对收货地址和订单明细。", note: "财务口径：实收=已确认收款订单金额，净收=实收-已通过退款；余额/线下按支付方式拆分。" };
+});
 const statuses = [
   { label: "待线下确认", value: "pending_confirm" },
   { label: "待付款", value: "pending_payment" },
@@ -942,6 +1126,15 @@ const commissionSummaryCards = computed(() => [
   { label: "已结算", value: `¥${money(commissionSummary.value.settledAmount)}`, count: `${commissionSummary.value.settledCount || 0} 笔` },
   { label: "已作废", value: `¥${money(commissionSummary.value.voidAmount)}`, count: `${commissionSummary.value.voidCount || 0} 笔` }
 ]);
+const checkoutGroupTraceNo = computed(() => filters.checkoutGroupNo.trim());
+const checkoutGroupTraceCards = computed(() => [
+  { label: "子订单", value: checkoutGroupTrace.value.orders.length || 0 },
+  { label: "实收金额", value: `¥${money(checkoutGroupTrace.value.summary.receivedAmount)}` },
+  { label: "净收金额", value: `¥${money(checkoutGroupTrace.value.summary.netReceivedAmount)}` },
+  { label: "待付款/待确认", value: `${checkoutGroupTrace.value.summary.pendingPaymentCount || 0} / ${checkoutGroupTrace.value.summary.pendingConfirmCount || 0}` },
+  { label: "待处理售后", value: checkoutGroupTrace.value.summary.pendingRefundCount || 0 },
+  { label: "已退金额", value: `¥${money(checkoutGroupTrace.value.summary.approvedRefundAmount)}` }
+]);
 const analyticsCards = computed(() => [
   { label: "30天订单", value: mallAnalytics.value.summary?.orderCount || 0 },
   { label: "30天实收", value: `¥${money(mallAnalytics.value.summary?.receivedAmount)}` },
@@ -951,15 +1144,37 @@ const analyticsCards = computed(() => [
 ]);
 
 function tenantLabel(tenant: any) { return `${tenant.name || tenant.code}（${tenant.code}）`; }
+function merchantLabel(merchant: any) {
+  const owner = merchant.ownerType === "agent" ? "代理店铺" : "商家店铺";
+  const status = merchant.mallEnabled === false || merchant.status !== "active" ? " · 未开放" : "";
+  return `${merchant.name || merchant.code}（${owner}${merchant.region ? ` · ${merchant.region}` : ""}${status}）`;
+}
+function merchantOwnerText(merchant: any) { return merchant?.ownerType === "agent" ? "代理店铺" : "商家店铺"; }
+function merchantOperational(merchant: any) { return !!merchant && merchant.status === "active" && merchant.mallEnabled !== false; }
+function merchantDisabledReason(merchant: any) {
+  if (!merchant) return "请先选择要运营的店铺。平台可在「商城店铺」为商家/代理开店并授权账号。";
+  if (merchant.status !== "active") return "当前店铺已被平台停用，不能继续配置物流、优惠券、秒杀、拼团、推广码或执行运营批处理；历史订单履约和售后仍可按权限处理。";
+  if (merchant.mallEnabled === false) return "当前店铺未开放商城，不能继续配置物流、优惠券、秒杀、拼团、推广码或执行运营批处理；请联系平台管理员在「商城店铺」开通商城后再操作。";
+  return "";
+}
+function merchantProductAuditRequired(merchant: any) { return merchant?.productAuditRequired !== false; }
 function agentLabel(agent: any) { return `${agent.name}${agent.region ? `（${agent.region}）` : ""}`; }
 function money(value: any) { return Number(value || 0).toFixed(2); }
+function settlementAmountText(value: any) {
+  const amount = Number(value || 0);
+  return `${amount < 0 ? "应扣回" : "应打款"} ¥${Math.abs(amount).toFixed(2)}`;
+}
+function settlementFinishActionText(row: any) {
+  return Number(row?.payableAmount || 0) < 0 ? "扣回/冲抵" : "打款";
+}
 function percent(value: any) { return (Number(value || 0) * 100).toFixed(2).replace(/\.?0+$/, ""); }
 function formatTime(value: any) { return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-"; }
 function paymentText(value: string) { return ({ wechat: "微信支付", balance: "余额支付", offline: "线下收款", alipay: "支付宝" } as any)[value] || value; }
+function paymentModeText(value: string) { return value === "merchant_direct" ? "商户直收" : "平台代收"; }
 function statusText(value: string) { return Object.fromEntries(statuses.map((item) => [item.value, item.label]))[value] || value; }
+function checkoutGroupStatusText(value: string) { return ({ pending_payment: "待付款", partial_paid: "部分支付", paid: "已支付", completed: "已完成", closed: "已关闭", refunded: "已退款" } as any)[value] || value; }
 function refundText(value: string) { return ({ pending: "待处理", processing: "处理中", approved: "已通过", rejected: "已拒绝", failed: "失败" } as any)[value] || value; }
 function refundStatusType(value: string) { return value === "approved" ? "success" : value === "failed" ? "danger" : value === "pending" || value === "processing" ? "warning" : "info"; }
-function reviewText(value: string) { return ({ pending: "待审核", approved: "已展示", rejected: "已拒绝" } as any)[value] || value; }
 function paymentStatusText(value: string) { return ({ success: "成功", discrepancy: "差异", failed: "失败" } as any)[value] || value || "-"; }
 function callbackStatusText(value: string) { return ({ received: "已接收", success: "成功", failed: "失败", idempotent: "幂等" } as any)[value] || value || "-"; }
 function callbackStatusType(value: string) { return value === "success" || value === "idempotent" ? "success" : value === "failed" ? "danger" : "warning"; }
@@ -977,6 +1192,8 @@ function couponUsageStatusText(value: string) { return ({ used: "已使用", rel
 function commissionStatusText(value: string) { return ({ pending: "待结算", void: "已作废", settled: "已结算" } as any)[value] || value || "-"; }
 function commissionStatusType(value: string) { return value === "pending" ? "warning" : value === "settled" ? "success" : "info"; }
 function commissionRemark(row: any) { return row.status === "settled" ? `${row.settledBy || "财务"}：${row.settleRemark || "已结算"}` : row.voidReason || "-"; }
+function settlementStatusText(value: string) { return ({ draft: "草稿", approved: "已审核", paid: "已打款", rejected: "已拒绝", cancelled: "已取消" } as any)[value] || value || "-"; }
+function settlementStatusType(value: string) { return value === "paid" ? "success" : value === "approved" ? "warning" : value === "rejected" || value === "cancelled" ? "danger" : "info"; }
 function paymentReadinessTagType(value: string) { return value === "real_ready" ? "success" : value === "sandbox_ready" ? "warning" : value === "disabled" ? "info" : "danger"; }
 function refundTypeText(value: string) { return ({ refund_only: "仅退款", return_refund: "退货退款" } as any)[value] || value || "-"; }
 function refundProviderName(value: string) { return ({ wechat: "微信", balance: "余额", offline: "线下" } as any)[value] || value || "-"; }
@@ -1022,23 +1239,205 @@ function refundSummary(refund: any) {
 }
 
 async function loadTenants() { tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : []; }
+function merchantLinkWarning(requestedMerchantId: number) {
+  return `当前链接指定的店铺 #${requestedMerchantId} 对当前账号不可见，或已被商家/关键词筛选条件过滤。为避免误操作，系统不会自动切换到其它店铺；请联系平台管理员确认店铺授权，或清空筛选后重试。`;
+}
+function clearMallScopeData() {
+  orders.value = [];
+  refunds.value = [];
+  paymentTransactions.value = [];
+  paymentCallbackLogs.value = [];
+  refundLogs.value = [];
+  commissions.value = [];
+  commissionPromoterSummary.value = [];
+  mallSettlements.value = [];
+  settlementPending.value = [];
+  coupons.value = [];
+  couponUsages.value = [];
+  couponCategories.value = [];
+  couponProducts.value = [];
+  flashSales.value = [];
+  groupBuys.value = [];
+  groupBuyRecords.value = [];
+  promotionCodes.value = [];
+  logisticsCompanies.value = [];
+  orderSummary.value = {};
+  commissionSummary.value = {};
+  mallAnalytics.value = {};
+  paymentReadiness.value = null;
+  currentOrder.value = null;
+  checkoutGroupOrders.value = [];
+  resetCheckoutGroupTrace();
+}
+function blockInvalidMerchantLink() {
+  if (!deepLinkWarning.value) return false;
+  clearMallScopeData();
+  return true;
+}
+function merchantPageUrl(path = route.path) {
+  if (!selectedMerchant.value) return "";
+  const query = new URLSearchParams();
+  if (selectedMerchant.value.tenant?.id) query.set("tenantId", String(selectedMerchant.value.tenant.id));
+  query.set("merchantId", String(selectedMerchant.value.id));
+  if (typeof route.query.panel === "string") query.set("panel", route.query.panel);
+  return `${window.location.origin}/admin${path}?${query.toString()}`;
+}
+function merchantH5Url() {
+  if (!selectedMerchant.value) return "";
+  return h5RoutePreviewUrl(selectedMerchant.value.tenant?.code || "", `/pages/mall/merchant?id=${selectedMerchant.value.id}`);
+}
+function goMerchantAdmin(path: string) {
+  if (!selectedMerchant.value) return;
+  router.push({ path, query: { tenantId: selectedMerchant.value.tenant?.id, merchantId: selectedMerchant.value.id } });
+}
+function openMerchantH5() {
+  const url = merchantH5Url();
+  if (url) window.open(url, "_blank", "noopener,noreferrer");
+}
+async function copyMerchantPageLink() {
+  const url = merchantPageUrl();
+  if (!url) return;
+  await copyToClipboard(url);
+  ElMessage.success("当前店铺后台链接已复制，可发给已授权的商家/代理账号。");
+}
+async function loadMerchants() {
+  merchants.value = await api.get<any, any[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: "true" } });
+  const requestedMerchantId = routeMerchantId();
+  deepLinkWarning.value = "";
+  if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) {
+    filters.merchantId = requestedMerchantId;
+  } else if (requestedMerchantId) {
+    filters.merchantId = undefined;
+    deepLinkWarning.value = merchantLinkWarning(requestedMerchantId);
+    clearMallScopeData();
+    return false;
+  } else if (filters.merchantId && !merchants.value.some((merchant) => merchant.id === filters.merchantId)) filters.merchantId = undefined;
+  if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
+  return true;
+}
+function currentMallParams(extra: Record<string, any> = {}) {
+  return {
+    tenantId: isPlatformAdmin() ? filters.tenantId || selectedMerchant.value?.tenant?.id : undefined,
+    merchantId: filters.merchantId || undefined,
+    ...extra
+  };
+}
+function appendCurrentMallParams(params: URLSearchParams) {
+  const tenantId = filters.tenantId || selectedMerchant.value?.tenant?.id;
+  if (isPlatformAdmin() && tenantId) params.set("tenantId", String(tenantId));
+  if (filters.merchantId) params.set("merchantId", String(filters.merchantId));
+}
+function requireMerchantSelection(action: string) {
+  if (deepLinkWarning.value) {
+    ElMessage.error("当前店铺链接不可用，请先确认店铺授权后再操作。");
+    return false;
+  }
+  if (filters.merchantId && selectedMerchantOpen.value) return true;
+  if (filters.merchantId) {
+    ElMessage.error(selectedMerchantDisabledReason.value);
+    return false;
+  }
+  ElMessage.error(`请先选择要${action}的店铺。平台可在「商城店铺」为商家/代理开店并授权账号。`);
+  return false;
+}
+function requireOpenMerchant(action: string) {
+  if (!filters.merchantId && isPlatformAdmin()) return true;
+  return requireMerchantSelection(action);
+}
+async function handleTenantChange() {
+  deepLinkWarning.value = "";
+  filters.merchantId = undefined;
+  const query = { ...route.query };
+  if (filters.tenantId) query.tenantId = String(filters.tenantId);
+  else delete query.tenantId;
+  delete query.merchantId;
+  await router.replace({ path: route.path, query });
+  await loadMerchants();
+  reload();
+}
+async function handleMerchantChange() {
+  deepLinkWarning.value = "";
+  const merchant = selectedMerchant.value;
+  if (merchant?.tenant?.id && isPlatformAdmin()) filters.tenantId = merchant.tenant.id;
+  const query = { ...route.query };
+  if (filters.tenantId) query.tenantId = String(filters.tenantId);
+  else delete query.tenantId;
+  if (filters.merchantId) query.merchantId = String(filters.merchantId);
+  else delete query.merchantId;
+  await router.replace({ path: route.path, query });
+  reload();
+}
 function orderQueryParams() {
   return {
-    tenantId: isPlatformAdmin() ? filters.tenantId : undefined,
+    ...currentMallParams(),
     status: filters.status || undefined,
     paymentMethod: filters.paymentMethod || undefined,
     refundStatus: filters.refundStatus || undefined,
     keyword: filters.keyword.trim() || undefined,
+    checkoutGroupNo: filters.checkoutGroupNo.trim() || undefined,
     startDate: filters.startDate || undefined,
     endDate: filters.endDate || undefined
   };
+}
+function emptyCheckoutGroupTrace() {
+  return {
+    orders: [],
+    summary: {},
+    refunds: [],
+    paymentTransactions: [],
+    paymentCallbackLogs: [],
+    refundLogs: [],
+    commissions: [],
+    commissionSummary: {}
+  };
+}
+function resetCheckoutGroupTrace() {
+  checkoutGroupTrace.value = emptyCheckoutGroupTrace();
+}
+async function loadCheckoutGroupTrace() {
+  if (blockInvalidMerchantLink()) return;
+  const groupNo = checkoutGroupTraceNo.value;
+  if (!groupNo) {
+    resetCheckoutGroupTrace();
+    return;
+  }
+  checkoutGroupTraceLoading.value = true;
+  try {
+    const params = currentMallParams({ checkoutGroupNo: groupNo });
+    const [orderResult, summary, refundRows, transactionRows, callbackRows, refundLogRows, commissionRows, commissionSummaryRow] = await Promise.all([
+      api.get<any, any>("/admin/mall/orders", { params: { ...params, page: 1, pageSize: 100 } }),
+      api.get<any, any>("/admin/mall/orders/summary", { params }),
+      api.get<any, any[]>("/admin/mall/refunds", { params }),
+      api.get<any, any[]>("/admin/mall/payment-transactions", { params }),
+      api.get<any, any[]>("/admin/mall/payment-callback-logs", { params }),
+      api.get<any, any[]>("/admin/mall/refund-logs", { params }),
+      api.get<any, any[]>("/admin/mall/commissions", { params }),
+      api.get<any, any>("/admin/mall/commissions/summary", { params })
+    ]);
+    checkoutGroupTrace.value = {
+      orders: orderResult.items || [],
+      summary: summary || {},
+      refunds: refundRows || [],
+      paymentTransactions: transactionRows || [],
+      paymentCallbackLogs: callbackRows || [],
+      refundLogs: refundLogRows || [],
+      commissions: commissionRows || [],
+      commissionSummary: commissionSummaryRow || {}
+    };
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载跨店结算组追踪失败");
+  } finally {
+    checkoutGroupTraceLoading.value = false;
+  }
 }
 function onDateRangeChange(value?: string[]) {
   filters.startDate = value?.[0] || "";
   filters.endDate = value?.[1] || "";
   loadOrders();
+  loadSettlements();
 }
 async function loadOrders() {
+  if (blockInvalidMerchantLink()) return;
   loading.value = true;
   try {
     const params = { ...orderQueryParams(), page: filters.page, pageSize: filters.pageSize };
@@ -1048,6 +1447,7 @@ async function loadOrders() {
     ]);
     orders.value = result.items || [];
     orderSummary.value = summary || {};
+    await loadCheckoutGroupTrace();
   } catch (error: any) {
     ElMessage.error(error.message || "加载商城订单失败");
   } finally {
@@ -1055,9 +1455,10 @@ async function loadOrders() {
   }
 }
 async function loadAnalytics() {
+  if (blockInvalidMerchantLink()) return;
   analyticsLoading.value = true;
   try {
-    mallAnalytics.value = await api.get<any, any>("/admin/mall/analytics", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined } });
+    mallAnalytics.value = await api.get<any, any>("/admin/mall/analytics", { params: currentMallParams() });
   } catch (error: any) {
     ElMessage.error(error.message || "加载商城运营看板失败");
   } finally {
@@ -1065,22 +1466,17 @@ async function loadAnalytics() {
   }
 }
 async function loadRefunds() {
+  if (blockInvalidMerchantLink()) return;
   try {
-    refunds.value = await api.get<any, any[]>("/admin/mall/refunds", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, status: refundFilters.status || undefined, paymentMethod: filters.paymentMethod || undefined, startDate: filters.startDate || undefined, endDate: filters.endDate || undefined, keyword: refundFilters.keyword.trim() || filters.keyword.trim() || undefined } });
+    refunds.value = await api.get<any, any[]>("/admin/mall/refunds", { params: currentMallParams({ status: refundFilters.status || undefined, paymentMethod: filters.paymentMethod || undefined, checkoutGroupNo: filters.checkoutGroupNo.trim() || undefined, startDate: filters.startDate || undefined, endDate: filters.endDate || undefined, keyword: refundFilters.keyword.trim() || filters.keyword.trim() || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载售后失败");
   }
 }
-async function loadReviews() {
-  try {
-    reviews.value = await api.get<any, any[]>("/admin/mall/reviews", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, status: reviewFilters.status || undefined, keyword: reviewFilters.keyword.trim() || undefined } });
-  } catch (error: any) {
-    ElMessage.error(error.message || "加载评价失败");
-  }
-}
 async function loadPaymentData() {
+  if (blockInvalidMerchantLink()) return;
   try {
-    const baseParams = { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, keyword: paymentKeyword.value.trim() || filters.keyword.trim() || undefined };
+    const baseParams = currentMallParams({ keyword: paymentKeyword.value.trim() || filters.keyword.trim() || undefined, checkoutGroupNo: filters.checkoutGroupNo.trim() || undefined });
     const [transactions, callbackLogs, refundLogRows, commissionRows, commissionSummaryRow, promoterSummaryRows, readiness] = await Promise.all([
       api.get<any, any[]>("/admin/mall/payment-transactions", { params: { ...baseParams, status: paymentFilters.status || undefined } }),
       api.get<any, any[]>("/admin/mall/payment-callback-logs", { params: { ...baseParams, status: callbackFilters.status || undefined } }),
@@ -1088,7 +1484,7 @@ async function loadPaymentData() {
       api.get<any, any[]>("/admin/mall/commissions", { params: { ...baseParams, status: commissionFilters.status || undefined } }),
       api.get<any, any>("/admin/mall/commissions/summary", { params: { ...baseParams, status: commissionFilters.status || undefined } }),
       api.get<any, any[]>("/admin/mall/commissions/by-promoter", { params: { ...baseParams, status: commissionFilters.status || undefined } }),
-      api.get<any, any>("/admin/mall/payment-readiness", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined } })
+      api.get<any, any>("/admin/mall/payment-readiness", { params: currentMallParams() })
     ]);
     paymentTransactions.value = transactions || [];
     paymentCallbackLogs.value = callbackLogs || [];
@@ -1097,8 +1493,84 @@ async function loadPaymentData() {
     commissionSummary.value = commissionSummaryRow || {};
     commissionPromoterSummary.value = promoterSummaryRows || [];
     paymentReadiness.value = readiness || null;
+    await loadCheckoutGroupTrace();
+    await loadSettlements();
   } catch (error: any) {
     ElMessage.error(error.message || "加载支付日志失败");
+  }
+}
+
+async function loadSettlements() {
+  if (blockInvalidMerchantLink()) return;
+  settlementLoading.value = true;
+  try {
+    const result = await api.get<any, any>("/admin/mall/settlements", {
+      params: currentMallParams({ status: settlementFilters.status || undefined, startDate: filters.startDate || undefined, endDate: filters.endDate || undefined })
+    });
+    mallSettlements.value = result.items || [];
+    settlementPending.value = result.pending || [];
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载商城结算失败");
+  } finally {
+    settlementLoading.value = false;
+  }
+}
+
+async function generateSettlement(row?: any) {
+  if (!canManageMallSettlements.value) return ElMessage.error("商城结算生成、审核和打款由平台财务处理");
+  const merchantId = row?.merchant?.id || filters.merchantId;
+  if (!merchantId) return ElMessage.error("请先选择或指定要生成结算单的店铺");
+  if (!filters.startDate || !filters.endDate) return ElMessage.error("请先在顶部选择结算周期日期范围");
+  try {
+    await api.post("/admin/mall/settlements/generate", {
+      tenantId: isPlatformAdmin() ? filters.tenantId || row?.merchant?.tenant?.id || selectedMerchant.value?.tenant?.id : undefined,
+      merchantId,
+      periodStart: filters.startDate,
+      periodEnd: filters.endDate,
+      remark: "后台商城财务生成结算单"
+    });
+    ElMessage.success("结算单已生成");
+    await loadSettlements();
+  } catch (error: any) {
+    ElMessage.error(error.message || "生成结算单失败");
+  }
+}
+
+async function approveSettlement(row: any) {
+  if (!canManageMallSettlements.value) return ElMessage.error("商城结算审核由平台财务处理");
+  const { value } = await ElMessageBox.prompt(`审核通过结算单 ${row.settlementNo}？${settlementAmountText(row.payableAmount)}`, "审核商城结算", { inputValue: "财务已核对订单、退款和服务费", confirmButtonText: "通过", cancelButtonText: "取消" });
+  await api.post(`/admin/mall/settlements/${row.id}/approve`, { remark: value });
+  ElMessage.success("结算单已审核");
+  await loadSettlements();
+}
+
+async function rejectSettlement(row: any) {
+  if (!canManageMallSettlements.value) return ElMessage.error("商城结算审核由平台财务处理");
+  const { value } = await ElMessageBox.prompt(`拒绝结算单 ${row.settlementNo}？`, "拒绝商城结算", { inputValue: "结算数据需重新核对", confirmButtonText: "拒绝", cancelButtonText: "取消" });
+  await api.post(`/admin/mall/settlements/${row.id}/reject`, { remark: value });
+  ElMessage.success("结算单已拒绝");
+  await loadSettlements();
+}
+
+async function markSettlementPaid(row: any) {
+  if (!canManageMallSettlements.value) return ElMessage.error("商城结算打款/扣回由平台财务处理");
+  const actionText = settlementFinishActionText(row);
+  const { value } = await ElMessageBox.prompt(`标记结算单 ${row.settlementNo} 已${actionText}？`, "标记商城结算完成", { inputValue: row.paidReference || "", inputPlaceholder: actionText === "扣回/冲抵" ? "填写扣回/冲抵凭证号或后续抵扣说明" : "填写打款流水号或线下凭证号", confirmButtonText: `确认${actionText}`, cancelButtonText: "取消", inputValidator: (value) => Boolean(String(value || "").trim()) || `请填写${actionText}凭证号或说明，方便财务对账` });
+  await api.post(`/admin/mall/settlements/${row.id}/mark-paid`, { paidReference: value, remark: actionText === "扣回/冲抵" ? "财务确认已扣回/冲抵" : "财务确认已打款" });
+  ElMessage.success(`结算单已标记${actionText}`);
+  await loadSettlements();
+}
+async function exportSettlements() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前订单管理店铺链接不可用，请先确认店铺授权后再导出。");
+  try {
+    const clean = new URLSearchParams();
+    appendCurrentMallParams(clean);
+    if (settlementFilters.status) clean.set("status", settlementFilters.status);
+    if (filters.startDate) clean.set("startDate", filters.startDate);
+    if (filters.endDate) clean.set("endDate", filters.endDate);
+    await downloadFile(`/admin/mall/settlements/export?${clean.toString()}`, "mall-settlements.xlsx");
+  } catch (error: any) {
+    ElMessage.error(error.message || "导出商城结算失败");
   }
 }
 async function settleCommission(row: any) {
@@ -1119,7 +1591,7 @@ async function batchSettleCommissions(target?: any) {
     const scopeText = target?.displayName ? `“${target.displayName}”` : "当前商家和搜索条件";
     const result = await ElMessageBox.prompt(`确认按${scopeText}批量结算 ${pendingCount} 笔待结算佣金，共 ¥${pendingAmount}？一次最多处理 200 笔。`, "批量结算商城佣金", { inputValue: target?.displayName ? `财务确认结算 ${target.displayName}` : "财务批量确认已结算", confirmButtonText: "确认结算", cancelButtonText: "取消", inputValidator: (value) => Boolean(String(value || "").trim()) || "请填写结算备注" });
     const payload = {
-      tenantId: isPlatformAdmin() ? filters.tenantId : undefined,
+      ...currentMallParams(),
       keyword: paymentKeyword.value.trim() || filters.keyword.trim() || undefined,
       agentId: target?.agentId || undefined,
       promoterUserId: target?.promoterUserId || undefined,
@@ -1135,9 +1607,10 @@ async function batchSettleCommissions(target?: any) {
   }
 }
 async function loadLogisticsCompanies() {
+  if (blockInvalidMerchantLink()) return;
   logisticsLoading.value = true;
   try {
-    logisticsCompanies.value = await api.get<any, any[]>("/admin/mall/logistics-companies", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined } });
+    logisticsCompanies.value = await api.get<any, any[]>("/admin/mall/logistics-companies", { params: currentMallParams() });
   } catch (error: any) {
     ElMessage.error(error.message || "加载物流设置失败");
   } finally {
@@ -1145,8 +1618,9 @@ async function loadLogisticsCompanies() {
   }
 }
 async function loadCouponOptions() {
+  if (blockInvalidMerchantLink()) return;
   try {
-    const params = { tenantId: isPlatformAdmin() ? filters.tenantId : undefined };
+    const params = currentMallParams();
     const [categories, productResult] = await Promise.all([
       api.get<any, any[]>("/admin/mall/categories", { params }),
       api.get<any, any>("/admin/mall/products", { params: { ...params, pageSize: 200 } })
@@ -1158,9 +1632,10 @@ async function loadCouponOptions() {
   }
 }
 async function loadCoupons() {
+  if (blockInvalidMerchantLink()) return;
   couponLoading.value = true;
   try {
-    coupons.value = await api.get<any, any[]>("/admin/mall/coupons", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, status: couponFilters.status || undefined, keyword: couponFilters.keyword.trim() || undefined } });
+    coupons.value = await api.get<any, any[]>("/admin/mall/coupons", { params: currentMallParams({ status: couponFilters.status || undefined, keyword: couponFilters.keyword.trim() || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载优惠券失败");
   } finally {
@@ -1168,9 +1643,10 @@ async function loadCoupons() {
   }
 }
 async function loadFlashSales() {
+  if (blockInvalidMerchantLink()) return;
   flashSaleLoading.value = true;
   try {
-    flashSales.value = await api.get<any, any[]>("/admin/mall/flash-sales", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, status: flashSaleFilters.status || undefined, keyword: flashSaleFilters.keyword.trim() || undefined } });
+    flashSales.value = await api.get<any, any[]>("/admin/mall/flash-sales", { params: currentMallParams({ status: flashSaleFilters.status || undefined, keyword: flashSaleFilters.keyword.trim() || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载秒杀活动失败");
   } finally {
@@ -1178,9 +1654,10 @@ async function loadFlashSales() {
   }
 }
 async function loadGroupBuys() {
+  if (blockInvalidMerchantLink()) return;
   groupBuyLoading.value = true;
   try {
-    groupBuys.value = await api.get<any, any[]>("/admin/mall/group-buys", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, status: groupBuyFilters.status || undefined, keyword: groupBuyFilters.keyword.trim() || undefined } });
+    groupBuys.value = await api.get<any, any[]>("/admin/mall/group-buys", { params: currentMallParams({ status: groupBuyFilters.status || undefined, keyword: groupBuyFilters.keyword.trim() || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载拼团活动失败");
   } finally {
@@ -1188,9 +1665,10 @@ async function loadGroupBuys() {
   }
 }
 async function loadGroupBuyRecords() {
+  if (blockInvalidMerchantLink()) return;
   groupBuyRecordLoading.value = true;
   try {
-    groupBuyRecords.value = await api.get<any, any[]>("/admin/mall/group-buy-records", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, status: groupBuyRecordFilters.status || undefined, keyword: groupBuyRecordFilters.keyword.trim() || undefined } });
+    groupBuyRecords.value = await api.get<any, any[]>("/admin/mall/group-buy-records", { params: currentMallParams({ status: groupBuyRecordFilters.status || undefined, keyword: groupBuyRecordFilters.keyword.trim() || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载参团记录失败");
   } finally {
@@ -1198,9 +1676,10 @@ async function loadGroupBuyRecords() {
   }
 }
 async function loadCouponUsages() {
+  if (blockInvalidMerchantLink()) return;
   couponUsageLoading.value = true;
   try {
-    couponUsages.value = await api.get<any, any[]>("/admin/mall/coupon-usages", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, status: couponUsageFilters.status || undefined, keyword: couponUsageFilters.keyword.trim() || couponFilters.keyword.trim() || undefined } });
+    couponUsages.value = await api.get<any, any[]>("/admin/mall/coupon-usages", { params: currentMallParams({ status: couponUsageFilters.status || undefined, keyword: couponUsageFilters.keyword.trim() || couponFilters.keyword.trim() || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载优惠券使用记录失败");
   } finally {
@@ -1208,16 +1687,18 @@ async function loadCouponUsages() {
   }
 }
 async function loadAgents() {
+  if (blockInvalidMerchantLink()) return;
   try {
-    agents.value = await api.get<any, any[]>("/admin/agents", { params: { includeDisabled: true, tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined } });
+    agents.value = await api.get<any, any[]>("/admin/agents", { params: { includeDisabled: true, tenantId: isPlatformAdmin() ? filters.tenantId || selectedMerchant.value?.tenant?.id || undefined : undefined } });
   } catch {
     agents.value = [];
   }
 }
 async function loadPromotionCodes() {
+  if (blockInvalidMerchantLink()) return;
   promotionLoading.value = true;
   try {
-    promotionCodes.value = await api.get<any, any[]>("/admin/mall/promotion-codes", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: promotionFilters.enabled || undefined, keyword: promotionFilters.keyword.trim() || undefined } });
+    promotionCodes.value = await api.get<any, any[]>("/admin/mall/promotion-codes", { params: currentMallParams({ enabled: promotionFilters.enabled || undefined, keyword: promotionFilters.keyword.trim() || undefined }) });
   } catch (error: any) {
     ElMessage.error(error.message || "加载推广码失败");
   } finally {
@@ -1225,6 +1706,7 @@ async function loadPromotionCodes() {
   }
 }
 function reload() {
+  if (blockInvalidMerchantLink()) return;
   const panel = activePanel.value;
   if (panel === "refunds") {
     loadRefunds();
@@ -1242,6 +1724,19 @@ function reload() {
     loadPromotionCodes();
     return;
   }
+  if (panel === "payment-logs") {
+    loadPaymentData();
+    return;
+  }
+  if (panel === "settlements") {
+    loadSettlements();
+    return;
+  }
+  if (panel === "statistics") {
+    loadOrders();
+    loadAnalytics();
+    return;
+  }
   if (panel === "finance") {
     loadAnalytics();
     loadPaymentData();
@@ -1251,6 +1746,7 @@ function reload() {
   loadAnalytics();
 }
 async function openRoutePanel() {
+  if (blockInvalidMerchantLink()) return;
   const panel = activePanel.value;
   if (panel === "refunds") {
     refundFilters.status = refundFilters.status || "pending";
@@ -1259,9 +1755,12 @@ async function openRoutePanel() {
   }
   if (panel === "logistics") openLogisticsDialog();
   if (panel === "marketing") openFlashSaleDialog();
-  if (panel === "finance") await loadPaymentData();
+  if (panel === "payment-logs" || panel === "finance") await loadPaymentData();
+  if (panel === "settlements") await loadSettlements();
+  if (panel === "statistics") await loadAnalytics();
 }
 async function exportOrders() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前订单管理店铺链接不可用，请先确认店铺授权后再导出。");
   try {
     const clean = new URLSearchParams();
     const params = orderQueryParams();
@@ -1274,11 +1773,13 @@ async function exportOrders() {
   }
 }
 async function exportRefunds() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前订单管理店铺链接不可用，请先确认店铺授权后再导出。");
   try {
     const clean = new URLSearchParams();
-    if (isPlatformAdmin() && filters.tenantId) clean.set("tenantId", String(filters.tenantId));
+    appendCurrentMallParams(clean);
     if (refundFilters.status) clean.set("status", refundFilters.status);
     if (filters.paymentMethod) clean.set("paymentMethod", filters.paymentMethod);
+    if (filters.checkoutGroupNo.trim()) clean.set("checkoutGroupNo", filters.checkoutGroupNo.trim());
     if (filters.startDate) clean.set("startDate", filters.startDate);
     if (filters.endDate) clean.set("endDate", filters.endDate);
     const keyword = refundFilters.keyword.trim() || filters.keyword.trim();
@@ -1289,11 +1790,13 @@ async function exportRefunds() {
   }
 }
 async function exportPaymentTransactions() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前订单管理店铺链接不可用，请先确认店铺授权后再导出。");
   try {
     const clean = new URLSearchParams();
-    if (isPlatformAdmin() && filters.tenantId) clean.set("tenantId", String(filters.tenantId));
+    appendCurrentMallParams(clean);
     if (paymentFilters.status) clean.set("status", paymentFilters.status);
     if (filters.paymentMethod) clean.set("paymentMethod", filters.paymentMethod);
+    if (filters.checkoutGroupNo.trim()) clean.set("checkoutGroupNo", filters.checkoutGroupNo.trim());
     if (filters.startDate) clean.set("startDate", filters.startDate);
     if (filters.endDate) clean.set("endDate", filters.endDate);
     const keyword = paymentKeyword.value.trim() || filters.keyword.trim();
@@ -1304,10 +1807,12 @@ async function exportPaymentTransactions() {
   }
 }
 async function exportPaymentCallbackLogs() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前订单管理店铺链接不可用，请先确认店铺授权后再导出。");
   try {
     const clean = new URLSearchParams();
-    if (isPlatformAdmin() && filters.tenantId) clean.set("tenantId", String(filters.tenantId));
+    appendCurrentMallParams(clean);
     if (callbackFilters.status) clean.set("status", callbackFilters.status);
+    if (filters.checkoutGroupNo.trim()) clean.set("checkoutGroupNo", filters.checkoutGroupNo.trim());
     if (filters.startDate) clean.set("startDate", filters.startDate);
     if (filters.endDate) clean.set("endDate", filters.endDate);
     const keyword = paymentKeyword.value.trim() || filters.keyword.trim();
@@ -1318,10 +1823,12 @@ async function exportPaymentCallbackLogs() {
   }
 }
 async function exportCommissions() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前订单管理店铺链接不可用，请先确认店铺授权后再导出。");
   try {
     const clean = new URLSearchParams();
-    if (isPlatformAdmin() && filters.tenantId) clean.set("tenantId", String(filters.tenantId));
+    appendCurrentMallParams(clean);
     if (commissionFilters.status) clean.set("status", commissionFilters.status);
+    if (filters.checkoutGroupNo.trim()) clean.set("checkoutGroupNo", filters.checkoutGroupNo.trim());
     const keyword = paymentKeyword.value.trim() || filters.keyword.trim();
     if (keyword) clean.set("keyword", keyword);
     await downloadFile(`/admin/mall/commissions/export?${clean.toString()}`, "mall-commissions.xlsx");
@@ -1330,10 +1837,12 @@ async function exportCommissions() {
   }
 }
 async function exportCommissionPromoters() {
+  if (blockInvalidMerchantLink()) return ElMessage.error("当前订单管理店铺链接不可用，请先确认店铺授权后再导出。");
   try {
     const clean = new URLSearchParams();
-    if (isPlatformAdmin() && filters.tenantId) clean.set("tenantId", String(filters.tenantId));
+    appendCurrentMallParams(clean);
     if (commissionFilters.status) clean.set("status", commissionFilters.status);
+    if (filters.checkoutGroupNo.trim()) clean.set("checkoutGroupNo", filters.checkoutGroupNo.trim());
     const keyword = paymentKeyword.value.trim() || filters.keyword.trim();
     if (keyword) clean.set("keyword", keyword);
     await downloadFile(`/admin/mall/commissions/by-promoter/export?${clean.toString()}`, "mall-commission-promoters.xlsx");
@@ -1342,6 +1851,7 @@ async function exportCommissionPromoters() {
   }
 }
 async function closeExpiredOrders() {
+  if (!requireOpenMerchant("清理超时订单")) return;
   try {
     await ElMessageBox.confirm("系统会扫描超过配置时间仍待支付/待确认的商城订单，自动关闭并释放库存和优惠券占用。确认立即执行一次？", "清理超时订单", { type: "warning", confirmButtonText: "立即清理", cancelButtonText: "取消" });
     closingExpired.value = true;
@@ -1356,6 +1866,7 @@ async function closeExpiredOrders() {
   }
 }
 async function failExpiredGroupBuys() {
+  if (!requireOpenMerchant("处理未成团拼团")) return;
   try {
     await ElMessageBox.confirm("系统会扫描已过结束时间但仍未成团的拼团队伍。余额支付订单会自动退款并回补库存；其他支付方式会标记未成团并保留人工处理。确认立即执行一次？", "处理未成团拼团", { type: "warning", confirmButtonText: "立即处理", cancelButtonText: "取消" });
     failingGroupBuys.value = true;
@@ -1371,6 +1882,7 @@ async function failExpiredGroupBuys() {
   }
 }
 async function completeExpiredShippedOrders() {
+  if (!requireOpenMerchant("自动完成已发货订单")) return;
   try {
     await ElMessageBox.confirm("系统会扫描超过配置天数仍未确认收货的已发货订单，自动标记为已完成。售后中的订单不会被处理。确认立即执行一次？", "自动完成已发货订单", { type: "warning", confirmButtonText: "立即执行", cancelButtonText: "取消" });
     completingShipped.value = true;
@@ -1385,15 +1897,74 @@ async function completeExpiredShippedOrders() {
   }
 }
 function refreshCurrentOrder(id: number) {
-  currentOrder.value = orders.value.find((item) => item.id === id) || currentOrder.value;
+  const next = orders.value.find((item) => item.id === id);
+  if (!next) return;
+  currentOrder.value = next;
+  loadCheckoutGroupOrders(next);
 }
 function openDetail(row: any) {
   currentOrder.value = row;
   detailVisible.value = true;
+  loadCheckoutGroupOrders(row);
+}
+async function loadCheckoutGroupOrders(row: any) {
+  const groupNo = row?.checkoutGroup?.groupNo;
+  checkoutGroupOrders.value = [];
+  if (!groupNo) return;
+  checkoutGroupLoading.value = true;
+  try {
+    const params = {
+      tenantId: isPlatformAdmin() ? row?.tenant?.id || filters.tenantId || undefined : undefined,
+      merchantId: !isPlatformAdmin() && filters.merchantId ? filters.merchantId : undefined,
+      checkoutGroupNo: groupNo,
+      page: 1,
+      pageSize: 100
+    };
+    const result = await api.get<any, any>("/admin/mall/orders", { params });
+    checkoutGroupOrders.value = result.items || [];
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载跨店拆单失败");
+  } finally {
+    checkoutGroupLoading.value = false;
+  }
+}
+function selectCheckoutGroupOrder(row: any) {
+  currentOrder.value = row;
+  loadCheckoutGroupOrders(row);
+}
+function relatedOrderIdentity(row: any) {
+  return row?.order?.id || row?.order?.orderNo || row?.orderNo || "";
+}
+function cachedMallOrders() {
+  return [...orders.value, ...checkoutGroupOrders.value, ...(checkoutGroupTrace.value.orders || [])];
+}
+async function openRelatedOrder(row: any) {
+  const related = row?.order || row;
+  const orderId = related?.id;
+  const orderNo = related?.orderNo || row?.orderNo;
+  const cached = cachedMallOrders().find((item) => (orderId && item.id === orderId) || (orderNo && item.orderNo === orderNo));
+  if (cached) {
+    openDetail(cached);
+    return;
+  }
+  if (!orderNo) {
+    ElMessage.error("这条记录没有可定位的商城订单号");
+    return;
+  }
+  try {
+    const result = await api.get<any, any>("/admin/mall/orders", { params: currentMallParams({ keyword: orderNo, page: 1, pageSize: 10 }) });
+    const order = (result.items || []).find((item: any) => item.orderNo === orderNo) || result.items?.[0];
+    if (!order) {
+      ElMessage.error("未找到对应商城订单，请检查当前店铺权限或筛选范围");
+      return;
+    }
+    openDetail(order);
+  } catch (error: any) {
+    ElMessage.error(error.message || "打开商城订单失败");
+  }
 }
 function openRefundOrder(row: any) {
-  const order = orders.value.find((item) => item.id === row.order?.id);
-  if (order) openDetail(order);
+  openRelatedOrder(row);
 }
 async function confirmOffline(row: any) {
   try {
@@ -1470,26 +2041,14 @@ async function rejectRefund(row: any) {
     ElMessage.error(error.message || "处理失败");
   }
 }
-async function moderateReview(row: any, status: "approved" | "rejected") {
-  try {
-    const result = await ElMessageBox.prompt(status === "approved" ? "通过后评价会展示在商品详情页，可填写审核备注。若要展示商家回复，请用“审核备注 || 商家回复”格式填写。" : "请输入拒绝原因，方便后续客服回访。", status === "approved" ? "通过评价" : "拒绝评价", { inputValue: status === "approved" ? "评价审核通过 || 感谢您的认可，七维书院会继续把好物和服务做好。" : "评价内容不适合展示", confirmButtonText: "确认", cancelButtonText: "取消" });
-    const [reviewRemark, merchantReply] = String(result.value || "").split("||").map((item) => item.trim());
-    await api.patch(`/admin/mall/reviews/${row.id}`, { status, reviewRemark: reviewRemark || "", merchantReply: status === "approved" ? merchantReply || "" : "" });
-    ElMessage.success(status === "approved" ? "评价已展示" : "评价已拒绝");
-    loadReviews();
-  } catch (error: any) {
-    if (error === "cancel") return;
-    ElMessage.error(error.message || "审核失败");
-  }
-}
 function openLogisticsDialog() {
-  if (isPlatformAdmin() && !filters.tenantId) return ElMessage.error("请先选择商家，再配置该商家的物流公司");
+  if (!requireMerchantSelection("配置物流")) return;
   resetLogisticsForm();
   logisticsDialogVisible.value = true;
   loadLogisticsCompanies();
 }
 function openCouponDialog() {
-  if (isPlatformAdmin() && !filters.tenantId) return ElMessage.error("请先选择商家，再配置该商家的优惠券");
+  if (!requireMerchantSelection("配置优惠券")) return;
   resetCouponForm();
   couponDialogVisible.value = true;
   loadCouponOptions();
@@ -1497,14 +2056,14 @@ function openCouponDialog() {
   loadCouponUsages();
 }
 function openFlashSaleDialog() {
-  if (isPlatformAdmin() && !filters.tenantId) return ElMessage.error("请先选择商家，再配置该商家的秒杀活动");
+  if (!requireMerchantSelection("配置秒杀活动")) return;
   resetFlashSaleForm();
   flashSaleDialogVisible.value = true;
   loadCouponOptions();
   loadFlashSales();
 }
 function openGroupBuyDialog() {
-  if (isPlatformAdmin() && !filters.tenantId) return ElMessage.error("请先选择商家，再配置该商家的拼团活动");
+  if (!requireMerchantSelection("配置拼团活动")) return;
   resetGroupBuyForm();
   groupBuyDialogVisible.value = true;
   loadCouponOptions();
@@ -1515,7 +2074,7 @@ function openGroupBuyRecordDialog() {
   loadGroupBuyRecords();
 }
 function openPromotionDialog() {
-  if (isPlatformAdmin() && !filters.tenantId) return ElMessage.error("请先选择商家，再配置该商家的推广码");
+  if (!requireMerchantSelection("配置推广码")) return;
   resetPromotionForm();
   promotionDialogVisible.value = true;
   loadAgents();
@@ -1537,9 +2096,11 @@ function resetPromotionForm() {
   Object.assign(promotionForm, { id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, enabled: true, remark: "" });
 }
 function editLogisticsCompany(row: any) {
+  if (!requireMerchantSelection("配置物流")) return;
   Object.assign(logisticsForm, { id: row.id, name: row.name, code: row.code || "", servicePhone: row.servicePhone || "", trackingUrl: row.trackingUrl || "", sortOrder: Number(row.sortOrder || 0), enabled: row.enabled });
 }
 function editCoupon(row: any) {
+  if (!requireMerchantSelection("配置优惠券")) return;
   Object.assign(couponForm, {
     id: row.id,
     code: row.code || "",
@@ -1557,6 +2118,7 @@ function editCoupon(row: any) {
   });
 }
 function editFlashSale(row: any) {
+  if (!requireMerchantSelection("配置秒杀活动")) return;
   Object.assign(flashSaleForm, {
     id: row.id,
     title: row.title || "",
@@ -1572,6 +2134,7 @@ function editFlashSale(row: any) {
   });
 }
 function editGroupBuy(row: any) {
+  if (!requireMerchantSelection("配置拼团活动")) return;
   Object.assign(groupBuyForm, {
     id: row.id,
     title: row.title || "",
@@ -1588,6 +2151,7 @@ function editGroupBuy(row: any) {
   });
 }
 function editPromotionCode(row: any) {
+  if (!requireMerchantSelection("配置推广码")) return;
   Object.assign(promotionForm, {
     id: row.id,
     code: row.code || "",
@@ -1600,10 +2164,11 @@ function editPromotionCode(row: any) {
   });
 }
 async function saveLogisticsCompany() {
+  if (!requireMerchantSelection("配置物流")) return;
   if (!logisticsForm.name?.trim()) return ElMessage.error("请输入物流公司名称");
   logisticsSaving.value = true;
   try {
-    const payload = { ...logisticsForm, name: logisticsForm.name.trim(), tenantId: isPlatformAdmin() ? filters.tenantId : undefined };
+    const payload = { ...logisticsForm, name: logisticsForm.name.trim(), ...currentMallParams() };
     if (logisticsForm.id) await api.patch(`/admin/mall/logistics-companies/${logisticsForm.id}`, payload);
     else await api.post("/admin/mall/logistics-companies", payload);
     ElMessage.success("物流公司已保存");
@@ -1616,6 +2181,7 @@ async function saveLogisticsCompany() {
   }
 }
 async function saveCoupon() {
+  if (!requireMerchantSelection("配置优惠券")) return;
   if (!couponForm.code?.trim()) return ElMessage.error("请输入优惠券码");
   if (!couponForm.name?.trim()) return ElMessage.error("请输入优惠券名称");
   if (Number(couponForm.discountAmount || 0) <= 0) return ElMessage.error("优惠金额必须大于 0");
@@ -1626,7 +2192,7 @@ async function saveCoupon() {
     const payload = {
       code: couponForm.code.trim(),
       name: couponForm.name.trim(),
-      tenantId: isPlatformAdmin() ? filters.tenantId : undefined,
+      ...currentMallParams(),
       minAmount: Number(couponForm.minAmount || 0),
       discountAmount: Number(couponForm.discountAmount || 0),
       scope: couponForm.scope,
@@ -1650,6 +2216,7 @@ async function saveCoupon() {
   }
 }
 async function saveFlashSale() {
+  if (!requireMerchantSelection("配置秒杀活动")) return;
   if (!flashSaleForm.title?.trim()) return ElMessage.error("请输入秒杀标题");
   if (!flashSaleForm.productId || !flashSaleForm.skuId) return ElMessage.error("请选择秒杀商品和规格");
   if (Number(flashSaleForm.salePrice || 0) <= 0) return ElMessage.error("秒杀价必须大于 0");
@@ -1657,7 +2224,7 @@ async function saveFlashSale() {
   if (!flashSaleForm.startsAt || !flashSaleForm.endsAt) return ElMessage.error("请设置秒杀时间");
   flashSaleSaving.value = true;
   try {
-    const payload = { ...flashSaleForm, title: flashSaleForm.title.trim(), tenantId: isPlatformAdmin() ? filters.tenantId : undefined };
+    const payload = { ...flashSaleForm, title: flashSaleForm.title.trim(), ...currentMallParams() };
     if (flashSaleForm.id) await api.patch(`/admin/mall/flash-sales/${flashSaleForm.id}`, payload);
     else await api.post("/admin/mall/flash-sales", payload);
     ElMessage.success("秒杀活动已保存");
@@ -1670,6 +2237,7 @@ async function saveFlashSale() {
   }
 }
 async function saveGroupBuy() {
+  if (!requireMerchantSelection("配置拼团活动")) return;
   if (!groupBuyForm.title?.trim()) return ElMessage.error("请输入拼团标题");
   if (!groupBuyForm.productId || !groupBuyForm.skuId) return ElMessage.error("请选择拼团商品和规格");
   if (Number(groupBuyForm.groupPrice || 0) <= 0) return ElMessage.error("拼团价必须大于 0");
@@ -1678,7 +2246,7 @@ async function saveGroupBuy() {
   if (!groupBuyForm.startsAt || !groupBuyForm.endsAt) return ElMessage.error("请设置拼团时间");
   groupBuySaving.value = true;
   try {
-    const payload = { ...groupBuyForm, title: groupBuyForm.title.trim(), tenantId: isPlatformAdmin() ? filters.tenantId : undefined };
+    const payload = { ...groupBuyForm, title: groupBuyForm.title.trim(), ...currentMallParams() };
     if (groupBuyForm.id) await api.patch(`/admin/mall/group-buys/${groupBuyForm.id}`, payload);
     else await api.post("/admin/mall/group-buys", payload);
     ElMessage.success("拼团活动已保存");
@@ -1691,6 +2259,7 @@ async function saveGroupBuy() {
   }
 }
 async function savePromotionCode() {
+  if (!requireMerchantSelection("配置推广码")) return;
   if (!promotionForm.code?.trim()) return ElMessage.error("请输入推广码");
   if (!promotionForm.name?.trim()) return ElMessage.error("请输入推广码名称");
   promotionSaving.value = true;
@@ -1698,7 +2267,7 @@ async function savePromotionCode() {
     const payload = {
       code: promotionForm.code.trim(),
       name: promotionForm.name.trim(),
-      tenantId: isPlatformAdmin() ? filters.tenantId : undefined,
+      ...currentMallParams(),
       promoterUserId: promotionForm.promoterUserId || null,
       agentId: promotionForm.agentId || null,
       commissionRate: Number(promotionForm.commissionRatePercent || 0) / 100,
@@ -1717,8 +2286,9 @@ async function savePromotionCode() {
   }
 }
 async function toggleLogisticsCompany(row: any) {
+  if (!requireMerchantSelection("配置物流")) return;
   try {
-    await api.patch(`/admin/mall/logistics-companies/${row.id}`, { ...row, tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined, enabled: !row.enabled });
+    await api.patch(`/admin/mall/logistics-companies/${row.id}`, { ...row, tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined, merchantId: row.merchant?.id || filters.merchantId || undefined, enabled: !row.enabled });
     ElMessage.success(row.enabled ? "物流公司已停用" : "物流公司已启用");
     await loadLogisticsCompanies();
   } catch (error: any) {
@@ -1726,11 +2296,13 @@ async function toggleLogisticsCompany(row: any) {
   }
 }
 async function toggleCoupon(row: any) {
+  if (!requireMerchantSelection("配置优惠券")) return;
   try {
     await api.patch(`/admin/mall/coupons/${row.id}`, {
       code: row.code,
       name: row.name,
       tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined,
+      merchantId: row.merchant?.id || filters.merchantId || undefined,
       minAmount: Number(row.minAmount || 0),
       discountAmount: Number(row.discountAmount || 0),
       scope: row.scope || "all",
@@ -1749,10 +2321,12 @@ async function toggleCoupon(row: any) {
   }
 }
 async function toggleFlashSale(row: any) {
+  if (!requireMerchantSelection("配置秒杀活动")) return;
   try {
     await api.patch(`/admin/mall/flash-sales/${row.id}`, {
       title: row.title,
       tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined,
+      merchantId: row.merchant?.id || filters.merchantId || undefined,
       productId: row.product?.id,
       skuId: row.sku?.id,
       salePrice: Number(row.salePrice || 0),
@@ -1770,10 +2344,12 @@ async function toggleFlashSale(row: any) {
   }
 }
 async function toggleGroupBuy(row: any) {
+  if (!requireMerchantSelection("配置拼团活动")) return;
   try {
     await api.patch(`/admin/mall/group-buys/${row.id}`, {
       title: row.title,
       tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined,
+      merchantId: row.merchant?.id || filters.merchantId || undefined,
       productId: row.product?.id,
       skuId: row.sku?.id,
       groupPrice: Number(row.groupPrice || 0),
@@ -1792,11 +2368,13 @@ async function toggleGroupBuy(row: any) {
   }
 }
 async function togglePromotionCode(row: any) {
+  if (!requireMerchantSelection("配置推广码")) return;
   try {
     await api.patch(`/admin/mall/promotion-codes/${row.id}`, {
       code: row.code,
       name: row.name,
       tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined,
+      merchantId: row.merchant?.id || filters.merchantId || undefined,
       promoterUserId: row.promoterUser?.id || null,
       agentId: row.agent?.id || null,
       commissionRate: Number(row.commissionRate || 0),
@@ -1811,11 +2389,16 @@ async function togglePromotionCode(row: any) {
 }
 onMounted(async () => {
   await loadTenants();
+  const merchantScopeReady = await loadMerchants();
+  if (!merchantScopeReady) return;
   reload();
   await openRoutePanel();
 });
-watch(() => [route.path, route.query.panel, route.query.tenantId], async () => {
+watch(() => [route.path, route.query.panel, route.query.tenantId, route.query.merchantId], async () => {
   filters.tenantId = routeTenantId();
+  filters.merchantId = routeMerchantId();
+  const merchantScopeReady = await loadMerchants();
+  if (!merchantScopeReady) return;
   reload();
   await openRoutePanel();
 });
@@ -1827,6 +2410,14 @@ watch(() => [route.path, route.query.panel, route.query.tenantId], async () => {
 .page-header p { margin: 6px 0 0; color: #64748b; }
 .finance-note { font-size: 12px; color: #94a3b8 !important; }
 .scope-hint { margin-bottom: 16px; }
+.deep-link-alert { margin-bottom: 16px; }
+.merchant-disabled-alert { margin-bottom: 16px; }
+.merchant-context-card { margin-bottom: 16px; border-color: #dbeafe; background: linear-gradient(135deg, #eff6ff, #fff); }
+.merchant-context-card :deep(.el-card__body) { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
+.merchant-context-main { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.merchant-context-main strong { color: #0f172a; }
+.merchant-context-main p { margin: 4px 0 0; color: #64748b; }
+.merchant-context-tags, .merchant-context-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .header-actions { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; justify-content: flex-end; }
 .summary-row { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .summary-card :deep(.el-card__body) { display: grid; gap: 6px; padding: 14px 16px; }
@@ -1850,6 +2441,9 @@ watch(() => [route.path, route.query.panel, route.query.tenantId], async () => {
 .readiness-head p { margin: 6px 0 0; color: #475569; line-height: 1.5; }
 .readiness-metrics { display: flex; flex-wrap: wrap; gap: 8px 18px; color: #64748b; font-size: 13px; }
 .readiness-issues { display: flex; flex-wrap: wrap; gap: 8px; }
+.settlement-card { margin-bottom: 16px; border-color: #dbeafe; background: linear-gradient(180deg, #eff6ff, #fff); }
+.settlement-card :deep(.el-card__body) { display: grid; gap: 12px; }
+.settlement-tip, .settlement-pending { margin-bottom: 6px; }
 .item-line { line-height: 1.7; color: #334155; }
 .action-tip { color: #475569; line-height: 1.5; }
 .refund-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }

@@ -13,6 +13,7 @@
 ## 2. 配置
 
 - 执行 `npm run init:production-env` 生成或补齐 `deploy/.env.production`；脚本会生成随机密钥，已存在时只补模板新增字段或替换仍为占位值的本地密钥，不覆盖已填写的真实生产配置。
+- 生产域名、短信服务商、微信/支付宝商户资料、证书路径、回调 URL、真实支付和多商户商城预发状态优先在后台“系统设置 / 部署配置”维护；`.env.production` 中的同名字段作为首次部署引导和兜底。
 - 修改 `BUILD_COMMIT` 为本次发布的代码提交、镜像摘要或制品版本。
 - 修改 `MYSQL_ROOT_PASSWORD`、`MYSQL_PASSWORD`、`JWT_SECRET`，不要使用示例值。
 - 修改 `CORS_ORIGIN` 为真实 H5 和后台域名。
@@ -25,6 +26,7 @@
 - 确认 `APP_VERSION`、`BUILD_COMMIT`、`BUILD_TIME` 已设置为本次发布版本、代码提交或镜像摘要、构建时间。
 - 确认 `NODE_ENV=production`。
 - 确认 `MULTI_TENANT_ENABLED=false`，除非 Tenant 数据模型、核心表 `tenantId` 迁移、后台权限过滤、公开端机构边界和预发隔离验收已经全部完成。
+- 确认 `MALL_MULTI_MERCHANT_ENABLED=false`，除非多商户商城店铺授权、商品审核、跨店拆单、店铺收款、履约、结算、导出隔离和 `smoke:mall-multi-merchant` 预发验收已经全部通过。
 - 执行 `npm run doctor`，确认 Production Configuration Readiness 没有 `ERR` 项。
 - 登录后台进入“上线体检”，确认没有 `需修复` 项，并逐项处理密钥、生产域名、支付沙箱端点、通知服务商凭证和自动关单任务提示。
 - 确认 API 生产配置校验可以通过；默认 JWT、默认数据库密码、生产开启 `DB_SYNCHRONIZE`、localhost CORS、生产开启支付沙箱端点或已启用但缺少凭证的通知服务商会导致 API 拒绝启动。
@@ -40,6 +42,7 @@
 - 确认 Nginx 仍保留 `/api/` 反向代理头、`/uploads/` 只读挂载、后台/H5 SPA no-store 缓存策略、静态资源缓存策略和安全响应头。
 - 执行 `npm run smoke`。
 - 执行 `npm run smoke:flow`。
+- 如启用或展示多商户商城，执行 `npm run smoke:mall-multi-merchant`，确认生成 `deploy/mall-multi-merchant-smoke-result.json` 且 `passed=true`；上线前再设置 `MALL_MULTI_MERCHANT_PREFLIGHT_PASSED=true`，该结果会被 `npm run preflight` 和 `npm run prelaunch:online-showcase` 检查，避免未跑多商户店铺、跨店拆单、结算凭证、已结算后退款扣回/冲抵和运营后台验收就开放商城。
 - 执行 `npm --prefix apps/api run migration:show`，确认待执行迁移符合预期。
 - 生产数据库备份后执行 `npm --prefix apps/api run migration:run`。
 - 执行 `docker compose --env-file deploy/.env.production up -d --build`。
@@ -111,7 +114,8 @@
 - 本地或预发环境可显式启用 `PAYMENT_SANDBOX_ENABLED=true`，微信/支付宝沙箱接口可生成带签名的支付参数。
 - 生产环境必须保持 `PAYMENT_SANDBOX_ENABLED=false`，mock/沙箱支付端点不能修改生产订单。
 - 真实自动打款未完成支付机构 SDK、回执查询、失败用例和回滚记录前，后台只能使用沙箱打款演练和线下打款登记。
-- 真实微信/支付宝支付未完成官方 SDK、证书验签、退款回调、真实对账单接入、代理真实打款和 `deploy/real-payment-smoke-result.json` 预发验收留档前，必须保持 `REAL_PAYMENT_ENABLED=false`；预发结果必须逐场景覆盖微信 Native/H5/JSAPI、支付宝 precreate/WAP/PAGE 及其证据字段，并保留 `agentTransfer` 的代理、结算单、转账单号、服务商回执号、成功查询、失败用例和回滚记录，接入步骤见 `docs/real-payment-integration-plan.md`。
+- 真实微信/支付宝支付未完成官方 SDK、证书验签、退款回调、真实对账单接入、代理真实打款、商城微信支付、店铺直收支付和 `deploy/real-payment-smoke-result.json` 预发验收留档前，必须保持 `REAL_PAYMENT_ENABLED=false`；预发结果必须逐场景覆盖微信 Native/H5/JSAPI、支付宝 precreate/WAP/PAGE 及其证据字段，并保留 `mallPaymentCreate`、`mallPaymentCallback`、`mallPaymentRouteGuard`、`mallRefund`、`agentTransfer` 的订单、店铺/代理、服务商流水、商户直收错路由拒绝、成功查询、失败用例和回滚记录，接入步骤见 `docs/real-payment-integration-plan.md`。
+- 多商户商城上线前必须保留 `deploy/mall-multi-merchant-smoke-result.json`，且结果覆盖店铺主体、店铺授权、商品审核、前台店铺页、跨店购物车、子订单履约、店铺结算、结算完成凭证、已结算后退款扣回/冲抵、支付日志、统计和结算导出；过期、失败或 API 地址不匹配时不要设置 `MALL_MULTI_MERCHANT_ENABLED=true`。
 - 重复支付回调不会重复生成支付流水或重复修改报名状态。
 - 财务对账页可查看支付回调日志，确认失败验签、成功回调和重复回调都有审计记录。
 - 操作日志页可查看确认收款、退款申请、退款审核、签到核销、候补补位和运营设置修改记录。
@@ -202,7 +206,7 @@
 - 每次新增 migration 前后都要在测试库执行 `migration:show` 和 `migration:run`。
 - 上传文件迁移到对象存储，例如腾讯云 COS。
 - 接入真实短信服务、邮件服务或微信订阅消息。
-- 接入真实微信支付和支付宝前，先完成商户号、证书、回调域名、官方 SDK 签名验签和沙箱联调。
+- 接入真实微信支付和支付宝前，先在后台补齐商户号、证书路径、回调域名、官方 SDK 签名验签状态和预发验收状态；`.env.production` 只作为兜底，不再是唯一配置入口。
 - 支付上线前补齐服务商证书配置、退款回调、关闭订单、真实对账单拉取和异常补偿流程。
 - 当前已具备票种、优惠码、支付流水、支付回调审计日志、支付对账差异、退款申请、退款审核、mock 回调幂等、微信/支付宝沙箱签名回调和退款幂等，真实支付接入前需要替换为服务商官方验签。
 - 当前已具备会员等级、会员档案、积分记录、会员价、积分抵扣、会员专属活动和优先报名窗口；更多权益规则上线前需补充权益计算测试。

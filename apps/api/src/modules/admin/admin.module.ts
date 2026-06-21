@@ -20,6 +20,7 @@ import { AgentSettlementTransfer } from "../../entities/agent-settlement-transfe
 import { AgentSettlement } from "../../entities/agent-settlement.entity";
 import { Agent } from "../../entities/agent.entity";
 import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { AmbassadorApplicationFollowup } from "../../entities/ambassador-application-followup.entity";
 import { AmbassadorCase } from "../../entities/ambassador-case.entity";
 import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
@@ -28,8 +29,11 @@ import { CharityFundSetting } from "../../entities/charity-fund-setting.entity";
 import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
 import { CharityProjectDisbursement } from "../../entities/charity-project-disbursement.entity";
 import { CharityProject } from "../../entities/charity-project.entity";
+import { CharityProjectUpdate } from "../../entities/charity-project-update.entity";
+import { Certificate } from "../../entities/certificate.entity";
 import { Coupon } from "../../entities/coupon.entity";
 import { ConversionEvent } from "../../entities/conversion-event.entity";
+import { Course } from "../../entities/course.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
@@ -53,7 +57,12 @@ import { Waitlist } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantRegionHitLog } from "../../entities/tenant-region-hit-log.entity";
 import { TenantRegion } from "../../entities/tenant-region.entity";
+import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
+import { VolunteerServiceRecord } from "../../entities/volunteer-service-record.entity";
+import { VolunteerTaskApplication } from "../../entities/volunteer-task-application.entity";
+import { VolunteerTask } from "../../entities/volunteer-task.entity";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
@@ -65,7 +74,7 @@ import { CharityFundService } from "../charity-fund.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, TenantRegion, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, HomepageSection, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement]),
+    TypeOrmModule.forFeature([Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, Course, H5AuthCodeLog, HomepageSection, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, Certificate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { api, downloadFile } from "../api";
 
 const loading = ref(false);
@@ -8,39 +8,30 @@ const savingSetting = ref(false);
 const savingCase = ref(false);
 const activeTab = ref("settings");
 const settingId = ref<number | null>(null);
-const settingForm = reactive<any>({
-  enabled: true,
-  config: {
-    heroTitle: "",
-    heroSubtitle: "",
-    heroCopy: "",
-    ctaText: "",
-    originalPrice: "",
-    earlyBirdPrice: "",
-    quotaText: "",
-    refundText: "",
-    customerWechat: "",
-    customerPhone: "",
-    backgroundImageUrl: "",
-    painPoints: [] as string[],
-    solutionItems: [] as string[],
-    benefits: [] as string[],
-    requirements: [] as string[],
-    faqs: [] as Array<{ question: string; answer: string }>,
-    entryPages: {}
-  }
-});
 const cases = ref<any[]>([]);
 const applications = ref<any[]>([]);
+const volunteerTasks = ref<any[]>([]);
+const volunteerApplications = ref<any[]>([]);
+const followups = ref<any[]>([]);
 const applicationFilter = reactive({ keyword: "", status: "", priority: "", source: "" });
 const caseDialogVisible = ref(false);
+const taskDialogVisible = ref(false);
+const followupDialogVisible = ref(false);
 const editingCaseId = ref<number | null>(null);
+const editingTaskId = ref<number | null>(null);
+const activeApplication = ref<any | null>(null);
 const caseForm = reactive({ name: "", field: "", avatarUrl: "", metrics: "", quote: "", sortOrder: 0, enabled: true });
+const taskForm = reactive({ title: "", type: "activity_support", city: "", address: "", startAt: "", endAt: "", quota: 1, status: "open", requirement: "", description: "" });
+const followupForm = reactive({ method: "wechat", result: "contacted", content: "", nextFollowAt: "" });
+const serviceForm = reactive({ applicationId: 0, hours: 2, title: "", proofUrl: "", feedback: "" });
 
 const statusText: Record<string, string> = {
   pending: "待跟进",
   contacted: "已联系",
+  screened: "已初筛",
+  interview: "待面谈",
   approved: "通过",
+  activated: "已激活",
   rejected: "拒绝"
 };
 const priorityText: Record<string, string> = {
@@ -53,9 +44,13 @@ const sourceOptions = [
   { value: "ambassador_apply", label: "大使申请", type: "danger" },
   { value: "aid_personal", label: "个人帮扶", type: "success" },
   { value: "aid_project", label: "项目帮扶", type: "success" },
+  { value: "volunteer_apply", label: "志愿者", type: "success" },
   { value: "brand_story_contact", label: "品牌咨询", type: "info" },
   { value: "", label: "文化大使旧入口", type: "info" }
 ];
+const taskStatusText: Record<string, string> = { draft: "草稿", open: "招募中", closed: "已关闭", completed: "已完成", archived: "已归档" };
+const taskTypeText: Record<string, string> = { activity_support: "活动协助", checkin: "签到接待", course_assistant: "课程助教", charity_execution: "公益执行", content_spread: "内容传播", aid_followup: "帮扶回访" };
+const volunteerStatusText: Record<string, string> = { pending: "待审核", approved: "已通过", rejected: "已拒绝", completed: "已完成", cancelled: "已取消" };
 const defaultEntryPages = {
   brandStory: {
     eyebrow: "七维书院 · 品牌故事",
@@ -106,16 +101,56 @@ const entryPageSections = [
   { key: "ambassadorApply", title: "大使申请页", publicPath: "/#/pages/apply/ambassador", itemLabel: "参与权益", flow: false, actions: false },
   { key: "aidApply", title: "帮扶申请页", publicPath: "/#/pages/apply/aid", itemLabel: "帮扶方向", flow: false, actions: false }
 ] as const;
+const settingForm = reactive<any>({
+  enabled: true,
+  config: {
+    heroTitle: "",
+    heroSubtitle: "",
+    heroCopy: "",
+    ctaText: "",
+    originalPrice: "",
+    earlyBirdPrice: "",
+    quotaText: "",
+    refundText: "",
+    customerWechat: "",
+    customerPhone: "",
+    backgroundImageUrl: "",
+    painPoints: [] as string[],
+    solutionItems: [] as string[],
+    benefits: [] as string[],
+    requirements: [] as string[],
+    faqs: [] as Array<{ question: string; answer: string }>,
+    entryPages: normalizeEntryPages({})
+  }
+});
 
 const landingUrl = computed(() => `${window.location.origin}/#/pages/ambassador/index`);
+const applicationStats = computed(() => {
+  const rows = applications.value || [];
+  const toFollow = rows.filter((row) => ["pending", "contacted", "screened", "interview"].includes(String(row.status || ""))).length;
+  const activated = rows.filter((row) => row.status === "activated").length;
+  const highPriority = rows.filter((row) => row.priority === "high").length;
+  const avgScore = rows.length ? rows.reduce((sum, row) => sum + scoreTotal(row), 0) / rows.length : 0;
+  return [
+    { label: "线索总数", value: rows.length, tip: "当前筛选条件下的全部招募与帮扶线索" },
+    { label: "待跟进", value: toFollow, tip: "待跟进、已联系、已初筛、待面谈" },
+    { label: "高意向", value: highPriority, tip: "线索等级为高" },
+    { label: "已激活", value: activated, tip: "已经通过并进入实际运营或服务" },
+    { label: "平均评分", value: avgScore.toFixed(1), tip: "五项能力评分平均值" }
+  ];
+});
+const statusStats = computed(() => Object.entries(statusText).map(([value, label]) => ({ value, label, count: applications.value.filter((row) => row.status === value).length })));
+const sourceStats = computed(() => sourceOptions.filter((item) => item.value).map((item) => ({ ...item, count: applications.value.filter((row) => row.source === item.value).length })));
 
 async function load() {
   loading.value = true;
   try {
-    const [setting, caseRows, applicationRows] = await Promise.all([api.get<any, any>("/admin/ambassador/settings"), api.get<any, any[]>("/admin/ambassador/cases"), api.get<any, any[]>("/admin/ambassador/applications")]);
+    const [setting, caseRows, applicationRows, tasks, taskApplications] = await Promise.all([api.get<any, any>("/admin/ambassador/settings"), api.get<any, any[]>("/admin/ambassador/cases"), api.get<any, any[]>("/admin/ambassador/applications"), api.get<any, any[]>("/admin/volunteer/tasks"), api.get<any, any[]>("/admin/volunteer/task-applications")]);
     applySetting(setting);
     cases.value = caseRows || [];
     applications.value = applicationRows || [];
+    volunteerTasks.value = tasks || [];
+    volunteerApplications.value = taskApplications || [];
   } catch (error: any) {
     ElMessage.error(error.message || "加载文化大使招募失败");
   } finally {
@@ -254,12 +289,88 @@ async function loadApplications() {
 
 async function updateApplication(row: any) {
   try {
-    const saved = await api.patch(`/admin/ambassador/applications/${row.id}`, { status: row.status, remark: row.remark || "", assignee: row.assignee || "", priority: row.priority || "normal", nextFollowAt: row.nextFollowAt || "" });
+    const saved = await api.patch(`/admin/ambassador/applications/${row.id}`, { status: row.status, remark: row.remark || "", assignee: row.assignee || "", priority: row.priority || "normal", nextFollowAt: row.nextFollowAt || "", cityResourceScore: Number(row.cityResourceScore || 0), communityScore: Number(row.communityScore || 0), contentScore: Number(row.contentScore || 0), charityScore: Number(row.charityScore || 0), deliveryScore: Number(row.deliveryScore || 0) });
     Object.assign(row, saved);
     ElMessage.success("跟进状态已保存");
   } catch (error: any) {
     ElMessage.error(error.message || "保存失败");
   }
+}
+
+async function openFollowups(row: any) {
+  activeApplication.value = row;
+  Object.assign(followupForm, { method: "wechat", result: "contacted", content: "", nextFollowAt: row.nextFollowAt || "" });
+  followups.value = await api.get<any, any[]>(`/admin/ambassador/applications/${row.id}/followups`);
+  followupDialogVisible.value = true;
+}
+
+async function saveFollowup() {
+  if (!activeApplication.value) return;
+  if (!followupForm.content.trim()) return ElMessage.error("请输入跟进内容");
+  try {
+    await api.post(`/admin/ambassador/applications/${activeApplication.value.id}/followups`, followupForm);
+    ElMessage.success("跟进记录已保存");
+    await openFollowups(activeApplication.value);
+    await loadApplications();
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存失败");
+  }
+}
+
+function openCreateTask() {
+  editingTaskId.value = null;
+  Object.assign(taskForm, { title: "", type: "activity_support", city: "", address: "", startAt: "", endAt: "", quota: 1, status: "open", requirement: "", description: "" });
+  taskDialogVisible.value = true;
+}
+
+function openEditTask(row: any) {
+  editingTaskId.value = row.id;
+  Object.assign(taskForm, { title: row.title || "", type: row.type || "activity_support", city: row.city || "", address: row.address || "", startAt: row.startAt ? formatTime(row.startAt) : "", endAt: row.endAt ? formatTime(row.endAt) : "", quota: Number(row.quota || 1), status: row.status || "open", requirement: row.requirement || "", description: row.description || "" });
+  taskDialogVisible.value = true;
+}
+
+async function saveTask() {
+  if (!taskForm.title.trim()) return ElMessage.error("请输入任务标题");
+  if (!taskForm.city.trim()) return ElMessage.error("请输入城市");
+  try {
+    const payload = { ...taskForm, address: taskForm.address || undefined, startAt: taskForm.startAt || undefined, endAt: taskForm.endAt || undefined };
+    if (editingTaskId.value) await api.patch(`/admin/volunteer/tasks/${editingTaskId.value}`, payload);
+    else await api.post("/admin/volunteer/tasks", payload);
+    ElMessage.success("志愿任务已保存");
+    taskDialogVisible.value = false;
+    volunteerTasks.value = await api.get<any, any[]>("/admin/volunteer/tasks");
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存失败");
+  }
+}
+
+async function updateVolunteerApplication(row: any) {
+  try {
+    const saved = await api.patch(`/admin/volunteer/task-applications/${row.id}`, { status: row.status, remark: row.remark || "" });
+    Object.assign(row, saved);
+    ElMessage.success("志愿报名状态已保存");
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存失败");
+  }
+}
+
+async function createServiceRecord(row: any) {
+  Object.assign(serviceForm, { applicationId: row.id, hours: 2, title: row.task?.title || "志愿服务", proofUrl: "", feedback: "" });
+  const { value: hours } = await ElMessageBox.prompt("请输入本次服务时长（小时）", "登记服务记录", { inputValue: String(serviceForm.hours), confirmButtonText: "下一步", cancelButtonText: "取消" });
+  serviceForm.hours = Number(hours || 0);
+  if (!Number.isFinite(serviceForm.hours) || serviceForm.hours < 0) return ElMessage.error("服务时长不正确");
+  const { value: feedback } = await ElMessageBox.prompt("填写服务评价或完成说明", "服务说明", { inputType: "textarea", inputValue: "任务已完成", confirmButtonText: "登记", cancelButtonText: "取消" });
+  try {
+    await api.post("/admin/volunteer/service-records", { ...serviceForm, feedback });
+    ElMessage.success("服务记录已登记");
+    volunteerApplications.value = await api.get<any, any[]>("/admin/volunteer/task-applications");
+  } catch (error: any) {
+    ElMessage.error(error.message || "登记失败");
+  }
+}
+
+function scoreTotal(row: any) {
+  return ["cityResourceScore", "communityScore", "contentScore", "charityScore", "deliveryScore"].reduce((sum, key) => sum + Number(row[key] || 0), 0);
 }
 
 async function exportApplications() {
@@ -297,6 +408,7 @@ function sourceTip(value?: string | null) {
   if (source === "ambassador_apply") return "文化大使、讲师、主理人申请";
   if (source === "aid_personal") return "个人学习帮扶、公益名额申请";
   if (source === "aid_project") return "公益项目方提交合作/帮扶项目";
+  if (source === "volunteer_apply") return "公益志愿者申请";
   if (source === "brand_story_contact") return "品牌故事页咨询线索";
   return "旧版文化大使入口或未标记来源";
 }
@@ -477,6 +589,31 @@ onMounted(load);
               <el-button @click="exportApplications">导出 Excel</el-button>
             </div>
           </div>
+          <div class="funnel-dashboard">
+            <div v-for="item in applicationStats" :key="item.label" class="funnel-stat">
+              <span>{{ item.label }}</span>
+              <strong>{{ item.value }}</strong>
+              <small>{{ item.tip }}</small>
+            </div>
+          </div>
+          <div class="funnel-bars">
+            <div>
+              <h4>状态分布</h4>
+              <div v-for="item in statusStats" :key="item.value" class="funnel-bar">
+                <span>{{ item.label }}</span>
+                <el-progress :percentage="applications.length ? Math.round((item.count / applications.length) * 100) : 0" :stroke-width="8" :show-text="false" />
+                <strong>{{ item.count }}</strong>
+              </div>
+            </div>
+            <div>
+              <h4>来源分布</h4>
+              <div v-for="item in sourceStats" :key="item.value" class="funnel-bar">
+                <span>{{ item.label }}</span>
+                <el-progress :percentage="applications.length ? Math.round((item.count / applications.length) * 100) : 0" :stroke-width="8" :show-text="false" />
+                <strong>{{ item.count }}</strong>
+              </div>
+            </div>
+          </div>
           <el-table :data="applications" stripe empty-text="暂无申请">
             <el-table-column label="申请类型" width="130" fixed="left">
               <template #default="{ row }">
@@ -499,6 +636,15 @@ onMounted(load);
                 </el-select>
               </template>
             </el-table-column>
+            <el-table-column label="评分" width="220">
+              <template #default="{ row }">
+                <div class="score-row">
+                  <el-input-number v-model="row.cityResourceScore" size="small" :min="0" :max="5" controls-position="right" @change="updateApplication(row)" />
+                  <el-input-number v-model="row.communityScore" size="small" :min="0" :max="5" controls-position="right" @change="updateApplication(row)" />
+                  <span>合计 {{ scoreTotal(row) }}</span>
+                </div>
+              </template>
+            </el-table-column>
             <el-table-column label="跟进人" width="140">
               <template #default="{ row }"><el-input v-model="row.assignee" size="small" placeholder="跟进人" @change="updateApplication(row)" /></template>
             </el-table-column>
@@ -516,13 +662,109 @@ onMounted(load);
               <template #default="{ row }"><el-input v-model="row.remark" size="small" placeholder="跟进备注" @change="updateApplication(row)" /></template>
             </el-table-column>
             <el-table-column label="提交时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
-            <el-table-column label="操作" width="140" fixed="right">
-              <template #default="{ row }"><el-button size="small" @click="copyWechatScript(row)">复制话术</el-button></template>
+            <el-table-column label="操作" width="190" fixed="right">
+              <template #default="{ row }">
+                <el-button size="small" @click="openFollowups(row)">跟进</el-button>
+                <el-button size="small" @click="copyWechatScript(row)">话术</el-button>
+              </template>
             </el-table-column>
           </el-table>
         </div>
       </el-tab-pane>
+
+      <el-tab-pane label="志愿任务" name="volunteer">
+        <div class="table-card">
+          <div class="table-head">
+            <h3>志愿任务</h3>
+            <el-button type="primary" @click="openCreateTask">新增任务</el-button>
+          </div>
+          <el-table :data="volunteerTasks" stripe empty-text="暂无志愿任务">
+            <el-table-column prop="title" label="任务" min-width="180" show-overflow-tooltip />
+            <el-table-column label="类型" width="120"><template #default="{ row }">{{ taskTypeText[row.type] || row.type }}</template></el-table-column>
+            <el-table-column prop="city" label="城市" width="110" />
+            <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.startAt) }}</template></el-table-column>
+            <el-table-column prop="quota" label="名额" width="80" />
+            <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag>{{ taskStatusText[row.status] || row.status }}</el-tag></template></el-table-column>
+            <el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button size="small" @click="openEditTask(row)">编辑</el-button></template></el-table-column>
+          </el-table>
+        </div>
+
+        <div class="table-card">
+          <div class="table-head">
+            <h3>任务报名</h3>
+          </div>
+          <el-table :data="volunteerApplications" stripe empty-text="暂无任务报名">
+            <el-table-column label="任务" min-width="180" show-overflow-tooltip><template #default="{ row }">{{ row.task?.title || "-" }}</template></el-table-column>
+            <el-table-column prop="name" label="姓名" width="100" />
+            <el-table-column prop="phone" label="手机号" width="130" />
+            <el-table-column prop="city" label="城市" width="110" />
+            <el-table-column prop="message" label="说明" min-width="220" show-overflow-tooltip />
+            <el-table-column label="状态" width="130">
+              <template #default="{ row }">
+                <el-select v-model="row.status" size="small" @change="updateVolunteerApplication(row)">
+                  <el-option v-for="(label, value) in volunteerStatusText" :key="value" :label="label" :value="value" />
+                </el-select>
+              </template>
+            </el-table-column>
+            <el-table-column label="备注" min-width="180"><template #default="{ row }"><el-input v-model="row.remark" size="small" @change="updateVolunteerApplication(row)" /></template></el-table-column>
+            <el-table-column label="操作" width="130" fixed="right"><template #default="{ row }"><el-button size="small" type="primary" @click="createServiceRecord(row)">登记完成</el-button></template></el-table-column>
+          </el-table>
+        </div>
+      </el-tab-pane>
     </el-tabs>
+
+    <el-dialog v-model="followupDialogVisible" :title="activeApplication ? `跟进记录：${activeApplication.name}` : '跟进记录'" width="680px" destroy-on-close>
+      <el-form :model="followupForm" label-width="96px">
+        <el-form-item label="沟通方式"><el-input v-model="followupForm.method" maxlength="40" placeholder="微信/电话/面谈" /></el-form-item>
+        <el-form-item label="结果">
+          <el-select v-model="followupForm.result">
+            <el-option label="已联系" value="contacted" />
+            <el-option label="已初筛" value="screened" />
+            <el-option label="待面谈" value="interview" />
+            <el-option label="通过" value="approved" />
+            <el-option label="已激活" value="activated" />
+            <el-option label="拒绝" value="rejected" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="下次跟进"><el-date-picker v-model="followupForm.nextFollowAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
+        <el-form-item label="跟进内容"><el-input v-model="followupForm.content" type="textarea" :rows="4" /></el-form-item>
+      </el-form>
+      <el-button type="primary" @click="saveFollowup">保存跟进</el-button>
+      <div class="followup-list">
+        <div v-for="item in followups" :key="item.id" class="followup-item">
+          <strong>{{ item.result }} · {{ item.method }}</strong>
+          <span>{{ formatTime(item.createdAt) }} · {{ item.operator?.username || "平台" }}</span>
+          <p>{{ item.content }}</p>
+        </div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="taskDialogVisible" :title="editingTaskId ? '编辑志愿任务' : '新增志愿任务'" width="620px" destroy-on-close>
+      <el-form :model="taskForm" label-width="96px">
+        <el-form-item label="任务标题" required><el-input v-model="taskForm.title" maxlength="120" /></el-form-item>
+        <el-form-item label="任务类型">
+          <el-select v-model="taskForm.type">
+            <el-option v-for="(label, value) in taskTypeText" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="城市" required><el-input v-model="taskForm.city" maxlength="80" /></el-form-item>
+        <el-form-item label="地点"><el-input v-model="taskForm.address" maxlength="160" /></el-form-item>
+        <el-form-item label="时间">
+          <div class="inline-fields">
+            <el-date-picker v-model="taskForm.startAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="开始" />
+            <el-date-picker v-model="taskForm.endAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="结束" />
+          </div>
+        </el-form-item>
+        <el-form-item label="名额"><el-input-number v-model="taskForm.quota" :min="1" /></el-form-item>
+        <el-form-item label="状态"><el-select v-model="taskForm.status"><el-option v-for="(label, value) in taskStatusText" :key="value" :label="label" :value="value" /></el-select></el-form-item>
+        <el-form-item label="要求"><el-input v-model="taskForm.requirement" type="textarea" :rows="2" /></el-form-item>
+        <el-form-item label="说明"><el-input v-model="taskForm.description" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="taskDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveTask">保存</el-button>
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="caseDialogVisible" :title="editingCaseId ? '编辑案例' : '新增案例'" width="560px" destroy-on-close>
       <el-form :model="caseForm" label-width="96px">
@@ -585,6 +827,58 @@ onMounted(load);
   border-radius: 8px;
   background: #fff;
 }
+.funnel-dashboard {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin: 14px 0;
+}
+.funnel-stat {
+  min-height: 92px;
+  padding: 12px;
+  border: 1px solid #eef2f7;
+  border-radius: 8px;
+  background: #f8fafc;
+}
+.funnel-stat span,
+.funnel-stat strong,
+.funnel-stat small {
+  display: block;
+}
+.funnel-stat span {
+  color: #667085;
+  font-size: 13px;
+}
+.funnel-stat strong {
+  margin-top: 8px;
+  color: #101828;
+  font-size: 24px;
+}
+.funnel-stat small {
+  margin-top: 6px;
+  color: #98a2b3;
+  line-height: 1.4;
+}
+.funnel-bars {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  margin-bottom: 14px;
+}
+.funnel-bars h4 {
+  margin: 0 0 8px;
+}
+.funnel-bar {
+  display: grid;
+  grid-template-columns: 80px minmax(0, 1fr) 36px;
+  align-items: center;
+  gap: 8px;
+  min-height: 28px;
+}
+.funnel-bar span,
+.funnel-bar strong {
+  font-size: 13px;
+}
 .tabs {
   display: flex;
   flex-direction: column;
@@ -619,6 +913,40 @@ onMounted(load);
 .entry-list {
   width: 100%;
 }
+.score-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.score-row :deep(.el-input-number) {
+  width: 64px;
+}
+.score-row span {
+  color: #667085;
+  font-size: 12px;
+}
+.followup-list {
+  margin-top: 18px;
+  border-top: 1px solid #eef2f7;
+}
+.followup-item {
+  padding: 12px 0;
+  border-bottom: 1px solid #eef2f7;
+}
+.followup-item strong,
+.followup-item span {
+  display: block;
+}
+.followup-item span {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+}
+.followup-item p {
+  margin: 8px 0 0;
+  color: #344054;
+  white-space: pre-wrap;
+}
 @media (max-width: 900px) {
   .toolbar,
   .table-head,
@@ -629,9 +957,14 @@ onMounted(load);
     flex-direction: column;
   }
   .grid-two,
+  .funnel-dashboard,
+  .funnel-bars,
   .repeat-row,
   .faq-row {
     grid-template-columns: 1fr;
+  }
+  .funnel-bar {
+    grid-template-columns: 72px minmax(0, 1fr) 32px;
   }
 }
 </style>

@@ -1,4 +1,5 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { MallMerchant } from "./mall-merchant.entity";
 import { MallOrder } from "./mall-order.entity";
 import { MallRefund } from "./mall-refund.entity";
 import { Tenant } from "./tenant.entity";
@@ -16,6 +17,9 @@ export class MallRefundLog {
 
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
   tenant!: Tenant | null;
+
+  @ManyToOne(() => MallMerchant, { eager: true, nullable: true, onDelete: "SET NULL" })
+  merchant!: MallMerchant | null;
 
   @Column({ type: "varchar", length: 40 })
   provider!: string;

@@ -1,6 +1,8 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Tenant } from "./tenant.entity";
 
+export type TenantRegionBoundaryPoint = { lat: number; lng: number };
+
 @Entity("tenant_regions")
 export class TenantRegion {
   @PrimaryGeneratedColumn()
@@ -29,6 +31,9 @@ export class TenantRegion {
 
   @Column({ type: "int", default: 5000 })
   radiusMeters!: number;
+
+  @Column({ type: "json", nullable: true })
+  boundaryPoints!: TenantRegionBoundaryPoint[] | null;
 
   @Column({ type: "boolean", default: true })
   exclusive!: boolean;

@@ -1,10 +1,11 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
+import { Response } from "express";
 import { mkdirSync } from "fs";
 import { diskStorage } from "multer";
 import { join } from "path";
 import { PublicService, PublicTenantContext } from "./public.service";
-import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, WechatLoginDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto } from "./dto";
 
 const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -55,8 +56,12 @@ export class PublicController {
   }
 
   @Get("tenants/resolve")
-  resolveTenant(@Query("lat") lat?: string, @Query("lng") lng?: string) {
-    return this.service.resolveTenantByLocation(lat, lng);
+  resolveTenant(@Req() req: any, @Query("lat") lat?: string, @Query("lng") lng?: string, @Query("source") source?: string) {
+    return this.service.resolveTenantByLocation(lat, lng, {
+      source,
+      clientIp: this.clientIp(req),
+      userAgent: req.headers?.["user-agent"] || null
+    });
   }
 
   @Get("homepage")
@@ -84,6 +89,11 @@ export class PublicController {
     return this.service.charityProjects();
   }
 
+  @Get("charity/projects/:id/updates")
+  charityProjectUpdates(@Param("id", ParseIntPipe) id: number) {
+    return this.service.charityProjectUpdates(id);
+  }
+
   @Get("ambassador/landing")
   ambassadorLanding() {
     return this.service.ambassadorLanding();
@@ -92,6 +102,23 @@ export class PublicController {
   @Post("ambassador/applications")
   submitAmbassadorApplication(@Body() dto: AmbassadorApplicationDto) {
     return this.service.submitAmbassadorApplication(dto);
+  }
+
+  @Get("volunteer/tasks")
+  volunteerTasks(@Query("city") city?: string) {
+    return this.service.volunteerTasks(city);
+  }
+
+  @Post("volunteer/apply")
+  async applyVolunteer(@Body() dto: VolunteerApplyDto, @Req() req: any) {
+    const user = this.service.optionalUserFromAuthorization(req.headers?.authorization);
+    return this.service.applyVolunteer(dto, await user);
+  }
+
+  @Post("volunteer/tasks/:id/apply")
+  async applyVolunteerTask(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskApplyDto, @Req() req: any) {
+    const user = this.service.optionalUserFromAuthorization(req.headers?.authorization);
+    return this.service.applyVolunteerTask(id, dto, await user);
   }
 
   @Get("activities")
@@ -216,6 +243,15 @@ export class PublicController {
     return this.service.myCertificates(user);
   }
 
+  @Get("me/certificates/:id/download")
+  async downloadMyCertificate(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Res() res: Response) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const result = await this.service.myCertificateDownload(user, id);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(result.filename)}"`);
+    res.end(result.svg);
+  }
+
   @Get("me/favorite-courses")
   async myFavoriteCourses(@Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
@@ -337,6 +373,12 @@ export class PublicController {
   async myCharityTransactions(@Req() req: any, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myCharityTransactions(user, page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
+  }
+
+  @Get("me/volunteer")
+  async myVolunteer(@Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myVolunteer(user);
   }
 
   @Get("me/registrations")

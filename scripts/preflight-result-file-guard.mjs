@@ -2,7 +2,8 @@ import fs from "node:fs";
 
 const resultFiles = [
   "deploy/real-payment-smoke-result.json",
-  "deploy/tenant-smoke-result.json"
+  "deploy/tenant-smoke-result.json",
+  "deploy/mall-multi-merchant-smoke-result.json"
 ];
 
 const failures = [];
@@ -35,8 +36,10 @@ const gitignore = read(".gitignore");
 const packageJson = JSON.parse(read("package.json"));
 const preflightChain = read("scripts/preflight-chain-guard.mjs");
 const preflight = read("scripts/preflight.mjs");
+const prelaunch = read("scripts/prelaunch-online-showcase.mjs");
 const realPaymentSmoke = read("scripts/real-payment-smoke-result.mjs");
 const tenantSmoke = read("scripts/tenant-smoke.mjs");
+const mallMultiMerchantSmoke = read("scripts/smoke-mall-multi-merchant.mjs");
 const realPaymentPlan = read("docs/real-payment-integration-plan.md");
 const tenantPlan = read("docs/multi-tenant-isolation-plan.md");
 const runbook = read("docs/production-runbook.md");
@@ -51,11 +54,18 @@ for (const file of resultFiles) {
 
 check(exists("deploy/real-payment-smoke-result.example.json"), "real payment smoke result example must exist.");
 check(exists("deploy/tenant-smoke-result.example.json"), "tenant smoke result example must exist.");
+check(exists("deploy/mall-multi-merchant-smoke-result.example.json"), "mall multi-merchant smoke result example must exist.");
 checkSourceIncludes(realPaymentSmoke, "process.env.REAL_PAYMENT_PREFLIGHT_RESULT_FILE", "real payment smoke script");
 checkSourceIncludes(realPaymentSmoke, "deploy/real-payment-smoke-result.json", "real payment smoke script");
 checkSourceIncludes(tenantSmoke, "process.env.TENANT_SMOKE_RESULT_FILE", "tenant smoke script");
 checkSourceIncludes(tenantSmoke, "process.env.MULTI_TENANT_PREFLIGHT_RESULT_FILE", "tenant smoke script");
 checkSourceIncludes(tenantSmoke, "deploy/tenant-smoke-result.json", "tenant smoke script");
+check(gitignoreHas(gitignore, "deploy/mall-multi-merchant-smoke-result.json"), ".gitignore must ignore deploy/mall-multi-merchant-smoke-result.json.");
+checkSourceIncludes(mallMultiMerchantSmoke, "process.env.MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE", "multi-merchant mall smoke script");
+checkSourceIncludes(mallMultiMerchantSmoke, "deploy/mall-multi-merchant-smoke-result.json", "multi-merchant mall smoke script");
+checkSourceIncludes(mallMultiMerchantSmoke, "writeSmokeResult", "multi-merchant mall smoke script");
+checkSourceIncludes(prelaunch, "deploy/mall-multi-merchant-smoke-result.json", "prelaunch script");
+checkSourceIncludes(prelaunch, "validateMallMultiMerchantSmokeEvidence", "prelaunch script");
 
 checkSourceIncludes(packageJson.scripts?.["smoke:real-payment"] || "", "scripts/real-payment-smoke-result.mjs", "package smoke:real-payment script");
 checkSourceIncludes(packageJson.scripts?.["smoke:tenant"] || "", "scripts/tenant-smoke.mjs", "package smoke:tenant script");
@@ -68,6 +78,9 @@ checkSourceIncludes(realPaymentPlan, "deploy/real-payment-smoke-result.json", "r
 checkSourceIncludes(realPaymentPlan, "npm run smoke:real-payment", "real payment integration plan");
 checkSourceIncludes(runbook, "deploy/real-payment-smoke-result.json", "production runbook");
 checkSourceIncludes(launchChecklist, "deploy/real-payment-smoke-result.json", "launch checklist");
+checkSourceIncludes(runbook, "deploy/mall-multi-merchant-smoke-result.json", "production runbook");
+checkSourceIncludes(launchChecklist, "deploy/mall-multi-merchant-smoke-result.json", "launch checklist");
+checkSourceIncludes(progress, "deploy/mall-multi-merchant-smoke-result.json", "project progress");
 
 checkSourceIncludes(tenantPlan, "deploy/tenant-smoke-result.json", "multi-tenant isolation plan");
 checkSourceIncludes(tenantPlan, "npm run smoke:tenant", "multi-tenant isolation plan");

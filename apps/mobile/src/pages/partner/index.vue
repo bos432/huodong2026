@@ -68,17 +68,18 @@ onShow(() => {
 <template>
   <view class="partner-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
-    <PageDecorationBlocks :sections="contentSections" />
 
-    <view class="hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#ffffff') }">
+    <view class="hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
       <view class="eyebrow">七维文化城市合伙人</view>
-      <view class="headline" :style="{ color: String(innerPageLayout.headerTextColor || '#111827') }">{{ innerPageConfig.title || "把一座城市的好活动，装进自己的运营后台" }}</view>
-      <view class="desc" :style="{ color: String(innerPageLayout.headerSubtitleColor || '#475467') }">{{ innerPageConfig.subtitle || "适合文化空间、书院、培训机构、书法教室、读书会主理人和本地社群运营者，用 SaaS 后台独立发布活动、管理报名、收款对账和沉淀会员。" }}</view>
+      <view class="headline" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "把一座城市的好活动，装进自己的运营后台" }}</view>
+      <view class="desc" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "适合文化空间、书院、培训机构、书法教室、读书会主理人和本地社群运营者，用 SaaS 后台独立发布活动、管理报名、收款对账和沉淀会员。" }}</view>
       <view class="hero-actions">
         <view class="primary-action" @click="copy(setting?.customerServiceWechat || setting?.customerServicePhone)">咨询合作</view>
         <view class="secondary-action" @click="callPhone">电话沟通</view>
       </view>
     </view>
+
+    <PageDecorationBlocks :sections="contentSections" />
 
     <view class="section">
       <view class="section-title">合作对象</view>
@@ -159,30 +160,49 @@ onShow(() => {
 </template>
 
 <style scoped>
-.partner-page { min-height: 100vh; padding: 24rpx; background: var(--page-bg-layer, #f5f7fb); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #172033); }
+.partner-page { min-height: 100vh; padding: 24rpx; background: var(--page-bg-layer, #f5f0e8); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #333333); }
 .partner-page.has-custom-nav { padding-bottom: 160rpx; }
-.hero { padding: 38rpx 28rpx 30rpx; border-radius: 8px; background: linear-gradient(135deg, #f7fbf8 0%, #ffffff 46%, #f4f7fb 100%); border: 1px solid #dfe7e5; box-shadow: 0 14rpx 36rpx rgba(15, 23, 42, 0.07); }
-.eyebrow { color: #0f766e; font-size: 25rpx; font-weight: 900; }
-.headline { margin-top: 16rpx; color: #111827; font-size: 46rpx; line-height: 1.18; font-weight: 900; }
+.hero {
+  position: relative;
+  overflow: hidden;
+  padding: 42rpx 30rpx 32rpx;
+  border-radius: 24rpx;
+  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+}
+.hero::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(180deg, rgba(34, 24, 19, 0.04), rgba(34, 24, 19, 0.22));
+  pointer-events: none;
+}
+.hero > view {
+  position: relative;
+  z-index: 1;
+}
+.eyebrow { color: rgba(255, 248, 240, 0.78); font-size: 25rpx; font-weight: 900; }
+.headline { margin-top: 16rpx; color: #fff8f0; font-size: 46rpx; line-height: 1.18; font-weight: 700; font-family: "STKaiti", "KaiTi", serif; }
 .desc { margin-top: 18rpx; color: #475467; font-size: 27rpx; line-height: 1.7; }
 .hero-actions, .contact-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 18rpx; margin-top: 28rpx; }
-.primary-action, .secondary-action { height: 82rpx; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 28rpx; font-weight: 900; }
-.primary-action { color: #fff; background: #0f766e; }
-.secondary-action { color: #0f766e; background: #e8f3ef; }
-.section { margin-top: 22rpx; padding: 26rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); border: 1px solid #e6ebf0; }
-.section-title { color: var(--text-color, #111827); font-size: 32rpx; font-weight: 900; margin-bottom: 18rpx; }
+.primary-action, .secondary-action { min-height: 82rpx; border-radius: 18rpx; display: flex; align-items: center; justify-content: center; font-size: 28rpx; font-weight: 900; }
+.primary-action { color: #fff; background: #c43d3d; }
+.hero .primary-action { background: rgba(255, 248, 240, 0.22); color: #fff8f0; border: 1px solid rgba(255, 248, 240, 0.22); }
+.secondary-action { color: #4a6b8a; background: rgba(74, 107, 138, 0.12); }
+.hero .secondary-action { color: #fff8f0; background: rgba(255, 248, 240, 0.12); border: 1px solid rgba(255, 248, 240, 0.16); }
+.section { margin-top: 22rpx; padding: 26rpx; border-radius: 24rpx; background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
+.section-title { color: var(--text-color, #333333); font-size: 32rpx; font-weight: 900; margin-bottom: 18rpx; font-family: "STKaiti", "KaiTi", serif; }
 .target-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; }
-.target-item { min-height: 70rpx; padding: 0 18rpx; border-radius: 6px; display: flex; align-items: center; background: #f4f7fb; color: #344054; font-size: 26rpx; font-weight: 800; }
+.target-item { min-height: 72rpx; padding: 0 18rpx; border-radius: 18rpx; display: flex; align-items: center; background: #f9f4ee; color: #666666; font-size: 26rpx; font-weight: 800; }
 .benefit-list { display: grid; gap: 18rpx; }
-.benefit { padding-bottom: 18rpx; border-bottom: 1px solid #edf0f5; }
+.benefit { padding-bottom: 18rpx; border-bottom: 1px solid #e8e0d8; }
 .benefit:last-child { padding-bottom: 0; border-bottom: 0; }
-.benefit-title, .activity-title { color: #172033; font-size: 28rpx; font-weight: 900; }
-.benefit-desc, .activity-desc { margin-top: 8rpx; color: #667085; font-size: 26rpx; line-height: 1.65; }
+.benefit-title, .activity-title { color: #333333; font-size: 28rpx; font-weight: 900; }
+.benefit-desc, .activity-desc { margin-top: 8rpx; color: #666666; font-size: 26rpx; line-height: 1.65; }
 .activity-stack { display: grid; gap: 16rpx; }
-.activity-card { padding: 20rpx; border-radius: 6px; background: #fbfcfd; border: 1px solid #edf0f5; }
+.activity-card { padding: 20rpx; border-radius: 18rpx; background: #fffaf4; border: 1px solid #e8e0d8; }
 .steps { display: grid; gap: 18rpx; }
-.step { display: grid; grid-template-columns: 48rpx 1fr; gap: 16rpx; align-items: start; color: #344054; font-size: 26rpx; line-height: 1.6; }
-.step text { width: 48rpx; height: 48rpx; border-radius: 999px; background: #0f766e; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24rpx; font-weight: 900; }
+.step { display: grid; grid-template-columns: 48rpx 1fr; gap: 16rpx; align-items: start; color: #666666; font-size: 26rpx; line-height: 1.6; }
+.step text { width: 48rpx; height: 48rpx; border-radius: 999px; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24rpx; font-weight: 900; }
 .contact { margin-bottom: 30rpx; }
-.contact-line { color: #344054; font-size: 27rpx; line-height: 1.7; overflow-wrap: anywhere; }
+.contact-line { color: #666666; font-size: 27rpx; line-height: 1.7; overflow-wrap: anywhere; }
 </style>

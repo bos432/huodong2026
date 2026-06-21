@@ -20,6 +20,8 @@ import {
 } from "./online-showcase-lib.mjs";
 
 const showcasePassword = env("SHOWCASE_PASSWORD");
+const DEFAULT_ACTIVITY_CAPACITY = 40;
+const ACTIVITY_CAPACITY_BUFFER = 120;
 
 const permissions = [
   "dashboard.view",
@@ -44,11 +46,19 @@ const permissions = [
   "finance.view",
   "finance.export",
   "finance.wallet_adjust",
+  "mall.merchant.manage",
+  "mall.merchant.view",
   "mall.product.manage",
+  "mall.product.audit",
+  "mall.review.manage",
+  "mall.logistics.manage",
   "mall.order.view",
   "mall.order.manage",
   "mall.refund.manage",
   "mall.finance.view",
+  "mall.payment.manage",
+  "mall.settlement.manage",
+  "mall.statistics.view",
   "payment_account.view",
   "payment_account.manage",
   "agent_settlement.view",
@@ -78,7 +88,7 @@ const permissions = [
 const accounts = [
   { username: "showcase_admin", role: "super_admin", permissions },
   { username: "showcase_ops", role: "operator", permissions: permissions.filter((item) => !item.startsWith("finance") && !item.startsWith("agent_settlement") && !item.startsWith("payment_account") && item !== "order.refund" && item !== "order.export") },
-  { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "member.view", "upload.settlement_proof"] },
+  { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "mall.merchant.manage", "mall.merchant.view", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "member.view", "upload.settlement_proof"] },
   { username: "showcase_checkin", role: "checkin_staff", permissions: ["dashboard.view", "activity.view", "registration.view", "checkin.manage"] }
 ];
 
@@ -115,15 +125,16 @@ async function main() {
   const tenant = await ensureTenant(platform.token);
   await ensureTenantRegion(platform.token, tenant.id);
   await ensureAccounts(platform.token, tenant.id);
+  const defaultMerchant = await ensureMallDefaultStore(platform.token, tenant.id);
 
   const showcaseAdmin = await loginShowcaseAdmin("showcase_admin");
   await ensureOperationSettings(showcaseAdmin.token);
   await ensureHomepage(showcaseAdmin.token);
-  await ensureAnnouncements(showcaseAdmin.token);
-  await ensureActivities(showcaseAdmin.token);
-  await ensureCourses(showcaseAdmin.token);
-  await ensureCommunity(showcaseAdmin.token);
-  await ensureMall(showcaseAdmin.token);
+  await ensureAnnouncements(showcaseAdmin.token, tenant.id);
+  await ensureActivities(showcaseAdmin.token, tenant.id);
+  await ensureCourses(showcaseAdmin.token, tenant.id);
+  await ensureCommunity(showcaseAdmin.token, tenant.id);
+  await ensureMall(showcaseAdmin.token, tenant.id, defaultMerchant.id);
   await ensureMembersAndWallets(showcaseAdmin.token, platform.token, tenant.id);
 
   console.log("\n线上演示商家数据已准备完成。");
@@ -200,6 +211,57 @@ async function ensureAccounts(token, tenantId) {
     }
   }
   reportStep("演示后台账号已创建/更新");
+}
+
+async function ensureMallDefaultStore(token, tenantId) {
+  const merchants = pickList(await api(`/admin/mall/merchants?tenantId=${tenantId}`, { headers: auth(token) }));
+  const payload = {
+    tenantId,
+    ownerType: "tenant",
+    code: "qiwai-showcase-main",
+    name: "七维书院自营店",
+    status: "active",
+    mallEnabled: true,
+    productAuditRequired: false,
+    paymentMode: "platform_collect",
+    region: "重庆市铜梁区",
+    contactName: "七维演示运营",
+    contactPhone: "13990009999",
+    notice: "书院自营商品、课程周边和公益好物统一从这里发货。",
+    remark: `demoScenario:${SCENARIO} default mall merchant`
+  };
+  const existing = merchants.find((item) => item.code === payload.code);
+  let merchant = existing
+    ? existing
+    : await api("/admin/mall/merchants", { method: "POST", headers: auth(token), body: JSON.stringify({ ...payload, status: "disabled", mallEnabled: false }) });
+  const admins = pickList(await api(`/admin/admins?includeSmoke=true&pageSize=300`, { headers: auth(token) }));
+  for (const username of ["showcase_admin", "showcase_ops", "showcase_finance"]) {
+    const admin = admins.find((item) => item.username === username);
+    if (!admin) continue;
+    await api("/admin/mall/merchant-access", {
+      method: "POST",
+      headers: auth(token),
+      body: JSON.stringify({ adminId: admin.id, merchantId: merchant.id, accessRole: username.includes("finance") ? "finance" : "manager", enabled: true })
+    });
+  }
+  const mutablePayload = existing
+    ? {
+        tenantId: payload.tenantId,
+        name: payload.name,
+        status: payload.status,
+        mallEnabled: payload.mallEnabled,
+        productAuditRequired: payload.productAuditRequired,
+        paymentMode: payload.paymentMode,
+        region: payload.region,
+        contactName: payload.contactName,
+        contactPhone: payload.contactPhone,
+        notice: payload.notice,
+        remark: payload.remark
+      }
+    : payload;
+  merchant = await api(`/admin/mall/merchants/${merchant.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(mutablePayload) });
+  reportStep("演示商城默认店铺与后台授权已配置", merchant.name);
+  return merchant;
 }
 
 async function ensureOperationSettings(token) {
@@ -357,10 +419,11 @@ async function ensureHomepage(token) {
   reportStep("H5 首页装修已重置为演示版");
 }
 
-async function ensureAnnouncements(token) {
+async function ensureAnnouncements(token, tenantId) {
   const existing = pickList(await api("/admin/announcements", { headers: auth(token) }));
   const title = "【演示】七维书院运营闭环验收说明";
   const payload = {
+    tenantId,
     title,
     type: "operation",
     content: "本页面为 qiwai-showcase 演示商家，覆盖活动报名、余额支付、退款、签到、课程学习、动态评论审核等上线验收场景。",
@@ -373,20 +436,27 @@ async function ensureAnnouncements(token) {
   reportStep("演示公告已配置");
 }
 
-async function ensureActivities(token) {
+async function ensureActivities(token, tenantId) {
   const existing = pickList(await api("/admin/activities?pageSize=200", { headers: auth(token) }));
   for (const [index, [title, price, category, description]] of activities.entries()) {
-    const payload = activityPayload(title, price, category, description, index);
     const row = existing.find((item) => item.title === title);
+    const capacity = showcaseCapacity(row);
+    const payload = { ...activityPayload(title, price, category, description, index, capacity), tenantId };
     const activity = row
       ? await api(`/admin/activities/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) })
       : await api("/admin/activities", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
-    await ensureTicketType(token, activity.id, price);
+    await ensureTicketType(token, activity.id, price, capacity);
   }
   reportStep("活动与票种已创建/更新", "6 个活动，覆盖免费和收费");
 }
 
-function activityPayload(title, price, category, description, index) {
+function showcaseCapacity(row) {
+  const existingCapacity = Number(row?.capacity || 0);
+  const registeredCount = Number(row?.registeredCount || 0);
+  return Math.max(DEFAULT_ACTIVITY_CAPACITY, existingCapacity, registeredCount + ACTIVITY_CAPACITY_BUFFER);
+}
+
+function activityPayload(title, price, category, description, index, capacity = DEFAULT_ACTIVITY_CAPACITY) {
   return {
     title,
     coverUrl: cover(index),
@@ -398,7 +468,7 @@ function activityPayload(title, price, category, description, index) {
     startTime: futureDate(5 + index, 14 + (index % 3)),
     endTime: futureDate(5 + index, 16 + (index % 3)),
     registrationDeadline: futureDate(4 + index, 22),
-    capacity: 40,
+    capacity,
     price,
     status: "open",
     featured: index < 3,
@@ -419,18 +489,19 @@ function activityPayload(title, price, category, description, index) {
   };
 }
 
-async function ensureTicketType(token, activityId, price) {
+async function ensureTicketType(token, activityId, price, capacity = DEFAULT_ACTIVITY_CAPACITY) {
   const list = pickList(await api(`/admin/ticket-types?activityId=${activityId}`, { headers: auth(token) }));
-  const payload = { activityId, name: price > 0 ? "演示标准票" : "免费体验票", price, capacity: 40, enabled: true };
+  const payload = { activityId, name: price > 0 ? "演示标准票" : "免费体验票", price, capacity, enabled: true };
   const existing = list.find((item) => item.name === payload.name);
   if (existing) await api(`/admin/ticket-types/${existing.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
   else await api("/admin/ticket-types", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
 }
 
-async function ensureCourses(token) {
+async function ensureCourses(token, tenantId) {
   const existing = pickList(await api("/admin/courses?status=published", { headers: auth(token) }));
   for (const [index, [title, price, teacherName, tags]] of courses.entries()) {
     const payload = {
+      tenantId,
       title,
       description: `${title}适合作为书院线上课程样板：包含试看课时、系统课时、后台确认收款、已购课程和学习进度记录。`,
       coverUrl: cover(index + 3),
@@ -473,11 +544,11 @@ async function ensureCourseContent(token, courseId) {
   }
 }
 
-async function ensureCommunity(token) {
+async function ensureCommunity(token, tenantId) {
   await api("/admin/checkin-tasks", {
     method: "POST",
     headers: auth(token),
-    body: JSON.stringify({ date: todayDate(), title: "【演示】今日书院共修打卡", description: "完成 10 分钟阅读或书写，并记录今天的一个小收获。" })
+    body: JSON.stringify({ tenantId, date: todayDate(), title: "【演示】今日书院共修打卡", description: "完成 10 分钟阅读或书写，并记录今天的一个小收获。" })
   }).catch(() => null);
 
   const communityActivities = pickList(await api("/admin/community-activities", { headers: auth(token) }));
@@ -486,7 +557,7 @@ async function ensureCommunity(token) {
     await api("/admin/community-activities", {
       method: "POST",
       headers: auth(token),
-      body: JSON.stringify({ title: caTitle, description: "用于展示共修活动入口和运营内容。", startTime: futureDate(8, 9), location: "七维书院演示空间", coverUrl: cover(5), status: "published" })
+      body: JSON.stringify({ tenantId, title: caTitle, description: "用于展示共修活动入口和运营内容。", startTime: futureDate(8, 9), location: "七维书院演示空间", coverUrl: cover(5), status: "published" })
     });
   }
 
@@ -496,25 +567,27 @@ async function ensureCommunity(token) {
     await api("/admin/community-posts", {
       method: "POST",
       headers: auth(token),
-      body: JSON.stringify({ userId: 1, content, images: [cover(index)], likes: 5 + index * 3, comments: 0, visible: true })
+      body: JSON.stringify({ tenantId, userId: 1, content, images: [cover(index)], likes: 5 + index * 3, comments: 0, visible: true })
     });
   }
   reportStep("共修、打卡和书院动态已创建/更新");
 }
 
-async function ensureMall(token) {
+async function ensureMall(token, tenantId, merchantId) {
+  assert(merchantId, "演示商城 seed 缺少默认店铺 merchantId");
+  const merchantQuery = `merchantId=${merchantId}`;
   const categoryNames = ["书院文创", "学习用品", "公益好物"];
-  const existingCategories = pickList(await api("/admin/mall/categories", { headers: auth(token) }));
+  const existingCategories = pickList(await api(`/admin/mall/categories?${merchantQuery}`, { headers: auth(token) }));
   const categories = [];
   for (const [index, name] of categoryNames.entries()) {
-    const payload = { name, sortOrder: index + 1, enabled: true };
+    const payload = { tenantId, merchantId, name, sortOrder: index + 1, enabled: true };
     const row = existingCategories.find((item) => item.name === name);
     const saved = row
       ? await api(`/admin/mall/categories/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) })
       : await api("/admin/mall/categories", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
     categories.push(saved);
   }
-  const existing = pickList(await api("/admin/mall/products?pageSize=200", { headers: auth(token) }));
+  const existing = pickList(await api(`/admin/mall/products?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
   const products = [
     ["【演示】七维书院读书手账", "学习用品", 39, 69, "适合晨读、课程笔记和共修打卡记录，演示商城余额支付与线下收款。"],
     ["【演示】东方美学书签套装", "书院文创", 19, 39, "铜版纸书签 6 枚装，适合作为活动伴手礼和课程赠品。"],
@@ -525,6 +598,8 @@ async function ensureMall(token) {
     const category = categories.find((item) => item.name === categoryName);
     const payload = {
       categoryId: category?.id,
+      tenantId,
+      merchantId,
       title,
       coverUrl: cover(index + 10),
       description,
@@ -544,73 +619,81 @@ async function ensureMall(token) {
     if (row) await api(`/admin/mall/products/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify({ ...payload, skus: payload.skus.map((sku, skuIndex) => ({ ...sku, id: row.skus?.[skuIndex]?.id })) }) });
     else await api("/admin/mall/products", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
   }
-  const seededProducts = pickList(await api("/admin/mall/products?pageSize=200", { headers: auth(token) }));
+  const seededProducts = pickList(await api(`/admin/mall/products?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
   const stationeryCategory = categories.find((item) => item.name === "学习用品");
   const calligraphyProduct = seededProducts.find((item) => item.title === "【演示】书法入门练习套装");
-  const couponPayload = { code: "SHOWCASE10", name: "演示商城满 50 减 10", minAmount: 50, discountAmount: 10, scope: "all", usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" };
+  const couponPayload = { tenantId, merchantId, code: "SHOWCASE10", name: "演示商城满 50 减 10", minAmount: 50, discountAmount: 10, scope: "all", usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" };
   const couponPayloads = [
     couponPayload,
-    { code: "STUDY8", name: "学习用品满 80 减 8", minAmount: 80, discountAmount: 8, scope: "category", scopeCategoryId: stationeryCategory?.id, usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
-    { code: "CALLIGRAPHY12", name: "书法套装专享满 80 减 12", minAmount: 80, discountAmount: 12, scope: "product", scopeProductId: calligraphyProduct?.id, usageLimit: 0, perUserLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
-    { code: "ONCE5", name: "新人每人限用满 50 减 5", minAmount: 50, discountAmount: 5, scope: "all", usageLimit: 0, perUserLimit: 1, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" }
+    { tenantId, merchantId, code: "STUDY8", name: "学习用品满 80 减 8", minAmount: 80, discountAmount: 8, scope: "category", scopeCategoryId: stationeryCategory?.id, usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
+    { tenantId, merchantId, code: "CALLIGRAPHY12", name: "书法套装专享满 80 减 12", minAmount: 80, discountAmount: 12, scope: "product", scopeProductId: calligraphyProduct?.id, usageLimit: 0, perUserLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
+    { tenantId, merchantId, code: "ONCE5", name: "新人每人限用满 50 减 5", minAmount: 50, discountAmount: 5, scope: "all", usageLimit: 0, perUserLimit: 1, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" }
   ];
-  const existingCoupons = pickList(await api("/admin/mall/coupons?pageSize=200", { headers: auth(token) }));
+  const existingCoupons = pickList(await api(`/admin/mall/coupons?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
   for (const payload of couponPayloads) {
     if ((payload.scope === "category" && !payload.scopeCategoryId) || (payload.scope === "product" && !payload.scopeProductId)) continue;
     const coupon = existingCoupons.find((item) => item.code === payload.code);
     if (coupon) await api(`/admin/mall/coupons/${coupon.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
     else await api("/admin/mall/coupons", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
   }
-  const promotionPayload = { code: "SHOWMALL5", name: "演示商城推广码 5%", commissionRate: 0.05, enabled: true, remark: `demoScenario:${SCENARIO} 商城推广佣金验收` };
-  const existingPromotions = pickList(await api("/admin/mall/promotion-codes?pageSize=200", { headers: auth(token) }));
+  const promotionPayload = { tenantId, merchantId, code: "SHOWMALL5", name: "演示商城推广码 5%", commissionRate: 0.05, enabled: true, remark: `demoScenario:${SCENARIO} 商城推广佣金验收` };
+  const existingPromotions = pickList(await api(`/admin/mall/promotion-codes?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
   const promotion = existingPromotions.find((item) => item.code === promotionPayload.code);
   if (promotion) await api(`/admin/mall/promotion-codes/${promotion.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(promotionPayload) });
   else await api("/admin/mall/promotion-codes", { method: "POST", headers: auth(token), body: JSON.stringify(promotionPayload) });
   if (calligraphyProduct?.skus?.[0]?.id) {
     const sku = calligraphyProduct.skus[0];
+    const existingFlashSales = pickList(await api(`/admin/mall/flash-sales?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
+    const existingFlashSale = existingFlashSales.find((item) => item.title === "【演示】书法套装限时秒杀");
+    const flashSaleRemaining = Math.min(Math.max(Number(sku.stock || 0) - Number(sku.lockedStock || 0), 0), 120);
     const flashSalePayload = {
       productId: calligraphyProduct.id,
+      tenantId,
+      merchantId,
       skuId: sku.id,
       title: "【演示】书法套装限时秒杀",
       salePrice: 69,
-      saleStock: 300,
+      saleStock: Number(existingFlashSale?.soldStock || 0) + Number(existingFlashSale?.lockedStock || 0) + flashSaleRemaining,
       perUserLimit: 1,
       startsAt: "2026-01-01 00:00:00",
       endsAt: "2027-12-31 23:59:59",
       status: "active",
       sortOrder: 1
     };
-    const existingFlashSales = pickList(await api("/admin/mall/flash-sales?pageSize=200", { headers: auth(token) }));
-    const flashSale = existingFlashSales.find((item) => item.title === flashSalePayload.title);
+    const flashSale = existingFlashSale;
     if (flashSale) await api(`/admin/mall/flash-sales/${flashSale.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(flashSalePayload) });
     else await api("/admin/mall/flash-sales", { method: "POST", headers: auth(token), body: JSON.stringify(flashSalePayload) });
   }
   if (calligraphyProduct?.skus?.[0]?.id) {
     const sku = calligraphyProduct.skus[1] || calligraphyProduct.skus[0];
+    const existingGroupBuys = pickList(await api(`/admin/mall/group-buys?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
+    const existingGroupBuy = existingGroupBuys.find((item) => item.title === "【演示】书法套装二人成团");
+    const groupBuyRemaining = Math.min(Math.max(Number(sku.stock || 0) - Number(sku.lockedStock || 0), 0), 60);
     const groupBuyPayload = {
       productId: calligraphyProduct.id,
+      tenantId,
+      merchantId,
       skuId: sku.id,
       title: "【演示】书法套装二人成团",
       groupPrice: 79,
       minPeople: 2,
-      groupStock: 300,
+      groupStock: Number(existingGroupBuy?.soldStock || 0) + Number(existingGroupBuy?.lockedStock || 0) + groupBuyRemaining,
       perUserLimit: 1,
       startsAt: "2026-01-01 00:00:00",
       endsAt: "2027-12-31 23:59:59",
       status: "active",
       sortOrder: 2
     };
-    const existingGroupBuys = pickList(await api("/admin/mall/group-buys?pageSize=200", { headers: auth(token) }));
-    const groupBuy = existingGroupBuys.find((item) => item.title === groupBuyPayload.title);
+    const groupBuy = existingGroupBuy;
     if (groupBuy) await api(`/admin/mall/group-buys/${groupBuy.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(groupBuyPayload) });
     else await api("/admin/mall/group-buys", { method: "POST", headers: auth(token), body: JSON.stringify(groupBuyPayload) });
   }
   const logisticsPayloads = [
-    { name: "顺丰演示", code: "SF", servicePhone: "95338", trackingUrl: "https://www.sf-express.com/chn/sc/waybill/waybill-detail/", sortOrder: 1, enabled: true },
-    { name: "中通演示", code: "ZTO", servicePhone: "95311", trackingUrl: "https://www.zto.com/express/expressCheck.html", sortOrder: 2, enabled: true },
-    { name: "京东演示", code: "JD", servicePhone: "950616", trackingUrl: "https://www.jdl.com/orderSearch/", sortOrder: 3, enabled: true }
+    { tenantId, merchantId, name: "顺丰演示", code: "SF", servicePhone: "95338", trackingUrl: "https://www.sf-express.com/chn/sc/waybill/waybill-detail/", sortOrder: 1, enabled: true },
+    { tenantId, merchantId, name: "中通演示", code: "ZTO", servicePhone: "95311", trackingUrl: "https://www.zto.com/express/expressCheck.html", sortOrder: 2, enabled: true },
+    { tenantId, merchantId, name: "京东演示", code: "JD", servicePhone: "950616", trackingUrl: "https://www.jdl.com/orderSearch/", sortOrder: 3, enabled: true }
   ];
-  const existingLogistics = pickList(await api("/admin/mall/logistics-companies?pageSize=200", { headers: auth(token) }));
+  const existingLogistics = pickList(await api(`/admin/mall/logistics-companies?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
   for (const payload of logisticsPayloads) {
     const row = existingLogistics.find((item) => item.name === payload.name);
     if (row) await api(`/admin/mall/logistics-companies/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
@@ -624,7 +707,7 @@ async function ensureMembersAndWallets(tenantAdminToken, platformToken, tenantId
     const profile = await api("/admin/members", {
       method: "POST",
       headers: auth(tenantAdminToken),
-      body: JSON.stringify({ phone: user.phone, password: showcasePassword, nickname: user.nickname, remark: `demoScenario:${SCENARIO}` })
+      body: JSON.stringify({ tenantId, phone: user.phone, password: showcasePassword, nickname: user.nickname, remark: `demoScenario:${SCENARIO}` })
     });
     const loggedIn = await loginUser(user.phone, user.nickname);
     const userId = loggedIn.user?.id;

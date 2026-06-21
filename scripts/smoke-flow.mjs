@@ -161,27 +161,23 @@ async function runFreeFlow(token) {
 async function runPaidFlow(token) {
   const activity = await createActivity(token, activityPayload({ title: `烟测付费活动 ${now}`, price: 99, requireReview: false }));
   const user = await createUser("02");
-  const registrationResult = await api(`/public/activities/${activity.id}/register`, {
-    method: "POST",
-    headers: user.headers,
-    body: JSON.stringify({ answers: answers(activity.fields, "付费") })
-  });
-  assert(registrationResult.registration.status === RegistrationStatus.PendingPayment, "Paid registration should be pending payment");
-  assert(registrationResult.order.status === OrderStatus.PendingPayment, "Paid order should be pending payment");
-
   await api(`/admin/users/${user.id}/wallet/adjust`, {
     method: "POST",
     headers: auth(token),
     body: JSON.stringify({ amount: 120, type: "recharge", remark: "flow smoke balance top-up" })
   });
   await assertOperationLog(token, "wallet.recharge", user.id, "Wallet recharge should be audited");
-  const paid = await api(`/public/orders/${registrationResult.order.id}/pay/balance`, { method: "POST", headers: user.headers });
-  assert(paid.order.paymentMethod === "balance", "Paid flow should use balance payment");
+  const registrationResult = await api(`/public/activities/${activity.id}/register`, {
+    method: "POST",
+    headers: user.headers,
+    body: JSON.stringify({ paymentMethod: "balance", answers: answers(activity.fields, "付费") })
+  });
+  assert(registrationResult.order.paymentMethod === "balance", "Paid flow should use balance payment");
   const detail = await api(`/public/me/registrations/${registrationResult.registration.id}`, { headers: user.headers });
   assert(detail.order.status === OrderStatus.Paid, "Paid order should become paid");
   assert(detail.registration.status === RegistrationStatus.Approved, "Paid no-review registration should become approved");
   await closeActivity(token, activity.id);
-  console.log("OK paid flow: pending payment -> balance payment -> approved");
+  console.log("OK paid flow: balance payment registration -> approved");
 }
 
 async function runExpiredOrderFlow(token) {

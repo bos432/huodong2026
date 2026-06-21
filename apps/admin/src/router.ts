@@ -5,6 +5,7 @@ const Login = () => import("./views/Login.vue");
 const Layout = () => import("./views/Layout.vue");
 const Dashboard = () => import("./views/Dashboard.vue");
 const Analytics = () => import("./views/Analytics.vue");
+const SupportSearch = () => import("./views/SupportSearch.vue");
 const Activities = () => import("./views/Activities.vue");
 const Funnels = () => import("./views/Funnels.vue");
 const Recaps = () => import("./views/Recaps.vue");
@@ -19,6 +20,7 @@ const Coupons = () => import("./views/Coupons.vue");
 const Agents = () => import("./views/Agents.vue");
 const AgentSettlements = () => import("./views/AgentSettlements.vue");
 const Ambassador = () => import("./views/Ambassador.vue");
+const Volunteers = () => import("./views/Volunteers.vue");
 const CheckIn = () => import("./views/CheckIn.vue");
 const Waitlists = () => import("./views/Waitlists.vue");
 const UserTags = () => import("./views/UserTags.vue");
@@ -33,7 +35,20 @@ const AdminLoginLogs = () => import("./views/AdminLoginLogs.vue");
 const H5CodeLogs = () => import("./views/H5CodeLogs.vue");
 const Courses = () => import("./views/Courses.vue");
 const Community = () => import("./views/Community.vue");
+const MallMerchants = () => import("./views/MallMerchants.vue");
+const MallPayments = () => import("./views/MallPayments.vue");
 const MallProducts = () => import("./views/MallProducts.vue");
+const MallCategories = () => import("./views/MallCategories.vue");
+const MallProductAudits = () => import("./views/MallProductAudits.vue");
+const MallInventory = () => import("./views/MallInventory.vue");
+const MallReviews = () => import("./views/MallReviews.vue");
+const MallMarketing = () => import("./views/MallMarketing.vue");
+const MallLogistics = () => import("./views/MallLogistics.vue");
+const MallStatistics = () => import("./views/MallStatistics.vue");
+const MallPaymentLogs = () => import("./views/MallPaymentLogs.vue");
+const MallSettlements = () => import("./views/MallSettlements.vue");
+const MallRefunds = () => import("./views/MallRefunds.vue");
+const MallFinance = () => import("./views/MallFinance.vue");
 const MallOrders = () => import("./views/MallOrders.vue");
 const ConfigCheck = () => import("./views/ConfigCheck.vue");
 const MiniprogramRelease = () => import("./views/MiniprogramRelease.vue");
@@ -42,6 +57,7 @@ const OperationFlow = () => import("./views/OperationFlow.vue");
 const OpsRoutine = () => import("./views/OpsRoutine.vue");
 const Tenants = () => import("./views/Tenants.vue");
 const TenantRegions = () => import("./views/TenantRegions.vue");
+const TenantRegionHitLogs = () => import("./views/TenantRegionHitLogs.vue");
 const TenantProfile = () => import("./views/TenantProfile.vue");
 
 export const router = createRouter({
@@ -55,24 +71,35 @@ export const router = createRouter({
         { path: "", redirect: "/dashboard" },
         { path: "dashboard", component: Dashboard, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "analytics", component: Analytics, meta: { roles: permissions.analytics, scope: "tenantOrPlatformAdmin" } },
+        { path: "support", component: SupportSearch, meta: { roles: ["support.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "courses", component: Courses, meta: { roles: ["course.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "community", component: Community, meta: { roles: ["community.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-merchants", component: MallMerchants, meta: { roles: ["mall.merchant.manage"], scope: "platform" } },
+        { path: "mall-payments", component: MallPayments, meta: { roles: ["mall.payment.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "mall-products", component: MallProducts, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
-        { path: "mall-inventory", component: MallProducts, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
-        { path: "mall-coupons", component: MallProducts, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-categories", component: MallCategories, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-product-audits", component: MallProductAudits, meta: { roles: ["mall.product.audit"], scope: "platform" } },
+        { path: "mall-inventory", component: MallInventory, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-reviews", component: MallReviews, meta: { roles: ["mall.review.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-coupons", redirect: (to) => ({ path: "/mall-marketing", query: { ...to.query, tab: "coupons" } }) },
         { path: "mall-orders", component: MallOrders, meta: { roles: ["mall.order.view", "mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
-        { path: "mall-refunds", component: MallOrders, meta: { roles: ["mall.refund.manage", "mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
-        { path: "mall-logistics", component: MallOrders, meta: { roles: ["mall.logistics.manage", "mall.order.manage"], scope: "tenantOrPlatformAdmin" } },
-        { path: "mall-marketing", component: MallOrders, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
-        { path: "mall-finance", component: MallOrders, meta: { roles: ["mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-refunds", component: MallRefunds, meta: { roles: ["mall.refund.manage", "mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-logistics", component: MallLogistics, meta: { roles: ["mall.logistics.manage", "mall.order.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-marketing", component: MallMarketing, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-payment-logs", component: MallPaymentLogs, meta: { roles: ["mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-settlements", component: MallSettlements, meta: { roles: ["mall.settlement.manage", "mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-statistics", component: MallStatistics, meta: { roles: ["mall.statistics.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "mall-finance", component: MallFinance, meta: { roles: ["mall.finance.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "tenants", component: Tenants, meta: { roles: ["tenant.manage"], scope: "platform" } },
         { path: "tenant-regions", component: TenantRegions, meta: { roles: ["tenant_region.manage"], scope: "platform" } },
+        { path: "tenant-region-hit-logs", component: TenantRegionHitLogs, meta: { roles: ["tenant_region.manage"], scope: "platform" } },
         { path: "ambassador", component: Ambassador, meta: { roles: ["ambassador.manage"], scope: "platform" } },
+        { path: "volunteers", component: Volunteers, meta: { roles: ["ambassador.manage"], scope: "platform" } },
         { path: "activities", component: Activities, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
         { path: "funnels", component: Funnels, meta: { roles: ["activity.view"], scope: "tenant" } },
         { path: "recaps", component: Recaps, meta: { roles: ["activity.view"], scope: "tenant" } },
         { path: "announcements", component: Announcements, meta: { roles: ["announcement.manage"], scope: "tenantOrPlatformAdmin" } },
-        { path: "homepage-builder", component: HomepageBuilder, meta: { roles: ["homepage.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "homepage-builder", component: HomepageBuilder, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
         { path: "notifications", component: Notifications, meta: { roles: ["notification.manage"], scope: "tenant" } },
         { path: "reviews", component: Reviews, meta: { roles: ["review.manage"], scope: "tenant" } },
         { path: "registrations", component: Registrations, meta: { roles: permissions.registrationView, scope: "tenantOrPlatformAdmin" } },
@@ -84,7 +111,7 @@ export const router = createRouter({
         { path: "agents", component: Agents, meta: { roles: permissions.paymentAccountView, scope: "tenantOrPlatformAdmin" } },
         { path: "agent-settlements", component: AgentSettlements, meta: { roles: ["agent_settlement.view"], scope: "tenant" } },
         { path: "orders", component: Orders, meta: { roles: ["order.view"], scope: "tenantOrPlatformAdmin" } },
-        { path: "finance", component: Finance, meta: { roles: ["finance.view"], scope: "tenantOrPlatformAdmin" } },
+        { path: "finance", component: Finance, meta: { roles: permissions.finance, scope: "tenantOrPlatformAdmin" } },
         { path: "charity", component: Charity, meta: { roles: ["charity.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "check-in", component: CheckIn, meta: { roles: permissions.checkIn, scope: "tenant" } },
         { path: "system-settings", component: SystemSettings, meta: { roles: ["system.manage", "operation_settings.manage"], scope: "tenantOrPlatformAdmin" } },
@@ -93,7 +120,7 @@ export const router = createRouter({
         { path: "operation-logs", component: OperationLogs, meta: { roles: ["logs.view"], scope: "any" } },
         { path: "admin-login-logs", component: AdminLoginLogs, meta: { roles: ["logs.view"], scope: "platform" } },
         { path: "h5-code-logs", component: H5CodeLogs, meta: { roles: ["logs.view"], scope: "platform" } },
-        { path: "config-check", component: ConfigCheck, meta: { roles: ["system.manage"], scope: "platform" } },
+        { path: "config-check", component: ConfigCheck, meta: { roles: permissions.superAdmin, scope: "platform" } },
         { path: "miniprogram-release", component: MiniprogramRelease, meta: { roles: ["miniprogram_release.manage"], scope: "platform" } },
         { path: "operation-guide", component: OperationGuide, meta: { roles: ["system.manage"], scope: "platform" } },
         { path: "operation-flow", component: OperationFlow, meta: { roles: ["dashboard.view"], scope: "tenantOrPlatformAdmin" } },
@@ -107,15 +134,24 @@ export const router = createRouter({
 });
 
 function fallbackPath() {
+  if (canAccess(permissions.overview)) return "/dashboard";
+  if (canAccess(permissions.checkIn)) return "/check-in";
   const candidates = [
     { path: "/dashboard", roles: permissions.overview, scope: "tenantOrPlatformAdmin" },
+    { path: "/support", roles: ["support.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/tenants", roles: ["tenant.manage"], scope: "platform" },
     { path: "/activities", roles: ["activity.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/registrations", roles: ["registration.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/orders", roles: ["order.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/finance", roles: ["finance.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/mall-merchants", roles: ["mall.merchant.manage"], scope: "platform" },
+    { path: "/mall-payments", roles: ["mall.payment.manage"], scope: "tenantOrPlatformAdmin" },
     { path: "/mall-orders", roles: ["mall.order.view", "mall.finance.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/mall-payment-logs", roles: ["mall.finance.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/mall-settlements", roles: ["mall.settlement.manage", "mall.finance.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/mall-statistics", roles: ["mall.statistics.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/mall-products", roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" },
+    { path: "/mall-categories", roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" },
     { path: "/members", roles: ["member.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/check-in", roles: permissions.checkIn, scope: "tenant" },
     { path: "/admins", roles: ["admin.manage"], scope: "any" }

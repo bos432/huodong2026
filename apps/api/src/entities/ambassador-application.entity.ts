@@ -1,6 +1,6 @@
 import { Column, CreateDateColumn, Entity, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 
-export type AmbassadorApplicationStatus = "pending" | "contacted" | "approved" | "rejected";
+export type AmbassadorApplicationStatus = "pending" | "contacted" | "screened" | "interview" | "approved" | "activated" | "rejected";
 
 @Entity("ambassador_applications")
 export class AmbassadorApplication {
@@ -36,6 +36,21 @@ export class AmbassadorApplication {
 
   @Column({ type: "varchar", length: 20, default: "normal" })
   priority!: "low" | "normal" | "high";
+
+  @Column({ type: "int", default: 0 })
+  cityResourceScore!: number;
+
+  @Column({ type: "int", default: 0 })
+  communityScore!: number;
+
+  @Column({ type: "int", default: 0 })
+  contentScore!: number;
+
+  @Column({ type: "int", default: 0 })
+  charityScore!: number;
+
+  @Column({ type: "int", default: 0 })
+  deliveryScore!: number;
 
   @Column({ type: "datetime", nullable: true })
   nextFollowAt!: Date | null;

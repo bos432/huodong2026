@@ -10,6 +10,7 @@ import { ActivityReview } from "./entities/activity-review.entity";
 import { ActivitySection } from "./entities/activity-section.entity";
 import { ActivityViewLog } from "./entities/activity-view-log.entity";
 import { AdminLoginLog } from "./entities/admin-login-log.entity";
+import { AdminMallMerchantAccess } from "./entities/admin-mall-merchant-access.entity";
 import { AdminOperationLog } from "./entities/admin-operation-log.entity";
 import { Activity } from "./entities/activity.entity";
 import { AdminUser } from "./entities/admin-user.entity";
@@ -18,6 +19,7 @@ import { AgentSettlementTransfer } from "./entities/agent-settlement-transfer.en
 import { AgentSettlement } from "./entities/agent-settlement.entity";
 import { Agent } from "./entities/agent.entity";
 import { AmbassadorApplication } from "./entities/ambassador-application.entity";
+import { AmbassadorApplicationFollowup } from "./entities/ambassador-application-followup.entity";
 import { AmbassadorCase } from "./entities/ambassador-case.entity";
 import { AmbassadorLandingSetting } from "./entities/ambassador-landing-setting.entity";
 import { Announcement } from "./entities/announcement.entity";
@@ -26,6 +28,7 @@ import { CharityFundSetting } from "./entities/charity-fund-setting.entity";
 import { CharityFundTransaction } from "./entities/charity-fund-transaction.entity";
 import { CharityProjectDisbursement } from "./entities/charity-project-disbursement.entity";
 import { CharityProject } from "./entities/charity-project.entity";
+import { CharityProjectUpdate } from "./entities/charity-project-update.entity";
 import { Certificate } from "./entities/certificate.entity";
 import { CommunityCheckIn } from "./entities/community-checkin.entity";
 import { CheckInTask } from "./entities/checkin-task.entity";
@@ -59,6 +62,9 @@ import { MallGroupBuy } from "./entities/mall-group-buy.entity";
 import { MallGroupBuyRecord } from "./entities/mall-group-buy-record.entity";
 import { MallInventoryLog } from "./entities/mall-inventory-log.entity";
 import { MallLogisticsCompany } from "./entities/mall-logistics-company.entity";
+import { MallCheckoutGroup } from "./entities/mall-checkout-group.entity";
+import { MallMerchant } from "./entities/mall-merchant.entity";
+import { MallMerchantPaymentAccount } from "./entities/mall-merchant-payment-account.entity";
 import { MallOrderItem } from "./entities/mall-order-item.entity";
 import { MallOrder } from "./entities/mall-order.entity";
 import { MallPaymentCallbackLog } from "./entities/mall-payment-callback-log.entity";
@@ -68,6 +74,7 @@ import { MallPromotionCode } from "./entities/mall-promotion-code.entity";
 import { MallRefund } from "./entities/mall-refund.entity";
 import { MallRefundLog } from "./entities/mall-refund-log.entity";
 import { MallReview } from "./entities/mall-review.entity";
+import { MallSettlement } from "./entities/mall-settlement.entity";
 import { MallSku } from "./entities/mall-sku.entity";
 import { MiniprogramReleaseLog } from "./entities/miniprogram-release-log.entity";
 import { MiniprogramReleaseSetting } from "./entities/miniprogram-release-setting.entity";
@@ -83,6 +90,7 @@ import { Registration } from "./entities/registration.entity";
 import { Refund } from "./entities/refund.entity";
 import { ShareVisit } from "./entities/share-visit.entity";
 import { Tenant } from "./entities/tenant.entity";
+import { TenantRegionHitLog } from "./entities/tenant-region-hit-log.entity";
 import { TenantRegion } from "./entities/tenant-region.entity";
 import { TicketType } from "./entities/ticket-type.entity";
 import { UserTag } from "./entities/user-tag.entity";
@@ -92,6 +100,10 @@ import { UserLearning } from "./entities/user-learning.entity";
 import { UserWallet } from "./entities/user-wallet.entity";
 import { Waitlist } from "./entities/waitlist.entity";
 import { WalletTransaction } from "./entities/wallet-transaction.entity";
+import { VolunteerProfile } from "./entities/volunteer-profile.entity";
+import { VolunteerServiceRecord } from "./entities/volunteer-service-record.entity";
+import { VolunteerTaskApplication } from "./entities/volunteer-task-application.entity";
+import { VolunteerTask } from "./entities/volunteer-task.entity";
 
 config({ path: "apps/api/.env" });
 config();
@@ -109,7 +121,9 @@ export default new DataSource({
     WalletTransaction,
     Tenant,
     TenantRegion,
+    TenantRegionHitLog,
     AdminLoginLog,
+    AdminMallMerchantAccess,
     AdminOperationLog,
     AdminUser,
     Agent,
@@ -119,6 +133,7 @@ export default new DataSource({
     AmbassadorLandingSetting,
     AmbassadorCase,
     AmbassadorApplication,
+    AmbassadorApplicationFollowup,
     ActivityCategory,
     ActivityChannel,
     ActivityApprovalLog,
@@ -144,6 +159,7 @@ export default new DataSource({
     CharityFundTransaction,
     CharityProject,
     CharityProjectDisbursement,
+    CharityProjectUpdate,
     H5AuthCodeLog,
     HomepageSection,
     MiniprogramReleaseSetting,
@@ -155,6 +171,9 @@ export default new DataSource({
     MemberLevel,
     MemberProfile,
     MallCategory,
+    MallMerchant,
+    MallMerchantPaymentAccount,
+    MallCheckoutGroup,
     MallCommission,
     MallCoupon,
     MallCouponClaim,
@@ -178,6 +197,7 @@ export default new DataSource({
     MallPromotionCode,
     MallRefundLog,
     MallReview,
+    MallSettlement,
     MemberPointLog,
     NotificationTemplate,
     Notification,
@@ -194,7 +214,11 @@ export default new DataSource({
     CommunityCheckIn,
     UserLearning,
     UserFavorite,
-    Certificate
+    Certificate,
+    VolunteerProfile,
+    VolunteerTask,
+    VolunteerTaskApplication,
+    VolunteerServiceRecord
   ],
   migrations: [__dirname.includes("dist") ? `${__dirname}/migrations/*.js` : "apps/api/src/migrations/*.ts"],
   synchronize: false,

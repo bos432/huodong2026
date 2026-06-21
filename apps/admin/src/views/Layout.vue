@@ -39,15 +39,21 @@ const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformAdmin() ? sele
 const currentH5PreviewLabel = computed(() => (isPlatformAdmin() ? (selectedPlatformTenant.value ? "商家H5" : "平台H5") : "商家H5"));
 const tenantScopedRoutePaths = new Set([
   "/activities",
+  "/support",
   "/registrations",
   "/orders",
+  "/mall-merchants",
+  "/mall-payments",
   "/mall-products",
+  "/mall-categories",
   "/mall-inventory",
-  "/mall-coupons",
   "/mall-orders",
   "/mall-refunds",
   "/mall-logistics",
   "/mall-marketing",
+  "/mall-payment-logs",
+  "/mall-settlements",
+  "/mall-statistics",
   "/mall-finance",
   "/finance",
   "/admins",
@@ -60,11 +66,13 @@ const tenantScopedRoutePaths = new Set([
 ]);
 const tenantQuickLinks = [
   { label: "活动", path: "/activities" },
+  { label: "客服", path: "/support" },
   { label: "报名", path: "/registrations" },
   { label: "订单", path: "/orders" },
   { label: "商城", path: "/mall-products" },
   { label: "商城订单", path: "/mall-orders" },
-  { label: "商城收款", path: "/agents", requiresMallEnabled: true },
+  { label: "商城统计", path: "/mall-statistics" },
+  { label: "商城收款", path: "/mall-payments", requiresMallEnabled: true },
   { label: "财务", path: "/finance" },
   { label: "装修", path: "/homepage-builder" },
   { label: "课程", path: "/courses" },
@@ -80,7 +88,8 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.overview, scope: "platform" },
-      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.analytics, scope: "platform" }
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.analytics, scope: "platform" },
+      { index: "/support", icon: "Search", label: "客服查询台", roles: ["support.view"], scope: "platform" }
     ]
   },
   {
@@ -91,6 +100,7 @@ const menuGroups = [
     items: [
       { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: ["tenant.manage"], scope: "platform" },
       { index: "/tenant-regions", icon: "Location", label: "区域保护", roles: ["tenant_region.manage"], scope: "platform" },
+      { index: "/tenant-region-hit-logs", icon: "Aim", label: "定位命中日志", roles: ["tenant_region.manage"], scope: "platform" },
       { index: "/admins", icon: "UserFilled", label: "商家账号", roles: ["admin.manage"], scope: "platform" },
       { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: ["tenant.manage"], scope: "platform" }
     ]
@@ -112,11 +122,11 @@ const menuGroups = [
   {
     index: "platform-finance",
     icon: "Wallet",
-    label: "平台端 · 订单财务",
+    label: "平台端 · 票务与财务",
     scope: "platform",
     items: [
       { index: "/orders", icon: "Wallet", label: "全局订单", roles: ["order.view"], scope: "platform" },
-      { index: "/finance", icon: "CreditCard", label: "全局对账", roles: ["finance.view"], scope: "platform" },
+      { index: "/finance", icon: "CreditCard", label: "全局对账", roles: permissions.finance, scope: "platform" },
       { index: "/agents", icon: "Shop", label: "商家收款账户", roles: ["payment_account.view"], scope: "platform" }
     ]
   },
@@ -127,14 +137,20 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/mall-products", icon: "Goods", label: "商品管理", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-merchants", icon: "Shop", label: "店铺管理", roles: ["mall.merchant.manage"], scope: "platform" },
+      { index: "/mall-categories", icon: "CollectionTag", label: "店铺分类", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-product-audits", icon: "Checked", label: "商品审核", roles: ["mall.product.audit"], scope: "platform" },
       { index: "/mall-inventory", icon: "Warning", label: "库存预警", roles: ["mall.product.manage"], scope: "platform" },
-      { index: "/mall-coupons", icon: "Discount", label: "优惠券营销", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-reviews", icon: "ChatDotRound", label: "评价管理", roles: ["mall.review.manage"], scope: "platform" },
       { index: "/mall-orders", icon: "Tickets", label: "商城订单", roles: ["mall.order.view", "mall.finance.view"], scope: "platform" },
       { index: "/mall-refunds", icon: "RefreshLeft", label: "售后退款", roles: ["mall.refund.manage", "mall.finance.view"], scope: "platform" },
       { index: "/mall-logistics", icon: "Van", label: "物流设置", roles: ["mall.logistics.manage", "mall.order.manage"], scope: "platform" },
-      { index: "/mall-marketing", icon: "Promotion", label: "秒杀拼团/推广", roles: ["mall.product.manage"], scope: "platform" },
-      { index: "/agents", icon: "Shop", label: "商城收款配置", roles: permissions.paymentAccountView, scope: "platform", requiresMallEnabled: true },
-      { index: "/mall-finance", icon: "Money", label: "商城财务", roles: ["mall.finance.view"], scope: "platform" }
+      { index: "/mall-marketing", icon: "Promotion", label: "营销中心", roles: ["mall.product.manage"], scope: "platform" },
+      { index: "/mall-payments", icon: "CreditCard", label: "商城收款配置", roles: ["mall.payment.manage"], scope: "platform", requiresMallEnabled: true },
+      { index: "/mall-payment-logs", icon: "DocumentChecked", label: "支付日志", roles: ["mall.finance.view"], scope: "platform" },
+      { index: "/mall-settlements", icon: "Money", label: "商城结算", roles: ["mall.settlement.manage", "mall.finance.view"], scope: "platform" },
+      { index: "/mall-statistics", icon: "DataAnalysis", label: "商城统计", roles: ["mall.statistics.view"], scope: "platform" },
+      { index: "/mall-finance", icon: "Money", label: "商城财务总览", roles: ["mall.finance.view"], scope: "platform" }
     ]
   },
   {
@@ -153,7 +169,8 @@ const menuGroups = [
     scope: "platform",
     items: [
       { index: "/charity", icon: "Coin", label: "公益池", roles: ["charity.view"], scope: "platform" },
-      { index: "/ambassador", icon: "Flag", label: "文化大使招募", roles: ["ambassador.manage"], scope: "platform" }
+      { index: "/ambassador", icon: "Flag", label: "文化大使招募", roles: ["ambassador.manage"], scope: "platform" },
+      { index: "/volunteers", icon: "UserFilled", label: "志愿者档案", roles: ["ambassador.manage"], scope: "platform" }
     ]
   },
   {
@@ -169,11 +186,11 @@ const menuGroups = [
   {
     index: "platform-security",
     icon: "Tools",
-    label: "平台端 · 系统安全",
+    label: "平台端 · 系统与安全",
     scope: "platform",
     items: [
       { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.manage"], scope: "platform" },
-      { index: "/config-check", icon: "Monitor", label: "上线体检", roles: ["system.manage"], scope: "platform" },
+      { index: "/config-check", icon: "Monitor", label: "上线体检", roles: permissions.superAdmin, scope: "platform" },
       { index: "/miniprogram-release", icon: "Promotion", label: "小程序发布", roles: ["miniprogram_release.manage"], scope: "platform" },
       { index: "/operation-flow", icon: "Connection", label: "操作流程图", roles: ["dashboard.view"], scope: "platform" },
       { index: "/operation-guide", icon: "Guide", label: "运维教程", roles: ["system.manage"], scope: "platform" },
@@ -190,7 +207,8 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/dashboard", icon: "DataAnalysis", label: "工作台", roles: permissions.overview, scope: "tenant" },
-      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.analytics, scope: "tenant" }
+      { index: "/analytics", icon: "TrendCharts", label: "数据中心", roles: permissions.analytics, scope: "tenant" },
+      { index: "/support", icon: "Search", label: "客服查询台", roles: ["support.view"], scope: "tenant" }
     ]
   },
   {
@@ -219,11 +237,11 @@ const menuGroups = [
   {
     index: "tenant-finance",
     icon: "Wallet",
-    label: "商家端 · 订单财务",
+    label: "商家端 · 票务与财务",
     scope: "tenant",
     items: [
       { index: "/orders", icon: "Wallet", label: "订单管理", roles: ["order.view"], scope: "tenant" },
-      { index: "/finance", icon: "CreditCard", label: "财务对账", roles: ["finance.view"], scope: "tenant" },
+      { index: "/finance", icon: "CreditCard", label: "财务对账", roles: permissions.finance, scope: "tenant" },
       { index: "/agents", icon: "Shop", label: "收款方式", roles: permissions.paymentAccountView, scope: "tenant" },
       { index: "/agent-settlements", icon: "Money", label: "代理结算", roles: ["agent_settlement.view"], scope: "tenant" }
     ]
@@ -235,14 +253,18 @@ const menuGroups = [
     scope: "tenant",
     items: [
       { index: "/mall-products", icon: "Goods", label: "商品管理", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/mall-categories", icon: "CollectionTag", label: "店铺分类", roles: ["mall.product.manage"], scope: "tenant" },
       { index: "/mall-inventory", icon: "Warning", label: "库存预警", roles: ["mall.product.manage"], scope: "tenant" },
-      { index: "/mall-coupons", icon: "Discount", label: "优惠券营销", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/mall-reviews", icon: "ChatDotRound", label: "评价管理", roles: ["mall.review.manage"], scope: "tenant" },
       { index: "/mall-orders", icon: "Tickets", label: "商城订单", roles: ["mall.order.view", "mall.finance.view"], scope: "tenant" },
       { index: "/mall-refunds", icon: "RefreshLeft", label: "售后退款", roles: ["mall.refund.manage", "mall.finance.view"], scope: "tenant" },
       { index: "/mall-logistics", icon: "Van", label: "物流设置", roles: ["mall.logistics.manage", "mall.order.manage"], scope: "tenant" },
-      { index: "/mall-marketing", icon: "Promotion", label: "秒杀拼团/推广", roles: ["mall.product.manage"], scope: "tenant" },
-      { index: "/agents", icon: "Shop", label: "商城收款配置", roles: permissions.paymentAccountView, scope: "tenant", requiresMallEnabled: true },
-      { index: "/mall-finance", icon: "Money", label: "商城财务", roles: ["mall.finance.view"], scope: "tenant" }
+      { index: "/mall-marketing", icon: "Promotion", label: "营销中心", roles: ["mall.product.manage"], scope: "tenant" },
+      { index: "/mall-payments", icon: "CreditCard", label: "商城收款配置", roles: ["mall.payment.manage"], scope: "tenant", requiresMallEnabled: true },
+      { index: "/mall-payment-logs", icon: "DocumentChecked", label: "支付日志", roles: ["mall.finance.view"], scope: "tenant" },
+      { index: "/mall-settlements", icon: "Money", label: "商城结算", roles: ["mall.settlement.manage", "mall.finance.view"], scope: "tenant" },
+      { index: "/mall-statistics", icon: "DataAnalysis", label: "商城统计", roles: ["mall.statistics.view"], scope: "tenant" },
+      { index: "/mall-finance", icon: "Money", label: "商城财务总览", roles: ["mall.finance.view"], scope: "tenant" }
     ]
   },
   {
@@ -263,7 +285,7 @@ const menuGroups = [
     label: "商家端 · 装修营销",
     scope: "tenant",
     items: [
-      { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: ["homepage.manage"], scope: "tenant" },
+      { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: permissions.operation, scope: "tenant" },
       { index: "/announcements", icon: "Bell", label: "公告管理", roles: ["announcement.manage"], scope: "tenant" },
       { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: ["activity.view"], scope: "tenant" },
       { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: ["activity.view"], scope: "tenant" }
@@ -400,7 +422,7 @@ function menuItemLabel(item: { index: string; label: string }) {
 }
 
 function validatePassword(password: string) {
-  if (password.length < 8) return "新密码至少需要 8 位";
+  if (password.length < 10) return "新密码至少需要 10 位";
   if (!/[A-Z]/.test(password) || !/[a-z]/.test(password) || !/\d/.test(password)) return "新密码需要包含大小写字母和数字";
   return "";
 }

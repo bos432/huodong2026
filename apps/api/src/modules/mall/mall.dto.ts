@@ -1,12 +1,17 @@
 import { PaymentMethod } from "../../shared/domain";
 import { Type } from "class-transformer";
-import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsOptional, IsString, Min, ValidateNested } from "class-validator";
+import { IsArray, IsBoolean, IsIn, IsInt, IsNotEmpty, IsNumber, IsObject, IsOptional, IsString, Min, ValidateNested } from "class-validator";
 
 export class MallCategoryDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  merchantId?: number;
 
   @IsString()
   @IsNotEmpty()
@@ -73,6 +78,11 @@ export class MallProductDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
+  merchantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
   categoryId?: number | null;
 
   @IsString()
@@ -102,8 +112,8 @@ export class MallProductDto {
   originalPrice?: number;
 
   @IsOptional()
-  @IsIn(["draft", "published", "offline"])
-  status?: "draft" | "published" | "offline";
+  @IsIn(["draft", "pending_review", "published", "offline"])
+  status?: "draft" | "pending_review" | "published" | "offline";
 
   @IsOptional()
   @IsBoolean()
@@ -134,6 +144,11 @@ export class MallListQueryDto {
   @Type(() => Number)
   @IsInt()
   tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  merchantId?: number;
 
   @IsOptional()
   @Type(() => Number)
@@ -169,6 +184,10 @@ export class MallListQueryDto {
   keyword?: string;
 
   @IsOptional()
+  @IsString()
+  checkoutGroupNo?: string;
+
+  @IsOptional()
   @IsIn(["featured", "newest", "hot"])
   sort?: "featured" | "newest" | "hot";
 
@@ -191,11 +210,166 @@ export class MallListQueryDto {
   pageSize?: number;
 }
 
+export class MallSettlementGenerateDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  merchantId!: number;
+
+  @IsString()
+  @IsNotEmpty()
+  periodStart!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  periodEnd!: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
+export class MallSettlementReviewDto {
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
+export class MallSettlementPaidDto {
+  @IsOptional()
+  @IsString()
+  paidReference?: string;
+
+  @IsOptional()
+  @IsString()
+  paidProofUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
+export class MallMerchantDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  agentId?: number | null;
+
+  @IsOptional()
+  @IsIn(["tenant", "agent"])
+  ownerType?: "tenant" | "agent";
+
+  @IsOptional()
+  @IsString()
+  code?: string;
+
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsOptional()
+  @IsIn(["active", "disabled"])
+  status?: "active" | "disabled";
+
+  @IsOptional()
+  @IsBoolean()
+  mallEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  productAuditRequired?: boolean;
+
+  @IsOptional()
+  @IsIn(["platform_collect", "merchant_direct"])
+  paymentMode?: "platform_collect" | "merchant_direct";
+
+  @IsOptional()
+  @IsString()
+  region?: string;
+
+  @IsOptional()
+  @IsString()
+  contactName?: string;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  logoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  notice?: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string;
+}
+
+export class MallMerchantAccessDto {
+  @Type(() => Number)
+  @IsInt()
+  adminId!: number;
+
+  @Type(() => Number)
+  @IsInt()
+  merchantId!: number;
+
+  @IsOptional()
+  @IsString()
+  accessRole?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+}
+
+export class MallMerchantPaymentAccountDto {
+  @Type(() => Number)
+  @IsInt()
+  merchantId!: number;
+
+  @IsIn([PaymentMethod.Wechat, PaymentMethod.Alipay])
+  provider!: PaymentMethod.Wechat | PaymentMethod.Alipay;
+
+  @IsOptional()
+  @IsString()
+  merchantName?: string;
+
+  @IsOptional()
+  @IsString()
+  merchantNo?: string;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsObject()
+  config?: Record<string, unknown>;
+}
+
 export class MallCouponDto {
   @IsOptional()
   @Type(() => Number)
   @IsInt()
   tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  merchantId?: number;
 
   @IsString()
   @IsNotEmpty()
@@ -257,6 +431,11 @@ export class MallPromotionCodeDto {
   @IsInt()
   tenantId?: number;
 
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  merchantId?: number;
+
   @IsString()
   @IsNotEmpty()
   code!: string;
@@ -294,6 +473,11 @@ export class MallFlashSaleDto {
   @Type(() => Number)
   @IsInt()
   tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  merchantId?: number;
 
   @Type(() => Number)
   @IsInt()
@@ -341,6 +525,11 @@ export class MallGroupBuyDto {
   @Type(() => Number)
   @IsInt()
   tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  merchantId?: number;
 
   @Type(() => Number)
   @IsInt()
@@ -419,6 +608,11 @@ export class MallLogisticsCompanyDto {
   @Type(() => Number)
   @IsInt()
   tenantId?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  merchantId?: number;
 
   @IsString()
   @IsNotEmpty()

@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from "typeorm";
 import { Agent } from "./agent.entity";
+import { MallMerchant } from "./mall-merchant.entity";
 import { MallOrder } from "./mall-order.entity";
 import { MallPromotionCode } from "./mall-promotion-code.entity";
 import { Tenant } from "./tenant.entity";
@@ -15,6 +16,9 @@ export class MallCommission {
 
   @ManyToOne(() => Tenant, { eager: true, nullable: false, onDelete: "CASCADE" })
   tenant!: Tenant;
+
+  @ManyToOne(() => MallMerchant, { eager: true, nullable: true, onDelete: "SET NULL" })
+  merchant!: MallMerchant | null;
 
   @ManyToOne(() => MallOrder, { eager: true, nullable: false, onDelete: "CASCADE" })
   order!: MallOrder;

@@ -8,6 +8,13 @@
         <view class="favorite-btn" :class="{ active: favorited }" @click.stop="toggleFavorite">{{ favorited ? "已收藏" : "收藏" }}</view>
       </view>
       <text class="title">{{ product.title }}</text>
+      <view v-if="product.merchant?.name" class="merchant-box" @click="goMerchant">
+        <view>
+          <text class="merchant-name">{{ product.merchant.name }}</text>
+          <text class="merchant-meta">{{ product.merchant.ownerType === "agent" ? "代理店铺" : "商家店铺" }}{{ product.merchant.region ? ` · ${product.merchant.region}` : "" }}</text>
+        </view>
+        <text class="merchant-link">进店 ›</text>
+      </view>
       <view class="price-row">
         <text class="price">¥{{ money(currentSku?.price || product.price) }}</text>
         <text v-if="Number(currentSku?.originalPrice || product.originalPrice) > 0" class="origin">¥{{ money(currentSku?.originalPrice || product.originalPrice) }}</text>
@@ -120,7 +127,10 @@ function maskUser(value: any) {
   const text = String(value || "用户");
   return /^1\d{10}$/.test(text) ? `${text.slice(0, 3)}****${text.slice(-4)}` : text;
 }
-function availableStock(sku: any) { return Math.max(Number(sku.stock || 0) - Number(sku.lockedStock || 0), 0); }
+function availableStock(sku: any) {
+  if (sku?.availableStock !== undefined && sku?.availableStock !== null) return Math.max(Number(sku.availableStock || 0), 0);
+  return Math.max(Number(sku?.stock || 0) - Number(sku?.lockedStock || 0), 0);
+}
 async function load(id: number) {
   try {
     product.value = await request<any>(`/public/mall/products/${id}`);
@@ -134,15 +144,19 @@ async function load(id: number) {
   }
 }
 async function loadFlashSales() {
-  flashSales.value = await request<any[]>("/public/mall/flash-sales").then((rows) => rows.filter((item) => item.product?.id === product.value.id)).catch(() => []);
+  flashSales.value = await request<any[]>(`/public/mall/flash-sales${activityScopeQuery()}`).then((rows) => rows.filter((item) => item.product?.id === product.value.id)).catch(() => []);
 }
 async function loadGroupBuys() {
-  groupBuys.value = await request<any[]>("/public/mall/group-buys").then((rows) => rows.filter((item) => item.product?.id === product.value.id)).catch(() => []);
+  groupBuys.value = await request<any[]>(`/public/mall/group-buys${activityScopeQuery()}`).then((rows) => rows.filter((item) => item.product?.id === product.value.id)).catch(() => []);
   await loadGroupBuyTeams();
 }
 async function loadGroupBuyTeams() {
   const group = currentGroupBuy.value;
-  groupBuyTeams.value = group ? await request<any[]>(`/public/mall/group-buys/${group.id}/teams`).catch(() => []) : [];
+  groupBuyTeams.value = group ? await request<any[]>(`/public/mall/group-buys/${group.id}/teams${activityScopeQuery()}`).catch(() => []) : [];
+}
+function activityScopeQuery() {
+  const merchantId = product.value.merchant?.id || currentSku.value?.merchant?.id || 0;
+  return merchantId ? `?merchantId=${merchantId}` : "";
 }
 async function loadFavoriteStatus(id: number) {
   try {
@@ -187,6 +201,10 @@ function goCheckout() {
   if (availableStock(currentSku.value) < quantity.value) return uni.showToast({ title: "库存不足", icon: "none" });
   uni.navigateTo({ url: withTenantCode(`/pages/mall/checkout?skuId=${currentSku.value.id}&quantity=${quantity.value}`) });
 }
+function goMerchant() {
+  if (!product.value.merchant?.id) return;
+  uni.navigateTo({ url: withTenantCode(`/pages/mall/merchant?id=${product.value.merchant.id}`) });
+}
 function goFlashSale() {
   const sale = currentFlashSale.value;
   if (!currentSku.value || !sale) return uni.showToast({ title: "当前规格暂无秒杀", icon: "none" });
@@ -226,6 +244,10 @@ onLoad((query) => load(Number(query?.id || 0)));
 .favorite-btn { padding:10rpx 20rpx; border-radius:999rpx; background:#f1f5f9; color:#475569; font-size:24rpx; font-weight:900; }
 .favorite-btn.active { background:#fff7ed; color:#c2410c; }
 .title { font-size:40rpx; font-weight:900; color:#111827; line-height:1.3; }
+.merchant-box { display:flex; justify-content:space-between; align-items:center; gap:16rpx; margin-top:16rpx; padding:16rpx 18rpx; border-radius:20rpx; background:#ecfdf5; color:#0f766e; }
+.merchant-name { display:block; font-size:27rpx; font-weight:900; }
+.merchant-meta { display:block; margin-top:4rpx; font-size:22rpx; opacity:.75; }
+.merchant-link { flex:0 0 auto; padding:8rpx 14rpx; border-radius:999rpx; background:#d1fae5; color:#047857; font-size:22rpx; font-weight:900; }
 .price-row { display:flex; gap:14rpx; align-items:baseline; margin-top:18rpx; }
 .price { color:#c2410c; font-size:44rpx; font-weight:900; }
 .origin { color:#94a3b8; text-decoration:line-through; }

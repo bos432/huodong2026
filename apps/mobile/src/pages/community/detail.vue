@@ -1,7 +1,8 @@
 <template>
-  <view class="container">
+  <view class="container community-detail-page">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">‹ 返回</view>
+      <view class="nav-back" @click="goBack">返回</view>
+      <view class="nav-title">书院动态</view>
       <view class="nav-action" @click="reload">刷新</view>
     </view>
 
@@ -12,19 +13,20 @@
     </view>
 
     <template v-else-if="post">
-      <view class="card">
-        <view class="row" style="justify-content:flex-start; gap:16rpx;">
+      <view class="card post-card">
+        <view class="section-kicker">动态详情</view>
+        <view class="row author-row">
           <image class="avatar-sm" :src="post.avatar" mode="aspectFill" />
           <view>
-            <text class="body-text" style="font-weight:600;">{{ post.nickname }}</text>
-            <text class="subtle" style="display:block;">{{ post.time }}</text>
+            <text class="author-name">{{ post.nickname }}</text>
+            <text class="subtle author-time">{{ post.time }}</text>
           </view>
         </view>
-        <text class="body-text" style="display:block; margin-top:16rpx; white-space:pre-line;">{{ post.content }}</text>
+        <text class="post-content">{{ post.content }}</text>
         <view v-if="post.images?.length" class="post-images">
           <image v-for="(img, index) in post.images" :key="index" class="post-image" :src="img" mode="aspectFill" />
         </view>
-        <view class="row" style="justify-content:flex-start; gap:28rpx; margin-top:16rpx;">
+        <view class="row interact-row">
           <view class="interact-btn" @click="toggleLike">
             <text>{{ post.liked ? "❤️" : "🤍" }}</text>
             <text class="subtle">{{ post.likes }}</text>
@@ -36,21 +38,21 @@
         </view>
       </view>
 
-      <view class="card" style="margin-top:16rpx;">
-        <view class="row" style="justify-content:space-between;">
+      <view class="card comments-card">
+        <view class="row comments-head">
           <text class="title-md">评论区</text>
           <text class="subtle">{{ comments.length }} 条已展示</text>
         </view>
         <view v-if="comments.length">
           <view v-for="item in comments" :key="item.id" class="comment-item">
-            <view class="row" style="justify-content:flex-start; gap:12rpx;">
+            <view class="row comment-author">
               <image class="avatar-sm" :src="item.avatar" mode="aspectFill" />
               <view>
-                <text class="body-text" style="font-weight:600;">{{ item.nickname }}</text>
-                <text class="subtle" style="display:block;">{{ item.time }}</text>
+                <text class="author-name">{{ item.nickname }}</text>
+                <text class="subtle author-time">{{ item.time }}</text>
               </view>
             </view>
-            <text class="body-text" style="display:block; margin-top:10rpx; white-space:pre-line;">{{ item.content }}</text>
+            <text class="comment-content">{{ item.content }}</text>
           </view>
         </view>
         <view v-else class="subtle" style="margin-top:12rpx;">暂无已通过审核的评论，发表后需后台审核展示。</view>
@@ -196,34 +198,56 @@ onMounted(loadPost);
 </script>
 
 <style scoped>
+.community-detail-page { padding-bottom: 150rpx; }
 .custom-nav {
   display: flex;
   align-items: center;
   justify-content: space-between;
   padding: 16rpx 0;
 }
-.nav-back, .nav-action { font-size: 28rpx; color: #4A6B8A; }
+.nav-back, .nav-action { min-width: 104rpx; min-height: 58rpx; display: flex; align-items: center; color: #4a6b8a; font-size: 27rpx; font-weight: 800; }
+.nav-action { justify-content: flex-end; }
+.nav-title { color: #333333; font-size: 32rpx; font-weight: 900; font-family: "STKaiti", "KaiTi", serif; }
 .state-card { text-align: center; }
 .retry-button { display: inline-flex; margin-top: 20rpx; min-width: 160rpx; }
+.post-card, .comments-card { border-radius: 24rpx; box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
+.comments-card { margin-top: 20rpx; }
+.section-kicker { color: #4a6b8a; font-size: 24rpx; font-weight: 800; margin-bottom: 16rpx; }
+.author-row, .comment-author { justify-content: flex-start; gap: 16rpx; }
+.author-name { color: #333333; font-size: 28rpx; font-weight: 800; display: block; }
+.author-time { display: block; margin-top: 4rpx; }
+.post-content, .comment-content {
+  display: block;
+  margin-top: 16rpx;
+  color: #666666;
+  font-size: 28rpx;
+  line-height: 1.7;
+  white-space: pre-line;
+}
 .post-images { display: flex; gap: 12rpx; flex-wrap: wrap; margin-top: 16rpx; }
 .post-image {
   width: calc(50% - 6rpx);
   height: 220rpx;
-  border-radius: 16rpx;
-  background: #E8E0D8;
+  border-radius: 18rpx;
+  background: #e8e0d8;
 }
-.interact-btn { display: flex; align-items: center; gap: 8rpx; }
+.interact-row { justify-content: flex-start; gap: 18rpx; margin-top: 18rpx; }
+.interact-btn { min-height: 62rpx; padding: 0 18rpx; display: flex; align-items: center; gap: 8rpx; border-radius: 999px; background: #f9f4ee; }
+.comments-head { justify-content: space-between; }
+.title-md { font-family: "STKaiti", "KaiTi", serif; }
 .comment-item {
   padding: 18rpx 0;
-  border-bottom: 1rpx solid #E8E0D8;
+  border-bottom: 1rpx solid #e8e0d8;
 }
+.comment-item:last-child { border-bottom: 0; }
 .bottom-actions {
   position: fixed;
   bottom: 0;
   left: 0;
   right: 0;
-  background: #fff;
+  background: rgba(255, 255, 255, 0.98);
   padding: 16rpx 32rpx calc(16rpx + env(safe-area-inset-bottom));
-  border-top: 1rpx solid #E8E0D8;
+  border-top: 1rpx solid #e8e0d8;
+  box-shadow: 0 -10rpx 30rpx rgba(51, 51, 51, 0.08);
 }
 </style>

@@ -23,6 +23,9 @@ export class CharityProjectDisbursement {
   @Column({ type: "varchar", length: 500, nullable: true })
   proofUrl!: string | null;
 
+  @Column({ type: "tinyint", default: 1 })
+  publicVisible!: boolean;
+
   @Column({ type: "varchar", length: 255, nullable: true })
   remark!: string | null;
 

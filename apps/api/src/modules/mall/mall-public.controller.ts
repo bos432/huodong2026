@@ -1,6 +1,6 @@
 import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req } from "@nestjs/common";
 import { PublicService, PublicTenantContext } from "../public/public.service";
-import { CreateMallOrderDto, MallAddressDto, MallCartItemDto, MallCartQuantityDto, MallListQueryDto, MallOrderQuoteDto, MallProviderPaymentCallbackDto, MallProviderPayDto, MallRefundRequestDto, MallReviewDto } from "./mall.dto";
+import { CreateMallOrderDto, MallAddressDto, MallCartItemDto, MallCartQuantityDto, MallListQueryDto, MallOrderQuoteDto, MallProviderPayDto, MallRefundRequestDto, MallReviewDto } from "./mall.dto";
 import { MallService } from "./mall.service";
 
 @Controller("public")
@@ -8,8 +8,18 @@ export class MallPublicController {
   constructor(private readonly service: MallService, private readonly publicService: PublicService) {}
 
   @Get("mall/categories")
-  categories(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
-    return this.service.publicCategories(this.tenantContext(req, tenantCode));
+  categories(@Query() query: MallListQueryDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    return this.service.publicCategories(query, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("mall/merchants")
+  merchants(@Query() query: MallListQueryDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    return this.service.publicMerchants(query, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("mall/merchants/:id")
+  merchant(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    return this.service.publicMerchantDetail(id, this.tenantContext(req, tenantCode));
   }
 
   @Get("mall/products")
@@ -28,56 +38,56 @@ export class MallPublicController {
   }
 
   @Get("mall/flash-sales")
-  flashSales(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
-    return this.service.publicFlashSales(this.tenantContext(req, tenantCode));
+  flashSales(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
+    return this.service.publicFlashSales(this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("mall/group-buys")
-  groupBuys(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
-    return this.service.publicGroupBuys(this.tenantContext(req, tenantCode));
+  groupBuys(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
+    return this.service.publicGroupBuys(this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("mall/group-buys/:id/teams")
-  groupBuyTeams(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
-    return this.service.publicGroupBuyTeams(id, this.tenantContext(req, tenantCode));
+  groupBuyTeams(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
+    return this.service.publicGroupBuyTeams(id, this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("mall/coupons")
-  coupons(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("amount") amount?: string) {
-    return this.service.publicCoupons(this.tenantContext(req, tenantCode), amount ? Number(amount) : undefined);
+  coupons(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("amount") amount?: string, @Query("merchantId") merchantId?: string) {
+    return this.service.publicCoupons(this.tenantContext(req, tenantCode), amount ? Number(amount) : undefined, merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("me/mall/coupons")
-  async myCoupons(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("amount") amount?: string) {
+  async myCoupons(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("amount") amount?: string, @Query("merchantId") merchantId?: string) {
     const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myAvailableCoupons(user, this.tenantContext(req, tenantCode), amount ? Number(amount) : undefined);
+    return this.service.myAvailableCoupons(user, this.tenantContext(req, tenantCode), amount ? Number(amount) : undefined, merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("me/mall/coupon-claims")
-  async myCouponClaims(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("status") status?: string) {
+  async myCouponClaims(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("status") status?: string, @Query("merchantId") merchantId?: string) {
     const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myCouponClaims(user, this.tenantContext(req, tenantCode), status);
+    return this.service.myCouponClaims(user, this.tenantContext(req, tenantCode), status, merchantId ? Number(merchantId) : undefined);
   }
 
   @Post("me/mall/coupons/:id/claim")
-  async claimCoupon(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+  async claimCoupon(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
     const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.claimCoupon(user, id, this.tenantContext(req, tenantCode));
+    return this.service.claimCoupon(user, id, this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("mall/coupons/validate")
-  validateCoupon(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("code") code?: string, @Query("amount") amount?: string) {
-    return this.service.validatePublicCoupon(this.tenantContext(req, tenantCode), code, Number(amount || 0));
+  validateCoupon(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("code") code?: string, @Query("amount") amount?: string, @Query("merchantId") merchantId?: string) {
+    return this.service.validatePublicCoupon(this.tenantContext(req, tenantCode), code, Number(amount || 0), merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("mall/logistics-companies")
-  logisticsCompanies(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
-    return this.service.publicLogisticsCompanies(this.tenantContext(req, tenantCode));
+  logisticsCompanies(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
+    return this.service.publicLogisticsCompanies(this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);
   }
 
   @Get("mall/payment-methods")
-  paymentMethods(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
-    return this.service.publicPaymentMethods(this.tenantContext(req, tenantCode));
+  paymentMethods(@Query() query: MallListQueryDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    return this.service.publicPaymentMethods(query, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/mall/favorites")
@@ -164,6 +174,12 @@ export class MallPublicController {
     return this.service.createOrder(user, dto, this.tenantContext(req, tenantCode));
   }
 
+  @Post("mall/checkout-groups")
+  async createCheckoutGroup(@Body() dto: CreateMallOrderDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.createCheckoutGroup(user, dto, this.tenantContext(req, tenantCode));
+  }
+
   @Post("mall/quote")
   async quoteOrder(@Body() dto: MallOrderQuoteDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
@@ -239,7 +255,22 @@ export class MallPaymentController {
   constructor(private readonly service: MallService) {}
 
   @Post("wechat/callback")
-  wechatPaymentCallback(@Body() body: MallProviderPaymentCallbackDto) {
-    return this.service.wechatPaymentCallback(body);
+  wechatPaymentCallback(@Body() body: Record<string, unknown>, @Req() req: any) {
+    return this.service.wechatPaymentCallback(body, { headers: req.headers, rawBody: req.rawBody });
+  }
+
+  @Post("wechat/refund-callback")
+  wechatRefundNotification(@Body() body: Record<string, unknown>, @Req() req: any) {
+    return this.service.wechatRefundNotification(body, { headers: req.headers, rawBody: req.rawBody });
+  }
+
+  @Post("merchants/:merchantId/wechat/callback")
+  wechatMerchantPaymentCallback(@Param("merchantId", ParseIntPipe) merchantId: number, @Body() body: Record<string, unknown>, @Req() req: any) {
+    return this.service.wechatMerchantPaymentCallback(merchantId, body, { headers: req.headers, rawBody: req.rawBody });
+  }
+
+  @Post("merchants/:merchantId/wechat/refund-callback")
+  wechatMerchantRefundNotification(@Param("merchantId", ParseIntPipe) merchantId: number, @Body() body: Record<string, unknown>, @Req() req: any) {
+    return this.service.wechatMerchantRefundNotification(merchantId, body, { headers: req.headers, rawBody: req.rawBody });
   }
 }

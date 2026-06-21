@@ -8,6 +8,7 @@ import { Activity } from "../../entities/activity.entity";
 import { AgentPaymentAccount } from "../../entities/agent-payment-account.entity";
 import { Agent } from "../../entities/agent.entity";
 import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { AmbassadorApplicationFollowup } from "../../entities/ambassador-application-followup.entity";
 import { AmbassadorCase } from "../../entities/ambassador-case.entity";
 import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
@@ -25,6 +26,7 @@ import { CharityFundSetting } from "../../entities/charity-fund-setting.entity";
 import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
 import { CharityProjectDisbursement } from "../../entities/charity-project-disbursement.entity";
 import { CharityProject } from "../../entities/charity-project.entity";
+import { CharityProjectUpdate } from "../../entities/charity-project-update.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
@@ -35,6 +37,7 @@ import { PaymentTransaction } from "../../entities/payment-transaction.entity";
 import { Refund } from "../../entities/refund.entity";
 import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantRegionHitLog } from "../../entities/tenant-region-hit-log.entity";
 import { TenantRegion } from "../../entities/tenant-region.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
@@ -44,6 +47,10 @@ import { UserLearning } from "../../entities/user-learning.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
 import { Waitlist } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
+import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
+import { VolunteerServiceRecord } from "../../entities/volunteer-service-record.entity";
+import { VolunteerTaskApplication } from "../../entities/volunteer-task-application.entity";
+import { VolunteerTask } from "../../entities/volunteer-task.entity";
 import { PaymentController, PublicController } from "./public.controller";
 import { PaymentProviderService } from "./payment-provider.service";
 import { PublicService } from "./public.service";
@@ -52,9 +59,9 @@ import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning, UserFavorite, Certificate])],
+  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning, UserFavorite, Certificate])],
   controllers: [PublicController, PaymentController],
   providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
-  exports: [PublicService]
+  exports: [PublicService, PaymentProviderService]
 })
 export class PublicModule {}

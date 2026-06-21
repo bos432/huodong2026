@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
+import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
 import { canAccess, permissions } from "../permissions";
 
@@ -12,10 +13,18 @@ const setting = ref<any>(null);
 const transactions = ref<any[]>([]);
 const projects = ref<any[]>([]);
 const projectDialogVisible = ref(false);
+const updateDialogVisible = ref(false);
+const disbursementDialogVisible = ref(false);
 const editingProjectId = ref<number | null>(null);
+const activeProject = ref<any | null>(null);
+const activeDisbursementProject = ref<any | null>(null);
+const projectUpdates = ref<any[]>([]);
+const projectDisbursements = ref<any[]>([]);
 const txFilter = reactive({ keyword: "", type: "", sourceType: "" });
 const settingForm = reactive({ enabled: true, ratePercent: 5, accrualBasis: "paid_amount", manualBasisAmount: undefined as number | undefined, userDisplayName: "我的公益贡献", publicNote: "公益金来自平台订单收入计提，用户无需额外支付。", retainOnActivityRefund: true, ambassadorThreshold: 100, ambassadorTitle: "公益大使" });
 const projectForm = reactive({ title: "", targetAmount: 500, status: "fundraising", coverUrl: "", description: "", executedAt: "", publicVisible: true });
+const updateForm = reactive({ title: "", content: "", proofUrl: "", publicVisible: true, publishedAt: "" });
+const disbursementForm = reactive({ amount: 100, remark: "公益项目执行拨付", proofUrl: "", publicVisible: true });
 
 const canOperate = computed(() => canAccess(permissions.operation));
 const canFinance = computed(() => canAccess(permissions.finance));
@@ -24,6 +33,7 @@ const statusText: Record<string, string> = {
   fundraising: "筹集中",
   pending_execution: "待执行",
   executing: "执行中",
+  pending_acceptance: "待验收",
   completed: "已完成",
   archived: "已归档"
 };
@@ -140,16 +150,45 @@ async function saveProject() {
 }
 
 async function addDisbursement(row: any) {
-  const { value: amountText } = await ElMessageBox.prompt(`当前公益池可用 ¥${money(summary.value?.availableAmount)}，请输入「${row.title}」本次拨付金额。`, "登记公益拨付", { inputValue: "100", confirmButtonText: "下一步", cancelButtonText: "取消" });
-  const amount = Number(amountText);
+  activeDisbursementProject.value = row;
+  Object.assign(disbursementForm, { amount: 100, remark: "公益项目执行拨付", proofUrl: "", publicVisible: true });
+  disbursementDialogVisible.value = true;
+}
+
+async function saveDisbursement() {
+  if (!activeDisbursementProject.value) return;
+  const amount = Number(disbursementForm.amount);
   if (!Number.isFinite(amount) || amount <= 0) return ElMessage.error("拨付金额必须大于 0");
-  const { value: remark } = await ElMessageBox.prompt("填写拨付说明或凭证摘要。", "拨付说明", { inputType: "textarea", inputValue: "公益项目执行拨付", confirmButtonText: "登记", cancelButtonText: "取消" });
   try {
-    await api.post(`/admin/charity/projects/${row.id}/disbursements`, { amount, remark });
+    await api.post(`/admin/charity/projects/${activeDisbursementProject.value.id}/disbursements`, { ...disbursementForm, amount, proofUrl: disbursementForm.proofUrl || undefined });
     ElMessage.success("拨付已登记");
+    disbursementDialogVisible.value = false;
     await load();
   } catch (error: any) {
     ElMessage.error(error.message || "登记失败");
+  }
+}
+
+async function openProjectUpdates(row: any) {
+  activeProject.value = row;
+  Object.assign(updateForm, { title: "", content: "", proofUrl: "", publicVisible: true, publishedAt: "" });
+  const data = await api.get<any, any>(`/admin/charity/projects/${row.id}/updates`);
+  projectUpdates.value = data.updates || [];
+  projectDisbursements.value = data.disbursements || [];
+  updateDialogVisible.value = true;
+}
+
+async function saveProjectUpdate() {
+  if (!activeProject.value) return;
+  if (!updateForm.title.trim()) return ElMessage.error("请输入动态标题");
+  if (!updateForm.content.trim()) return ElMessage.error("请输入动态内容");
+  try {
+    await api.post(`/admin/charity/projects/${activeProject.value.id}/updates`, { ...updateForm, proofUrl: updateForm.proofUrl || undefined, publishedAt: updateForm.publishedAt || undefined });
+    ElMessage.success("执行动态已发布");
+    await openProjectUpdates(activeProject.value);
+    await load();
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存失败");
   }
 }
 
@@ -159,6 +198,62 @@ function money(value?: string | number) {
 
 function formatTime(value?: string) {
   return value ? value.replace("T", " ").slice(0, 16) : "-";
+}
+
+function openProof(url?: string | null) {
+  if (!url) return;
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
+function uploadHeaders() {
+  const token = localStorage.getItem("admin_token");
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
+function beforeImageUpload(file: File) {
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
+  if (!allowed.includes(file.type)) {
+    ElMessage.error("请上传 JPG、PNG、WebP 或 GIF 图片");
+    return false;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error("图片不能超过 5MB");
+    return false;
+  }
+  return true;
+}
+
+function beforeProofUpload(file: File) {
+  const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
+  if (!allowed.includes(file.type)) {
+    ElMessage.error("请上传 JPG、PNG、WebP、GIF 或 PDF 凭证");
+    return false;
+  }
+  if (file.size > 10 * 1024 * 1024) {
+    ElMessage.error("凭证不能超过 10MB");
+    return false;
+  }
+  return true;
+}
+
+function handleUpdateProofUploadSuccess(response: any) {
+  const data = response?.data || response;
+  const url = String(data?.url || "").trim();
+  if (!url) return ElMessage.error("上传成功但未返回凭证地址");
+  updateForm.proofUrl = url;
+  ElMessage.success("执行凭证已上传");
+}
+
+function handleDisbursementProofUploadSuccess(response: any) {
+  const data = response?.data || response;
+  const url = String(data?.url || "").trim();
+  if (!url) return ElMessage.error("上传成功但未返回凭证地址");
+  disbursementForm.proofUrl = url;
+  ElMessage.success("拨付凭证已上传");
+}
+
+function handleProofUploadError(error: any) {
+  ElMessage.error(error?.message || "凭证上传失败");
 }
 
 onMounted(load);
@@ -216,9 +311,10 @@ onMounted(load);
         <el-table-column label="进度" width="180"><template #default="{ row }"><el-progress :percentage="row.progressPercent || 0" /></template></el-table-column>
         <el-table-column label="公开" width="90"><template #default="{ row }"><el-tag :type="row.publicVisible ? 'success' : 'info'">{{ row.publicVisible ? "展示" : "隐藏" }}</el-tag></template></el-table-column>
         <el-table-column label="更新时间" width="170"><template #default="{ row }">{{ formatTime(row.updatedAt) }}</template></el-table-column>
-        <el-table-column v-if="canOperate || canFinance" label="操作" width="180" fixed="right">
+        <el-table-column v-if="canOperate || canFinance" label="操作" width="240" fixed="right">
           <template #default="{ row }">
             <el-button v-if="canOperate" size="small" @click="openEditProject(row)">编辑</el-button>
+            <el-button size="small" @click="openProjectUpdates(row)">动态</el-button>
             <el-button v-if="canFinance" size="small" type="primary" @click="addDisbursement(row)">拨付</el-button>
           </template>
         </el-table-column>
@@ -272,6 +368,86 @@ onMounted(load);
         <el-button type="primary" :loading="savingProject" @click="saveProject">保存</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="updateDialogVisible" :title="activeProject ? `执行动态：${activeProject.title}` : '执行动态'" width="760px" destroy-on-close>
+      <div class="update-layout">
+        <div class="update-form">
+          <h3>发布执行动态</h3>
+          <el-form :model="updateForm" label-width="96px">
+            <el-form-item label="标题" required><el-input v-model="updateForm.title" maxlength="120" /></el-form-item>
+            <el-form-item label="内容" required><el-input v-model="updateForm.content" type="textarea" :rows="4" /></el-form-item>
+            <el-form-item label="执行凭证">
+              <div class="upload-line">
+                <el-input v-model="updateForm.proofUrl" maxlength="500" placeholder="上传图片后自动填入，也可填写外部凭证 URL" />
+                <el-upload
+                  action="/api/admin/uploads/images"
+                  name="file"
+                  :headers="uploadHeaders()"
+                  :show-file-list="false"
+                  :before-upload="beforeImageUpload"
+                  :on-success="handleUpdateProofUploadSuccess"
+                  :on-error="handleProofUploadError"
+                >
+                  <el-button :icon="UploadFilled">上传</el-button>
+                </el-upload>
+                <el-button v-if="updateForm.proofUrl" @click="openProof(updateForm.proofUrl)">查看</el-button>
+              </div>
+            </el-form-item>
+            <el-form-item label="发布时间"><el-date-picker v-model="updateForm.publishedAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" placeholder="默认当前时间" /></el-form-item>
+            <el-form-item label="公开展示"><el-switch v-model="updateForm.publicVisible" /></el-form-item>
+          </el-form>
+          <el-button type="primary" @click="saveProjectUpdate">发布动态</el-button>
+        </div>
+        <div class="update-list">
+          <h3>已发布动态</h3>
+          <el-empty v-if="!projectUpdates.length" description="暂无动态" />
+          <div v-for="item in projectUpdates" :key="item.id" class="timeline-item">
+            <strong>{{ item.title }}</strong>
+            <span>{{ formatTime(item.publishedAt || item.createdAt) }} · {{ item.publicVisible ? "公开" : "隐藏" }}</span>
+            <p>{{ item.content }}</p>
+            <a v-if="item.proofUrl" :href="item.proofUrl" target="_blank">查看凭证</a>
+          </div>
+          <h3>拨付凭证</h3>
+          <el-empty v-if="!projectDisbursements.length" description="暂无拨付记录" />
+          <div v-for="item in projectDisbursements" :key="item.id" class="timeline-item">
+            <strong>¥{{ money(item.amount) }}</strong>
+            <span>{{ formatTime(item.createdAt) }} · {{ item.operator?.username || "系统" }}</span>
+            <p>{{ item.remark || "公益项目拨付" }}</p>
+            <a v-if="item.proofUrl" :href="item.proofUrl" target="_blank">查看凭证</a>
+          </div>
+        </div>
+      </div>
+    </el-dialog>
+
+    <el-dialog v-model="disbursementDialogVisible" :title="activeDisbursementProject ? `公益拨付：${activeDisbursementProject.title}` : '公益拨付'" width="560px" destroy-on-close>
+      <el-alert class="page-hint" type="info" :closable="false" :title="`当前公益池可用 ¥${money(summary?.availableAmount)}`" />
+      <el-form :model="disbursementForm" label-width="96px">
+        <el-form-item label="拨付金额" required><el-input-number v-model="disbursementForm.amount" :min="0.01" :precision="2" /></el-form-item>
+        <el-form-item label="拨付说明"><el-input v-model="disbursementForm.remark" type="textarea" :rows="3" maxlength="500" /></el-form-item>
+        <el-form-item label="拨付凭证">
+          <div class="upload-line">
+            <el-input v-model="disbursementForm.proofUrl" maxlength="500" placeholder="上传图片/PDF 后自动填入，也可填写外部凭证 URL" />
+            <el-upload
+              action="/api/admin/uploads/settlement-proofs"
+              name="file"
+              :headers="uploadHeaders()"
+              :show-file-list="false"
+              :before-upload="beforeProofUpload"
+              :on-success="handleDisbursementProofUploadSuccess"
+              :on-error="handleProofUploadError"
+            >
+              <el-button :icon="UploadFilled">上传</el-button>
+            </el-upload>
+            <el-button v-if="disbursementForm.proofUrl" @click="openProof(disbursementForm.proofUrl)">查看</el-button>
+          </div>
+        </el-form-item>
+        <el-form-item label="公开展示"><el-switch v-model="disbursementForm.publicVisible" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="disbursementDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="saveDisbursement">登记拨付</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -289,7 +465,16 @@ onMounted(load);
 .table-head h3 { margin: 0; }
 .filters { display: grid; grid-template-columns: 220px 150px 150px; gap: 10px; }
 h3 { margin: 0 0 16px; }
+.update-layout { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; align-items: start; }
+.update-form, .update-list { min-width: 0; }
+.timeline-item { padding: 12px 0; border-bottom: 1px solid #eef2f7; }
+.timeline-item strong { display: block; color: #111827; }
+.timeline-item span { display: block; margin-top: 4px; color: #667085; font-size: 12px; }
+.timeline-item p { margin: 8px 0 0; color: #344054; line-height: 1.55; white-space: pre-wrap; }
+.timeline-item a { display: inline-block; margin-top: 8px; color: #2563eb; }
+.upload-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; width: 100%; }
 @media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
 @media (max-width: 760px) { .table-head { display: grid; } .filters { grid-template-columns: 1fr; } }
-@media (max-width: 640px) { .metric-grid { grid-template-columns: 1fr; } }
+@media (max-width: 760px) { .update-layout { grid-template-columns: 1fr; } }
+@media (max-width: 640px) { .metric-grid, .upload-line { grid-template-columns: 1fr; } }
 </style>

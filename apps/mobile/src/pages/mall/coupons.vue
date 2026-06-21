@@ -46,12 +46,13 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
 
 const status = ref<"claimable" | "available" | "used" | "expired">("claimable");
 const loading = ref(false);
+const merchantId = ref(0);
 const claimableCoupons = ref<any[]>([]);
 const myClaims = ref<any[]>([]);
 const tabs = [
@@ -61,6 +62,7 @@ const tabs = [
   { label: "过期/停用", value: "expired" as const }
 ];
 const currentRows = computed(() => status.value === "claimable" ? claimableCoupons.value : myClaims.value);
+const merchantQuery = computed(() => merchantId.value ? `merchantId=${merchantId.value}` : "");
 
 function money(value: any) { return Number(value || 0).toFixed(2); }
 function dateText(value: any) { return value ? String(value).slice(0, 10) : "长期有效"; }
@@ -85,8 +87,12 @@ async function load() {
   loading.value = true;
   try {
     await ensureUser();
-    if (status.value === "claimable") claimableCoupons.value = await request<any[]>("/public/me/mall/coupons").catch(() => []);
-    else myClaims.value = await request<any[]>(`/public/me/mall/coupon-claims?status=${status.value}`).catch(() => []);
+    const suffix = merchantQuery.value ? `?${merchantQuery.value}` : "";
+    if (status.value === "claimable") claimableCoupons.value = await request<any[]>(`/public/me/mall/coupons${suffix}`).catch(() => []);
+    else {
+      const joiner = merchantQuery.value ? `&${merchantQuery.value}` : "";
+      myClaims.value = await request<any[]>(`/public/me/mall/coupon-claims?status=${status.value}${joiner}`).catch(() => []);
+    }
   } catch (error: any) {
     uni.showToast({ title: error.message || "加载优惠券失败", icon: "none" });
   } finally {
@@ -96,7 +102,8 @@ async function load() {
 async function claimCoupon(item: any) {
   try {
     await ensureUser();
-    await request(`/public/me/mall/coupons/${item.id}/claim`, { method: "POST" });
+    const suffix = merchantQuery.value ? `?${merchantQuery.value}` : "";
+    await request(`/public/me/mall/coupons/${item.id}/claim${suffix}`, { method: "POST" });
     uni.showToast({ title: "领取成功", icon: "none" });
     await load();
   } catch (error: any) {
@@ -104,8 +111,12 @@ async function claimCoupon(item: any) {
   }
 }
 function goMall() {
-  uni.navigateTo({ url: withTenantCode("/pages/mall/index") });
+  const target = merchantId.value ? `/pages/mall/merchant?id=${merchantId.value}` : "/pages/mall/index";
+  uni.navigateTo({ url: withTenantCode(target) });
 }
+onLoad((query: any) => {
+  merchantId.value = Number(query?.merchantId || 0);
+});
 onShow(load);
 </script>
 

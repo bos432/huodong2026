@@ -7,6 +7,8 @@ const realPaymentFlags = [
   "REAL_REFUND_QUERY_IMPLEMENTED",
   "REAL_PAYMENT_STATEMENT_FETCH_IMPLEMENTED",
   "AGENT_REAL_TRANSFER_IMPLEMENTED",
+  "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED",
+  "MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED",
   "REAL_PAYMENT_PREFLIGHT_PASSED"
 ];
 
@@ -40,6 +42,16 @@ const tenantFlags = [
 const tenantConfigKeys = [
   "MULTI_TENANT_PREFLIGHT_RESULT_FILE",
   "MULTI_TENANT_PREFLIGHT_MAX_AGE_HOURS"
+];
+
+const mallMultiMerchantFlags = [
+  "MALL_MULTI_MERCHANT_ENABLED",
+  "MALL_MULTI_MERCHANT_PREFLIGHT_PASSED"
+];
+
+const mallMultiMerchantConfigKeys = [
+  "MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE",
+  "MALL_MULTI_MERCHANT_SMOKE_MAX_AGE_HOURS"
 ];
 
 const failures = [];
@@ -111,19 +123,44 @@ for (const key of tenantConfigKeys) {
   checkSourceIncludes(systemSettings, `envLine("${key}"`, "admin deployment settings");
 }
 
+for (const flag of mallMultiMerchantFlags) {
+  checkSourceIncludes(preflight, flag, "preflight");
+  checkSourceIncludes(doctor, flag, "doctor");
+  checkSourceIncludes(runtimeValidation, flag, "runtime config validation");
+  checkSourceIncludes(productionExample, `${flag}=false`, "production env example");
+  checkSourceIncludes(initProductionEnv, `["${flag}", "false"]`, "production env init script");
+  checkSourceIncludes(compose, `${flag}: \${${flag}:-false}`, "docker compose");
+  checkSourceIncludes(systemSettings, `envLine("${flag}"`, "admin deployment settings");
+}
+
+for (const key of mallMultiMerchantConfigKeys) {
+  checkSourceIncludes(preflight, key, "preflight");
+  checkSourceIncludes(doctor, key, "doctor");
+  checkSourceIncludes(productionExample, `${key}=`, "production env example");
+  checkSourceIncludes(initProductionEnv, `["${key}",`, "production env init script");
+  checkSourceIncludes(compose, `${key}: \${${key}`, "docker compose");
+  checkSourceIncludes(systemSettings, `envLine("${key}"`, "admin deployment settings");
+}
+
 checkSourceIncludes(preflight, "checkRealPaymentSmokeResult(env, envPath)", "preflight");
 checkSourceIncludes(preflight, "REAL_PAYMENT_PREFLIGHT_PASSED is not true", "preflight");
 checkSourceIncludes(preflight, "checkTenantSmokeResult(env, envPath)", "preflight");
 checkSourceIncludes(preflight, "tenant isolation preflight is still marked incomplete", "preflight");
+checkSourceIncludes(preflight, "checkMallMultiMerchantSmokeResult(env, envPath)", "preflight");
+checkSourceIncludes(preflight, "multi-merchant mall preflight is still marked incomplete", "preflight");
 checkSourceIncludes(doctor, "realPaymentRolloutChecks", "doctor");
 checkSourceIncludes(doctor, "multiTenantRolloutChecks", "doctor");
+checkSourceIncludes(doctor, "mallMultiMerchantRolloutChecks", "doctor");
 checkSourceIncludes(doctor, "REAL_PAYMENT_PREFLIGHT_RESULT_FILE", "doctor");
 checkSourceIncludes(doctor, "MULTI_TENANT_PREFLIGHT_RESULT_FILE", "doctor");
+checkSourceIncludes(doctor, "MALL_MULTI_MERCHANT_SMOKE_RESULT_FILE", "doctor");
 
 checkSourceIncludes(runtimeValidation, "addRealPaymentRuntimeChecks", "runtime config validation");
 checkSourceIncludes(runtimeValidation, "addMultiTenantRuntimeChecks", "runtime config validation");
+checkSourceIncludes(runtimeValidation, "addMallMultiMerchantRuntimeChecks", "runtime config validation");
 checkSourceIncludes(runtimeValidation, "真实支付总开关", "runtime config validation");
 checkSourceIncludes(runtimeValidation, "多机构隔离开关", "runtime config validation");
+checkSourceIncludes(runtimeValidation, "多商户商城开关", "runtime config validation");
 
 checkSourceIncludes(systemSettings, "rolloutReadiness", "admin deployment settings");
 checkSourceIncludes(systemSettings, "buildRolloutReadiness", "admin deployment settings");
@@ -132,6 +169,8 @@ checkSourceIncludes(systemSettings, "真实支付总开关", "admin deployment s
 checkSourceIncludes(systemSettings, "微信支付", "admin deployment settings");
 checkSourceIncludes(systemSettings, "支付宝", "admin deployment settings");
 checkSourceIncludes(systemSettings, "代理真实打款", "admin deployment settings");
+checkSourceIncludes(systemSettings, "商城微信支付", "admin deployment settings");
+checkSourceIncludes(systemSettings, "店铺直收支付", "admin deployment settings");
 checkSourceIncludes(systemSettings, "预发验收结果", "admin deployment settings");
 checkSourceIncludes(systemSettings, "WECHAT_PAY_ENABLED 或 ALIPAY_ENABLED", "admin deployment settings");
 checkSourceIncludes(systemSettings, "WECHAT_PAY_NOTIFY_URL", "admin deployment settings");
@@ -139,9 +178,14 @@ checkSourceIncludes(systemSettings, "ALIPAY_NOTIFY_URL", "admin deployment setti
 checkSourceIncludes(systemSettings, "multiTenantEnabled", "admin deployment settings");
 checkSourceIncludes(systemSettings, "multiTenantPreflightResultFile", "admin deployment settings");
 checkSourceIncludes(systemSettings, "multiTenantPreflightMaxAgeHours", "admin deployment settings");
+checkSourceIncludes(systemSettings, "mallMultiMerchantEnabled", "admin deployment settings");
+checkSourceIncludes(systemSettings, "mallMultiMerchantSmokeResultFile", "admin deployment settings");
+checkSourceIncludes(systemSettings, "mallMultiMerchantSmokeMaxAgeHours", "admin deployment settings");
 
 checkSourceIncludes(realPaymentPlan, "REAL_PAYMENT_ENABLED=false", "real payment integration plan");
 checkSourceIncludes(realPaymentPlan, "AGENT_REAL_TRANSFER_IMPLEMENTED=false", "real payment integration plan");
+checkSourceIncludes(realPaymentPlan, "MALL_REAL_WECHAT_PAYMENT_IMPLEMENTED=false", "real payment integration plan");
+checkSourceIncludes(realPaymentPlan, "MALL_MERCHANT_DIRECT_PAYMENT_IMPLEMENTED=false", "real payment integration plan");
 checkSourceIncludes(realPaymentPlan, "REAL_PAYMENT_PREFLIGHT_PASSED=false", "real payment integration plan");
 checkSourceIncludes(realPaymentPlan, "真实支付预发验收必须包含代理真实打款证据", "real payment integration plan");
 
@@ -151,12 +195,14 @@ checkSourceIncludes(tenantPlan, "deploy/tenant-smoke-result.json", "multi-tenant
 
 checkSourceIncludes(launchChecklist, "REAL_PAYMENT_ENABLED=false", "launch checklist");
 checkSourceIncludes(launchChecklist, "MULTI_TENANT_ENABLED=false", "launch checklist");
+checkSourceIncludes(launchChecklist, "MALL_MULTI_MERCHANT_ENABLED=false", "launch checklist");
 checkSourceIncludes(progress, "真实支付上线挡板", "project progress");
 checkSourceIncludes(progress, "多机构隔离计划与挡板", "project progress");
+checkSourceIncludes(progress, "多商户商城上线挡板", "project progress");
 
 if (failures.length) {
   for (const failure of failures) console.error(`ERR  ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log("OK   preflight rollout flags guard covers real payment and multi-tenant rollout defaults.");
+  console.log("OK   preflight rollout flags guard covers real payment, multi-tenant, and multi-merchant mall rollout defaults.");
 }
