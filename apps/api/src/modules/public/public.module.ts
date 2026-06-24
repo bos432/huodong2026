@@ -21,6 +21,7 @@ import { CourseLesson } from "../../entities/course-lesson.entity";
 import { CourseOrder } from "../../entities/course-order.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
+import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { CharityFundSetting } from "../../entities/charity-fund-setting.entity";
 import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
@@ -60,7 +61,7 @@ import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning, UserFavorite, Certificate, CommunityPost])],
+  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, MiniprogramReleaseSetting, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning, UserFavorite, Certificate, CommunityPost])],
   controllers: [PublicController, PaymentController],
   providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
   exports: [PublicService, PaymentProviderService]

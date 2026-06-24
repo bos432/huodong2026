@@ -25,6 +25,7 @@ import { CourseLesson } from "../../entities/course-lesson.entity";
 import { CourseOrder, CourseOrderStatus } from "../../entities/course-order.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
+import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
@@ -94,6 +95,7 @@ export class PublicService {
     @InjectRepository(MemberPointLog) private readonly memberPointLogs: Repository<MemberPointLog>,
     @InjectRepository(Waitlist) private readonly waitlists: Repository<Waitlist>,
     @InjectRepository(H5AuthCodeLog) private readonly h5AuthCodeLogs: Repository<H5AuthCodeLog>,
+    @InjectRepository(MiniprogramReleaseSetting) private readonly miniprogramReleaseSettings: Repository<MiniprogramReleaseSetting>,
     @InjectRepository(UserWallet) private readonly userWallets: Repository<UserWallet>,
     @InjectRepository(WalletTransaction) private readonly walletTransactions: Repository<WalletTransaction>,
     @InjectRepository(ActivityChannel) private readonly activityChannels: Repository<ActivityChannel>,
@@ -1509,9 +1511,10 @@ export class PublicService {
 
   private async resolveWechatIdentity(code: string, requestedAppId?: string) {
     const realWechatLogin = this.config.get("WECHAT_LOGIN_REAL_ENABLED", this.config.get("NODE_ENV") === "production" ? "true" : "false") === "true";
-    const appId = requestedAppId?.trim() || this.config.get<string>("WECHAT_APP_ID") || this.config.get<string>("WECHAT_PAY_APP_ID") || "";
+    const releaseSetting = await this.miniprogramReleaseSettings.findOne({ where: {}, order: { id: "ASC" } });
+    const appId = requestedAppId?.trim() || this.config.get<string>("WECHAT_APP_ID") || releaseSetting?.appId || this.config.get<string>("WECHAT_PAY_APP_ID") || "";
     if (!realWechatLogin) return { openid: `dev_${code}`, unionid: null, appId: appId || "dev" };
-    const appSecret = this.config.get<string>("WECHAT_APP_SECRET");
+    const appSecret = this.config.get<string>("WECHAT_APP_SECRET") || (releaseSetting?.appId === appId ? releaseSetting?.appSecret : "") || "";
     if (!appId || !appSecret) throw new BadRequestException("微信登录配置未完成");
     const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
     const response = await fetch(url);
