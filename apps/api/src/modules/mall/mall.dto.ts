@@ -146,6 +146,10 @@ export class MallListQueryDto {
   tenantId?: number;
 
   @IsOptional()
+  @IsString()
+  tenantCode?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   merchantId?: number;

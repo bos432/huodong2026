@@ -237,9 +237,9 @@ async function mallFlow(financeToken, opsToken) {
   assert(products.length >= 4, "商城商品不足 4 个，请先执行 seed");
   const newestProducts = pickList(await api(`/public/mall/products?tenantCode=${TENANT_CODE}&sort=newest&pageSize=20`, { headers: tenantHeader() }));
   const hotProducts = pickList(await api(`/public/mall/products?tenantCode=${TENANT_CODE}&sort=hot&pageSize=20`, { headers: tenantHeader() }));
-  const searchedProducts = pickList(await api(`/public/mall/products?tenantCode=${TENANT_CODE}&keyword=${encodeURIComponent("书院")}&pageSize=20`, { headers: tenantHeader() }));
+  const searchedProducts = pickList(await api(`/public/mall/products?tenantCode=${TENANT_CODE}&keyword=${encodeURIComponent("慢π")}&pageSize=20`, { headers: tenantHeader() }));
   assert(newestProducts.length >= 1 && hotProducts.length >= 1, "商城新品/热销榜接口无商品");
-  assert(searchedProducts.some((item) => String(item.title || "").includes("书院") || String(item.brandName || "").includes("书院")), "商城搜索接口未返回匹配商品");
+  assert(searchedProducts.some((item) => String(item.title || "").includes("慢π") || String(item.brandName || "").includes("慢π")), "商城搜索接口未返回匹配商品");
   const product = products.find((item) => (item.skus || []).some((sku) => Number(sku.price || 0) >= 50 && Number(sku.stock || 0) - Number(sku.lockedStock || 0) > 0));
   assert(product, "商城没有可购买库存");
   const merchantId = product.merchant?.id || product.merchantId;

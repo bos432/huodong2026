@@ -264,12 +264,13 @@ export async function updateMyPhone(phone: string, verificationToken: string, ve
 
 export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: string }> {
   const token = getUserToken();
+  const tenantCode = getCurrentTenantCode();
   return new Promise((resolve, reject) => {
     uni.uploadFile({
-      url: `${API_BASE}${appendTenantCode("/public/me/avatar", getCurrentTenantCode())}`,
+      url: `${API_BASE}${appendTenantCode("/public/me/avatar", tenantCode)}`,
       filePath,
       name: "file",
-      header: token ? { Authorization: `Bearer ${token}` } : {},
+      header: { ...(tenantCode ? { "x-tenant-code": tenantCode } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       success(res) {
         let body: any = res.data;
         if (typeof body === "string") {
@@ -303,12 +304,13 @@ export function uploadCommunityPostImage(filePath: string): Promise<{ url: strin
 
 function uploadPublicImage(path: string, filePath: string): Promise<{ url: string; path: string }> {
   const token = getUserToken();
+  const tenantCode = getCurrentTenantCode();
   return new Promise((resolve, reject) => {
     uni.uploadFile({
-      url: `${API_BASE}${appendTenantCode(path, getCurrentTenantCode())}`,
+      url: `${API_BASE}${appendTenantCode(path, tenantCode)}`,
       filePath,
       name: "file",
-      header: token ? { Authorization: `Bearer ${token}` } : {},
+      header: { ...(tenantCode ? { "x-tenant-code": tenantCode } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       success(res) {
         let body: any = res.data;
         if (typeof body === "string") {

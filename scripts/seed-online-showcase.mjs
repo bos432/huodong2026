@@ -576,11 +576,27 @@ async function ensureCommunity(token, tenantId) {
 
   const communityActivities = pickList(await api("/admin/community-activities", { headers: auth(token) }));
   const caTitle = "【演示】周末线下共修会";
-  if (!communityActivities.some((item) => item.title === caTitle)) {
+  const communityActivityPayload = {
+    tenantId,
+    title: caTitle,
+    description: "用于展示共修活动入口和运营内容。",
+    startTime: futureDate(8, 9),
+    location: "慢π演示空间",
+    coverUrl: cover(5),
+    status: "published"
+  };
+  const existingCommunityActivity = communityActivities.find((item) => item.title === caTitle);
+  if (existingCommunityActivity) {
+    await api(`/admin/community-activities/${existingCommunityActivity.id}`, {
+      method: "PATCH",
+      headers: auth(token),
+      body: JSON.stringify(communityActivityPayload)
+    });
+  } else {
     await api("/admin/community-activities", {
       method: "POST",
       headers: auth(token),
-      body: JSON.stringify({ tenantId, title: caTitle, description: "用于展示共修活动入口和运营内容。", startTime: futureDate(8, 9), location: "慢π演示空间", coverUrl: cover(5), status: "published" })
+      body: JSON.stringify(communityActivityPayload)
     });
   }
 

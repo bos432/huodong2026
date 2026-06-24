@@ -66,7 +66,7 @@ function activityPayload() {
     coverUrl: "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1200&q=80",
     description: "用于验证参与者活动心得发布、审核、公开展示和分享统计。",
     notice: "自动烟测活动，保留用于验收追踪。",
-    location: "烟测书院共修空间",
+    location: "慢π烟测共修空间",
     startTime: futureDate(7, 14),
     endTime: futureDate(7, 16),
     registrationDeadline: futureDate(6, 20),

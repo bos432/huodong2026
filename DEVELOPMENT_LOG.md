@@ -2,6 +2,91 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 线上 H5 主流程与商城租户参数收口
+
+### 阶段名称
+
+慢π上线前完整验收 - 线上 H5 点击级主流程、心得上传与商城租户参数修复小阶段。
+
+### 本阶段完成内容
+
+- 重新读取开发计划相关记录和最新 `DEVELOPMENT_LOG.md`，确认上一阶段已完成线上 H5 新静态包发布、慢π标题复验和 API release 元数据同步。
+- 使用右侧浏览器接管线上 H5 标签页，先确认旧未刷新标签仍会停留在旧脚本 `assets/index-D6hAU5Ez.js` 和标题 `七维书院`；随后使用全新时间戳重新导航，确认线上当前 HTML 已加载新脚本 `assets/index-Dw1W2UkT.js`，标题和顶部栏均为 `慢π`。
+- 继续完成线上 H5 用户侧主流程验收：
+  - 登录演示用户 `13990000001`。
+  - 打开活动列表和活动详情。
+  - 对 `【演示】硬笔书法入门公开课` 完成报名，生成报名记录 `32`，刷新后报名状态保持 `报名成功 / 已付款`。
+  - 使用已签到活动 `【演示】国学经典晨读体验营` 创建参与者心得 `18`，内容标记 `线上H5验收心得-1782280883411`。
+  - 后台审核通过 post `18` 后，H5 首页和共修动态公开展示该心得。
+  - 动态详情页可打开，海报入口可生成非空海报图；浏览器桌面环境无法替代微信长按保存，真机微信仍需后续补验。
+- 单独补验线上心得图片上传接口：演示用户上传 1x1 PNG 成功，返回 `/uploads/community-posts/1782281401920-bf018ddc1044b.png`。
+- 发现并修复演示共修活动旧地点回流问题：线上数据已将 `【演示】周末线下共修会` 的地点从旧文案更新为 `慢π演示空间`；同步修改 `seed:online-showcase`，以后重跑 seed 会更新既有记录，不再只在缺失时创建。
+- 发现并修复验收工具/商城链路细节：
+  - `smoke-community-sharing` 不再生成 `烟测书院共修空间`，改为 `慢π烟测共修空间`。
+  - `smoke-online-showcase` 商城搜索关键词从 `书院` 改为 `慢π`。
+  - 后端 `MallListQueryDto` 增加 `tenantCode`，避免 H5 给 `/public/mall/products` 等商城公开接口追加租户参数时，在生产严格校验下被误判为非法字段。
+  - H5 上传头像、商城评价/售后图片、心得图片时补充 `x-tenant-code` 请求头，降低只依赖 query 参数的风险。
+- 真实支付仍保持关闭，未改动 `REAL_PAYMENT_ENABLED=false` / `PAYMENT_SANDBOX_ENABLED=false` 的上线安全边界。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/modules/mall/mall.dto.ts`
+- `apps/mobile/src/api.ts`
+- `scripts/seed-online-showcase.mjs`
+- `scripts/smoke-community-sharing.mjs`
+- `scripts/smoke-online-showcase.mjs`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 14:15:48 +08:00。
+- `node --check scripts/seed-online-showcase.mjs`：通过。
+- `node --check scripts/smoke-community-sharing.mjs`：通过。
+- `node --check scripts/smoke-online-showcase.mjs`：通过。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过，真实支付、发布元信息、域名、上传、权限、财务对账等 guard 均通过。
+- `git diff --check`：通过；仅提示 Windows 下 LF/CRLF 转换。
+- 旧品牌扫描：`rg -n "七维书院|七维文化|七维|奇外|电召|烟测书院|书院商城|七维书院好课|七维文化大使" scripts apps/mobile/src apps/admin/src apps/api/src packages -g "!node_modules"` 仅剩：
+  - `scripts/preflight-copy-risk-guard.mjs` 的风险词清单。
+  - `scripts/seed-online-showcase.mjs` 的旧数据清理条件。
+
+### 浏览器验收结果
+
+- 验证时间：2026-06-24 14:15:48 +08:00。
+- 验证环境：线上 H5 `https://rd.chaimen666.com/?tenantCode=qiwai-showcase&t=1782281363397#/`，右侧浏览器；线上 API `https://rd.chaimen666.com/api`。
+- 浏览器验证步骤：
+  - 打开线上 H5 首页，确认 `document.title=慢π`，顶部栏标题为 `慢π`，当前脚本为 `/assets/index-Dw1W2UkT.js`。
+  - 检查首页正文和标题不包含 `七维/奇外/电召`，可见 `慢π演示中心`、`慢π商城`、`慢π好课`、`寻找100位慢π大使`。
+  - 活动列表、活动详情、登录、报名、报名详情刷新、共修动态、心得详情、海报入口在本阶段线上点击验收中已走通。
+  - 首页可见已审核心得 `线上H5验收心得-1782280883411`。
+  - 读取控制台 error 日志：无。
+- 输入的测试数据摘要：
+  - 报名：`线上验收用户A / 13990000001 / showcase_acceptance`，报名记录 `32`。
+  - 心得：post `18`，标记 `线上H5验收心得-1782280883411`，审核备注 `线上H5最终验收通过`。
+  - 上传：`online-h5-upload-*.png`，返回 `/uploads/community-posts/1782281401920-bf018ddc1044b.png`。
+- 通过项：线上 H5 新包生效；旧品牌在当前新页面消失；用户登录、报名、刷新后状态、心得审核公开展示、图片上传、海报入口均可用；控制台无明显前端 error。
+- 发现的问题：
+  - 未刷新旧标签页仍可能停留在旧浏览器内存脚本和旧标题，需要用户刷新或打开带时间戳的新链接；当前线上 HTML 已是新包。
+  - 商城公开接口在当前线上 API 尚未部署本阶段 DTO 修复前，`tenantCode` 查询参数仍可能触发 400；本地已修复并通过构建，需随下一次服务器部署生效。
+  - 真机微信长按保存海报、朋友圈卡片和扫码回流仍未验收。
+- 是否达到可上线运营标准：H5 主流程和心得分享核心链路已达到线上试运营可用状态；商城租户参数修复需部署后复验；真实在线支付、短信、证书、回调资料未补齐前，仍只能按“试运营 / 真实支付关闭”标准上线。
+
+### 遗留问题
+
+- 本阶段后端商城 DTO 与 H5 上传 header 修复尚未发布到服务器，需要提交并让服务器拉取构建、重启 API、重新发布 H5。
+- 真机微信 iOS/Android 下的分享、海报长按保存、二维码扫码回流仍需 HTTPS 线上链接实测。
+- `/api/health/ready` 的 `config=warning` 仍符合当前真实支付、短信、证书、回调未补齐状态。
+
+### 下一阶段应继续处理的事项
+
+- 提交并推送本阶段修复；服务器拉取后执行 API/H5 构建、发布静态包、PM2 重启。
+- 部署后复验：
+  - `https://rd.chaimen666.com/api/public/mall/products?tenantCode=qiwai-showcase&keyword=慢π&pageSize=20`
+  - H5 商城首页、商品详情、加入购物车/下单入口。
+  - H5 心得图片上传和动态发布页面。
+- 若部署复验通过，继续进入真机微信验收清单；真实支付资料补齐前继续保持真实支付关闭。
+
 ## 2026-06-24 - API release 元数据同步复验
 
 ### 阶段名称
