@@ -12,13 +12,16 @@ export function hasWechatProfilePayload(profile: WechatProfilePayload) {
 export function requestWechatProfile(): Promise<WechatProfilePayload> {
   return new Promise((resolve) => {
     // #ifdef MP-WEIXIN
-    const getUserProfile = (uni as any).getUserProfile;
+    const runtimeUni = typeof uni === "undefined" ? undefined : (uni as any);
+    const runtimeWx = (globalThis as any).wx;
+    const getUserProfile = runtimeWx?.getUserProfile || runtimeUni?.getUserProfile;
+    const caller = runtimeWx?.getUserProfile ? runtimeWx : runtimeUni;
     if (typeof getUserProfile !== "function") {
       resolve({ authorized: false, unavailable: true });
       return;
     }
     try {
-      getUserProfile({
+      getUserProfile.call(caller, {
         desc: "用于完善会员昵称和头像",
         success: (res: any) => {
           const info = res?.userInfo || {};

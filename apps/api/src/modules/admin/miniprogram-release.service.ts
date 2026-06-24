@@ -215,6 +215,7 @@ export class MiniprogramReleaseService {
     return {
       appJson: this.ensureSafeAppJson(projectPath),
       appWxss: this.ensureSafeAppWxss(projectPath),
+      appMiniappJson: this.ensureMiniappAuthConfig(projectPath),
       projectConfig: this.ensureProjectConfigAppId(projectPath, setting.appId)
     };
   }
@@ -226,12 +227,34 @@ export class MiniprogramReleaseService {
     const permission = this.objectValue(json, "permission");
     const userLocation = this.objectValue(permission, "scope.userLocation");
     const before = typeof userLocation.desc === "string" ? userLocation.desc : "";
+    const miniApp = this.objectValue(json, "miniApp");
+    const hadAuthorizePage = miniApp.useAuthorizePage === true;
+    let fixed = false;
     if (before && before.length > 30) {
       userLocation.desc = SAFE_USER_LOCATION_DESC;
-      writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
-      return { path: file, userLocationDesc: userLocation.desc, fixed: true, previousLength: before.length };
+      fixed = true;
     }
-    return { path: file, userLocationDesc: before, fixed: false, previousLength: before.length };
+    if (!hadAuthorizePage) {
+      miniApp.useAuthorizePage = true;
+      fixed = true;
+    }
+    if (fixed) writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
+    return { path: file, userLocationDesc: userLocation.desc || before, fixed, previousLength: before.length, useAuthorizePage: true };
+  }
+
+  private ensureMiniappAuthConfig(projectPath: string) {
+    const file = join(projectPath, "app.miniapp.json");
+    const exists = existsSync(file);
+    const json = exists ? this.readJsonFile(file, "小程序 app.miniapp.json") : {};
+    const identity = this.objectValue(json, "identityServiceConfig");
+    const previous = { ...identity };
+    const type = Number(identity.authorizeMiniprogramType);
+    identity.authorizeMiniprogramType = [0, 1, 2].includes(type) ? type : 1;
+    identity.miniprogramLoginPath = typeof identity.miniprogramLoginPath === "string" && identity.miniprogramLoginPath ? identity.miniprogramLoginPath : "__default__";
+    identity.adaptWxLogin = typeof identity.adaptWxLogin === "boolean" ? identity.adaptWxLogin : false;
+    const changed = JSON.stringify(previous) !== JSON.stringify(identity) || !exists;
+    if (changed) writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
+    return { path: file, exists, fixed: changed, identityServiceConfig: identity };
   }
 
   private ensureSafeAppWxss(projectPath: string) {

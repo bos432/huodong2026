@@ -2,6 +2,53 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序微信授权弹窗与登录服务配置补齐
+
+### 阶段名称
+
+小程序上线准备 - 按微信官方文档补齐授权页配置小阶段。
+
+### 本阶段完成内容
+
+- 阅读微信“小程序登录服务配置”和“支持的登录方式介绍”文档，确认其属于多端身份管理/小程序登录服务能力，不是普通 `wx.login` 自动返回头像昵称。
+- 修复登录页头像昵称授权调用：优先使用微信原生 `wx.getUserProfile`，再兜底 `uni.getUserProfile`，避免 uni 运行时未封装该 API 时静默跳过授权弹窗。
+- 新增小程序构建后补丁脚本，自动给 `mp-weixin` 构建产物补齐：
+  - `app.json` 的 `miniApp.useAuthorizePage=true`。
+  - `app.miniapp.json` 的 `identityServiceConfig`。
+- 后台“小程序发布”上传体验版前增加同样的构建产物自检，防止服务器上传旧包或缺少官方授权页配置。
+- 保持 `adaptWxLogin=false` 默认值，避免把现有 `wx.login -> jscode2session` 登录链路自动改成需要多端应用 `code2Verifyinfo` 的登录码。
+- 更新小程序上传发布文档，说明微信资料弹窗、头像昵称填写能力、`app.miniapp.json` 和 `code2Verifyinfo` 的边界。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/wechat-profile.ts`
+- `apps/mobile/package.json`
+- `scripts/patch-mobile-mp-weixin-auth.mjs`
+- `apps/api/src/modules/admin/miniprogram-release.service.ts`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 19:52 +08:00。
+- 首次执行 `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin` 暴露脚本路径问题：`npm --prefix apps/mobile` 下工作目录变为 `apps/mobile`，已修复为按脚本所在目录反推仓库根目录。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过；构建后输出 `app.miniapp.json`，并确认 `app.json` 含 `miniApp.useAuthorizePage=true`。
+- `rg -n '"miniApp"|"useAuthorizePage"|"identityServiceConfig"|"authorizeMiniprogramType"|"adaptWxLogin"|getUserProfile|用于完善会员昵称和头像' apps\mobile\dist\build\mp-weixin apps\mobile\src\wechat-profile.ts scripts\patch-mobile-mp-weixin-auth.mjs`：通过，确认构建产物含官方授权页配置和微信原生 `getUserProfile` 调用。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下部分文件未来可能发生 LF/CRLF 转换。
+
+### 遗留问题
+
+- `wx.getUserProfile` 是否返回真实昵称头像仍受微信基础库和账号授权规则限制；若微信侧不再返回真实资料，需要继续使用“编辑资料”页的 `chooseAvatar` 和 `input type=nickname`。
+- 如果后续要完整接入文档里的多端身份管理 `wx.weixinMiniProgramLogin`，需要新增多端应用 AppID/Secret 配置，并在后端接 `code2Verifyinfo`，不能直接复用当前普通小程序 AppSecret。
+
+### 下一阶段应继续处理的事项
+
+- 本地重建小程序包并用微信开发者工具导入 `apps/mobile/dist/build/mp-weixin` 验证授权弹窗和构建配置。
+- 服务器拉取本次提交后重新构建 API 与小程序包，再在后台“小程序发布”上传体验版。
+
 ## 2026-06-24 - 小程序头像昵称填写能力修正
 
 ### 阶段名称

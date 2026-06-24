@@ -7,7 +7,7 @@
     "dev:h5": "uni -p h5",
     "prebuild:h5": "node ../../scripts/clean-mobile-h5-dist.mjs",
     "build:h5": "uni build -p h5",
-    "build:mp-weixin": "uni build -p mp-weixin"
+    "build:mp-weixin": "uni build -p mp-weixin && node ../../scripts/patch-mobile-mp-weixin-auth.mjs"
   },
   "dependencies": {
     "@dcloudio/uni-app": "3.0.0-alpha-5010220260529001",
