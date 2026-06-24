@@ -1,3 +1,5 @@
+import { clientError } from "./error-reporting";
+
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 const ADMIN_TOKEN_KEY = "mobile_admin_token";
@@ -89,7 +91,7 @@ export function mobileAdminRequest<T>(url: string, options: UniApp.RequestOption
         reject(new MobileAdminError(requestId ? `${body?.message || "请求失败"}（请求编号：${requestId}）` : body?.message || "请求失败", res.statusCode));
       },
       fail(error) {
-        reject(error);
+        reject(clientError(error, "请求失败", { method: options.method || "GET", url }));
       }
     });
   });
@@ -122,7 +124,7 @@ export function uploadAdminImage(filePath: string): Promise<{ url: string; path:
         else reject(new MobileAdminError(body?.message || "上传失败", res.statusCode));
       },
       fail(error) {
-        reject(error);
+        reject(clientError(error, "上传失败", { method: "UPLOAD", url: "/admin/uploads/images" }));
       }
     });
   });

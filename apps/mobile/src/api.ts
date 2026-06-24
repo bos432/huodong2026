@@ -1,3 +1,5 @@
+import { clientError } from "./error-reporting";
+
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const DEV_PHONE = "13800000001";
 const TENANT_CODE_STORAGE_KEY = "h5_tenant_code";
@@ -161,7 +163,7 @@ export function request<T>(url: string, options: UniApp.RequestOptions = {}): Pr
         else reject(new ApiClientError(body?.message || "请求失败", body?.requestId || headerValue(res.header, "x-request-id")));
       },
       fail(error) {
-        reject(error);
+        reject(clientError(error, "请求失败", { method: options.method || "GET", url: requestUrl }));
       }
     });
   });
@@ -284,7 +286,7 @@ export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: s
         else reject(new ApiClientError(body?.message || "上传失败", body?.requestId || headerValue(res.header, "x-request-id")));
       },
       fail(error) {
-        reject(error);
+        reject(clientError(error, "上传失败", { method: "UPLOAD", url: appendTenantCode("/public/me/avatar", tenantCode) }));
       }
     });
   });
@@ -324,7 +326,7 @@ function uploadPublicImage(path: string, filePath: string): Promise<{ url: strin
         else reject(new ApiClientError(body?.message || "上传失败", body?.requestId || headerValue(res.header, "x-request-id")));
       },
       fail(error) {
-        reject(error);
+        reject(clientError(error, "上传失败", { method: "UPLOAD", url: appendTenantCode(path, tenantCode) }));
       }
     });
   });

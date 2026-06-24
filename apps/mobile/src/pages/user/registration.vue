@@ -4,6 +4,7 @@ import { OrderStatus, RegistrationStatus } from "@activity/shared";
 import QRCode from "qrcode";
 import { ensureUser, request, requestRegistrationRefund, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
+import { clientError } from "../../error-reporting";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -316,7 +317,7 @@ function requestWechatPayment(params: Record<string, any>) {
       signType: String(params.signType || "RSA"),
       paySign: String(params.paySign),
       success: () => resolve(),
-      fail: (error) => reject(error)
+      fail: (error) => reject(clientError(error, "微信支付失败", { provider: "wxpay", tradeType: params.tradeType || "JSAPI" }))
     } as any);
   });
 }

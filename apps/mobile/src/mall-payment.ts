@@ -1,4 +1,5 @@
 import { request } from "./api";
+import { clientError } from "./error-reporting";
 
 export function preferredMallWechatPaymentScene() {
   // #ifdef H5
@@ -55,7 +56,7 @@ function requestWechatPayment(params: Record<string, any>) {
       signType: String(params.signType || "RSA"),
       paySign: String(params.paySign),
       success: () => resolve(),
-      fail: (error) => reject(error)
+      fail: (error) => reject(clientError(error, "微信支付失败", { provider: "wxpay", tradeType: params.tradeType || "JSAPI" }))
     } as any);
   });
 }
