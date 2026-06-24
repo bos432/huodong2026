@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { loginH5, loginH5Password, loginWechat, requestH5Code, withTenantCode } from "../../api";
+import { loginH5, loginH5Password, loginWechat, requestH5Code, uploadMyAvatar, withTenantCode } from "../../api";
 import { isTabUrl, usePageDecoration } from "../../decoration";
-import { requestWechatProfile } from "../../wechat-profile";
+import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
@@ -17,6 +17,10 @@ const loginMode = ref<"password" | "code">("password");
 const sending = ref(false);
 const loggingIn = ref(false);
 const message = ref("");
+const wechatAuthVisible = ref(false);
+const wechatAuthNickname = ref("");
+const wechatAuthAvatarPath = ref("");
+const wechatAuthMessage = ref("");
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("login_page", "/pages/user/login");
 
 const canSend = computed(() => /^1\d{10}$/.test(phone.value.trim()) && !sending.value);
@@ -65,6 +69,12 @@ function goAdminLogin() {
   uni.navigateTo({ url: "/pages/admin/login" });
 }
 
+function goAfterLogin() {
+  const target = redirectTarget();
+  if (isTabUrl(target)) uni.reLaunch({ url: withTenantCode(target.split("?")[0]) });
+  else uni.redirectTo({ url: withTenantCode(target) });
+}
+
 async function sendCode() {
   syncH5LoginInputs();
   if (!canSend.value) {
@@ -99,9 +109,7 @@ async function submit() {
     if (loginMode.value === "password") await loginH5Password(phone.value.trim(), password.value, `用户${phone.value.slice(-4)}`);
     else await loginH5(phone.value.trim(), token.value, code.value.trim(), `用户${phone.value.slice(-4)}`);
     uni.showToast({ title: "登录成功", icon: "success" });
-    const target = redirectTarget();
-    if (isTabUrl(target)) uni.reLaunch({ url: withTenantCode(target.split("?")[0]) });
-    else uni.redirectTo({ url: withTenantCode(target) });
+    goAfterLogin();
   } catch (error: any) {
     uni.showToast({ title: error.message || "登录失败", icon: "none" });
   } finally {
@@ -109,31 +117,82 @@ async function submit() {
   }
 }
 
-function submitWechat() {
+function closeWechatAuthPanel() {
   if (loggingIn.value) return;
-  loggingIn.value = true;
-  requestWechatProfile().then((profile) => {
+  wechatAuthVisible.value = false;
+  wechatAuthMessage.value = "";
+}
+
+function chooseWechatLoginAvatar(event: any) {
+  const filePath = String(event?.detail?.avatarUrl || "");
+  if (!filePath) {
+    uni.showToast({ title: "未选择微信头像", icon: "none" });
+    return;
+  }
+  wechatAuthAvatarPath.value = filePath;
+}
+
+function updateWechatAuthNickname(event: any) {
+  wechatAuthNickname.value = inputValue(event).slice(0, 40);
+}
+
+async function finishWechatLogin(profile: Partial<WechatProfilePayload> = {}, avatarFilePath = "") {
+  await new Promise<void>((resolve, reject) => {
     uni.login({
       provider: "weixin",
       success: async (res) => {
         try {
-          await loginWechat(res.code, profile.nickname, profile.avatarUrl);
-          uni.showToast({ title: "登录成功", icon: "success" });
-          const target = redirectTarget();
-          if (isTabUrl(target)) uni.reLaunch({ url: withTenantCode(target.split("?")[0]) });
-          else uni.redirectTo({ url: withTenantCode(target) });
-        } catch (error: any) {
-          uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
-        } finally {
-          loggingIn.value = false;
+          await loginWechat(res.code, profile.nickname, avatarFilePath ? undefined : profile.avatarUrl);
+          if (avatarFilePath) await uploadMyAvatar(avatarFilePath);
+          resolve();
+        } catch (error) {
+          reject(error);
         }
       },
-      fail: (error) => {
-        loggingIn.value = false;
-        uni.showToast({ title: error.errMsg || "微信登录失败", icon: "none" });
-      }
+      fail: (error) => reject(new Error(error.errMsg || "微信登录失败"))
     });
   });
+}
+
+async function submitWechat() {
+  if (loggingIn.value) return;
+  loggingIn.value = true;
+  try {
+    const profile = await requestWechatProfile();
+    if (profile.authorized && hasWechatProfilePayload(profile)) {
+      await finishWechatLogin(profile);
+      uni.showToast({ title: "登录成功", icon: "success" });
+      goAfterLogin();
+      return;
+    }
+    wechatAuthNickname.value = profile.nickname || "";
+    wechatAuthAvatarPath.value = profile.avatarUrl || "";
+    wechatAuthMessage.value = profile.unavailable ? "当前环境未返回微信资料，请在这里授权头像和昵称。" : "请确认授权头像和昵称后继续登录。";
+    wechatAuthVisible.value = true;
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "微信授权失败", icon: "none" });
+  } finally {
+    loggingIn.value = false;
+  }
+}
+
+async function confirmWechatProfileLogin() {
+  const nickname = wechatAuthNickname.value.trim();
+  if (!nickname && !wechatAuthAvatarPath.value) {
+    uni.showToast({ title: "请选择头像或填写昵称", icon: "none" });
+    return;
+  }
+  loggingIn.value = true;
+  try {
+    await finishWechatLogin({ nickname, authorized: true }, wechatAuthAvatarPath.value);
+    wechatAuthVisible.value = false;
+    uni.showToast({ title: "登录成功", icon: "success" });
+    goAfterLogin();
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
+  } finally {
+    loggingIn.value = false;
+  }
 }
 
 onMounted(loadDecoration);
@@ -180,12 +239,35 @@ onMounted(loadDecoration);
       </template>
       <view class="button" :class="{ secondary: !canLogin }" @click="submit">{{ loggingIn ? "登录中..." : "登录" }}</view>
       <!-- #ifndef H5 -->
-      <view class="button wechat-button" @click="submitWechat">{{ loggingIn ? "登录中..." : "微信登录" }}</view>
+      <button class="button wechat-button native-button" :disabled="loggingIn" @tap="submitWechat">{{ loggingIn ? "登录中..." : "微信登录" }}</button>
       <!-- #endif -->
       <view class="admin-login-entry" @click="goAdminLogin">
         <text>管理端入口</text>
       </view>
     </view>
+    <!-- #ifdef MP-WEIXIN -->
+    <view v-if="wechatAuthVisible" class="wechat-auth-mask">
+      <view class="wechat-auth-sheet">
+        <view class="wechat-auth-brand">慢π</view>
+        <view class="wechat-auth-title">获取你的昵称、头像和登录权限</view>
+        <view v-if="wechatAuthMessage" class="wechat-auth-message">{{ wechatAuthMessage }}</view>
+        <button class="wechat-auth-row avatar-select" open-type="chooseAvatar" @chooseavatar="chooseWechatLoginAvatar">
+          <text class="auth-label">头像</text>
+          <image v-if="wechatAuthAvatarPath" class="auth-avatar" :src="wechatAuthAvatarPath" mode="aspectFill" />
+          <view v-else class="auth-avatar auth-avatar-empty">微</view>
+          <text class="auth-arrow">›</text>
+        </button>
+        <view class="wechat-auth-row">
+          <text class="auth-label">昵称</text>
+          <input v-model="wechatAuthNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写微信昵称" @input="updateWechatAuthNickname" />
+        </view>
+        <view class="wechat-auth-actions">
+          <button class="auth-action reject" :disabled="loggingIn" @tap="closeWechatAuthPanel">拒绝</button>
+          <button class="auth-action allow" :disabled="loggingIn" @tap="confirmWechatProfileLogin">{{ loggingIn ? "登录中" : "允许" }}</button>
+        </view>
+      </view>
+    </view>
+    <!-- #endif -->
     <AppBottomNav current-path="/pages/user/my" />
   </view>
 </template>
@@ -257,5 +339,77 @@ onMounted(loadDecoration);
 .mini-button.disabled { background: #9ca3af; }
 .notice { padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); color: #4a6b8a; font-size: 26rpx; }
 .wechat-button { background: #16a34a; }
+.native-button { width: 100%; margin: 0; padding: 0; border: 0; line-height: normal; }
+.native-button::after { border: 0; }
+.native-button[disabled] { color: #fff; opacity: .68; }
 .admin-login-entry { display: flex; align-items: center; justify-content: center; min-height: 68rpx; padding: 8rpx 18rpx; border-radius: 16rpx; background: #f9f4ee; color: #4a6b8a; font-size: 24rpx; font-weight: 800; }
+.wechat-auth-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.46);
+}
+.wechat-auth-sheet {
+  width: 100%;
+  max-width: 760rpx;
+  padding: 34rpx 42rpx 28rpx;
+  border-radius: 28rpx 28rpx 0 0;
+  background: #fff;
+  box-shadow: 0 -18rpx 50rpx rgba(15, 23, 42, 0.14);
+}
+.wechat-auth-brand { color: #8b4a3e; font-size: 26rpx; font-weight: 900; }
+.wechat-auth-title { margin-top: 22rpx; color: #111827; font-size: 34rpx; font-weight: 950; line-height: 1.45; }
+.wechat-auth-message { margin-top: 14rpx; color: #8f8172; font-size: 24rpx; line-height: 1.55; }
+.wechat-auth-row {
+  min-height: 104rpx;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1rpx solid #ececec;
+  border-radius: 0;
+  background: #fff;
+  color: #111827;
+  line-height: normal;
+}
+.wechat-auth-row::after { border: 0; }
+.avatar-select { width: 100%; }
+.auth-label { width: 100rpx; flex: 0 0 auto; color: #111827; font-size: 28rpx; font-weight: 700; text-align: left; }
+.auth-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #f1e3d0;
+}
+.auth-avatar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b4a3e;
+  font-size: 26rpx;
+  font-weight: 900;
+}
+.auth-arrow { margin-left: auto; color: #8f8172; font-size: 44rpx; line-height: 1; }
+.auth-nickname-input { flex: 1; min-width: 0; height: 92rpx; color: #111827; font-size: 28rpx; text-align: left; }
+.wechat-auth-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; margin-top: 32rpx; }
+.auth-action {
+  height: 84rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 900;
+  line-height: 84rpx;
+}
+.auth-action::after { border: 0; }
+.auth-action.reject { background: #f3f4f6; color: #111827; }
+.auth-action.allow { background: #16a34a; color: #fff; }
+.auth-action[disabled] { opacity: .62; }
 </style>

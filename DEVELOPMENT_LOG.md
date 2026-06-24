@@ -2,6 +2,50 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序登录页头像昵称授权面板
+
+### 阶段名称
+
+小程序上线准备 - 登录页接入官方头像昵称填写能力小阶段。
+
+### 本阶段完成内容
+
+- 继续核对微信官方文档：
+  - `wx.getUserProfile` 文档仍说明点击后可弹授权窗口，但也提示用户头像昵称获取规则已调整。
+  - “头像昵称填写”文档明确推荐 `button open-type=chooseAvatar` 和 `input type=nickname`，并提示开发者工具对昵称输入是 Web 模拟，部分表现需真机验证。
+- 修改小程序登录页：
+  - 微信登录按钮从普通 `view` 改成原生 `button`，保证点击事件更贴近微信官方示例。
+  - 登录时仍先尝试 `wx.getUserProfile`；若弹窗可用且返回头像/昵称，则直接登录并同步后台。
+  - 若旧资料授权不弹窗或不返回资料，立即打开“获取你的昵称、头像和登录权限”面板。
+  - 面板内头像使用微信官方 `open-type=chooseAvatar`，昵称使用 `input type=nickname`，用户点击“允许”后再执行 `uni.login`、后端微信登录和头像上传。
+  - 用户点击“拒绝”会关闭面板，不再静默登录成默认 `微信用户`。
+- 更新小程序上传发布说明，明确开发者工具与真机表现差异、登录页授权面板和后台同步规则。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/user/login.vue`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 20:13 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `rg -n 'chooseAvatar|type="nickname"|获取你的昵称、头像和登录权限|auth-action|微信登录|bindchooseavatar' apps\mobile\dist\build\mp-weixin\pages\user\login.wxml apps\mobile\dist\build\mp-weixin\pages\user\login.js apps\mobile\dist\build\mp-weixin\pages\user\login.wxss apps\mobile\src\pages\user\login.vue`：通过，确认小程序产物内已有官方头像昵称填写组件。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下部分文件未来可能发生 LF/CRLF 转换。
+
+### 遗留问题
+
+- 开发者工具可能无法完整模拟 `input type=nickname` 的真机候选昵称体验；需要扫码到手机微信真机验证。
+- 如果后续必须做成微信系统级统一授权页而不是小程序内承接面板，需要走多端身份管理完整链路：`wx.weixinMiniProgramLogin`、多端应用 AppID/Secret、服务端 `code2Verifyinfo`，当前普通小程序 `jscode2session` 后端不能直接复用。
+
+### 下一阶段应继续处理的事项
+
+- 服务器拉取本次提交，重新构建小程序包。
+- 用微信开发者工具导入最新 `apps/mobile/dist/build/mp-weixin`，在手机微信扫码预览测试：点击微信登录、选择头像、选择/填写昵称、允许登录、后台会员资料查看昵称头像是否同步。
+
 ## 2026-06-24 - 小程序微信授权弹窗与登录服务配置补齐
 
 ### 阶段名称
