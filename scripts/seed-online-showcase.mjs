@@ -283,7 +283,7 @@ async function ensureOperationSettings(token) {
       refundInstructions: "演示退款用于验收余额退回、订单状态和财务记录。",
       invoiceInstructions: "演示订单如需发票，请联系演示客服登记开票信息。",
       pageTheme: {
-        brandName: TENANT_NAME,
+        brandName: "慢π",
         slogan: "传统文化、课程学习、活动报名一站式演示中心",
         primaryColor: "#8B5A2B",
         accentColor: "#D8A24A",
