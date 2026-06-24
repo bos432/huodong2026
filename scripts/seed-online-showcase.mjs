@@ -715,7 +715,7 @@ async function ensureMembersAndWallets(tenantAdminToken, platformToken, tenantId
     const profile = await api("/admin/members", {
       method: "POST",
       headers: auth(tenantAdminToken),
-      body: JSON.stringify({ tenantId, phone: user.phone, password: showcasePassword, nickname: user.nickname, remark: `demoScenario:${SCENARIO}` })
+      body: JSON.stringify({ phone: user.phone, password: showcasePassword, nickname: user.nickname, remark: `demoScenario:${SCENARIO}` })
     });
     const loggedIn = await loginUser(user.phone, user.nickname);
     const userId = loggedIn.user?.id;
