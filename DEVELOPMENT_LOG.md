@@ -34,6 +34,8 @@
 - `npm.cmd run test:preflight-guards`：通过。
 - `rg -n "console\\.error\\([^\\n]*,|reject\\(error\\)|setNavigationBarTitle\\(\\{ title: normalized \\}\\);" apps/mobile/src -g "*.ts" -g "*.vue"`：仅剩单参数 `[H5] ...` `console.error`，未发现裸 `reject(error)` 或未兜底的标题设置调用。
 - `git diff --check`：通过；仅提示 Windows 下 LF/CRLF 转换。
+- `git commit -m "fix: suppress H5 title timing object logs"`：通过，生成提交 `a4d2e50`。
+- `git push origin feature/qiwai-ui-experiment`：通过，远端已更新到 `a4d2e50`。
 
 ### 浏览器验收结果
 
