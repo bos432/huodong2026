@@ -2,6 +2,49 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序微信头像昵称授权登录优化
+
+### 阶段名称
+
+小程序上线准备 - 微信登录资料授权弹窗与昵称头像保存小阶段。
+
+### 本阶段完成内容
+
+- 根据用户截图确认：微信小程序登录时展示的“获取你的昵称、头像和权限”属于头像昵称资料授权弹窗，不是 `wx.login` 本身。
+- 明确登录链路边界：`wx.login` 只能拿临时 `code`，后端换取 `openid`/AppID；昵称头像必须通过 `getUserProfile` 授权获取，手机号仍需单独授权或绑定。
+- 小程序登录页在执行 `uni.login` 前先调用 `getUserProfile`：
+  - 用户允许时，把微信昵称和头像随登录请求提交给后端保存。
+  - 用户拒绝或接口不可用时，仍继续使用 openid 完成微信登录，避免阻断核心登录流程。
+- 更新小程序上传发布说明，补充“允许保存昵称头像、拒绝仍可登录”的验收预期。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/user/login.vue`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 18:11:34 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `rg -n "getUserProfile|用于完善会员昵称和头像" apps\mobile\dist\build\mp-weixin apps\mobile\src\pages\user\login.vue`：确认源码与小程序构建产物都包含微信资料授权调用。
+- `rg -n "URLSearchParams|touristappid" apps\mobile\dist\build\mp-weixin`：无命中，确认小程序包未回退到旧查询参数问题。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+
+### 遗留问题
+
+- 线上服务器还需要拉取本阶段提交、重建 API 与 `mp-weixin` 包。
+- 微信开发者工具需要重新编译 `apps/mobile/dist/build/mp-weixin` 后再点击微信登录验证授权弹窗。
+- 后台能否显示真实昵称头像取决于用户是否点击“允许”；点击“拒绝”时仍会生成默认微信用户。
+
+### 下一阶段应继续处理的事项
+
+- 服务器执行最新发布命令，确认 API ready 后重建小程序包。
+- 微信开发者工具重新导入/编译小程序包，验证登录弹窗、允许保存昵称头像、拒绝仍可登录。
+- 本地开发者工具验收通过后，再上传体验版并用手机微信扫码做真机验证。
+
 ## 2026-06-24 - 小程序微信登录会员资料可见性优化
 
 ### 阶段名称

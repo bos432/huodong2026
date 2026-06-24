@@ -64,6 +64,36 @@ function goAdminLogin() {
   uni.navigateTo({ url: "/pages/admin/login" });
 }
 
+function requestWechatProfile(): Promise<{ nickname?: string; avatarUrl?: string }> {
+  return new Promise((resolve) => {
+    // #ifdef MP-WEIXIN
+    const getUserProfile = (uni as any).getUserProfile;
+    if (typeof getUserProfile !== "function") {
+      resolve({});
+      return;
+    }
+    try {
+      getUserProfile({
+        desc: "用于完善会员昵称和头像",
+        success: (res: any) => {
+          const info = res?.userInfo || {};
+          resolve({
+            nickname: typeof info.nickName === "string" ? info.nickName : "",
+            avatarUrl: typeof info.avatarUrl === "string" ? info.avatarUrl : ""
+          });
+        },
+        fail: () => resolve({})
+      });
+    } catch {
+      resolve({});
+    }
+    // #endif
+    // #ifndef MP-WEIXIN
+    resolve({});
+    // #endif
+  });
+}
+
 async function sendCode() {
   syncH5LoginInputs();
   if (!canSend.value) {
@@ -111,25 +141,27 @@ async function submit() {
 function submitWechat() {
   if (loggingIn.value) return;
   loggingIn.value = true;
-  uni.login({
-    provider: "weixin",
-    success: async (res) => {
-      try {
-        await loginWechat(res.code);
-        uni.showToast({ title: "登录成功", icon: "success" });
-        const target = redirectTarget();
-        if (isTabUrl(target)) uni.reLaunch({ url: withTenantCode(target.split("?")[0]) });
-        else uni.redirectTo({ url: withTenantCode(target) });
-      } catch (error: any) {
-        uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
-      } finally {
+  requestWechatProfile().then((profile) => {
+    uni.login({
+      provider: "weixin",
+      success: async (res) => {
+        try {
+          await loginWechat(res.code, profile.nickname, profile.avatarUrl);
+          uni.showToast({ title: "登录成功", icon: "success" });
+          const target = redirectTarget();
+          if (isTabUrl(target)) uni.reLaunch({ url: withTenantCode(target.split("?")[0]) });
+          else uni.redirectTo({ url: withTenantCode(target) });
+        } catch (error: any) {
+          uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
+        } finally {
+          loggingIn.value = false;
+        }
+      },
+      fail: (error) => {
         loggingIn.value = false;
+        uni.showToast({ title: error.errMsg || "微信登录失败", icon: "none" });
       }
-    },
-    fail: (error) => {
-      loggingIn.value = false;
-      uni.showToast({ title: error.errMsg || "微信登录失败", icon: "none" });
-    }
+    });
   });
 }
 
