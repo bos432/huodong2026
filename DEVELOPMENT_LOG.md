@@ -2,6 +2,51 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 线上 H5 租户修复提交推送
+
+### 阶段名称
+
+上线前部署配置 - 线上 H5 主流程收口修复提交与远端同步小阶段。
+
+### 本阶段完成内容
+
+- 重新读取最新 `DEVELOPMENT_LOG.md` 和工作区状态，确认上一阶段遗留为：本地商城 `tenantCode` DTO、H5 上传 header、演示 seed 和 smoke 文案修复尚未提交发布。
+- 将本阶段受控文件提交到当前分支 `feature/qiwai-ui-experiment`：
+  - `DEVELOPMENT_LOG.md`
+  - `apps/api/src/modules/mall/mall.dto.ts`
+  - `apps/mobile/src/api.ts`
+  - `scripts/seed-online-showcase.mjs`
+  - `scripts/smoke-community-sharing.mjs`
+  - `scripts/smoke-online-showcase.mjs`
+- 已推送远端，服务器可直接拉取最新提交继续部署。
+- 未纳入 `.local-logs/`、`.local-mariadb/` 两个本地未跟踪目录。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 14:18:18 +08:00。
+- `git commit -m "fix: harden online H5 tenant smoke flow"`：通过，生成提交 `d84ab71`。
+- `git push origin feature/qiwai-ui-experiment`：通过，远端从 `3b36363` 更新到 `d84ab71`。
+- `git status --short`：仅剩未跟踪 `.local-logs/`、`.local-mariadb/`。
+
+### 浏览器验收结果
+
+- 本阶段为本地提交与远端同步，不新增页面点击。
+- 上一阶段右侧浏览器已验证线上 H5 新时间戳页面：`document.title=慢π`、顶部栏 `慢π`、脚本 `/assets/index-Dw1W2UkT.js`、无旧品牌残留、无控制台 error。
+
+### 遗留问题
+
+- 本条日志本身追加后仍需再提交并推送，确保服务器拉取时包含完整阶段记录。
+- 服务器尚未拉取 `d84ab71` 并部署，因此线上商城 `tenantCode` 400 修复还未生效。
+
+### 下一阶段应继续处理的事项
+
+- 提交并推送本日志追加记录。
+- 给出服务器部署命令：拉取最新分支、构建 API/H5、发布静态包、重启 PM2、验证商城公开接口、H5 首页和 health ready。
+
 ## 2026-06-24 - 线上 H5 主流程与商城租户参数收口
 
 ### 阶段名称
