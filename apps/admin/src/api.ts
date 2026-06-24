@@ -1,4 +1,5 @@
 import axios from "axios";
+import { clearStoredAdminSession } from "./permissions";
 
 export const api = axios.create({ baseURL: "/api" });
 
@@ -29,6 +30,19 @@ function normalizeApiMessage(value: unknown, fallback: string) {
   return issues ? `${base}：${issues}` : base;
 }
 
+let redirectingToLogin = false;
+
+function isAdminLoginPath() {
+  return window.location.pathname.replace(/\/+$/, "") === "/admin/login";
+}
+
+function redirectToAdminLogin() {
+  if (redirectingToLogin || isAdminLoginPath()) return;
+  redirectingToLogin = true;
+  clearStoredAdminSession();
+  window.location.assign("/admin/login");
+}
+
 async function errorFromFetchResponse(res: Response, fallback: string) {
   const requestId = res.headers.get("x-request-id") || undefined;
   let message = fallback;
@@ -51,8 +65,13 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response.data.data,
   (error) => {
+    const status = error.response?.status;
+    const requestUrl = String(error.config?.url || "");
+    const isLoginRequest = requestUrl.includes("/admin/auth/login");
+    if (status === 401 && !isLoginRequest) redirectToAdminLogin();
     const responseMessage = error.response?.data?.message;
-    const fallback = error.response?.status === 403 ? "当前账号无权限，请联系超级管理员" : error.message || "请求失败";
+    const forbiddenFallback = error.response?.status === 403 ? "当前账号无权限，请联系超级管理员" : error.message || "请求失败";
+    const fallback = status === 401 ? "登录已过期，请重新登录" : forbiddenFallback;
     const message = normalizeApiMessage(responseMessage, fallback);
     const requestId = error.response?.data?.requestId || requestIdFromHeaders(error.response?.headers);
     return Promise.reject(new ApiClientError(message, requestId));

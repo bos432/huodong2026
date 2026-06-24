@@ -5,6 +5,7 @@
   "type": "module",
   "scripts": {
     "dev:h5": "uni -p h5",
+    "prebuild:h5": "node ../../scripts/clean-mobile-h5-dist.mjs",
     "build:h5": "uni build -p h5",
     "build:mp-weixin": "uni build -p mp-weixin"
   },
