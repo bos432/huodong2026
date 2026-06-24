@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { fetchMyCharityTransactions, getCurrentRouteWithQuery, getUserToken, request } from "../../api";
+import { usePageDecoration } from "../../decoration";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
 const detail = ref<any | null>(null);
 const myDetail = ref<any | null>(null);
@@ -18,6 +20,12 @@ const pool = computed(() => detail.value?.pool || detail.value || {});
 const setting = computed(() => detail.value?.setting || {});
 const hasMore = computed(() => transactions.value.length < total.value);
 const hasMyCharity = computed(() => Boolean(myDetail.value));
+const { bottomNavSection, contentSections, loadDecoration } = usePageDecoration("charity_page", "/pages/charity/index");
+const decorationSections = computed(() => contentSections.value.filter((section) => {
+  if (section.type === "hero" && section.title === "公益页") return false;
+  if (section.type === "rich_text" && section.title === "页面说明") return false;
+  return true;
+}));
 
 async function load() {
   loading.value = true;
@@ -113,7 +121,10 @@ function goLogin() {
   uni.navigateTo({ url: `/pages/user/login?redirect=${redirect}` });
 }
 
-onMounted(load);
+onMounted(() => {
+  load();
+  loadDecoration();
+});
 </script>
 
 <template>
@@ -128,6 +139,8 @@ onMounted(load);
         </view>
         <view class="hero-badge">公益金</view>
       </view>
+
+      <PageDecorationBlocks :sections="decorationSections" />
 
       <view v-if="hasMyCharity && ambassador.eligible" class="ambassador-card active">
         <view>
@@ -233,7 +246,7 @@ onMounted(load);
       </view>
     </template>
 
-    <AppBottomNav current-path="/pages/user/my" />
+    <AppBottomNav :section="bottomNavSection" current-path="/pages/charity/index" />
   </view>
 </template>
 

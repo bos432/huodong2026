@@ -10,16 +10,29 @@
     </view>
     <view v-else-if="!task" class="checkin-card state-card">
       <text class="title-lg state-title">暂无今日任务</text>
-      <text class="subtle state-text">请等待书院发布今天的打卡任务。</text>
+      <text class="subtle state-text">请等待慢π运营发布今天的打卡任务。</text>
     </view>
     <view v-else class="checkin-card task-card">
       <text class="subtle task-date">{{ dateTitle }}</text>
       <text class="title-lg task-title">今日任务</text>
       <text class="body-text task-name">{{ task.title }}</text>
       <text v-if="task.description" class="subtle task-desc">{{ task.description }}</text>
-      <view v-if="!checkedIn" class="button block button-lg" :class="{ disabled: submitting }" @click="doCheckin">{{ submitting ? "打卡中..." : "点击打卡" }}</view>
+      <view class="personal-status" :class="{ done: checkedIn }">
+        <text class="personal-status-title">{{ checkedIn ? "你今天已完成打卡" : "你今天还未打卡" }}</text>
+        <text class="personal-status-sub">{{ checkedIn ? "今天已经点亮，明天继续保持。" : `点击后会点亮 ${currentDay} 日，并计入你的月度记录。` }}</text>
+      </view>
+      <view v-if="!checkedIn" class="button block button-lg" :class="{ disabled: submitting }" @click="doCheckin">{{ submitting ? "打卡中..." : "完成今日打卡" }}</view>
       <view v-else class="button block button-lg disabled done-button">已完成</view>
-      <text class="subtle month-count">本月已打卡 {{ checkedDays.length }} 天</text>
+      <view class="checkin-stats">
+        <view class="checkin-stat">
+          <text class="checkin-stat-value">{{ completedCount }}</text>
+          <text class="checkin-stat-label">今日同学打卡</text>
+        </view>
+        <view class="checkin-stat">
+          <text class="checkin-stat-value">{{ checkedDays.length }}</text>
+          <text class="checkin-stat-label">你本月已打卡</text>
+        </view>
+      </view>
     </view>
 
     <!-- 打卡日历 -->
@@ -43,6 +56,7 @@ const submitting = ref(false);
 const task = ref<any>(null);
 const today = ref("");
 const checkedDays = ref<number[]>([]);
+const completedCount = computed(() => Math.max(0, Number(task.value?.completedCount || 0)));
 const currentDay = computed(() => Number((today.value || localDateString()).slice(8, 10)));
 const daysInMonth = computed(() => {
   const date = today.value || localDateString();
@@ -114,8 +128,15 @@ onLoad(loadCheckin);
 .task-title { text-align:center; display:block; font-family:"STKaiti","KaiTi",serif; }
 .task-name { display:block; text-align:center; margin:18rpx 0; color:#666666; line-height:1.7; }
 .task-desc { display:block; text-align:center; margin-bottom:18rpx; line-height:1.6; }
+.personal-status { display:grid; gap:6rpx; margin:20rpx 0; padding:18rpx; border-radius:18rpx; background:#fff7ec; border:1rpx solid #eadac6; }
+.personal-status.done { background:#f2f8ef; border-color:#c8dfbf; }
+.personal-status-title { color:#5b2f24; font-size:28rpx; font-weight:900; }
+.personal-status-sub { color:#8a6b58; font-size:24rpx; line-height:1.5; }
 .done-button { background:#5b8c5a; color:#fff; }
-.month-count { display:block; text-align:center; margin-top:18rpx; }
+.checkin-stats { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:14rpx; margin-top:18rpx; }
+.checkin-stat { display:grid; gap:4rpx; padding:16rpx 10rpx; border-radius:16rpx; background:#f9f4ee; }
+.checkin-stat-value { color:#c43d3d; font-size:34rpx; font-weight:900; line-height:1.1; }
+.checkin-stat-label { color:#8a6b58; font-size:22rpx; }
 .calendar-card { margin-top:24rpx; border-radius:24rpx; box-shadow:0 12rpx 34rpx rgba(91,47,36,0.07); }
 .calendar-title { margin-bottom:16rpx; display:block; font-family:"STKaiti","KaiTi",serif; }
 .calendar-grid { display:grid; grid-template-columns:repeat(7,1fr); gap:8rpx; }

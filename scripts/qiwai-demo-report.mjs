@@ -176,7 +176,7 @@ async function main() {
 
     const now = new Date().toISOString().slice(0, 19).replace("T", " ");
     const lines = [
-      "# 七维文化三城样板经营报告",
+      "# 慢π三城样板经营报告",
       "",
       `生成时间：${now}`,
       "",
@@ -228,13 +228,13 @@ async function main() {
     const file = path.isAbsolute(outputFile) ? outputFile : path.join(root, outputFile);
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, `${lines.join("\n")}\n`, "utf8");
-    console.log(`七维文化样板经营报告已生成：${path.relative(root, file) || file}`);
+    console.log(`慢π样板经营报告已生成：${path.relative(root, file) || file}`);
   } finally {
     await connection.end();
   }
 }
 
 main().catch((error) => {
-  console.error(`七维文化样板经营报告生成失败：${error.message}`);
+  console.error(`慢π样板经营报告生成失败：${error.message}`);
   process.exitCode = 1;
 });

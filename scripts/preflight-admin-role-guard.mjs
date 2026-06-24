@@ -96,12 +96,12 @@ checkSourceIncludesAll(adminPermissions, [
   'role === "admin" ? AdminRole.SuperAdmin',
   "roles.includes(currentRole() as AdminRole)",
   "superAdmin: [AdminRole.SuperAdmin]",
-  "overview: [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance]",
-  "operation: [AdminRole.SuperAdmin, AdminRole.Operator]",
-  "finance: [AdminRole.SuperAdmin, AdminRole.Finance]",
-  "checkIn: [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.CheckInStaff]",
-  "activityView: [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance, AdminRole.CheckInStaff]",
-  "registrationView: [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance, AdminRole.CheckInStaff]"
+  'overview: ["dashboard.view"]',
+  'operation: ["homepage.manage"]',
+  'finance: ["finance.view", "finance.manage"]',
+  'checkIn: ["checkin.manage"]',
+  'activityView: ["activity.view", "activity.manage"]',
+  'registrationView: ["registration.view", "registration.manage"]'
 ], "admin permissions");
 
 checkSourceIncludesAll(adminRouter, [
@@ -163,7 +163,7 @@ checkSourceIncludesAll(smoke, [
 
 checkSourceIncludesAll(adminActivitiesView, [
   "canOperateActivities",
-  "permissions.operation",
+  'canAccess(["activity.manage"])',
   "当前账号只能只读查看活动列表",
   'v-if="canOperateActivities"',
   "if (!canOperateActivities.value)",
@@ -173,8 +173,8 @@ checkSourceIncludesAll(adminActivitiesView, [
 checkSourceIncludesAll(adminRegistrationsView, [
   "canOperateRegistrations",
   "canViewRegistrationOrders",
-  "permissions.operation",
-  "permissions.finance",
+  'canAccess(["registration.manage"])',
+  'canAccess(["order.view", "finance.view", "finance.manage"])',
   "只读模式",
   "关联订单",
   'v-if="canViewRegistrationOrders"',

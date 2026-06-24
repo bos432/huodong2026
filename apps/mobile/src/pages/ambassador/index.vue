@@ -108,7 +108,7 @@ onLoad((options: any) => {
   <view class="ambassador-page">
     <view class="hero" :style="heroStyle">
       <view class="hero-inner">
-        <text class="seal">七维书院 · 英雄帖</text>
+        <text class="seal">慢π · 英雄帖</text>
         <text class="hero-title">{{ config.heroTitle }}</text>
         <text class="hero-subtitle">{{ config.heroSubtitle }}</text>
         <text class="hero-copy">{{ config.heroCopy }}</text>
@@ -127,7 +127,7 @@ onLoad((options: any) => {
 
     <view class="section">
       <text class="section-kicker">我们不一样</text>
-      <text class="section-title">七维书院「文化大使」计划</text>
+      <text class="section-title">慢π「文化大使」计划</text>
       <text class="section-desc">我们不招员工，我们找共创者。你负责内容与热爱，我们负责把路径铺清楚。</text>
       <view class="feature-list">
         <view v-for="(item, index) in config.solutionItems" :key="item" class="feature-item">

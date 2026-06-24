@@ -98,7 +98,7 @@
         <view v-if="item.featured" class="featured-badge">推荐</view>
         <view v-if="!availableProductStock(item)" class="soldout-badge">售罄</view>
         <image v-if="item.coverUrl" class="cover" :src="item.coverUrl" mode="aspectFill" />
-        <view v-else class="cover placeholder">书院好物</view>
+        <view v-else class="cover placeholder">慢π好物</view>
         <text v-if="item.brandName" class="brand">{{ item.brandName }}</text>
         <text class="title">{{ item.title }}</text>
         <view class="row">

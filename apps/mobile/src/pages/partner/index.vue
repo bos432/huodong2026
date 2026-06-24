@@ -70,7 +70,7 @@ onShow(() => {
     <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
 
     <view class="hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
-      <view class="eyebrow">七维文化城市合伙人</view>
+      <view class="eyebrow">慢π城市合伙人</view>
       <view class="headline" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "把一座城市的好活动，装进自己的运营后台" }}</view>
       <view class="desc" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "适合文化空间、书院、培训机构、书法教室、读书会主理人和本地社群运营者，用 SaaS 后台独立发布活动、管理报名、收款对账和沉淀会员。" }}</view>
       <view class="hero-actions">

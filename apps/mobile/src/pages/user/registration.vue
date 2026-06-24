@@ -45,6 +45,7 @@ const registrationStatus = computed(() => detail.value?.registration?.status as 
 const orderStatus = computed(() => detail.value?.order?.status as OrderStatus | undefined);
 const primaryAction = computed(() => actionForStatus(registrationStatus.value));
 const charityRefund = computed(() => detail.value?.charityRefund || null);
+const canShareActivityPost = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
 
 function currentStepIndex(status: RegistrationStatus) {
   const index = steps.indexOf(status);
@@ -324,6 +325,11 @@ function goReview() {
   uni.navigateTo({ url: withTenantCode(`/pages/user/review?id=${detail.value.registration.id}`) });
 }
 
+function goPublish() {
+  const activityId = detail.value?.registration?.activity?.id || "";
+  uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activityId}`) });
+}
+
 onMounted(() => {
   load();
   loadDecoration();
@@ -346,7 +352,7 @@ onMounted(() => {
         <view v-else class="hero-image hero-fallback">报名</view>
         <view class="hero-mask"></view>
         <view class="hero-head">
-          <text class="hero-kicker">七维书院 · 报名详情</text>
+          <text class="hero-kicker">慢π · 报名详情</text>
           <text class="hero-status">{{ registrationStatusText[detail.registration.status as RegistrationStatus] }}</text>
         </view>
         <view class="hero-bottom">
@@ -454,6 +460,7 @@ onMounted(() => {
 
       <view v-if="detail.registration.status === RegistrationStatus.Approved || detail.registration.status === RegistrationStatus.CheckedIn" class="button" @click="showCode">查看签到码</view>
       <view v-if="detail.registration.status === RegistrationStatus.Approved || detail.registration.status === RegistrationStatus.CheckedIn" class="button secondary" @click="goReview">评价活动</view>
+      <view v-if="canShareActivityPost" class="button secondary share-button" @click="goPublish">分享活动心得</view>
       <view v-if="canCancel()" class="button secondary danger-button" @click="cancel">取消报名</view>
 
       <view v-if="groupDialogVisible" class="group-dialog-mask" @click="groupDialogVisible = false">
@@ -624,6 +631,7 @@ onMounted(() => {
 .code-tip { margin-top: 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.5; }
 .copy-code { display: inline-flex; margin-top: 18rpx; }
 .button { margin-top: 18rpx; }
+.share-button { border-color: rgba(74, 107, 138, 0.22); color: #4a6b8a; background: rgba(74, 107, 138, 0.08); }
 .danger-button { color: #dc2626; background: #fef2f2; }
 .pay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-top: 18rpx; }
 .pay-actions .button { margin-top: 0; }

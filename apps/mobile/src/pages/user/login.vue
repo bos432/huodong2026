@@ -23,6 +23,37 @@ const canPasswordLogin = computed(() => /^1\d{10}$/.test(phone.value.trim()) && 
 const canCodeLogin = computed(() => /^1\d{10}$/.test(phone.value.trim()) && /^\d{6}$/.test(code.value.trim()) && token.value && !loggingIn.value);
 const canLogin = computed(() => (loginMode.value === "password" ? canPasswordLogin.value : canCodeLogin.value));
 
+function inputValue(event: any) {
+  return String(event?.detail?.value ?? event?.target?.value ?? "");
+}
+
+function updatePhone(event: any) {
+  phone.value = inputValue(event).replace(/\D/g, "").slice(0, 11);
+}
+
+function updatePassword(event: any) {
+  password.value = inputValue(event).slice(0, 64);
+}
+
+function updateCode(event: any) {
+  code.value = inputValue(event).replace(/\D/g, "").slice(0, 6);
+}
+
+function syncH5LoginInputs() {
+  // #ifdef H5
+  const readInput = (name: string) => {
+    const element = document.querySelector(`[data-login-field="${name}"] input, input[data-login-field="${name}"]`) as HTMLInputElement | null;
+    return element?.value || "";
+  };
+  const domPhone = readInput("phone").replace(/\D/g, "").slice(0, 11);
+  const domPassword = readInput("password").slice(0, 64);
+  const domCode = readInput("code").replace(/\D/g, "").slice(0, 6);
+  if (domPhone) phone.value = domPhone;
+  if (domPassword) password.value = domPassword;
+  if (domCode) code.value = domCode;
+  // #endif
+}
+
 function redirectTarget() {
   const pages = getCurrentPages();
   const options = (pages[pages.length - 1] as any)?.options || {};
@@ -34,6 +65,7 @@ function goAdminLogin() {
 }
 
 async function sendCode() {
+  syncH5LoginInputs();
   if (!canSend.value) {
     uni.showToast({ title: "请输入正确的手机号", icon: "none" });
     return;
@@ -56,6 +88,7 @@ async function sendCode() {
 }
 
 async function submit() {
+  syncH5LoginInputs();
   if (!canLogin.value) {
     uni.showToast({ title: loginMode.value === "password" ? "请填写手机号和密码" : "请填写手机号和 6 位验证码", icon: "none" });
     return;
@@ -108,7 +141,7 @@ onMounted(loadDecoration);
     <TenantContextBadge :tenant="tenant" label="当前城市" hint="登录后沿用" />
 
     <view class="login-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
-      <view class="hero-mark">七维</view>
+      <view class="hero-mark">慢π</view>
       <view class="hero-copy">
         <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "手机号登录" }}</view>
         <view class="subtle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "用于查看报名、订单、签到码和会员权益。" }}</view>
@@ -121,7 +154,7 @@ onMounted(loadDecoration);
       <view class="card-kicker">欢迎回来</view>
       <view class="field">
         <view class="label">手机号</view>
-        <input v-model="phone" class="input" type="number" maxlength="11" placeholder="请输入手机号" />
+        <input v-model="phone" data-login-field="phone" class="input" type="number" maxlength="11" placeholder="请输入手机号" @input="updatePhone" @change="updatePhone" @blur="updatePhone" />
       </view>
       <view class="login-tabs">
         <view class="login-tab" :class="{ active: loginMode === 'password' }" @click="loginMode = 'password'">密码登录</view>
@@ -129,13 +162,13 @@ onMounted(loadDecoration);
       </view>
       <view v-if="loginMode === 'password'" class="field">
         <view class="label">密码</view>
-        <input v-model="password" class="input" type="password" maxlength="64" placeholder="请输入密码" />
+        <input v-model="password" data-login-field="password" class="input" type="password" maxlength="64" placeholder="请输入密码" @input="updatePassword" @change="updatePassword" @blur="updatePassword" />
       </view>
       <template v-else>
         <view class="field">
           <view class="label">验证码</view>
           <view class="code-row">
-            <input v-model="code" class="input" type="number" maxlength="6" placeholder="6 位验证码" />
+            <input v-model="code" data-login-field="code" class="input" type="number" maxlength="6" placeholder="6 位验证码" @input="updateCode" @change="updateCode" @blur="updateCode" />
             <view class="mini-button" :class="{ disabled: !canSend }" @click="sendCode">{{ sending ? "发送中" : "获取验证码" }}</view>
           </view>
         </view>

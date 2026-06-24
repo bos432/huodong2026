@@ -10,6 +10,8 @@
       </view>
     </view>
 
+    <PageDecorationBlocks :sections="decorationSections" />
+
     <view class="section">
       <text class="section-title">{{ config.sectionTitle }}</text>
       <view v-for="item in parsedBeliefs" :key="item.title" class="belief-card">
@@ -33,15 +35,30 @@
         <view class="join-card" @click="goAid">帮扶申请</view>
       </view>
     </view>
+
+    <AppBottomNav v-if="showBottomNav" :section="bottomNavSection" current-path="/pages/brand/story" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted } from "vue";
-import { withTenantCode } from "../../api";
+import { computed, onMounted, ref } from "vue";
+import { onLoad, onShow } from "@dcloudio/uni-app";
+import { getCurrentTenantCode, withTenantCode } from "../../api";
 import { useEntryPageConfig } from "../../entry-pages";
+import { usePageDecoration } from "../../decoration";
+import { loadPageTheme } from "../../theme";
+import AppBottomNav from "../../components/AppBottomNav.vue";
+import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
 const { config, load } = useEntryPageConfig("brandStory");
+const { bottomNavSection, contentSections, showBottomNav, loadDecoration } = usePageDecoration("brand_story", "/pages/brand/story");
+const mounted = ref(false);
+const lastLoadedTenantCode = ref("");
+const decorationSections = computed(() => contentSections.value.filter((section) => {
+  if (section.type === "hero" && section.title === "品牌故事") return false;
+  if (section.type === "rich_text" && section.title === "页面说明") return false;
+  return true;
+}));
 
 const parsedBeliefs = computed(() => config.items.map((item) => {
   const [title, ...copy] = String(item).split(/[：:]/);
@@ -52,7 +69,26 @@ function goDean() { uni.navigateTo({ url: withTenantCode("/pages/recruit/dean") 
 function goAmbassador() { uni.navigateTo({ url: withTenantCode("/pages/apply/ambassador") }); }
 function goAid() { uni.navigateTo({ url: withTenantCode("/pages/apply/aid") }); }
 
-onMounted(load);
+async function refreshTenantScopedPage() {
+  lastLoadedTenantCode.value = getCurrentTenantCode();
+  await Promise.all([load(), loadDecoration()]);
+}
+
+onLoad(() => {
+  refreshTenantScopedPage();
+});
+
+onMounted(() => {
+  mounted.value = true;
+  refreshTenantScopedPage();
+});
+
+onShow(() => {
+  if (!mounted.value) return;
+  if (getCurrentTenantCode() === lastLoadedTenantCode.value) return;
+  loadPageTheme();
+  refreshTenantScopedPage();
+});
 </script>
 
 <style scoped>

@@ -1,6 +1,6 @@
 export const API_BASE = (process.env.API_BASE || "http://localhost:3000/api").replace(/\/$/, "");
 export const TENANT_CODE = "qiwai-showcase";
-export const TENANT_NAME = "七维书院演示中心";
+export const TENANT_NAME = "慢π演示中心";
 export const SCENARIO = "online-showcase";
 
 export const demoUsers = [
@@ -113,7 +113,7 @@ export function formatDateTime(date) {
 
 export function answers(fields = [], suffix = "") {
   return fields.map((field) => {
-    let value = `七维演示验收${suffix}`;
+    let value = `慢π演示验收${suffix}`;
     if (String(field.label || "").includes("姓名")) value = `演示学员${suffix}`;
     if (String(field.label || "").includes("手机") || field.type === "phone") value = `1399000${String(Date.now()).slice(-4)}`;
     if (String(field.label || "").includes("微信")) value = `showcase_${suffix || "user"}`;

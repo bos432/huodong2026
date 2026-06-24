@@ -89,9 +89,9 @@
       </view>
     </view>
 
-    <!-- 书院动态 -->
+    <!-- 共修动态 -->
     <view class="section-with-title" style="margin-top:24rpx;">
-      <text class="title-md">📖 书院动态</text>
+      <text class="title-md">📖 共修动态</text>
     </view>
     <view v-for="(post, idx) in posts" :key="idx" class="card post-card" @click="goPost(post)">
       <view class="row" style="justify-content:flex-start; gap:16rpx;">
@@ -116,7 +116,7 @@
         </view>
       </view>
     </view>
-    <EmptyState v-if="!posts.length" icon="📝" text="暂无书院动态" />
+    <EmptyState v-if="!posts.length" icon="📝" text="暂无共修动态" />
 
     <!-- 底部安全区 -->
     <view style="height:120rpx;"></view>
@@ -150,7 +150,7 @@ onShow(async () => {
   loadCourses();
   loadPosts();
   lastLoadedTenantCode.value = getCurrentTenantCode();
-  if (changedByLocation && beforeTenantCode) uni.showToast({ title: "已按当前位置切换书院", icon: "none" });
+  if (changedByLocation && beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
 });
 
 const jingang = [
@@ -158,15 +158,15 @@ const jingang = [
   { icon: "院", label: "院长招募", url: "/pages/recruit/dean" },
   { icon: "使", label: "大使申请", url: "/pages/apply/ambassador" },
   { icon: "扶", label: "帮扶申请", url: "/pages/apply/aid" },
-  { icon: "🛍", label: "书院商城", url: "/pages/mall/index" },
+  { icon: "🛍", label: "慢π商城", url: "/pages/mall/index" },
   { icon: "🌿", label: "健康", category: "健康" },
   { icon: "⛰", label: "创业", category: "创业" },
   { icon: "⋯", label: "更多", category: "" }
 ];
 
 const banners = [
-  { title: "寻找100位七维文化大使", sub: "一起用7把钥匙，打开中国人的精神家园", bg: "#C43D3D", link: "ambassador" },
-  { title: "精选课程：七维书院好课", sub: "从基础到进阶，跟随老师系统学习", bg: "#4A6B8A", link: "course" },
+  { title: "寻找100位慢π大使", sub: "一起用7把钥匙，打开中国人的精神家园", bg: "#C43D3D", link: "ambassador" },
+  { title: "精选课程：慢π好课", sub: "从基础到进阶，跟随老师系统学习", bg: "#4A6B8A", link: "course" },
   { title: "线上共修会报名中", sub: "与百位同修一起精进", bg: "#5B8C5A", link: "community" }
 ];
 

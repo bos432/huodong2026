@@ -30,7 +30,7 @@ export function normalizeCourse(row: any, index = 0): CourseCard {
   return {
     id,
     title: row?.title || "未命名课程",
-    teacher: row?.teacherName || "七维书院",
+    teacher: row?.teacherName || "慢π",
     teacherAvatar: row?.teacherAvatar || "",
     price,
     originalPrice: Number(row?.originalPrice || 0),

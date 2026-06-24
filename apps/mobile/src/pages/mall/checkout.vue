@@ -84,7 +84,7 @@
     <view class="card">
       <text class="section-title">推广码</text>
       <view class="coupon-input">
-        <input v-model="promotionCode" placeholder="有推广码可填写，便于书院统计推广佣金" />
+        <input v-model="promotionCode" placeholder="有推广码可填写，便于商家统计推广佣金" />
         <button v-if="promotionCode" size="mini" plain @click="promotionCode = ''">清空</button>
       </view>
       <text class="empty-tip">不填写也可以正常下单；填写后后台会记录推广来源。</text>

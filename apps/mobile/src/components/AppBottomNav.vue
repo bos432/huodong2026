@@ -27,7 +27,7 @@ const items = computed(() => {
     : [];
   if (configuredItems) return configured;
   return [
-    { label: "书院", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", icon: "🏛", activeIcon: "🏯" },
+    { label: "慢π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", icon: "π", activeIcon: "π" },
     { label: "课程", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", icon: "📖", activeIcon: "📚" },
     { label: "共修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", icon: "🪷", activeIcon: "🌸" },
     { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D", icon: "📅", activeIcon: "🎯" },

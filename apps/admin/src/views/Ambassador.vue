@@ -53,23 +53,23 @@ const taskTypeText: Record<string, string> = { activity_support: "活动协助",
 const volunteerStatusText: Record<string, string> = { pending: "待审核", approved: "已通过", rejected: "已拒绝", completed: "已完成", cancelled: "已取消" };
 const defaultEntryPages = {
   brandStory: {
-    eyebrow: "七维书院 · 品牌故事",
-    title: "把传统文化，做成可学习、可体验、可持续运营的现代书院。",
-    copy: "七维书院连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。",
+    eyebrow: "慢π · 品牌故事",
+    title: "把传统文化，做成可学习、可体验、可持续运营的现代学习空间。",
+    copy: "慢π连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。",
     primaryActionText: "申请成为院长",
     secondaryActionText: "了解帮扶计划",
     sectionTitle: "我们相信",
-    items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。", "书院要能运营：活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
-    flowTitle: "一套完整的书院闭环",
-    flowItems: ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地书院"],
+    items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。", "空间要能运营：活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
+    flowTitle: "一套完整的慢π闭环",
+    flowItems: ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地慢π"],
     joinTitle: "你可以如何参与"
   },
   deanRecruit: {
     eyebrow: "院长招募",
-    title: "招募一批真正愿意把书院开在本地的人。",
+    title: "招募一批真正愿意把慢π服务落在本地的人。",
     copy: "院长不是普通代理，而是本地学习空间的负责人：组织活动、服务学员、链接老师和公益资源。",
     sectionTitle: "适合谁",
-    items: ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同七维书院品牌与公益理念"],
+    items: ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同慢π品牌与公益理念"],
     formTitle: "提交院长申请",
     submitText: "提交院长申请",
     successMessage: "院长招募申请已进入后台，我们会尽快联系你。"
@@ -77,7 +77,7 @@ const defaultEntryPages = {
   ambassadorApply: {
     eyebrow: "大使申请",
     title: "把你的热爱，变成能被更多人看见的文化服务。",
-    copy: "适合讲师、主理人、内容创作者、社群组织者申请成为七维文化大使。",
+    copy: "适合讲师、主理人、内容创作者、社群组织者申请成为慢π大使。",
     sectionTitle: "你将参与",
     items: ["课程共创", "活动共办", "品牌露出", "学员服务", "公益参与", "长期成长"],
     formTitle: "提交大使申请",
@@ -384,7 +384,7 @@ async function exportApplications() {
 
 async function copyWechatScript(row: any) {
   const source = sourceMeta(row.source);
-  const text = `你好${row.name || "老师"}，我是七维书院${source.label}的跟进人。看到你提交的方向是「${row.expertise || "传统文化/教育"}」，想和你约一个10分钟沟通，了解你的情况和下一步合作/帮扶方式。你今天或明天哪个时间方便？`;
+  const text = `你好${row.name || "老师"}，我是慢π${source.label}的跟进人。看到你提交的方向是「${row.expertise || "传统文化/教育"}」，想和你约一个10分钟沟通，了解你的情况和下一步合作/帮扶方式。你今天或明天哪个时间方便？`;
   await navigator.clipboard.writeText(text);
   ElMessage.success("微信跟进话术已复制");
 }
@@ -404,7 +404,7 @@ function sourceMeta(value?: string | null) {
 
 function sourceTip(value?: string | null) {
   const source = String(value || "");
-  if (source === "dean_recruit") return "本地书院院长/负责人申请";
+  if (source === "dean_recruit") return "本地慢π院长/负责人申请";
   if (source === "ambassador_apply") return "文化大使、讲师、主理人申请";
   if (source === "aid_personal") return "个人学习帮扶、公益名额申请";
   if (source === "aid_project") return "公益项目方提交合作/帮扶项目";

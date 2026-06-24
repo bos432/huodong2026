@@ -8,6 +8,17 @@ export type CommunityPost = {
   comments: number;
   liked: boolean;
   images?: string[];
+  source?: string;
+  status?: string;
+  shareCount?: number;
+  activity?: {
+    id: number;
+    title: string;
+    coverUrl?: string | null;
+    startTime?: string;
+    endTime?: string;
+    location?: string;
+  } | null;
 };
 
 function relativeTime(value?: string) {
@@ -34,12 +45,16 @@ export function normalizeCommunityPosts(payload: any) {
   return rows.map((item: any, index: number) => ({
     id: Number(item.id || index + 1),
     avatar: item.avatar || `/static/avatar${(index % 3) + 1}.png`,
-    nickname: item.nickname || item.user?.nickname || "书院同学",
+    nickname: item.nickname || item.user?.nickname || "慢π同学",
     time: relativeTime(item.createdAt || item.time),
     content: item.content || "",
     likes: Number(item.likes || 0),
     comments: Number(item.comments || 0),
     liked: Boolean(item.liked),
-    images: Array.isArray(item.images) ? item.images : []
+    images: Array.isArray(item.images) ? item.images : [],
+    source: item.source || "official",
+    status: item.status || "approved",
+    shareCount: Number(item.shareCount || 0),
+    activity: item.activity || null
   }));
 }

@@ -3,16 +3,16 @@ function configuredH5Origin() {
   if (value) return normalizeH5Origin(value);
   if (typeof window !== "undefined" && window.location?.hostname) {
     const { hostname, origin, protocol } = window.location;
-    if (hostname === "localhost" || hostname === "127.0.0.1") return `${protocol}//${hostname}:4139`;
+    if (hostname === "localhost" || hostname === "127.0.0.1") return `${protocol}//${hostname}:5273`;
     return origin;
   }
-  return "http://127.0.0.1:4139";
+  return "http://127.0.0.1:5273";
 }
 
 function normalizeH5Origin(value: string) {
   try {
     const url = new URL(value);
-    if (url.port === "4139" && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") url.port = "";
+    if (["4139", "5173", "5273"].includes(url.port) && url.hostname !== "localhost" && url.hostname !== "127.0.0.1") url.port = "";
     return url.origin;
   } catch {
     return value;

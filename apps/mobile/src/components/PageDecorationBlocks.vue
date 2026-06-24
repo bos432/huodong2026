@@ -6,13 +6,55 @@ defineProps<{
   sections: HomepageSectionView[];
 }>();
 
+function densityPadding(value: unknown) {
+  if (value === "compact") return "18rpx";
+  if (value === "spacious") return "34rpx";
+  return "26rpx";
+}
+
+function fontFamily(value: unknown) {
+  if (value === "kaiti") return "\"STKaiti\", \"KaiTi\", serif";
+  if (value === "serif") return "\"Times New Roman\", \"Noto Serif SC\", serif";
+  return "system-ui, -apple-system, BlinkMacSystemFont, \"Segoe UI\", sans-serif";
+}
+
+function cardShadow(value: unknown) {
+  if (value === "flat") return "none";
+  if (value === "outlined") return "none";
+  if (value === "elevated") return "0 22rpx 54rpx rgba(91, 47, 36, 0.14)";
+  return "0 14rpx 34rpx rgba(91, 47, 36, 0.07)";
+}
+
+function cardBorder(value: unknown, dividerStyle: unknown) {
+  if (value === "outlined") return "1rpx solid rgba(15, 23, 42, 0.12)";
+  if (dividerStyle === "line") return "1rpx solid rgba(15, 23, 42, 0.08)";
+  return "0";
+}
+
+function buttonRadius(value: unknown) {
+  if (value === "square") return "8rpx";
+  if (value === "rounded") return "18rpx";
+  return "999px";
+}
+
 function sectionStyle(section: HomepageSectionView, fallback = "#fff") {
   const layout = section.layout || {};
   const background = layout.backgroundImage ? `url(${layout.backgroundImage}) center/cover no-repeat, ${layout.backgroundColor || fallback}` : layout.backgroundColor || fallback;
   return {
     background,
     borderRadius: `${Number(layout.borderRadius ?? 8)}px`,
-    marginBottom: `${Number(layout.spacingBottom ?? 18)}rpx`
+    marginBottom: `${Number(layout.spacingBottom ?? 18)}rpx`,
+    padding: densityPadding(layout.density),
+    color: String(layout.textColor || "var(--text-color, #111827)"),
+    fontFamily: fontFamily(layout.fontStyle),
+    boxShadow: cardShadow(layout.cardStyle),
+    border: cardBorder(layout.cardStyle, layout.dividerStyle),
+    "--primary-color": String(layout.primaryColor || "var(--primary-color, #0f766e)"),
+    "--decor-accent-color": String(layout.accentColor || "var(--primary-color, #c43d3d)"),
+    "--text-color": String(layout.textColor || "var(--text-color, #111827)"),
+    "--muted-color": String(layout.mutedColor || "var(--muted-color, #667085)"),
+    "--decor-button-radius": buttonRadius(layout.buttonStyle),
+    "--decor-divider-background": layout.dividerStyle === "soft" ? "rgba(255, 250, 243, 0.82)" : "transparent"
   };
 }
 
@@ -53,8 +95,16 @@ function activities(section: HomepageSectionView) {
   return sectionRows(section, "activities");
 }
 
+function posts(section: HomepageSectionView) {
+  return sectionRows(section, "posts");
+}
+
 function goActivity(id?: number | string) {
   if (id) goDecoratedLink(`/pages/activity/detail?id=${id}`);
+}
+
+function goPost(id?: number | string) {
+  if (id) goDecoratedLink(`/pages/community/detail?id=${id}`);
 }
 
 function priceText(price: string | number) {
@@ -76,7 +126,7 @@ function formatTime(value: string) {
 <template>
   <template v-for="section in sections" :key="section.id">
     <view v-if="section.type === 'hero'" class="decor-hero" :style="heroStyle(section)">
-      <view class="decor-eyebrow">{{ section.config.eyebrow || "七维文化" }}</view>
+      <view class="decor-eyebrow">{{ section.config.eyebrow || "慢π" }}</view>
       <view class="decor-title">{{ section.title }}</view>
       <view v-if="section.subtitle" class="decor-copy">{{ section.subtitle }}</view>
       <view v-if="heroButtonText(section)" class="decor-button" @click="goDecoratedLink(heroButtonLink(section))">
@@ -148,6 +198,44 @@ function formatTime(value: string) {
         </view>
       </view>
     </view>
+
+    <view v-else-if="['testimonial_feed', 'featured_testimonials', 'activity_testimonials'].includes(section.type)" class="decor-card-block" :style="sectionStyle(section)">
+      <view v-if="section.title" class="decor-section-title">{{ section.title }}</view>
+      <view v-if="section.subtitle" class="decor-section-copy">{{ section.subtitle }}</view>
+      <view v-if="posts(section).length" class="decor-post-list">
+        <view v-for="item in posts(section).slice(0, Number(section.config.limit || 3))" :key="item.id" class="decor-post" @click="goPost(item.id)">
+          <image v-if="item.images?.length" :src="item.images[0]" mode="aspectFill" />
+          <image v-else-if="item.activity?.coverUrl" :src="item.activity.coverUrl" mode="aspectFill" />
+          <view v-else class="decor-post-fallback">心得</view>
+          <view class="decor-post-body">
+            <view class="decor-post-title">{{ item.activity?.title || "活动心得" }}</view>
+            <view class="decor-post-content">{{ item.content }}</view>
+            <view class="decor-post-foot">点赞 {{ item.likes || 0 }} · 评论 {{ item.comments || 0 }}</view>
+          </view>
+        </view>
+      </view>
+      <view v-else class="decor-empty">暂无已审核的参与者心得</view>
+    </view>
+
+    <view v-else-if="section.type === 'brand_story_entry'" class="decor-story-entry" :style="sectionStyle(section, '#fff7ec')" @click="goDecoratedLink(String(section.config.link || '/pages/brand/story'))">
+      <image v-if="section.config.imageUrl" :src="String(section.config.imageUrl)" mode="aspectFill" />
+      <view class="decor-story-body">
+        <view class="decor-section-title">{{ section.title || "品牌故事" }}</view>
+        <view class="decor-section-copy">{{ section.subtitle || "了解慢π理念与共建方式" }}</view>
+        <view class="decor-button compact">{{ section.config.buttonText || "了解更多" }}</view>
+      </view>
+    </view>
+
+    <view v-else-if="['charity_summary', 'course_recommendations', 'mall_showcase'].includes(section.type)" class="decor-card-block decor-link-block" :style="sectionStyle(section)" @click="goDecoratedLink(String(section.config.link || ''))">
+      <view class="decor-section-title">{{ section.title }}</view>
+      <view v-if="section.subtitle" class="decor-section-copy">{{ section.subtitle }}</view>
+      <view class="decor-link-grid">
+        <view v-for="item in ((section.config.items as any[]) || []).slice(0, 3)" :key="item.label" class="decor-link-item">
+          <text>{{ item.icon || item.label?.slice(0, 1) }}</text>
+          <view>{{ item.label }}</view>
+        </view>
+      </view>
+    </view>
   </template>
 </template>
 
@@ -157,7 +245,7 @@ function formatTime(value: string) {
 .decor-eyebrow { color: rgba(255,255,255,0.78); font-size: 23rpx; font-weight: 800; }
 .decor-title { margin-top: 10rpx; font-size: 40rpx; line-height: 1.22; font-weight: 900; }
 .decor-copy { margin-top: 12rpx; color: rgba(255,255,255,0.84); font-size: 25rpx; line-height: 1.55; }
-.decor-button { position: relative; z-index: 1; display: inline-flex; margin-top: 22rpx; padding: 14rpx 26rpx; border-radius: 999px; background: rgba(255,255,255,0.92); color: #5b2f24; font-size: 24rpx; font-weight: 900; box-shadow: 0 10rpx 26rpx rgba(91, 47, 36, 0.18); }
+.decor-button { position: relative; z-index: 1; display: inline-flex; margin-top: 22rpx; padding: 14rpx 26rpx; border-radius: var(--decor-button-radius, 999px); background: rgba(255,255,255,0.92); color: var(--decor-accent-color, #5b2f24); font-size: 24rpx; font-weight: 900; box-shadow: 0 10rpx 26rpx rgba(91, 47, 36, 0.18); }
 .decor-quick-grid { display: grid; gap: 14rpx; margin-bottom: 18rpx; }
 .decor-quick-item { min-height: 122rpx; display: grid; gap: 9rpx; justify-items: center; align-content: center; border-radius: 16px; background: linear-gradient(180deg, #fff 0%, #fffbf5 100%); color: #3f3428; font-size: 23rpx; font-weight: 800; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); border: 1px solid rgba(139, 90, 43, 0.08); }
 .decor-quick-icon { width: 54rpx; height: 54rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 24rpx; font-weight: 900; }
@@ -182,4 +270,21 @@ function formatTime(value: string) {
 .decor-activity-title { color: var(--text-color, #111827); font-size: 27rpx; line-height: 1.35; font-weight: 900; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .decor-activity-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-color, #667085); font-size: 23rpx; }
 .decor-activity-foot { display: flex; justify-content: space-between; gap: 12rpx; color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 900; }
+.decor-post-list { display: grid; gap: 14rpx; }
+.decor-post { display: grid; grid-template-columns: 128rpx 1fr; gap: 14rpx; padding: 14rpx; border-radius: 14px; background: var(--decor-divider-background, #fffaf3); border: 1px solid rgba(139, 90, 43, 0.08); }
+.decor-post image, .decor-post-fallback { width: 128rpx; height: 128rpx; border-radius: 12px; }
+.decor-post-fallback { display: flex; align-items: center; justify-content: center; background: #f3e7d6; color: #8b5a2b; font-weight: 900; }
+.decor-post-body { min-width: 0; display: grid; gap: 7rpx; align-content: center; }
+.decor-post-title { color: #3f3428; font-size: 25rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.decor-post-content { color: #667085; font-size: 23rpx; line-height: 1.45; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.decor-post-foot { color: var(--primary-color, #8b5a2b); font-size: 22rpx; font-weight: 800; }
+.decor-empty { padding: 22rpx; border-radius: 12px; background: var(--decor-divider-background, #fffaf3); color: var(--muted-color, #8a94a6); text-align: center; font-size: 24rpx; }
+.decor-story-entry { display: grid; grid-template-columns: 180rpx 1fr; gap: 18rpx; padding: 24rpx; margin-bottom: 18rpx; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.07); }
+.decor-story-entry image { width: 180rpx; height: 180rpx; border-radius: 14px; }
+.decor-story-body { min-width: 0; }
+.decor-button.compact { margin-top: 14rpx; padding: 10rpx 18rpx; font-size: 23rpx; background: var(--decor-accent-color, #5b2f24); color: #fff; }
+.decor-link-block { cursor: pointer; }
+.decor-link-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; }
+.decor-link-item { min-height: 106rpx; display: grid; justify-items: center; align-content: center; gap: 8rpx; border-radius: 14px; background: var(--decor-divider-background, #fffaf3); color: var(--decor-accent-color, #5b2f24); font-size: 23rpx; font-weight: 800; }
+.decor-link-item text { width: 44rpx; height: 44rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: rgba(139, 90, 43, 0.12); color: var(--decor-accent-color, #c43d3d); font-weight: 900; }
 </style>

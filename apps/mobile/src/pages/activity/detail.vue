@@ -146,6 +146,14 @@ function goService() {
   uni.navigateTo({ url: withTenantCode("/pages/service/index") });
 }
 
+function goCommunity() {
+  uni.navigateTo({ url: withTenantCode(`/pages/community/index?activityId=${activity.value?.id || ""}`) });
+}
+
+function goPublish() {
+  uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activity.value?.id || ""}`) });
+}
+
 function openLocation() {
   const latitude = locationLatitude();
   const longitude = locationLongitude();
@@ -219,7 +227,7 @@ onMounted(loadDecoration);
         <view v-else class="hero-image hero-fallback">雅集</view>
         <view class="hero-mask"></view>
         <view class="hero-head">
-          <text class="hero-kicker">七维书院 · 活动详情</text>
+          <text class="hero-kicker">慢π · 活动详情</text>
           <text class="hero-status">{{ statusText(activity.displayStatus) }}</text>
         </view>
         <view class="hero-bottom">
@@ -310,6 +318,14 @@ onMounted(loadDecoration);
         <view class="action-item" @click="goMy">
           <text>票</text>
           <view>我的报名</view>
+        </view>
+        <view class="action-item" @click="goPublish">
+          <text>记</text>
+          <view>分享心得</view>
+        </view>
+        <view class="action-item" @click="goCommunity">
+          <text>看</text>
+          <view>活动口碑</view>
         </view>
       </view>
 
@@ -487,8 +503,8 @@ onMounted(loadDecoration);
 .member-access { margin-top: 18rpx; padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); border: 1px solid rgba(74, 107, 138, 0.12); }
 .member-access.blocked { background: rgba(255, 159, 0, 0.08); border-color: rgba(255, 159, 0, 0.18); }
 .operation-notice { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: #fff7ed; border: 1px solid #fed7aa; }
-.action-card { display: grid; gap: 18rpx; }
-.action-card .section-title { margin-bottom: 0; }
+.action-card { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18rpx; }
+.action-card .section-title { grid-column: 1 / -1; margin-bottom: 0; }
 .action-item { display: grid; gap: 10rpx; justify-items: center; color: #666666; font-size: 24rpx; font-weight: 600; }
 .action-item text { width: 58rpx; height: 58rpx; display: flex; align-items: center; justify-content: center; border-radius: 20rpx; background: rgba(74, 107, 138, 0.12); color: #4a6b8a; font-size: 25rpx; font-weight: 700; }
 .mini-button { padding: 10rpx 18rpx; border-radius: 12rpx; color: #c43d3d; background: rgba(196, 61, 61, 0.12); font-size: 24rpx; }

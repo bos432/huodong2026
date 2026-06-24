@@ -50,6 +50,17 @@
       <text style="font-size:24rpx; color:#999; margin-top:6rpx;">{{ pageBrand.slogan }}</text>
     </view>
 
+    <!-- 用户心得入口 -->
+    <view class="card community-post-entry" @click="goCommunityPosts">
+      <view class="row">
+        <view>
+          <text class="entry-title">我的活动心得</text>
+          <text class="entry-copy">查看审核状态，继续分享已通过的活动感悟。</text>
+        </view>
+        <text class="entry-arrow">去查看 ›</text>
+      </view>
+    </view>
+
     <!-- 订单记录 -->
     <view class="card order-card">
       <view class="row" style="margin-bottom:16rpx;">
@@ -240,6 +251,7 @@ function goEdit() { uni.navigateTo({ url:"/pages/user/profile" }); }
 function goCharity() { uni.navigateTo({ url:"/pages/charity/index" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goWallet() { uni.navigateTo({ url:"/pages/user/wallet" }); }
+function goCommunityPosts() { uni.navigateTo({ url:"/pages/user/community-posts" }); }
 function goOrders(tab: any) {
   const status = tab?.status || "all";
   uni.navigateTo({ url:`/pages/user/orders?status=${status}` });
@@ -302,6 +314,26 @@ function logoutUser() {
 .ambassador-entry {
   margin-bottom: 16rpx;
   border: 2rpx solid rgba(196,61,61,0.2);
+}
+.community-post-entry { margin-bottom: 16rpx; }
+.entry-title {
+  display: block;
+  color: #263d3c;
+  font-size: 30rpx;
+  font-weight: 900;
+}
+.entry-copy {
+  display: block;
+  margin-top: 8rpx;
+  color: #8f8172;
+  font-size: 24rpx;
+  line-height: 1.55;
+}
+.entry-arrow {
+  flex-shrink: 0;
+  color: #C43D3D;
+  font-size: 25rpx;
+  font-weight: 900;
 }
 .order-card { margin-bottom: 16rpx; }
 .order-tabs {

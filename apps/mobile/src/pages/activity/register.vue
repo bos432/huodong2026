@@ -263,7 +263,7 @@ watch(couponCode, () => {
         <view v-else class="hero-image hero-fallback">报名</view>
         <view class="hero-mask"></view>
         <view class="hero-head">
-          <text class="hero-kicker">七维书院 · 报名确认</text>
+          <text class="hero-kicker">慢π · 报名确认</text>
           <text class="hero-status">{{ seatsText }}</text>
         </view>
         <view class="hero-bottom">

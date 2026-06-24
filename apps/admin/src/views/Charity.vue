@@ -3,7 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
-import { canAccess, permissions } from "../permissions";
+import { canAccess } from "../permissions";
 
 const loading = ref(false);
 const savingSetting = ref(false);
@@ -26,8 +26,8 @@ const projectForm = reactive({ title: "", targetAmount: 500, status: "fundraisin
 const updateForm = reactive({ title: "", content: "", proofUrl: "", publicVisible: true, publishedAt: "" });
 const disbursementForm = reactive({ amount: 100, remark: "公益项目执行拨付", proofUrl: "", publicVisible: true });
 
-const canOperate = computed(() => canAccess(permissions.operation));
-const canFinance = computed(() => canAccess(permissions.finance));
+const canOperate = computed(() => canAccess(["charity.manage"]));
+const canFinance = computed(() => canAccess(["charity.finance"]));
 
 const statusText: Record<string, string> = {
   fundraising: "筹集中",

@@ -96,15 +96,15 @@ async function main() {
     tenantId: tenant.id,
     ownerType: "tenant",
     code: "qiwai-showcase-self",
-    name: "七维书院自营商城",
+    name: "慢π自营商城",
     status: "active",
     mallEnabled: true,
     productAuditRequired: false,
     paymentMode: "platform_collect",
     region: "重庆市铜梁区",
-    contactName: "七维自营店长",
+    contactName: "慢π自营店长",
     contactPhone: "13990008881",
-    notice: "平台自营书院好物，支持平台统一代收和履约。",
+    notice: "平台自营慢π好物，支持平台统一代收和履约。",
     remark: `demoScenario:${SCENARIO} multi-merchant self store`
   };
   const existingAgentStore = await findMerchantByCode(platform.token, tenant.id, "qiwai-showcase-agent-south");
@@ -291,6 +291,10 @@ async function main() {
   const reviewEvidence = await assertReviewStoreIsolation(selfOwner.token, agentOwner.token, user.userAccessToken, completedSelfOrder, completedAgentOrder, selfStore, agentStore);
   markSmokeCheck("reviewStoreIsolation", reviewEvidence);
   reportStep("商城评价店铺隔离通过", "店铺账号只能查看和审核本店评价");
+  const cleanupSettlement = await settlePendingMallRecords(platform.token, agentStore, "代理店历史待结算记录清理");
+  if (cleanupSettlement) {
+    reportStep("代理店历史待结算记录已清理", cleanupSettlement.settlementNo);
+  }
   const agentBalanceOrder = await createAgentBalanceSettlementOrder(platform.token, agentOwner.token, user.userAccessToken, user.user?.id, agentProduct, agentStore, logisticsEvidence.agentLogistics);
   reportStep("代理店余额支付结算样本已准备", agentBalanceOrder.orderNo);
 
@@ -445,7 +449,7 @@ async function ensureStoreAccounts(token, tenantId) {
 }
 
 async function upsertAdmin(token, admins, tenantId, username, displayName, role = "operator", permissions = mallOperatorPermissions) {
-  const existing = admins.find((item) => item.username === username);
+  const existing = await findAdminByUsername(token, username) || admins.find((item) => item.username === username);
   const payload = { username, password: showcasePassword, role, tenantId, permissions };
   if (existing) {
     const saved = await api(`/admin/admins/${existing.id}`, {
@@ -459,11 +463,16 @@ async function upsertAdmin(token, admins, tenantId, username, displayName, role 
   return api("/admin/admins", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
 }
 
+async function findAdminByUsername(token, username) {
+  const result = pickList(await api(`/admin/admins?includeSmoke=true&pageSize=20&keyword=${encodeURIComponent(username)}`, { headers: auth(token) }));
+  return result.find((item) => item.username === username) || null;
+}
+
 async function ensureAgent(token, tenantId) {
   const agents = pickList(await api(`/admin/agents?includeDisabled=true&tenantId=${tenantId}`, { headers: auth(token) }));
   const payload = {
     tenantId,
-    name: "七维南城代理",
+    name: "慢π南城代理",
     region: "重庆市南岸区",
     contactName: "南城代理负责人",
     contactPhone: "13990008882",
@@ -895,7 +904,7 @@ async function assertCategoryMerchantAvailabilityGuard(token, tenantId, managerA
       title: "【多商户】无启用规格保护商品",
       coverUrl: cover(35),
       description: "用于验证已上架但无启用 SKU 的商品不会出现在前台商城。",
-      brandName: "书院自营",
+      brandName: "慢π自营",
       price: 31,
       originalPrice: 51,
       status: "published",
@@ -1199,7 +1208,7 @@ async function ensureStoreProduct(token, merchant, title, categoryName, price, o
     title,
     coverUrl: cover(coverSeed),
     description: `${merchant.name} 多商户验收商品：用于验证店铺独立发布、前台按店铺展示、跨店购物车拆单。`,
-    brandName: merchant.ownerType === "agent" ? "代理严选" : "书院自营",
+    brandName: merchant.ownerType === "agent" ? "代理严选" : "慢π自营",
     price,
     originalPrice,
     status: "published",
@@ -2279,6 +2288,42 @@ async function assertSettlementGuard(storeToken, merchant) {
   assert(!result.ok && String(result.error?.message || "").includes("平台财务"), "店铺账号不应能生成、审核或打款自己的商城结算单");
 }
 
+async function settlePendingMallRecords(platformToken, merchant, label) {
+  const today = todayDate();
+  const draftResult = await tryApi("/admin/mall/settlements/generate", {
+    method: "POST",
+    headers: auth(platformToken),
+    body: JSON.stringify({
+      merchantId: merchant.id,
+      periodStart: today,
+      periodEnd: today,
+      remark: `${label}：为多商户 smoke 隔离本次余额支付样本`
+    })
+  });
+  if (!draftResult.ok) {
+    const message = String(draftResult.error?.message || "");
+    if (message.includes("当前周期没有新的可结算订单或退款")) return null;
+    throw draftResult.error;
+  }
+  const draft = draftResult.data;
+  const approved = await api(`/admin/mall/settlements/${draft.id}/approve`, {
+    method: "POST",
+    headers: auth(platformToken),
+    body: JSON.stringify({ remark: `${label}：自动审核` })
+  });
+  assert(approved.status === "approved", `${label}结算单审核后应为 approved`);
+  const paid = await api(`/admin/mall/settlements/${draft.id}/mark-paid`, {
+    method: "POST",
+    headers: auth(platformToken),
+    body: JSON.stringify({
+      paidReference: `SMOKE-CLEANUP-${Date.now()}-${draft.id}`,
+      remark: `${label}：自动标记完成`
+    })
+  });
+  assert(paid.status === "paid", `${label}结算单标记完成后应为 paid`);
+  return paid;
+}
+
 async function assertSettlementLifecycle(platformToken, merchant, label) {
   const today = todayDate();
   const query = `merchantId=${merchant.id}&startDate=${today}&endDate=${today}`;
@@ -2466,7 +2511,7 @@ async function assertMallOperationalAdminEndpoints(platformToken, selfToken, age
   assert(platformExportText.includes(selfSettlement.settlementNo), "平台商城结算导出应包含自营店结算单号");
   assert(platformExportText.includes(selfStore.name), "平台商城结算导出应包含自营店店铺名称");
   assert(!platformExportText.includes(agentSettlement.settlementNo), "平台按自营店筛选导出时不应包含代理店结算单号");
-  const selfOrderExportText = await downloadWorkbookText(`/admin/mall/orders/export?${selfQuery}`, platformToken, "平台商城订单导出");
+  const selfOrderExportText = await downloadWorkbookText(`/admin/mall/orders/export?merchantId=${selfStore.id}`, platformToken, "平台商城订单导出");
   assert(selfOrderExportText.includes("结算组号") && selfOrderExportText.includes("店铺名称") && selfOrderExportText.includes("收款模式"), "商城订单导出应包含多商户对账字段");
   assert(selfOrderExportText.includes(selfStore.name), "商城订单导出应包含自营店店铺名称");
   assert(selfOrderExportText.includes("平台代收"), "商城订单导出应标明平台代收模式");

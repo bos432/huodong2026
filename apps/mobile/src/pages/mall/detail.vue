@@ -1,7 +1,7 @@
 <template>
   <view class="detail-page">
     <image v-if="product.coverUrl" class="hero-img" :src="product.coverUrl" mode="aspectFill" />
-    <view v-else class="hero-img placeholder">七维书院严选</view>
+    <view v-else class="hero-img placeholder">慢π严选</view>
     <view class="card">
       <view class="top-row">
         <text v-if="product.brandName" class="brand">{{ product.brandName }}</text>

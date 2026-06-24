@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Check, CircleClose, Close, Download, Search } from "@element-plus/icons-vue";
 import { OrderStatus, RegistrationStatus, orderStatusText, registrationStatusText } from "@activity/shared";
 import { api, downloadExport } from "../api";
-import { canAccess, isPlatformAdmin, permissions } from "../permissions";
+import { canAccess, isPlatformAdmin } from "../permissions";
 
 type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
 
@@ -36,8 +36,8 @@ const query = reactive({
   pageSize: 20
 });
 const total = ref(0);
-const canOperateRegistrations = canAccess(permissions.operation);
-const canViewRegistrationOrders = canAccess(permissions.finance);
+const canOperateRegistrations = canAccess(["registration.manage"]);
+const canViewRegistrationOrders = canAccess(["order.view", "finance.view", "finance.manage"]);
 const pageTitle = computed(() => (isPlatformAdmin() ? "全局报名" : "报名管理"));
 const operateHintTitle = computed(() => (isPlatformAdmin() ? "平台报名监管" : "审核提示"));
 const operateHintDescription = computed(() =>

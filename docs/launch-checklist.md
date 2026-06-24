@@ -42,7 +42,9 @@
 - 确认 Nginx 仍保留 `/api/` 反向代理头、`/uploads/` 只读挂载、后台/H5 SPA no-store 缓存策略、静态资源缓存策略和安全响应头。
 - 执行 `npm run smoke`。
 - 执行 `npm run smoke:flow`。
+- 执行 `npm run smoke:community-sharing`，确认参与者心得发布、后台审核、公开展示、分享统计和 H5 装修心得模块读取均通过。
 - 如启用或展示多商户商城，执行 `npm run smoke:mall-multi-merchant`，确认生成 `deploy/mall-multi-merchant-smoke-result.json` 且 `passed=true`；上线前再设置 `MALL_MULTI_MERCHANT_PREFLIGHT_PASSED=true`，该结果会被 `npm run preflight` 和 `npm run prelaunch:online-showcase` 检查，避免未跑多商户店铺、跨店拆单、结算凭证、已结算后退款扣回/冲抵和运营后台验收就开放商城。
+- 在真实手机微信内执行 [慢π微信分享与海报真机验收清单](wechat-share-poster-acceptance.md)，确认活动分享、心得发布、海报生成、长按保存、二维码扫码回流和朋友圈传播均通过。
 - 执行 `npm --prefix apps/api run migration:show`，确认待执行迁移符合预期。
 - 生产数据库备份后执行 `npm --prefix apps/api run migration:run`。
 - 执行 `docker compose --env-file deploy/.env.production up -d --build`。
@@ -151,6 +153,9 @@
 
 - H5 活动详情可生成邀请码和分享链接。
 - 通过邀请码访问活动详情后，后台活动漏斗能看到分享访问增长。
+- H5 参与者心得详情可在微信内生成海报，海报包含慢π品牌、活动标题、心得摘要、首图或活动封面、用户昵称和二维码/分享链接。
+- 微信内长按保存心得海报成功，保存后的图片无空白、黑块、文字遮挡或二维码不可识别问题。
+- 从朋友圈、聊天分享卡片和海报二维码进入 H5 时，公开活动和已审核心得均可未登录浏览，`tenantCode` 和详情 id 不丢失。
 - 后台活动漏斗展示浏览、分享访问、报名、付款、成功、签到和评价数据。
 - 后台活动复盘页可查看转化率、签到率、评价均分、最近评价和通知触达。
 - 后台活动复盘可导出 Excel，文件包含概览、邀请榜和评价。

@@ -408,7 +408,7 @@ const ActivityForm = defineComponent({
       const save = isFlash ? saveFlashSale : saveGroupBuy;
       return h(ElForm, { labelWidth: "92px" }, () => [
         h(ElFormItem, { label: "归属店铺", required: true }, () => h("span", { class: "form-scope" }, selectedMerchantName.value)),
-        h(ElFormItem, { label: "标题", required: true }, () => h(ElInput, { modelValue: form.title, "onUpdate:modelValue": (value: string) => (form.title = value), maxlength: 80, placeholder: isFlash ? "如 周末限时秒杀" : "如 三人成团书院好物" })),
+        h(ElFormItem, { label: "标题", required: true }, () => h(ElInput, { modelValue: form.title, "onUpdate:modelValue": (value: string) => (form.title = value), maxlength: 80, placeholder: isFlash ? "如 周末限时秒杀" : "如 三人成团慢π好物" })),
         h(ElFormItem, { label: "商品/规格", required: true }, () => h("div", { class: "inline-fields" }, [
           h(ElSelect, { modelValue: form.productId, "onUpdate:modelValue": (value: number) => { form.productId = value; form.skuId = null; }, filterable: true, placeholder: "选择商品", style: "width:260px" }, () => products.value.map((product) => h(ElOption, { key: product.id, label: product.title, value: product.id }))),
           h(ElSelect, { modelValue: form.skuId, "onUpdate:modelValue": (value: number) => (form.skuId = value), filterable: true, placeholder: "选择规格", style: "width:220px" }, () => skus.map((sku: any) => h(ElOption, { key: sku.id, label: `${sku.name}（可售 ${sku.availableStock ?? sku.stock ?? 0}）`, value: sku.id })))

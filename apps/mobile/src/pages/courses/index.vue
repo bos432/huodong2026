@@ -4,6 +4,8 @@
       <text class="title-lg">全部课程</text>
     </view>
 
+    <PageDecorationBlocks :sections="decorationSections" />
+
     <scroll-view class="category-tabs" scroll-x :show-scrollbar="false">
       <view
         v-for="(cat, idx) in categories"
@@ -63,16 +65,16 @@ import { computed, onMounted, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText } from "../../course-data";
+import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
-
-onShow(() => { loadPageTheme(); });
+import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
 const categories = [
   { key: "all", label: "全部" },
   { key: "国学", label: "国学" },
-  { key: "玄学", label: "玄学" },
+  { key: "东方哲学", label: "东方哲学" },
   { key: "书法", label: "书法" },
   { key: "教育", label: "教育" },
   { key: "健康", label: "健康" },
@@ -91,6 +93,12 @@ const activeSort = ref("newest");
 const loading = ref(true);
 const error = ref("");
 const allCourses = ref<any[]>([]);
+const { contentSections, loadDecoration } = usePageDecoration("course_home", "/pages/courses/index");
+const decorationSections = computed(() => contentSections.value.filter((section) => {
+  if (section.type === "hero" && section.title === "课程首页") return false;
+  if (section.type === "rich_text" && section.title === "页面说明") return false;
+  return true;
+}));
 
 async function loadCourses() {
   loading.value = true;
@@ -120,7 +128,15 @@ function goDetail(course: any) {
   uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${course.id}`) });
 }
 
-onMounted(loadCourses);
+onMounted(() => {
+  loadCourses();
+  loadDecoration();
+});
+
+onShow(() => {
+  loadPageTheme();
+  loadDecoration();
+});
 </script>
 
 <style scoped>

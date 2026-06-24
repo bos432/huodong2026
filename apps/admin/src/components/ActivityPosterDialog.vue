@@ -23,7 +23,7 @@ const canvasRef = ref<HTMLCanvasElement | null>(null);
 const posterDataUrl = ref("");
 const loading = ref(false);
 const title = computed(() => props.activity?.title || "活动海报");
-const scopeName = computed(() => props.tenantName || props.activity?.tenant?.name || props.activity?.tenant?.code || "七维文化");
+const scopeName = computed(() => props.tenantName || props.activity?.tenant?.name || props.activity?.tenant?.code || "慢π");
 
 function formatTime(value?: string) {
   if (!value) return "-";
@@ -105,7 +105,7 @@ function drawCover(ctx: CanvasRenderingContext2D, image: HTMLImageElement | null
     ctx.fillRect(x, y, width, height);
     ctx.fillStyle = "rgba(17,24,39,0.72)";
     ctx.font = "bold 46px sans-serif";
-    ctx.fillText("七维文化", x + 44, y + 120);
+    ctx.fillText("慢π", x + 44, y + 120);
     ctx.font = "28px sans-serif";
     ctx.fillText("城市活动与课程报名", x + 44, y + 170);
   }
@@ -175,7 +175,7 @@ async function renderPoster() {
 
     ctx.fillStyle = "#94a3b8";
     ctx.font = "22px sans-serif";
-    ctx.fillText("七维文化城市合伙人运营 SaaS", 74, 1324);
+    ctx.fillText("慢π城市合伙人运营 SaaS", 74, 1324);
     posterDataUrl.value = canvas.toDataURL("image/png");
   } catch (error: any) {
     posterDataUrl.value = "";

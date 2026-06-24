@@ -1,10 +1,10 @@
-# 七维文化活动与课程 SaaS 平台落地方案
+# 慢π活动与课程 SaaS 平台落地方案
 
 更新时间：2026-06-11
 
 ## 1. 项目定位
 
-七维文化第一年不做大而全知识平台，先聚焦：
+慢π第一年不做大而全知识平台，先聚焦：
 
 > 线下文化活动 + 课程报名 + 城市合伙人运营 SaaS。
 
@@ -172,10 +172,10 @@
 - 城市合伙人说明书：[city-partner-handbook.md](city-partner-handbook.md)
 - 城市合伙人合作与结算规则：[city-partner-cooperation-policy.md](city-partner-cooperation-policy.md)
 - 城市合伙人首月运营 SOP：[city-partner-first-month-sop.md](city-partner-first-month-sop.md)
-- 七维文化本地演示指南：[qiwai-local-demo-guide.md](qiwai-local-demo-guide.md)
-- 七维文化样板数据脚本：`npm run seed:qiwai-demo`
-- 七维文化样板验收脚本：`npm run smoke:qiwai-demo`，覆盖账号登录、租户隔离、公开端活动隔离、三城样板活动“报名 -> 线下收款确认 -> 签到 -> 用户标签 -> 活动复盘 -> 财务可见”闭环、杭州部分退款闭环、城市合伙人结算生成/提交/审核/打款登记/详情审计/导出/跨城隔离，以及平台超级管理员跨商家监管和活动发布审核流。
-- 七维文化样板经营报告：`npm run report:qiwai-demo`，输出三城活动、报名、GMV、退款、净收入、签到率、结算单、应结算金额、已打款金额和城市健康状态。
+- 慢π本地演示指南：[qiwai-local-demo-guide.md](qiwai-local-demo-guide.md)
+- 慢π样板数据脚本：`npm run seed:qiwai-demo`
+- 慢π样板验收脚本：`npm run smoke:qiwai-demo`，覆盖账号登录、租户隔离、公开端活动隔离、三城样板活动“报名 -> 线下收款确认 -> 签到 -> 用户标签 -> 活动复盘 -> 财务可见”闭环、杭州部分退款闭环、城市合伙人结算生成/提交/审核/打款登记/详情审计/导出/跨城隔离，以及平台超级管理员跨商家监管和活动发布审核流。
+- 慢π样板经营报告：`npm run report:qiwai-demo`，输出三城活动、报名、GMV、退款、净收入、签到率、结算单、应结算金额、已打款金额和城市健康状态。
 
 ## 8. 执行默认假设
 

@@ -86,14 +86,14 @@ const permissions = [
 ];
 
 const accounts = [
-  { username: "showcase_admin", role: "super_admin", permissions },
+  { username: "showcase_admin", role: "operator", permissions },
   { username: "showcase_ops", role: "operator", permissions: permissions.filter((item) => !item.startsWith("finance") && !item.startsWith("agent_settlement") && !item.startsWith("payment_account") && item !== "order.refund" && item !== "order.export") },
   { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "mall.merchant.manage", "mall.merchant.view", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "member.view", "upload.settlement_proof"] },
   { username: "showcase_checkin", role: "checkin_staff", permissions: ["dashboard.view", "activity.view", "registration.view", "checkin.manage"] }
 ];
 
 const activities = [
-  ["【演示】国学经典晨读体验营", 0, "国学", "清晨共读《大学》与《论语》片段，用 60 分钟体验书院式学习节奏，适合第一次到访的新学员。"],
+  ["【演示】国学经典晨读体验营", 0, "国学", "清晨共读《大学》与《论语》片段，用 60 分钟体验慢π式学习节奏，适合第一次到访的新学员。"],
   ["【演示】硬笔书法入门公开课", 0, "书法", "从握笔、坐姿、基础笔画开始，现场完成一张入门作品，适合零基础成人和亲子家庭。"],
   ["【演示】节气养生与身心舒展", 0, "身心健康", "结合节气生活方式、呼吸放松和轻运动，做一场温和体验课，帮助用户建立健康打卡习惯。"],
   ["【演示】家庭教育沟通工作坊", 59, "家庭教育", "拆解亲子沟通场景，用练习帮助家长建立更稳定的表达方式，适合转化为系列课。"],
@@ -102,9 +102,9 @@ const activities = [
 ];
 
 const courses = [
-  ["【演示】国学入门十分钟", 0, "七维导学老师", ["国学", "体验课", "新人必看"]],
+  ["【演示】国学入门十分钟", 0, "慢π导学老师", ["国学", "体验课", "新人必看"]],
   ["【演示】书法基础体验课", 0, "书法主理人", ["书法", "免费体验", "作品练习"]],
-  ["【演示】传统文化系统课", 299, "七维书院讲师团", ["传统文化", "系统课", "30天学习"]],
+  ["【演示】传统文化系统课", 299, "慢π讲师团", ["传统文化", "系统课", "30天学习"]],
   ["【演示】家庭教育进阶课", 199, "家庭教育顾问", ["家庭教育", "进阶", "亲子沟通"]]
 ];
 
@@ -114,7 +114,7 @@ const posts = [
   "家庭教育沙龙复盘：先处理情绪，再处理事情，是很多家长今天带走的一句话。评论区欢迎留下你的场景。",
   "节气身心课预告：这周从饮食、睡眠和轻运动三个角度做生活方式练习，适合加入共修打卡。",
   "学员笔记精选：学习传统文化不是背答案，而是多一个看世界的角度。今天的笔记已经整理进课程资料。",
-  "城市书院日常：下午的空间很安静，适合阅读、抄写，也适合和自己待一会儿。欢迎预约到店体验。",
+  "慢π城市日常：下午的空间很安静，适合阅读、抄写，也适合和自己待一会儿。欢迎预约到店体验。",
   "共修打卡第 7 天：有人开始早睡，有人开始每天读 10 分钟书，小变化会积累，后台也能看到打卡记录。",
   "创业技能小课预告：用一页纸梳理用户、产品和第一次成交路径，适合想做本地文化服务的人。"
 ];
@@ -149,7 +149,7 @@ async function ensureTenant(token) {
     code: TENANT_CODE,
     name: TENANT_NAME,
     region: "演示城市",
-    contactName: "七维演示运营",
+    contactName: "慢π演示运营",
     contactPhone: "13990009999",
     enabled: true,
     settings: {
@@ -199,10 +199,9 @@ async function ensureTenantRegion(token, tenantId) {
 }
 
 async function ensureAccounts(token, tenantId) {
-  const admins = pickList(await api(`/admin/admins?includeSmoke=true&pageSize=200`, { headers: auth(token) }));
   for (const account of accounts) {
     const payload = { username: account.username, password: showcasePassword, role: account.role, tenantId, permissions: account.permissions };
-    const existing = admins.find((item) => item.username === account.username);
+    const existing = await findAdminByUsername(token, account.username);
     if (existing) {
       await api(`/admin/admins/${existing.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify({ role: account.role, tenantId, enabled: true, permissions: account.permissions }) });
       await api(`/admin/admins/${existing.id}/password`, { method: "POST", headers: auth(token), body: JSON.stringify({ password: showcasePassword }) });
@@ -213,30 +212,34 @@ async function ensureAccounts(token, tenantId) {
   reportStep("演示后台账号已创建/更新");
 }
 
+async function findAdminByUsername(token, username) {
+  const result = pickList(await api(`/admin/admins?includeSmoke=true&pageSize=20&keyword=${encodeURIComponent(username)}`, { headers: auth(token) }));
+  return result.find((item) => item.username === username) || null;
+}
+
 async function ensureMallDefaultStore(token, tenantId) {
   const merchants = pickList(await api(`/admin/mall/merchants?tenantId=${tenantId}`, { headers: auth(token) }));
   const payload = {
     tenantId,
     ownerType: "tenant",
     code: "qiwai-showcase-main",
-    name: "七维书院自营店",
+    name: "慢π自营店",
     status: "active",
     mallEnabled: true,
     productAuditRequired: false,
     paymentMode: "platform_collect",
     region: "重庆市铜梁区",
-    contactName: "七维演示运营",
+    contactName: "慢π演示运营",
     contactPhone: "13990009999",
-    notice: "书院自营商品、课程周边和公益好物统一从这里发货。",
+    notice: "慢π自营商品、课程周边和公益好物统一从这里发货。",
     remark: `demoScenario:${SCENARIO} default mall merchant`
   };
   const existing = merchants.find((item) => item.code === payload.code);
   let merchant = existing
     ? existing
     : await api("/admin/mall/merchants", { method: "POST", headers: auth(token), body: JSON.stringify({ ...payload, status: "disabled", mallEnabled: false }) });
-  const admins = pickList(await api(`/admin/admins?includeSmoke=true&pageSize=300`, { headers: auth(token) }));
   for (const username of ["showcase_admin", "showcase_ops", "showcase_finance"]) {
-    const admin = admins.find((item) => item.username === username);
+    const admin = await findAdminByUsername(token, username);
     if (!admin) continue;
     await api("/admin/mall/merchant-access", {
       method: "POST",
@@ -273,7 +276,7 @@ async function ensureOperationSettings(token) {
       registrationDisabledMessage: "",
       offlinePaymentInstructions: "演示商家支持免费报名、余额支付和线下收款确认。真实微信/支付宝未配置时不能假成功。",
       paymentMethods: { free: true, balance: true, offline: true, wechat: true, alipay: false },
-      customerServiceName: "七维演示客服",
+      customerServiceName: "慢π演示客服",
       customerServicePhone: "13990009999",
       customerServiceWechat: "qiwai_showcase_service",
       defaultGroupQrCodeUrl: "",
@@ -301,8 +304,8 @@ async function ensureHomepage(token) {
   const payloads = [
     {
       type: "hero",
-      title: "七维书院演示中心",
-      subtitle: "一座可运营的线上书院：活动报名、课程学习、共修打卡、动态互动和财务追溯完整闭环。",
+      title: "慢π演示中心",
+      subtitle: "一座可运营的线上慢π空间：活动报名、课程学习、共修打卡、动态互动和财务追溯完整闭环。",
       sortOrder: 1,
       config: {
         eyebrow: "上线演示商家",
@@ -324,7 +327,7 @@ async function ensureHomepage(token) {
     },
     {
       type: "quick_nav",
-      title: "书院服务",
+      title: "慢π服务",
       subtitle: "从体验、学习到复购服务，用户路径一眼可见",
       sortOrder: 3,
       config: {
@@ -336,7 +339,7 @@ async function ensureHomepage(token) {
           { label: "活动报名", icon: "活", color: "#8B5A2B", link: "/pages/activity/list", action: "mainPage" },
           { label: "课程学习", icon: "课", color: "#4A6B8A", link: "/pages/courses/index", action: "mainPage" },
           { label: "共修打卡", icon: "修", color: "#5B8C5A", link: "/pages/community/checkin" },
-          { label: "书院动态", icon: "动", color: "#B45309", link: "/pages/community/index", action: "mainPage" }
+          { label: "慢π动态", icon: "动", color: "#B45309", link: "/pages/community/index", action: "mainPage" }
         ],
         demoScenario: SCENARIO
       },
@@ -353,7 +356,7 @@ async function ensureHomepage(token) {
       sortOrder: 99,
       config: {
         items: [
-          { label: "书院", icon: "书", activeIcon: "书", link: "/pages/index/index", action: "mainPage", color: "#8B5A2B" },
+          { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#8B5A2B" },
           { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#8B5A2B" },
           { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#8B5A2B" },
           { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#8B5A2B" },
@@ -365,11 +368,11 @@ async function ensureHomepage(token) {
     },
     {
       type: "my_page",
-      title: "我的书院",
+      title: "我的慢π",
       subtitle: "报名、订单、课程、钱包和管理入口",
       sortOrder: 100,
       config: {
-        greeting: "我的书院",
+        greeting: "我的慢π",
         tools: [
           { label: "我的订单", icon: "单", color: "#8B5A2B", link: "/pages/user/orders", action: "navigate" },
           { label: "商城订单", icon: "商", color: "#C2410C", link: "/pages/user/mall-orders", action: "navigate" },
@@ -400,7 +403,7 @@ async function ensureHomepage(token) {
           { key: "registration_detail", title: "报名详情", subtitle: "查看报名状态、订单、签到码和主办方服务信息。", showBottomNav: true },
           { key: "review_page", title: "评价活动", subtitle: "你的反馈会帮助主办方持续改进活动体验。", showBottomNav: true },
           { key: "login_page", title: "手机号登录", subtitle: "用于查看报名、订单、签到码和会员权益。", showBottomNav: false },
-          { key: "partner_page", title: "城市合伙人", subtitle: "区域保护、代理运营和城市书院演示入口。", showBottomNav: true }
+          { key: "partner_page", title: "城市合伙人", subtitle: "区域保护、代理运营和慢π城市演示入口。", showBottomNav: true }
         ],
         demoScenario: SCENARIO
       },
@@ -421,7 +424,7 @@ async function ensureHomepage(token) {
 
 async function ensureAnnouncements(token, tenantId) {
   const existing = pickList(await api("/admin/announcements", { headers: auth(token) }));
-  const title = "【演示】七维书院运营闭环验收说明";
+  const title = "【演示】慢π运营闭环验收说明";
   const payload = {
     tenantId,
     title,
@@ -462,7 +465,7 @@ function activityPayload(title, price, category, description, index, capacity = 
     coverUrl: cover(index),
     description,
     notice: "请提前 10 分钟到场签到。本演示内容仅用于系统验收，不涉及算命、改运、预测等违规内容。",
-    location: "七维书院演示空间",
+    location: "慢π演示空间",
     locationLatitude: 29.844 + index * 0.001,
     locationLongitude: 106.056 + index * 0.001,
     startTime: futureDate(5 + index, 14 + (index % 3)),
@@ -480,7 +483,7 @@ function activityPayload(title, price, category, description, index, capacity = 
       { label: "微信号", type: "text", required: false, sortOrder: 3, options: [] },
       { label: "学习兴趣", type: "single_choice", required: false, sortOrder: 4, options: [{ label: category, value: category }, { label: "其他", value: "其他" }] }
     ],
-    hosts: [{ name: "七维演示讲师", title: category, avatarUrl: "", bio: "负责演示商家内容交付和用户服务。", sortOrder: 1 }],
+    hosts: [{ name: "慢π演示讲师", title: category, avatarUrl: "", bio: "负责演示商家内容交付和用户服务。", sortOrder: 1 }],
     sections: [
       { type: "highlights", title: "你会获得什么", content: `一次完整的${category}体验：现场讲解、互动练习、老师答疑，以及后续课程/共修建议。`, imageUrl: cover(index + 1), sortOrder: 1 },
       { type: "agenda", title: "活动流程", content: "签到入场 -> 主题导入 -> 互动体验 -> 作品/问题点评 -> 后续学习建议。", imageUrl: "", sortOrder: 2 },
@@ -503,7 +506,7 @@ async function ensureCourses(token, tenantId) {
     const payload = {
       tenantId,
       title,
-      description: `${title}适合作为书院线上课程样板：包含试看课时、系统课时、后台确认收款、已购课程和学习进度记录。`,
+      description: `${title}适合作为慢π线上课程样板：包含试看课时、系统课时、后台确认收款、已购课程和学习进度记录。`,
       coverUrl: cover(index + 3),
       teacherName,
       teacherAvatar: "",
@@ -545,11 +548,16 @@ async function ensureCourseContent(token, courseId) {
 }
 
 async function ensureCommunity(token, tenantId) {
-  await api("/admin/checkin-tasks", {
-    method: "POST",
-    headers: auth(token),
-    body: JSON.stringify({ tenantId, date: todayDate(), title: "【演示】今日书院共修打卡", description: "完成 10 分钟阅读或书写，并记录今天的一个小收获。" })
-  }).catch(() => null);
+  const checkinPayload = { tenantId, date: todayDate(), title: "【演示】今日慢π共修打卡", description: "完成 10 分钟阅读或书写，并记录今天的一个小收获。" };
+  const existingCheckins = pickList(await api(`/admin/checkin-tasks?date=${encodeURIComponent(checkinPayload.date)}`, { headers: auth(token) }));
+  const tenantCheckins = existingCheckins.filter((item) => Number(item.tenant?.id || item.tenantId || tenantId) === Number(tenantId));
+  if (tenantCheckins.length) {
+    for (const item of tenantCheckins) {
+      await api(`/admin/checkin-tasks/${item.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(checkinPayload) });
+    }
+  } else {
+    await api("/admin/checkin-tasks", { method: "POST", headers: auth(token), body: JSON.stringify(checkinPayload) });
+  }
 
   const communityActivities = pickList(await api("/admin/community-activities", { headers: auth(token) }));
   const caTitle = "【演示】周末线下共修会";
@@ -557,7 +565,7 @@ async function ensureCommunity(token, tenantId) {
     await api("/admin/community-activities", {
       method: "POST",
       headers: auth(token),
-      body: JSON.stringify({ tenantId, title: caTitle, description: "用于展示共修活动入口和运营内容。", startTime: futureDate(8, 9), location: "七维书院演示空间", coverUrl: cover(5), status: "published" })
+      body: JSON.stringify({ tenantId, title: caTitle, description: "用于展示共修活动入口和运营内容。", startTime: futureDate(8, 9), location: "慢π演示空间", coverUrl: cover(5), status: "published" })
     });
   }
 
@@ -570,13 +578,13 @@ async function ensureCommunity(token, tenantId) {
       body: JSON.stringify({ tenantId, userId: 1, content, images: [cover(index)], likes: 5 + index * 3, comments: 0, visible: true })
     });
   }
-  reportStep("共修、打卡和书院动态已创建/更新");
+  reportStep("共修、打卡和慢π动态已创建/更新");
 }
 
 async function ensureMall(token, tenantId, merchantId) {
   assert(merchantId, "演示商城 seed 缺少默认店铺 merchantId");
   const merchantQuery = `merchantId=${merchantId}`;
-  const categoryNames = ["书院文创", "学习用品", "公益好物"];
+  const categoryNames = ["慢π文创", "学习用品", "公益好物"];
   const existingCategories = pickList(await api(`/admin/mall/categories?${merchantQuery}`, { headers: auth(token) }));
   const categories = [];
   for (const [index, name] of categoryNames.entries()) {
@@ -589,8 +597,8 @@ async function ensureMall(token, tenantId, merchantId) {
   }
   const existing = pickList(await api(`/admin/mall/products?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
   const products = [
-    ["【演示】七维书院读书手账", "学习用品", 39, 69, "适合晨读、课程笔记和共修打卡记录，演示商城余额支付与线下收款。"],
-    ["【演示】东方美学书签套装", "书院文创", 19, 39, "铜版纸书签 6 枚装，适合作为活动伴手礼和课程赠品。"],
+    ["【演示】慢π读书手账", "学习用品", 39, 69, "适合晨读、课程笔记和共修打卡记录，演示商城余额支付与线下收款。"],
+    ["【演示】东方美学书签套装", "慢π文创", 19, 39, "铜版纸书签 6 枚装，适合作为活动伴手礼和课程赠品。"],
     ["【演示】节气香囊公益礼盒", "公益好物", 59, 99, "用于公益好物演示，售后、发货、库存流水均可追踪。"],
     ["【演示】书法入门练习套装", "学习用品", 89, 129, "含练习纸、基础字帖和控笔练习说明，适合书法体验课转化。"]
   ];
@@ -609,7 +617,7 @@ async function ensureMall(token, tenantId, merchantId) {
       featured: index < 2,
       sortOrder: index + 1,
       deliveryNote: "默认 48 小时内发货，偏远地区请联系客服。",
-      afterSaleNote: "未发货可申请退款；已发货如需退货退款请先联系书院确认。",
+      afterSaleNote: "未发货可申请退款；已发货如需退货退款请先联系运营方确认。",
       skus: [
         { name: "标准款", price, originalPrice, stock: 120, enabled: true },
         { name: "礼盒款", price: price + 20, originalPrice: originalPrice + 30, stock: 60, enabled: true }

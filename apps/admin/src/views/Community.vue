@@ -1,14 +1,14 @@
 <template>
   <div class="community-page">
     <div class="page-header">
-      <h2>书院运营</h2>
+      <h2>慢π运营</h2>
       <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="平台/全部商家" style="width: 240px" @change="changeTenant">
         <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
       </el-select>
     </div>
     <el-alert
       type="info"
-      title="书院动态/文章会展示在 H5 首页「书院动态」和共修页「学员动态」；用户点赞、评论后，可在这里审核评论。"
+      title="共修动态/文章会展示在 H5 首页「共修动态」和共修页「学员动态」；用户点赞、评论后，可在这里审核评论。"
       show-icon
       :closable="false"
       class="page-alert"
@@ -29,29 +29,62 @@
       </el-tab-pane>
       <el-tab-pane label="打卡任务" name="checkin">
         <el-button type="primary" size="small" style="margin-bottom:16px;" @click="showCheckinForm = true">新增打卡任务</el-button>
+        <el-alert
+          v-if="duplicateCheckinGroups.length"
+          type="warning"
+          :title="`检测到 ${duplicateCheckinGroups.length} 组同日重复打卡任务，请保留一条并删除多余记录；系统已阻止继续新增同商家同日期任务。`"
+          show-icon
+          :closable="false"
+          class="page-alert"
+        />
         <el-table :data="checkinTasks" stripe style="width:100%;" empty-text="暂无打卡任务">
           <el-table-column prop="id" label="ID" width="60" />
           <el-table-column prop="date" label="日期" width="120" />
+          <el-table-column label="重复状态" width="100"><template #default="{row}"><el-tag :type="isDuplicateCheckinTask(row) ? 'danger' : 'success'">{{ isDuplicateCheckinTask(row) ? '重复' : '正常' }}</el-tag></template></el-table-column>
           <el-table-column prop="title" label="任务名称" min-width="200" />
           <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="160" show-overflow-tooltip><template #default="{row}">{{ tenantDisplayName(row) }}</template></el-table-column>
           <el-table-column prop="completedCount" label="完成数" width="80" />
           <el-table-column label="操作" width="200"><template #default="{row}"><el-button size="small" @click="editCheckin(row)">编辑</el-button><el-button size="small" type="danger" @click="deleteCheckin(row)">删除</el-button></template></el-table-column>
         </el-table>
       </el-tab-pane>
-      <el-tab-pane label="书院动态/文章" name="posts">
+      <el-tab-pane label="共修动态/文章" name="posts">
         <div class="tab-toolbar">
           <el-button type="primary" size="small" @click="showPostForm = true">发布动态/文章</el-button>
+          <el-select v-model="postFilters.status" clearable placeholder="审核状态" size="small" style="width: 130px" @change="load">
+            <el-option label="待审核" value="pending" />
+            <el-option label="已通过" value="approved" />
+            <el-option label="已拒绝" value="rejected" />
+          </el-select>
+          <el-select v-model="postFilters.source" clearable placeholder="来源" size="small" style="width: 130px" @change="load">
+            <el-option label="官方动态" value="official" />
+            <el-option label="参与者心得" value="participant" />
+          </el-select>
+          <el-input v-model="postFilters.activityId" clearable placeholder="活动ID" size="small" style="width: 110px" @change="load" @clear="load" @keyup.enter="load" />
+          <el-button size="small" @click="load">查询</el-button>
+          <el-button size="small" text @click="resetPostFilters">重置</el-button>
           <span>后台发布内容与用户动态统一进入前台动态流，适合公告、文章、活动花絮和学员案例。</span>
         </div>
-        <el-table :data="posts" stripe style="width:100%;" empty-text="暂无书院动态">
+        <el-table :data="posts" stripe style="width:100%;" empty-text="暂无共修动态">
           <el-table-column prop="id" label="ID" width="60" />
           <el-table-column prop="userId" label="用户ID" width="80" />
+          <el-table-column label="来源" width="110"><template #default="{row}"><el-tag :type="row.source === 'participant' ? 'warning' : 'info'">{{ row.source === 'participant' ? '参与者心得' : '官方动态' }}</el-tag></template></el-table-column>
+          <el-table-column label="关联活动" min-width="180" show-overflow-tooltip><template #default="{row}">{{ row.activity?.title || '-' }}</template></el-table-column>
           <el-table-column prop="content" label="内容" min-width="300" show-overflow-tooltip />
           <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="160" show-overflow-tooltip><template #default="{row}">{{ tenantDisplayName(row) }}</template></el-table-column>
-          <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="row.visible === false ? 'info' : 'success'">{{ row.visible === false ? '隐藏' : '展示' }}</el-tag></template></el-table-column>
+          <el-table-column label="审核" width="100"><template #default="{row}"><el-tag :type="postStatusTag(row.status)">{{ postStatusText(row.status) }}</el-tag></template></el-table-column>
+          <el-table-column label="展示" width="90"><template #default="{row}"><el-tag :type="row.visible === false ? 'info' : 'success'">{{ row.visible === false ? '隐藏' : '展示' }}</el-tag></template></el-table-column>
+          <el-table-column prop="reviewRemark" label="审核备注" min-width="160" show-overflow-tooltip />
           <el-table-column prop="likes" label="点赞" width="60" />
+          <el-table-column prop="shareCount" label="分享" width="60" />
           <el-table-column prop="createdAt" label="时间" width="160" />
-          <el-table-column label="操作" width="100"><template #default="{row}"><el-button size="small" type="danger" @click="deletePost(row)">删除</el-button></template></el-table-column>
+          <el-table-column label="操作" width="250">
+            <template #default="{row}">
+              <el-button size="small" type="success" :disabled="row.status === 'approved'" @click="openPostReview(row, 'approved', true)">通过</el-button>
+              <el-button size="small" type="warning" :disabled="row.status === 'rejected'" @click="openPostReview(row, 'rejected', false)">拒绝</el-button>
+              <el-button size="small" @click="openPostReview(row, row.status || 'pending', !row.visible)">{{ row.visible === false ? '展示' : '下架' }}</el-button>
+              <el-button size="small" type="danger" @click="deletePost(row)">删除</el-button>
+            </template>
+          </el-table-column>
         </el-table>
       </el-tab-pane>
       <el-tab-pane label="点赞评论/评论审核" name="comments">
@@ -106,7 +139,7 @@
       <template #footer><el-button @click="showCheckinForm = false">取消</el-button><el-button type="primary" :loading="savingCheckin" @click="saveCheckin">保存</el-button></template>
     </el-dialog>
 
-    <el-dialog v-model="showPostForm" title="发布书院动态/文章" width="560px">
+    <el-dialog v-model="showPostForm" title="发布共修动态/文章" width="560px">
       <el-form :model="postForm" label-width="92px">
         <el-form-item v-if="isPlatformAdmin()" label="所属商家">
           <el-select v-model="postForm.tenantId" clearable filterable placeholder="平台动态">
@@ -116,8 +149,11 @@
         <el-form-item label="展示状态">
           <el-switch v-model="postForm.visible" active-text="前台展示" inactive-text="先隐藏" />
         </el-form-item>
+        <el-form-item label="关联活动ID">
+          <el-input-number v-model="postForm.activityId" :min="0" placeholder="可选" />
+        </el-form-item>
         <el-form-item label="内容" required>
-          <el-input v-model="postForm.content" type="textarea" :rows="7" maxlength="2000" show-word-limit placeholder="可发布书院文章、活动回顾、学员案例、运营公告等内容" />
+          <el-input v-model="postForm.content" type="textarea" :rows="7" maxlength="2000" show-word-limit placeholder="可发布共修文章、活动回顾、学员案例、运营公告等内容" />
         </el-form-item>
         <el-form-item label="图片地址">
           <el-input v-model="postForm.imagesText" type="textarea" :rows="3" placeholder="可选。每行一个图片地址，也支持用逗号分隔。" />
@@ -128,11 +164,36 @@
         <el-button type="primary" :loading="savingPost" @click="savePost">发布</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showPostReviewDialog" title="审核共修动态" width="520px">
+      <el-form :model="postReviewForm" label-width="88px">
+        <el-form-item label="动态ID">
+          <span>{{ postReviewForm.id || "-" }}</span>
+        </el-form-item>
+        <el-form-item label="审核状态">
+          <el-select v-model="postReviewForm.status" style="width: 180px" @change="syncReviewVisibility">
+            <el-option label="待审核" value="pending" />
+            <el-option label="已通过" value="approved" />
+            <el-option label="已拒绝" value="rejected" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="前台展示">
+          <el-switch v-model="postReviewForm.visible" active-text="展示" inactive-text="隐藏" :disabled="postReviewForm.status === 'rejected'" />
+        </el-form-item>
+        <el-form-item label="审核备注">
+          <el-input v-model="postReviewForm.reviewRemark" type="textarea" :rows="4" maxlength="500" show-word-limit placeholder="可填写通过说明、驳回原因或下架原因，便于运营追踪。" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showPostReviewDialog = false">取消</el-button>
+        <el-button type="primary" :loading="savingPostReview" @click="submitPostReview">保存审核结果</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from "vue";
+import { computed, reactive, ref, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
@@ -157,6 +218,21 @@ const savingCheckin = ref(false);
 const showPostForm = ref(false);
 const savingPost = ref(false);
 const postForm = ref<any>({ content: "", imagesText: "", visible: true });
+const showPostReviewDialog = ref(false);
+const savingPostReview = ref(false);
+const postReviewForm = ref<any>({ id: undefined, status: "pending", visible: true, reviewRemark: "" });
+const postFilters = reactive({ status: "", source: "", activityId: "" });
+const duplicateCheckinGroups = computed(() => {
+  const groups = new Map<string, any[]>();
+  for (const task of checkinTasks.value) {
+    const key = checkinTaskDuplicateKey(task);
+    if (!key) continue;
+    const rows = groups.get(key) || [];
+    rows.push(task);
+    groups.set(key, rows);
+  }
+  return Array.from(groups.values()).filter((rows) => rows.length > 1);
+});
 const routeTenantId = () => {
   const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
   return isPlatformAdmin() && tenantId && Number.isFinite(tenantId) ? tenantId : undefined;
@@ -182,10 +258,12 @@ function formatLocalDate(value?: string | Date | null) {
 async function load() {
   try {
     const params = { tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined };
+    const activityId = Number(postFilters.activityId || 0) || undefined;
+    const postParams = { ...params, status: postFilters.status || undefined, source: postFilters.source || undefined, activityId };
     const [actRows, chkRows, postRows, commentRows] = await Promise.all([
       api.get<any, any[]>("/admin/community-activities", { params }),
       api.get<any, any[]>("/admin/checkin-tasks", { params }),
-      api.get<any, any[]>("/admin/community-posts", { params }),
+      api.get<any, any[]>("/admin/community-posts", { params: postParams }),
       api.get<any, any[]>("/admin/community-post-comments", { params })
     ]);
     activities.value = actRows;
@@ -209,11 +287,38 @@ function tenantDisplayName(row: any) {
   return row.tenant?.name || row.tenant?.code || "平台/未归属";
 }
 
+function checkinTaskDuplicateKey(row: any) {
+  const date = formatLocalDate(row?.date);
+  if (!date) return "";
+  const tenantId = row?.tenant?.id || row?.tenantId || "platform";
+  return `${tenantId}:${date}`;
+}
+
+function isDuplicateCheckinTask(row: any) {
+  const key = checkinTaskDuplicateKey(row);
+  if (!key) return false;
+  return checkinTasks.value.filter((task) => checkinTaskDuplicateKey(task) === key).length > 1;
+}
+
+function findDuplicateCheckinTask(dto: any) {
+  const key = checkinTaskDuplicateKey({ date: dto.date, tenantId: dto.tenantId || "platform" });
+  if (!key) return null;
+  const currentId = Number(dto.id || 0);
+  return checkinTasks.value.find((task) => Number(task.id) !== currentId && checkinTaskDuplicateKey(task) === key) || null;
+}
+
 function changeTenant() {
   const query = { ...route.query };
   if (filters.tenantId) query.tenantId = String(filters.tenantId);
   else delete query.tenantId;
   router.replace({ path: route.path, query });
+  load();
+}
+
+function resetPostFilters() {
+  postFilters.status = "";
+  postFilters.source = "";
+  postFilters.activityId = "";
   load();
 }
 
@@ -263,6 +368,7 @@ async function deleteActivity(row: any) {
 }
 
 async function saveCheckin() {
+  if (!checkinForm.value.date) return ElMessage.error("请选择打卡日期");
   if (!checkinForm.value.title?.trim()) return ElMessage.error("请输入任务名称");
   try {
     savingCheckin.value = true;
@@ -272,6 +378,12 @@ async function saveCheckin() {
     if (typeof dto.date === "object") dto.date = formatLocalDate(dto.date);
     else dto.date = formatLocalDate(dto.date);
     if (isPlatformAdmin()) dto.tenantId = dto.tenantId || null;
+    const duplicate = findDuplicateCheckinTask(dto);
+    if (duplicate) {
+      const scope = duplicate.tenant?.name || duplicate.tenant?.code || "平台";
+      ElMessage.error(`${scope} ${dto.date} 已有打卡任务「${duplicate.title}」，请编辑已有任务或删除重复任务`);
+      return;
+    }
     if (editingCheckin.value && dto.id) {
       await api.patch("/admin/checkin-tasks/" + dto.id, dto);
     } else {
@@ -333,18 +445,67 @@ async function savePost() {
     const dto: any = {
       content: postForm.value.content.trim(),
       images: parseImageUrls(postForm.value.imagesText),
-      visible: postForm.value.visible !== false
+      visible: postForm.value.visible !== false,
+      activityId: Number(postForm.value.activityId || 0) || null
     };
     if (isPlatformAdmin()) dto.tenantId = postForm.value.tenantId || null;
     await api.post("/admin/community-posts", dto);
     showPostForm.value = false;
     postForm.value = { content: "", imagesText: "", visible: true, tenantId: filters.tenantId };
     await load();
-    ElMessage.success("书院动态已发布");
+    ElMessage.success("共修动态已发布");
   } catch (error: any) {
-    ElMessage.error(error.message || "发布书院动态失败");
+    ElMessage.error(error.message || "发布共修动态失败");
   } finally {
     savingPost.value = false;
+  }
+}
+
+function postStatusText(status: string) {
+  if (status === "approved") return "已通过";
+  if (status === "rejected") return "已拒绝";
+  return "待审核";
+}
+
+function postStatusTag(status: string) {
+  if (status === "approved") return "success";
+  if (status === "rejected") return "danger";
+  return "warning";
+}
+
+function syncReviewVisibility() {
+  if (postReviewForm.value.status === "rejected") postReviewForm.value.visible = false;
+  if (postReviewForm.value.status === "approved") postReviewForm.value.visible = true;
+}
+
+function openPostReview(row: any, status: "approved" | "rejected" | "pending", visible?: boolean) {
+  postReviewForm.value = {
+    id: row.id,
+    status,
+    visible: visible === undefined ? row.visible !== false : visible,
+    reviewRemark: row.reviewRemark || ""
+  };
+  syncReviewVisibility();
+  showPostReviewDialog.value = true;
+}
+
+async function submitPostReview() {
+  if (!postReviewForm.value.id) return;
+  try {
+    savingPostReview.value = true;
+    const status = postReviewForm.value.status as "approved" | "rejected" | "pending";
+    await api.patch("/admin/community-posts/" + postReviewForm.value.id, {
+      status,
+      visible: postReviewForm.value.visible,
+      reviewRemark: postReviewForm.value.reviewRemark?.trim() || ""
+    });
+    showPostReviewDialog.value = false;
+    await load();
+    ElMessage.success(status === "approved" ? "动态已通过" : status === "rejected" ? "动态已拒绝" : "动态已更新");
+  } catch (error: any) {
+    ElMessage.error(error.message || "审核动态失败");
+  } finally {
+    savingPostReview.value = false;
   }
 }
 

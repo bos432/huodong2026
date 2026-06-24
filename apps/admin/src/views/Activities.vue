@@ -8,7 +8,7 @@ import { api } from "../api";
 import ActivityPosterDialog from "../components/ActivityPosterDialog.vue";
 import H5QrDialog from "../components/H5QrDialog.vue";
 import { activityH5PreviewUrl, copyToClipboard } from "../h5-preview";
-import { canAccess, currentTenantCode, currentTenantSettings, isPlatformAdmin, permissions } from "../permissions";
+import { canAccess, currentTenantCode, currentTenantSettings, isPlatformAdmin } from "../permissions";
 
 const activityStatusText: Record<ActivityStatus, string> = {
   [ActivityStatus.Draft]: "草稿",
@@ -86,7 +86,7 @@ const registrationReviewEnabled = computed(() => isPlatformAdmin() || currentTen
 const registrationReviewDisabledReason = computed(() =>
   registrationReviewEnabled.value ? "" : "平台未开通本商家的报名审核权限，活动报名将自动通过或进入付款流程。"
 );
-const canOperateActivities = computed(() => canAccess(permissions.operation));
+const canOperateActivities = computed(() => canAccess(["activity.manage"]));
 const h5QrUrl = computed(() => (h5QrActivity.value ? activityPreviewUrl(h5QrActivity.value) : ""));
 const h5QrScopeName = computed(() => (h5QrActivity.value ? `活动：${h5QrActivity.value.title || h5QrActivity.value.id}` : "活动 H5"));
 const posterUrl = computed(() => (posterActivity.value ? activityPreviewUrl(posterActivity.value) : ""));

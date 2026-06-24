@@ -19,9 +19,9 @@ type PageTheme = {
 };
 
 const defaultTheme: Required<PageTheme> = {
-  brandName: "七维书院",
+  brandName: "慢π",
   brandLogoUrl: "",
-  brandSlogan: "和七维书院一起，让热爱发光",
+  brandSlogan: "和慢π一起，让热爱发光",
   adminTitle: "",
   backgroundColor: "#F5F0E8",
   backgroundImage: "",

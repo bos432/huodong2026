@@ -27,7 +27,11 @@ const shellTitle = computed(() => {
 const roleCapabilityText = computed(() => {
   const role = currentRole();
   if (isPlatformAdmin()) return "平台超管：可管理全平台商家、活动、订单、公益池、系统安全，并拥有会员余额调整权限。";
-  if (role === AdminRole.Operator) return "运营账号：可管理活动、报名、会员和装修营销；不处理余额调整等平台资产操作。";
+  if (role === AdminRole.Operator) {
+    if (canAccess(["activity.manage", "registration.manage", "homepage.manage", "member.manage"])) return "运营账号：可管理活动、报名、会员和装修营销；不处理余额调整等平台资产操作。";
+    if (canAccess(["mall.product.manage", "mall.order.view", "mall.finance.view"])) return "商城运营账号：可管理授权店铺的商品、订单、售后和商城经营数据。";
+    return "运营账号：当前仅显示已授权的后台功能。";
+  }
   if (role === AdminRole.Finance) return "财务账号：可查看订单财务、确认线下收款、处理退款和对账；不编辑活动内容。";
   if (role === AdminRole.CheckInStaff) return "签到账号：用于现场查询报名和签到核销；不显示审核、收款和活动编辑操作。";
   return "商家管理员：只管理本商家数据，可配置活动、报名、员工账号和经营设置。";
@@ -176,11 +180,11 @@ const menuGroups = [
   {
     index: "platform-academy",
     icon: "Reading",
-    label: "平台端 · 书院运营",
+    label: "平台端 · 慢π运营",
     scope: "platform",
     items: [
       { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "platform" },
-      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "platform" }
+      { index: "/community", icon: "ChatLineSquare", label: "共修动态", roles: ["community.manage"], scope: "platform" }
     ]
   },
   {
@@ -294,11 +298,11 @@ const menuGroups = [
   {
     index: "tenant-academy",
     icon: "Reading",
-    label: "商家端 · 书院运营",
+    label: "商家端 · 慢π运营",
     scope: "tenant",
     items: [
       { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "tenant" },
-      { index: "/community", icon: "ChatLineSquare", label: "书院动态/共修", roles: ["community.manage"], scope: "tenant" }
+      { index: "/community", icon: "ChatLineSquare", label: "共修动态", roles: ["community.manage"], scope: "tenant" }
     ]
   },
   {

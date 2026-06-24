@@ -1,14 +1,15 @@
 <template>
   <view class="mall-page has-custom-nav">
     <view class="mall-hero">
-      <text class="eyebrow">七维书院严选</text>
-      <text class="hero-title">把课程、活动和好物放进同一个书院服务闭环</text>
+      <text class="eyebrow">慢π严选</text>
+      <text class="hero-title">把课程、活动和好物放进同一个慢π服务闭环</text>
       <text class="hero-sub">支持余额支付与线下收款，订单状态后台可追踪。</text>
       <view class="hero-actions">
         <view class="hero-action" @click="goCart">购物车 / 地址 / 订单结算</view>
         <view class="hero-action secondary" @click="goCoupons">领券中心 / 我的券包</view>
       </view>
     </view>
+    <PageDecorationBlocks :sections="decorationSections" />
     <scroll-view class="category-row" scroll-x :show-scrollbar="false">
       <view class="category-chip" :class="{ active: !categoryId }" @click="selectCategory(0)">全部</view>
       <view v-for="item in categories" :key="item.id" class="category-chip" :class="{ active: categoryId === item.id }" @click="selectCategory(item.id)">{{ item.name }}</view>
@@ -106,7 +107,7 @@
         <view v-if="sort === 'hot' && Number(item.salesCount || 0) > 0" class="hot-badge">已售 {{ item.salesCount }}</view>
         <view v-if="!availableProductStock(item)" class="soldout-badge">售罄</view>
         <image v-if="item.coverUrl" class="cover" :src="item.coverUrl" mode="aspectFill" />
-        <view v-else class="cover placeholder">书院好物</view>
+        <view v-else class="cover placeholder">慢π好物</view>
         <text v-if="item.brandName" class="brand">{{ item.brandName }}</text>
         <text v-if="item.merchant?.name" class="merchant-tag">{{ item.merchant.name }}</text>
         <text class="title">{{ item.title }}</text>
@@ -126,10 +127,12 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { request, withTenantCode } from "../../api";
+import { usePageDecoration } from "../../decoration";
 import EmptyState from "../../components/EmptyState.vue";
+import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TabBar from "../../components/TabBar.vue";
 
 const categories = ref<any[]>([]);
@@ -148,6 +151,12 @@ const sortTabs = [
   { label: "新品", value: "newest" as const },
   { label: "热销", value: "hot" as const }
 ];
+const { contentSections, loadDecoration } = usePageDecoration("mall_home", "/pages/mall/index");
+const decorationSections = computed(() => contentSections.value.filter((section) => {
+  if (section.type === "hero" && section.title === "商城首页") return false;
+  if (section.type === "rich_text" && section.title === "页面说明") return false;
+  return true;
+}));
 
 function money(value: any) { return Number(value || 0).toFixed(2); }
 function availableProductStock(item: any) { return Math.max(Number(item.stock || 0), 0); }
@@ -206,6 +215,7 @@ onShow(() => {
   } catch {
     recentKeywords.value = [];
   }
+  loadDecoration();
   load();
 });
 </script>

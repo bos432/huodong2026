@@ -48,6 +48,7 @@ npm run build
 npm --prefix apps/api run migration:show
 npm run smoke
 npm run smoke:flow
+npm run smoke:community-sharing
 ```
 
 通过标准：
@@ -56,6 +57,8 @@ npm run smoke:flow
 - `migration:show` 中所有迁移均为 `[X]`。
 - `npm run smoke` 显示 `Smoke test passed.`。
 - `npm run smoke:flow` 显示 `Full business flow smoke test passed.`。
+- `npm run smoke:community-sharing` 显示 `Community sharing smoke test passed.`。
+- 若进入预发或生产验收，还需要按 `docs/wechat-share-poster-acceptance.md` 做手机微信真机验收；桌面浏览器不能替代长按保存、朋友圈分享和二维码扫码回流。
 
 ## 3. 后台基础配置验收
 
@@ -445,6 +448,29 @@ npm run smoke:flow
 | 手机验证码错误 | 不能登录 |
 | 后台连续登录失败 | 触发限流或失败审计 |
 
+## 11.1 用户心得与微信分享真机验收
+
+本项用于验证“用户心得分享与 H5 装修优化方案”的传播闭环，详细步骤见 `docs/wechat-share-poster-acceptance.md`。
+
+测试步骤：
+
+1. 在微信内打开 H5 活动详情，完成登录或使用已登录账号。
+2. 从活动详情或报名详情进入发布心得。
+3. 选择已参加活动，上传 1-9 张图片并提交心得。
+4. 后台审核通过该参与者心得。
+5. 在微信内打开心得详情，点击生成海报。
+6. 长按保存海报到相册。
+7. 使用另一台手机扫描海报二维码，确认打开同一条心得详情。
+8. 将活动详情链接、心得详情链接和海报图片分别分享到朋友圈，确认打开和展示正常。
+
+通过标准：
+
+- 未参加活动用户不能发布关联心得。
+- 审核通过前心得不公开，审核通过后首页、共修首页、活动口碑区和详情页可见。
+- 海报包含慢π品牌、活动、心得摘要、用户昵称、首图或活动封面、二维码/分享链接。
+- iOS 与 Android 微信内均能长按保存，扫码后进入正确页面。
+- 分享链路不丢失 `tenantCode` 和详情 id。
+
 ## 12. 上线前部署演练
 
 ### 12.1 准备生产环境变量
@@ -486,6 +512,7 @@ npm --prefix apps/api run migration:run
 ```bash
 npm run smoke
 npm run smoke:flow
+npm run smoke:community-sharing
 ```
 
 ### 12.3 上线前通过标准
@@ -511,6 +538,12 @@ npm run smoke:flow
 | 环境 | migration 全部 `[X]` |  |  |  |  |
 | 环境 | smoke 通过 |  |  |  |  |
 | 环境 | smoke:flow 通过 |  |  |  |  |
+| 环境 | smoke:community-sharing 通过 |  |  |  |  |
+| 真机微信 | 活动链接分享到聊天/朋友圈 |  |  |  |  |
+| 真机微信 | 参与者心得发布与后台审核 |  |  |  |  |
+| 真机微信 | 心得海报生成与长按保存 |  |  |  |  |
+| 真机微信 | 海报二维码扫码回流 |  |  |  |  |
+| 真机微信 | 图片上传 1 张和 9 张 |  |  |  |  |
 | 后台 | 系统设置保存 |  |  |  |  |
 | 后台 | 分类管理 |  |  |  |  |
 | 后台 | 管理员角色 |  |  |  |  |
@@ -558,4 +591,5 @@ npm run smoke:flow
 - `npm run build` 通过。
 - `npm run smoke` 通过。
 - `npm run smoke:flow` 通过。
+- `npm run smoke:community-sharing` 通过。
 - `npm run preflight` 在生产配置下无 `ERR`。

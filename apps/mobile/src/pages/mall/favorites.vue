@@ -2,7 +2,7 @@
   <view class="list-page">
     <view class="hero">
       <text class="eyebrow">我的商城收藏</text>
-      <text class="title">把想回头购买的书院好物先收起来</text>
+      <text class="title">把想回头购买的慢π好物先收起来</text>
       <text class="sub">{{ items.length ? `${items.length} 件已收藏` : "暂无收藏商品" }}</text>
     </view>
     <view v-for="row in items" :key="row.id" class="product-row" @click="goDetail(row.product)">
@@ -10,7 +10,7 @@
       <view v-else class="cover placeholder">好物</view>
       <view class="info">
         <text class="name">{{ row.product?.title }}</text>
-        <text class="muted">{{ row.product?.brandName || "七维书院严选" }} · {{ dateText(row.createdAt) }}</text>
+        <text class="muted">{{ row.product?.brandName || "慢π严选" }} · {{ dateText(row.createdAt) }}</text>
         <text class="price">¥{{ money(row.product?.price) }}</text>
       </view>
       <text class="arrow">›</text>

@@ -92,7 +92,7 @@
         </div>
       </template>
       <div class="category-form">
-        <el-input v-model="categoryForm.name" placeholder="分类名称，如 书院严选/文创茶器" />
+        <el-input v-model="categoryForm.name" placeholder="分类名称，如 慢π严选/文创茶器" />
         <el-input v-model="categoryForm.iconUrl" placeholder="图标 URL，可选" />
         <el-input-number v-model="categoryForm.sortOrder" :precision="0" placeholder="排序" />
         <el-switch v-model="categoryForm.enabled" active-text="启用" inactive-text="停用" />

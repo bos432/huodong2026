@@ -27,7 +27,7 @@ async function submit() {
 <template>
   <main class="login-page">
     <section class="login-panel">
-      <h1>活动报名后台</h1>
+      <h1>慢π运营后台</h1>
       <el-form label-position="top" @keyup.enter="submit">
         <el-form-item label="用户名"><el-input v-model="form.username" autocomplete="username" placeholder="请输入管理员账号" /></el-form-item>
         <el-form-item label="密码"><el-input v-model="form.password" type="password" show-password autocomplete="current-password" placeholder="请输入密码" /></el-form-item>

@@ -48,7 +48,7 @@ const titleText = computed(() => {
 });
 const bodyText = computed(() => {
   if (isSuccess.value) return accessMode.value === "free" ? "课程已加入，可直接开始学习" : "恭喜您获得课程学习权限";
-  if (isPending.value) return "课程订单已提交，当前不会自动开通学习权限。请联系书院完成线下付款，后台确认收款后再学习。";
+  if (isPending.value) return "课程订单已提交，当前不会自动开通学习权限。请联系运营方完成线下付款，后台确认收款后再学习。";
   return "请稍后重试或联系客服";
 });
 const primaryText = computed(() => isSuccess.value ? "去学习" : isPending.value ? "返回课程" : "重新支付");

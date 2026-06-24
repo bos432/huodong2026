@@ -12,7 +12,7 @@ const runId = Date.now();
 const tenants = [
   {
     code: "qiwai-hangzhou",
-    name: "七维文化杭州城市合伙人",
+    name: "慢π杭州城市合伙人",
     admin: "qiwai_hz_admin",
     ops: "qiwai_hz_ops",
     finance: "qiwai_hz_finance",
@@ -21,7 +21,7 @@ const tenants = [
   },
   {
     code: "qiwai-suzhou",
-    name: "七维文化苏州城市合伙人",
+    name: "慢π苏州城市合伙人",
     admin: "qiwai_sz_admin",
     ops: "qiwai_sz_ops",
     finance: "qiwai_sz_finance",
@@ -30,7 +30,7 @@ const tenants = [
   },
   {
     code: "qiwai-chengdu",
-    name: "七维文化成都城市合伙人",
+    name: "慢π成都城市合伙人",
     admin: "qiwai_cd_admin",
     ops: "qiwai_cd_ops",
     finance: "qiwai_cd_finance",
@@ -83,6 +83,19 @@ async function api(path, options = {}) {
   }
   if (!res.ok || body?.code !== 0) throw new Error(`${options.method || "GET"} ${path} failed: ${body?.message || text || res.status}`);
   return body.data;
+}
+
+async function fetchAllAdminActivities(token) {
+  const items = [];
+  const pageSize = 100;
+  for (let page = 1; page <= 20; page += 1) {
+    const data = await api(`/admin/activities?page=${page}&pageSize=${pageSize}`, { headers: auth(token) });
+    const pageItems = Array.isArray(data) ? data : data.items || [];
+    items.push(...pageItems);
+    const total = Number(data?.total || items.length);
+    if (Array.isArray(data) || pageItems.length === 0 || items.length >= total) break;
+  }
+  return items;
 }
 
 async function login(username, expectedRole, expectedTenantCode) {
@@ -167,8 +180,8 @@ async function h5Login(phone, nickname) {
 
 function answers(fields, suffix) {
   return fields.map((field) => {
-    let value = `七维样板验收 ${suffix}`;
-    if (String(field.label).includes("姓名")) value = `七维用户${suffix}`;
+    let value = `慢π样板验收 ${suffix}`;
+    if (String(field.label).includes("姓名")) value = `慢π用户${suffix}`;
     if (String(field.label).includes("手机") || field.type === "phone") value = `139${String(Date.now()).slice(-8)}`;
     return { fieldId: field.id, label: field.label, type: field.type, value };
   });
@@ -263,9 +276,9 @@ function activityPayload(title, price = 0, status = ActivityStatus.Draft) {
   return {
     title,
     coverUrl: "https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=80",
-    description: "七维文化样板审核活动，用于验证商家提交审核、平台审核和公开端展示。",
+    description: "慢π样板审核活动，用于验证商家提交审核、平台审核和公开端展示。",
     notice: "本活动仅用于样板验收，不涉及算命、改运、预测等内容。",
-    location: "七维文化样板空间",
+    location: "慢π样板空间",
     startTime: futureDate(16, 14),
     endTime: futureDate(16, 16),
     registrationDeadline: futureDate(15, 22),
@@ -279,7 +292,7 @@ function activityPayload(title, price = 0, status = ActivityStatus.Draft) {
       { label: "姓名", type: "text", required: true, sortOrder: 1, options: [] },
       { label: "手机号", type: "phone", required: true, sortOrder: 2, options: [] }
     ],
-    hosts: [{ name: "七维文化审核讲师", title: "样板讲师", avatarUrl: "", bio: "负责样板活动审核演示。", sortOrder: 1 }],
+    hosts: [{ name: "慢π审核讲师", title: "样板讲师", avatarUrl: "", bio: "负责样板活动审核演示。", sortOrder: 1 }],
     sections: [{ type: "notice", title: "合规说明", content: "聚焦传统文化学习与线下体验。", imageUrl: "", sortOrder: 1 }]
   };
 }
@@ -294,7 +307,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
   assert(activity, `${tenant.code} paid demo activity missing: ${activityTitle}`);
 
   const detail = await api(`/public/activities/${activity.id}?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: tenantHeader(tenant.code) });
-  const user = await h5Login(`139${String(Date.now()).slice(-8)}`, `七维${tenant.name}验收用户${Date.now()}`);
+  const user = await h5Login(`139${String(Date.now()).slice(-8)}`, `慢π${tenant.name}验收用户${Date.now()}`);
   const registered = await api(`/public/activities/${activity.id}/register?tenantCode=${encodeURIComponent(tenant.code)}`, {
     method: "POST",
     headers: { ...tenantHeader(tenant.code), ...user.headers },
@@ -306,7 +319,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
   await api(`/admin/orders/${registered.order.id}/confirm-offline-payment`, {
     method: "POST",
     headers: auth(finance.token),
-    body: JSON.stringify({ remark: "七维样板验收线下收款" })
+    body: JSON.stringify({ remark: "慢π样板验收线下收款" })
   });
 
   const afterPayment = await api(`/public/users/${user.id}/registrations/${registered.registration.id}?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: { ...tenantHeader(tenant.code), ...user.headers } });
@@ -322,7 +335,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
   await api("/admin/check-ins", {
     method: "POST",
     headers: auth(checkin.token),
-    body: JSON.stringify({ code: code.code, remark: "七维样板验收签到" })
+    body: JSON.stringify({ code: code.code, remark: "慢π样板验收签到" })
   });
 
   const afterCheckin = await api(`/public/users/${user.id}/registrations/${registered.registration.id}?tenantCode=${encodeURIComponent(tenant.code)}`, { headers: { ...tenantHeader(tenant.code), ...user.headers } });
@@ -332,7 +345,7 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
   const bulkTag = await api("/admin/tags/bulk-activity", {
     method: "POST",
     headers: auth(ops.token),
-    body: JSON.stringify({ activityId: activity.id, name: tagName, color: "success", remark: "七维样板验收活动批量标记" })
+    body: JSON.stringify({ activityId: activity.id, name: tagName, color: "success", remark: "慢π样板验收活动批量标记" })
   });
   assert(bulkTag.createdCount >= 1 || bulkTag.skippedCount >= 1, `${tenant.code} activity bulk tag should affect users`);
   const activityTags = await api(`/admin/tags?activityId=${activity.id}`, { headers: auth(ops.token) });
@@ -488,7 +501,7 @@ async function verifyRefundFlow(flow) {
   const refundRequest = await api(`/admin/orders/${flow.order.id}/refund`, {
     method: "POST",
     headers: auth(flow.financeToken),
-    body: JSON.stringify({ amount: 10, reason: "七维样板验收部分退款", refundNo })
+    body: JSON.stringify({ amount: 10, reason: "慢π样板验收部分退款", refundNo })
   });
   assert(refundRequest.refund?.status === "pending", "refund request should be pending");
   assert(refundRequest.order?.status === OrderStatus.Paid, "pending refund should not change paid order status");
@@ -496,7 +509,7 @@ async function verifyRefundFlow(flow) {
   const approved = await api(`/admin/refunds/${refundRequest.refund.id}/approve`, {
     method: "POST",
     headers: auth(flow.financeToken),
-    body: JSON.stringify({ remark: "七维样板验收退款通过" })
+    body: JSON.stringify({ remark: "慢π样板验收退款通过" })
   });
   assert(approved.refund?.status === "completed", "approved refund should be completed");
   assert(approved.order?.status === OrderStatus.PartiallyRefunded, "partial refund should update order status");
@@ -524,8 +537,7 @@ async function verifyPlatformSupervisionAndApproval() {
     assert(tenantList.some((item) => item.code === tenant.code), `platform should see tenant ${tenant.code}`);
   }
 
-  const allActivities = await api("/admin/activities?pageSize=200", { headers: auth(platform.token) });
-  const allItems = Array.isArray(allActivities) ? allActivities : allActivities.items || [];
+  const allItems = await fetchAllAdminActivities(platform.token);
   for (const tenant of tenants) {
     for (const title of tenant.activities) {
       assert(allItems.some((item) => item.title === title), `platform should see activity ${title}`);
@@ -534,7 +546,7 @@ async function verifyPlatformSupervisionAndApproval() {
 
   const tenant = tenants[1];
   const ops = await login(tenant.ops, "operator", tenant.code);
-  const title = `七维样板平台审核活动 ${Date.now()}`;
+  const title = `慢π样板平台审核活动 ${Date.now()}`;
   const draft = await api("/admin/activities", {
     method: "POST",
     headers: auth(ops.token),
@@ -555,7 +567,7 @@ async function verifyPlatformSupervisionAndApproval() {
   const approved = await api(`/admin/activities/${draft.id}/approve`, {
     method: "POST",
     headers: auth(platform.token),
-    body: JSON.stringify({ remark: "七维样板验收通过" })
+    body: JSON.stringify({ remark: "慢π样板验收通过" })
   });
   assert(approved.status === ActivityStatus.Open, "approval demo activity should become open");
 
@@ -577,11 +589,11 @@ async function main() {
   await verifyRefundFlow(businessFlows[0]);
   await verifySettlementFlow(businessFlows[0], businessFlows[2]);
   await verifyPlatformSupervisionAndApproval();
-  console.log("\n七维文化样板验收通过。");
+  console.log("\n慢π样板验收通过。");
 }
 
 main().catch((error) => {
-  console.error("\n七维文化样板验收失败：");
+  console.error("\n慢π样板验收失败：");
   console.error(error.message);
   console.error("请先确认 API 已启动，并执行 npm run seed:qiwai-demo。");
   process.exitCode = 1;

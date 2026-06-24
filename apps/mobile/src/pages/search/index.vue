@@ -10,7 +10,7 @@
 
     <view v-if="!keyword">
       <view class="search-hero">
-        <view class="hero-kicker">书院搜索</view>
+        <view class="hero-kicker">慢π搜索</view>
         <view class="hero-title">找到想学的课程</view>
         <view class="hero-desc">可以按课程名称、讲师或分类快速筛选。</view>
       </view>

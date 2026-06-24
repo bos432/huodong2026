@@ -208,7 +208,7 @@ onReachBottom(loadMore);
 
     <view class="hero-card" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'linear-gradient(135deg, rgba(196,61,61,0.96), rgba(122,36,32,0.96))') }">
       <view class="hero-copy">
-        <text class="hero-kicker">七维书院 · {{ cityName() }}</text>
+        <text class="hero-kicker">慢π · {{ cityName() }}</text>
         <text class="hero-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "活动列表" }}</text>
         <text class="hero-subtitle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ heroSubtitle }}</text>
       </view>

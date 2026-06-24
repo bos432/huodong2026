@@ -133,7 +133,7 @@
           </el-select>
         </el-form-item>
         <el-form-item label="商品名称" required><el-input v-model="form.title" /></el-form-item>
-        <el-form-item label="品牌名称"><el-input v-model="form.brandName" placeholder="如七维书院严选/合作品牌" /></el-form-item>
+        <el-form-item label="品牌名称"><el-input v-model="form.brandName" placeholder="如慢π严选/合作品牌" /></el-form-item>
         <el-form-item label="分类"><el-select v-model="form.categoryId" clearable placeholder="未分类"><el-option v-for="item in categories" :key="item.id" :label="item.name" :value="item.id" /></el-select></el-form-item>
         <el-form-item label="封面图"><el-input v-model="form.coverUrl" placeholder="图片 URL，后续可接上传组件" /></el-form-item>
         <el-form-item label="商品介绍"><el-input v-model="form.description" type="textarea" :rows="4" /></el-form-item>
@@ -608,7 +608,7 @@ async function handleFormTenantChange() {
   await loadCategories();
 }
 function resetForm() {
-  Object.assign(form, { id: null, tenantId: filters.tenantId || selectedMerchant.value?.tenant?.id, merchantId: filters.merchantId, title: "", brandName: "", categoryId: undefined, coverUrl: "", description: "", status: "draft", featured: false, sortOrder: 0, deliveryNote: "默认快递发货，偏远地区请联系客服", afterSaleNote: "支持未发货退款，已发货请联系书院处理", skus: [{ name: "默认规格", price: 0, originalPrice: 0, stock: 100, enabled: true }] });
+  Object.assign(form, { id: null, tenantId: filters.tenantId || selectedMerchant.value?.tenant?.id, merchantId: filters.merchantId, title: "", brandName: "", categoryId: undefined, coverUrl: "", description: "", status: "draft", featured: false, sortOrder: 0, deliveryNote: "默认快递发货，偏远地区请联系客服", afterSaleNote: "支持未发货退款，已发货请联系运营方处理", skus: [{ name: "默认规格", price: 0, originalPrice: 0, stock: 100, enabled: true }] });
 }
 function createProduct() {
   if (!requireOpenMerchant("发布商品")) return;

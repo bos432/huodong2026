@@ -97,6 +97,9 @@ export class CoursesController {
   @Post("community-posts") createPost(@Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.createCommunityPost(dto, admin); }
 
   @AdminRoles(...COMMUNITY_ROLES)
+  @Patch("community-posts/:id") reviewPost(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.reviewCommunityPost(id, dto, admin); }
+
+  @AdminRoles(...COMMUNITY_ROLES)
   @Delete("community-posts/:id") deletePost(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: AdminContext) { return this.service.deleteCommunityPost(id, admin); }
 
   @AdminRoles(...COMMUNITY_ROLES)

@@ -1,7 +1,7 @@
 <template>
   <view class="cart-page">
     <view class="hero">
-      <text class="eyebrow">书院严选购物车</text>
+      <text class="eyebrow">慢π严选购物车</text>
       <text class="title">把想要的好物先放进来，确认地址后一起结算</text>
     </view>
     <view v-if="cartGroups.length > 1" class="cross-store-tip">

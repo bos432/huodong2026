@@ -297,6 +297,10 @@ export function uploadMallRefundImage(filePath: string): Promise<{ url: string; 
   return uploadPublicImage("/public/me/mall/refund-images", filePath);
 }
 
+export function uploadCommunityPostImage(filePath: string): Promise<{ url: string; path: string }> {
+  return uploadPublicImage("/public/me/community/post-images", filePath);
+}
+
 function uploadPublicImage(path: string, filePath: string): Promise<{ url: string; path: string }> {
   const token = getUserToken();
   return new Promise((resolve, reject) => {

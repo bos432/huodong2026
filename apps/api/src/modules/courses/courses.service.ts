@@ -7,7 +7,7 @@ import { CourseLesson } from "../../entities/course-lesson.entity";
 import { CourseOrder, CourseOrderStatus } from "../../entities/course-order.entity";
 import { CommunityActivity } from "../../entities/community-activity.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
-import { CommunityPost } from "../../entities/community-post.entity";
+import { CommunityPost, CommunityPostStatus } from "../../entities/community-post.entity";
 import { CommunityPostComment, CommunityPostCommentStatus } from "../../entities/community-post-comment.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
@@ -218,6 +218,7 @@ export class CoursesService {
     const item = this.checkinTasks.create();
     Object.assign(item, this.normalizeCheckinTaskDto(dto));
     await this.assignTenant(item, dto, admin);
+    await this.assertCheckinTaskDateUnique(item);
     return this.checkinTasks.save(item);
   }
 
@@ -225,6 +226,7 @@ export class CoursesService {
     const item = await this.assertCheckinTaskAccess(id, admin);
     Object.assign(item, this.normalizeCheckinTaskDto(dto));
     await this.assignTenant(item, dto, admin);
+    await this.assertCheckinTaskDateUnique(item, id);
     return this.checkinTasks.save(item);
   }
 
@@ -255,20 +257,59 @@ export class CoursesService {
     return formatter.format(date);
   }
 
+  private async assertCheckinTaskDateUnique(task: { id?: number; date?: string | null; tenant?: Tenant | null }, excludeId?: number) {
+    const date = String(task.date || "").trim();
+    if (!date) throw new BadRequestException("请选择打卡日期");
+    const tenantId = task.tenant?.id || null;
+    const builder = this.checkinTasks
+      .createQueryBuilder("task")
+      .leftJoinAndSelect("task.tenant", "tenant")
+      .where("task.date = :date", { date });
+    if (tenantId) builder.andWhere("task.tenantId = :tenantId", { tenantId });
+    else builder.andWhere("task.tenantId IS NULL");
+    if (excludeId) builder.andWhere("task.id != :excludeId", { excludeId });
+    const duplicate = await builder.getOne();
+    if (!duplicate) return;
+    const scope = duplicate.tenant?.name || duplicate.tenant?.code || "平台";
+    throw new BadRequestException(`${scope} ${date} 已存在打卡任务「${duplicate.title}」，请编辑已有任务或删除重复任务后再保存`);
+  }
+
   // ===== Community Posts =====
   async listCommunityPosts(query: any, admin?: AdminContext) {
     const builder = this.communityPosts.createQueryBuilder("post").leftJoinAndSelect("post.tenant", "tenant").orderBy("post.createdAt", "DESC").take(Math.min(query.limit || 20, 50));
+    builder.leftJoinAndSelect("post.activity", "activity");
     applyTenantScopeToQuery(builder, "post", admin);
     this.applyPlatformTenantFilter(builder, "post", query.tenantId, admin);
     if (query.visible !== undefined) builder.andWhere("post.visible = :visible", { visible: query.visible === true || query.visible === "true" || query.visible === "1" });
+    if (query.status) builder.andWhere("post.status = :status", { status: query.status });
+    if (query.source) builder.andWhere("post.source = :source", { source: query.source });
+    if (query.activityId) builder.andWhere("post.activityId = :activityId", { activityId: Number(query.activityId) });
     return builder.getMany();
   }
 
   async createCommunityPost(dto: any, admin?: AdminContext) {
     const item = this.communityPosts.create();
-    Object.assign(item, dto);
+    Object.assign(item, {
+      ...dto,
+      source: "official",
+      status: dto.visible === false ? "pending" : "approved",
+      approvedAt: dto.visible === false ? null : new Date(),
+      tags: Array.isArray(dto.tags) ? dto.tags.slice(0, 6) : [],
+      images: Array.isArray(dto.images) ? dto.images.slice(0, 9) : []
+    });
     await this.assignTenant(item, dto, admin);
     return this.communityPosts.save(item);
+  }
+
+  async reviewCommunityPost(id: number, dto: { status?: CommunityPostStatus; reviewRemark?: string | null; visible?: boolean }, admin?: AdminContext) {
+    const post = await this.assertCommunityPostAccess(id, admin);
+    const nextStatus = dto.status;
+    if (nextStatus !== "approved" && nextStatus !== "rejected" && nextStatus !== "pending") throw new BadRequestException("动态状态不正确");
+    post.status = nextStatus;
+    post.reviewRemark = dto.reviewRemark?.trim() || null;
+    post.visible = dto.visible === undefined ? nextStatus !== "rejected" : Boolean(dto.visible);
+    post.approvedAt = nextStatus === "approved" ? post.approvedAt || new Date() : null;
+    return this.communityPosts.save(post);
   }
 
   async deleteCommunityPost(id: number, admin?: AdminContext) {

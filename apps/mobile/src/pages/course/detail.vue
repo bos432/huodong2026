@@ -122,7 +122,7 @@ const course = computed(() => {
   return {
     id: row.id,
     title: row.title,
-    teacher: row.teacherName || "七维书院",
+    teacher: row.teacherName || "慢π",
     teacherAvatar: row.teacherAvatar || "",
     price,
     originalPrice: Number(row.originalPrice || 0),

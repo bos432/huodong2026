@@ -12,7 +12,7 @@ const password = process.env.QIWAI_DEMO_PASSWORD || "Qiwai123456";
 const tenants = [
   {
     code: "qiwai-hangzhou",
-    name: "七维文化杭州城市合伙人",
+    name: "慢π杭州城市合伙人",
     region: "杭州",
     contactName: "杭州主理人",
     contactPhone: "13800001001",
@@ -27,7 +27,7 @@ const tenants = [
         price: 99,
         location: "杭州西湖文化空间",
         description: "以节气、人文地理和经典文本为线索，做一场适合城市用户参与的东方哲学体验活动。",
-        host: "七维文化讲师团",
+        host: "慢π讲师团",
         section: "节气文化导入、经典片段共读、城市生活应用讨论、会员活动介绍。"
       },
       {
@@ -42,7 +42,7 @@ const tenants = [
   },
   {
     code: "qiwai-suzhou",
-    name: "七维文化苏州城市合伙人",
+    name: "慢π苏州城市合伙人",
     region: "苏州",
     contactName: "苏州主理人",
     contactPhone: "13800001002",
@@ -72,7 +72,7 @@ const tenants = [
   },
   {
     code: "qiwai-chengdu",
-    name: "七维文化成都城市合伙人",
+    name: "慢π成都城市合伙人",
     region: "成都",
     contactName: "成都主理人",
     contactPhone: "13800001003",
@@ -144,7 +144,7 @@ async function main() {
         await upsertActivity(connection, tenantId, agentId, activity, index);
       }
     }
-    console.log("七维文化演示数据已准备完成。");
+    console.log("慢π演示数据已准备完成。");
     console.log(`默认密码：${password}`);
     for (const tenant of tenants) {
       console.log(`${tenant.name}: ${tenant.admin} / ${tenant.ops} / ${tenant.finance} / ${tenant.checkin}`);
@@ -183,7 +183,7 @@ async function upsertTenant(connection, tenant) {
         remark = VALUES(remark),
         updatedAt = NOW()
     `,
-    [tenant.code, tenant.name, tenant.region, tenant.contactName, tenant.contactPhone, settings, "七维文化城市合伙人演示租户"]
+    [tenant.code, tenant.name, tenant.region, tenant.contactName, tenant.contactPhone, settings, "慢π城市合伙人演示租户"]
   );
   const [rows] = await connection.execute("SELECT id FROM tenants WHERE code = ? LIMIT 1", [tenant.code]);
   return rows[0].id;
@@ -405,6 +405,6 @@ async function clearActivityChildren(connection, activityId) {
 }
 
 main().catch((error) => {
-  console.error(`七维文化演示数据准备失败：${error.message}`);
+  console.error(`慢π演示数据准备失败：${error.message}`);
   process.exitCode = 1;
 });

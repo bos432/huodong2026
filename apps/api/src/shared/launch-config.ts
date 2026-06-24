@@ -90,7 +90,17 @@ const launchConfigEnvMap: Array<[string, string]> = [
   ["backupRetentionDays", "BACKUP_RETENTION_DAYS"]
 ];
 
-const allowedLaunchConfigKeys = new Set(launchConfigEnvMap.map(([key]) => key));
+const launchConfigMetadataKeys = [
+  "wechatH5AcceptanceTenantCode",
+  "wechatH5AcceptanceStatus",
+  "wechatH5AcceptanceAt",
+  "wechatH5AcceptanceRemark"
+];
+
+const allowedLaunchConfigKeys = new Set([
+  ...launchConfigEnvMap.map(([key]) => key),
+  ...launchConfigMetadataKeys
+]);
 
 export function normalizeLaunchConfig(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};

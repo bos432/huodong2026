@@ -1,5 +1,6 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { CopyDocument, Delete, Plus, Refresh, Upload, View } from "@element-plus/icons-vue";
 import { api } from "../api";
@@ -26,6 +27,13 @@ const moduleTypes: Array<{ type: HomepageSectionType; label: string; description
   { type: "featured_activities", label: "精选活动", description: "推荐活动横滑" },
   { type: "activity_tabs", label: "分类标签", description: "活动流筛选标签" },
   { type: "activity_feed", label: "活动信息流", description: "活动列表" },
+  { type: "testimonial_feed", label: "参与者心得", description: "展示审核通过的用户心得" },
+  { type: "featured_testimonials", label: "精选心得", description: "突出学员案例和活动口碑" },
+  { type: "activity_testimonials", label: "活动口碑墙", description: "适合活动详情页展示反馈" },
+  { type: "charity_summary", label: "公益公示摘要", description: "公益池、公示项目入口" },
+  { type: "course_recommendations", label: "课程推荐", description: "课程转化入口" },
+  { type: "mall_showcase", label: "商城精选", description: "文化好物导购入口" },
+  { type: "brand_story_entry", label: "品牌故事入口", description: "品牌理念与共建入口" },
   { type: "image_banner", label: "图片广告", description: "运营 Banner" },
   { type: "rich_text", label: "富文本", description: "报名须知与说明" },
   { type: "bottom_nav", label: "前台底部导航", description: "控制前台底部 5 个菜单、图标和跳转" },
@@ -44,12 +52,18 @@ const pageOptions = [
   { key: "user_my", label: "我的", route: "/pages/user/my" },
   { key: "login_page", label: "登录", route: "/pages/user/login" },
   { key: "registration_detail", label: "报名详情", route: "/pages/user/registration" },
-  { key: "review_page", label: "评价", route: "/pages/user/review" }
+  { key: "review_page", label: "评价", route: "/pages/user/review" },
+  { key: "community_home", label: "共修首页", route: "/pages/community/index" },
+  { key: "community_detail", label: "动态详情", route: "/pages/community/detail" },
+  { key: "course_home", label: "课程首页", route: "/pages/courses/index" },
+  { key: "charity_page", label: "公益页", route: "/pages/charity/index" },
+  { key: "mall_home", label: "商城首页", route: "/pages/mall/index" },
+  { key: "brand_story", label: "品牌故事", route: "/pages/brand/story" }
 ];
 
 const defaultConfig: Record<string, Record<string, any>> = {
   search_bar: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、培训" },
-  hero: { eyebrow: "Activity OS", primaryButtonText: "浏览活动", primaryButtonLink: "/pages/activity/list", showStats: true, backgroundColor: "#0f766e", backgroundImage: "", backgroundFit: "cover", overlayColor: "#0f2327", overlayOpacity: 42, textOpacity: 100, titleOpacity: 100, subtitleOpacity: 86, buttonOpacity: 18, statsOpacity: 14 },
+  hero: { eyebrow: "慢π活动运营", primaryButtonText: "浏览活动", primaryButtonLink: "/pages/activity/list", showStats: true, backgroundColor: "#0f766e", backgroundImage: "", backgroundFit: "cover", overlayColor: "#0f2327", overlayOpacity: 42, textOpacity: 100, titleOpacity: 100, subtitleOpacity: 86, buttonOpacity: 18, statsOpacity: 14 },
   announcement_bar: { limit: 5, pinnedFirst: true, link: "/pages/announcement/list" },
   quick_nav: {
     items: [
@@ -63,11 +77,39 @@ const defaultConfig: Record<string, Record<string, any>> = {
   featured_activities: { source: "featured", limit: 6 },
   activity_tabs: { includeHot: true, limit: 8 },
   activity_feed: { source: "latest", limit: 10, pageSize: 4, pagination: "pager" },
+  testimonial_feed: { source: "participant", limit: 3, link: "/pages/community/index" },
+  featured_testimonials: { source: "featured", limit: 3, link: "/pages/community/index" },
+  activity_testimonials: { source: "activity", limit: 6, link: "/pages/community/index" },
+  charity_summary: {
+    link: "/pages/charity/index",
+    items: [
+      { label: "公益池", icon: "益" },
+      { label: "项目公示", icon: "公" },
+      { label: "志愿服务", icon: "愿" }
+    ]
+  },
+  course_recommendations: {
+    link: "/pages/courses/index",
+    items: [
+      { label: "系统课程", icon: "课" },
+      { label: "学习记录", icon: "学" },
+      { label: "证书成长", icon: "证" }
+    ]
+  },
+  mall_showcase: {
+    link: "/pages/mall/index",
+    items: [
+      { label: "文化好物", icon: "物" },
+      { label: "店铺精选", icon: "店" },
+      { label: "优惠活动", icon: "惠" }
+    ]
+  },
+  brand_story_entry: { buttonText: "了解品牌故事", link: "/pages/brand/story", imageUrl: "" },
   image_banner: { imageUrl: "", link: "/pages/activity/list", ratio: "3:1", fit: "cover" },
   rich_text: { content: "报名须知", imageUrl: "", link: "" },
   bottom_nav: {
     items: [
-      { label: "书院", icon: "书", activeIcon: "书", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
+      { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
       { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
       { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D" },
       { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D" },
@@ -107,6 +149,13 @@ const defaultLayout: Record<string, Record<string, any>> = {
   featured_activities: { display: "horizontal", spacingBottom: 18 },
   activity_tabs: { spacingBottom: 8 },
   activity_feed: { display: "list" },
+  testimonial_feed: { display: "cards", spacingBottom: 18, backgroundColor: "#ffffff", borderRadius: 8 },
+  featured_testimonials: { display: "cards", spacingBottom: 18, backgroundColor: "#fff7ec", borderRadius: 8 },
+  activity_testimonials: { display: "wall", spacingBottom: 18, backgroundColor: "#ffffff", borderRadius: 8 },
+  charity_summary: { spacingBottom: 18, backgroundColor: "#ffffff", borderRadius: 8 },
+  course_recommendations: { spacingBottom: 18, backgroundColor: "#ffffff", borderRadius: 8 },
+  mall_showcase: { spacingBottom: 18, backgroundColor: "#ffffff", borderRadius: 8 },
+  brand_story_entry: { spacingBottom: 18, backgroundColor: "#fff7ec", borderRadius: 8 },
   image_banner: { spacingBottom: 18 },
   rich_text: { spacingBottom: 18 },
   bottom_nav: { backgroundColor: "#ffffff", activeColor: "#0f766e", textColor: "#667085" },
@@ -117,8 +166,129 @@ const defaultLayout: Record<string, Record<string, any>> = {
   },
   inner_pages: { headerBackgroundColor: "#ffffff", headerTextColor: "#111827", headerSubtitleColor: "#667085", stickyFilterBackground: "#f4f6f8", actionBarBackgroundColor: "#ffffff" }
 };
+type TemplateRow = { type: HomepageSectionType | string; title: string | null; subtitle?: string | null; config?: Record<string, any>; layout?: Record<string, any>; enabled?: boolean };
+const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow[] }> = [
+  {
+    key: "activity_ops",
+    label: "活动运营型",
+    rows: [
+      { type: "hero", title: "近期活动与共修报名", subtitle: "筛选近期线下活动，报名、付款确认和签到都在这里完成。", config: { ...defaultConfig.hero, primaryButtonText: "浏览活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" } },
+      { type: "quick_nav", title: null, config: defaultConfig.quick_nav },
+      { type: "featured_activities", title: "精选活动", subtitle: "主办方推荐，适合优先查看" },
+      { type: "testimonial_feed", title: "参与者心得", subtitle: "真实活动反馈帮助新用户理解这里在发生什么" }
+    ]
+  },
+  {
+    key: "academy_brand",
+    label: "慢π品牌型",
+    rows: [
+      { type: "hero", title: "慢π", subtitle: "在城市里共建东方文化学习、活动和公益服务场。", config: { ...defaultConfig.hero, eyebrow: "东方文化共建", primaryButtonText: "了解品牌故事", primaryButtonLink: "/pages/brand/story", backgroundColor: "#5b2f24" } },
+      { type: "brand_story_entry", title: "慢π在做什么", subtitle: "讲清理念、课程、活动和城市共建路径" },
+      { type: "featured_testimonials", title: "同学故事", subtitle: "来自活动现场与课程学习的真实反馈" },
+      { type: "charity_summary", title: "公益可信公示", subtitle: "公益池、项目进展和志愿服务入口" }
+    ]
+  },
+  {
+    key: "course_conversion",
+    label: "课程转化型",
+    rows: [
+      { type: "hero", title: "系统学习东方文化", subtitle: "从活动体验进入课程学习，用证书和成长记录沉淀长期关系。", config: { ...defaultConfig.hero, primaryButtonText: "查看课程", primaryButtonLink: "/pages/courses/index", backgroundColor: "#4a6b8a" } },
+      { type: "course_recommendations", title: "课程推荐", subtitle: "课程、学习记录和证书成长入口" },
+      { type: "testimonial_feed", title: "学习与活动心得", subtitle: "用参与者内容提升信任感" },
+      { type: "activity_feed", title: "近期活动", subtitle: "先体验，再系统学习" }
+    ]
+  },
+  {
+    key: "charity_recruit",
+    label: "公益招募型",
+    rows: [
+      { type: "hero", title: "公益可信公示与志愿共建", subtitle: "公益金、公示项目、帮扶申请和志愿服务形成闭环。", config: { ...defaultConfig.hero, primaryButtonText: "查看公益池", primaryButtonLink: "/pages/charity/index", backgroundColor: "#5b8c5a" } },
+      { type: "charity_summary", title: "公益公示摘要", subtitle: "公开展示公益池、项目与志愿服务入口" },
+      { type: "quick_nav", title: null, config: { items: [{ label: "帮扶申请", icon: "扶", color: "#5B8C5A", link: "/pages/apply/aid" }, { label: "志愿服务", icon: "愿", color: "#0f766e", link: "/pages/volunteer/index" }, { label: "大使申请", icon: "使", color: "#C43D3D", link: "/pages/apply/ambassador" }, { label: "院长招募", icon: "院", color: "#7A4B24", link: "/pages/recruit/dean" }] } },
+      { type: "testimonial_feed", title: "公益参与故事", subtitle: "活动与服务记录让信任可见" }
+    ]
+  },
+  {
+    key: "mall_guide",
+    label: "商城导购型",
+    rows: [
+      { type: "hero", title: "慢π文化好物", subtitle: "课程周边、城市店铺与精选商品，配合活动形成转化。", config: { ...defaultConfig.hero, primaryButtonText: "进入商城", primaryButtonLink: "/pages/mall/index", backgroundColor: "#8b5a2b" } },
+      { type: "mall_showcase", title: "商城精选", subtitle: "文化好物、店铺精选和优惠活动入口" },
+      { type: "activity_feed", title: "搭配近期活动", subtitle: "从活动场景自然进入购买" },
+      { type: "testimonial_feed", title: "参与者反馈", subtitle: "用真实体验提升商品和活动信任" }
+    ]
+  }
+];
+const visualPresets = [
+  {
+    key: "warm_academy",
+    label: "慢π暖色",
+    layout: {
+      primaryColor: "#8b5a2b",
+      accentColor: "#c43d3d",
+      textColor: "#3f3428",
+      mutedColor: "#8a6b58",
+      backgroundColor: "#fff7ec",
+      fontStyle: "kaiti",
+      density: "comfortable",
+      buttonStyle: "pill",
+      cardStyle: "soft",
+      dividerStyle: "soft"
+    }
+  },
+  {
+    key: "quiet_work",
+    label: "运营清爽",
+    layout: {
+      primaryColor: "#0f766e",
+      accentColor: "#4a6b8a",
+      textColor: "#111827",
+      mutedColor: "#667085",
+      backgroundColor: "#ffffff",
+      fontStyle: "system",
+      density: "compact",
+      buttonStyle: "rounded",
+      cardStyle: "outlined",
+      dividerStyle: "line"
+    }
+  },
+  {
+    key: "public_green",
+    label: "公益共建",
+    layout: {
+      primaryColor: "#5b8c5a",
+      accentColor: "#0f766e",
+      textColor: "#173b28",
+      mutedColor: "#4b6b57",
+      backgroundColor: "#f0fdf4",
+      fontStyle: "system",
+      density: "comfortable",
+      buttonStyle: "pill",
+      cardStyle: "soft",
+      dividerStyle: "soft"
+    }
+  },
+  {
+    key: "mall_editorial",
+    label: "商城导购",
+    layout: {
+      primaryColor: "#7a4b24",
+      accentColor: "#c2410c",
+      textColor: "#3f3428",
+      mutedColor: "#7c5f4c",
+      backgroundColor: "#fffaf3",
+      fontStyle: "serif",
+      density: "spacious",
+      buttonStyle: "square",
+      cardStyle: "elevated",
+      dividerStyle: "none"
+    }
+  }
+];
 const rows = ref<HomepageSectionView[]>([]);
 const tenants = ref<any[]>([]);
+const route = useRoute();
+const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const drawer = ref(false);
@@ -129,6 +299,11 @@ const form = reactive<SectionForm>({ type: "hero", title: "", subtitle: "", enab
 const configText = ref("{}");
 const layoutText = ref("{}");
 const filters = reactive({ tenantId: undefined as number | undefined, pageKey: "home" });
+const selectedTemplateKey = ref("activity_ops");
+const copyFromPageKey = ref("home");
+const lastPublishedRows = ref<HomepageSectionView[]>([]);
+const lastPublishedLoaded = ref(false);
+const restoreSnapshotSavedAt = ref("");
 
 const orderedRows = computed(() => [...rows.value].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
 const canEdit = computed(() => true);
@@ -154,6 +329,13 @@ const currentFormSnapshot = computed(() => JSON.stringify({
   configText: configText.value,
   layoutText: layoutText.value
 }));
+const restoreSnapshotKey = computed(() => {
+  const scope = isPlatformAdmin()
+    ? filters.tenantId ? `tenant-${filters.tenantId}` : "platform-global"
+    : `tenant-${currentTenantCode() || "current"}`;
+  return `homepage-builder-restore:${scope}:${filters.pageKey}`;
+});
+const restoreSnapshotHint = computed(() => restoreSnapshotSavedAt.value ? `已保留 ${restoreSnapshotSavedAt.value} 的恢复快照。` : "首次修改前会自动保留当前发布版本，刷新后台后仍可恢复。");
 const hasUnsavedChanges = computed(() => drawer.value && formSnapshot.value !== currentFormSnapshot.value);
 const drawerPreviewRow = computed(() => currentDraftPreviewRow());
 const defaultPreviewRows = computed(() => buildDefaultPreviewRows(filters.pageKey));
@@ -176,6 +358,59 @@ function typeLabel(type: string) {
 
 function cloneJson<T>(value: T): T {
   return JSON.parse(JSON.stringify(value || {}));
+}
+
+function restorableRows(list: HomepageSectionView[]) {
+  return list.map((item) => ({
+    pageKey: item.pageKey,
+    type: item.type,
+    title: item.title,
+    subtitle: item.subtitle,
+    enabled: item.enabled,
+    sortOrder: item.sortOrder,
+    config: cloneJson(item.config || {}),
+    layout: cloneJson(item.layout || {})
+  })) as HomepageSectionView[];
+}
+
+function formatSnapshotTime(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  return date.toLocaleString("zh-CN", { hour12: false });
+}
+
+function readRestoreSnapshot() {
+  try {
+    const raw = window.localStorage.getItem(restoreSnapshotKey.value);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed?.rows)) return null;
+    return { rows: parsed.rows as HomepageSectionView[], savedAt: formatSnapshotTime(parsed.savedAt) };
+  } catch {
+    return null;
+  }
+}
+
+function rememberBeforeMutation() {
+  const rowsToSave = restorableRows(orderedRows.value);
+  const savedAt = new Date().toISOString();
+  try {
+    window.localStorage.setItem(restoreSnapshotKey.value, JSON.stringify({ version: 1, savedAt, rows: rowsToSave }));
+  } catch {
+    // localStorage can be unavailable in privacy contexts; keep the in-memory fallback.
+  }
+  lastPublishedRows.value = cloneJson(rowsToSave);
+  lastPublishedLoaded.value = true;
+  restoreSnapshotSavedAt.value = formatSnapshotTime(savedAt);
+}
+
+function clearRestoreSnapshot() {
+  try {
+    window.localStorage.removeItem(restoreSnapshotKey.value);
+  } catch {
+    // Ignore storage cleanup failures; the current in-memory state is still correct.
+  }
+  restoreSnapshotSavedAt.value = "";
 }
 
 function previewRow(
@@ -234,7 +469,7 @@ function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
     previewRow(1, "hero", {
       title: label,
       subtitle: subtitleMap[pageKey] || "",
-      config: { ...defaultConfig.hero, eyebrow: "七维文化", showStats: false, primaryButtonText: "", primaryButtonLink: "", backgroundColor: "#0f766e" },
+      config: { ...defaultConfig.hero, eyebrow: "慢π", showStats: false, primaryButtonText: "", primaryButtonLink: "", backgroundColor: "#0f766e" },
       layout: { spacingBottom: 16, density: "compact", borderRadius: 8 }
     }),
     previewRow(2, "rich_text", {
@@ -293,8 +528,16 @@ function previewSectionStyle(row: HomepageSectionView) {
   return {
     background,
     borderRadius: `${Number(layout.borderRadius ?? 8)}px`,
-    marginBottom: `${Number(layout.spacingBottom ?? 10)}px`
+    marginBottom: `${Number(layout.spacingBottom ?? 10)}px`,
+    color: String(layout.textColor || "#111827")
   };
+}
+
+function applyVisualPreset(key: string) {
+  const preset = visualPresets.find((item) => item.key === key);
+  if (!preset) return;
+  form.layout = { ...(form.layout || {}), ...cloneJson(preset.layout) };
+  syncJsonText();
 }
 
 function resetForm(type: HomepageSectionType | string) {
@@ -325,10 +568,47 @@ function homepageScopeParams() {
   return { params };
 }
 
-async function load() {
+function firstQueryValue(value: unknown) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function validPageKey(value: unknown) {
+  const key = String(firstQueryValue(value) || "").trim();
+  return pageOptions.some((item) => item.key === key) ? key : "home";
+}
+
+function validTenantId(value: unknown) {
+  const id = Number(firstQueryValue(value) || 0);
+  return Number.isFinite(id) && id > 0 ? id : undefined;
+}
+
+function applyRouteFilters() {
+  filters.pageKey = validPageKey(route.query.pageKey);
+  filters.tenantId = isPlatformAdmin() ? validTenantId(route.query.tenantId) : undefined;
+}
+
+function syncRouteFilters() {
+  const query: Record<string, string> = {};
+  for (const [key, value] of Object.entries(route.query)) {
+    const normalized = String(firstQueryValue(value) || "");
+    if (normalized) query[key] = normalized;
+  }
+  query.pageKey = filters.pageKey;
+  if (isPlatformAdmin() && filters.tenantId) query.tenantId = String(filters.tenantId);
+  else delete query.tenantId;
+  router.replace({ query });
+}
+
+async function load(options: { updateSnapshot?: boolean } = {}) {
   loading.value = true;
   try {
     rows.value = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", homepageScopeParams());
+    if (options.updateSnapshot !== false) {
+      const cached = readRestoreSnapshot();
+      lastPublishedRows.value = cloneJson(cached?.rows || rows.value);
+      lastPublishedLoaded.value = true;
+      restoreSnapshotSavedAt.value = cached?.savedAt || "";
+    }
   } finally {
     loading.value = false;
   }
@@ -345,6 +625,7 @@ async function handleScopeChanged() {
     editingId.value = null;
     captureFormSnapshot();
   }
+  syncRouteFilters();
   await load();
 }
 
@@ -385,21 +666,24 @@ async function copy(row: HomepageSectionView) {
     config: row.config || {},
     layout: row.layout || {}
   };
+  rememberBeforeMutation();
   await api.post("/admin/homepage/sections", payload, homepageScopeParams());
   ElMessage.success("模块已复制");
-  load();
+  load({ updateSnapshot: false });
 }
 
 async function remove(row: HomepageSectionView) {
   if (!canEdit.value) return;
   await ElMessageBox.confirm(`确认删除「${row.title || typeLabel(row.type)}」？删除后 H5 将不再显示该模块。`, "删除模块", { type: "warning" });
+  rememberBeforeMutation();
   await api.delete(`/admin/homepage/sections/${row.id}`, homepageScopeParams());
   ElMessage.success("模块已删除");
-  load();
+  load({ updateSnapshot: false });
 }
 
 async function toggle(row: HomepageSectionView) {
   if (!canEdit.value) return;
+  rememberBeforeMutation();
   await api.patch(`/admin/homepage/sections/${row.id}`, {
     pageKey: filters.pageKey,
     type: row.type,
@@ -411,7 +695,7 @@ async function toggle(row: HomepageSectionView) {
     enabled: !row.enabled
   }, homepageScopeParams());
   ElMessage.success(!row.enabled ? "模块已启用" : "模块已停用");
-  load();
+  load({ updateSnapshot: false });
 }
 
 function parseJson(text: string, label: string) {
@@ -460,12 +744,13 @@ async function submit() {
   try {
     if (form.type === "bottom_nav") form.config.items = sanitizeNavItems(form.config.items);
     const payload = { ...form, pageKey: filters.pageKey, title: form.title || null, subtitle: form.subtitle || null };
+    rememberBeforeMutation();
     if (editingId.value) await api.patch(`/admin/homepage/sections/${editingId.value}`, payload, homepageScopeParams());
     else await api.post("/admin/homepage/sections", payload, homepageScopeParams());
     ElMessage.success(`已保存到「${saveScopeName.value}」，刷新前台预览即可查看最新效果`);
     captureFormSnapshot();
     drawer.value = false;
-    load();
+    load({ updateSnapshot: false });
   } finally {
     saving.value = false;
   }
@@ -493,6 +778,7 @@ async function closeDrawer(done?: () => void) {
 
 async function saveOrder(nextRows: HomepageSectionView[]) {
   if (!canEdit.value) return;
+  rememberBeforeMutation();
   const items = nextRows.map((item, index) => ({ id: item.id, sortOrder: (index + 1) * 10 }));
   rows.value = await api.put<any, HomepageSectionView[]>("/admin/homepage/sections/reorder", { items }, homepageScopeParams());
   ElMessage.success("排序已保存");
@@ -531,8 +817,75 @@ function onDrop(target: HomepageSectionView) {
 async function resetDefault() {
   if (!canEdit.value) return;
   await ElMessageBox.confirm(`恢复默认装修会替换「${currentPageOption.value.label}」当前范围的全部模块配置，确认继续？`, "恢复默认装修", { type: "warning" });
+  rememberBeforeMutation();
   rows.value = await api.post<any, HomepageSectionView[]>("/admin/homepage/sections/reset-default", {}, homepageScopeParams());
   ElMessage.success("已恢复默认装修");
+}
+
+function templatePayload(row: TemplateRow, index: number) {
+  return {
+    pageKey: filters.pageKey,
+    type: row.type,
+    title: row.title,
+    subtitle: row.subtitle || "",
+    enabled: row.enabled !== false,
+    sortOrder: (index + 1) * 10,
+    config: cloneJson(row.config || defaultConfig[row.type] || {}),
+    layout: cloneJson(row.layout || defaultLayout[row.type] || {})
+  };
+}
+
+async function replaceCurrentSections(nextRows: TemplateRow[] | HomepageSectionView[], message: string, options: { updateSnapshot?: boolean; skipBeforeSnapshot?: boolean } = {}) {
+  if (!canEdit.value) return;
+  if (!options.skipBeforeSnapshot) rememberBeforeMutation();
+  for (const row of orderedRows.value) await api.delete(`/admin/homepage/sections/${row.id}`, homepageScopeParams());
+  const saved: HomepageSectionView[] = [];
+  for (const [index, row] of nextRows.entries()) {
+    const payload = "id" in row
+      ? {
+          pageKey: filters.pageKey,
+          type: row.type,
+          title: row.title,
+          subtitle: row.subtitle || "",
+          enabled: row.enabled,
+          sortOrder: (index + 1) * 10,
+          config: cloneJson(row.config || {}),
+          layout: cloneJson(row.layout || {})
+        }
+      : templatePayload(row, index);
+    saved.push(await api.post<any, HomepageSectionView>("/admin/homepage/sections", payload, homepageScopeParams()));
+  }
+  rows.value = saved;
+  if (options.updateSnapshot) {
+    lastPublishedRows.value = cloneJson(saved);
+    lastPublishedLoaded.value = true;
+  }
+  ElMessage.success(message);
+}
+
+async function applyTemplate() {
+  const template = decorationTemplates.find((item) => item.key === selectedTemplateKey.value) || decorationTemplates[0];
+  await ElMessageBox.confirm(`应用「${template.label}」会替换当前页面模块，确认继续？`, "应用装修模板", { type: "warning" });
+  await replaceCurrentSections(template.rows, `已应用「${template.label}」`);
+}
+
+async function restoreLastPublished() {
+  if (!lastPublishedLoaded.value) return ElMessage.warning("当前没有可恢复的发布快照，请先刷新页面");
+  await ElMessageBox.confirm("恢复后会撤销本次刷新后的模块调整，确认继续？", "恢复上次发布版本", { type: "warning" });
+  await replaceCurrentSections(lastPublishedRows.value, "已恢复到上次发布版本", { updateSnapshot: true, skipBeforeSnapshot: true });
+  clearRestoreSnapshot();
+  lastPublishedRows.value = cloneJson(rows.value);
+  lastPublishedLoaded.value = true;
+}
+
+async function copyFromPage() {
+  if (!copyFromPageKey.value || copyFromPageKey.value === filters.pageKey) return ElMessage.warning("请选择另一个页面作为复制来源");
+  const source = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", {
+    params: { ...homepageScopeParams().params, pageKey: copyFromPageKey.value }
+  });
+  if (!source.length) return ElMessage.warning("来源页面暂无模块");
+  await ElMessageBox.confirm(`将「${pageOptions.find((item) => item.key === copyFromPageKey.value)?.label || copyFromPageKey.value}」复制到当前页面，确认替换？`, "复制页面配置", { type: "warning" });
+  await replaceCurrentSections(source, "页面配置已复制");
 }
 
 async function uploadImage(file: File, field: string) {
@@ -685,12 +1038,20 @@ async function copyH5PreviewUrl() {
   ElMessage.success("H5 预览链接已复制");
 }
 
-function openCurrentPreview() {
-  window.open(previewUrl.value, "_blank", "noopener,noreferrer");
+async function openCurrentPreview() {
+  await copyToClipboard(previewUrl.value);
+  const opened = window.open(previewUrl.value, "_blank", "noopener,noreferrer");
+  if (opened) ElMessage.success("已打开预览，并复制预览链接");
+  else ElMessage.warning("浏览器阻止了新窗口，预览链接已复制");
 }
 
 onMounted(async () => {
+  applyRouteFilters();
   await loadTenants();
+  if (isPlatformAdmin() && filters.tenantId && !tenants.value.some((tenant) => tenant.id === filters.tenantId)) {
+    filters.tenantId = undefined;
+  }
+  syncRouteFilters();
   await load();
 });
 </script>
@@ -709,8 +1070,17 @@ onMounted(async () => {
         <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width: 220px" @change="handleScopeChanged">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
         </el-select>
-        <el-button :icon="View" @click="openCurrentPreview">打开H5预览</el-button>
+        <el-button :icon="View" @click="openCurrentPreview">发布前预览</el-button>
         <el-button :icon="CopyDocument" @click="copyH5PreviewUrl">复制链接</el-button>
+        <el-select v-if="canEdit" v-model="selectedTemplateKey" placeholder="装修模板" style="width: 150px">
+          <el-option v-for="item in decorationTemplates" :key="item.key" :label="item.label" :value="item.key" />
+        </el-select>
+        <el-button v-if="canEdit" type="success" @click="applyTemplate">应用模板</el-button>
+        <el-select v-if="canEdit" v-model="copyFromPageKey" placeholder="复制来源" style="width: 150px">
+          <el-option v-for="page in pageOptions" :key="page.key" :label="page.label" :value="page.key" />
+        </el-select>
+        <el-button v-if="canEdit" @click="copyFromPage">复制页面配置</el-button>
+        <el-button v-if="canEdit" @click="restoreLastPublished">恢复上次发布版本</el-button>
         <el-button v-if="canEdit" :icon="Refresh" @click="resetDefault">恢复默认装修</el-button>
         <el-button type="primary" @click="load">刷新</el-button>
       </div>
@@ -719,6 +1089,7 @@ onMounted(async () => {
     <div class="preview-link">
       <strong>{{ previewScopeName }}</strong>
       <span>{{ previewUrl }}</span>
+      <small>模块保存后前台生效；未保存内容可先查看右侧手机预览或抽屉实时预览。{{ restoreSnapshotHint }}</small>
     </div>
 
     <div v-if="scopeTip" class="scope-tip" :class="{ muted: isPlatformAdmin() && filters.tenantId }">{{ scopeTip }}</div>
@@ -779,7 +1150,7 @@ onMounted(async () => {
                 <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
               </div>
               <div v-else-if="row.type === 'hero'" class="preview-hero" :style="previewHeroStyle(row)">
-                <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "Activity OS" }}</small>
+                <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "慢π活动运营" }}</small>
                 <h4 :style="{ opacity: clampPercent((row.config as any).titleOpacity, 100) / 100 }">{{ row.title }}</h4>
                 <p :style="{ opacity: clampPercent((row.config as any).subtitleOpacity, 86) / 100 }">{{ row.subtitle }}</p>
                 <div v-if="(row.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (row.config as any).buttonOpacity, 18) }">{{ (row.config as any).primaryButtonText }}</div>
@@ -956,7 +1327,7 @@ onMounted(async () => {
             type="info"
             show-icon
             :closable="false"
-            title="这里控制前台页面底部固定导航，也就是手机底部的“书院 / 课程 / 共修 / 活动 / 我的”。保存后 H5 刷新生效，小程序需要重新上传审核。"
+            title="这里控制前台页面底部固定导航，也就是手机底部的“慢π / 课程 / 共修 / 活动 / 我的”。保存后 H5 刷新生效，小程序需要重新上传审核。"
           />
           <div class="quick-editor">
             <div v-for="(item, index) in (form.config.items || [])" :key="index" class="quick-row nav-row">
@@ -1022,7 +1393,62 @@ onMounted(async () => {
         </template>
 
         <el-divider>通用外观</el-divider>
+        <el-form-item label="视觉预设">
+          <div class="visual-preset-list">
+            <el-button v-for="preset in visualPresets" :key="preset.key" @click="applyVisualPreset(preset.key)">
+              {{ preset.label }}
+            </el-button>
+          </div>
+        </el-form-item>
         <div class="form-grid">
+          <el-form-item label="主题色">
+            <el-color-picker v-model="form.layout.primaryColor" @change="syncJsonText" />
+          </el-form-item>
+          <el-form-item label="强调色">
+            <el-color-picker v-model="form.layout.accentColor" @change="syncJsonText" />
+          </el-form-item>
+          <el-form-item label="文字色">
+            <el-color-picker v-model="form.layout.textColor" @change="syncJsonText" />
+          </el-form-item>
+          <el-form-item label="辅助文字色">
+            <el-color-picker v-model="form.layout.mutedColor" @change="syncJsonText" />
+          </el-form-item>
+          <el-form-item label="字体风格">
+            <el-select v-model="form.layout.fontStyle" placeholder="默认" clearable @change="syncJsonText">
+              <el-option label="系统无衬线" value="system" />
+              <el-option label="雅致楷体" value="kaiti" />
+              <el-option label="典雅衬线" value="serif" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="模块密度">
+            <el-select v-model="form.layout.density" placeholder="默认" clearable @change="syncJsonText">
+              <el-option label="紧凑" value="compact" />
+              <el-option label="舒适" value="comfortable" />
+              <el-option label="宽松" value="spacious" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="按钮样式">
+            <el-select v-model="form.layout.buttonStyle" placeholder="默认" clearable @change="syncJsonText">
+              <el-option label="胶囊" value="pill" />
+              <el-option label="圆角" value="rounded" />
+              <el-option label="方角" value="square" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="卡片样式">
+            <el-select v-model="form.layout.cardStyle" placeholder="默认" clearable @change="syncJsonText">
+              <el-option label="柔和阴影" value="soft" />
+              <el-option label="描边" value="outlined" />
+              <el-option label="浮起" value="elevated" />
+              <el-option label="扁平" value="flat" />
+            </el-select>
+          </el-form-item>
+          <el-form-item label="分割样式">
+            <el-select v-model="form.layout.dividerStyle" placeholder="默认" clearable @change="syncJsonText">
+              <el-option label="无" value="none" />
+              <el-option label="细线" value="line" />
+              <el-option label="柔和底色" value="soft" />
+            </el-select>
+          </el-form-item>
           <el-form-item label="下方间距">
             <el-input-number v-model="form.layout.spacingBottom" :min="0" :max="80" @change="syncJsonText" />
           </el-form-item>
@@ -1068,7 +1494,7 @@ onMounted(async () => {
             <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
           </div>
           <div v-else-if="row.type === 'hero'" class="preview-hero" :style="previewHeroStyle(row)">
-            <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "Activity OS" }}</small>
+            <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "慢π活动运营" }}</small>
             <h4 :style="{ opacity: clampPercent((row.config as any).titleOpacity, 100) / 100 }">{{ row.title }}</h4>
             <p :style="{ opacity: clampPercent((row.config as any).subtitleOpacity, 86) / 100 }">{{ row.subtitle }}</p>
             <div v-if="(row.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (row.config as any).buttonOpacity, 18) }">{{ (row.config as any).primaryButtonText }}</div>
@@ -1113,9 +1539,10 @@ onMounted(async () => {
 .builder-toolbar h2 { margin: 0; font-size: 22px; }
 .builder-toolbar p { margin: 6px 0 0; color: #667085; }
 .toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
-.preview-link { display: flex; align-items: center; gap: 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #475467; }
+.preview-link { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #475467; }
 .preview-link strong { color: #111827; white-space: nowrap; }
 .preview-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.preview-link small { flex-basis: 100%; color: #667085; font-weight: 700; }
 .scope-tip { margin: 0 0 16px; padding: 12px 14px; border: 1px solid #b7e4d7; border-radius: 8px; background: #ecfdf5; color: #047857; font-weight: 700; }
 .scope-tip.muted { border-color: #e5e7eb; background: #f8fafc; color: #667085; }
 .builder-layout { display: grid; grid-template-columns: 220px minmax(420px, 1fr) 340px; gap: 16px; align-items: start; }
@@ -1167,6 +1594,7 @@ onMounted(async () => {
 .preview-inner-pages { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #fff; color: #111827; border: 1px solid #e5e7eb; }
 .preview-inner-pages span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: #f3f4f6; color: #475467; font-size: 12px; }
 .upload-line { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.visual-preset-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .drawer-save-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -8px 0 16px; padding: 12px; border: 1px solid #dbeafe; border-radius: 8px; background: #f8fbff; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06); }
 .drawer-save-bar strong { display: block; color: #111827; font-size: 14px; }
 .drawer-save-bar span { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #667085; font-size: 12px; margin-top: 3px; }

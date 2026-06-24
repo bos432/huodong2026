@@ -338,7 +338,7 @@ onMounted(load);
             <view class="picker">{{ selectedTenant?.name || "请选择商家" }}</view>
           </picker>
         </view>
-        <view class="field"><view class="label">活动标题</view><input v-model="form.title" class="input" placeholder="例如：七维文化杭州城市体验课" /></view>
+        <view class="field"><view class="label">活动标题</view><input v-model="form.title" class="input" placeholder="例如：慢π杭州城市体验课" /></view>
         <view class="field"><view class="label">封面图</view><view class="upload" @click="chooseImage('cover')"><image v-if="form.coverUrl" :src="form.coverUrl" mode="aspectFill" /><text v-else>上传封面</text></view></view>
         <view class="field"><view class="label">活动介绍</view><textarea v-model="form.description" class="textarea" auto-height placeholder="一句话说明活动亮点、对象和收益" /></view>
         <view class="grid2">

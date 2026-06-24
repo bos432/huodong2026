@@ -167,7 +167,7 @@ async function commentFlow(opsToken) {
   const demo = smokeUser("comment");
   const user = await loginUser(demo.phone, demo.nickname);
   const posts = pickList(await api(`/public/community/posts?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) }));
-  assert(posts.length >= 8, "书院动态不足 8 条");
+  assert(posts.length >= 8, "慢π动态不足 8 条");
   const post = posts[0];
   const like = await api(`/public/community/posts/${post.id}/like?tenantCode=${TENANT_CODE}`, {
     method: "POST",
@@ -335,7 +335,7 @@ async function mallFlow(financeToken, opsToken) {
   const address = await api(`/public/me/mall/addresses?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ receiverName: "商城演示用户", receiverPhone: demo.phone, city: "演示城市", detail: "七维书院演示空间", isDefault: true })
+    body: JSON.stringify({ receiverName: "商城演示用户", receiverPhone: demo.phone, city: "演示城市", detail: "慢π演示空间", isDefault: true })
   });
   assert(address.id, "商城收货地址创建失败");
   const flashOrder = await api(`/public/mall/orders?tenantCode=${TENANT_CODE}`, {
@@ -371,7 +371,7 @@ async function mallFlow(financeToken, opsToken) {
   const joinAddress = await api(`/public/me/mall/addresses?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(joinUser.userAccessToken),
-    body: JSON.stringify({ receiverName: "商城拼团参团用户", receiverPhone: joinDemo.phone, city: "演示城市", detail: "七维书院拼团空间", isDefault: true })
+    body: JSON.stringify({ receiverName: "商城拼团参团用户", receiverPhone: joinDemo.phone, city: "演示城市", detail: "慢π拼团空间", isDefault: true })
   });
   const joinGroupBuyOrder = await api(`/public/mall/orders?tenantCode=${TENANT_CODE}`, {
     method: "POST",
@@ -769,7 +769,7 @@ async function mallFlow(financeToken, opsToken) {
   const approvedReview = await api(`/admin/mall/reviews/${targetReview.id}`, {
     method: "PATCH",
     headers: auth(opsToken),
-    body: JSON.stringify({ status: "approved", reviewRemark: "online-showcase 商城评价审核通过", merchantReply: "感谢您的真实反馈，七维书院会继续优化商品和服务体验。" })
+    body: JSON.stringify({ status: "approved", reviewRemark: "online-showcase 商城评价审核通过", merchantReply: "感谢您的真实反馈，慢π会继续优化商品和服务体验。" })
   });
   assert(approvedReview.status === "approved", "商城评价审核通过后应为 approved");
   assert(approvedReview.merchantReply, "商城评价审核通过后缺少商家回复");

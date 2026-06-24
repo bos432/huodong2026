@@ -158,7 +158,7 @@
                   <el-option label="支付宝" value="alipay" />
                 </el-select>
               </el-form-item>
-              <el-form-item label="商户名称"><el-input v-model="paymentForm.merchantName" maxlength="120" placeholder="如：某某书院自营店" /></el-form-item>
+              <el-form-item label="商户名称"><el-input v-model="paymentForm.merchantName" maxlength="120" placeholder="如：慢π自营店" /></el-form-item>
               <el-form-item label="商户号"><el-input v-model="paymentForm.merchantNo" maxlength="128" placeholder="微信商户号 / 支付宝商户标识" /></el-form-item>
               <el-form-item label="启用"><el-switch v-model="paymentForm.enabled" /></el-form-item>
               <el-alert class="payment-readiness-alert" :type="paymentFormReadiness.type" show-icon :closable="false" :title="paymentFormReadiness.label" :description="paymentFormReadiness.desc" />

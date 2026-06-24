@@ -12,9 +12,10 @@
     </view>
     <view class="settings-card">
       <view class="settings-item" @click="goSecurity"><text>账号与安全</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" @click="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
       <view class="settings-item"><text>会员中心</text><text class="item-arrow">›</text></view>
       <view class="settings-item"><text>消息通知</text><text class="item-arrow">›</text></view>
-      <view class="settings-item"><text>关于七维书院</text><text class="item-arrow">v0.1.0 ›</text></view>
+      <view class="settings-item"><text>关于慢π</text><text class="item-arrow">v0.1.0 ›</text></view>
     </view>
     <view class="logout-button" @click="logout">退出登录</view>
     <TabBar current="user" />
@@ -26,6 +27,7 @@ import TabBar from "../../components/TabBar.vue";
 
 function goBack() { uni.navigateBack(); }
 function goSecurity() { uni.navigateTo({ url:"/pages/user/security" }); }
+function goCommunityPosts() { uni.navigateTo({ url:"/pages/user/community-posts" }); }
 function logout() {
   uni.showModal({
     title:"确认退出",

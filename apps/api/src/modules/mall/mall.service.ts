@@ -2490,7 +2490,14 @@ export class MallService implements OnModuleDestroy {
     if (tenant) this.applyTenantFilter(settlementBuilder, "settlement", tenant);
     if (merchant) this.applyMerchantFilter(settlementBuilder, "settlement", merchant);
     if (query.status) settlementBuilder.andWhere("settlement.status = :status", { status: query.status });
-    this.applyDateRangeFilter(settlementBuilder, "settlement", query);
+    const range = this.mallSettlementQueryRange(query);
+    if (range.periodStart && range.periodEnd) {
+      settlementBuilder.andWhere("settlement.periodStart <= :periodEnd AND settlement.periodEnd >= :periodStart", range);
+    } else if (range.periodStart) {
+      settlementBuilder.andWhere("settlement.periodEnd >= :periodStart", { periodStart: range.periodStart });
+    } else if (range.periodEnd) {
+      settlementBuilder.andWhere("settlement.periodStart <= :periodEnd", { periodEnd: range.periodEnd });
+    }
     const items = await settlementBuilder.take(100).getMany();
     return { items, pending: await this.mallSettlementPendingSummary(query, tenant, merchant) };
   }
@@ -2684,8 +2691,8 @@ export class MallService implements OnModuleDestroy {
       .where("refund.status = :status", { status: "approved" });
     if (tenant) this.applyTenantFilter(refundBuilder, "refund", tenant);
     if (merchant) this.applyMerchantFilter(refundBuilder, "refund", merchant);
-    if (range.periodStart) refundBuilder.andWhere("refund.createdAt >= :settlementStartAt", { settlementStartAt: `${range.periodStart} 00:00:00` });
-    if (range.periodEnd) refundBuilder.andWhere("refund.createdAt <= :settlementEndAt", { settlementEndAt: `${range.periodEnd} 23:59:59` });
+    if (range.periodStart) refundBuilder.andWhere("COALESCE(refund.completedAt, refund.createdAt) >= :settlementStartAt", { settlementStartAt: `${range.periodStart} 00:00:00` });
+    if (range.periodEnd) refundBuilder.andWhere("COALESCE(refund.completedAt, refund.createdAt) <= :settlementEndAt", { settlementEndAt: `${range.periodEnd} 23:59:59` });
     if (settled.refundIds.length) refundBuilder.andWhere("refund.id NOT IN (:...settledRefundIds)", { settledRefundIds: settled.refundIds });
     const refundRows = await refundBuilder
       .select("refund.merchantId", "merchantId")
@@ -4342,7 +4349,7 @@ export class MallService implements OnModuleDestroy {
       .where("refund.tenantId = :tenantId", { tenantId: tenant.id })
       .andWhere("refund.merchantId = :merchantId", { merchantId: merchant.id })
       .andWhere("refund.status = :status", { status: "approved" })
-      .andWhere("refund.createdAt BETWEEN :startAt AND :endAt", { startAt, endAt });
+      .andWhere("COALESCE(refund.completedAt, refund.createdAt) BETWEEN :startAt AND :endAt", { startAt, endAt });
     if (settled.refundIds.length) refundBuilder.andWhere("refund.id NOT IN (:...settledRefundIds)", { settledRefundIds: settled.refundIds });
     const refunds = await refundBuilder.getMany();
     const orderAmount = orders.reduce((sum, order) => sum + Number(order.amount || 0), 0);
@@ -5779,7 +5786,7 @@ export class MallService implements OnModuleDestroy {
   private async requirePublicTenant(context?: PublicTenantContext | null) {
     const code = normalizeTenantCode(context?.tenantCode);
     const tenant = code ? await this.tenants.findOne({ where: { code, enabled: true } }) : context?.tenantId ? await this.tenants.findOne({ where: { id: context.tenantId, enabled: true } }) : null;
-    if (!tenant) throw new NotFoundException("请先选择书院/商家后再进入商城");
+    if (!tenant) throw new NotFoundException("请先选择商家后再进入商城");
     this.assertMallEnabled(tenant);
     return tenant;
   }
@@ -6019,10 +6026,10 @@ export class MallService implements OnModuleDestroy {
         throw new BadRequestException(readiness.issues[0] || "商城真实微信支付未完成上线联调，请联系平台财务处理");
       }
       if (["sandbox_ready", "real_ready"].includes(readiness.status)) return;
-      throw new BadRequestException(readiness.issues[0] || "微信支付配置未就绪，请联系书院");
+      throw new BadRequestException(readiness.issues[0] || "微信支付配置未就绪，请联系商家");
     }
     const label = method === PaymentMethod.Balance ? "余额支付" : "线下收款";
-    throw new BadRequestException(`${label}暂未开放，请联系书院`);
+    throw new BadRequestException(`${label}暂未开放，请联系商家`);
   }
 
   private async assertPaymentMethodOperationEnabled(method: PaymentMethod, tenant: Tenant) {
@@ -6032,7 +6039,7 @@ export class MallService implements OnModuleDestroy {
     if (method === PaymentMethod.Offline && methods.offline) return;
     if (method === PaymentMethod.Wechat && methods.wechat) return;
     const label = method === PaymentMethod.Wechat ? "微信支付" : method === PaymentMethod.Balance ? "余额支付" : "线下收款";
-    throw new BadRequestException(`${label}暂未开放，请联系书院`);
+    throw new BadRequestException(`${label}暂未开放，请联系商家`);
   }
 
   private normalizePaymentMethods(value: unknown) {

@@ -17,7 +17,7 @@ async function main() {
       code: tenant.code,
       name: tenant.name,
       region: tenant.region || "演示城市",
-      contactName: tenant.contactName || "七维演示运营",
+      contactName: tenant.contactName || "慢π演示运营",
       contactPhone: tenant.contactPhone || "13990009999",
       enabled: false,
       settings: { ...(tenant.settings || {}), demoScenario: SCENARIO, disabledByCleanup: true },

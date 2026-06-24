@@ -1,4 +1,4 @@
-﻿import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
@@ -40,6 +40,7 @@ import { TenantRegion, TenantRegionBoundaryPoint } from "../../entities/tenant-r
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
+import { CommunityPost } from "../../entities/community-post.entity";
 import { UserFavorite } from "../../entities/user-favorite.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
@@ -103,6 +104,7 @@ export class PublicService {
     @InjectRepository(CourseOrder) private readonly courseOrders: Repository<CourseOrder>,
     @InjectRepository(UserLearning) private readonly userLearning: Repository<UserLearning>,
     @InjectRepository(Certificate) private readonly certificates: Repository<Certificate>,
+    @InjectRepository(CommunityPost) private readonly communityPosts: Repository<CommunityPost>,
     @InjectRepository(UserFavorite) private readonly userFavorites: Repository<UserFavorite>,
     @InjectRepository(VolunteerProfile) private readonly volunteerProfiles: Repository<VolunteerProfile>,
     @InjectRepository(VolunteerTask) private readonly volunteerTasksRepo: Repository<VolunteerTask>,
@@ -363,7 +365,7 @@ export class PublicService {
   <rect width="1200" height="840" fill="#fbf7ef"/>
   <rect x="54" y="54" width="1092" height="732" rx="26" fill="#fffdf8" stroke="#9f6b43" stroke-width="6"/>
   <rect x="84" y="84" width="1032" height="672" rx="18" fill="none" stroke="#d8b98c" stroke-width="2"/>
-  <text x="600" y="172" text-anchor="middle" fill="#214b4e" font-size="42" font-weight="700">七维书院</text>
+  <text x="600" y="172" text-anchor="middle" fill="#214b4e" font-size="42" font-weight="700">慢π</text>
   <text x="600" y="250" text-anchor="middle" fill="#8b4a3e" font-size="58" font-weight="800">志愿服务证书</text>
   <text x="600" y="344" text-anchor="middle" fill="#263d3c" font-size="34">授予</text>
   <text x="600" y="420" text-anchor="middle" fill="#101828" font-size="52" font-weight="800">${safeName}</text>
@@ -546,7 +548,7 @@ export class PublicService {
       region: match ? this.publicTenantRegion(match.region, match.distanceMeters) : null,
       candidates: matches.slice(0, 5).map((item) => ({ tenant: this.publicHomepageTenant(item.region.tenant), region: this.publicTenantRegion(item.region, item.distanceMeters) })),
       tenants: match ? [] : await this.publicTenants(),
-      message: match ? `已根据当前位置匹配：${match.region.tenant.name}` : "当前位置暂无匹配商家，请手动选择城市/书院"
+      message: match ? `已根据当前位置匹配：${match.region.tenant.name}` : "当前位置暂无匹配商家，请手动选择城市/商家"
     };
   }
 
@@ -739,16 +741,17 @@ export class PublicService {
         .getMany();
     }
     if (!source.length) source = defaultHomepageSections(normalizedPageKey).filter((item) => item.enabled).map((item, index) => this.homepageSections.create({ ...item, id: -(index + 1), pageKey: normalizedPageKey }));
-    const [announcements, categories, latest, featured] = await Promise.all([
+    const [announcements, categories, latest, featured, testimonials] = await Promise.all([
       this.homepageAnnouncements(10, true, tenant),
       this.categoriesList(tenant ? { tenantId: tenant.id } : context),
       this.activitiesList({ pageSize: 20 }, tenant ? { tenantId: tenant.id } : context),
-      this.activitiesList({ featured: true, pageSize: 12 }, tenant ? { tenantId: tenant.id } : context)
+      this.activitiesList({ featured: true, pageSize: 12 }, tenant ? { tenantId: tenant.id } : context),
+      this.homepageTestimonials(tenant)
     ]);
     const latestItems = Array.isArray(latest) ? latest : latest.items;
     const featuredItems = Array.isArray(featured) ? featured : featured.items;
     return {
-      sections: source.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems })),
+      sections: source.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, testimonials })),
       fallback: !sections.length,
       pageKey: normalizedPageKey,
       tenant: this.publicHomepageTenant(tenant)
@@ -767,7 +770,22 @@ export class PublicService {
     return builder.take(Math.min(Math.max(limit, 1), 20)).getMany();
   }
 
-  private homepageSectionView(section: HomepageSection, payload: { announcements: unknown[]; categories: unknown[]; latest: any[]; featured: any[] }) {
+  private async homepageTestimonials(tenant?: Tenant | null) {
+    const builder = this.communityPosts
+      .createQueryBuilder("post")
+      .leftJoinAndSelect("post.activity", "activity")
+      .leftJoin("post.tenant", "tenant")
+      .where("post.visible = :visible", { visible: true })
+      .andWhere("post.status = :status", { status: "approved" })
+      .andWhere("post.source = :source", { source: "participant" })
+      .andWhere("(post.tenantId IS NULL OR tenant.enabled = :tenantEnabled)", { tenantEnabled: true })
+      .orderBy("post.createdAt", "DESC")
+      .take(12);
+    if (tenant) builder.andWhere("post.tenantId = :tenantId", { tenantId: tenant.id });
+    return builder.getMany();
+  }
+
+  private homepageSectionView(section: HomepageSection, payload: { announcements: unknown[]; categories: unknown[]; latest: any[]; featured: any[]; testimonials: any[] }) {
     const config = section.config || {};
     const data: Record<string, unknown> = {};
     if (section.type === "announcement_bar") {
@@ -779,6 +797,8 @@ export class PublicService {
       data.activities = source.slice(0, this.configLimit(config, 6, 20));
     } else if (section.type === "activity_feed") {
       data.activities = payload.latest.slice(0, this.configLimit(config, 10, 30));
+    } else if (section.type === "testimonial_feed" || section.type === "featured_testimonials" || section.type === "activity_testimonials") {
+      data.posts = payload.testimonials.slice(0, this.configLimit(config, 3, 12));
     }
     return {
       id: section.id,
@@ -2161,7 +2181,7 @@ export class PublicService {
 
   private defaultAmbassadorConfig(): Record<string, unknown> {
     return {
-      heroTitle: "寻找100位“七维文化大使”",
+      heroTitle: "寻找100位“慢π大使”",
       heroSubtitle: "一起用7把钥匙，打开中国人的精神家园",
       heroCopy: "不用辞职、不用囤货，只需把你的热爱变成课程，平台帮你搞定技术、流量和变现。",
       ctaText: "立即申请，锁定早鸟名额",
@@ -2174,7 +2194,7 @@ export class PublicService {
       backgroundImageUrl: "",
       painPoints: ["你在传统文化、书法、教育、健康、创业或技能领域有积累，却缺一个被看见的舞台。", "你试过做内容，但流量不稳定，转化不系统。", "你想把知识做成课程，却被技术、运营和交付卡住。", "你不想只做卖课的人，更想进入一个共创、成长、长期沉淀品牌的圈子。"],
       solutionItems: ["独立小程序店铺 + 专属H5主页，一键开课。", "平台全域流量扶持，结合城市线下活动导流。", "每月闭门共创会，授课技能训练，关键阶段策略陪跑。", "链接传统文化、书法、教育、健康、创业、技能等领域的共创者。"],
-      benefits: ["官方认证身份：颁发“七维书院·特聘文化大使”证书，并获得平台个人品牌展示机会。", "课程收益支持：首批入驻享平台扶持政策，具体规则以审核沟通为准。", "高端私密社群：进入七维书院共创圈，资源互换、经验复盘。", "全年赋能陪跑：闭门策略会、线下大课、课程打磨与运营指导。"],
+      benefits: ["官方认证身份：颁发“慢π·特聘文化大使”证书，并获得平台个人品牌展示机会。", "课程收益支持：首批入驻享平台扶持政策，具体规则以审核沟通为准。", "高端私密社群：进入慢π共创圈，资源互换、经验复盘。", "全年赋能陪跑：闭门策略会、线下大课、课程打磨与运营指导。"],
       requirements: ["有真才实学：在传统文化、东方哲学、民俗文化、书法、教育、健康、创业、技能任一领域有扎实积累。", "有利他之心：愿意分享，愿意帮助他人成长。", "有长期主义：不是来赚快钱，而是想打造个人品牌、沉淀长期资产。"],
       faqs: [
         { question: "我没有录制课程经验，怎么办？", answer: "平台会协助你梳理课程大纲、设计表达结构，并陪跑第一门课程上线。" },
@@ -2183,23 +2203,23 @@ export class PublicService {
       ],
       entryPages: {
         brandStory: {
-          eyebrow: "七维书院 · 品牌故事",
-          title: "把传统文化，做成可学习、可体验、可持续运营的现代书院。",
-          copy: "七维书院连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。",
+          eyebrow: "慢π · 品牌故事",
+          title: "把传统文化，做成可学习、可体验、可持续运营的现代学习空间。",
+          copy: "慢π连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。",
           primaryActionText: "申请成为院长",
           secondaryActionText: "了解帮扶计划",
           sectionTitle: "我们相信",
-          items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。", "书院要能运营：活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
-          flowTitle: "一套完整的书院闭环",
-          flowItems: ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地书院"],
+          items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。", "空间要能运营：活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
+          flowTitle: "一套完整的慢π闭环",
+          flowItems: ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地慢π"],
           joinTitle: "你可以如何参与"
         },
         deanRecruit: {
           eyebrow: "院长招募",
-          title: "招募一批真正愿意把书院开在本地的人。",
+          title: "招募一批真正愿意把慢π服务落在本地的人。",
           copy: "院长不是普通代理，而是本地学习空间的负责人：组织活动、服务学员、链接老师和公益资源。",
           sectionTitle: "适合谁",
-          items: ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同七维书院品牌与公益理念"],
+          items: ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同慢π品牌与公益理念"],
           formTitle: "提交院长申请",
           submitText: "提交院长申请",
           successMessage: "院长招募申请已进入后台，我们会尽快联系你。"
@@ -2207,7 +2227,7 @@ export class PublicService {
         ambassadorApply: {
           eyebrow: "大使申请",
           title: "把你的热爱，变成能被更多人看见的文化服务。",
-          copy: "适合讲师、主理人、内容创作者、社群组织者申请成为七维文化大使。",
+          copy: "适合讲师、主理人、内容创作者、社群组织者申请成为慢π大使。",
           sectionTitle: "你将参与",
           items: ["课程共创", "活动共办", "品牌露出", "学员服务", "公益参与", "长期成长"],
           formTitle: "提交大使申请",
