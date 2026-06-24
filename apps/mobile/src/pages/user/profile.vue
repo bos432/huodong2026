@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ensureUser, fetchMyProfile, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
-import { hasWechatProfilePayload, requestWechatProfile } from "../../wechat-profile";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 
 const profile = ref<any>(null);
@@ -9,7 +8,7 @@ const nickname = ref("");
 const avatarUrl = ref("");
 const saving = ref(false);
 const loading = ref(true);
-const syncingWechatProfile = ref(false);
+const uploadingWechatAvatar = ref(false);
 
 function displayName() {
   return profile.value?.nickname || profile.value?.phone || `用户${profile.value?.id || ""}`;
@@ -27,7 +26,7 @@ async function load() {
   }
 }
 
-function chooseAvatar() {
+function chooseLocalAvatar() {
   uni.chooseImage({
     count: 1,
     sizeType: ["compressed"],
@@ -50,30 +49,25 @@ function chooseAvatar() {
   });
 }
 
-async function useWechatProfile() {
-  if (syncingWechatProfile.value) return;
-  syncingWechatProfile.value = true;
+async function chooseWechatAvatar(event: any) {
+  if (uploadingWechatAvatar.value) return;
+  const filePath = String(event?.detail?.avatarUrl || "");
+  if (!filePath) {
+    uni.showToast({ title: "未选择微信头像", icon: "none" });
+    return;
+  }
+  uploadingWechatAvatar.value = true;
   try {
-    const wechatProfile = await requestWechatProfile();
-    if (!wechatProfile.authorized || !hasWechatProfilePayload(wechatProfile)) {
-      uni.showToast({ title: wechatProfile.unavailable ? "当前环境不支持微信授权" : "未获取到微信资料", icon: "none" });
-      return;
-    }
-    const payload: { nickname?: string; avatarUrl?: string } = {};
-    if (wechatProfile.nickname) {
-      payload.nickname = wechatProfile.nickname;
-      nickname.value = wechatProfile.nickname;
-    }
-    if (wechatProfile.avatarUrl) {
-      payload.avatarUrl = wechatProfile.avatarUrl;
-      avatarUrl.value = wechatProfile.avatarUrl;
-    }
-    profile.value = await updateMyProfile(payload);
-    uni.showToast({ title: "微信资料已同步", icon: "success" });
+    uni.showLoading({ title: "上传中" });
+    const uploaded = await uploadMyAvatar(filePath);
+    avatarUrl.value = uploaded.url;
+    profile.value = await fetchMyProfile();
+    uni.showToast({ title: "微信头像已更新", icon: "success" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "同步失败", icon: "none" });
+    uni.showToast({ title: error.message || "上传失败", icon: "none" });
   } finally {
-    syncingWechatProfile.value = false;
+    uploadingWechatAvatar.value = false;
+    uni.hideLoading();
   }
 }
 
@@ -119,15 +113,20 @@ onMounted(load);
           <view class="avatar-row">
             <image v-if="avatarUrl" class="small-avatar" :src="avatarUrl" mode="aspectFill" />
             <view v-else class="small-avatar fallback">{{ displayName().slice(0, 1) }}</view>
-            <view class="mini-button" @click="chooseAvatar">上传头像</view>
             <!-- #ifdef MP-WEIXIN -->
-            <view class="mini-button wechat-button" :class="{ disabled: syncingWechatProfile }" @click="useWechatProfile">{{ syncingWechatProfile ? "获取中" : "使用微信资料" }}</view>
+            <button class="mini-button wechat-button" open-type="chooseAvatar" :class="{ disabled: uploadingWechatAvatar }" @chooseavatar="chooseWechatAvatar">{{ uploadingWechatAvatar ? "上传中" : "微信头像" }}</button>
             <!-- #endif -->
+            <view class="mini-button" @click="chooseLocalAvatar">上传头像</view>
           </view>
         </view>
         <view class="field">
           <view class="label">昵称</view>
+          <!-- #ifdef MP-WEIXIN -->
+          <input v-model="nickname" type="nickname" class="input" maxlength="40" placeholder="填写昵称" />
+          <!-- #endif -->
+          <!-- #ifndef MP-WEIXIN -->
           <input v-model="nickname" class="input" maxlength="40" placeholder="填写昵称" />
+          <!-- #endif -->
         </view>
         <view class="button" :class="{ disabled: saving }" @click="save">{{ saving ? "保存中..." : "保存资料" }}</view>
       </view>
@@ -250,6 +249,13 @@ onMounted(load);
   color: #8b4a3e;
   font-size: 25rpx;
   font-weight: 900;
+  line-height: 1.4;
+  margin: 0;
+  border: 0;
+}
+
+.mini-button::after {
+  border: 0;
 }
 
 .mini-button.wechat-button {

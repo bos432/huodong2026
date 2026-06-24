@@ -15,8 +15,8 @@
       <text class="profile-nickname">{{ displayName }}</text>
       <view class="profile-badge">{{ memberLevelName }}</view>
       <text class="profile-expire">{{ profileIdentityText }}</text>
-      <view v-if="canSyncWechatProfile" class="wechat-profile-sync" :class="{ disabled: syncingWechatProfile }" @click="syncWechatProfile">
-        <text>{{ syncingWechatProfile ? "获取中..." : "同步微信头像昵称" }}</text>
+      <view v-if="canCompleteWechatProfile" class="wechat-profile-sync" @click="goEdit">
+        <text>完善微信资料</text>
       </view>
       <view class="profile-edit-btn" @click="goEdit">
         <text class="subtle profile-edit-text">编辑资料  ›</text>
@@ -108,10 +108,9 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { clearUser, ensureUser, fetchMyProfile, getUserToken, request, updateMyProfile } from "../../api";
+import { clearUser, ensureUser, fetchMyProfile, getUserToken, request } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
-import { hasWechatProfilePayload, requestWechatProfile } from "../../wechat-profile";
 import TabBar from "../../components/TabBar.vue";
 
 const profile = ref<any>(null);
@@ -123,7 +122,6 @@ const registrations = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
 const mallOrders = ref<any[]>([]);
 const loadingProfile = ref(false);
-const syncingWechatProfile = ref(false);
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
@@ -150,7 +148,7 @@ const profileIdentityText = computed(() => {
   return "请先登录后查看权益";
 });
 const isDefaultWechatNickname = computed(() => /^微信用户[A-Z0-9]+$/.test(String(profile.value?.nickname || "")));
-const canSyncWechatProfile = computed(() => Boolean(profile.value?.wechatBound && (!profile.value?.avatarUrl || !profile.value?.nickname || isDefaultWechatNickname.value)));
+const canCompleteWechatProfile = computed(() => Boolean(profile.value?.wechatBound && (!profile.value?.avatarUrl || !profile.value?.nickname || isDefaultWechatNickname.value)));
 const pendingRegistrationCount = computed(() => registrations.value.filter((item) => item.status === "pending_payment").length + courseOrders.value.filter((item) => item.status === "pending_payment").length + mallOrders.value.filter((item) => ["pending_payment", "pending_confirm"].includes(item.status)).length);
 const learningCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) < 100).length);
 const completedCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) >= 100).length);
@@ -269,26 +267,6 @@ function goOrders(tab: any) {
   uni.navigateTo({ url:`/pages/user/orders?status=${status}` });
 }
 function goAdmin() { uni.navigateTo({ url:"/pages/admin/home" }); }
-async function syncWechatProfile() {
-  if (syncingWechatProfile.value) return;
-  syncingWechatProfile.value = true;
-  try {
-    const wechatProfile = await requestWechatProfile();
-    if (!wechatProfile.authorized || !hasWechatProfilePayload(wechatProfile)) {
-      uni.showToast({ title: wechatProfile.unavailable ? "当前环境不支持微信授权" : "未获取到微信资料", icon: "none" });
-      return;
-    }
-    const payload: { nickname?: string; avatarUrl?: string } = {};
-    if (wechatProfile.nickname) payload.nickname = wechatProfile.nickname;
-    if (wechatProfile.avatarUrl) payload.avatarUrl = wechatProfile.avatarUrl;
-    profile.value = await updateMyProfile(payload);
-    uni.showToast({ title: "微信资料已同步", icon: "success" });
-  } catch (error: any) {
-    uni.showToast({ title: error.message || "同步失败", icon: "none" });
-  } finally {
-    syncingWechatProfile.value = false;
-  }
-}
 function resetUserState() {
   profile.value = null;
   wallet.value = null;
@@ -353,7 +331,6 @@ function logoutUser() {
   font-weight: 900;
   border: 1rpx solid rgba(139, 63, 50, 0.18);
 }
-.wechat-profile-sync.disabled { opacity: .62; }
 .profile-edit-btn { position: absolute; bottom: 16rpx; right: 32rpx; }
 .profile-edit-text { color: var(--profile-header-text, #5B2F24); font-weight: 700; }
 .profile-grid-card { margin-bottom: 16rpx; }

@@ -2,6 +2,51 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序头像昵称填写能力修正
+
+### 阶段名称
+
+小程序上线准备 - 改用微信头像昵称填写组件小阶段。
+
+### 本阶段完成内容
+
+- 根据开发者工具截图复查：当前小程序已经能用 `wx.login` 取得微信登录态，但仍显示默认 `微信用户` 和默认头像，说明后端 openid 登录链路已通，问题在头像昵称获取方式。
+- 重新梳理微信小程序能力边界：`wx.login` 不返回昵称头像；`getUserProfile` 不能作为新版本小程序获取头像昵称的主链路依赖。
+- 将“我的”页的“同步微信头像昵称”直接授权按钮改为“完善微信资料”，点击进入“编辑资料”页。
+- “账号资料”页改用微信推荐的头像昵称填写能力：
+  - `button open-type="chooseAvatar"` 获取用户主动选择的微信头像临时文件。
+  - `input type="nickname"` 让用户选择或填写微信昵称。
+  - 选择微信头像后立即上传到后端头像接口，昵称通过“保存资料”写入后端。
+- 保留普通上传头像能力，用于 H5 或用户本地图片上传。
+- 更新 `docs/小程序上传发布说明.md`，明确昵称头像验收应走“编辑资料”页的微信头像/昵称控件。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/user/my.vue`
+- `apps/mobile/src/pages/user/profile.vue`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 19:31:48 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `rg -n "chooseAvatar|nickname|微信头像|完善微信资料" apps\mobile\dist\build\mp-weixin\pages\user apps\mobile\dist\build\mp-weixin`：确认小程序产物含 `open-type="chooseAvatar"`、`bindchooseavatar`、`input type="nickname"` 和“完善微信资料”入口。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下部分文件未来可能发生 LF/CRLF 转换。
+
+### 遗留问题
+
+- 需要重新导入或刷新本地 `apps/mobile/dist/build/mp-weixin`，旧包不会显示“完善微信资料/微信头像”新入口。
+- 微信昵称选择和头像选择必须在微信开发者工具或真机小程序内人工点击验证。
+
+### 下一阶段应继续处理的事项
+
+- 本地构建通过后提交推送。
+- 用微信开发者工具导入本地 `E:\2027\活动报名\活动报名\apps\mobile\dist\build\mp-weixin`，进入“我的 -> 完善微信资料/编辑资料”，验证 `微信头像` 按钮和昵称输入框。
+
 ## 2026-06-24 - 小程序已登录用户微信资料同步入口
 
 ### 阶段名称
