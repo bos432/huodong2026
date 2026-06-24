@@ -5062,9 +5062,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private validateActivityDto(dto: ActivityDto) {
-    if (!dto.title?.trim()) throw new BadRequestException("请填写活动标");
-    if (!dto.location?.trim()) throw new BadRequestException("请填写活动地");
-    if (!dto.description?.trim()) throw new BadRequestException("请填写活动介");
+    if (!dto.title?.trim()) throw new BadRequestException("请填写活动标题");
+    if (!dto.location?.trim()) throw new BadRequestException("请填写活动地点");
+    if (!dto.description?.trim()) throw new BadRequestException("请填写活动介绍");
     const hasLat = dto.locationLatitude !== undefined && dto.locationLatitude !== null;
     const hasLng = dto.locationLongitude !== undefined && dto.locationLongitude !== null;
     if (hasLat !== hasLng) throw new BadRequestException("请同时填写地图纬度和经度");
@@ -5073,15 +5073,15 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const start = this.parseDate(dto.startTime);
     const end = this.parseDate(dto.endTime);
     const deadline = this.parseDate(dto.registrationDeadline);
-    if (end <= start) throw new BadRequestException("结束时间必须晚于开始时");
-    if (deadline >= start) throw new BadRequestException("报名截止时间必须早于活动开始时");
-    if (dto.priorityMemberLevelId && !dto.priorityRegistrationEndsAt) throw new BadRequestException("请设置优先报名截止时");
+    if (end <= start) throw new BadRequestException("结束时间必须晚于开始时间");
+    if (deadline >= start) throw new BadRequestException("报名截止时间必须早于活动开始时间");
+    if (dto.priorityMemberLevelId && !dto.priorityRegistrationEndsAt) throw new BadRequestException("请设置优先报名截止时间");
     if (!dto.priorityMemberLevelId && dto.priorityRegistrationEndsAt) throw new BadRequestException("请先选择优先报名会员等级");
     if (dto.priorityRegistrationEndsAt) {
       const priorityEndsAt = this.parseDate(dto.priorityRegistrationEndsAt);
       if (priorityEndsAt >= deadline) throw new BadRequestException("优先报名截止时间必须早于报名截止时间");
     }
-    if (!dto.fields.length) throw new BadRequestException("至少需要配置一个报名字");
+    if (!dto.fields.length) throw new BadRequestException("至少需要配置一个报名字段");
     for (const field of dto.fields) if (!field.label?.trim()) throw new BadRequestException("报名字段名称不能为空");
   }
 
