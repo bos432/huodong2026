@@ -19,11 +19,11 @@ const defaultBottomNavSection: HomepageSectionView = {
   sortOrder: 90,
   config: {
     items: [
-      { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
-      { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
-      { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D" },
-      { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D" },
-      { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D" }
+      { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D", enabled: true }
     ]
   },
   layout: { backgroundColor: "#ffffff", activeColor: "#C43D3D", textColor: "#667085" }
@@ -86,8 +86,9 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   const currentPath = legacyOrder ? pageKeyOrPath : currentPathOrPageKey;
   const sections = ref<HomepageSectionView[]>([]);
   const tenant = ref<HomepagePayload["tenant"] | null>(null);
+  const loadFailed = ref(false);
 
-  const bottomNavSection = computed(() => sections.value.find((item) => item.type === "bottom_nav") || defaultBottomNavSection);
+  const bottomNavSection = computed(() => sections.value.find((item) => item.type === "bottom_nav") || (loadFailed.value ? defaultBottomNavSection : null));
   const innerPagesSection = computed(() => sections.value.find((item) => item.enabled && item.type === "inner_pages") || defaultInnerPagesSection);
   const innerPageLayout = computed<Record<string, any>>(() => ({ ...defaultInnerPagesSection.layout, ...(innerPagesSection.value.layout || {}) }));
   const innerPageConfig = computed<InnerPageConfig>(() => {
@@ -101,6 +102,7 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
 
   async function loadDecoration() {
     try {
+      loadFailed.value = false;
       const endpoint = pageKey === "home" ? "/public/homepage" : `/public/page-decoration?pageKey=${encodeURIComponent(pageKey)}`;
       const payload = await request<HomepagePayload>(endpoint);
       const pageSections = payload.sections || [];
@@ -118,6 +120,7 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
     } catch {
       sections.value = [];
       tenant.value = null;
+      loadFailed.value = true;
     }
   }
 

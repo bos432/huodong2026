@@ -9720,6 +9720,60 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 - 在微信开发者工具中打开动态详情，点击“生成海报”，确认弹出海报图片而不是仅复制链接。
 - 打开线上后台“会员管理”，确认出现总会员、已绑手机号、微信绑定、小程序来源、近 7 日活跃概览，以及筛选、排序和分页。
 
+## 2026-06-25 - 后台装修底部导航生效修复
+
+### 阶段名称
+
+小程序试运营前 - 前台装修底部导航保存与前台渲染一致性小阶段。
+
+### 本阶段完成内容
+
+- 根据用户截图复核“前台底部导航”装修：后台预览能看到菜单开关变化，但 H5/小程序仍可能显示旧底栏或默认 5 项。
+- 修复公开装修接口的默认回退逻辑：当某个商家/平台范围已经有装修记录但全部停用时，公开接口不再误判为“无配置”并回退系统默认装修。
+- 修复移动端底栏渲染：
+  - 装修接口成功返回但没有 `bottom_nav` 时，不再自动补默认底栏。
+  - `AppBottomNav` 在未显式传入装修模块的页面会自动读取首页全局底栏配置，避免资料页、余额页、志愿服务等页面漏用后台配置。
+  - 底栏列数按启用菜单数量自适应，关闭单个菜单后剩余菜单会铺满底部。
+  - 登录页改为遵守 `inner_pages.login_page.showBottomNav`，默认不显示底栏。
+- 修复后台装修编辑器预览：
+  - 底部导航默认配置和新增菜单都显式写入 `enabled: true`。
+  - 右侧手机预览和抽屉实时预览都按启用项计算列数，禁用项不再留下空白列。
+- 更新后台装修教程和二次开发说明，补充底部导航生效规则、商家范围和小程序重新构建要求。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/modules/public/public.service.ts`
+- `apps/mobile/src/decoration.ts`
+- `apps/mobile/src/components/AppBottomNav.vue`
+- `apps/mobile/src/styles.css`
+- `apps/mobile/src/pages/user/login.vue`
+- `apps/admin/src/views/HomepageBuilder.vue`
+- `docs/后台装修使用教程.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-25 00:02 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_H5_ORIGIN='https://rd.chaimen666.com'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过，并完成小程序授权配置 patch。
+- `npm.cmd --prefix apps/admin run build`：通过；仍有既有 VueUse PURE 注释和大 chunk 提示。
+- `npm.cmd run test:preflight-guards`：通过。
+- 构建产物抽查：H5、小程序和后台产物均包含底部导航启用项、动态列数或后台预览逻辑关键字。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 本地未直接操作线上后台保存“关闭课程菜单”的测试数据，避免误改用户当前线上装修；需要部署后在测试商家实际点一次保存、刷新 H5 验证。
+- 小程序端仍必须重新构建并导入微信开发者工具；仅改后台配置不会改变已导入的旧小程序包。
+
+### 下一阶段应继续处理的事项
+
+- 将本次提交部署到服务器后，重启 API，并重新构建发布 H5、后台静态包。
+- 微信开发者工具重新导入最新 `apps/mobile/dist/build/mp-weixin`，打开首页确认底栏和后台“前台底部导航”一致。
+- 在后台用测试商家验证：关闭一个底栏入口、保存模块、刷新 H5，确认前台只显示启用菜单且列数铺满。
+
 ## 2026-06-24 - 小程序动态海报路径文案修正
 
 ### 阶段名称

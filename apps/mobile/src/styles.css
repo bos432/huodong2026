@@ -142,7 +142,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   bottom: 0;
   z-index: 20;
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(var(--nav-count, 5), minmax(0, 1fr));
   gap: 4rpx;
   height: calc(120rpx + env(safe-area-inset-bottom));
   padding: 8rpx 16rpx calc(16rpx + env(safe-area-inset-bottom));

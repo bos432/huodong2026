@@ -111,11 +111,11 @@ const defaultConfig: Record<string, Record<string, any>> = {
   rich_text: { content: "报名须知", imageUrl: "", link: "" },
   bottom_nav: {
     items: [
-      { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
-      { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
-      { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D" },
-      { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D" },
-      { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D" }
+      { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D", enabled: true }
     ]
   },
   my_page: {
@@ -565,6 +565,14 @@ function previewSectionStyle(row: HomepageSectionView) {
     marginBottom: `${Number(layout.spacingBottom ?? 10)}px`,
     color: String(layout.textColor || "#111827")
   };
+}
+
+function enabledNavItems(row: HomepageSectionView) {
+  return (((row.config as any)?.items || []) as any[]).filter((nav: any) => nav?.enabled !== false).slice(0, 5);
+}
+
+function previewNavCount(row: HomepageSectionView) {
+  return Math.max(enabledNavItems(row).length, 1);
 }
 
 function applyVisualPreset(key: string) {
@@ -1126,7 +1134,7 @@ function addNavItem() {
     ElMessage.warning("前台底部导航最多 5 项");
     return;
   }
-  form.config.items = [...(Array.isArray(form.config.items) ? form.config.items : []), { label: "新菜单", icon: "新", activeIcon: "新", color: "#C43D3D", link: "/pages/index/index", action: "mainPage" }];
+  form.config.items = [...(Array.isArray(form.config.items) ? form.config.items : []), { label: "新菜单", icon: "新", activeIcon: "新", color: "#C43D3D", link: "/pages/index/index", action: "mainPage", enabled: true }];
   syncJsonText();
 }
 
@@ -1391,8 +1399,8 @@ onMounted(async () => {
                 <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
                 <span v-else>图片 Banner</span>
               </div>
-              <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav" :style="{ '--preview-nav-count': Math.min((((row.config as any).items || []).length || 1), 5) }">
-                <span v-for="item in ((row.config as any).items || []).filter((nav: any) => nav.enabled !== false).slice(0, 5)" :key="item.label">
+              <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav" :style="{ '--preview-nav-count': previewNavCount(row) }">
+                <span v-for="item in enabledNavItems(row)" :key="item.label">
                   <b>{{ item.icon || item.label?.slice(0, 1) }}</b>{{ item.label }}
                 </span>
               </div>
@@ -1735,8 +1743,8 @@ onMounted(async () => {
             <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
             <span v-else>图片 Banner</span>
           </div>
-          <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav" :style="{ '--preview-nav-count': Math.min((((row.config as any).items || []).length || 1), 5) }">
-            <span v-for="item in ((row.config as any).items || []).filter((nav: any) => nav.enabled !== false).slice(0, 5)" :key="item.label">
+          <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav" :style="{ '--preview-nav-count': previewNavCount(row) }">
+            <span v-for="item in enabledNavItems(row)" :key="item.label">
               <b>{{ item.icon || item.label?.slice(0, 1) }}</b>{{ item.label }}
             </span>
           </div>

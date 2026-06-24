@@ -23,7 +23,7 @@ const wechatAuthNickname = ref("");
 const wechatAuthAvatarPath = ref("");
 const wechatAuthMessage = ref("");
 const phoneBindVisible = ref(false);
-const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("login_page", "/pages/user/login");
+const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("login_page", "/pages/user/login");
 
 const canSend = computed(() => /^1\d{10}$/.test(phone.value.trim()) && !sending.value);
 const canPasswordLogin = computed(() => /^1\d{10}$/.test(phone.value.trim()) && password.value.length >= 6 && !loggingIn.value);
@@ -218,7 +218,7 @@ onMounted(loadDecoration);
 </script>
 
 <template>
-  <view class="container login-page has-custom-nav">
+  <view class="container login-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantContextBadge :tenant="tenant" label="当前城市" hint="登录后沿用" />
 
     <view class="login-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
@@ -298,7 +298,7 @@ onMounted(loadDecoration);
       @close="closePhoneBindAfterLogin"
       @bound="handlePhoneBoundAfterLogin"
     />
-    <AppBottomNav current-path="/pages/user/my" />
+    <AppBottomNav v-if="showBottomNav" :section="bottomNavSection" current-path="/pages/user/my" />
   </view>
 </template>
 

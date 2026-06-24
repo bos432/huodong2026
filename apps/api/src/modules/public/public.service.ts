@@ -744,6 +744,7 @@ export class PublicService {
   async homepage(context?: PublicTenantContext, pageKey?: string) {
     const tenant = await this.resolveTenantContext(context);
     const normalizedPageKey = normalizePageKey(pageKey);
+    const scopedTenantId = tenant?.id ?? null;
     const sectionsBuilder = this.homepageSections
       .createQueryBuilder("section")
       .leftJoin("section.tenant", "tenant")
@@ -755,8 +756,11 @@ export class PublicService {
     if (tenant) sectionsBuilder.andWhere("section.tenantId = :tenantId", { tenantId: tenant.id });
     else sectionsBuilder.andWhere("section.tenantId IS NULL");
     const sections = await sectionsBuilder.getMany();
+    const configuredCount = await this.homepageConfiguredCount(normalizedPageKey, scopedTenantId);
     let source = sections;
-    if (!source.length && tenant) {
+    let fallback = false;
+    if (!source.length && tenant && configuredCount === 0) {
+      fallback = true;
       source = await this.homepageSections
         .createQueryBuilder("section")
         .where("section.enabled = :enabled", { enabled: true })
@@ -765,8 +769,15 @@ export class PublicService {
         .orderBy("section.sortOrder", "ASC")
         .addOrderBy("section.id", "ASC")
         .getMany();
+      const platformConfiguredCount = await this.homepageConfiguredCount(normalizedPageKey, null);
+      if (!source.length && platformConfiguredCount > 0) fallback = true;
+      if (!source.length && platformConfiguredCount === 0) {
+        source = defaultHomepageSections(normalizedPageKey).filter((item) => item.enabled).map((item, index) => this.homepageSections.create({ ...item, id: -(index + 1), pageKey: normalizedPageKey }));
+      }
+    } else if (!source.length && configuredCount === 0) {
+      fallback = true;
+      source = defaultHomepageSections(normalizedPageKey).filter((item) => item.enabled).map((item, index) => this.homepageSections.create({ ...item, id: -(index + 1), pageKey: normalizedPageKey }));
     }
-    if (!source.length) source = defaultHomepageSections(normalizedPageKey).filter((item) => item.enabled).map((item, index) => this.homepageSections.create({ ...item, id: -(index + 1), pageKey: normalizedPageKey }));
     const [announcements, categories, latest, featured, testimonials] = await Promise.all([
       this.homepageAnnouncements(10, true, tenant),
       this.categoriesList(tenant ? { tenantId: tenant.id } : context),
@@ -778,10 +789,19 @@ export class PublicService {
     const featuredItems = Array.isArray(featured) ? featured : featured.items;
     return {
       sections: source.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, testimonials })),
-      fallback: !sections.length,
+      fallback,
       pageKey: normalizedPageKey,
       tenant: this.publicHomepageTenant(tenant)
     };
+  }
+
+  private homepageConfiguredCount(pageKey: string, tenantId: number | null) {
+    const builder = this.homepageSections
+      .createQueryBuilder("section")
+      .where("section.pageKey = :pageKey", { pageKey });
+    if (tenantId) builder.andWhere("section.tenantId = :tenantId", { tenantId });
+    else builder.andWhere("section.tenantId IS NULL");
+    return builder.getCount();
   }
 
   private async homepageAnnouncements(limit: number, pinnedFirst: boolean, tenant?: Tenant | null) {

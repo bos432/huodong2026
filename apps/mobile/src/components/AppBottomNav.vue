@@ -1,22 +1,32 @@
 <script setup lang="ts">
 import { computed } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import type { HomepageSectionView } from "@activity/shared";
-import { goDecoratedLink } from "../decoration";
+import { goDecoratedLink, usePageDecoration } from "../decoration";
 
 const props = defineProps<{
   section?: HomepageSectionView | null;
   currentPath: string;
 }>();
 
+const autoDecoration = usePageDecoration("home", props.currentPath);
+const activeSection = computed(() => props.section === undefined ? autoDecoration.bottomNavSection.value : props.section);
+
+onShow(() => {
+  if (props.section === undefined) void autoDecoration.loadDecoration();
+});
+
 const items = computed(() => {
-  const configuredItems = Array.isArray(props.section?.config?.items) ? props.section.config.items : null;
+  const section = activeSection.value;
+  if (!section || section.enabled === false) return [];
+  const configuredItems = Array.isArray(section.config?.items) ? section.config.items : null;
   const configured = configuredItems
     ? configuredItems
         .map((item: any) => ({
           label: String(item?.label || "").trim(),
           link: String(item?.link || "").trim(),
           action: String(item?.action || "mainPage").trim(),
-          color: String(item?.color || props.section?.layout?.activeColor || "#C43D3D"),
+          color: String(item?.color || section.layout?.activeColor || "#C43D3D"),
           icon: String(item?.icon || "").trim(),
           activeIcon: String(item?.activeIcon || "").trim(),
           iconUrl: String(item?.iconUrl || "").trim(),
@@ -52,7 +62,7 @@ function isCurrent(url?: string) {
     v-if="items.length"
     class="custom-tabbar"
     :style="{
-      background: String(section?.layout?.backgroundColor || '#ffffff'),
+      background: String(activeSection?.layout?.backgroundColor || '#ffffff'),
       '--nav-count': items.length
     }"
   >
@@ -61,7 +71,7 @@ function isCurrent(url?: string) {
       :key="item.link"
       class="custom-tabbar-item"
       :class="{ active: isCurrent(item.link) }"
-      :style="{ color: isCurrent(item.link) ? String(item.color || section?.layout?.activeColor || '#0f766e') : String(section?.layout?.textColor || '#667085') }"
+      :style="{ color: isCurrent(item.link) ? String(item.color || activeSection?.layout?.activeColor || '#0f766e') : String(activeSection?.layout?.textColor || '#667085') }"
       @click="goDecoratedLink(item.link, item.action)"
     >
       <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
