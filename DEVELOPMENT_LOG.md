@@ -9563,3 +9563,45 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 服务器执行最新发布命令后，使用 `curl -s "https://rd.chaimen666.com/?t=$(date +%s)" | grep -E 'assets/index-|七维|慢π'` 检查外网主包 hash。
 - 右侧浏览器打开新时间戳链接做最终复验，并将结果继续写入 `DEVELOPMENT_LOG.md`。
+## 2026-06-24 - 个人中心微信资料点击预填
+
+### 阶段名称
+
+小程序真机验收 - 个人中心微信头像昵称授权体验小阶段。
+
+### 本阶段完成内容
+
+- 根据微信小程序头像昵称授权规则复核个人中心逻辑：页面打开后不能静默自动获取微信头像昵称，必须由用户点击触发。
+- 优化“我的”页微信资料补全弹窗：
+  - 用户点击“授权微信头像昵称 / 去授权”后，先尝试调用微信资料接口预填头像昵称。
+  - 用户点击“允许”时，如果头像或昵称仍缺失，会再次在点击手势内尝试读取微信资料。
+  - 微信返回旧式资料时自动填入弹窗；微信不返回时，继续使用官方 `chooseAvatar` 和 `input type=nickname` 让用户选择头像、昵称。
+  - 增加“获取中”状态，避免重复点击造成并发请求。
+- 更新小程序上传发布说明，明确“不能无点击自动获取，只能点击后合规预填”的口径。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/user/my.vue`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 20:24 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过；构建后 `patch-mobile-mp-weixin-auth.mjs` 已补齐 `miniApp.useAuthorizePage=true` 和 `app.miniapp.json`。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `rg -n -F "获取中" apps/mobile/dist/build/mp-weixin apps/mobile/src/pages/user/my.vue`：通过，确认小程序构建产物包含按钮状态。
+- `rg -n -F "已从微信读取头像昵称" apps/mobile/dist/build/mp-weixin apps/mobile/src/pages/user/my.vue`：通过，确认预填成功提示进入构建产物。
+- `rg -n -F "微信未自动返回头像昵称" apps/mobile/dist/build/mp-weixin apps/mobile/src/pages/user/my.vue`：通过，确认回落提示进入构建产物。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 开发者工具对 `input type=nickname` 和头像昵称候选的模拟不一定等同真机，仍需手机微信扫码预览验证。
+- 微信现行规则下不能实现页面无点击自动获取头像昵称；只能在用户点击登录、授权入口或允许按钮后触发。
+
+### 下一阶段应继续处理的事项
+
+- 重新导入或刷新本地 `apps/mobile/dist/build/mp-weixin`，在微信开发者工具和手机微信预览中验证个人中心授权弹窗。
+- 若真机点击后仍不返回旧式资料，按当前回落流程选择头像与昵称，确认后台会员列表能同步显示头像昵称。

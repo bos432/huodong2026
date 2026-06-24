@@ -126,8 +126,8 @@
           <input v-model="wechatProfileNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写微信昵称" @input="updateWechatProfileNickname" />
         </view>
         <view class="wechat-auth-actions">
-          <button class="auth-action reject" :disabled="syncingWechatProfile" @tap="closeWechatProfilePanel">稍后再说</button>
-          <button class="auth-action allow" :disabled="syncingWechatProfile" @tap="saveWechatProfilePanel">{{ syncingWechatProfile ? "同步中" : "允许" }}</button>
+          <button class="auth-action reject" :disabled="syncingWechatProfile || requestingWechatProfile" @tap="closeWechatProfilePanel">稍后再说</button>
+          <button class="auth-action allow" :disabled="syncingWechatProfile || requestingWechatProfile" @tap="saveWechatProfilePanel">{{ syncingWechatProfile ? "同步中" : requestingWechatProfile ? "获取中" : "允许" }}</button>
         </view>
       </view>
     </view>
@@ -144,6 +144,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { clearUser, ensureUser, fetchMyProfile, getUserToken, request, updateMyProfile, uploadMyAvatar } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
+import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import TabBar from "../../components/TabBar.vue";
 
 const profile = ref<any>(null);
@@ -160,6 +161,7 @@ const wechatProfileNickname = ref("");
 const wechatProfileAvatarPath = ref("");
 const wechatProfilePanelMessage = ref("请选择微信头像和昵称后继续。");
 const syncingWechatProfile = ref(false);
+const requestingWechatProfile = ref(false);
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
@@ -325,6 +327,7 @@ function resetUserState() {
   mallOrders.value = [];
   wechatProfilePanelVisible.value = false;
   syncingWechatProfile.value = false;
+  requestingWechatProfile.value = false;
 }
 function inputValue(event: any) {
   return String(event?.detail?.value ?? event?.target?.value ?? "");
@@ -332,15 +335,49 @@ function inputValue(event: any) {
 function isRemoteAvatar(value: string) {
   return /^https?:\/\//i.test(value) || value.startsWith("/uploads/");
 }
-function openWechatProfilePanel(auto = false, row: any = profile.value) {
+function applyWechatProfilePayload(payload: WechatProfilePayload) {
+  let changed = false;
+  const nickname = String(payload.nickname || "").trim();
+  if (nickname && isDefaultWechatNicknameValue(wechatProfileNickname.value)) {
+    wechatProfileNickname.value = nickname.slice(0, 40);
+    changed = true;
+  }
+  const avatarUrl = String(payload.avatarUrl || "").trim();
+  if (avatarUrl && !wechatProfileAvatarPath.value.trim()) {
+    wechatProfileAvatarPath.value = avatarUrl;
+    changed = true;
+  }
+  return changed;
+}
+async function tryRequestWechatProfile() {
+  if (requestingWechatProfile.value || syncingWechatProfile.value) return false;
+  requestingWechatProfile.value = true;
+  try {
+    const payload = await requestWechatProfile();
+    const changed = payload.authorized && hasWechatProfilePayload(payload) && applyWechatProfilePayload(payload);
+    wechatProfilePanelMessage.value = changed
+      ? "已从微信读取头像昵称，请确认后允许同步。"
+      : payload.unavailable
+        ? "当前环境未自动返回微信资料，请点击头像并选择昵称。"
+        : "微信未自动返回头像昵称，请点击头像并选择昵称。";
+    return changed;
+  } catch {
+    wechatProfilePanelMessage.value = "微信资料读取失败，请点击头像并选择昵称。";
+    return false;
+  } finally {
+    requestingWechatProfile.value = false;
+  }
+}
+async function openWechatProfilePanel(auto = false, row: any = profile.value) {
   if (!row?.wechatBound) return;
   wechatProfileNickname.value = isDefaultWechatNicknameValue(row.nickname) ? "" : String(row.nickname || "");
   wechatProfileAvatarPath.value = String(row.avatarUrl || "");
   wechatProfilePanelMessage.value = auto ? "检测到当前仍是默认微信资料，请授权头像和昵称后继续使用会员中心。" : "请选择微信头像和昵称，保存后后台会员资料会同步更新。";
   wechatProfilePanelVisible.value = true;
+  if (!auto) await tryRequestWechatProfile();
 }
 function closeWechatProfilePanel() {
-  if (syncingWechatProfile.value) return;
+  if (syncingWechatProfile.value || requestingWechatProfile.value) return;
   wechatProfilePanelVisible.value = false;
 }
 function chooseWechatProfileAvatar(event: any) {
@@ -355,6 +392,9 @@ function updateWechatProfileNickname(event: any) {
   wechatProfileNickname.value = inputValue(event).slice(0, 40);
 }
 async function saveWechatProfilePanel() {
+  if ((!wechatProfileNickname.value.trim() || !wechatProfileAvatarPath.value.trim()) && !requestingWechatProfile.value) {
+    await tryRequestWechatProfile();
+  }
   const nickname = wechatProfileNickname.value.trim();
   let avatarUrl = wechatProfileAvatarPath.value.trim();
   if (!nickname || !avatarUrl) {
