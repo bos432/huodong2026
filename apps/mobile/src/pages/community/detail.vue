@@ -75,16 +75,19 @@
           <view class="button block" @click="posterUrl = ''">关闭</view>
         </view>
       </view>
+      <!-- #ifdef MP-WEIXIN -->
+      <canvas canvas-id="communityPosterCanvas" id="communityPosterCanvas" class="poster-canvas"></canvas>
+      <!-- #endif -->
     </template>
   </view>
 </template>
 
 <script setup lang="ts">
 import QRCode from "qrcode";
-import { computed, ref } from "vue";
+import { computed, nextTick, ref } from "vue";
 import { onMounted } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { ensureUser, request } from "../../api";
+import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -114,14 +117,15 @@ const decorationSections = computed(() => contentSections.value.filter((section)
 }));
 const shareLink = computed(() => {
   if (!post.value) return "";
+  const path = communityDetailPath();
   // #ifdef H5
   if (typeof window !== "undefined") {
     const url = new URL(window.location.href);
-    url.hash = `#/pages/community/detail?id=${post.value.id}`;
+    url.hash = `#${path}`;
     return url.toString();
   }
   // #endif
-  return `/pages/community/detail?id=${post.value.id}`;
+  return h5DetailUrl(path) || path;
 });
 const comments = computed<CommunityComment[]>(() =>
   (Array.isArray(rawComments.value) ? rawComments.value : []).map((item, index) => ({
@@ -265,6 +269,62 @@ function drawWrappedText(ctx: CanvasRenderingContext2D, text: string, x: number,
   if (line && lines < maxLines) ctx.fillText(line.length < text.length ? `${line.slice(0, Math.max(0, line.length - 1))}…` : line, x, y);
 }
 
+function drawUniWrappedText(ctx: any, text: string, x: number, y: number, maxChars: number, lineHeight: number, maxLines: number) {
+  const source = String(text || "");
+  for (let index = 0; index < maxLines; index += 1) {
+    const start = index * maxChars;
+    if (start >= source.length) return;
+    const chunk = source.slice(start, start + maxChars);
+    const clipped = index === maxLines - 1 && source.length > start + maxChars;
+    ctx.fillText(clipped ? `${chunk.slice(0, Math.max(0, maxChars - 1))}…` : chunk, x, y + index * lineHeight);
+  }
+}
+
+function drawUniQrCode(ctx: any, text: string, x: number, y: number, size: number) {
+  try {
+    const qr = (QRCode as any).create(String(text || ""), { errorCorrectionLevel: "M" });
+    const modules = qr?.modules;
+    const moduleSize = Number(modules?.size || 0);
+    if (!moduleSize || typeof modules.get !== "function") return false;
+    const quietZone = 4;
+    const cell = Math.max(2, Math.floor(size / (moduleSize + quietZone * 2)));
+    const qrSize = cell * (moduleSize + quietZone * 2);
+    const offset = Math.floor((size - qrSize) / 2);
+    const startX = x + offset + quietZone * cell;
+    const startY = y + offset + quietZone * cell;
+    ctx.setFillStyle("#ffffff");
+    ctx.fillRect(x, y, size, size);
+    ctx.setFillStyle("#1f2933");
+    for (let row = 0; row < moduleSize; row += 1) {
+      for (let col = 0; col < moduleSize; col += 1) {
+        if (modules.get(row, col)) ctx.fillRect(startX + col * cell, startY + row * cell, cell, cell);
+      }
+    }
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function communityDetailPath() {
+  if (!post.value) return "/pages/community/detail";
+  const params = [`id=${post.value.id}`];
+  const tenantCode = getCurrentTenantCode();
+  if (tenantCode) params.push(`tenantCode=${encodeURIComponent(tenantCode)}`);
+  return `/pages/community/detail?${params.join("&")}`;
+}
+
+function h5DetailUrl(path: string) {
+  const apiBase = String(import.meta.env.VITE_API_BASE || "");
+  try {
+    if (!/^https?:\/\//i.test(apiBase)) return "";
+    const origin = new URL(apiBase).origin;
+    return `${origin}/#${path}`;
+  } catch {
+    return "";
+  }
+}
+
 async function drawPosterImage(ctx: CanvasRenderingContext2D, src: string, x: number, y: number, width: number, height: number) {
   if (!src || typeof Image === "undefined") return false;
   return new Promise<boolean>((resolve) => {
@@ -347,6 +407,70 @@ async function drawPosterCanvas(ctx: CanvasRenderingContext2D, includeImage: boo
   drawWrappedText(ctx, shareLink.value, 54, 1042, hasQr ? 420 : 642, 32, 2);
 }
 
+async function generateMiniProgramPoster() {
+  if (!post.value) return false;
+  await nextTick();
+  return new Promise<boolean>((resolve) => {
+    try {
+      const ctx = uni.createCanvasContext("communityPosterCanvas");
+      ctx.setFillStyle("#fff7ec");
+      ctx.fillRect(0, 0, 750, 1120);
+      ctx.setFillStyle("#5b2f24");
+      ctx.setFontSize(42);
+      ctx.fillText("慢π · 活动心得", 54, 84);
+      ctx.setFillStyle("#f3e7d6");
+      ctx.fillRect(54, 130, 642, 390);
+      ctx.setFillStyle("#8b5a2b");
+      ctx.setFontSize(54);
+      ctx.fillText("活动心得", 266, 340);
+      ctx.setFillStyle("#333333");
+      ctx.setFontSize(38);
+      drawUniWrappedText(ctx, post.value.activity?.title || "参与者心得", 54, 585, 15, 48, 2);
+      ctx.setFillStyle("#666666");
+      ctx.setFontSize(30);
+      drawUniWrappedText(ctx, post.value.content, 54, 710, 19, 44, 5);
+      ctx.setFillStyle("#8b5a2b");
+      ctx.setFontSize(28);
+      ctx.fillText(`来自 ${post.value.nickname || "慢π同学"}`, 54, 924);
+      ctx.setFillStyle("#eadac6");
+      ctx.fillRect(54, 952, 642, 2);
+      const hasQr = drawUniQrCode(ctx, shareLink.value, 516, 886, 164);
+      ctx.setStrokeStyle("#d6bfa8");
+      ctx.strokeRect(516, 886, 164, 164);
+      if (!hasQr) {
+        ctx.setFillStyle("#ffffff");
+        ctx.fillRect(516, 886, 164, 164);
+        ctx.setStrokeStyle("#d6bfa8");
+        ctx.strokeRect(516, 886, 164, 164);
+        ctx.setFillStyle("#8b5a2b");
+        ctx.setFontSize(24);
+        ctx.fillText("复制链接", 548, 970);
+      }
+      ctx.setFillStyle("#333333");
+      ctx.setFontSize(24);
+      ctx.fillText(hasQr ? "扫码查看动态" : "复制链接查看动态", 54, 1008);
+      ctx.setFillStyle("#666666");
+      drawUniWrappedText(ctx, shareLink.value, 54, 1042, 28, 32, 2);
+      ctx.draw(false, () => {
+        uni.canvasToTempFilePath({
+          canvasId: "communityPosterCanvas",
+          width: 750,
+          height: 1120,
+          destWidth: 750,
+          destHeight: 1120,
+          success: (res) => {
+            posterUrl.value = res.tempFilePath;
+            resolve(true);
+          },
+          fail: () => resolve(false)
+        });
+      });
+    } catch {
+      resolve(false);
+    }
+  });
+}
+
 async function generatePoster() {
   if (!post.value) return;
   // #ifdef H5
@@ -378,6 +502,15 @@ async function generatePoster() {
     await recordShare();
     return;
   }
+  // #endif
+  // #ifdef MP-WEIXIN
+  if (await generateMiniProgramPoster()) {
+    await recordShare();
+    return;
+  }
+  copyShareLink();
+  uni.showToast({ title: "海报生成失败，已复制链接", icon: "none" });
+  return;
   // #endif
   copyShareLink();
 }
@@ -460,4 +593,5 @@ onShow(() => {
 .poster-mask { position: fixed; inset: 0; z-index: 30; display: flex; align-items: center; justify-content: center; padding: 40rpx; background: rgba(0,0,0,0.62); }
 .poster-panel { width: 620rpx; max-height: 88vh; overflow: auto; display: grid; gap: 18rpx; padding: 22rpx; border-radius: 24rpx; background: #fff; }
 .poster-panel image { width: 100%; border-radius: 18rpx; }
+.poster-canvas { position: fixed; left: -9999px; top: -9999px; width: 750px; height: 1120px; pointer-events: none; opacity: 0; }
 </style>

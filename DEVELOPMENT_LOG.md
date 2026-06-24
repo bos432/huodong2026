@@ -9676,3 +9676,46 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 - 将本次提交部署到服务器后，重新构建 API、H5 和小程序包，并重启 `activity-api`。
 - 在微信开发者工具导入最新 `apps/mobile/dist/build/mp-weixin`，验证微信登录、手机号授权绑定、个人中心资料展示、活动报名、课程下单、商城下单和钱包入口。
 - 在后台会员管理验证分页、筛选、排序、详情抽屉和 URL 条件恢复；确认小程序绑定手机号后后台会员列表显示“手机号已绑定”。
+
+## 2026-06-24 - 小程序动态海报生成与会员管理发布核对
+
+### 阶段名称
+
+小程序试运营前 - 动态详情海报按钮与会员管理线上发布核对小阶段。
+
+### 本阶段完成内容
+
+- 定位“生成海报也是复制链接”的原因：动态详情页原先只有 H5 DOM canvas 海报生成，小程序端没有 canvas 生成链路，点击后会回退到复制分享路径。
+- 为小程序动态详情页新增隐藏 canvas，点击“生成海报”时在小程序端绘制海报图片：
+  - 绘制慢π活动心得标题、动态内容、作者和可保存图片。
+  - 使用 `qrcode` 的二维码矩阵直接绘制二维码，避免小程序端再走 dataURL 图片转换。
+  - 小程序构建时若 `VITE_API_BASE` 是公网 HTTPS API，会把 `/pages/community/detail?id=...` 转成 `https://rd.chaimen666.com/#/pages/community/detail?id=...` 形式，复制链接和海报二维码不再优先暴露裸小程序内部路径。
+  - 保留失败兜底：如果 canvas 生成失败，才复制链接并提示“海报生成失败，已复制链接”。
+- 核对会员管理增强状态：本地 `apps/admin/src/views/Members.vue` 与构建产物已包含运营概览、筛选、排序、分页、来源端、微信绑定、手机号绑定和详情身份状态；线上页面若仍旧，判断为后台静态包未重新构建/发布或浏览器缓存未刷新。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/community/detail.vue`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 21:30 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过；小程序产物包含 `communityPosterCanvas`、`扫码查看动态` 和 H5 公网链接生成逻辑。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仍有既有 VueUse PURE 注释和大 chunk 提示。
+- `Get-ChildItem apps/admin/dist/assets -Filter 'Members-*' | Select-String -Pattern 'summary-grid|member-filters|sourceChannel|pageSize'`：通过，本地后台构建产物确认包含会员管理增强关键字。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 本阶段没有新增官方微信小程序码后端接口；海报二维码当前指向公网 H5 动态详情链接，能解决“复制裸路径/没有海报图”的体验问题。若后续要求扫码直接进入小程序指定页，需要新增后端调用微信 `getwxacodeunlimit` 并缓存小程序码图片。
+- 需要在微信开发者工具重新导入最新 `apps/mobile/dist/build/mp-weixin`，真机验证长按保存海报和扫码打开 H5 动态详情。
+- 线上会员管理若仍显示旧版，需要服务器重新构建并发布 `apps/admin/dist`，然后浏览器强刷或退出重登。
+
+### 下一阶段应继续处理的事项
+
+- 将本次提交部署到服务器后，重新构建 H5、后台和小程序包；本次只改前端，不需要 API 重启。
+- 在微信开发者工具中打开动态详情，点击“生成海报”，确认弹出海报图片而不是仅复制链接。
+- 打开线上后台“会员管理”，确认出现总会员、已绑手机号、微信绑定、小程序来源、近 7 日活跃概览，以及筛选、排序和分页。
