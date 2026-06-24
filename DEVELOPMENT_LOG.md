@@ -2,6 +2,61 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序微信登录会员资料可见性优化
+
+### 阶段名称
+
+小程序上线准备 - 微信登录后前台显示与后台会员可见性小阶段。
+
+### 本阶段完成内容
+
+- 读取 `docs/qiwai-cultural-saas-platform-plan.md` 和最新 `DEVELOPMENT_LOG.md`，确认当前阶段为小程序开发者工具登录链路验收。
+- 根据用户截图分析：微信开发者工具内已能进入“我的”页，但顶部仍显示 `未登录`；后台会员列表中既有演示用户仍显示 `微信绑定=未绑定`、`AppID=-`。
+- 明确微信平台能力边界：
+  - `wx.login` 只返回临时 `code`，后端只能换取 `openid`、可能的 `unionid` 和 AppID。
+  - 微信不会自动返回手机号、昵称或头像。
+  - 手机号必须单独走手机号授权/绑定；昵称头像需用户填写或通过微信头像昵称填写能力获取。
+- 后端优化微信登录：
+  - 新微信用户没有昵称时，自动生成 `微信用户xxxxxx` 作为系统展示名，避免前台误显示“未登录”。
+  - 微信登录保存用户后立即刷新/创建会员档案，让后台会员列表能看到小程序来源、微信绑定状态、AppID 和最近活跃时间。
+  - `/public/me/profile` 增加 `sourceChannel`、`lastLoginChannel`、`wechatBound`、`wechatAppId`，给前台明确识别微信登录态。
+- 小程序/H5 我的页优化：
+  - 已微信登录但未绑定手机号时，昵称显示为微信用户兜底名。
+  - 身份提示显示 `微信已登录 · 未绑定手机号`，不再显示“请先登录后查看权益”。
+- 更新 `docs/小程序上传发布说明.md`，说明后台能获取到的是 openid/AppID 绑定关系，不等于自动获取手机号、微信昵称或头像。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/modules/public/public.service.ts`
+- `apps/mobile/src/pages/user/my.vue`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 18:03:34 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `rg -n "URLSearchParams|touristappid" apps\mobile\dist\build\mp-weixin`：无命中，输出 `OK no URLSearchParams or touristappid in mp-weixin build`。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+
+### 浏览器/本地工具验收结果
+
+- 本阶段为本地代码修复和构建验证；微信开发者工具需重新编译最新 `mp-weixin` 构建产物后复验。
+- 后端修改需服务器拉取、构建 API 并重启 PM2 后，线上 API 才会在真实微信登录时创建默认昵称和会员档案。
+
+### 遗留问题
+
+- 微信手机号、微信昵称、微信头像不会由 `wx.login` 自动返回；后续如需完整资料，需要增加手机号授权和头像昵称填写流程。
+- 服务器尚未拉取本次提交并重新构建 API/小程序包。
+
+### 下一阶段应继续处理的事项
+
+- 提交并推送本阶段补丁。
+- 服务器拉取后构建 API、重启 PM2，并重新构建 `mp-weixin`。
+- 在微信开发者工具重新编译并点击微信登录，确认我的页显示 `微信用户xxxxxx` 或已填写昵称，后台会员列表刷新后出现 `来源=微信小程序`、`微信绑定=已绑定`、`AppID=wx4373059ed6b7793b`。
+
 ## 2026-06-24 - 小程序微信登录服务器复验
 
 ### 阶段名称

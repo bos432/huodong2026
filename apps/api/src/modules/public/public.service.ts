@@ -235,6 +235,10 @@ export class PublicService {
       phone: fresh.phone,
       nickname: fresh.nickname,
       avatarUrl: fresh.avatarUrl,
+      sourceChannel: fresh.sourceChannel,
+      lastLoginChannel: fresh.lastLoginChannel,
+      wechatBound: Boolean(fresh.openid),
+      wechatAppId: fresh.wechatAppId,
       hasPassword: Boolean(fresh.passwordHash),
       memberLevel: profile?.level ? { id: profile.level.id, name: profile.level.name } : null,
       points: profile?.points || 0
@@ -481,9 +485,10 @@ export class PublicService {
     user.sourceChannel = user.sourceChannel || "mp_weixin";
     user.lastLoginChannel = "mp_weixin";
     user.lastLoginAt = new Date();
-    user.nickname = dto.nickname || user.nickname;
+    user.nickname = dto.nickname || user.nickname || `微信用户${openid.slice(-6).toUpperCase()}`;
     user.avatarUrl = dto.avatarUrl || user.avatarUrl;
     const saved = await this.users.save(user);
+    await this.refreshMemberProfile(saved);
     return this.userLoginResponse(saved);
   }
 

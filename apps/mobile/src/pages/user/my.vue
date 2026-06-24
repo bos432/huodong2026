@@ -14,7 +14,7 @@
       <image class="avatar-lg" :src="profile?.avatarUrl || '/static/avatar_default.png'" mode="aspectFill" />
       <text class="profile-nickname">{{ displayName }}</text>
       <view class="profile-badge">{{ memberLevelName }}</view>
-      <text class="profile-expire">{{ profile?.phone ? `手机号：${profile.phone}` : "请先登录后查看权益" }}</text>
+      <text class="profile-expire">{{ profileIdentityText }}</text>
       <view class="profile-edit-btn" @click="goEdit">
         <text class="subtle profile-edit-text">编辑资料  ›</text>
       </view>
@@ -137,8 +137,13 @@ const profileHeaderTextColor = computed(() => {
   return !textColor || (textColor === "#ffffff" && String(layout.heroBackgroundColor || "") === "#111827") ? warmHeaderTextColor : textColor;
 });
 const profileHeaderMutedColor = computed(() => String(myPageSection.value?.layout?.heroMutedTextColor || warmHeaderMutedColor));
-const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (loadingProfile.value ? "加载中..." : "未登录"));
+const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `微信用户${profile.value.id}` : loadingProfile.value ? "加载中..." : "未登录"));
 const memberLevelName = computed(() => profile.value?.memberLevel?.name || "普通会员");
+const profileIdentityText = computed(() => {
+  if (profile.value?.phone) return `手机号：${profile.value.phone}`;
+  if (profile.value?.wechatBound) return "微信已登录 · 未绑定手机号";
+  return "请先登录后查看权益";
+});
 const pendingRegistrationCount = computed(() => registrations.value.filter((item) => item.status === "pending_payment").length + courseOrders.value.filter((item) => item.status === "pending_payment").length + mallOrders.value.filter((item) => ["pending_payment", "pending_confirm"].includes(item.status)).length);
 const learningCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) < 100).length);
 const completedCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) >= 100).length);
