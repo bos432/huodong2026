@@ -2,6 +2,57 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - H5 直出目录 EPERM 清理修复
+
+### 阶段名称
+
+上线前部署配置 - H5 直出目录旧静态文件 `EPERM` 解锁清理小阶段。
+
+### 本阶段完成内容
+
+- 重新读取 `docs/开发方案与二次开发说明.md`、`docs/线上部署结构与发布说明.md` 和最新 `DEVELOPMENT_LOG.md`。
+- 根据服务器输出重新确认线上结构：
+  - H5 根路径直接服务 `apps/mobile/dist/build/h5`。
+  - 后台 `/admin/` 直接 alias 到 `apps/admin/dist`。
+  - 当前 `七维书院` 残留的主要原因是 H5 新包构建未跑完，外网仍加载旧静态包。
+- 针对服务器 `EPERM: operation not permitted, unlink .../assets/AdminBottomNav-kku8XPez.css` 修复 H5 构建前清理脚本：
+  - 删除旧文件或目录遇到 `EPERM/EACCES` 时，自动尝试 Linux `chattr -i -a` 清除不可变/追加属性。
+  - 同时尝试放宽当前文件/目录权限并重试删除。
+  - 保留“不删除 H5 根目录，只清空内部文件”的线上直出目录安全边界。
+  - 自动解锁后仍失败时，错误信息提示检查 `lsattr/chattr` 和父目录权限。
+- 补充 `docs/线上部署结构与发布说明.md`，加入 `EPERM` 手动排查命令和禁止删除 H5 根目录说明。
+- 补充 `docs/开发方案与二次开发说明.md` 升级记录，说明本次线上旧标题/旧静态包排查结论。
+
+### 修改/新增的主要文件
+
+- `scripts/clean-mobile-h5-dist.mjs`
+- `docs/线上部署结构与发布说明.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 13:32:54 +08:00。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过，构建前清理脚本在本地成功清空并重建 H5 dist。
+- `rg -n "七维书院|七维文化|七维|奇外|电召" apps/mobile/dist/build/h5 apps/admin/dist apps/mobile/src apps/admin/src apps/api/src packages -g "!node_modules"`：无命中，退出码 1 表示未发现旧品牌词。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换。
+
+### 浏览器验收结果
+
+- 本阶段为服务器构建脚本和部署文档修复，线上浏览器最终复验仍需服务器拉取本次提交并重新执行 H5 构建。
+- 复验重点：外网 HTML 不再引用旧 `assets/index-D6hAU5Ez.js`，右侧浏览器 `document.title`、H5 顶部栏和页面内容显示 `慢π`。
+
+### 遗留问题
+
+- 需要服务器拉取本次提交后重新执行 H5 构建；若旧文件存在不可变属性，脚本会自动尝试解锁，仍失败时需按文档手动执行 `lsattr/chattr/chmod`。
+- 构建成功前，线上 H5 仍可能继续显示旧标题。
+
+### 下一阶段应继续处理的事项
+
+- 推送本次修复后，在服务器执行最新发布命令并检查外网主包 hash。
+- 服务器构建通过后，使用右侧浏览器打开带时间戳的线上 H5，确认无 `七维` 旧标题残留，并将浏览器验收结果继续写入 `DEVELOPMENT_LOG.md`。
+
 ## 2026-06-24 - 共修打卡后台同日唯一性校验
 
 ### 阶段名称
