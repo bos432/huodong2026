@@ -2,6 +2,52 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - H5 错误日志优化提交推送
+
+### 阶段名称
+
+上线前部署配置 - H5 错误日志优化与线上商城点击复验记录提交推送小阶段。
+
+### 本阶段完成内容
+
+- 重新读取最新 `DEVELOPMENT_LOG.md` 和 `docs/线上部署结构与发布说明.md`，确认上一阶段遗留为“提交并推送本阶段 H5 错误日志优化与前一阶段商城点击级复验日志”。
+- 暂存本次相关文件，排除本地 `.local-logs/`、`.local-mariadb/` 未跟踪目录。
+- 创建本地提交：`d02aa6a fix: improve H5 error diagnostics`。
+- 推送到远端分支：`origin/feature/qiwai-ui-experiment`，远端从 `0f52ad0` 更新到 `d02aa6a`。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+- `apps/mobile/src/error-reporting.ts`
+- `apps/mobile/src/main.ts`
+- `apps/mobile/src/api.ts`
+- `apps/mobile/src/mobile-admin.ts`
+- `apps/mobile/src/mall-payment.ts`
+- `apps/mobile/src/pages/user/registration.vue`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 14:54:08 +08:00。
+- `git diff --check`：通过；仅提示 Windows 下 LF/CRLF 转换。
+- `git commit -m "fix: improve H5 error diagnostics"`：通过，生成提交 `d02aa6a`。
+- `git push origin feature/qiwai-ui-experiment`：通过。
+
+### 浏览器验收结果
+
+- 本阶段为 Git 提交推送，不新增浏览器点击。
+- 上一阶段右侧浏览器已完成线上 H5 商城点击级复验；H5 错误日志优化需服务器拉取并发布后再在线上浏览器复验。
+
+### 遗留问题
+
+- 服务器尚未拉取 `d02aa6a` 并重新构建发布 H5，因此线上当前仍不会出现新的 `[H5] ...` 错误日志格式。
+- 真机微信 iOS/Android 分享、海报长按保存、二维码扫码回流仍未验收。
+
+### 下一阶段应继续处理的事项
+
+- 在服务器执行部署命令：拉取 `feature/qiwai-ui-experiment`，构建 H5/Admin，按直出目录发布静态包，必要时重启 API 并等待 readiness。
+- 部署后打开线上 H5，确认主包 hash 更新、页面无旧品牌残留，并复验控制台错误日志格式。
+- 继续补做后台多角色对线上商城订单 `MO17822834802957D7DB7` 的查看权限复验，或进入真机微信验收。
+
 ## 2026-06-24 - H5 前端错误日志可读性优化
 
 ### 阶段名称
