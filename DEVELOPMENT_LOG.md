@@ -8828,6 +8828,41 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 - 服务器拉取最新提交后重新执行 `npm --prefix apps/mobile run build:h5`，确认不再出现 `ENOTDIR/EISDIR`。
 - 构建成功后检查外网 HTML 主脚本 hash，并用右侧浏览器复验 `document.title` 和顶部栏。
 
+## 2026-06-24 - 小程序体验版上传权限描述修复
+
+### 阶段名称
+
+小程序上线准备 - 修复微信 `scope.userLocation` 权限说明长度小阶段。
+
+### 本阶段完成内容
+
+- 根据后台“小程序发布”上传体验版失败提示，定位到微信 CI 校验报错：`scope.userLocation exceeds 30`。
+- 将微信小程序定位权限说明从超长描述改为 `用于定位城市展示本地活动课程`，保留业务含义并控制在微信 30 字限制以内。
+- 本地重新构建 `mp-weixin`，确认生成产物 `app.json` 中的权限说明已同步为短文案。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/manifest.json`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 14:15 +08:00。
+- `npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `apps/mobile/dist/build/mp-weixin/app.json`：确认 `scope.userLocation.desc` 为 `用于定位城市展示本地活动课程`。
+- `rg -n "用于根据|书院/商家|scope.userLocation|用于定位城市展示本地活动课程" apps/mobile/dist/build/mp-weixin apps/mobile/src/manifest.json`：仅命中新短文案与字段名，未发现旧超长说明。
+- `git diff --check`：通过；仅提示 Windows 下 `manifest.json` 未来可能发生 LF/CRLF 转换。
+
+### 遗留问题
+
+- 线上服务器还需要拉取本次提交，并重新执行 `npm --prefix apps/mobile run build:mp-weixin` 后再在后台上传体验版。
+- 微信公众平台仍需保持服务器出口 IP 在“小程序代码上传 IP 白名单”中。
+
+### 下一阶段应继续处理的事项
+
+- 服务器拉取最新代码、重建小程序包后，再次点击后台“小程序发布 -> 上传体验版”。
+- 上传成功后用体验版二维码在手机微信中验证首页、登录、活动报名、心得发布、图片上传和商城/余额支付主流程。
+
 ## 2026-06-24 - 线上部署结构文档与 H5 清理逻辑重写
 
 ### 阶段名称
