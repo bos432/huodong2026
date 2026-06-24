@@ -68,8 +68,9 @@ function normalizeTheme(theme?: PageTheme | null) {
 
 export function applyPageTheme(theme?: PageTheme | null) {
   const normalized = normalizeTheme(theme);
+  const brandTitle = String(normalized.brandName || defaultTheme.brandName).trim() || defaultTheme.brandName;
   pageBrand.value = {
-    name: String(normalized.brandName || defaultTheme.brandName),
+    name: brandTitle,
     logoUrl: String(normalized.brandLogoUrl || ""),
     slogan: String(normalized.brandSlogan || defaultTheme.brandSlogan)
   };
@@ -83,6 +84,7 @@ export function applyPageTheme(theme?: PageTheme | null) {
 
   // #ifdef H5
   const root = document.documentElement;
+  document.title = brandTitle;
   root.style.setProperty("--page-bg", normalized.backgroundColor);
   root.style.setProperty("--page-bg-layer", pageBgLayer);
   root.style.setProperty("--page-bg-image", imageLayer);
@@ -95,6 +97,7 @@ export function applyPageTheme(theme?: PageTheme | null) {
   root.style.setProperty("--primary-color", normalized.primaryColor);
   root.style.setProperty("--primary-soft", rgba(normalized.primaryColor, 14));
   // #endif
+  uni.setNavigationBarTitle({ title: brandTitle });
 }
 
 export async function loadPageTheme() {
