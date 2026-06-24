@@ -2,6 +2,58 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序本地开发者工具调试链路
+
+### 阶段名称
+
+小程序上线准备 - 本地微信开发者工具与 HBuilder X 快速调试链路小阶段。
+
+### 本阶段完成内容
+
+- 读取 `docs/qiwai-cultural-saas-platform-plan.md`、`docs/小程序上传发布说明.md` 和最新 `DEVELOPMENT_LOG.md`，确认当前阶段为小程序体验版真机问题快速排查。
+- 检查本机安装路径，确认可用工具：
+  - 微信开发者工具：`D:\Program Files (x86)\Tencent\微信web开发者工具\微信开发者工具.exe`
+  - 微信开发者工具 CLI：`D:\Program Files (x86)\Tencent\微信web开发者工具\cli.bat`
+  - HBuilder X：`D:\HBuilderX\HBuilderX.exe`
+- 使用线上 API 地址构建本地小程序包：`VITE_API_BASE=https://rd.chaimen666.com/api`。
+- 调用微信开发者工具 CLI 打开 `apps/mobile/dist/build/mp-weixin`，本机微信开发者工具已启动并载入“活动发布”项目。
+- 调用 HBuilder X 打开 `apps/mobile` 源码目录，方便后续 uni-app 页面编辑与运行到小程序。
+- 通过右侧后台“小程序发布管理”只读确认当前保存的小程序 AppID 为 `wx4373059ed6b7793b`。
+- 修复本地调试体验：将 `apps/mobile/src/manifest.json` 的 `mp-weixin.appid` 从空值改为正式 AppID，避免本地构建产物继续生成 `touristappid`。
+- 重新构建后确认 `apps/mobile/dist/build/mp-weixin/project.config.json` 已写入正式 AppID。
+- 补充 `docs/小程序上传发布说明.md` 的“本地快速调试”章节，记录构建、打开微信工具、生成预览二维码和常见错误判断。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/manifest.json`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 17:17:24 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- 微信开发者工具 CLI `open --project apps/mobile/dist/build/mp-weixin --lang zh`：已启动并打开项目。
+- `apps/mobile/dist/build/mp-weixin/project.config.json`：确认 `appid` 为 `wx4373059ed6b7793b`。
+- 微信开发者工具 CLI `preview`：已越过 `AppID 不合法`，但被微信账号权限阻止，返回 `登录用户不是该小程序的开发者`。
+- HBuilder X：已启动并打开 `apps/mobile`。
+
+### 浏览器/本地工具验收结果
+
+- 后台页面只读检查通过：小程序发布配置页可打开，AppID 已配置，最新上传体验版记录仍为成功。
+- 本地微信开发者工具可打开构建产物目录。
+- 本地预览二维码生成未完成，原因是当前微信开发者工具登录账号未加入该小程序开发成员；这不是代码构建错误。
+
+### 遗留问题
+
+- 需要用已加入该小程序开发者/体验者的微信号登录本机微信开发者工具，或在微信公众平台将当前登录账号添加为开发者后，才能使用 CLI `preview` 生成本地预览二维码。
+- 继续真机验收前，仍需服务器拉取最新代码、重新构建小程序包并上传新的体验版。
+
+### 下一阶段应继续处理的事项
+
+- 用户切换或授权微信开发者工具账号后，重新执行 `preview` 命令生成二维码，并在开发者工具模拟器控制台复验是否还有小程序运行时报错。
+- 若本地预览通过，再上传新体验版并用手机真机复验“我的慢π”、首页、登录、报名、心得发布和商城流程。
+
 ## 2026-06-24 - 小程序真机 URLSearchParams 兼容修复
 
 ### 阶段名称

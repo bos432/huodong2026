@@ -5,7 +5,7 @@
   "versionName": "0.1.0",
   "versionCode": "1",
   "mp-weixin": {
-    "appid": "",
+    "appid": "wx4373059ed6b7793b",
     "permission": {
       "scope.userLocation": {
         "desc": "用于定位城市展示本地活动课程"
