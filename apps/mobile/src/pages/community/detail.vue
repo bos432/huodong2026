@@ -340,6 +340,35 @@ function h5Origin() {
   return "https://rd.chaimen666.com";
 }
 
+function posterImageSrc() {
+  return String(post.value?.images?.find(Boolean) || post.value?.activity?.coverUrl || "").trim();
+}
+
+function absolutePosterAssetUrl(src: string) {
+  const value = String(src || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("//")) return `https:${value}`;
+  if (value.startsWith("/")) return `${h5Origin()}${value}`;
+  return value;
+}
+
+function getMiniProgramImageInfo(src: string) {
+  const url = absolutePosterAssetUrl(src);
+  if (!url) return Promise.resolve(null);
+  return new Promise<{ path: string; width: number; height: number } | null>((resolve) => {
+    uni.getImageInfo({
+      src: url,
+      success: (res) => resolve({
+        path: res.path,
+        width: Number(res.width || 0),
+        height: Number(res.height || 0)
+      }),
+      fail: () => resolve(null)
+    });
+  });
+}
+
 async function drawPosterImage(ctx: CanvasRenderingContext2D, src: string, x: number, y: number, width: number, height: number) {
   if (!src || typeof Image === "undefined") return false;
   return new Promise<boolean>((resolve) => {
@@ -394,7 +423,7 @@ async function drawPosterCanvas(ctx: CanvasRenderingContext2D, includeImage: boo
   ctx.fillStyle = "#5b2f24";
   ctx.font = "bold 42px sans-serif";
   ctx.fillText("慢π · 活动心得", 54, 84);
-  const image = includeImage ? post.value.images?.[0] || post.value.activity?.coverUrl || "" : "";
+  const image = includeImage ? absolutePosterAssetUrl(posterImageSrc()) : "";
   const hasImage = includeImage ? await drawPosterImage(ctx, image, 54, 130, 642, 390) : false;
   if (!hasImage) {
     ctx.fillStyle = "#f3e7d6";
@@ -422,50 +451,66 @@ async function drawPosterCanvas(ctx: CanvasRenderingContext2D, includeImage: boo
   drawWrappedText(ctx, posterHintText.value, 54, 1042, hasQr ? 420 : 642, 32, 2);
 }
 
+async function drawMiniProgramPosterImage(ctx: any, x: number, y: number, width: number, height: number) {
+  const info = await getMiniProgramImageInfo(posterImageSrc());
+  if (!info?.path) return false;
+  try {
+    ctx.drawImage(info.path, x, y, width, height);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function drawMiniProgramPosterPlaceholder(ctx: any, x: number, y: number, width: number, height: number) {
+  ctx.setFillStyle("#f3e7d6");
+  ctx.fillRect(x, y, width, height);
+  ctx.setFillStyle("#8b5a2b");
+  ctx.setFontSize(54);
+  ctx.fillText("活动心得", x + 212, y + 210);
+}
+
 async function generateMiniProgramPoster() {
   if (!post.value) return false;
   await nextTick();
-  return new Promise<boolean>((resolve) => {
-    try {
-      const ctx = uni.createCanvasContext("communityPosterCanvas");
-      ctx.setFillStyle("#fff7ec");
-      ctx.fillRect(0, 0, 750, 1120);
-      ctx.setFillStyle("#5b2f24");
-      ctx.setFontSize(42);
-      ctx.fillText("慢π · 活动心得", 54, 84);
-      ctx.setFillStyle("#f3e7d6");
-      ctx.fillRect(54, 130, 642, 390);
-      ctx.setFillStyle("#8b5a2b");
-      ctx.setFontSize(54);
-      ctx.fillText("活动心得", 266, 340);
-      ctx.setFillStyle("#333333");
-      ctx.setFontSize(38);
-      drawUniWrappedText(ctx, post.value.activity?.title || "参与者心得", 54, 585, 15, 48, 2);
-      ctx.setFillStyle("#666666");
-      ctx.setFontSize(30);
-      drawUniWrappedText(ctx, post.value.content, 54, 710, 19, 44, 5);
-      ctx.setFillStyle("#8b5a2b");
-      ctx.setFontSize(28);
-      ctx.fillText(`来自 ${post.value.nickname || "慢π同学"}`, 54, 924);
-      ctx.setFillStyle("#eadac6");
-      ctx.fillRect(54, 952, 642, 2);
-      const hasQr = drawUniQrCode(ctx, shareLink.value, 516, 886, 164);
+  try {
+    const ctx = uni.createCanvasContext("communityPosterCanvas");
+    ctx.setFillStyle("#fff7ec");
+    ctx.fillRect(0, 0, 750, 1120);
+    ctx.setFillStyle("#5b2f24");
+    ctx.setFontSize(42);
+    ctx.fillText("慢π · 活动心得", 54, 84);
+    const hasImage = await drawMiniProgramPosterImage(ctx, 54, 130, 642, 390);
+    if (!hasImage) drawMiniProgramPosterPlaceholder(ctx, 54, 130, 642, 390);
+    ctx.setFillStyle("#333333");
+    ctx.setFontSize(38);
+    drawUniWrappedText(ctx, post.value.activity?.title || "参与者心得", 54, 585, 15, 48, 2);
+    ctx.setFillStyle("#666666");
+    ctx.setFontSize(30);
+    drawUniWrappedText(ctx, post.value.content, 54, 710, 19, 44, 5);
+    ctx.setFillStyle("#8b5a2b");
+    ctx.setFontSize(28);
+    ctx.fillText(`来自 ${post.value.nickname || "慢π同学"}`, 54, 924);
+    ctx.setFillStyle("#eadac6");
+    ctx.fillRect(54, 952, 642, 2);
+    const hasQr = drawUniQrCode(ctx, shareLink.value, 516, 886, 164);
+    ctx.setStrokeStyle("#d6bfa8");
+    ctx.strokeRect(516, 886, 164, 164);
+    if (!hasQr) {
+      ctx.setFillStyle("#ffffff");
+      ctx.fillRect(516, 886, 164, 164);
       ctx.setStrokeStyle("#d6bfa8");
       ctx.strokeRect(516, 886, 164, 164);
-      if (!hasQr) {
-        ctx.setFillStyle("#ffffff");
-        ctx.fillRect(516, 886, 164, 164);
-        ctx.setStrokeStyle("#d6bfa8");
-        ctx.strokeRect(516, 886, 164, 164);
-        ctx.setFillStyle("#8b5a2b");
-        ctx.setFontSize(24);
-        ctx.fillText("复制链接", 548, 970);
-      }
-      ctx.setFillStyle("#333333");
+      ctx.setFillStyle("#8b5a2b");
       ctx.setFontSize(24);
-      ctx.fillText(hasQr ? "扫码查看动态" : "复制链接查看动态", 54, 1008);
-      ctx.setFillStyle("#666666");
-      drawUniWrappedText(ctx, posterHintText.value, 54, 1042, 19, 32, 2);
+      ctx.fillText("复制链接", 548, 970);
+    }
+    ctx.setFillStyle("#333333");
+    ctx.setFontSize(24);
+    ctx.fillText(hasQr ? "扫码查看动态" : "复制链接查看动态", 54, 1008);
+    ctx.setFillStyle("#666666");
+    drawUniWrappedText(ctx, posterHintText.value, 54, 1042, 19, 32, 2);
+    return await new Promise<boolean>((resolve) => {
       ctx.draw(false, () => {
         uni.canvasToTempFilePath({
           canvasId: "communityPosterCanvas",
@@ -480,10 +525,10 @@ async function generateMiniProgramPoster() {
           fail: () => resolve(false)
         });
       });
-    } catch {
-      resolve(false);
-    }
-  });
+    });
+  } catch {
+    return false;
+  }
 }
 
 async function generatePoster() {

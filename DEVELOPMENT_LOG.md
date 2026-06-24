@@ -9759,3 +9759,54 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 服务器拉取本次提交后，构建小程序包时同时设置 `VITE_H5_ORIGIN=https://rd.chaimen666.com` 和 `VITE_API_BASE=https://rd.chaimen666.com/api`。
 - 真机微信预览中长按保存海报、扫码回流 H5 动态详情，确认视觉和链路都符合上线试运营要求。
+
+## 2026-06-24 - 后台装修教程与小程序海报默认取图修复
+
+### 阶段名称
+
+小程序试运营前 - 后台装修说明与动态海报图片展示小阶段。
+
+### 本阶段完成内容
+
+- 根据后台装修页截图补充“装修教程”入口：
+  - 在后台“前台全局装修”工具条新增“装修教程”按钮。
+  - 弹窗解释页面选择、商家范围、发布前预览、复制链接、应用模板、复制页面配置、恢复上次发布版本、恢复默认装修和刷新分别是什么意思。
+  - 明确平台默认装修和商家独立装修的区别，提示“应用模板/复制页面配置/恢复默认装修”会替换当前页面模块。
+- 新增文档 `docs/后台装修使用教程.md`：
+  - 面向运营说明后台装修入口、平台默认装修、商家独立装修、红框工具条、推荐操作流程、模块含义、上线前检查清单和风险提醒。
+- 修复小程序动态详情海报默认不显示动态图片的问题：
+  - 海报取图优先级改为“动态首图 -> 关联活动封面 -> 占位图”。
+  - 小程序端绘制海报前先用 `uni.getImageInfo` 把远程/上传图片转成可绘制的本地路径，再用 canvas `drawImage` 绘制。
+  - 支持 `/uploads/...` 相对路径自动转成当前 H5 域名绝对路径。
+  - 图片加载失败时仍回退占位图，不影响海报生成和二维码绘制。
+- 同步更新 `docs/开发方案与二次开发说明.md` 升级记录。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/community/detail.vue`
+- `apps/admin/src/views/HomepageBuilder.vue`
+- `docs/后台装修使用教程.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 23:29 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_H5_ORIGIN='https://rd.chaimen666.com'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过；小程序产物包含 `getImageInfo`、`drawImage`、海报文案和二维码绘制逻辑。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅有既有 Rollup PURE 注释和大 chunk 提示。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+- 线上接口抽查：`https://rd.chaimen666.com/api/public/community/posts/18?tenantCode=qiwai-showcase` 返回动态首图和活动封面，符合本次海报取图逻辑。
+
+### 遗留问题
+
+- 当前演示动态首图来自 `images.unsplash.com`。微信小程序正式版若没有把第三方域名加入合法 `downloadFile` 域名，`getImageInfo` 可能加载失败并回退占位图；正式运营建议用户上传图片走本系统 `/uploads/community-posts/`，或后续增加图片代理/转存能力。
+- 本阶段没有在微信开发者工具里做真实点击验证，需要重新导入最新 `apps/mobile/dist/build/mp-weixin` 后点击动态详情“生成海报”复验。
+- 后台“装修教程”已进入本地构建产物，线上要重新构建发布后台静态包后才能看到。
+
+### 下一阶段应继续处理的事项
+
+- 服务器拉取本次提交后，重新构建后台和小程序包。
+- 微信开发者工具导入最新 `apps/mobile/dist/build/mp-weixin`，打开 `/pages/community/detail?id=18&tenantCode=qiwai-showcase`，确认海报顶部显示动态首图或活动封面。
+- 打开线上后台“前台全局装修”，确认工具条出现“装修教程”按钮，弹窗说明可正常阅读。

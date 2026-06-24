@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { CopyDocument, Delete, Plus, Refresh, Upload, View } from "@element-plus/icons-vue";
+import { CopyDocument, Delete, Plus, QuestionFilled, Refresh, Upload, View } from "@element-plus/icons-vue";
 import { api } from "../api";
 import { currentTenantCode, isPlatformAdmin } from "../permissions";
 import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
@@ -304,6 +304,19 @@ const copyFromPageKey = ref("home");
 const lastPublishedRows = ref<HomepageSectionView[]>([]);
 const lastPublishedLoaded = ref(false);
 const restoreSnapshotSavedAt = ref("");
+const helpDialogVisible = ref(false);
+
+const toolbarHelpItems = [
+  { title: "选择页面", text: "决定你正在装修哪一个前台页面，例如首页、活动列表、动态详情、我的页面或底部导航。" },
+  { title: "选择商家", text: "平台超管可切换装修范围；不选商家时编辑平台默认装修，选中商家时只编辑该商家的独立装修。" },
+  { title: "发布前预览", text: "打开当前页面的 H5 预览链接，同时复制链接，方便用手机微信或浏览器检查真实效果。" },
+  { title: "复制链接", text: "只复制当前预览地址，不打开新窗口，适合发给运营同事或在手机上测试。" },
+  { title: "装修模板 / 应用模板", text: "模板是一套预设模块组合。应用模板会替换当前页面已有模块，适合新页面快速起步，已有装修请先确认再点。" },
+  { title: "复制页面配置", text: "从另一个页面复制模块到当前页面，会替换当前页面模块，适合复用布局后再微调文案和图片。" },
+  { title: "恢复上次发布版本", text: "回到首次修改前自动保存的版本，适合改乱后撤回本次编辑。" },
+  { title: "恢复默认装修", text: "重置为系统默认模块。这个动作会覆盖当前范围、当前页面的装修内容。" },
+  { title: "刷新", text: "重新读取后台已保存的模块数据，用来确认保存后是否真正生效。" }
+];
 
 const orderedRows = computed(() => [...rows.value].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
 const canEdit = computed(() => true);
@@ -1082,6 +1095,7 @@ onMounted(async () => {
         <el-button v-if="canEdit" @click="copyFromPage">复制页面配置</el-button>
         <el-button v-if="canEdit" @click="restoreLastPublished">恢复上次发布版本</el-button>
         <el-button v-if="canEdit" :icon="Refresh" @click="resetDefault">恢复默认装修</el-button>
+        <el-button :icon="QuestionFilled" @click="helpDialogVisible = true">装修教程</el-button>
         <el-button type="primary" @click="load">刷新</el-button>
       </div>
     </div>
@@ -1093,6 +1107,38 @@ onMounted(async () => {
     </div>
 
     <div v-if="scopeTip" class="scope-tip" :class="{ muted: isPlatformAdmin() && filters.tenantId }">{{ scopeTip }}</div>
+
+    <el-dialog v-model="helpDialogVisible" title="后台装修使用教程" width="760px">
+      <div class="builder-help">
+        <section>
+          <h3>这块是做什么的</h3>
+          <p>后台装修用来控制前台 H5/小程序的页面模块、顺序、文案、图片、按钮和底部导航。保存后，用户端刷新页面就会按这里的配置展示。</p>
+        </section>
+        <section>
+          <h3>推荐操作顺序</h3>
+          <ol>
+            <li>先在左上角选择要装修的页面。</li>
+            <li>平台超管先确认装修范围：不选商家是平台默认装修，选中商家是该商家的独立装修。</li>
+            <li>点击模块行编辑文案、图片、按钮链接和显示状态。</li>
+            <li>用右侧手机预览或“发布前预览”检查效果。</li>
+            <li>确认无误后保存模块，复制链接到手机微信里再看一次。</li>
+          </ol>
+        </section>
+        <section>
+          <h3>红框工具条说明</h3>
+          <div class="builder-help-grid">
+            <article v-for="item in toolbarHelpItems" :key="item.title">
+              <strong>{{ item.title }}</strong>
+              <span>{{ item.text }}</span>
+            </article>
+          </div>
+        </section>
+        <section class="builder-help-warning">
+          <h3>容易误操作的地方</h3>
+          <p>“应用模板”“复制页面配置”“恢复默认装修”都会替换当前页面模块。正式运营页面建议先点“发布前预览”或保留当前配置截图，再执行这些动作。</p>
+        </section>
+      </div>
+    </el-dialog>
 
     <div class="builder-layout">
       <aside v-if="canEdit" class="module-palette">
@@ -1545,6 +1591,15 @@ onMounted(async () => {
 .preview-link small { flex-basis: 100%; color: #667085; font-weight: 700; }
 .scope-tip { margin: 0 0 16px; padding: 12px 14px; border: 1px solid #b7e4d7; border-radius: 8px; background: #ecfdf5; color: #047857; font-weight: 700; }
 .scope-tip.muted { border-color: #e5e7eb; background: #f8fafc; color: #667085; }
+.builder-help { display: grid; gap: 18px; color: #334155; line-height: 1.72; }
+.builder-help h3 { margin: 0 0 8px; color: #0f172a; font-size: 16px; }
+.builder-help p { margin: 0; }
+.builder-help ol { margin: 0; padding-left: 20px; }
+.builder-help-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.builder-help-grid article { display: grid; gap: 5px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+.builder-help-grid strong { color: #0f766e; }
+.builder-help-grid span { color: #475569; font-size: 13px; }
+.builder-help-warning { padding: 12px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; }
 .builder-layout { display: grid; grid-template-columns: 220px minmax(420px, 1fr) 340px; gap: 16px; align-items: start; }
 .module-palette, .section-list, .phone-preview { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
 .module-palette h3, .list-head h3 { margin: 0 0 12px; }
