@@ -41,6 +41,8 @@ export const pageBrand = ref({
   slogan: defaultTheme.brandSlogan
 });
 
+let latestRuntimeTitle = defaultTheme.brandName;
+
 function clamp(value: unknown, min: number, max: number, fallback: number) {
   const numeric = Number(value);
   if (!Number.isFinite(numeric)) return fallback;
@@ -66,9 +68,37 @@ function normalizeTheme(theme?: PageTheme | null) {
   return { ...defaultTheme, ...(theme || {}) };
 }
 
+function normalizeTitle(value?: unknown) {
+  return String(value || defaultTheme.brandName).trim() || defaultTheme.brandName;
+}
+
+function syncH5Title(title: string) {
+  // #ifdef H5
+  if (typeof document === "undefined") return;
+  document.title = title;
+  const titleNodes = document.querySelectorAll(".uni-page-head__title, uni-page-head .uni-page-head__title");
+  titleNodes.forEach((node) => {
+    node.textContent = title;
+  });
+  // #endif
+}
+
+export function setRuntimePageTitle(title?: string) {
+  const normalized = normalizeTitle(title);
+  latestRuntimeTitle = normalized;
+  uni.setNavigationBarTitle({ title: normalized });
+  // #ifdef H5
+  if (typeof window !== "undefined") {
+    syncH5Title(normalized);
+    window.requestAnimationFrame(() => syncH5Title(latestRuntimeTitle));
+    [80, 240, 600].forEach((delay) => window.setTimeout(() => syncH5Title(latestRuntimeTitle), delay));
+  }
+  // #endif
+}
+
 export function applyPageTheme(theme?: PageTheme | null) {
   const normalized = normalizeTheme(theme);
-  const brandTitle = String(normalized.brandName || defaultTheme.brandName).trim() || defaultTheme.brandName;
+  const brandTitle = normalizeTitle(normalized.brandName);
   pageBrand.value = {
     name: brandTitle,
     logoUrl: String(normalized.brandLogoUrl || ""),
@@ -84,7 +114,6 @@ export function applyPageTheme(theme?: PageTheme | null) {
 
   // #ifdef H5
   const root = document.documentElement;
-  document.title = brandTitle;
   root.style.setProperty("--page-bg", normalized.backgroundColor);
   root.style.setProperty("--page-bg-layer", pageBgLayer);
   root.style.setProperty("--page-bg-image", imageLayer);
@@ -97,7 +126,7 @@ export function applyPageTheme(theme?: PageTheme | null) {
   root.style.setProperty("--primary-color", normalized.primaryColor);
   root.style.setProperty("--primary-soft", rgba(normalized.primaryColor, 14));
   // #endif
-  uni.setNavigationBarTitle({ title: brandTitle });
+  setRuntimePageTitle(brandTitle);
 }
 
 export async function loadPageTheme() {

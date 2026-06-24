@@ -1476,7 +1476,7 @@ onMounted(async () => {
                   <div class="brand-setting-card">
                     <div class="brand-setting-head">
                       <strong>品牌名称与 Logo</strong>
-                      <span>保存后用于 H5 首页标题、我的页文案和后台识别。小程序需重新上传审核后生效。</span>
+                      <span>保存后用于 H5 顶部导航、浏览器标题、首页标题、我的页文案和后台识别。小程序需重新上传审核后生效。</span>
                     </div>
                     <div class="brand-setting-grid">
                       <el-input v-model="form.pageTheme.brandName" placeholder="前台品牌名称，例如：慢π" maxlength="40" />
