@@ -18,6 +18,8 @@ type SectionForm = {
   layout: Record<string, any>;
 };
 
+type CrossCopyMode = "current_page" | "all_pages";
+
 const moduleTypes: Array<{ type: HomepageSectionType; label: string; description: string }> = [
   { type: "search_bar", label: "搜索栏", description: "城市与搜索入口" },
   { type: "hero", label: "主视觉", description: "首屏标题、按钮和统计" },
@@ -305,6 +307,16 @@ const lastPublishedRows = ref<HomepageSectionView[]>([]);
 const lastPublishedLoaded = ref(false);
 const restoreSnapshotSavedAt = ref("");
 const helpDialogVisible = ref(false);
+const crossCopyDialogVisible = ref(false);
+const crossCopySubmitting = ref(false);
+const crossCopyResult = ref("");
+const crossCopyForm = reactive({
+  mode: "current_page" as CrossCopyMode,
+  sourceTenantId: undefined as number | undefined,
+  targetTenantId: undefined as number | undefined,
+  sourcePageKey: "home",
+  targetPageKey: "home"
+});
 
 const toolbarHelpItems = [
   { title: "选择页面", text: "决定你正在装修哪一个前台页面，例如首页、活动列表、动态详情、我的页面或底部导航。" },
@@ -313,6 +325,7 @@ const toolbarHelpItems = [
   { title: "复制链接", text: "只复制当前预览地址，不打开新窗口，适合发给运营同事或在手机上测试。" },
   { title: "装修模板 / 应用模板", text: "模板是一套预设模块组合。应用模板会替换当前页面已有模块，适合新页面快速起步，已有装修请先确认再点。" },
   { title: "复制页面配置", text: "从另一个页面复制模块到当前页面，会替换当前页面模块，适合复用布局后再微调文案和图片。" },
+  { title: "跨商家复制", text: "平台超管把一个商家的装修复制到另一个商家，可复制当前页面，也可复制来源商家有配置的全部页面。" },
   { title: "恢复上次发布版本", text: "回到首次修改前自动保存的版本，适合改乱后撤回本次编辑。" },
   { title: "恢复默认装修", text: "重置为系统默认模块。这个动作会覆盖当前范围、当前页面的装修内容。" },
   { title: "刷新", text: "重新读取后台已保存的模块数据，用来确认保存后是否真正生效。" }
@@ -333,6 +346,14 @@ const saveScopeName = computed(() => (isPlatformAdmin() && filters.tenantId ? se
 const previewTenantCode = computed(() => (isPlatformAdmin() ? selectedTenant.value?.code || "" : currentTenantCode()));
 const previewScopeName = computed(() => (isPlatformAdmin() && !previewTenantCode.value ? "平台默认首页" : selectedTenant.value?.name || tenantDisplayName({ tenant: { code: previewTenantCode.value } })));
 const previewUrl = computed(() => h5RoutePreviewUrl(previewTenantCode.value, currentPageOption.value.route));
+const crossCopySourceTenantName = computed(() => tenantNameById(crossCopyForm.sourceTenantId));
+const crossCopyTargetTenantName = computed(() => tenantNameById(crossCopyForm.targetTenantId));
+const crossCopyPlanText = computed(() => {
+  if (crossCopyForm.mode === "all_pages") return `将「${crossCopySourceTenantName.value}」已有装修模块的页面复制到「${crossCopyTargetTenantName.value}」，来源为空的页面会跳过。`;
+  const sourcePage = pageOptions.find((item) => item.key === crossCopyForm.sourcePageKey)?.label || crossCopyForm.sourcePageKey;
+  const targetPage = pageOptions.find((item) => item.key === crossCopyForm.targetPageKey)?.label || crossCopyForm.targetPageKey;
+  return `将「${crossCopySourceTenantName.value}」的「${sourcePage}」复制到「${crossCopyTargetTenantName.value}」的「${targetPage}」。`;
+});
 const currentFormSnapshot = computed(() => JSON.stringify({
   type: form.type,
   title: form.title,
@@ -579,6 +600,30 @@ function homepageScopeParams() {
   const params: Record<string, unknown> = { pageKey: filters.pageKey };
   if (isPlatformAdmin() && filters.tenantId) params.tenantId = filters.tenantId;
   return { params };
+}
+
+function homepageParamsFor(tenantId: number | undefined, pageKey: string) {
+  const params: Record<string, unknown> = { pageKey };
+  if (tenantId) params.tenantId = tenantId;
+  return { params };
+}
+
+function tenantNameById(id?: number) {
+  const tenant = tenants.value.find((item) => Number(item.id) === Number(id || 0));
+  return tenant ? tenant.name || tenant.code : "未选择商家";
+}
+
+function sectionCopyPayload(row: HomepageSectionView, pageKey: string, index: number) {
+  return {
+    pageKey,
+    type: row.type,
+    title: row.title,
+    subtitle: row.subtitle || "",
+    enabled: row.enabled,
+    sortOrder: (index + 1) * 10,
+    config: cloneJson(row.config || {}),
+    layout: cloneJson(row.layout || {})
+  };
 }
 
 function firstQueryValue(value: unknown) {
@@ -901,6 +946,87 @@ async function copyFromPage() {
   await replaceCurrentSections(source, "页面配置已复制");
 }
 
+function openCrossTenantCopy() {
+  if (!isPlatformAdmin()) return;
+  const currentTenantId = filters.tenantId || tenants.value[0]?.id;
+  const sourceTenant = tenants.value.find((tenant) => tenant.id !== currentTenantId) || tenants.value[0];
+  crossCopyForm.mode = "current_page";
+  crossCopyForm.sourceTenantId = sourceTenant?.id;
+  crossCopyForm.targetTenantId = currentTenantId;
+  crossCopyForm.sourcePageKey = filters.pageKey;
+  crossCopyForm.targetPageKey = filters.pageKey;
+  crossCopyResult.value = "";
+  crossCopyDialogVisible.value = true;
+}
+
+function validateCrossTenantCopy() {
+  if (!isPlatformAdmin()) return "只有平台超管可以跨商家复制装修";
+  if (!crossCopyForm.sourceTenantId) return "请选择来源商家";
+  if (!crossCopyForm.targetTenantId) return "请选择目标商家";
+  if (crossCopyForm.sourceTenantId === crossCopyForm.targetTenantId) return "来源商家和目标商家不能相同；同一商家内复制请使用“复制页面配置”";
+  if (crossCopyForm.mode === "current_page" && !crossCopyForm.sourcePageKey) return "请选择来源页面";
+  if (crossCopyForm.mode === "current_page" && !crossCopyForm.targetPageKey) return "请选择目标页面";
+  return "";
+}
+
+async function replaceSectionsForTenant(tenantId: number, pageKey: string, sourceRows: HomepageSectionView[]) {
+  const params = homepageParamsFor(tenantId, pageKey);
+  const currentRows = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", params);
+  for (const row of currentRows) await api.delete(`/admin/homepage/sections/${row.id}`, params);
+  for (const [index, row] of sourceRows.entries()) {
+    await api.post("/admin/homepage/sections", sectionCopyPayload(row, pageKey, index), params);
+  }
+}
+
+async function executeCrossTenantCopy() {
+  const validation = validateCrossTenantCopy();
+  if (validation) return ElMessage.warning(validation);
+  const sourceTenantId = Number(crossCopyForm.sourceTenantId);
+  const targetTenantId = Number(crossCopyForm.targetTenantId);
+  const pairs = crossCopyForm.mode === "all_pages"
+    ? pageOptions.map((page) => ({ sourcePageKey: page.key, targetPageKey: page.key, label: page.label }))
+    : [{
+        sourcePageKey: crossCopyForm.sourcePageKey,
+        targetPageKey: crossCopyForm.targetPageKey,
+        label: pageOptions.find((page) => page.key === crossCopyForm.sourcePageKey)?.label || crossCopyForm.sourcePageKey
+      }];
+  const confirmMessage = crossCopyForm.mode === "all_pages"
+    ? `确认将「${crossCopySourceTenantName.value}」已有装修模块的页面复制到「${crossCopyTargetTenantName.value}」？目标商家的对应页面会被替换。`
+    : `确认执行跨商家复制？${crossCopyPlanText.value}目标页面当前模块会被替换。`;
+  await ElMessageBox.confirm(confirmMessage, "跨商家复制", {
+    type: "warning",
+    confirmButtonText: "确认复制",
+    cancelButtonText: "取消"
+  });
+  crossCopySubmitting.value = true;
+  crossCopyResult.value = "";
+  try {
+    let copiedPages = 0;
+    let skippedPages = 0;
+    let copiedModules = 0;
+    for (const pair of pairs) {
+      const sourceRows = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", homepageParamsFor(sourceTenantId, pair.sourcePageKey));
+      if (!sourceRows.length) {
+        skippedPages += 1;
+        continue;
+      }
+      await replaceSectionsForTenant(targetTenantId, pair.targetPageKey, sourceRows);
+      copiedPages += 1;
+      copiedModules += sourceRows.length;
+    }
+    if (!copiedPages) {
+      crossCopyResult.value = "来源商家选定页面没有装修模块，本次没有复制。";
+      return ElMessage.warning(crossCopyResult.value);
+    }
+    const targetIsCurrentScope = filters.tenantId === targetTenantId && (crossCopyForm.mode === "all_pages" || crossCopyForm.targetPageKey === filters.pageKey);
+    if (targetIsCurrentScope) await load({ updateSnapshot: false });
+    crossCopyResult.value = `已复制 ${copiedPages} 个页面、${copiedModules} 个模块${skippedPages ? `；跳过 ${skippedPages} 个空页面` : ""}。`;
+    ElMessage.success(crossCopyResult.value);
+  } finally {
+    crossCopySubmitting.value = false;
+  }
+}
+
 async function uploadImage(file: File, field: string) {
   const data = new FormData();
   data.append("file", file);
@@ -1093,6 +1219,7 @@ onMounted(async () => {
           <el-option v-for="page in pageOptions" :key="page.key" :label="page.label" :value="page.key" />
         </el-select>
         <el-button v-if="canEdit" @click="copyFromPage">复制页面配置</el-button>
+        <el-button v-if="isPlatformAdmin()" :icon="CopyDocument" @click="openCrossTenantCopy">跨商家复制</el-button>
         <el-button v-if="canEdit" @click="restoreLastPublished">恢复上次发布版本</el-button>
         <el-button v-if="canEdit" :icon="Refresh" @click="resetDefault">恢复默认装修</el-button>
         <el-button :icon="QuestionFilled" @click="helpDialogVisible = true">装修教程</el-button>
@@ -1138,6 +1265,58 @@ onMounted(async () => {
           <p>“应用模板”“复制页面配置”“恢复默认装修”都会替换当前页面模块。正式运营页面建议先点“发布前预览”或保留当前配置截图，再执行这些动作。</p>
         </section>
       </div>
+    </el-dialog>
+
+    <el-dialog v-model="crossCopyDialogVisible" title="跨商家复制" width="760px" destroy-on-close>
+      <div class="cross-copy-dialog">
+        <el-alert
+          type="warning"
+          show-icon
+          :closable="false"
+          title="复制会替换目标商家对应页面的已有装修模块，建议先确认来源和目标不要选反。"
+        />
+        <el-form label-position="top" class="cross-copy-form">
+          <el-form-item label="复制范围">
+            <el-radio-group v-model="crossCopyForm.mode">
+              <el-radio-button label="current_page">当前页面</el-radio-button>
+              <el-radio-button label="all_pages">全部页面</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
+          <div class="cross-copy-grid">
+            <el-form-item label="来源商家" required>
+              <el-select v-model="crossCopyForm.sourceTenantId" filterable placeholder="选择要复制的商家" style="width: 100%">
+                <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="目标商家" required>
+              <el-select v-model="crossCopyForm.targetTenantId" filterable placeholder="选择要覆盖的商家" style="width: 100%">
+                <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
+              </el-select>
+            </el-form-item>
+          </div>
+          <div class="cross-copy-grid">
+            <el-form-item label="来源页面" required>
+              <el-select v-model="crossCopyForm.sourcePageKey" :disabled="crossCopyForm.mode === 'all_pages'" filterable style="width: 100%">
+                <el-option v-for="page in pageOptions" :key="page.key" :label="page.label" :value="page.key" />
+              </el-select>
+            </el-form-item>
+            <el-form-item label="目标页面" required>
+              <el-select v-model="crossCopyForm.targetPageKey" :disabled="crossCopyForm.mode === 'all_pages'" filterable style="width: 100%">
+                <el-option v-for="page in pageOptions" :key="page.key" :label="page.label" :value="page.key" />
+              </el-select>
+            </el-form-item>
+          </div>
+        </el-form>
+        <div class="cross-copy-plan">
+          <strong>复制计划</strong>
+          <span>{{ crossCopyPlanText }}</span>
+        </div>
+        <el-alert v-if="crossCopyResult" type="success" show-icon :closable="false" :title="crossCopyResult" />
+      </div>
+      <template #footer>
+        <el-button @click="crossCopyDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="crossCopySubmitting" @click="executeCrossTenantCopy">确认复制</el-button>
+      </template>
     </el-dialog>
 
     <div class="builder-layout">
@@ -1600,6 +1779,11 @@ onMounted(async () => {
 .builder-help-grid strong { color: #0f766e; }
 .builder-help-grid span { color: #475569; font-size: 13px; }
 .builder-help-warning { padding: 12px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; }
+.cross-copy-dialog { display: grid; gap: 16px; }
+.cross-copy-form { display: grid; gap: 6px; }
+.cross-copy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
+.cross-copy-plan { display: grid; gap: 6px; padding: 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1d4ed8; }
+.cross-copy-plan strong { color: #1e3a8a; }
 .builder-layout { display: grid; grid-template-columns: 220px minmax(420px, 1fr) 340px; gap: 16px; align-items: start; }
 .module-palette, .section-list, .phone-preview { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
 .module-palette h3, .list-head h3 { margin: 0 0 12px; }
