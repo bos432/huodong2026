@@ -1,8 +1,8 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { existsSync, mkdirSync, writeFileSync } from "fs";
-import { join, resolve } from "path";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { isAbsolute, join, resolve } from "path";
 import { Repository } from "typeorm";
 import { MiniprogramReleaseLog } from "../../entities/miniprogram-release-log.entity";
 import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
@@ -11,6 +11,8 @@ import { MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto } from "./dt
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 type ReleaseAction = "upload" | "submit_audit" | "audit_status" | "release";
 type ReleaseStatus = "success" | "failed" | "processing";
+
+const SAFE_USER_LOCATION_DESC = "用于定位城市展示本地活动课程";
 
 @Injectable()
 export class MiniprogramReleaseService {
@@ -52,6 +54,7 @@ export class MiniprogramReleaseService {
       const desc = this.releaseDescription(setting, dto);
       const privateKeyPath = this.privateKeyFile(setting);
       const projectPath = this.projectPath(setting);
+      const projectCheck = this.prepareProjectFiles(projectPath, setting);
       const project = new ci.Project({ appid: setting.appId, type: "miniProgram", projectPath, privateKeyPath, ignores: ["node_modules/**/*"] });
       const result = await ci.upload({ project, version, desc, setting: { es6: true, minify: true } });
       const preview = await ci.preview({ project, version, desc, qrcodeFormat: "image", qrcodeOutputDest: this.qrCodePath() });
@@ -59,7 +62,7 @@ export class MiniprogramReleaseService {
         version,
         description: desc,
         qrCodeUrl: this.qrCodeUrl(),
-        detail: { upload: this.safePayload(result), preview: this.safePayload(preview), projectPath }
+        detail: { upload: this.safePayload(result), preview: this.safePayload(preview), projectPath, projectCheck }
       };
     });
   }
@@ -192,9 +195,70 @@ export class MiniprogramReleaseService {
   }
 
   private projectPath(setting: MiniprogramReleaseSetting) {
-    const path = resolve(setting.projectPath || this.config.get<string>("MINIPROGRAM_PROJECT_PATH", "apps/mobile/dist/build/mp-weixin"));
-    if (!existsSync(path)) throw new BadRequestException(`小程序构建目录不存在：${path}，请先执行 npm --prefix apps/mobile run build:mp-weixin`);
+    const configured = String(setting.projectPath || this.config.get<string>("MINIPROGRAM_PROJECT_PATH", "apps/mobile/dist/build/mp-weixin")).trim();
+    const candidates = isAbsolute(configured)
+      ? [resolve(configured)]
+      : [resolve(this.projectRoot(), configured), resolve(configured)];
+    const uniqueCandidates = Array.from(new Set(candidates));
+    const path = uniqueCandidates.find((candidate) => existsSync(candidate));
+    if (!path) throw new BadRequestException(`小程序构建目录不存在：${uniqueCandidates.join(" 或 ")}，请先执行 npm --prefix apps/mobile run build:mp-weixin`);
     return path;
+  }
+
+  private projectRoot() {
+    const candidates = [process.cwd(), resolve(process.cwd(), ".."), resolve(process.cwd(), "..", "..")];
+    return candidates.find((candidate) => existsSync(join(candidate, "apps", "mobile", "package.json"))) || process.cwd();
+  }
+
+  private prepareProjectFiles(projectPath: string, setting: MiniprogramReleaseSetting) {
+    return {
+      appJson: this.ensureSafeAppJson(projectPath),
+      projectConfig: this.ensureProjectConfigAppId(projectPath, setting.appId)
+    };
+  }
+
+  private ensureSafeAppJson(projectPath: string) {
+    const file = join(projectPath, "app.json");
+    if (!existsSync(file)) throw new BadRequestException(`小程序 app.json 不存在：${file}`);
+    const json = this.readJsonFile(file, "小程序 app.json");
+    const permission = this.objectValue(json, "permission");
+    const userLocation = this.objectValue(permission, "scope.userLocation");
+    const before = typeof userLocation.desc === "string" ? userLocation.desc : "";
+    if (before && before.length > 30) {
+      userLocation.desc = SAFE_USER_LOCATION_DESC;
+      writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
+      return { path: file, userLocationDesc: userLocation.desc, fixed: true, previousLength: before.length };
+    }
+    return { path: file, userLocationDesc: before, fixed: false, previousLength: before.length };
+  }
+
+  private ensureProjectConfigAppId(projectPath: string, appId: string) {
+    const file = join(projectPath, "project.config.json");
+    if (!existsSync(file)) return { path: file, fixed: false, exists: false };
+    const json = this.readJsonFile(file, "小程序 project.config.json");
+    const before = typeof json.appid === "string" ? json.appid : "";
+    if (before !== appId) {
+      json.appid = appId;
+      writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
+      return { path: file, appid: appId, fixed: true, previousAppId: before, exists: true };
+    }
+    return { path: file, appid: before, fixed: false, exists: true };
+  }
+
+  private readJsonFile(file: string, label: string) {
+    try {
+      return JSON.parse(readFileSync(file, "utf8")) as Record<string, any>;
+    } catch (error: any) {
+      throw new BadRequestException(`${label} 读取失败：${error?.message || "JSON 格式不正确"}`);
+    }
+  }
+
+  private objectValue(record: Record<string, any>, key: string) {
+    const value = record[key];
+    if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, any>;
+    const next: Record<string, any> = {};
+    record[key] = next;
+    return next;
   }
 
   private qrCodePath() {
