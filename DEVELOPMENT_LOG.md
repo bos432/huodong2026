@@ -2,6 +2,58 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - API release 元数据同步复验
+
+### 阶段名称
+
+上线前部署配置 - 线上 API release commit 与 H5 静态包版本对齐小阶段。
+
+### 本阶段完成内容
+
+- 读取线上服务器执行输出，确认服务器已拉取最新提交 `2b1322d`。
+- 使用 PM2 `restart activity-api --update-env` 重启 API，并显式传入：
+  - `BUILD_COMMIT=$(git rev-parse --short HEAD)`
+  - `BUILD_TIME=$(date -Iseconds)`
+  - `PUBLIC_H5_ORIGIN=https://rd.chaimen666.com`
+  - `PUBLIC_ADMIN_ORIGIN=https://rd.chaimen666.com/admin`
+  - `PUBLIC_API_ORIGIN=https://rd.chaimen666.com`
+  - `CORS_ORIGIN=https://rd.chaimen666.com`
+  - `REAL_PAYMENT_ENABLED=false`
+  - `PAYMENT_SANDBOX_ENABLED=false`
+- `pm2 save` 成功保存当前进程列表。
+- 线上 `/api/health/ready` 的 release 元数据已与当前代码提交对齐。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 13:47:52 +08:00。
+- 服务器验证摘要：
+  - `git pull --ff-only origin feature/qiwai-ui-experiment`：从 `f7649be` 更新到 `2b1322d`。
+  - `$PM2 restart activity-api --update-env`：成功，`activity-api` 状态 `online`。
+  - `$PM2 save`：成功保存到 `/root/.pm2/dump.pm2`。
+  - `curl -i https://rd.chaimen666.com/api/health/ready`：HTTP 200。
+  - 返回数据：`ready=true`、`api=up`、`database=up`、`config=warning`。
+  - release 信息：`commit=2b1322d`、`buildTime=2026-06-24T13:47:49+08:00`。
+  - 真实支付仍保持关闭：`REAL_PAYMENT_ENABLED=false`、`PAYMENT_SANDBOX_ENABLED=false`。
+
+### 浏览器验收结果
+
+- 本阶段为 API release 元数据同步，不新增页面点击。
+- 上一阶段线上 H5 浏览器复验已经通过：标题和顶部栏均为 `慢π`，加载新脚本 `/assets/index-Dw1W2UkT.js`，无前端 error。
+
+### 遗留问题
+
+- `/api/health/ready` 仍显示 `config=warning`，符合当前真实支付、短信、证书、回调等生产资料尚未全部补齐的上线门禁状态。
+- 真实在线支付未完成验收前，仍不能开放真实微信/支付宝支付正式运营。
+
+### 下一阶段应继续处理的事项
+
+- 继续线上 H5 核心主流程点击验收：首页、活动详情、登录、报名、我的报名、共修动态、发布心得、后台审核、公开展示、海报入口。
+- 待 HTTPS 真机微信环境和生产资料补齐后，再补 iOS/Android 微信内分享、海报长按保存、二维码回流，以及真实支付小额支付/退款/回调验收。
+
 ## 2026-06-24 - 线上 H5 旧标题修复复验
 
 ### 阶段名称
