@@ -8049,3 +8049,43 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 服务器执行最新命令后，重新检查外网 HTML 是否不再引用 `index-D6hAU5Ez.js`。
 - 右侧浏览器重新打开带时间戳的线上 H5，确认标题、顶部栏、正文和资源 hash 均为慢π新包。
+
+## 2026-06-24 - H5 清理脚本 EISDIR 兼容补丁
+
+### 阶段名称
+
+上线前部署配置 - 服务器 Node v20 删除 H5 assets 目录兼容小阶段。
+
+### 本阶段完成内容
+
+- 读取服务器第二次执行输出，确认已拉取到 `c0b2989`，Admin 构建通过，但 H5 构建在 `prebuild:h5` 阶段仍中断。
+- 新错误为 `EISDIR: illegal operation on a directory, unlink .../apps/mobile/dist/build/h5/assets`，说明服务器 Node v20 在清理 `assets` 目录时进入了文件删除兜底分支。
+- 将 `clean-mobile-h5-dist.mjs` 改为对子项优先使用 `rm(path, { recursive: true, force: true })`，只在 `ENOTDIR` 时尝试 `unlink`，且 `unlink` 遇到 `EISDIR` 会回退到递归删除目录。
+- 未改动业务代码、数据库、Nginx 配置或支付开关。
+
+### 修改/新增的主要文件
+
+- `scripts/clean-mobile-h5-dist.mjs`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 13:19:37 +08:00。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `rg -n "七维书院|七维文化|七维|奇外|电召" apps/mobile/dist/build/h5 apps/admin/dist apps/mobile/src apps/admin/src apps/api/src packages -g "!node_modules"`：无命中。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下脚本文件未来可能发生 LF/CRLF 转换。
+
+### 浏览器验收结果
+
+- 本阶段为服务器构建脚本兼容补丁，线上浏览器仍需等待服务器拉取本次提交后复验。
+- 当前线上旧标题问题仍未判定完成，原因是服务器 H5 构建尚未成功跑完。
+
+### 遗留问题
+
+- 需要服务器拉取本次提交后再次执行 H5 构建和外网验证。
+
+### 下一阶段应继续处理的事项
+
+- 服务器拉取最新提交后重新执行 `npm --prefix apps/mobile run build:h5`，确认不再出现 `ENOTDIR/EISDIR`。
+- 构建成功后检查外网 HTML 主脚本 hash，并用右侧浏览器复验 `document.title` 和顶部栏。

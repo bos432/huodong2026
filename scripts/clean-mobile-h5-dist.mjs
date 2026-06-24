@@ -1,4 +1,4 @@
-import { mkdir, readdir, rm, stat, unlink } from "node:fs/promises";
+import { mkdir, readdir, rm, unlink } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,18 +8,18 @@ const h5Dist = resolve(scriptDir, "../apps/mobile/dist/build/h5");
 
 async function removeEntry(path) {
   try {
-    const info = await stat(path);
-    if (info.isDirectory()) {
-      await rm(path, { recursive: true, force: true, maxRetries: 3 });
-      return;
-    }
-    await unlink(path);
+    await rm(path, { recursive: true, force: true, maxRetries: 3 });
   } catch (error) {
     if (error?.code === "ENOENT") return;
     if (error?.code === "ENOTDIR") {
       await unlink(path).catch((unlinkError) => {
+        if (unlinkError?.code === "EISDIR") return rm(path, { recursive: true, force: true, maxRetries: 3 });
         if (unlinkError?.code !== "ENOENT") throw unlinkError;
       });
+      return;
+    }
+    if (error?.code === "EISDIR") {
+      await rm(path, { recursive: true, force: true, maxRetries: 3 });
       return;
     }
     throw error;
