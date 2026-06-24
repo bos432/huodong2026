@@ -8089,3 +8089,50 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 服务器拉取最新提交后重新执行 `npm --prefix apps/mobile run build:h5`，确认不再出现 `ENOTDIR/EISDIR`。
 - 构建成功后检查外网 HTML 主脚本 hash，并用右侧浏览器复验 `document.title` 和顶部栏。
+
+## 2026-06-24 - 线上部署结构文档与 H5 清理逻辑重写
+
+### 阶段名称
+
+上线前部署配置 - 按真实 Nginx 结构重写 H5 构建清理与发布说明小阶段。
+
+### 本阶段完成内容
+
+- 重新按项目结构分析当前问题，确认线上是宝塔 + Nginx + PM2 直出部署：
+  - H5 根路径直接服务 `apps/mobile/dist/build/h5`。
+  - 后台 `/admin/` 直接 alias 到 `apps/admin/dist`。
+  - API `/api/` 反代到 PM2 的 `127.0.0.1:3000/api/`。
+- 明确本次“后台品牌为慢π但 H5 标题仍是七维书院”的判断路径：API 数据层已更新，但外网 `index.html` 仍引用旧 H5 主包，根因在 H5 构建/静态层。
+- 将 `clean-mobile-h5-dist.mjs` 从 Node `fs.rm(... recursive)` 改为显式递归清理：`readdir -> unlink/rmdir`，避免服务器 Node v20 在删除 `assets/*.css` 时出现 `ENOTDIR: scandir` 或 `EISDIR: unlink`。
+- 新增 `docs/线上部署结构与发布说明.md`，记录项目结构、Nginx 映射、发布命令、旧标题排查方法和本次问题结论。
+- 在 `docs/开发方案与二次开发说明.md` 中增加线上部署结构专题文档入口。
+
+### 修改/新增的主要文件
+
+- `scripts/clean-mobile-h5-dist.mjs`
+- `docs/线上部署结构与发布说明.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 13:25:45 +08:00。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过；构建前成功清理已有 H5 dist，包括 `assets` 目录和其下 CSS/JS 文件。
+- `rg -n "七维书院|七维文化|七维|奇外|电召" apps/mobile/dist/build/h5 apps/admin/dist apps/mobile/src apps/admin/src apps/api/src packages -g "!node_modules"`：无命中。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下文档和脚本文件未来可能发生 LF/CRLF 转换。
+
+### 浏览器验收结果
+
+- 本阶段为结构文档与构建脚本修复，线上浏览器仍需服务器拉取本次提交并重新构建 H5 后复验。
+- 复验重点：外网 HTML 不再引用 `assets/index-D6hAU5Ez.js`，右侧浏览器 `document.title` 和 H5 顶部栏显示 `慢π`。
+
+### 遗留问题
+
+- 需要服务器拉取本次提交后再次执行 H5 构建。
+- 构建成功后才能最终确认线上旧标题残留消失。
+
+### 下一阶段应继续处理的事项
+
+- 服务器执行最新发布命令后，使用 `curl -s "https://rd.chaimen666.com/?t=$(date +%s)" | grep -E 'assets/index-|七维|慢π'` 检查外网主包 hash。
+- 右侧浏览器打开新时间戳链接做最终复验，并将结果继续写入 `DEVELOPMENT_LOG.md`。
