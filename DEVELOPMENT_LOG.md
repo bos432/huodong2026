@@ -2,6 +2,56 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序微信登录服务器复验
+
+### 阶段名称
+
+小程序上线准备 - 生产 API 微信登录配置联动发布复验小阶段。
+
+### 本阶段完成内容
+
+- 读取 `docs/qiwai-cultural-saas-platform-plan.md` 和最新 `DEVELOPMENT_LOG.md`，确认上一阶段遗留为服务器拉取 `bd2275b`、构建 API、重启 PM2 后复验微信登录配置读取。
+- 读取用户贴回的服务器执行输出，确认服务器已完成：
+  - `git pull --ff-only origin feature/qiwai-ui-experiment`：从 `a13bb84` 快进到 `bd2275b`。
+  - `npm --prefix apps/api run build`：通过。
+  - `PM2 restart activity-api --update-env`：通过。
+  - `API_READY_URL=https://rd.chaimen666.com/api/health/ready npm run wait:api-ready`：第 1 次因 PM2 刚重启短暂 `502`，第 2 次成功，`ready=true api=up database=up config=warning commit=bd2275b`。
+- 确认服务器用假 `code` 调用微信登录接口后，返回已从 `微信登录配置未完成` 变为微信侧 `invalid code`，说明生产 API 已能读取 AppID/AppSecret。
+- 本地再次调用线上接口复核，结果同样为 `invalid code`，确认外网 API 已生效。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 17:54 +08:00。
+- 服务器 API 构建：通过。
+- 服务器 PM2 重启：通过。
+- 服务器 readiness：通过，commit 为 `bd2275b`。
+- 服务器微信登录配置验证：
+  - 请求：`POST https://rd.chaimen666.com/api/public/auth/wechat-login`
+  - 数据：`{"code":"debug-code","appId":"wx4373059ed6b7793b"}`
+  - 结果：`invalid code`，不再返回 `微信登录配置未完成`。
+- 本地外网复核：同样返回 `invalid code`。
+
+### 浏览器/本地工具验收结果
+
+- 本阶段为生产 API 配置读取复验，未新增右侧浏览器点击。
+- 结论：微信登录后端配置读取链路已打通；下一步应回到微信开发者工具/体验版，用真实 `wx.login` code 点击“微信登录”复验。
+
+### 遗留问题
+
+- 服务器本次只构建并重启了 API，还未重新构建 `mp-weixin` 并上传新的体验版；已上传的旧体验版可能仍包含旧前端包。
+- 本机微信开发者工具预览二维码仍要求当前登录账号加入小程序开发者/体验者。
+- 若真实微信登录继续失败，需要根据微信返回的新错误继续判断，例如 AppSecret 错误、账号未绑定、合法域名或开发者权限问题。
+
+### 下一阶段应继续处理的事项
+
+- 在微信开发者工具中重新点击“微信登录”，确认不再提示 `微信登录配置未完成`。
+- 服务器继续执行小程序构建，并在后台“小程序发布管理”上传新体验版，建议版本号递增到 `1.0.2`。
+- 用手机微信扫描新体验版二维码，复验“我的慢π”、登录、活动报名、心得发布、商城流程。
+
 ## 2026-06-24 - 小程序微信登录配置联动修复
 
 ### 阶段名称
