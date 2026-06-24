@@ -9910,3 +9910,49 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 - 服务器拉取本次提交后，重新构建并发布后台静态包，无需 API 重启。
 - 使用平台超管进入“前台全局装修”，点击“跨商家复制”，用两个测试商家验证当前页面复制和全部页面复制。
 - 复制后打开目标商家的 H5 链接，确认页面模块、顺序、图片和底部导航符合预期。
+
+## 2026-06-25 - 小程序装修租户与底栏重复修复
+
+### 阶段名称
+
+小程序试运营前 - 装修配置在小程序开发工具不生效排查与修复小阶段。
+
+### 本阶段完成内容
+
+- 根据用户截图复核：H5 已显示慢π演示中心的 4 个底栏入口，但小程序开发工具裸打开 `pages/index/index` 仍显示旧的“书院/课程/共修/活动/我的”。
+- 线上接口对比确认：
+  - `https://rd.chaimen666.com/api/public/homepage?tenantCode=qiwai-showcase` 返回慢π演示中心商家装修，底栏中“课程”为停用状态。
+  - `https://rd.chaimen666.com/api/public/homepage` 不带租户时返回平台默认装修，且平台范围历史上残留两个 `bottom_nav` 模块，旧模块排在前面。
+- 移动端新增 `VITE_DEFAULT_TENANT_CODE` 支持：小程序/ H5 无路由租户、无本地租户缓存时，可按构建环境默认进入指定商家。
+- 移动端装修消费侧新增全局单例去重：`bottom_nav`、`my_page`、`inner_pages` 如果有重复配置，只保留接口排序中最后一份，避免旧模块抢先显示。
+- API 公开装修输出层同步去重，减少旧小程序包或缓存页面读到重复全局装修模块的概率。
+- 更新后台装修教程和二次开发说明，补充小程序默认商家构建命令、清缓存重编译提示和重复底栏处理规则。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/api.ts`
+- `apps/mobile/src/decoration.ts`
+- `apps/api/src/modules/public/public.service.ts`
+- `docs/后台装修使用教程.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 线上接口抽查：不带 `tenantCode` 的首页返回平台默认装修且存在历史重复底栏；带 `tenantCode=qiwai-showcase` 的首页返回慢π演示中心装修和 4 个有效底栏入口。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_H5_ORIGIN='https://rd.chaimen666.com'; $env:VITE_DEFAULT_TENANT_CODE='qiwai-showcase'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过，并完成小程序授权配置 patch。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+- 小程序产物抽查：`apps/mobile/dist/build/mp-weixin/api.js` 已包含 `qiwai-showcase` 默认租户；`decoration.js` 已包含 `bottom_nav/my_page/inner_pages` 去重逻辑；旧“书院”未作为底栏标签残留。
+
+### 遗留问题
+
+- 微信开发者工具已经打开的旧包不会自动变化，必须重新构建小程序包，并在开发者工具中“清缓存 -> 清除全部缓存”后重新编译。
+- 平台默认装修历史上仍有旧底栏数据；本次通过前端/API 去重规避，后续可在后台人工删除旧模块，让运营列表更清爽。
+
+### 下一阶段应继续处理的事项
+
+- 部署本次提交后，在服务器端带 `VITE_DEFAULT_TENANT_CODE=qiwai-showcase` 重新构建小程序包。
+- 微信开发者工具导入最新 `apps/mobile/dist/build/mp-weixin`，清缓存后打开首页，确认顶部和底栏均来自慢π演示中心。
+- 如果仍显示旧内容，检查开发工具是否导入了错误目录，必须是项目下的 `apps/mobile/dist/build/mp-weixin`。

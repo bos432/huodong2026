@@ -35,6 +35,8 @@ function normalizeTenantCode(value?: unknown) {
   return code || "";
 }
 
+const DEFAULT_TENANT_CODE = normalizeTenantCode(import.meta.env.VITE_DEFAULT_TENANT_CODE);
+
 function queryTenantCode(search?: string) {
   return normalizeTenantCode(queryParam(search, "tenantCode"));
 }
@@ -62,7 +64,14 @@ export function syncTenantCodeFromRoute() {
     setCurrentTenantCodeSource("route");
     return code;
   }
-  return normalizeTenantCode(uni.getStorageSync(TENANT_CODE_STORAGE_KEY));
+  const stored = normalizeTenantCode(uni.getStorageSync(TENANT_CODE_STORAGE_KEY));
+  if (stored) return stored;
+  if (DEFAULT_TENANT_CODE) {
+    uni.setStorageSync(TENANT_CODE_STORAGE_KEY, DEFAULT_TENANT_CODE);
+    setCurrentTenantCodeSource("default");
+    return DEFAULT_TENANT_CODE;
+  }
+  return "";
 }
 
 export function getCurrentTenantCode() {
@@ -88,7 +97,7 @@ export function hasExplicitTenantCodeInRoute() {
   return Boolean(locationTenantCode() || pageTenantCode());
 }
 
-export function setCurrentTenantCodeSource(value: "route" | "manual" | "location" | "") {
+export function setCurrentTenantCodeSource(value: "route" | "manual" | "location" | "default" | "") {
   if (value) uni.setStorageSync(TENANT_CODE_SOURCE_STORAGE_KEY, value);
   else uni.removeStorageSync(TENANT_CODE_SOURCE_STORAGE_KEY);
 }

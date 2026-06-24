@@ -787,12 +787,22 @@ export class PublicService {
     ]);
     const latestItems = Array.isArray(latest) ? latest : latest.items;
     const featuredItems = Array.isArray(featured) ? featured : featured.items;
+    const publicSections = this.normalizeHomepagePublicSections(source);
     return {
-      sections: source.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, testimonials })),
+      sections: publicSections.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, testimonials })),
       fallback,
       pageKey: normalizedPageKey,
       tenant: this.publicHomepageTenant(tenant)
     };
+  }
+
+  private normalizeHomepagePublicSections(sections: HomepageSection[]) {
+    const singletonTypes = new Set(["bottom_nav", "my_page", "inner_pages"]);
+    const latestSingleton = new Map<string, HomepageSection>();
+    for (const section of sections) {
+      if (singletonTypes.has(section.type)) latestSingleton.set(section.type, section);
+    }
+    return sections.filter((section) => !singletonTypes.has(section.type) || latestSingleton.get(section.type) === section);
   }
 
   private homepageConfiguredCount(pageKey: string, tenantId: number | null) {

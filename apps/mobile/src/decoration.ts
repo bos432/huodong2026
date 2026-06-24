@@ -9,6 +9,8 @@ type InnerPageConfig = {
   showBottomNav?: boolean;
 };
 
+const globalSingletonTypes = ["bottom_nav", "my_page", "inner_pages"];
+
 const defaultBottomNavSection: HomepageSectionView = {
   id: -900,
   pageKey: "home",
@@ -63,6 +65,14 @@ function normalizeLink(url?: string) {
   return String(url || "").split("?")[0];
 }
 
+function normalizeDecorationSections(list: HomepageSectionView[]) {
+  const latestSingleton = new Map<string, HomepageSectionView>();
+  for (const item of list) {
+    if (globalSingletonTypes.includes(item.type)) latestSingleton.set(item.type, item);
+  }
+  return list.filter((item) => !globalSingletonTypes.includes(item.type) || latestSingleton.get(item.type) === item);
+}
+
 export function isTabUrl(url?: string) {
   return ["/pages/index/index", "/pages/courses/index", "/pages/community/index", "/pages/activity/list", "/pages/user/my"].includes(normalizeLink(url));
 }
@@ -105,15 +115,14 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
       loadFailed.value = false;
       const endpoint = pageKey === "home" ? "/public/homepage" : `/public/page-decoration?pageKey=${encodeURIComponent(pageKey)}`;
       const payload = await request<HomepagePayload>(endpoint);
-      const pageSections = payload.sections || [];
+      const pageSections = normalizeDecorationSections(payload.sections || []);
       if (pageKey === "home") {
         sections.value = pageSections;
       } else {
         const homePayload = await request<HomepagePayload>("/public/homepage").catch(() => null);
-        const homeSections = homePayload?.sections || [];
-        const globalTypes = ["bottom_nav", "my_page", "inner_pages"];
-        const localSections = payload.fallback ? pageSections.filter((item) => !globalTypes.includes(item.type)) : pageSections;
-        const inherited = homeSections.filter((item) => globalTypes.includes(item.type) && !localSections.some((pageItem) => pageItem.type === item.type));
+        const homeSections = normalizeDecorationSections(homePayload?.sections || []);
+        const localSections = payload.fallback ? pageSections.filter((item) => !globalSingletonTypes.includes(item.type)) : pageSections;
+        const inherited = homeSections.filter((item) => globalSingletonTypes.includes(item.type) && !localSections.some((pageItem) => pageItem.type === item.type));
         sections.value = [...localSections, ...inherited];
       }
       tenant.value = payload.tenant || null;
