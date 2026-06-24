@@ -9719,3 +9719,43 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 - 将本次提交部署到服务器后，重新构建 H5、后台和小程序包；本次只改前端，不需要 API 重启。
 - 在微信开发者工具中打开动态详情，点击“生成海报”，确认弹出海报图片而不是仅复制链接。
 - 打开线上后台“会员管理”，确认出现总会员、已绑手机号、微信绑定、小程序来源、近 7 日活跃概览，以及筛选、排序和分页。
+
+## 2026-06-24 - 小程序动态海报路径文案修正
+
+### 阶段名称
+
+小程序试运营前 - 动态海报不暴露内部页面路径小阶段。
+
+### 本阶段完成内容
+
+- 根据微信开发者工具截图复核动态海报效果，确认上一阶段虽然已经生成海报和二维码，但海报底部仍会显示 `/pages/community/detail?id=...` 这类小程序内部页面路径，用户观感不专业，扫码目标在未设置构建域名时也不够稳定。
+- 将“二维码目标链接”和“海报展示文案”拆开：
+  - 二维码和复制链接优先使用 `VITE_H5_ORIGIN`。
+  - 未设置 `VITE_H5_ORIGIN` 时，自动从 `VITE_API_BASE` 推导同域名 H5 地址。
+  - 再无构建环境变量时，当前线上包兜底使用 `https://rd.chaimen666.com`。
+  - 海报底部不再绘制真实 URL 或 `/pages/...` 内部路径，只展示“扫码查看慢π动态详情，长按保存后分享给好友”。
+- 保留失败兜底：二维码生成失败时仍提示复制链接，但不在海报视觉上展示内部路径。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/community/detail.vue`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 22:28 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_H5_ORIGIN='https://rd.chaimen666.com'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `rg -n "扫码查看慢π动态详情|请点击页面复制链接分享动态详情|rd\\.chaimen666\\.com|VITE_H5_ORIGIN|/pages/community/detail" apps/mobile/dist/build/mp-weixin/pages/community/detail.js apps/mobile/src/pages/community/detail.vue`：通过，确认小程序构建产物中二维码目标为公网 H5 链接，海报展示文案不再直接绘制内部路径。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 当前二维码仍是普通 H5 链接二维码，不是微信官方小程序码；扫码会进入 H5 动态详情。若后续要扫码直接打开小程序详情页，需要新增后端调用微信 `getwxacodeunlimit` 并缓存图片。
+- 需要重新构建并导入最新 `apps/mobile/dist/build/mp-weixin`，在微信开发者工具或真机预览中点击“生成海报”复验。
+
+### 下一阶段应继续处理的事项
+
+- 服务器拉取本次提交后，构建小程序包时同时设置 `VITE_H5_ORIGIN=https://rd.chaimen666.com` 和 `VITE_API_BASE=https://rd.chaimen666.com/api`。
+- 真机微信预览中长按保存海报、扫码回流 H5 动态详情，确认视觉和链路都符合上线试运营要求。

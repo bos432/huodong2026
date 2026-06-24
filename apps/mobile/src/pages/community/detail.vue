@@ -127,6 +127,12 @@ const shareLink = computed(() => {
   // #endif
   return h5DetailUrl(path) || path;
 });
+const posterHintText = computed(() => {
+  if (!shareLink.value) return "扫码查看慢π动态详情";
+  return /^https?:\/\//i.test(shareLink.value)
+    ? "扫码查看慢π动态详情，长按保存后分享给好友"
+    : "请点击页面复制链接分享动态详情";
+});
 const comments = computed<CommunityComment[]>(() =>
   (Array.isArray(rawComments.value) ? rawComments.value : []).map((item, index) => ({
     id: Number(item.id || index + 1),
@@ -315,14 +321,23 @@ function communityDetailPath() {
 }
 
 function h5DetailUrl(path: string) {
-  const apiBase = String(import.meta.env.VITE_API_BASE || "");
+  const origin = h5Origin();
+  return origin ? `${origin}/#${path}` : "";
+}
+
+function h5Origin() {
+  const direct = String(import.meta.env.VITE_H5_ORIGIN || import.meta.env.VITE_PUBLIC_H5_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(direct)) return direct;
+  const apiBase = String(import.meta.env.VITE_API_BASE || "").trim();
   try {
-    if (!/^https?:\/\//i.test(apiBase)) return "";
-    const origin = new URL(apiBase).origin;
-    return `${origin}/#${path}`;
+    if (/^https?:\/\//i.test(apiBase)) return new URL(apiBase).origin;
   } catch {
-    return "";
+    // Ignore malformed build-time API base and continue with runtime fallbacks.
   }
+  // #ifdef H5
+  if (typeof window !== "undefined" && /^https?:\/\//i.test(window.location.origin)) return window.location.origin;
+  // #endif
+  return "https://rd.chaimen666.com";
 }
 
 async function drawPosterImage(ctx: CanvasRenderingContext2D, src: string, x: number, y: number, width: number, height: number) {
@@ -402,9 +417,9 @@ async function drawPosterCanvas(ctx: CanvasRenderingContext2D, includeImage: boo
   const hasQr = await drawShareQr(ctx);
   ctx.fillStyle = "#333333";
   ctx.font = "24px sans-serif";
-  ctx.fillText(hasQr ? "分享链接" : "复制链接查看动态", 54, 1008);
+  ctx.fillText(hasQr ? "扫码查看动态" : "复制链接查看动态", 54, 1008);
   ctx.fillStyle = "#666666";
-  drawWrappedText(ctx, shareLink.value, 54, 1042, hasQr ? 420 : 642, 32, 2);
+  drawWrappedText(ctx, posterHintText.value, 54, 1042, hasQr ? 420 : 642, 32, 2);
 }
 
 async function generateMiniProgramPoster() {
@@ -450,7 +465,7 @@ async function generateMiniProgramPoster() {
       ctx.setFontSize(24);
       ctx.fillText(hasQr ? "扫码查看动态" : "复制链接查看动态", 54, 1008);
       ctx.setFillStyle("#666666");
-      drawUniWrappedText(ctx, shareLink.value, 54, 1042, 28, 32, 2);
+      drawUniWrappedText(ctx, posterHintText.value, 54, 1042, 19, 32, 2);
       ctx.draw(false, () => {
         uni.canvasToTempFilePath({
           canvasId: "communityPosterCanvas",
