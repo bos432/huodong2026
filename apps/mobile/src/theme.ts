@@ -83,10 +83,21 @@ function syncH5Title(title: string) {
   // #endif
 }
 
+function ignoreNavigationBarTitleError(error: unknown) {
+  const message = String((error as any)?.errMsg || (error as any)?.message || error || "");
+  if (message.includes("setNavigationBarTitle:fail page not found")) return;
+  console.warn(`[H5] set navigation title failed: ${message || "unknown"}`);
+}
+
 export function setRuntimePageTitle(title?: string) {
   const normalized = normalizeTitle(title);
   latestRuntimeTitle = normalized;
-  uni.setNavigationBarTitle({ title: normalized });
+  try {
+    const result = uni.setNavigationBarTitle({ title: normalized }) as unknown as Promise<unknown>;
+    if (result && typeof result.catch === "function") result.catch(ignoreNavigationBarTitleError);
+  } catch (error) {
+    ignoreNavigationBarTitleError(error);
+  }
   // #ifdef H5
   if (typeof window !== "undefined") {
     syncH5Title(normalized);

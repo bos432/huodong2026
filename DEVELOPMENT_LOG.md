@@ -2,6 +2,56 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - H5 控制台残留 Object 日志修复
+
+### 阶段名称
+
+上线前体验细节 - H5 首页控制台残留 `Object` 错误日志收口小阶段。
+
+### 本阶段完成内容
+
+- 读取用户贴回的服务器发布输出，确认服务器已拉取 `44ce6ba`，H5 构建成功，线上静态主包更新为 `assets/index-BAs0Zayf.js`，旧品牌词扫描通过，Nginx reload 与 API readiness 均通过。
+- 使用右侧浏览器打开线上 H5 首页，确认页面实际加载 `https://rd.chaimen666.com/assets/index-BAs0Zayf.js`，正文和标题均为慢π，未出现旧品牌词和页面阻塞。
+- 浏览器控制台复验发现：
+  - 新的 `[H5] unhandled promise rejection: setNavigationBarTitle:fail page not found` 前缀已经生效。
+  - 但由于 `reportH5Error()` 仍把原始 error 对象作为第二个 `console.error` 参数输出，浏览器日志仍额外捕获一条独立 `Object`。
+- 将 `reportH5Error()` 改为只输出单条字符串日志，并把 error/context 压缩为 `detail=...` 字符串，避免浏览器继续单独记录 `Object`。
+- 定位非阻塞错误源头为 `theme.ts` 里的 `uni.setNavigationBarTitle({ title })` 在 H5 页面尚未就绪时可能返回 rejected promise。
+- 给 `setRuntimePageTitle()` 增加 try/catch 与 promise catch：
+  - 已知 `setNavigationBarTitle:fail page not found` 在 H5 下直接忽略，因为同函数已经用 DOM `document.title` 和 `.uni-page-head__title` 兜底同步标题。
+  - 其它未知标题设置错误仍以单条 `[H5] set navigation title failed: ...` warn 输出。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/error-reporting.ts`
+- `apps/mobile/src/theme.ts`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 15:02:09 +08:00。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `rg -n "console\\.error\\([^\\n]*,|reject\\(error\\)|setNavigationBarTitle\\(\\{ title: normalized \\}\\);" apps/mobile/src -g "*.ts" -g "*.vue"`：仅剩单参数 `[H5] ...` `console.error`，未发现裸 `reject(error)` 或未兜底的标题设置调用。
+- `git diff --check`：通过；仅提示 Windows 下 LF/CRLF 转换。
+
+### 浏览器验收结果
+
+- 验证环境：线上 H5 `https://rd.chaimen666.com/?tenantCode=qiwai-showcase&t=1782284404668#/`，右侧浏览器。
+- 部署前线上浏览器结果：页面加载新包 `assets/index-BAs0Zayf.js`，无旧品牌、无页面阻塞；控制台仍有一条独立 `Object`，已在本阶段本地代码中修复。
+- 本阶段修复尚未发布到服务器，因此线上浏览器需要服务器拉取本次提交后再次复验。
+
+### 遗留问题
+
+- 需要提交、推送并由服务器再次构建发布 H5，确认线上新主包 hash 变化后，重新打开 H5 验证控制台不再出现独立 `Object`。
+- 真机微信 iOS/Android 分享、海报长按保存、二维码扫码回流仍未验收。
+
+### 下一阶段应继续处理的事项
+
+- 提交并推送本阶段补丁。
+- 服务器拉取后执行 H5 构建发布，再用右侧浏览器确认首页控制台不再出现 `Object`。
+- 继续补做后台多角色对线上商城订单 `MO17822834802957D7DB7` 的查看权限复验，或进入真机微信验收。
+
 ## 2026-06-24 - H5 错误日志优化提交推送
 
 ### 阶段名称

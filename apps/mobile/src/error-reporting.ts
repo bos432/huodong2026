@@ -18,6 +18,15 @@ function compactContext(context?: ErrorContext) {
   return entries.length ? ` (${entries.join(", ")})` : "";
 }
 
+function compactDetail(error: unknown, context?: ErrorContext) {
+  const detail = {
+    error: error instanceof Error ? { name: error.name, message: error.message } : error,
+    context
+  };
+  const json = safeJson(detail);
+  return json && json !== "{}" ? ` detail=${json.slice(0, 1200)}` : "";
+}
+
 export function describeError(error: unknown, fallback = "操作失败") {
   if (error instanceof Error) return error.message || error.name || fallback;
   if (typeof error === "string") return error || fallback;
@@ -50,11 +59,7 @@ export function clientError(error: unknown, fallback: string, context?: ErrorCon
 export function reportH5Error(scope: string, error: unknown, context?: ErrorContext) {
   const message = describeError(error, "未知错误");
   const contextText = compactContext(context);
-  // Keep the first console argument readable even when the original error is a plain object.
-  console.error(`[H5] ${scope}: ${message}${contextText}`, {
-    error,
-    context
-  });
+  console.error(`[H5] ${scope}: ${message}${contextText}${compactDetail(error, context)}`);
 }
 
 export function installH5ErrorReporting(app: VueApp) {
