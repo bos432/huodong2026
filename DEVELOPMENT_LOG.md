@@ -7944,3 +7944,60 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 继续按上线前计划推进真实 HTTPS 域名、微信内 H5 分享/海报、DNS/SSL/Nginx/PM2 服务器侧联调。
 - 真实支付、短信、证书、回调资料补齐后，再开启真实支付小额支付、退款和重复回调验收。
+
+## 2026-06-24 - 线上静态发布与旧品牌残留定位
+
+### 阶段名称
+
+上线前部署配置 - H5/Admin 构建产物发布到站点根目录小阶段。
+
+### 本阶段完成内容
+
+- 右侧浏览器检查线上 H5 `https://rd.chaimen666.com/#/?tenantCode=qiwai-showcase`，确认页面仍加载旧资源 `assets/index-D6hAU5Ez.js`，浏览器标题和 H5 顶部栏仍显示 `七维书院`。
+- 核对线上公开首页接口 `https://rd.chaimen666.com/api/public/homepage?tenantCode=qiwai-showcase`，返回商家名 `慢π演示中心`，接口数据不含 `七维`，确认问题不是后台配置未保存，而是线上静态 H5 构建产物未发布到 Nginx 实际服务目录。
+- 新增 `publish:webroot` 发布脚本，将 `apps/mobile/dist/build/h5` 发布到站点根目录，将 `apps/admin/dist` 发布到 `admin/`，发布前备份旧 `index.html`、`assets/`、`admin/`。
+- 新增后台构建前清理脚本，避免 `apps/admin/dist` 留存旧 hash 资源。
+- 保持真实支付关闭，未改动线上支付开关逻辑。
+
+### 修改/新增的主要文件
+
+- `package.json`
+- `apps/admin/package.json`
+- `scripts/publish-webroot.mjs`
+- `scripts/clean-admin-dist.mjs`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 12:55:56 +08:00。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过，构建前已清理 H5 旧产物。
+- `npm.cmd --prefix apps/admin run build`：通过，构建前已清理 Admin 旧产物；仅保留既有 VueUse pure 注释与大 chunk 提醒。
+- `rg -n "七维书院|七维文化|七维|奇外|电召" apps/mobile/dist/build/h5 apps/admin/dist apps/mobile/src apps/admin/src apps/api/src packages -g "!node_modules"`：无命中。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下 `package.json`、`apps/admin/package.json` 未来可能发生 LF/CRLF 转换。
+- 临时 webroot 发布演练：通过，H5/Admin 入口均替换为新构建，旧 `assets/old.js`、`admin/assets/old.js` 被删除，`.deploy-backups` 备份目录已生成。
+- 线上 `https://rd.chaimen666.com/api/health/ready`：API ready 通过，但 release commit 仍为 `7831515`，说明服务器仍需拉取最新代码、构建并执行发布脚本。
+
+### 浏览器验收结果
+
+- 验证时间：2026-06-24 12:55:56 +08:00。
+- 验证环境：线上 H5 `https://rd.chaimen666.com/#/?tenantCode=qiwai-showcase`，右侧浏览器。
+- 浏览器验证步骤：
+  - 读取当前页面标题、顶部栏标题、脚本和样式资源。
+  - 页面可见正文已展示 `慢π演示中心`、`慢π` 等数据内容。
+  - `document.title` 和多个 `.uni-page-head__title` 仍为 `七维书院`。
+  - 当前 HTML 仍引用 `/assets/index-D6hAU5Ez.js`，因此刷新或增加时间戳仍会加载旧 H5 包。
+- 输入的测试数据摘要：无新增业务数据，仅检查线上页面和公开首页接口。
+- 通过项：问题定位完成；接口数据正确；本地构建产物和发布脚本验证通过。
+- 发现的问题：线上站点根目录尚未执行最新发布步骤，仍在服务旧静态资源；需服务器执行 `git pull`、H5/Admin 构建、`npm run publish:webroot` 后再复验。
+- 是否达到可上线运营标准：本小阶段代码达到可运行、可测试、可继续部署状态；线上需完成静态发布后才能判定品牌残留修复通过。
+
+### 遗留问题
+
+- 线上 H5 仍显示 `七维书院`，等待服务器拉取并发布最新构建产物。
+- 线上 API release commit 仍为旧值 `7831515`，需要重启 API 并带上最新 `BUILD_COMMIT`/`BUILD_TIME`。
+
+### 下一阶段应继续处理的事项
+
+- 在服务器执行最新发布命令：拉取分支、构建 Admin/H5、执行 `npm run publish:webroot`、重启 API、检查旧品牌词残留和 health ready。
+- 发布完成后重新打开线上 H5，确认主脚本 hash 已变化，`document.title` 与 H5 顶部栏均显示 `慢π`，并确认后台 `/admin` 可正常打开。
