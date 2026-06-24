@@ -2,6 +2,62 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 线上 H5 旧标题修复复验
+
+### 阶段名称
+
+上线前部署配置 - 线上 H5 新静态包发布与慢π标题复验小阶段。
+
+### 本阶段完成内容
+
+- 读取服务器执行输出，确认宝塔防篡改/文件保护关闭后，服务器已成功拉取 `f7649be`。
+- 服务器手动清理旧文件属性后，后台与 H5 构建均成功：
+  - `npm --prefix apps/admin run build`：通过。
+  - `npm --prefix apps/mobile run build:h5`：通过。
+  - `npm run publish:webroot`：识别 H5/Admin 构建产物已是 Nginx 直出目录。
+- 线上 H5 dist 主包已更新为 `assets/index-Dw1W2UkT.js`。
+- 线上 H5/Admin 构建产物旧品牌词检查通过：未发现 `七维书院/七维文化/七维/奇外/电召`。
+- Nginx 配置检查和 reload 成功。
+- 使用右侧浏览器打开带时间戳的线上 H5，确认旧标题残留已消失。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 13:40:56 +08:00。
+- 服务器验证摘要：
+  - `HEAD=f7649be`。
+  - `lsattr apps/mobile/dist/build/h5/assets/AdminBottomNav-kku8XPez.css`：文件无不可变属性，仅显示普通 extents 标记。
+  - `npm --prefix apps/admin run build`：通过；仅保留既有 VueUse pure 注释与大 chunk 提醒。
+  - `npm --prefix apps/mobile run build:h5`：通过。
+  - `grep -o 'assets/index-[^"]*\.js' apps/mobile/dist/build/h5/index.html`：`assets/index-Dw1W2UkT.js`。
+  - `grep -R "七维书院\|七维文化\|七维\|奇外\|电召" apps/mobile/dist/build/h5 apps/admin/dist`：无命中，输出 `OK 没有旧品牌残留`。
+  - `/www/server/nginx/sbin/nginx -t && /www/server/nginx/sbin/nginx -s reload`：通过。
+  - 外网 HTML 检查：加载 `/assets/index-Dw1W2UkT.js` 和 `/assets/index-BVheYeKY.css`。
+  - `curl -i https://rd.chaimen666.com/api/health/ready`：HTTP 200，`ready=true`、`api=up`、`database=up`。
+
+### 浏览器验收结果
+
+- 验证环境：线上 H5 `https://rd.chaimen666.com/?tenantCode=qiwai-showcase&t=1782279721506#/`，右侧浏览器。
+- 页面实际结果：
+  - `document.title`：`慢π`。
+  - H5 顶部栏标题：`慢π`。
+  - 当前脚本：`/assets/index-Dw1W2UkT.js`。
+  - 页面文本包含 `慢π`。
+  - 页面文本和标题不包含 `七维`、`奇外`、`电召`。
+  - 浏览器控制台 error：无。
+
+### 遗留问题
+
+- API `/api/health/ready` 的 `release.commit` 仍显示旧值 `fb0a2e7`、`buildTime=2026-06-24T13:02:31+08:00`；这不影响本次 H5 静态标题修复，但会影响线上 release 元数据准确性。
+
+### 下一阶段应继续处理的事项
+
+- 在服务器重启 `activity-api --update-env`，同步 `BUILD_COMMIT=f7649be` 和最新 `BUILD_TIME`，让健康检查 release 信息与当前代码一致。
+- 继续用线上 H5 走核心用户流程，确认首页、活动详情、报名、共修动态、发布心得、海报入口均在新包下正常。
+
 ## 2026-06-24 - H5 直出目录 EPERM 清理修复
 
 ### 阶段名称
