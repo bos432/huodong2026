@@ -82,6 +82,20 @@ import { VolunteerTask } from "../../entities/volunteer-task.entity";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[] };
 type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean; mallEnabled: boolean; packagePlan: string; packageExpiresAt: string | null };
+type MemberListQuery = {
+  keyword?: string;
+  activityId?: number;
+  page?: number;
+  pageSize?: number;
+  sourceChannel?: string;
+  wechatBound?: string | boolean;
+  phoneBound?: string | boolean;
+  levelId?: string | number;
+  activeStart?: string;
+  activeEnd?: string;
+  sortBy?: string;
+  sortOrder?: string;
+};
 const TENANT_STAFF_ROLES = [AdminRole.Operator, AdminRole.Finance, AdminRole.CheckInStaff];
 
 @Injectable()
@@ -3555,38 +3569,119 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return this.memberLevels.save(row);
   }
 
-  async listMembers(query: string | { keyword?: string; activityId?: number } = {}, admin?: AdminContext) {
-    const keyword = typeof query === "string" ? query : query.keyword;
-    const activityId = typeof query === "string" ? undefined : query.activityId;
+  async listMembers(query: string | MemberListQuery = {}, admin?: AdminContext) {
+    const normalized: MemberListQuery = typeof query === "string" ? { keyword: query } : query;
+    const keyword = normalized.keyword;
+    const activityId = normalized.activityId;
+    const paged = Boolean(normalized.page || normalized.pageSize);
+    const page = Math.max(Math.trunc(Number(normalized.page || 1)), 1);
+    const pageSize = Math.min(Math.max(Math.trunc(Number(normalized.pageSize || 20)), 1), 100);
+    let activity: Activity | null = null;
+    let scopedUserIds: number[] | undefined;
     if (activityId) {
-      const activity = await this.activities.findOneBy({ id: activityId });
+      activity = await this.activities.findOneBy({ id: activityId });
       if (!activity) throw new NotFoundException("活动不存");
       this.assertTenantAccess(activity, admin);
-      const userIds = await this.userIdsForActivity(activity.id, admin);
-      const users = userIds.length ? await this.users.find({ where: { id: In(userIds) } }) : [];
-      for (const user of users) await this.ensureMemberProfile(user);
-      if (!users.length) return [];
-      const builder = this.memberProfiles
-        .createQueryBuilder("profile")
-        .leftJoinAndSelect("profile.user", "user")
-        .leftJoinAndSelect("profile.level", "level")
-        .where("user.id IN (:...userIds)", { userIds });
-      if (keyword?.trim()) builder.andWhere("(user.phone LIKE :keyword OR user.nickname LIKE :keyword)", { keyword: `%${keyword.trim()}%` });
-      const profiles = await builder.orderBy("profile.points", "DESC").addOrderBy("profile.updatedAt", "DESC").getMany();
-      return profiles.map((profile) => ({ ...profile, activity: { id: activity.id, title: activity.title } }));
+      scopedUserIds = await this.userIdsForActivity(activity.id, admin);
+    } else if (this.isTenantScoped(admin)) {
+      const users = await this.usersForTenant(admin, undefined, 10000);
+      scopedUserIds = users.map((user) => user.id);
+    } else {
+      await this.ensureProfilesForExistingUsers();
     }
-    if (this.isTenantScoped(admin)) {
-      const users = await this.usersForTenant(admin, keyword, 300);
+    if (scopedUserIds !== undefined) {
+      const users = scopedUserIds.length ? await this.users.find({ where: { id: In(scopedUserIds) } }) : [];
       for (const user of users) await this.ensureMemberProfile(user);
-      if (!users.length) return [];
-      return this.memberProfiles.find({ where: { user: { id: In(users.map((user) => user.id)) } }, order: { points: "DESC", updatedAt: "DESC" }, take: 300 });
+      if (!users.length) {
+        return paged ? { items: [], total: 0, page, pageSize, summary: { totalMembers: 0, phoneBound: 0, wechatBound: 0, miniProgramSource: 0, active7Days: 0 } } : [];
+      }
     }
-    await this.ensureProfilesForExistingUsers();
-    const profiles = await this.memberProfiles.find({ order: { points: "DESC", updatedAt: "DESC" }, take: 300 });
-    const filtered = keyword?.trim()
-      ? profiles.filter((item) => `${item.user.nickname || ""}${item.user.phone || ""}`.includes(keyword.trim()))
-      : profiles;
-    return filtered;
+    const builder = this.memberProfiles
+      .createQueryBuilder("profile")
+      .leftJoinAndSelect("profile.user", "user")
+      .leftJoinAndSelect("profile.level", "level");
+    if (scopedUserIds !== undefined) builder.where("user.id IN (:...scopedUserIds)", { scopedUserIds });
+    else builder.where("1=1");
+    this.applyMemberFilters(builder, normalized);
+    this.applyMemberSort(builder, normalized);
+    if (!paged) {
+      const profiles = await builder.take(300).getMany();
+      return activity ? profiles.map((profile) => ({ ...profile, activity: { id: activity!.id, title: activity!.title } })) : profiles;
+    }
+    const total = await builder.clone().getCount();
+    const [phoneBound, wechatBound, miniProgramSource, active7Days] = await Promise.all([
+      builder.clone().andWhere("user.phone IS NOT NULL AND user.phone <> ''").getCount(),
+      builder.clone().andWhere("user.openid IS NOT NULL AND user.openid <> ''").getCount(),
+      builder.clone().andWhere("user.sourceChannel = :summarySource", { summarySource: "mp_weixin" }).getCount(),
+      builder.clone().andWhere("profile.lastActiveAt >= :active7Days", { active7Days: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) }).getCount()
+    ]);
+    const items = await builder.skip((page - 1) * pageSize).take(pageSize).getMany();
+    return {
+      items: activity ? items.map((profile) => ({ ...profile, activity: { id: activity!.id, title: activity!.title } })) : items,
+      total,
+      page,
+      pageSize,
+      summary: { totalMembers: total, phoneBound, wechatBound, miniProgramSource, active7Days }
+    };
+  }
+
+  private applyMemberFilters(builder: SelectQueryBuilder<MemberProfile>, query: MemberListQuery) {
+    const keyword = String(query.keyword || "").trim();
+    if (keyword) {
+      const keywordLike = `%${keyword}%`;
+      const keywordId = Number(keyword);
+      builder.andWhere(new Brackets((qb) => {
+        qb.where("user.phone LIKE :keyword", { keyword: keywordLike })
+          .orWhere("user.nickname LIKE :keyword", { keyword: keywordLike });
+        if (Number.isInteger(keywordId) && keywordId > 0) qb.orWhere("user.id = :keywordId", { keywordId });
+      }));
+    }
+    const sourceChannel = String(query.sourceChannel || "").trim();
+    if (["h5", "mp_weixin", "admin"].includes(sourceChannel)) builder.andWhere("user.sourceChannel = :sourceChannel", { sourceChannel });
+    const wechatBound = this.memberBooleanFilter(query.wechatBound);
+    if (wechatBound === true) builder.andWhere("user.openid IS NOT NULL AND user.openid <> ''");
+    if (wechatBound === false) builder.andWhere("(user.openid IS NULL OR user.openid = '')");
+    const phoneBound = this.memberBooleanFilter(query.phoneBound);
+    if (phoneBound === true) builder.andWhere("user.phone IS NOT NULL AND user.phone <> ''");
+    if (phoneBound === false) builder.andWhere("(user.phone IS NULL OR user.phone = '')");
+    const levelIdText = String(query.levelId || "").trim();
+    if (levelIdText === "none") builder.andWhere("level.id IS NULL");
+    else if (Number.isFinite(Number(levelIdText)) && Number(levelIdText) > 0) builder.andWhere("level.id = :levelId", { levelId: Number(levelIdText) });
+    const activeStart = this.memberDateFilter(query.activeStart);
+    const activeEnd = this.memberDateFilter(query.activeEnd, true);
+    if (activeStart) builder.andWhere("profile.lastActiveAt >= :activeStart", { activeStart });
+    if (activeEnd) builder.andWhere("profile.lastActiveAt <= :activeEnd", { activeEnd });
+  }
+
+  private memberBooleanFilter(value: unknown) {
+    if (value === true || value === "true" || value === "1" || value === "yes") return true;
+    if (value === false || value === "false" || value === "0" || value === "no") return false;
+    return undefined;
+  }
+
+  private memberDateFilter(value: unknown, endOfDay = false) {
+    const text = String(value || "").trim();
+    if (!text) return null;
+    const date = new Date(text);
+    if (Number.isNaN(date.getTime())) return null;
+    if (endOfDay && /^\d{4}-\d{2}-\d{2}$/.test(text)) date.setHours(23, 59, 59, 999);
+    return date;
+  }
+
+  private applyMemberSort(builder: SelectQueryBuilder<MemberProfile>, query: MemberListQuery) {
+    const sortMap: Record<string, string> = {
+      lastActiveAt: "profile.lastActiveAt",
+      lastActive: "profile.lastActiveAt",
+      lastLoginAt: "user.lastLoginAt",
+      lastLogin: "user.lastLoginAt",
+      points: "profile.points",
+      totalSpent: "profile.totalSpent",
+      registrationCount: "profile.registrationCount",
+      createdAt: "user.createdAt"
+    };
+    const sortBy = sortMap[String(query.sortBy || "lastActiveAt")] || sortMap.lastActiveAt;
+    const sortOrder = String(query.sortOrder || "DESC").toUpperCase() === "ASC" ? "ASC" : "DESC";
+    builder.orderBy(sortBy, sortOrder).addOrderBy("profile.updatedAt", "DESC").addOrderBy("user.id", "DESC");
   }
 
   async createMember(dto: CreateMemberDto, admin?: AdminContext) {

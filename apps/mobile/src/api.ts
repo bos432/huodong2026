@@ -262,6 +262,20 @@ export async function updateMyPhone(phone: string, verificationToken: string, ve
   return profile;
 }
 
+export async function bindWechatPhone(code: string) {
+  let appId = "";
+  // #ifdef MP-WEIXIN
+  try {
+    appId = uni.getAccountInfoSync?.().miniProgram?.appId || "";
+  } catch {
+    appId = "";
+  }
+  // #endif
+  const profile = await request<any>("/public/me/phone/wechat", { method: "POST", data: { code, appId: appId || undefined } });
+  saveProfileSession(profile);
+  return profile;
+}
+
 export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: string }> {
   const token = getUserToken();
   const tenantCode = getCurrentTenantCode();

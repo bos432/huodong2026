@@ -61,18 +61,29 @@
         <view class="button block button-lg" :class="{ disabled: paying }" @click="doPay">{{ payButtonText }}</view>
       </view>
     </template>
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="提交课程订单前绑定手机号"
+      message="课程订单、线下确认和学习权益需要手机号，授权后将继续提交订单。"
+      close-text="暂不提交"
+      @close="closePhoneBindPanel"
+      @bound="handlePhoneBound"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const selectedPayment = ref(0);
 const loading = ref(true);
 const paying = ref(false);
 const error = ref("");
 const course = ref<any>();
+const phoneBindVisible = ref(false);
+const pendingPhoneAction = ref<"" | "pay">("");
 const paymentMethods = [
   { icon: "🏦", label: "线下收款（待后台确认）", value: "offline" }
 ];
@@ -114,7 +125,7 @@ async function doPay() {
   if (paying.value) return;
   paying.value = true;
   try {
-    await ensureUser();
+    if (!(await requirePhoneBound("pay"))) return;
     const paymentMethod = Number(course.value.price) > 0 ? paymentMethods[selectedPayment.value]?.value || "offline" : undefined;
     const result = await request<any>(`/public/courses/${course.value.id}/orders`, {
       method: "POST",
@@ -138,6 +149,27 @@ async function doPay() {
   } finally {
     paying.value = false;
   }
+}
+
+async function requirePhoneBound(action: "pay") {
+  await ensureUser();
+  const profile = await fetchMyProfile();
+  if (profile?.phone) return true;
+  pendingPhoneAction.value = action;
+  phoneBindVisible.value = true;
+  return false;
+}
+
+function closePhoneBindPanel() {
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+}
+
+function handlePhoneBound() {
+  const action = pendingPhoneAction.value;
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+  if (action === "pay") doPay();
 }
 
 onMounted(loadCourse);

@@ -1,8 +1,7 @@
 <template>
   <view class="profile-page has-custom-nav">
-    <!-- 顶部用户信息 -->
     <view
-      class="profile-header"
+      class="member-card"
       :style="{
         background: profileHeaderBackground,
         color: profileHeaderTextColor,
@@ -10,26 +9,29 @@
         '--profile-header-muted': profileHeaderMutedColor
       }"
     >
-      <view class="profile-greeting" :style="{ color: profileHeaderTextColor }">{{ myPageGreeting }}</view>
-      <image class="avatar-lg" :src="profile?.avatarUrl || '/static/avatar_default.png'" mode="aspectFill" />
-      <text class="profile-nickname">{{ displayName }}</text>
-      <view class="profile-badge">{{ memberLevelName }}</view>
-      <text class="profile-expire">{{ profileIdentityText }}</text>
-      <view v-if="canCompleteWechatProfile" class="wechat-profile-sync" @click="openWechatProfilePanel()">
-        <text>授权微信头像昵称</text>
+      <view class="member-card-top">
+        <image class="avatar-lg" :src="profile?.avatarUrl || '/static/avatar_default.png'" mode="aspectFill" />
+        <view class="member-main">
+          <view class="profile-greeting" :style="{ color: profileHeaderTextColor }">{{ myPageGreeting }}</view>
+          <text class="profile-nickname">{{ displayName }}</text>
+          <view class="identity-line">
+            <text class="profile-badge">{{ memberLevelName }}</text>
+            <text class="phone-state" :class="{ missing: !profile?.phone }">{{ phoneStatusText }}</text>
+          </view>
+          <text class="profile-expire">{{ profileIdentityText }}</text>
+        </view>
+        <view class="profile-edit-btn" @click="goEdit">编辑</view>
       </view>
-      <view class="profile-edit-btn" @click="goEdit">
-        <text class="subtle profile-edit-text">编辑资料  ›</text>
+      <view class="member-stats">
+        <view v-for="item in memberStats" :key="item.label" class="member-stat">
+          <text>{{ item.label }}</text>
+          <strong>{{ item.value }}</strong>
+        </view>
       </view>
-    </view>
-
-    <view v-if="canCompleteWechatProfile" class="wechat-complete-card" @click="openWechatProfilePanel()">
-      <view class="wechat-complete-icon">微</view>
-      <view class="wechat-complete-copy">
-        <view class="wechat-complete-title">完善微信头像和昵称</view>
-        <view class="wechat-complete-sub">当前仍是默认微信资料，授权后后台会员资料会同步更新。</view>
+      <view v-if="!profile?.phone || canCompleteWechatProfile" class="member-actions">
+        <view v-if="!profile?.phone" class="member-action primary" @click="openPhoneBindPanel">绑定手机号</view>
+        <view v-if="canCompleteWechatProfile" class="member-action" @click="openWechatProfilePanel()">完善头像昵称</view>
       </view>
-      <view class="wechat-complete-action">去授权</view>
     </view>
 
     <!-- 核心入口宫格 -->
@@ -133,6 +135,14 @@
     </view>
     <!-- #endif -->
 
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="绑定手机号"
+      message="报名、下单、余额和会员权益需要手机号。绑定后后台会员管理会显示完整身份状态。"
+      @close="closePhoneBindPanel"
+      @bound="handlePhoneBound"
+    />
+
     <view style="height:120rpx;"></view>
     <TabBar current="user" />
   </view>
@@ -146,6 +156,7 @@ import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import TabBar from "../../components/TabBar.vue";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const profile = ref<any>(null);
 const wallet = ref<any>(null);
@@ -162,6 +173,7 @@ const wechatProfileAvatarPath = ref("");
 const wechatProfilePanelMessage = ref("请选择微信头像和昵称后继续。");
 const syncingWechatProfile = ref(false);
 const requestingWechatProfile = ref(false);
+const phoneBindVisible = ref(false);
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
@@ -187,6 +199,13 @@ const profileIdentityText = computed(() => {
   if (profile.value?.wechatBound) return "微信已登录 · 未绑定手机号";
   return "请先登录后查看权益";
 });
+const phoneStatusText = computed(() => profile.value?.phone ? "手机号已绑定" : "未绑定手机号");
+const memberStats = computed(() => [
+  { label: "积分", value: String(profile.value?.points || 0) },
+  { label: "余额", value: `¥${money(wallet.value?.availableBalance)}` },
+  { label: "报名", value: String(registrations.value.length) },
+  { label: "订单", value: String(registrations.value.length + courseOrders.value.length + mallOrders.value.length) }
+]);
 function isDefaultWechatNicknameValue(value?: unknown) {
   const name = String(value || "").trim();
   return !name || /^微信用户([A-Z0-9]+)?$/i.test(name);
@@ -316,6 +335,17 @@ function goOrders(tab: any) {
   uni.navigateTo({ url:`/pages/user/orders?status=${status}` });
 }
 function goAdmin() { uni.navigateTo({ url:"/pages/admin/home" }); }
+function openPhoneBindPanel() {
+  phoneBindVisible.value = true;
+}
+function closePhoneBindPanel() {
+  phoneBindVisible.value = false;
+}
+async function handlePhoneBound(profileData: any) {
+  phoneBindVisible.value = false;
+  profile.value = profileData;
+  await loadProfile();
+}
 function resetUserState() {
   profile.value = null;
   wallet.value = null;
@@ -328,6 +358,7 @@ function resetUserState() {
   wechatProfilePanelVisible.value = false;
   syncingWechatProfile.value = false;
   requestingWechatProfile.value = false;
+  phoneBindVisible.value = false;
 }
 function inputValue(event: any) {
   return String(event?.detail?.value ?? event?.target?.value ?? "");
@@ -436,6 +467,73 @@ function logoutUser() {
   min-height: 100vh;
   background: var(--page-bg, #F5F0E8);
   padding: 0 32rpx 0;
+}
+.member-card {
+  margin: 0 -32rpx 18rpx;
+  padding: 38rpx 32rpx 28rpx;
+  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.12);
+}
+.member-card-top {
+  display: grid;
+  grid-template-columns: 120rpx minmax(0, 1fr) 82rpx;
+  align-items: center;
+  gap: 20rpx;
+}
+.member-main { min-width: 0; display: grid; gap: 8rpx; }
+.identity-line { display: flex; align-items: center; flex-wrap: wrap; gap: 10rpx; }
+.phone-state {
+  min-height: 36rpx;
+  padding: 4rpx 14rpx;
+  border-radius: 999rpx;
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  font-size: 21rpx;
+  font-weight: 900;
+}
+.phone-state.missing {
+  background: rgba(196, 61, 61, 0.12);
+  color: #b42318;
+}
+.member-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12rpx;
+  margin-top: 28rpx;
+}
+.member-stat {
+  min-height: 92rpx;
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 6rpx;
+  border-radius: 16rpx;
+  background: rgba(255, 250, 242, 0.54);
+  border: 1rpx solid rgba(139, 63, 50, 0.12);
+}
+.member-stat text { color: var(--profile-header-muted, rgba(91, 47, 36, 0.68)); font-size: 22rpx; }
+.member-stat strong { color: var(--profile-header-text, #5B2F24); font-size: 27rpx; line-height: 1.2; }
+.member-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14rpx;
+  margin-top: 24rpx;
+}
+.member-action {
+  min-height: 74rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 16rpx;
+  background: rgba(255, 250, 242, 0.7);
+  color: #8b3f32;
+  font-size: 25rpx;
+  font-weight: 900;
+  border: 1rpx solid rgba(139, 63, 50, 0.16);
+}
+.member-action.primary {
+  background: #16a34a;
+  color: #fff;
+  border-color: #16a34a;
 }
 .profile-header {
   display: flex;

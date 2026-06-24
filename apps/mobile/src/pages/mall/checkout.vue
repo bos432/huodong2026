@@ -106,14 +106,23 @@
       <textarea v-model="buyerRemark" placeholder="买家备注，可选" />
     </view>
     <view class="submit" :class="{ disabled: !canSubmitOrder }" @click="submit">{{ submitting ? "提交中..." : "提交订单" }}</view>
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="下单前绑定手机号"
+      message="商城订单、收货联系和余额支付需要手机号，授权后将继续提交订单。"
+      close-text="暂不下单"
+      @close="closePhoneBindPanel"
+      @bound="handlePhoneBound"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const skuId = ref(0);
 const flashSaleId = ref(0);
@@ -136,6 +145,8 @@ const quote = ref<any>(null);
 const paymentMethods = ref<any[]>([]);
 const submitting = ref(false);
 const clientOrderKey = ref("");
+const phoneBindVisible = ref(false);
+const pendingPhoneAction = ref<"" | "submit">("");
 const availablePaymentMethods = computed(() => paymentMethods.value.filter((item) => item.enabled));
 const selectedAddress = computed(() => addresses.value.find((item) => item.id === selectedAddressId.value) || addresses.value.find((item) => item.isDefault) || addresses.value[0] || null);
 const totalAmount = computed(() => checkoutItems.value.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0));
@@ -361,6 +372,7 @@ async function submit() {
   if (isCrossMerchantCheckout.value && !(await confirmCrossMerchantCheckout())) return;
   submitting.value = true;
   try {
+    if (!(await requirePhoneBound("submit"))) return;
     const result = await request<any>("/public/mall/checkout-groups", {
       method: "POST",
       data: {
@@ -397,6 +409,27 @@ async function submit() {
   } finally {
     submitting.value = false;
   }
+}
+
+async function requirePhoneBound(action: "submit") {
+  await ensureUser();
+  const profile = await fetchMyProfile();
+  if (profile?.phone) return true;
+  pendingPhoneAction.value = action;
+  phoneBindVisible.value = true;
+  return false;
+}
+
+function closePhoneBindPanel() {
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+}
+
+function handlePhoneBound() {
+  const action = pendingPhoneAction.value;
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+  if (action === "submit") submit();
 }
 onLoad((query) => {
   skuId.value = Number(query?.skuId || 0);

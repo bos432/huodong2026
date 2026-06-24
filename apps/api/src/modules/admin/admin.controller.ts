@@ -1069,8 +1069,21 @@ export class AdminController {
 
   @AdminRoles(...OPERATION_ROLES)
   @Get("members")
-  members(@Query("keyword") keyword?: string, @Query("activityId") activityId?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.listMembers({ keyword, activityId: activityId ? Number(activityId) : undefined }, admin);
+  members(@Query() query: any, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listMembers({
+      keyword: query.keyword,
+      activityId: query.activityId ? Number(query.activityId) : undefined,
+      page: query.page ? Number(query.page) : undefined,
+      pageSize: query.pageSize ? Number(query.pageSize) : undefined,
+      sourceChannel: query.sourceChannel,
+      wechatBound: query.wechatBound,
+      phoneBound: query.phoneBound,
+      levelId: query.levelId,
+      activeStart: query.activeStart,
+      activeEnd: query.activeEnd,
+      sortBy: query.sortBy,
+      sortOrder: query.sortOrder
+    }, admin);
   }
 
   @AdminRoles(...OPERATION_ROLES)

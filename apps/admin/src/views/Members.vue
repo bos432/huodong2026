@@ -14,8 +14,20 @@ const detail = ref<any>();
 const wallet = ref<any>();
 const walletTransactions = ref<any[]>([]);
 const loading = ref(false);
-const keyword = ref("");
+const keyword = ref(String(route.query.keyword || ""));
 const activityId = ref<number | undefined>(routeActivityId());
+const sourceChannel = ref(String(route.query.sourceChannel || ""));
+const wechatBound = ref(String(route.query.wechatBound || ""));
+const phoneBound = ref(String(route.query.phoneBound || ""));
+const levelId = ref(String(route.query.levelId || ""));
+const activeStart = ref(String(route.query.activeStart || ""));
+const activeEnd = ref(String(route.query.activeEnd || ""));
+const sortBy = ref(String(route.query.sortBy || "lastActiveAt"));
+const sortOrder = ref(String(route.query.sortOrder || "DESC"));
+const page = ref(Number(route.query.page || 1) || 1);
+const pageSize = ref(Number(route.query.pageSize || 20) || 20);
+const total = ref(0);
+const summary = ref({ totalMembers: 0, phoneBound: 0, wechatBound: 0, miniProgramSource: 0, active7Days: 0 });
 const detailDrawer = ref(false);
 const levelDialog = ref(false);
 const memberDialog = ref(false);
@@ -72,31 +84,119 @@ const memberSummary = computed(() => {
   if (!activityId.value) return "";
   const paid = rows.value.filter((row) => Number(row.totalSpent || 0) > 0).length;
   const reviewed = rows.value.filter((row) => Number(row.reviewCount || 0) > 0).length;
-  return `本场活动沉淀 ${rows.value.length} 个会员线索，其中 ${paid} 人已有消费、${reviewed} 人留下评价。`;
+  return `本场活动沉淀 ${total.value || rows.value.length} 个会员线索，本页 ${paid} 人已有消费、${reviewed} 人留下评价。`;
 });
 
 async function load() {
   loading.value = true;
   try {
-    const [members, levelRows] = await Promise.all([
-      api.get<any, any[]>("/admin/members", { params: { keyword: keyword.value || undefined, activityId: activityId.value || undefined } }),
+    const [result, levelRows] = await Promise.all([
+      api.get<any, any>("/admin/members", { params: memberQueryParams() }),
       api.get<any, any[]>("/admin/member-levels")
     ]);
-    rows.value = members;
+    if (Array.isArray(result)) {
+      rows.value = result;
+      total.value = result.length;
+      summary.value = buildSummaryFromRows(result);
+    } else {
+      rows.value = result.items || [];
+      total.value = Number(result.total || 0);
+      page.value = Number(result.page || page.value);
+      pageSize.value = Number(result.pageSize || pageSize.value);
+      summary.value = result.summary || buildSummaryFromRows(rows.value);
+    }
     levels.value = levelRows;
   } finally {
     loading.value = false;
   }
 }
 
+function memberQueryParams() {
+  return {
+    keyword: keyword.value || undefined,
+    activityId: activityId.value || undefined,
+    sourceChannel: sourceChannel.value || undefined,
+    wechatBound: wechatBound.value || undefined,
+    phoneBound: phoneBound.value || undefined,
+    levelId: levelId.value || undefined,
+    activeStart: activeStart.value || undefined,
+    activeEnd: activeEnd.value || undefined,
+    sortBy: sortBy.value || undefined,
+    sortOrder: sortOrder.value || undefined,
+    page: page.value,
+    pageSize: pageSize.value
+  };
+}
+
+function buildSummaryFromRows(items: any[]) {
+  const activeLine = Date.now() - 7 * 24 * 60 * 60 * 1000;
+  return {
+    totalMembers: items.length,
+    phoneBound: items.filter((row) => row.user?.phone).length,
+    wechatBound: items.filter((row) => row.user?.openid).length,
+    miniProgramSource: items.filter((row) => row.user?.sourceChannel === "mp_weixin").length,
+    active7Days: items.filter((row) => row.lastActiveAt && new Date(row.lastActiveAt).getTime() >= activeLine).length
+  };
+}
+
+function syncRouteQuery() {
+  router.replace({
+    path: "/members",
+    query: {
+      keyword: keyword.value || undefined,
+      activityId: activityId.value || undefined,
+      sourceChannel: sourceChannel.value || undefined,
+      wechatBound: wechatBound.value || undefined,
+      phoneBound: phoneBound.value || undefined,
+      levelId: levelId.value || undefined,
+      activeStart: activeStart.value || undefined,
+      activeEnd: activeEnd.value || undefined,
+      sortBy: sortBy.value !== "lastActiveAt" ? sortBy.value : undefined,
+      sortOrder: sortOrder.value !== "DESC" ? sortOrder.value : undefined,
+      page: page.value > 1 ? page.value : undefined,
+      pageSize: pageSize.value !== 20 ? pageSize.value : undefined
+    }
+  });
+}
+
 function applyFilter() {
-  router.replace({ path: "/members", query: { activityId: activityId.value || undefined } });
+  page.value = 1;
+  syncRouteQuery();
+  load();
+}
+
+function resetFilter() {
+  keyword.value = "";
+  sourceChannel.value = "";
+  wechatBound.value = "";
+  phoneBound.value = "";
+  levelId.value = "";
+  activeStart.value = "";
+  activeEnd.value = "";
+  sortBy.value = "lastActiveAt";
+  sortOrder.value = "DESC";
+  page.value = 1;
+  syncRouteQuery();
   load();
 }
 
 function clearActivityFilter() {
   activityId.value = undefined;
-  router.replace({ path: "/members" });
+  page.value = 1;
+  syncRouteQuery();
+  load();
+}
+
+function changePage(nextPage: number) {
+  page.value = nextPage;
+  syncRouteQuery();
+  load();
+}
+
+function changePageSize(nextSize: number) {
+  pageSize.value = nextSize;
+  page.value = 1;
+  syncRouteQuery();
   load();
 }
 
@@ -297,13 +397,50 @@ function formatTime(value?: string | Date | null) {
 onMounted(load);
 
 watch(
-  () => route.query.activityId,
+  () => route.query,
   () => {
     const nextActivityId = routeActivityId();
-    if (activityId.value !== nextActivityId) {
-      activityId.value = nextActivityId;
-      load();
-    }
+    const next = {
+      keyword: String(route.query.keyword || ""),
+      activityId: nextActivityId,
+      sourceChannel: String(route.query.sourceChannel || ""),
+      wechatBound: String(route.query.wechatBound || ""),
+      phoneBound: String(route.query.phoneBound || ""),
+      levelId: String(route.query.levelId || ""),
+      activeStart: String(route.query.activeStart || ""),
+      activeEnd: String(route.query.activeEnd || ""),
+      sortBy: String(route.query.sortBy || "lastActiveAt"),
+      sortOrder: String(route.query.sortOrder || "DESC"),
+      page: Number(route.query.page || 1) || 1,
+      pageSize: Number(route.query.pageSize || 20) || 20
+    };
+    if (
+      keyword.value === next.keyword &&
+      activityId.value === next.activityId &&
+      sourceChannel.value === next.sourceChannel &&
+      wechatBound.value === next.wechatBound &&
+      phoneBound.value === next.phoneBound &&
+      levelId.value === next.levelId &&
+      activeStart.value === next.activeStart &&
+      activeEnd.value === next.activeEnd &&
+      sortBy.value === next.sortBy &&
+      sortOrder.value === next.sortOrder &&
+      page.value === next.page &&
+      pageSize.value === next.pageSize
+    ) return;
+    keyword.value = next.keyword;
+    activityId.value = next.activityId;
+    sourceChannel.value = next.sourceChannel;
+    wechatBound.value = next.wechatBound;
+    phoneBound.value = next.phoneBound;
+    levelId.value = next.levelId;
+    activeStart.value = next.activeStart;
+    activeEnd.value = next.activeEnd;
+    sortBy.value = next.sortBy;
+    sortOrder.value = next.sortOrder;
+    page.value = next.page;
+    pageSize.value = next.pageSize;
+    load();
   }
 );
 </script>
@@ -317,6 +454,14 @@ watch(
         <el-button :icon="Plus" @click="openCreateMember">新增会员</el-button>
         <el-button type="primary" :icon="Plus" @click="openCreateLevel">新建等级</el-button>
       </div>
+    </div>
+
+    <div class="summary-grid">
+      <div class="summary-card"><span>总会员</span><strong>{{ summary.totalMembers }}</strong></div>
+      <div class="summary-card"><span>已绑手机号</span><strong>{{ summary.phoneBound }}</strong></div>
+      <div class="summary-card"><span>微信绑定</span><strong>{{ summary.wechatBound }}</strong></div>
+      <div class="summary-card"><span>小程序来源</span><strong>{{ summary.miniProgramSource }}</strong></div>
+      <div class="summary-card"><span>近 7 日活跃</span><strong>{{ summary.active7Days }}</strong></div>
     </div>
 
     <el-alert
@@ -352,9 +497,55 @@ watch(
     </div>
 
     <div class="table-card">
-      <el-form inline>
-        <el-form-item label="关键词"><el-input v-model="keyword" clearable placeholder="手机号/昵称" style="width: 220px" /></el-form-item>
-        <el-button type="primary" :icon="Search" @click="applyFilter">查询</el-button>
+      <el-form class="member-filters" label-position="top">
+        <el-form-item label="关键词"><el-input v-model="keyword" clearable placeholder="手机号 / 昵称 / UserID" /></el-form-item>
+        <el-form-item label="来源">
+          <el-select v-model="sourceChannel" clearable placeholder="全部">
+            <el-option label="H5" value="h5" />
+            <el-option label="微信小程序" value="mp_weixin" />
+            <el-option label="后台创建" value="admin" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="手机号">
+          <el-select v-model="phoneBound" clearable placeholder="全部">
+            <el-option label="已绑定" value="true" />
+            <el-option label="未绑定" value="false" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="微信">
+          <el-select v-model="wechatBound" clearable placeholder="全部">
+            <el-option label="已绑定" value="true" />
+            <el-option label="未绑定" value="false" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="等级">
+          <el-select v-model="levelId" clearable placeholder="全部">
+            <el-option label="普通会员" value="none" />
+            <el-option v-for="level in levels" :key="level.id" :label="level.name" :value="String(level.id)" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="活跃开始"><el-date-picker v-model="activeStart" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" /></el-form-item>
+        <el-form-item label="活跃结束"><el-date-picker v-model="activeEnd" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" /></el-form-item>
+        <el-form-item label="排序">
+          <div class="sort-row">
+            <el-select v-model="sortBy">
+              <el-option label="最近活跃" value="lastActiveAt" />
+              <el-option label="最近登录" value="lastLoginAt" />
+              <el-option label="积分" value="points" />
+              <el-option label="消费" value="totalSpent" />
+              <el-option label="报名数" value="registrationCount" />
+              <el-option label="创建时间" value="createdAt" />
+            </el-select>
+            <el-select v-model="sortOrder" class="sort-order">
+              <el-option label="降序" value="DESC" />
+              <el-option label="升序" value="ASC" />
+            </el-select>
+          </div>
+        </el-form-item>
+        <el-form-item label="操作" class="filter-actions">
+          <el-button type="primary" :icon="Search" @click="applyFilter">查询</el-button>
+          <el-button @click="resetFilter">重置</el-button>
+        </el-form-item>
         <el-button v-if="activityId" @click="clearActivityFilter">查看全部会员</el-button>
       </el-form>
       <el-table v-loading="loading" :data="rows" stripe empty-text="暂无会员">
@@ -377,6 +568,18 @@ watch(
         <el-table-column label="最近登录" width="180"><template #default="{ row }">{{ formatTime(row.user.lastLoginAt) }}</template></el-table-column>
         <el-table-column label="操作" width="110" fixed="right"><template #default="{ row }"><el-button size="small" @click="openDetail(row)">详情</el-button></template></el-table-column>
       </el-table>
+      <div class="pagination-row">
+        <el-pagination
+          background
+          layout="total, sizes, prev, pager, next, jumper"
+          :total="total"
+          :current-page="page"
+          :page-size="pageSize"
+          :page-sizes="[20, 50, 100]"
+          @current-change="changePage"
+          @size-change="changePageSize"
+        />
+      </div>
     </div>
 
     <el-dialog v-model="levelDialog" width="520px" title="会员等级">
@@ -515,6 +718,16 @@ watch(
 .activity-alert { margin-bottom: 16px; }
 .dialog-alert { margin-bottom: 16px; }
 .level-card { margin-bottom: 16px; }
+.summary-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.summary-card { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.summary-card span { color: #667085; font-size: 13px; }
+.summary-card strong { color: #111827; font-size: 24px; line-height: 1.1; }
+.member-filters { display: grid; grid-template-columns: 220px 150px 130px 130px 150px 170px 170px 290px 170px auto; gap: 12px; align-items: end; margin-bottom: 14px; }
+.member-filters :deep(.el-form-item) { margin-right: 0; margin-bottom: 0; }
+.member-filters :deep(.el-select), .member-filters :deep(.el-date-editor) { width: 100%; }
+.sort-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 8px; }
+.filter-actions :deep(.el-form-item__content) { display: flex; gap: 8px; flex-wrap: nowrap; }
+.pagination-row { display: flex; justify-content: flex-end; margin-top: 14px; }
 .section-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
 h3 { margin: 0; }
 .profile { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
@@ -531,4 +744,8 @@ h3 { margin: 0; }
 .wallet-card span, .wallet-card small { color: #667085; font-size: 13px; }
 .wallet-card strong { color: #0f766e; font-size: 26px; }
 .wallet-actions { display: flex; gap: 8px; align-items: center; }
+@media (max-width: 1480px) {
+  .member-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
 </style>

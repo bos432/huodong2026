@@ -51,6 +51,15 @@ export class WechatLoginDto {
   avatarUrl?: string;
 }
 
+export class WechatPhoneDto {
+  @IsString()
+  code!: string;
+
+  @IsOptional()
+  @IsString()
+  appId?: string;
+}
+
 export class UpdateProfileDto {
   @IsOptional()
   @IsString()

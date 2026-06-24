@@ -6,6 +6,7 @@ import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayloa
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const phone = ref("");
 const password = ref("");
@@ -21,6 +22,7 @@ const wechatAuthVisible = ref(false);
 const wechatAuthNickname = ref("");
 const wechatAuthAvatarPath = ref("");
 const wechatAuthMessage = ref("");
+const phoneBindVisible = ref(false);
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("login_page", "/pages/user/login");
 
 const canSend = computed(() => /^1\d{10}$/.test(phone.value.trim()) && !sending.value);
@@ -137,14 +139,14 @@ function updateWechatAuthNickname(event: any) {
 }
 
 async function finishWechatLogin(profile: Partial<WechatProfilePayload> = {}, avatarFilePath = "") {
-  await new Promise<void>((resolve, reject) => {
+  return new Promise<any>((resolve, reject) => {
     uni.login({
       provider: "weixin",
       success: async (res) => {
         try {
-          await loginWechat(res.code, profile.nickname, avatarFilePath ? undefined : profile.avatarUrl);
+          const user = await loginWechat(res.code, profile.nickname, avatarFilePath ? undefined : profile.avatarUrl);
           if (avatarFilePath) await uploadMyAvatar(avatarFilePath);
-          resolve();
+          resolve(user);
         } catch (error) {
           reject(error);
         }
@@ -154,15 +156,23 @@ async function finishWechatLogin(profile: Partial<WechatProfilePayload> = {}, av
   });
 }
 
+function continueAfterWechatLogin(user: any) {
+  uni.showToast({ title: "登录成功", icon: "success" });
+  if (!user?.phone) {
+    phoneBindVisible.value = true;
+    return;
+  }
+  goAfterLogin();
+}
+
 async function submitWechat() {
   if (loggingIn.value) return;
   loggingIn.value = true;
   try {
     const profile = await requestWechatProfile();
     if (profile.authorized && hasWechatProfilePayload(profile)) {
-      await finishWechatLogin(profile);
-      uni.showToast({ title: "登录成功", icon: "success" });
-      goAfterLogin();
+      const user = await finishWechatLogin(profile);
+      continueAfterWechatLogin(user);
       return;
     }
     wechatAuthNickname.value = profile.nickname || "";
@@ -184,15 +194,24 @@ async function confirmWechatProfileLogin() {
   }
   loggingIn.value = true;
   try {
-    await finishWechatLogin({ nickname, authorized: true }, wechatAuthAvatarPath.value);
+    const user = await finishWechatLogin({ nickname, authorized: true }, wechatAuthAvatarPath.value);
     wechatAuthVisible.value = false;
-    uni.showToast({ title: "登录成功", icon: "success" });
-    goAfterLogin();
+    continueAfterWechatLogin(user);
   } catch (error: any) {
     uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
   } finally {
     loggingIn.value = false;
   }
+}
+
+function closePhoneBindAfterLogin() {
+  phoneBindVisible.value = false;
+  goAfterLogin();
+}
+
+function handlePhoneBoundAfterLogin() {
+  phoneBindVisible.value = false;
+  goAfterLogin();
 }
 
 onMounted(loadDecoration);
@@ -214,33 +233,36 @@ onMounted(loadDecoration);
 
     <view class="card login-card">
       <view class="card-kicker">欢迎回来</view>
-      <view class="field">
-        <view class="label">手机号</view>
-        <input v-model="phone" data-login-field="phone" class="input" type="number" maxlength="11" placeholder="请输入手机号" @input="updatePhone" @change="updatePhone" @blur="updatePhone" />
-      </view>
-      <view class="login-tabs">
-        <view class="login-tab" :class="{ active: loginMode === 'password' }" @click="loginMode = 'password'">密码登录</view>
-        <view class="login-tab" :class="{ active: loginMode === 'code' }" @click="loginMode = 'code'">验证码登录</view>
-      </view>
-      <view v-if="loginMode === 'password'" class="field">
-        <view class="label">密码</view>
-        <input v-model="password" data-login-field="password" class="input" type="password" maxlength="64" placeholder="请输入密码" @input="updatePassword" @change="updatePassword" @blur="updatePassword" />
-      </view>
-      <template v-else>
-        <view class="field">
-          <view class="label">验证码</view>
-          <view class="code-row">
-            <input v-model="code" data-login-field="code" class="input" type="number" maxlength="6" placeholder="6 位验证码" @input="updateCode" @change="updateCode" @blur="updateCode" />
-            <view class="mini-button" :class="{ disabled: !canSend }" @click="sendCode">{{ sending ? "发送中" : "获取验证码" }}</view>
-          </view>
-        </view>
-        <view v-if="message" class="notice">{{ message }}</view>
-        <view v-if="expiresAt" class="subtle">有效期至：{{ expiresAt.replace("T", " ").slice(0, 16) }}</view>
-      </template>
-      <view class="button" :class="{ secondary: !canLogin }" @click="submit">{{ loggingIn ? "登录中..." : "登录" }}</view>
       <!-- #ifndef H5 -->
-      <button class="button wechat-button native-button" :disabled="loggingIn" @tap="submitWechat">{{ loggingIn ? "登录中..." : "微信登录" }}</button>
+      <button class="button wechat-button native-button primary-wechat" :disabled="loggingIn" @tap="submitWechat">{{ loggingIn ? "登录中..." : "微信登录" }}</button>
+      <view class="login-divider"><text>手机号登录</text></view>
       <!-- #endif -->
+      <view class="phone-login-section">
+        <view class="field">
+          <view class="label">手机号</view>
+          <input v-model="phone" data-login-field="phone" class="input" type="number" maxlength="11" placeholder="请输入手机号" @input="updatePhone" @change="updatePhone" @blur="updatePhone" />
+        </view>
+        <view class="login-tabs">
+          <view class="login-tab" :class="{ active: loginMode === 'password' }" @click="loginMode = 'password'">密码登录</view>
+          <view class="login-tab" :class="{ active: loginMode === 'code' }" @click="loginMode = 'code'">验证码登录</view>
+        </view>
+        <view v-if="loginMode === 'password'" class="field">
+          <view class="label">密码</view>
+          <input v-model="password" data-login-field="password" class="input" type="password" maxlength="64" placeholder="请输入密码" @input="updatePassword" @change="updatePassword" @blur="updatePassword" />
+        </view>
+        <template v-else>
+          <view class="field">
+            <view class="label">验证码</view>
+            <view class="code-row">
+              <input v-model="code" data-login-field="code" class="input" type="number" maxlength="6" placeholder="6 位验证码" @input="updateCode" @change="updateCode" @blur="updateCode" />
+              <view class="mini-button" :class="{ disabled: !canSend }" @click="sendCode">{{ sending ? "发送中" : "获取验证码" }}</view>
+            </view>
+          </view>
+          <view v-if="message" class="notice">{{ message }}</view>
+          <view v-if="expiresAt" class="subtle">有效期至：{{ expiresAt.replace("T", " ").slice(0, 16) }}</view>
+        </template>
+        <view class="button" :class="{ secondary: !canLogin }" @click="submit">{{ loggingIn ? "登录中..." : "登录" }}</view>
+      </view>
       <view class="admin-login-entry" @click="goAdminLogin">
         <text>管理端入口</text>
       </view>
@@ -268,6 +290,14 @@ onMounted(loadDecoration);
       </view>
     </view>
     <!-- #endif -->
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="绑定手机号后继续"
+      message="微信登录已完成。报名、下单、余额和会员权益需要手机号，建议现在授权绑定。"
+      close-text="稍后进入"
+      @close="closePhoneBindAfterLogin"
+      @bound="handlePhoneBoundAfterLogin"
+    />
     <AppBottomNav current-path="/pages/user/my" />
   </view>
 </template>
@@ -329,6 +359,23 @@ onMounted(loadDecoration);
   font-size: 24rpx;
   font-weight: 800;
 }
+.primary-wechat { height: 92rpx; font-size: 30rpx; }
+.login-divider {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  color: #8f8172;
+  font-size: 24rpx;
+  font-weight: 800;
+}
+.login-divider::before,
+.login-divider::after {
+  content: "";
+  flex: 1;
+  height: 1rpx;
+  background: #eadfd1;
+}
+.phone-login-section { display: grid; gap: 24rpx; }
 .field { display: grid; gap: 12rpx; }
 .label { font-size: 28rpx; font-weight: 650; }
 .login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8rpx; padding: 8rpx; border-radius: 18rpx; background: #f9f4ee; }

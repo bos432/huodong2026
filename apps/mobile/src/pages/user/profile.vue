@@ -2,6 +2,7 @@
 import { onMounted, ref } from "vue";
 import { ensureUser, fetchMyProfile, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const profile = ref<any>(null);
 const nickname = ref("");
@@ -9,6 +10,7 @@ const avatarUrl = ref("");
 const saving = ref(false);
 const loading = ref(true);
 const uploadingWechatAvatar = ref(false);
+const phoneBindVisible = ref(false);
 
 function displayName() {
   return profile.value?.nickname || profile.value?.phone || `用户${profile.value?.id || ""}`;
@@ -91,6 +93,20 @@ function goSecurity() {
   uni.navigateTo({ url: withTenantCode("/pages/user/security") });
 }
 
+function openPhoneBind() {
+  phoneBindVisible.value = true;
+}
+
+function closePhoneBind() {
+  phoneBindVisible.value = false;
+}
+
+async function handlePhoneBound(profileData: any) {
+  phoneBindVisible.value = false;
+  profile.value = profileData;
+  await load();
+}
+
 onMounted(load);
 </script>
 
@@ -138,7 +154,23 @@ onMounted(load);
         </view>
         <view class="arrow">进入</view>
       </view>
+
+      <view v-if="!profile?.phone" class="card security-entry phone-entry" @click="openPhoneBind">
+        <view>
+          <view class="entry-title">微信授权绑定手机号</view>
+          <view class="sub">小程序端可一键绑定微信手机号，用于报名、下单和会员权益。</view>
+        </view>
+        <view class="arrow">绑定</view>
+      </view>
     </template>
+
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="绑定手机号"
+      message="绑定后可继续报名、下单、使用余额和会员权益。"
+      @close="closePhoneBind"
+      @bound="handlePhoneBound"
+    />
 
     <AppBottomNav current-path="/pages/user/my" />
   </view>

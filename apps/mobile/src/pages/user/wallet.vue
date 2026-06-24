@@ -1,11 +1,13 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ensureUser, request } from "../../api";
+import { ensureUser, fetchMyProfile, request } from "../../api";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const wallet = ref<any | null>(null);
 const rows = ref<any[]>([]);
 const loading = ref(true);
+const phoneBindVisible = ref(false);
 
 const creditAmount = computed(() => rows.value.filter((item) => item.direction !== "debit").reduce((sum, item) => sum + Number(item.amount || 0), 0));
 const debitAmount = computed(() => rows.value.filter((item) => item.direction === "debit").reduce((sum, item) => sum + Number(item.amount || 0), 0));
@@ -14,6 +16,13 @@ async function load() {
   loading.value = true;
   try {
     await ensureUser();
+    const profile = await fetchMyProfile();
+    if (!profile?.phone) {
+      phoneBindVisible.value = true;
+      wallet.value = null;
+      rows.value = [];
+      return;
+    }
     const [walletDetail, transactions] = await Promise.all([
       request<any>("/public/me/wallet").catch(() => null),
       request<any[]>("/public/me/wallet/transactions").catch(() => [])
@@ -23,6 +32,15 @@ async function load() {
   } finally {
     loading.value = false;
   }
+}
+
+function closePhoneBindPanel() {
+  phoneBindVisible.value = false;
+}
+
+async function handlePhoneBound() {
+  phoneBindVisible.value = false;
+  await load();
 }
 
 function money(value: string | number | undefined | null) {
@@ -96,6 +114,14 @@ onMounted(load);
     </view>
 
     <AppBottomNav current-path="/pages/user/my" />
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="查看余额前绑定手机号"
+      message="余额充值、抵扣和退款返还需要手机号作为会员身份凭证。"
+      close-text="稍后查看"
+      @close="closePhoneBindPanel"
+      @bound="handlePhoneBound"
+    />
   </view>
 </template>
 

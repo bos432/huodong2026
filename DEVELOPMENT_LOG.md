@@ -9605,3 +9605,74 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 重新导入或刷新本地 `apps/mobile/dist/build/mp-weixin`，在微信开发者工具和手机微信预览中验证个人中心授权弹窗。
 - 若真机点击后仍不返回旧式资料，按当前回落流程选择头像与昵称，确认后台会员列表能同步显示头像昵称。
+
+## 2026-06-24 - 小程序登录手机号绑定与会员管理优化
+
+### 阶段名称
+
+小程序试运营前 - 登录、手机号绑定、个人中心和会员管理体验优化小阶段。
+
+### 本阶段完成内容
+
+- 新增微信手机号授权绑定链路：
+  - 后端新增 `POST /public/me/phone/wechat`，使用小程序 AppID/AppSecret 换取 `access_token`，再调用微信 `wxa/business/getuserphonenumber` 获取手机号。
+  - 授权手机号写入当前用户 `users.phone`，并刷新会员资料；若手机号已属于其他会员账号，返回明确提示，暂不自动合并账号。
+  - 移动端新增复用组件 `WechatPhoneBindSheet`，小程序端使用官方 `button open-type="getPhoneNumber"`，H5 端引导到账号安全页。
+- 优化小程序登录与个人中心：
+  - 登录页调整为小程序端优先展示“微信登录”，手机号/密码/验证码入口保留为次级入口。
+  - 微信登录成功但未绑定手机号时，展示手机号绑定面板；用户可绑定后继续，也可稍后进入。
+  - “我的”页顶部改为会员身份卡，集中展示头像昵称、手机号状态、会员等级、积分、余额、报名和订单数据。
+  - 资料页新增“微信授权绑定手机号”入口，和原账号安全的短信改绑并存。
+- 接入关键动作手机号绑定：
+  - 活动报名提交前检查手机号，未绑定则弹出授权面板，绑定后继续提交。
+  - 课程免费加入、付费确认下单前检查手机号。
+  - 商城提交订单前检查手机号。
+  - 钱包余额入口读取资产前检查手机号。
+- 增强后台会员管理：
+  - `GET /admin/members` 保持旧数组兼容；传入 `page/pageSize` 时返回 `{ items, total, page, pageSize, summary }`。
+  - 会员列表新增关键词、来源、手机号绑定、微信绑定、会员等级、活跃时间、排序和分页。
+  - 页面顶部新增总会员、已绑手机号、微信绑定、小程序来源、近 7 日活跃概览。
+  - 筛选条件同步到 URL，刷新后可恢复。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/modules/public/dto.ts`
+- `apps/api/src/modules/public/public.controller.ts`
+- `apps/api/src/modules/public/public.service.ts`
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/mobile/src/api.ts`
+- `apps/mobile/src/components/WechatPhoneBindSheet.vue`
+- `apps/mobile/src/pages/user/login.vue`
+- `apps/mobile/src/pages/user/my.vue`
+- `apps/mobile/src/pages/user/profile.vue`
+- `apps/mobile/src/pages/user/wallet.vue`
+- `apps/mobile/src/pages/activity/register.vue`
+- `apps/mobile/src/pages/course/detail.vue`
+- `apps/mobile/src/pages/order/confirm.vue`
+- `apps/mobile/src/pages/mall/checkout.vue`
+- `apps/admin/src/views/Members.vue`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 20:55 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅有既有 Rollup 注释和大 chunk 提示。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过；`patch-mobile-mp-weixin-auth.mjs` 正常补齐授权配置。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅有 Windows 工作区 LF/CRLF 转换提示。
+- 构建产物检查：`apps/mobile/dist/build/mp-weixin/components/WechatPhoneBindSheet.wxml` 已包含 `open-type="getPhoneNumber"`。
+
+### 遗留问题
+
+- 本阶段未做真机微信手机号授权实测；需要在微信开发者工具和手机微信预览/体验版中点击“微信授权绑定手机号”，确认微信返回 `code` 且线上 AppSecret 配置可用。
+- 微信头像昵称仍受官方限制，不能静默自动获取，仍需用户点击头像/昵称授权入口。
+- 手机号冲突暂不自动合并账号，需要后台人工处理。
+
+### 下一阶段应继续处理的事项
+
+- 将本次提交部署到服务器后，重新构建 API、H5 和小程序包，并重启 `activity-api`。
+- 在微信开发者工具导入最新 `apps/mobile/dist/build/mp-weixin`，验证微信登录、手机号授权绑定、个人中心资料展示、活动报名、课程下单、商城下单和钱包入口。
+- 在后台会员管理验证分页、筛选、排序、详情抽屉和 URL 条件恢复；确认小程序绑定手机号后后台会员列表显示“手机号已绑定”。

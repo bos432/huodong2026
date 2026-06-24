@@ -57,7 +57,7 @@ import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults"
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
-import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto, WechatPhoneDto } from "./dto";
 import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -445,6 +445,25 @@ export class PublicService {
     row.phone = phone;
     if (!row.nickname) row.nickname = `本地用户${phone.slice(-4)}`;
     const saved = await this.users.save(row);
+    return this.myProfile(saved);
+  }
+
+  async bindWechatPhone(user: User, dto: WechatPhoneDto) {
+    const code = String(dto.code || "").trim();
+    if (!code) throw new BadRequestException("缺少微信手机号授权 code");
+    const phone = await this.resolveWechatPhoneNumber(code, dto.appId);
+    const row = await this.users.findOneBy({ id: user.id });
+    if (!row) throw new UnauthorizedException("登录已失效，请重新登录");
+    const exists = await this.users.findOne({ where: { phone } });
+    if (exists && exists.id !== row.id) {
+      throw new BadRequestException("该手机号已有账号，请使用手机号登录或联系管理员处理");
+    }
+    row.phone = phone;
+    if (!row.nickname) row.nickname = `微信用户${phone.slice(-4)}`;
+    row.lastLoginChannel = row.lastLoginChannel || "mp_weixin";
+    row.lastLoginAt = new Date();
+    const saved = await this.users.save(row);
+    await this.refreshMemberProfile(saved);
     return this.myProfile(saved);
   }
 
@@ -1514,12 +1533,17 @@ export class PublicService {
     return tenant?.id ? String(tenant.id) : "platform";
   }
 
-  private async resolveWechatIdentity(code: string, requestedAppId?: string) {
-    const realWechatLogin = this.config.get("WECHAT_LOGIN_REAL_ENABLED", this.config.get("NODE_ENV") === "production" ? "true" : "false") === "true";
+  private async resolveWechatMiniProgramConfig(requestedAppId?: string) {
     const releaseSetting = await this.miniprogramReleaseSettings.findOne({ where: {}, order: { id: "ASC" } });
     const appId = requestedAppId?.trim() || this.config.get<string>("WECHAT_APP_ID") || releaseSetting?.appId || this.config.get<string>("WECHAT_PAY_APP_ID") || "";
-    if (!realWechatLogin) return { openid: `dev_${code}`, unionid: null, appId: appId || "dev" };
     const appSecret = this.config.get<string>("WECHAT_APP_SECRET") || (releaseSetting?.appId === appId ? releaseSetting?.appSecret : "") || "";
+    return { appId, appSecret };
+  }
+
+  private async resolveWechatIdentity(code: string, requestedAppId?: string) {
+    const realWechatLogin = this.config.get("WECHAT_LOGIN_REAL_ENABLED", this.config.get("NODE_ENV") === "production" ? "true" : "false") === "true";
+    const { appId, appSecret } = await this.resolveWechatMiniProgramConfig(requestedAppId);
+    if (!realWechatLogin) return { openid: `dev_${code}`, unionid: null, appId: appId || "dev" };
     if (!appId || !appSecret) throw new BadRequestException("微信登录配置未完成");
     const url = `https://api.weixin.qq.com/sns/jscode2session?appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}&js_code=${encodeURIComponent(code)}&grant_type=authorization_code`;
     const response = await fetch(url);
@@ -1528,6 +1552,36 @@ export class PublicService {
     const unionid = typeof payload.unionid === "string" ? payload.unionid.trim() : null;
     if (!response.ok || !openid) throw new BadRequestException(String(payload.errmsg || "微信登录失败"));
     return { openid, unionid, appId };
+  }
+
+  private async resolveWechatAccessToken(requestedAppId?: string) {
+    const { appId, appSecret } = await this.resolveWechatMiniProgramConfig(requestedAppId);
+    if (!appId || !appSecret) throw new BadRequestException("微信手机号授权配置未完成");
+    const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(appId)}&secret=${encodeURIComponent(appSecret)}`;
+    const response = await fetch(url);
+    const payload = await response.json() as Record<string, unknown>;
+    const accessToken = typeof payload.access_token === "string" ? payload.access_token.trim() : "";
+    if (!response.ok || !accessToken) throw new BadRequestException(String(payload.errmsg || "获取微信 access_token 失败"));
+    return accessToken;
+  }
+
+  private async resolveWechatPhoneNumber(code: string, requestedAppId?: string) {
+    const realWechatLogin = this.config.get("WECHAT_LOGIN_REAL_ENABLED", this.config.get("NODE_ENV") === "production" ? "true" : "false") === "true";
+    if (!realWechatLogin) {
+      const devPhone = this.config.get<string>("WECHAT_PHONE_DEV_NUMBER", "");
+      if (/^1\d{10}$/.test(devPhone)) return devPhone;
+      throw new BadRequestException("微信手机号授权需要配置真实小程序 AppID/AppSecret");
+    }
+    const accessToken = await this.resolveWechatAccessToken(requestedAppId);
+    const response = await fetch(`https://api.weixin.qq.com/wxa/business/getuserphonenumber?access_token=${encodeURIComponent(accessToken)}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ code })
+    });
+    const payload = await response.json() as Record<string, any>;
+    const phone = typeof payload?.phone_info?.phoneNumber === "string" ? payload.phone_info.phoneNumber.trim() : "";
+    if (!response.ok || !/^1\d{10}$/.test(phone)) throw new BadRequestException(String(payload.errmsg || "微信手机号授权失败"));
+    return phone;
   }
 
   private generateVerificationCode() {

@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { FieldType } from "@activity/shared";
-import { ensureUser, request, getCurrentRouteWithQuery, withTenantCode } from "../../api";
+import { ensureUser, fetchMyProfile, request, getCurrentRouteWithQuery, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const activity = ref<any>();
 const operationSetting = ref<any>();
@@ -25,6 +26,8 @@ const source = ref("");
 const inviteCode = ref("");
 const attemptedSubmit = ref(false);
 const missingFieldId = ref<number>();
+const phoneBindVisible = ref(false);
+const pendingPhoneAction = ref<"" | "submit">("");
 const values = reactive<Record<number, any>>({});
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_register", "/pages/activity/register");
 
@@ -147,7 +150,7 @@ function goLogin() {
 async function doSubmit() {
   submitting.value = true;
   try {
-    userId.value = await ensureUser();
+    if (!(await requirePhoneBound("submit"))) return;
     const answers = activity.value.fields.map((field: any) => ({ fieldId: field.id, label: field.label, type: field.type, value: values[field.id] ?? (field.type === FieldType.MultipleChoice ? [] : "") }));
     const result = await request<any>(`/public/activities/${activity.value.id}/register`, {
       method: "POST",
@@ -172,6 +175,27 @@ async function doSubmit() {
   } finally {
     submitting.value = false;
   }
+}
+
+async function requirePhoneBound(action: "submit") {
+  userId.value = await ensureUser();
+  const profile = await fetchMyProfile();
+  if (profile?.phone) return true;
+  pendingPhoneAction.value = action;
+  phoneBindVisible.value = true;
+  return false;
+}
+
+function closePhoneBindPanel() {
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+}
+
+function handlePhoneBound() {
+  const action = pendingPhoneAction.value;
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+  if (action === "submit") doSubmit();
 }
 
 async function refreshQuote(showError = false) {
@@ -380,6 +404,14 @@ watch(couponCode, () => {
         <view class="button" :class="{ secondary: submitting || memberBlocked || registrationPaused }" @click="submit">{{ submitButtonText }}</view>
       </view>
     </template>
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="报名前绑定手机号"
+      message="活动报名需要手机号，授权后将继续提交当前报名。"
+      close-text="暂不报名"
+      @close="closePhoneBindPanel"
+      @bound="handlePhoneBound"
+    />
   </view>
 </template>
 

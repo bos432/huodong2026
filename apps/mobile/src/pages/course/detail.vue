@@ -90,14 +90,23 @@
         </view>
       </view>
     </template>
+    <WechatPhoneBindSheet
+      :visible="phoneBindVisible"
+      title="购买课程前绑定手机号"
+      message="课程订单和学习权益需要手机号，授权后将继续当前操作。"
+      close-text="暂不购买"
+      @close="closePhoneBindPanel"
+      @bound="handlePhoneBound"
+    />
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
 import { priceText } from "../../course-data";
 import EmptyState from "../../components/EmptyState.vue";
+import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 
 const activeTab = ref("detail");
 const isFav = ref(false);
@@ -105,6 +114,8 @@ const loading = ref(true);
 const error = ref("");
 const rawCourse = ref<any>();
 const joining = ref(false);
+const phoneBindVisible = ref(false);
+const pendingPhoneAction = ref<"" | "buy">("");
 
 const tabs = [
   { key: "detail", label: "详情" },
@@ -200,12 +211,13 @@ async function toggleFavorite() {
 async function buyCourse() {
   if (!course.value) return;
   if (Number(course.value.price) > 0) {
+    if (!(await requirePhoneBound("buy"))) return;
     uni.navigateTo({ url: withTenantCode(`/pages/order/confirm?id=${course.value.id}`) });
   } else {
     if (joining.value) return;
     joining.value = true;
     try {
-      await ensureUser();
+      if (!(await requirePhoneBound("buy"))) return;
       await request(`/public/courses/${course.value.id}/orders`, { method: "POST", data: {} });
       uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&mode=free&id=${course.value.id}`) });
     } catch (err: any) {
@@ -214,6 +226,27 @@ async function buyCourse() {
       joining.value = false;
     }
   }
+}
+
+async function requirePhoneBound(action: "buy") {
+  await ensureUser();
+  const profile = await fetchMyProfile();
+  if (profile?.phone) return true;
+  pendingPhoneAction.value = action;
+  phoneBindVisible.value = true;
+  return false;
+}
+
+function closePhoneBindPanel() {
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+}
+
+function handlePhoneBound() {
+  const action = pendingPhoneAction.value;
+  phoneBindVisible.value = false;
+  pendingPhoneAction.value = "";
+  if (action === "buy") buyCourse();
 }
 
 onMounted(loadCourse);
