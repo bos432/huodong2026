@@ -1,6 +1,6 @@
 import { cp, mkdir, rm, stat } from "node:fs/promises";
 import { existsSync } from "node:fs";
-import { basename, dirname, resolve, sep } from "node:path";
+import { basename, dirname, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
@@ -8,6 +8,11 @@ const repoRoot = resolve(scriptDir, "..");
 const webroot = resolve(process.env.WEBROOT || repoRoot);
 const h5Dist = resolve(repoRoot, "apps/mobile/dist/build/h5");
 const adminDist = resolve(repoRoot, "apps/admin/dist");
+const adminWebroot = resolve(process.env.ADMIN_WEBROOT || (webroot === h5Dist ? adminDist : resolve(webroot, "admin")));
+
+function isSamePath(a, b) {
+  return relative(resolve(a), resolve(b)) === "";
+}
 
 function assertSafeWebroot(target) {
   const normalized = resolve(target);
@@ -35,6 +40,7 @@ async function backupPath(source, backupDir) {
 }
 
 async function publishDirectory(source, target) {
+  if (isSamePath(source, target)) return;
   await rm(target, { recursive: true, force: true });
   await cp(source, target, { recursive: true, force: true });
 }
@@ -45,18 +51,31 @@ await assertDirectory(adminDist, "Admin build output");
 
 const timestamp = new Date().toISOString().replace(/[-:T.Z]/g, "").slice(0, 14);
 const backupDir = resolve(webroot, ".deploy-backups", timestamp);
-await mkdir(backupDir, { recursive: true });
 
-await backupPath(resolve(webroot, "index.html"), backupDir);
-await backupPath(resolve(webroot, "assets"), backupDir);
-await backupPath(resolve(webroot, "admin"), backupDir);
+const h5IsDirectWebroot = isSamePath(h5Dist, webroot);
+const adminIsDirectWebroot = isSamePath(adminDist, adminWebroot);
 
-await cp(resolve(h5Dist, "index.html"), resolve(webroot, "index.html"), { force: true });
-await publishDirectory(resolve(h5Dist, "assets"), resolve(webroot, "assets"));
+if (!h5IsDirectWebroot || !adminIsDirectWebroot) {
+  await mkdir(backupDir, { recursive: true });
+}
 
-await mkdir(resolve(webroot, "admin"), { recursive: true });
-await cp(resolve(adminDist, "index.html"), resolve(webroot, "admin/index.html"), { force: true });
-await publishDirectory(resolve(adminDist, "assets"), resolve(webroot, "admin/assets"));
+if (h5IsDirectWebroot) {
+  console.log(`H5 build output is already the Nginx webroot: ${webroot}`);
+} else {
+  await backupPath(resolve(webroot, "index.html"), backupDir);
+  await backupPath(resolve(webroot, "assets"), backupDir);
+  await cp(resolve(h5Dist, "index.html"), resolve(webroot, "index.html"), { force: true });
+  await publishDirectory(resolve(h5Dist, "assets"), resolve(webroot, "assets"));
+}
+
+if (adminIsDirectWebroot) {
+  console.log(`Admin build output is already the Nginx admin root: ${adminWebroot}`);
+} else {
+  await mkdir(adminWebroot, { recursive: true });
+  await backupPath(adminWebroot, backupDir);
+  await cp(resolve(adminDist, "index.html"), resolve(adminWebroot, "index.html"), { force: true });
+  await publishDirectory(resolve(adminDist, "assets"), resolve(adminWebroot, "assets"));
+}
 
 console.log(`Published H5 and admin static files to: ${webroot}`);
-console.log(`Previous static files were backed up to: ${backupDir}`);
+if (existsSync(backupDir)) console.log(`Previous static files were backed up to: ${backupDir}`);

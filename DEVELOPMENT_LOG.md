@@ -8001,3 +8001,51 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 在服务器执行最新发布命令：拉取分支、构建 Admin/H5、执行 `npm run publish:webroot`、重启 API、检查旧品牌词残留和 health ready。
 - 发布完成后重新打开线上 H5，确认主脚本 hash 已变化，`document.title` 与 H5 顶部栏均显示 `慢π`，并确认后台 `/admin` 可正常打开。
+
+## 2026-06-24 - 线上 H5 直出目录发布脚本兼容
+
+### 阶段名称
+
+上线前部署配置 - Nginx 直指 H5/Admin dist 目录时的构建发布修复小阶段。
+
+### 本阶段完成内容
+
+- 读取服务器执行输出，确认线上 Nginx 配置为：
+  - H5 `root /www/wwwroot/rd.chaimen666.com/apps/mobile/dist/build/h5;`
+  - Admin `alias /www/wwwroot/rd.chaimen666.com/apps/admin/dist/;`
+- 定位首次发布未生效原因：服务器在 `npm --prefix apps/mobile run build:h5` 的 `prebuild:h5` 阶段中断，`clean-mobile-h5-dist.mjs` 使用整目录 `rm -r` 时在服务器 Node v20 上对 `h5/index.html` 抛出 `ENOTDIR: not a directory, scandir .../index.html`，导致后续 `publish:webroot` 未执行。
+- 将 H5 清理脚本改为“保留 dist 根目录、逐项删除子文件/目录”，并对 `ENOTDIR` 做文件删除兜底，适配 Nginx 直接服务构建目录的线上结构。
+- 扩展 `publish:webroot`：当 `WEBROOT` 等于 `apps/mobile/dist/build/h5` 时识别为 H5 直出模式；当 `ADMIN_WEBROOT` 等于 `apps/admin/dist` 时识别为 Admin 直出模式，避免把源目录当目标目录再次复制或删除。
+- 保留普通 webroot 复制模式，继续支持把 H5 发布到站点根目录、Admin 发布到 `webroot/admin` 的部署形态。
+
+### 修改/新增的主要文件
+
+- `scripts/clean-mobile-h5-dist.mjs`
+- `scripts/publish-webroot.mjs`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 13:14:13 +08:00。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过，新的逐项清理脚本可正常清空并重建 H5 dist。
+- `npm.cmd --prefix apps/admin run build`：通过；仅保留既有 VueUse pure 注释与大 chunk 提醒。
+- `npm run publish:webroot` 临时普通 webroot 复制模式：通过，H5/Admin 入口均替换为新构建，旧资源被删除，备份目录生成。
+- `WEBROOT=apps/mobile/dist/build/h5 ADMIN_WEBROOT=apps/admin/dist npm run publish:webroot` 直出模式：通过，脚本识别 H5/Admin 构建产物已是 Nginx 服务目录，不再执行危险复制；H5 `index.html` 仍引用新 hash `assets/index-7sr955wH.js`。
+- `rg -n "七维书院|七维文化|七维|奇外|电召" apps/mobile/dist/build/h5 apps/admin/dist apps/mobile/src apps/admin/src apps/api/src packages -g "!node_modules"`：无命中。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下脚本文件未来可能发生 LF/CRLF 转换。
+
+### 浏览器验收结果
+
+- 本阶段先完成本地脚本修复和构建验证；线上右侧浏览器仍需等待服务器拉取本次提交并重新执行 H5 构建后复验。
+- 上一轮线上浏览器结果仍显示旧 `assets/index-D6hAU5Ez.js`，原因已定位为服务器 H5 构建在清理阶段失败，未生成并发布新包。
+
+### 遗留问题
+
+- 需要服务器拉取本次提交后重新执行构建发布命令。
+- 执行完成前，线上 H5 仍可能显示旧标题 `七维书院`。
+
+### 下一阶段应继续处理的事项
+
+- 服务器执行最新命令后，重新检查外网 HTML 是否不再引用 `index-D6hAU5Ez.js`。
+- 右侧浏览器重新打开带时间戳的线上 H5，确认标题、顶部栏、正文和资源 hash 均为慢π新包。
