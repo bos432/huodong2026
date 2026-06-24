@@ -2,6 +2,49 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 个人中心微信资料授权重写
+
+### 阶段名称
+
+小程序上线准备 - 重写个人中心默认微信用户补资料小阶段。
+
+### 本阶段完成内容
+
+- 根据本地开发者工具截图复查：当前用户已经处于“微信已登录”状态，但个人中心仍显示默认头像和 `微信用户`，说明登录页授权流程不会再触发已有登录态用户。
+- 重写“我的”页微信资料补全入口：
+  - 当 `wechatBound=true` 且头像为空或昵称仍是默认 `微信用户` 时，顶部显示“授权微信头像昵称”按钮。
+  - 在个人中心头部下方新增“完善微信头像和昵称”提示卡片，避免入口被“编辑资料”弱化。
+  - 检测到默认微信资料时自动弹出“获取你的昵称、头像和会员权限”面板。
+  - 面板头像使用微信官方 `button open-type=chooseAvatar`，昵称使用 `input type=nickname`。
+  - 用户必须同时选择头像并填写/选择昵称，点击“允许”后上传头像并调用 `/public/me/profile` 同步后台会员资料。
+  - 点击“稍后再说”只关闭当前面板，不修改已有用户资料。
+- 更新小程序上传发布说明，明确已登录用户也会在个人中心触发头像昵称授权补全。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/pages/user/my.vue`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 20:33 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `rg -n '授权微信头像昵称|完善微信头像和昵称|获取你的昵称、头像和会员权限|chooseAvatar|type="nickname"|bindchooseavatar|微信资料已同步|请选择头像并填写昵称' apps\mobile\dist\build\mp-weixin\pages\user\my.wxml apps\mobile\dist\build\mp-weixin\pages\user\my.js apps\mobile\dist\build\mp-weixin\pages\user\my.wxss apps\mobile\src\pages\user\my.vue`：通过，确认个人中心小程序产物包含官方头像昵称填写组件。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下部分文件未来可能发生 LF/CRLF 转换。
+
+### 遗留问题
+
+- 开发者工具对 `input type=nickname` 的候选昵称表现可能不完整，最终仍需手机微信扫码预览验证。
+- 若微信开发者工具缓存了旧包，需要重新构建并重新导入 `apps/mobile/dist/build/mp-weixin`，必要时清缓存/重新编译。
+
+### 下一阶段应继续处理的事项
+
+- 服务器或本地重新构建小程序包后，在微信开发者工具中进入“我的”页，确认默认微信用户会弹出补资料面板。
+- 选择微信头像、填写/选择昵称并点击“允许”，检查个人中心头像昵称刷新，后台会员资料同步。
+
 ## 2026-06-24 - 小程序登录页头像昵称授权面板
 
 ### 阶段名称

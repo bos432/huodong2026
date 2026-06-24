@@ -15,12 +15,21 @@
       <text class="profile-nickname">{{ displayName }}</text>
       <view class="profile-badge">{{ memberLevelName }}</view>
       <text class="profile-expire">{{ profileIdentityText }}</text>
-      <view v-if="canCompleteWechatProfile" class="wechat-profile-sync" @click="goEdit">
-        <text>完善微信资料</text>
+      <view v-if="canCompleteWechatProfile" class="wechat-profile-sync" @click="openWechatProfilePanel()">
+        <text>授权微信头像昵称</text>
       </view>
       <view class="profile-edit-btn" @click="goEdit">
         <text class="subtle profile-edit-text">编辑资料  ›</text>
       </view>
+    </view>
+
+    <view v-if="canCompleteWechatProfile" class="wechat-complete-card" @click="openWechatProfilePanel()">
+      <view class="wechat-complete-icon">微</view>
+      <view class="wechat-complete-copy">
+        <view class="wechat-complete-title">完善微信头像和昵称</view>
+        <view class="wechat-complete-sub">当前仍是默认微信资料，授权后后台会员资料会同步更新。</view>
+      </view>
+      <view class="wechat-complete-action">去授权</view>
     </view>
 
     <!-- 核心入口宫格 -->
@@ -100,6 +109,30 @@
       <text>退出当前账号</text>
     </view>
 
+    <!-- #ifdef MP-WEIXIN -->
+    <view v-if="wechatProfilePanelVisible" class="wechat-auth-mask">
+      <view class="wechat-auth-sheet">
+        <view class="wechat-auth-brand">慢π</view>
+        <view class="wechat-auth-title">获取你的昵称、头像和会员权限</view>
+        <view class="wechat-auth-message">{{ wechatProfilePanelMessage }}</view>
+        <button class="wechat-auth-row avatar-select" open-type="chooseAvatar" @chooseavatar="chooseWechatProfileAvatar">
+          <text class="auth-label">头像</text>
+          <image v-if="wechatProfileAvatarPath" class="auth-avatar" :src="wechatProfileAvatarPath" mode="aspectFill" />
+          <view v-else class="auth-avatar auth-avatar-empty">微</view>
+          <text class="auth-arrow">›</text>
+        </button>
+        <view class="wechat-auth-row">
+          <text class="auth-label">昵称</text>
+          <input v-model="wechatProfileNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写微信昵称" @input="updateWechatProfileNickname" />
+        </view>
+        <view class="wechat-auth-actions">
+          <button class="auth-action reject" :disabled="syncingWechatProfile" @tap="closeWechatProfilePanel">稍后再说</button>
+          <button class="auth-action allow" :disabled="syncingWechatProfile" @tap="saveWechatProfilePanel">{{ syncingWechatProfile ? "同步中" : "允许" }}</button>
+        </view>
+      </view>
+    </view>
+    <!-- #endif -->
+
     <view style="height:120rpx;"></view>
     <TabBar current="user" />
   </view>
@@ -108,7 +141,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { clearUser, ensureUser, fetchMyProfile, getUserToken, request } from "../../api";
+import { clearUser, ensureUser, fetchMyProfile, getUserToken, request, updateMyProfile, uploadMyAvatar } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import TabBar from "../../components/TabBar.vue";
@@ -122,6 +155,11 @@ const registrations = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
 const mallOrders = ref<any[]>([]);
 const loadingProfile = ref(false);
+const wechatProfilePanelVisible = ref(false);
+const wechatProfileNickname = ref("");
+const wechatProfileAvatarPath = ref("");
+const wechatProfilePanelMessage = ref("请选择微信头像和昵称后继续。");
+const syncingWechatProfile = ref(false);
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
@@ -147,8 +185,15 @@ const profileIdentityText = computed(() => {
   if (profile.value?.wechatBound) return "微信已登录 · 未绑定手机号";
   return "请先登录后查看权益";
 });
-const isDefaultWechatNickname = computed(() => /^微信用户[A-Z0-9]+$/.test(String(profile.value?.nickname || "")));
-const canCompleteWechatProfile = computed(() => Boolean(profile.value?.wechatBound && (!profile.value?.avatarUrl || !profile.value?.nickname || isDefaultWechatNickname.value)));
+function isDefaultWechatNicknameValue(value?: unknown) {
+  const name = String(value || "").trim();
+  return !name || /^微信用户([A-Z0-9]+)?$/i.test(name);
+}
+function shouldCompleteWechatProfile(row?: any) {
+  return Boolean(row?.wechatBound && (!row.avatarUrl || isDefaultWechatNicknameValue(row.nickname)));
+}
+const isDefaultWechatNickname = computed(() => isDefaultWechatNicknameValue(profile.value?.nickname));
+const canCompleteWechatProfile = computed(() => shouldCompleteWechatProfile(profile.value));
 const pendingRegistrationCount = computed(() => registrations.value.filter((item) => item.status === "pending_payment").length + courseOrders.value.filter((item) => item.status === "pending_payment").length + mallOrders.value.filter((item) => ["pending_payment", "pending_confirm"].includes(item.status)).length);
 const learningCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) < 100).length);
 const completedCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) >= 100).length);
@@ -179,6 +224,8 @@ async function loadProfile() {
     registrations.value = Array.isArray(registrationRows) ? registrationRows : [];
     courseOrders.value = Array.isArray(courseOrderRows) ? courseOrderRows : [];
     mallOrders.value = Array.isArray(mallOrderRows) ? mallOrderRows : [];
+    if (shouldCompleteWechatProfile(profileData)) openWechatProfilePanel(true, profileData);
+    else wechatProfilePanelVisible.value = false;
   } catch (error: any) {
     profile.value = null;
     wallet.value = null;
@@ -276,6 +323,58 @@ function resetUserState() {
   registrations.value = [];
   courseOrders.value = [];
   mallOrders.value = [];
+  wechatProfilePanelVisible.value = false;
+  syncingWechatProfile.value = false;
+}
+function inputValue(event: any) {
+  return String(event?.detail?.value ?? event?.target?.value ?? "");
+}
+function isRemoteAvatar(value: string) {
+  return /^https?:\/\//i.test(value) || value.startsWith("/uploads/");
+}
+function openWechatProfilePanel(auto = false, row: any = profile.value) {
+  if (!row?.wechatBound) return;
+  wechatProfileNickname.value = isDefaultWechatNicknameValue(row.nickname) ? "" : String(row.nickname || "");
+  wechatProfileAvatarPath.value = String(row.avatarUrl || "");
+  wechatProfilePanelMessage.value = auto ? "检测到当前仍是默认微信资料，请授权头像和昵称后继续使用会员中心。" : "请选择微信头像和昵称，保存后后台会员资料会同步更新。";
+  wechatProfilePanelVisible.value = true;
+}
+function closeWechatProfilePanel() {
+  if (syncingWechatProfile.value) return;
+  wechatProfilePanelVisible.value = false;
+}
+function chooseWechatProfileAvatar(event: any) {
+  const filePath = String(event?.detail?.avatarUrl || "");
+  if (!filePath) {
+    uni.showToast({ title: "未选择微信头像", icon: "none" });
+    return;
+  }
+  wechatProfileAvatarPath.value = filePath;
+}
+function updateWechatProfileNickname(event: any) {
+  wechatProfileNickname.value = inputValue(event).slice(0, 40);
+}
+async function saveWechatProfilePanel() {
+  const nickname = wechatProfileNickname.value.trim();
+  let avatarUrl = wechatProfileAvatarPath.value.trim();
+  if (!nickname || !avatarUrl) {
+    uni.showToast({ title: "请选择头像并填写昵称", icon: "none" });
+    return;
+  }
+  syncingWechatProfile.value = true;
+  try {
+    if (avatarUrl && !isRemoteAvatar(avatarUrl)) {
+      const uploaded = await uploadMyAvatar(avatarUrl);
+      avatarUrl = uploaded.url;
+    }
+    profile.value = await updateMyProfile({ nickname, avatarUrl });
+    wechatProfilePanelVisible.value = false;
+    uni.showToast({ title: "微信资料已同步", icon: "success" });
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "同步失败", icon: "none" });
+  } finally {
+    syncingWechatProfile.value = false;
+  }
 }
 function logoutUser() {
   uni.showModal({
@@ -306,6 +405,34 @@ function logoutUser() {
   margin: 0 -32rpx;
   position: relative;
 }
+.wechat-complete-card {
+  display: grid;
+  grid-template-columns: 76rpx minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 18rpx;
+  margin: 18rpx 0 16rpx;
+  padding: 22rpx 24rpx;
+  border-radius: 20rpx;
+  background: #fffaf2;
+  border: 1rpx solid rgba(196, 61, 61, 0.24);
+  box-shadow: 0 10rpx 28rpx rgba(72, 55, 38, 0.08);
+}
+.wechat-complete-icon {
+  width: 76rpx;
+  height: 76rpx;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 20rpx;
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+  font-size: 28rpx;
+  font-weight: 950;
+}
+.wechat-complete-copy { min-width: 0; }
+.wechat-complete-title { color: #5B2F24; font-size: 28rpx; font-weight: 950; }
+.wechat-complete-sub { margin-top: 6rpx; color: #8f8172; font-size: 23rpx; line-height: 1.45; }
+.wechat-complete-action { color: #C43D3D; font-size: 25rpx; font-weight: 900; }
 .profile-greeting { font-size: 38rpx; font-weight: 900; margin-bottom: 16rpx; }
 .profile-nickname { font-size: 32rpx; font-weight: 600; color: var(--profile-header-text, #5B2F24); margin-top: 12rpx; }
 .profile-badge {
@@ -397,4 +524,73 @@ function logoutUser() {
   font-size: 28rpx;
   font-weight: 800;
 }
+.wechat-auth-mask {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.46);
+}
+.wechat-auth-sheet {
+  width: 100%;
+  max-width: 760rpx;
+  padding: 34rpx 42rpx 28rpx;
+  border-radius: 28rpx 28rpx 0 0;
+  background: #fff;
+  box-shadow: 0 -18rpx 50rpx rgba(15, 23, 42, 0.14);
+}
+.wechat-auth-brand { color: #8b4a3e; font-size: 26rpx; font-weight: 900; }
+.wechat-auth-title { margin-top: 22rpx; color: #111827; font-size: 34rpx; font-weight: 950; line-height: 1.45; }
+.wechat-auth-message { margin-top: 14rpx; color: #8f8172; font-size: 24rpx; line-height: 1.55; }
+.wechat-auth-row {
+  min-height: 104rpx;
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-bottom: 1rpx solid #ececec;
+  border-radius: 0;
+  background: #fff;
+  color: #111827;
+  line-height: normal;
+}
+.wechat-auth-row::after { border: 0; }
+.avatar-select { width: 100%; }
+.auth-label { width: 100rpx; flex: 0 0 auto; color: #111827; font-size: 28rpx; font-weight: 700; text-align: left; }
+.auth-avatar {
+  width: 72rpx;
+  height: 72rpx;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: #f1e3d0;
+}
+.auth-avatar-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #8b4a3e;
+  font-size: 26rpx;
+  font-weight: 900;
+}
+.auth-arrow { margin-left: auto; color: #8f8172; font-size: 44rpx; line-height: 1; }
+.auth-nickname-input { flex: 1; min-width: 0; height: 92rpx; color: #111827; font-size: 28rpx; text-align: left; }
+.wechat-auth-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; margin-top: 32rpx; }
+.auth-action {
+  height: 84rpx;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12rpx;
+  font-size: 28rpx;
+  font-weight: 900;
+  line-height: 84rpx;
+}
+.auth-action::after { border: 0; }
+.auth-action.reject { background: #f3f4f6; color: #111827; }
+.auth-action.allow { background: #16a34a; color: #fff; }
+.auth-action[disabled] { opacity: .62; }
 </style>
