@@ -35,6 +35,7 @@
     "build:admin": "npm --prefix apps/admin run build",
     "build:mobile:h5": "npm --prefix apps/mobile run build:h5",
     "publish:webroot": "node scripts/publish-webroot.mjs",
+    "wait:api-ready": "node scripts/wait-api-ready.mjs",
     "test": "npm --prefix apps/api run test"
   },
   "devDependencies": {

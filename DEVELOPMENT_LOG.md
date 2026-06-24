@@ -2,6 +2,59 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - API ready 等待脚本
+
+### 阶段名称
+
+上线前部署配置 - PM2 重启后 API readiness 等待重试小阶段。
+
+### 本阶段完成内容
+
+- 重新读取最新 `DEVELOPMENT_LOG.md`、`docs/project-progress.md` 和工作区状态，确认上一阶段遗留“PM2 重启后立即 curl 可能短暂 502”。
+- 新增 `scripts/wait-api-ready.mjs`：
+  - 默认检查 `http://127.0.0.1:3000/api/health/ready`。
+  - 支持 `--url`、`--api-base`、`--timeout-ms`、`--interval-ms` 参数。
+  - 支持环境变量 `API_READY_URL`、`API_BASE`、`API_READY_TIMEOUT_MS`、`API_READY_INTERVAL_MS`。
+  - 只有 HTTP 200 且返回 `ready=true` 才判定成功。
+  - 遇到 502、连接失败或 ready 未完成时持续重试，超时后退出 1。
+- 在 `package.json` 增加 `npm run wait:api-ready`。
+- 更新 `docs/线上部署结构与发布说明.md`，要求 PM2 重启后执行 `API_READY_URL=https://rd.chaimen666.com/api/health/ready npm run wait:api-ready`，避免把重启瞬间 502 误判为持续故障。
+- 扩展 `scripts/preflight-health-guard.mjs`，把 wait 脚本、package 命令和部署文档纳入静态保护。
+
+### 修改/新增的主要文件
+
+- `scripts/wait-api-ready.mjs`
+- `package.json`
+- `scripts/preflight-health-guard.mjs`
+- `docs/线上部署结构与发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 14:34:32 +08:00。
+- `node --check scripts/wait-api-ready.mjs`：通过。
+- `npm.cmd run wait:api-ready -- --url https://rd.chaimen666.com/api/health/ready --timeout-ms 15000 --interval-ms 1000`：通过，1 次尝试成功，输出 `ready=true api=up database=up config=warning commit=35f1de4`。
+- `node scripts/preflight-health-guard.mjs`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下 LF/CRLF 转换。
+
+### 浏览器验收结果
+
+- 本阶段为发布脚本能力补强，不新增右侧浏览器点击。
+- 上一阶段右侧浏览器已验证线上 H5 首页和商城页可用，线上 smoke 已通过。
+
+### 遗留问题
+
+- 服务器尚未拉取本阶段新增的 `wait:api-ready` 脚本；下次部署前拉取即可使用。
+- 真机微信 iOS/Android 分享、海报长按保存、二维码扫码回流仍未验收。
+- H5 控制台泛化 `Object` error 仍需后续单独定位和日志可读性优化。
+
+### 下一阶段应继续处理的事项
+
+- 提交并推送本阶段脚本、文档和日志。
+- 下一次服务器部署命令在 PM2 重启后加入：`API_READY_URL=https://rd.chaimen666.com/api/health/ready npm run wait:api-ready`。
+- 继续右侧浏览器商城商品详情、购物车、下单入口点击级复验，或处理 H5 泛化 `Object` 控制台错误。
+
 ## 2026-06-24 - 线上演示商家 smoke 复验
 
 ### 阶段名称

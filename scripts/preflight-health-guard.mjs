@@ -24,9 +24,12 @@ const smoke = read("scripts/smoke.mjs");
 const smokeFlow = read("scripts/smoke-flow.mjs");
 const tenantSmoke = read("scripts/tenant-smoke.mjs");
 const doctor = read("scripts/doctor.mjs");
+const waitApiReady = read("scripts/wait-api-ready.mjs");
+const packageJson = read("package.json");
 const compose = read("docker-compose.yml");
 const launchChecklist = read("docs/launch-checklist.md");
 const runbook = read("docs/production-runbook.md");
+const deployDocs = read("docs/线上部署结构与发布说明.md");
 const progress = read("docs/project-progress.md");
 
 checkSourceIncludes(healthController, '@Controller("health")', "health controller");
@@ -59,6 +62,11 @@ checkSourceIncludes(appModule, "HealthModule", "app module");
 checkSourceIncludes(doctor, "/api/health", "doctor");
 checkSourceIncludes(doctor, "/api/health/ready", "doctor");
 checkSourceIncludes(compose, "http://127.0.0.1:3000/api/health/ready", "docker compose");
+checkSourceIncludes(packageJson, "wait:api-ready", "package scripts");
+checkSourceIncludes(waitApiReady, "API_READY_URL", "wait api ready script");
+checkSourceIncludes(waitApiReady, "API_READY_TIMEOUT_MS", "wait api ready script");
+checkSourceIncludes(waitApiReady, "/health/ready", "wait api ready script");
+checkSourceIncludes(waitApiReady, "ready=true", "wait api ready script");
 
 checkSourceIncludes(smoke, 'api("/health")', "smoke script");
 checkSourceIncludes(smoke, 'api("/health/ready")', "smoke script");
@@ -83,6 +91,8 @@ checkSourceIncludes(runbook, "/api/health/live", "production runbook");
 checkSourceIncludes(runbook, "/api/health/ready", "production runbook");
 checkSourceIncludes(runbook, "/api/health/metrics", "production runbook");
 checkSourceIncludes(runbook, "ready: true", "production runbook");
+checkSourceIncludes(deployDocs, "npm run wait:api-ready", "online deploy docs");
+checkSourceIncludes(deployDocs, "API_READY_URL", "online deploy docs");
 checkSourceIncludes(progress, "健康检查静态 guard", "project progress");
 
 if (failures.length) {
