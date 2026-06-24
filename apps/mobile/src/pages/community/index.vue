@@ -112,6 +112,7 @@ import { ensureUser, request, withTenantCode } from "../../api";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { queryParam } from "../../query";
 
 onShow(() => {
   loadPageTheme();
@@ -148,7 +149,7 @@ function loadRouteOptions() {
   if (typeof window !== "undefined") {
     const hash = window.location.hash || "";
     const queryText = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : window.location.search.slice(1);
-    activityFilterId.value = Number(new URLSearchParams(queryText).get("activityId") || 0);
+    activityFilterId.value = Number(queryParam(queryText, "activityId") || 0);
   }
   // #endif
 }

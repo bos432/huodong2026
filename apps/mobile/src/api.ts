@@ -1,4 +1,5 @@
 import { clientError } from "./error-reporting";
+import { queryFromUrl, queryParam, stringifyQuery } from "./query";
 
 const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const DEV_PHONE = "13800000001";
@@ -35,9 +36,7 @@ function normalizeTenantCode(value?: unknown) {
 }
 
 function queryTenantCode(search?: string) {
-  if (!search) return "";
-  const text = search.startsWith("?") ? search.slice(1) : search;
-  return normalizeTenantCode(new URLSearchParams(text).get("tenantCode"));
+  return normalizeTenantCode(queryParam(search, "tenantCode"));
 }
 
 function locationTenantCode() {
@@ -126,15 +125,14 @@ export function setActivityListIntent(intent: ActivityListIntent) {
 }
 
 export function setActivityListIntentFromUrl(url: string, fallback: ActivityListIntent = {}) {
-  const query = String(url || "").split("?")[1]?.split("#")[0] || "";
-  const params = new URLSearchParams(query);
-  const categoryIdText = params.get("categoryId");
+  const query = queryFromUrl(url);
+  const categoryIdText = queryParam(query, "categoryId");
   const categoryId = categoryIdText && Number.isFinite(Number(categoryIdText)) ? Number(categoryIdText) : fallback.categoryId;
   setActivityListIntent({
     ...fallback,
     categoryId,
-    keyword: params.get("keyword") || fallback.keyword,
-    focus: params.get("focus") === "1" || params.get("focus") === "true" || fallback.focus
+    keyword: queryParam(query, "keyword") || fallback.keyword,
+    focus: queryParam(query, "focus") === "1" || queryParam(query, "focus") === "true" || fallback.focus
   });
 }
 
@@ -185,7 +183,7 @@ export function getCurrentRouteWithQuery() {
   const options = { ...(page.options || {}) };
   const tenantCode = getCurrentTenantCode();
   if (tenantCode && !options.tenantCode) options.tenantCode = tenantCode;
-  const query = new URLSearchParams(options).toString();
+  const query = stringifyQuery(options);
   return `/${page.route}${query ? `?${query}` : ""}`;
 }
 

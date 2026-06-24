@@ -88,6 +88,7 @@ import { ensureUser, request } from "../../api";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { queryParam } from "../../query";
 
 type CommunityComment = {
   id: number;
@@ -141,7 +142,7 @@ function currentPostId() {
   if (typeof window !== "undefined") {
     const hash = window.location.hash || "";
     const queryText = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : window.location.search.slice(1);
-    const routeId = Number(new URLSearchParams(queryText).get("id") || 0);
+    const routeId = Number(queryParam(queryText, "id") || 0);
     if (routeId) return routeId;
   }
   // #endif

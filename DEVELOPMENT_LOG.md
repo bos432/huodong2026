@@ -2,6 +2,63 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序真机 URLSearchParams 兼容修复
+
+### 阶段名称
+
+小程序上线准备 - 真机体验版 `Can't find variable: URLSearchParams` 报错修复小阶段。
+
+### 本阶段完成内容
+
+- 读取 `docs/qiwai-cultural-saas-platform-plan.md`、`docs/小程序上传发布说明.md` 和最新 `DEVELOPMENT_LOG.md`，确认当前阶段处于小程序体验版真机验收。
+- 查看用户提供的手机真机截图，确认体验版在“我的慢π”页弹出 `Can't find variable: URLSearchParams`。
+- 定位原因：移动端代码中多处直接使用浏览器/H5 API `URLSearchParams`，微信小程序运行时不提供该全局变量，导致真机运行时报错。
+- 新增小程序兼容的 query 工具函数，用普通字符串解析替代 `URLSearchParams`。
+- 替换移动端以下场景中的 `URLSearchParams`：
+  - 租户码读取。
+  - 活动列表意图参数解析。
+  - 当前路由 query 拼接。
+  - 慢π动态列表、动态详情、发布心得页面的活动参数读取。
+  - H5 支付宝表单提交参数解析。
+- 构建 `mp-weixin` 后扫描产物，确认微信小程序包内已不再包含 `URLSearchParams`。
+- 同时构建 H5，确认本次 query 解析兼容改动未破坏 H5 打包。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/query.ts`
+- `apps/mobile/src/api.ts`
+- `apps/mobile/src/pages/community/index.vue`
+- `apps/mobile/src/pages/community/detail.vue`
+- `apps/mobile/src/pages/community/publish.vue`
+- `apps/mobile/src/pages/user/registration.vue`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 16:59:19 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `rg -n "URLSearchParams" apps\mobile\dist\build\mp-weixin`：无命中，输出 `OK no URLSearchParams in mp-weixin build`。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 下 LF/CRLF 转换。
+
+### 浏览器/真机验收结果
+
+- 本阶段根据用户手机截图完成本地代码修复与小程序构建验证。
+- 由于真机运行的是线上已上传的旧体验版，本地修复需要先推送、服务器拉取、重新构建 `mp-weixin` 并上传新的体验版后，才能在手机微信中复验。
+
+### 遗留问题
+
+- 需要服务器拉取本次提交后重新执行小程序构建，并在后台“小程序发布管理”上传新的体验版。
+- 上传后需用手机微信重新扫描体验版二维码，重点复验“我的慢π”页不再弹出 `URLSearchParams` 报错。
+- 真实支付仍未完成商户、证书、回调和真实小额支付/退款验收，正式运营前仍需保持真实支付关闭。
+
+### 下一阶段应继续处理的事项
+
+- 提交并推送本阶段补丁。
+- 服务器拉取后执行 `VITE_API_BASE=https://rd.chaimen666.com/api npm --prefix apps/mobile run build:mp-weixin`，检查构建产物无 `URLSearchParams`。
+- 在后台“小程序发布管理”上传版本号递增的新体验版，例如 `1.0.2`，再进行手机真机复验。
+
 ## 2026-06-24 - H5 控制台 Object 日志线上复验
 
 ### 阶段名称

@@ -77,6 +77,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, uploadCommunityPostImage, withTenantCode } from "../../api";
+import { queryParam } from "../../query";
 
 const loading = ref(false);
 const uploading = ref(false);
@@ -133,7 +134,7 @@ function loadRouteOptions() {
   if (typeof window !== "undefined") {
     const hash = window.location.hash || "";
     const queryText = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : window.location.search.slice(1);
-    routeActivityId.value = Number(new URLSearchParams(queryText).get("activityId") || 0);
+    routeActivityId.value = Number(queryParam(queryText, "activityId") || 0);
   }
   // #endif
 }

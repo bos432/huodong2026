@@ -8,6 +8,7 @@ import { clientError } from "../../error-reporting";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { queryEntries } from "../../query";
 
 const registrationStatusText: Record<RegistrationStatus, string> = {
   [RegistrationStatus.PendingPayment]: "待付款",
@@ -264,7 +265,7 @@ async function payOrder(provider: "wechat" | "alipay" | "balance") {
       const form = document.createElement("form");
       form.method = "POST";
       form.action = String(pay.payParams.gatewayUrl);
-      new URLSearchParams(String(pay.payParams.formBody)).forEach((value, key) => {
+      queryEntries(String(pay.payParams.formBody)).forEach(([key, value]) => {
         const input = document.createElement("input");
         input.type = "hidden";
         input.name = key;
