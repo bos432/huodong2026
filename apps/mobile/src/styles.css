@@ -10,7 +10,7 @@ html, body {
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
 }
 
-* {
+view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, navigator, form, label {
   box-sizing: border-box;
 }
 

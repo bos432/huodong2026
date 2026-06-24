@@ -8828,6 +8828,46 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 - 服务器拉取最新提交后重新执行 `npm --prefix apps/mobile run build:h5`，确认不再出现 `ENOTDIR/EISDIR`。
 - 构建成功后检查外网 HTML 主脚本 hash，并用右侧浏览器复验 `document.title` 和顶部栏。
 
+## 2026-06-24 - 小程序体验版 WXSS 上传校验修复
+
+### 阶段名称
+
+小程序上线准备 - 修复微信 CI `app.wxss` 通配选择器小阶段。
+
+### 本阶段完成内容
+
+- 读取服务器执行结果，确认线上 API 已拉取并重启到 `01e1df4`，`/api/health/ready` 返回 `commit=01e1df4`。
+- 使用右侧浏览器刷新线上“小程序发布管理”页面，确认旧的定位权限说明长度错误已消失，最新失败变为微信 CI `app.wxss(1:321): unexpected token *`。
+- 定位到 `apps/mobile/src/styles.css` 中的全局 `* { box-sizing: border-box; }` 会被编译进小程序 `app.wxss`，微信上传校验不接受该通配选择器。
+- 将全局通配选择器改为小程序支持的显式组件选择器：`view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, navigator, form, label`。
+- 扩展后台小程序发布服务上传前自检：若旧构建产物 `app.wxss` 仍含 `* { box-sizing: border-box; }`，上传前自动替换为显式组件选择器。
+- 更新小程序上传发布文档，记录后台上传前对 `app.wxss` 的兜底处理。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/styles.css`
+- `apps/api/src/modules/admin/miniprogram-release.service.ts`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 16:29 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `rg -n "(^|})\\s*\\*\\s*\\{" apps/mobile/dist/build/mp-weixin/app.wxss apps/mobile/src/styles.css || echo 'OK no universal selector'`：通过，未发现通配选择器。
+- `apps/mobile/dist/build/mp-weixin/app.json`：确认 `scope.userLocation.desc` 仍为 `用于定位城市展示本地活动课程`。
+
+### 遗留问题
+
+- 需要服务器拉取本次提交后重新构建 API 和小程序包，并重启 PM2，让后台上传前 WXSS 兜底逻辑生效。
+- 再次上传体验版后如微信继续返回新的 WXSS/类目/隐私错误，需要按最新错误继续处理。
+
+### 下一阶段应继续处理的事项
+
+- 服务器部署本次提交后，在后台“小程序发布”再次点击“上传体验版”。
+- 上传成功后，用体验版二维码在手机微信中完成首页、登录、活动报名、心得发布、图片上传和商城/余额支付主流程验收。
+
 ## 2026-06-24 - 小程序体验版上传目录自检修复
 
 ### 阶段名称

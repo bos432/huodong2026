@@ -13,6 +13,7 @@ type ReleaseAction = "upload" | "submit_audit" | "audit_status" | "release";
 type ReleaseStatus = "success" | "failed" | "processing";
 
 const SAFE_USER_LOCATION_DESC = "用于定位城市展示本地活动课程";
+const SAFE_MP_BOX_SIZING_SELECTOR = "view,text,image,button,input,textarea,scroll-view,swiper,swiper-item,navigator,form,label";
 
 @Injectable()
 export class MiniprogramReleaseService {
@@ -213,6 +214,7 @@ export class MiniprogramReleaseService {
   private prepareProjectFiles(projectPath: string, setting: MiniprogramReleaseSetting) {
     return {
       appJson: this.ensureSafeAppJson(projectPath),
+      appWxss: this.ensureSafeAppWxss(projectPath),
       projectConfig: this.ensureProjectConfigAppId(projectPath, setting.appId)
     };
   }
@@ -230,6 +232,19 @@ export class MiniprogramReleaseService {
       return { path: file, userLocationDesc: userLocation.desc, fixed: true, previousLength: before.length };
     }
     return { path: file, userLocationDesc: before, fixed: false, previousLength: before.length };
+  }
+
+  private ensureSafeAppWxss(projectPath: string) {
+    const file = join(projectPath, "app.wxss");
+    if (!existsSync(file)) return { path: file, fixed: false, exists: false };
+    const before = readFileSync(file, "utf8");
+    const next = before.replace(/(^|})\s*\*\s*\{([^{}]*box-sizing\s*:\s*border-box\s*;?[^{}]*)\}/g, `$1${SAFE_MP_BOX_SIZING_SELECTOR}{$2}`);
+    if (/(^|})\s*\*\s*\{/.test(next)) throw new BadRequestException(`小程序 app.wxss 仍包含微信不支持的通配选择器：${file}`);
+    if (next !== before) {
+      writeFileSync(file, next, "utf8");
+      return { path: file, fixed: true, exists: true };
+    }
+    return { path: file, fixed: false, exists: true };
   }
 
   private ensureProjectConfigAppId(projectPath: string, appId: string) {
