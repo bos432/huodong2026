@@ -2,6 +2,73 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 线上 H5 租户修复部署复验
+
+### 阶段名称
+
+上线前部署配置 - 服务器拉取 `35f1de4` 后 API/H5 发布与线上商城复验小阶段。
+
+### 本阶段完成内容
+
+- 读取用户贴回的服务器执行输出，确认服务器已从 `2b1322d` 快进到 `35f1de4`。
+- 服务器侧完成：
+  - `npm --prefix apps/api run build`：通过。
+  - `npm --prefix apps/mobile run build:h5`：通过，H5 dist 已清理并重建。
+  - `WEBROOT=apps/mobile/dist/build/h5 ADMIN_WEBROOT=apps/admin/dist npm run publish:webroot`：通过，识别 H5/Admin 均为 Nginx 直出目录。
+  - `$PM2 restart activity-api --update-env` 和 `$PM2 save`：通过，真实支付继续保持关闭。
+- 服务器紧跟 PM2 重启后第一次 `curl https://rd.chaimen666.com/api/health/ready` 返回 `502 Bad Gateway`；随后本地复测确认 API 已恢复，判断为 PM2 重启瞬间的短暂空窗，不是持续故障。
+- 线上 H5 当前静态包已更新为 `assets/index-4SYBy6so.js`。
+- 线上商城公开接口 `tenantCode` 修复已生效，`/api/public/mall/products?tenantCode=qiwai-showcase&keyword=慢π&pageSize=20` 返回 200。
+- 使用右侧浏览器打开线上 H5 首页和商城页，确认慢π新包和商城数据正常渲染。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 14:27:10 +08:00。
+- 服务器输出摘要：
+  - `git rev-parse --short HEAD`：`35f1de4`。
+  - API 构建：通过。
+  - H5 构建：通过。
+  - 静态发布：通过，H5 webroot 为 `apps/mobile/dist/build/h5`，Admin root 为 `apps/admin/dist`。
+  - PM2：`activity-api` 显示 `online`，进程列表已保存。
+  - 首次 health curl：HTTP 502，发生在 PM2 重启后立即访问。
+- 本地复测：
+  - `https://rd.chaimen666.com/api/health/ready`：HTTP 200，`ready=true`、`api=up`、`database=up`、`release.commit=35f1de4`、`config=warning`。
+  - `https://rd.chaimen666.com/api/public/mall/products?tenantCode=qiwai-showcase&keyword=慢π&pageSize=20`：HTTP 200，`code=0`，返回 1 条匹配商品，内容包含 `慢π`，不包含 `七维/奇外/电召`。
+  - `https://rd.chaimen666.com/api/public/homepage?tenantCode=qiwai-showcase`：HTTP 200，内容包含 `慢π`，不包含 `七维/奇外/电召`。
+
+### 浏览器验收结果
+
+- 验证时间：2026-06-24 14:27:10 +08:00。
+- 验证环境：线上 H5 `https://rd.chaimen666.com/?tenantCode=qiwai-showcase&t=1782282368006#/` 和商城页 `#/pages/mall/index?tenantCode=qiwai-showcase`，右侧浏览器。
+- 浏览器验证步骤：
+  - 打开 H5 首页，确认 `document.title=慢π`，脚本为 `/assets/index-4SYBy6so.js`。
+  - 首页正文包含 `慢π演示中心`、`慢π商城`、`慢π好课`、已审核心得 `线上H5验收心得-1782280883411`。
+  - 首页正文和标题不包含 `七维/奇外/电召`。
+  - 打开 H5 商城页，确认可见 `慢π严选`、`慢π自营店`、秒杀商品、拼团商品、推荐商品列表。
+  - 商城页未出现 `property tenantCode should not exist`、`502`、`Bad Gateway`、`请求失败`、`加载失败` 等阻塞文案。
+- 输入的测试数据摘要：本阶段不新增业务数据，仅复用线上 `qiwai-showcase` 演示数据和上一阶段 post `18`。
+- 通过项：服务器部署成功；API health 恢复；release 元数据对齐 `35f1de4`；H5 新包生效；商城 `tenantCode` 修复在线生效；旧品牌残留未复现。
+- 发现的问题：
+  - PM2 重启后立即访问 API 会短暂 502，建议后续发布脚本加入 readiness 等待重试，避免误判。
+  - 右侧浏览器控制台仍有泛化 `Object` error 日志，页面不阻塞；建议后续单独优化 H5 前端错误日志可读性，定位是否来自 H5 定位失败、图片加载或被 catch 的请求对象。
+- 是否达到可上线运营标准：本阶段达到线上试运营可用标准；真实支付/短信/证书/回调未补齐前仍需保持真实支付关闭，`config=warning` 属于预期。
+
+### 遗留问题
+
+- 真机微信 iOS/Android 分享、海报长按保存、二维码扫码回流仍未验收。
+- 发布脚本缺少 API readiness 等待重试。
+- H5 控制台泛化 `Object` error 需要后续变成可读错误日志并进一步定位。
+
+### 下一阶段应继续处理的事项
+
+- 提交并推送本阶段部署复验记录。
+- 可继续执行线上 `npm run smoke:online-showcase`，或进入右侧浏览器商城商品详情、购物车、下单入口点击级复验。
+- 后续新增一个小阶段：发布脚本/API 重启命令增加 health ready 重试，减少 502 空窗误报。
+
 ## 2026-06-24 - 线上 H5 租户修复提交推送
 
 ### 阶段名称
