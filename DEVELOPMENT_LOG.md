@@ -2,6 +2,51 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - 小程序已登录用户微信资料同步入口
+
+### 阶段名称
+
+小程序上线准备 - 已登录状态补齐微信头像昵称授权入口小阶段。
+
+### 本阶段完成内容
+
+- 根据开发者工具截图复查当前链路，确认用户已经处于“微信已登录 · 未绑定手机号”状态，因此不会再次进入登录页，也不会触发登录页上的 `getUserProfile` 授权弹窗。
+- 新增共用微信资料授权工具，统一处理 `getUserProfile` 成功、拒绝和当前环境不支持的结果。
+- 登录页继续在微信登录前拉起资料授权，用户允许时保存昵称头像，拒绝时仍使用 openid 登录。
+- “我的”页在微信登录但缺头像/默认 `微信用户xxxxxx` 昵称时显示“同步微信头像昵称”，点击后可直接拉起授权弹窗并保存到后台。
+- “账号资料”页新增“使用微信资料”按钮，已登录用户无需退出重登，也能补同步微信昵称和头像。
+- 头像按钮行增加换行能力，避免小屏上按钮挤出布局。
+- 更新 `docs/小程序上传发布说明.md`，补充已登录用户的微信资料同步入口和验收方式。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/wechat-profile.ts`
+- `apps/mobile/src/pages/user/login.vue`
+- `apps/mobile/src/pages/user/my.vue`
+- `apps/mobile/src/pages/user/profile.vue`
+- `docs/小程序上传发布说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 18:26:12 +08:00。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `rg -n "getUserProfile|同步微信头像昵称|使用微信资料|用于完善会员昵称和头像" apps\mobile\dist\build\mp-weixin apps\mobile\src\pages\user apps\mobile\src\wechat-profile.ts`：确认源码与小程序产物都包含资料授权和补资料入口。
+- `git diff --check`：通过；仅提示 Windows 下部分文件未来可能发生 LF/CRLF 转换。
+
+### 遗留问题
+
+- 需要重新构建并导入 `apps/mobile/dist/build/mp-weixin`，开发者工具刷新后才能看到“同步微信头像昵称/使用微信资料”入口。
+- 微信资料授权弹窗依赖微信开发者工具/真机小程序环境；H5 不会出现该弹窗。
+
+### 下一阶段应继续处理的事项
+
+- 本地验证通过后提交并推送，服务器拉取最新代码并重新构建 `mp-weixin`。
+- 开发者工具进入“我的”页点击“同步微信头像昵称”，确认出现微信授权弹窗；允许后后台会员资料显示昵称头像。
+
 ## 2026-06-24 - 小程序微信头像昵称授权登录优化
 
 ### 阶段名称

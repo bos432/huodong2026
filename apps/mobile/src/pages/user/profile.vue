@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { ensureUser, fetchMyProfile, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
+import { hasWechatProfilePayload, requestWechatProfile } from "../../wechat-profile";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 
 const profile = ref<any>(null);
@@ -8,6 +9,7 @@ const nickname = ref("");
 const avatarUrl = ref("");
 const saving = ref(false);
 const loading = ref(true);
+const syncingWechatProfile = ref(false);
 
 function displayName() {
   return profile.value?.nickname || profile.value?.phone || `用户${profile.value?.id || ""}`;
@@ -46,6 +48,33 @@ function chooseAvatar() {
       }
     }
   });
+}
+
+async function useWechatProfile() {
+  if (syncingWechatProfile.value) return;
+  syncingWechatProfile.value = true;
+  try {
+    const wechatProfile = await requestWechatProfile();
+    if (!wechatProfile.authorized || !hasWechatProfilePayload(wechatProfile)) {
+      uni.showToast({ title: wechatProfile.unavailable ? "当前环境不支持微信授权" : "未获取到微信资料", icon: "none" });
+      return;
+    }
+    const payload: { nickname?: string; avatarUrl?: string } = {};
+    if (wechatProfile.nickname) {
+      payload.nickname = wechatProfile.nickname;
+      nickname.value = wechatProfile.nickname;
+    }
+    if (wechatProfile.avatarUrl) {
+      payload.avatarUrl = wechatProfile.avatarUrl;
+      avatarUrl.value = wechatProfile.avatarUrl;
+    }
+    profile.value = await updateMyProfile(payload);
+    uni.showToast({ title: "微信资料已同步", icon: "success" });
+  } catch (error: any) {
+    uni.showToast({ title: error.message || "同步失败", icon: "none" });
+  } finally {
+    syncingWechatProfile.value = false;
+  }
 }
 
 async function save() {
@@ -91,6 +120,9 @@ onMounted(load);
             <image v-if="avatarUrl" class="small-avatar" :src="avatarUrl" mode="aspectFill" />
             <view v-else class="small-avatar fallback">{{ displayName().slice(0, 1) }}</view>
             <view class="mini-button" @click="chooseAvatar">上传头像</view>
+            <!-- #ifdef MP-WEIXIN -->
+            <view class="mini-button wechat-button" :class="{ disabled: syncingWechatProfile }" @click="useWechatProfile">{{ syncingWechatProfile ? "获取中" : "使用微信资料" }}</view>
+            <!-- #endif -->
           </view>
         </view>
         <view class="field">
@@ -201,6 +233,7 @@ onMounted(load);
 .avatar-row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 18rpx;
 }
 
@@ -217,6 +250,15 @@ onMounted(load);
   color: #8b4a3e;
   font-size: 25rpx;
   font-weight: 900;
+}
+
+.mini-button.wechat-button {
+  background: rgba(22, 163, 74, 0.12);
+  color: #15803d;
+}
+
+.mini-button.disabled {
+  opacity: .58;
 }
 
 .input {

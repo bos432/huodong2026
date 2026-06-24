@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { loginH5, loginH5Password, loginWechat, requestH5Code, withTenantCode } from "../../api";
 import { isTabUrl, usePageDecoration } from "../../decoration";
+import { requestWechatProfile } from "../../wechat-profile";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
@@ -62,36 +63,6 @@ function redirectTarget() {
 
 function goAdminLogin() {
   uni.navigateTo({ url: "/pages/admin/login" });
-}
-
-function requestWechatProfile(): Promise<{ nickname?: string; avatarUrl?: string }> {
-  return new Promise((resolve) => {
-    // #ifdef MP-WEIXIN
-    const getUserProfile = (uni as any).getUserProfile;
-    if (typeof getUserProfile !== "function") {
-      resolve({});
-      return;
-    }
-    try {
-      getUserProfile({
-        desc: "用于完善会员昵称和头像",
-        success: (res: any) => {
-          const info = res?.userInfo || {};
-          resolve({
-            nickname: typeof info.nickName === "string" ? info.nickName : "",
-            avatarUrl: typeof info.avatarUrl === "string" ? info.avatarUrl : ""
-          });
-        },
-        fail: () => resolve({})
-      });
-    } catch {
-      resolve({});
-    }
-    // #endif
-    // #ifndef MP-WEIXIN
-    resolve({});
-    // #endif
-  });
 }
 
 async function sendCode() {
