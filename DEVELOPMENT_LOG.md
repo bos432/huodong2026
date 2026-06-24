@@ -2,6 +2,63 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-24 - H5 控制台 Object 日志线上复验
+
+### 阶段名称
+
+上线前体验细节 - 服务器发布 `8b77b29` 后 H5 控制台日志复验小阶段。
+
+### 本阶段完成内容
+
+- 重新读取 `docs/project-progress.md` 和最新 `DEVELOPMENT_LOG.md`，确认上一阶段遗留为“服务器拉取后执行 H5 构建发布，再用右侧浏览器确认首页控制台不再出现 `Object`”。
+- 读取用户贴回的服务器发布输出，确认服务器已完成：
+  - `git pull --ff-only origin feature/qiwai-ui-experiment`：从 `44ce6ba` 快进到 `8b77b29`。
+  - `npm --prefix apps/mobile run build:h5`：通过。
+  - `WEBROOT=/www/wwwroot/rd.chaimen666.com/apps/mobile/dist/build/h5 ADMIN_WEBROOT=/www/wwwroot/rd.chaimen666.com/apps/admin/dist npm run publish:webroot`：通过，识别 H5/Admin 均为 Nginx 直出目录。
+  - H5 构建目录主包：`assets/index-BBIiu1QX.js`。
+  - 旧品牌扫描：`OK 没有旧品牌残留`。
+  - Nginx 配置检查与 reload：通过。
+  - `API_READY_URL=https://rd.chaimen666.com/api/health/ready npm run wait:api-ready`：通过，`ready=true api=up database=up config=warning commit=35f1de4`。
+- 使用右侧浏览器打开线上 H5 首页，确认外网实际加载 `https://rd.chaimen666.com/assets/index-BBIiu1QX.js`。
+- 复验页面标题为 `慢π`，正文包含 `慢π演示中心`、近期活动、课程、共修动态和底部导航。
+- 复验页面无 `七维/奇外/电召` 旧品牌词，无 `502`、`Bad Gateway`、`tenantCode should not exist` 等阻塞文案。
+- 读取右侧浏览器控制台 `error/warn` 日志，结果为空；此前独立 `Object` 日志和 `setNavigationBarTitle:fail page not found` 已不再出现。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-24 15:13:13 +08:00。
+- 服务器 H5 构建发布：通过，线上主包 `assets/index-BBIiu1QX.js`。
+- 服务器旧品牌扫描：通过，输出 `OK 没有旧品牌残留`。
+- 服务器 API readiness：通过，`ready=true api=up database=up config=warning commit=35f1de4`。
+- 右侧浏览器线上 H5 首页复验：通过。
+
+### 浏览器验收结果
+
+- 验证环境：线上 H5 `https://rd.chaimen666.com/?tenantCode=qiwai-showcase&t=1782285171406#/`，右侧浏览器。
+- 浏览器验证步骤：
+  - 打开带时间戳的线上 H5 首页。
+  - 读取页面标题、正文、脚本资源和阻塞文案。
+  - 读取浏览器 `error/warn` 控制台日志。
+- 输入的测试数据摘要：无新增业务数据，本阶段仅做线上页面与控制台复验。
+- 通过项：页面能正常打开；实际加载新主包 `assets/index-BBIiu1QX.js`；旧品牌词未出现；页面无阻塞；控制台 `error/warn` 为空；独立 `Object` 日志已消失。
+- 发现的问题：无新增问题。`/api/health/ready` 的 `config=warning` 仍为真实支付/短信/生产资料未完全补齐的预期提示，不影响 H5 试运营链路。
+- 是否达到可上线运营标准：本小阶段达到线上 H5 控制台日志和页面加载验收标准；真实在线支付、短信、证书、回调资料未补齐前仍不得开放真实支付。
+
+### 遗留问题
+
+- 真机微信 iOS/Android 分享、海报长按保存、二维码扫码回流仍未验收。
+- 仍需补做后台多角色对线上商城订单 `MO17822834802957D7DB7` 的查看权限复验。
+- 真实支付、短信、证书、回调资料未补齐前，继续保持真实支付关闭。
+
+### 下一阶段应继续处理的事项
+
+- 继续按计划补做后台多角色查看线上商城订单与权限边界复验。
+- 进入真机微信 H5 验收时，使用 HTTPS 链接在 iOS/Android 微信中验证分享、海报长按保存、二维码扫码回流和朋友圈卡片。
+
 ## 2026-06-24 - H5 控制台残留 Object 日志修复
 
 ### 阶段名称
