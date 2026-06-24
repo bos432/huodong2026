@@ -436,13 +436,24 @@ async function ensureAnnouncements(token, tenantId) {
   const row = existing.find((item) => item.title === title);
   if (row) await api(`/admin/announcements/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
   else await api("/admin/announcements", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
+  for (const stale of existing.filter((item) => String(item.title || "").includes("七维"))) {
+    await api(`/admin/announcements/${stale.id}`, {
+      method: "PATCH",
+      headers: auth(token),
+      body: JSON.stringify({ tenantId, title: stale.title, type: stale.type || "operation", content: stale.content || "", enabled: false, pinned: false })
+    });
+  }
   reportStep("演示公告已配置");
 }
 
 async function ensureActivities(token, tenantId) {
   const existing = pickList(await api("/admin/activities?pageSize=200", { headers: auth(token) }));
   for (const [index, [title, price, category, description]] of activities.entries()) {
-    const row = existing.find((item) => item.title === title);
+    const targetTitle = normalizeShowcaseTitle(title);
+    const row = existing.find((item) => {
+      const itemTitle = normalizeShowcaseTitle(item.title);
+      return itemTitle && (itemTitle.includes(targetTitle) || targetTitle.includes(itemTitle));
+    });
     const capacity = showcaseCapacity(row);
     const payload = { ...activityPayload(title, price, category, description, index, capacity), tenantId };
     const activity = row
@@ -451,6 +462,10 @@ async function ensureActivities(token, tenantId) {
     await ensureTicketType(token, activity.id, price, capacity);
   }
   reportStep("活动与票种已创建/更新", "6 个活动，覆盖免费和收费");
+}
+
+function normalizeShowcaseTitle(value) {
+  return String(value || "").replace(/[【】]/g, "").replace(/演示/g, "").replace(/演/g, "").replace(/\s+/g, "");
 }
 
 function showcaseCapacity(row) {
