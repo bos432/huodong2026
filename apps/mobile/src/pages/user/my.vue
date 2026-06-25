@@ -143,6 +143,7 @@
       @bound="handlePhoneBound"
     />
 
+    <MarketingPopup />
     <view style="height:120rpx;"></view>
     <TabBar current="user" />
   </view>
@@ -157,6 +158,7 @@ import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import TabBar from "../../components/TabBar.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import MarketingPopup from "../../components/MarketingPopup.vue";
 
 const profile = ref<any>(null);
 const wallet = ref<any>(null);

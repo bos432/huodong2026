@@ -1,22 +1,9 @@
-<template>
-  <slot />
-  <MarketingPopup :show-key="popupShowKey" />
-</template>
-
 <script setup lang="ts">
-import { ref } from "vue";
-import { onLaunch, onShow } from "@dcloudio/uni-app";
-import MarketingPopup from "./components/MarketingPopup.vue";
+import { onLaunch } from "@dcloudio/uni-app";
 import { loadPageTheme } from "./theme";
-
-const popupShowKey = ref(0);
 
 onLaunch(() => {
   loadPageTheme();
-});
-
-onShow(() => {
-  popupShowKey.value += 1;
 });
 </script>
 

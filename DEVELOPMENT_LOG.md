@@ -2,6 +2,42 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-25 - 营销弹窗线上触发链路修复
+
+### 阶段名称
+
+试运营装修营销增强 - 营销弹窗 H5/小程序真实挂载修复与线上联调小阶段。
+
+### 本阶段完成内容
+
+- 右侧浏览器复查线上营销弹窗，确认原测试弹窗保存为 `平台/未归属`，带 `tenantCode=qiwai-showcase` 的公开接口不会返回，因此演示商家前台不展示。
+- 在后台保留创建测试数据：`Codex联调弹窗-慢π首页`，归属 `慢π演示中心（qiwai-showcase）`，投放首页、全部平台、每次进入、优先级 20。
+- 继续复查发现公开接口已正常返回商家级弹窗，但 H5 页面 DOM 未出现弹窗组件；根因是 `App.vue` 模板不适合作为 uni-app 多端页面渲染挂载点。
+- 将 `MarketingPopup` 改为可自触发页面 `onShow` 的组件。
+- 从 `App.vue` 移除无效弹窗模板挂载，避免误判为全局组件已渲染。
+- 将营销弹窗挂载到 `PageDecorationBlocks`，覆盖首页、活动、课程、商城、共修、详情页等装修渲染链路。
+- 单独在 `pages/user/my.vue` 挂载营销弹窗，覆盖“我的”页投放。
+
+### 修改/新增的主要文件
+
+- `apps/mobile/src/App.vue`
+- `apps/mobile/src/components/MarketingPopup.vue`
+- `apps/mobile/src/components/PageDecorationBlocks.vue`
+- `apps/mobile/src/pages/user/my.vue`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- `curl https://rd.chaimen666.com/api/public/marketing-popups?tenantCode=qiwai-showcase&pageKey=home&platform=h5`：通过，返回 `Codex联调弹窗-慢π首页`。
+- `curl https://rd.chaimen666.com/api/public/marketing-popups?tenantCode=qiwai-showcase&pageKey=home&platform=mp-weixin`：通过，返回同一条弹窗。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_DEFAULT_TENANT_CODE='qiwai-showcase'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+
+### 遗留问题
+
+- 当前修复需要提交并部署服务器后，线上 H5 才能在右侧浏览器完成最终弹出、关闭和统计回写验证。
+- 小程序端需要重新构建并导入/上传新包后才能看到弹窗组件。
+
 ## 2026-06-24 - 个人中心微信资料授权重写
 
 ### 阶段名称

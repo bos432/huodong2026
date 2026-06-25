@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref, watch } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { request, withTenantCode, getCurrentTenantCode } from "../api";
 import { goDecoratedLink } from "../decoration";
 
@@ -18,7 +19,7 @@ type MarketingPopupView = {
   updatedAt?: string;
 };
 
-const props = defineProps<{ showKey: number }>();
+const props = withDefaults(defineProps<{ showKey?: number }>(), { showKey: 0 });
 const visible = ref(false);
 const popup = ref<MarketingPopupView | null>(null);
 const loading = ref(false);
@@ -124,6 +125,7 @@ function handleButton(button: PopupButton) {
   if (link.startsWith("/pages/")) goDecoratedLink(withTenantCode(link));
 }
 
+onShow(loadPopup);
 watch(() => props.showKey, loadPopup, { immediate: true });
 </script>
 
