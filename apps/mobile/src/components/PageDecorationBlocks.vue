@@ -53,6 +53,11 @@ function sectionStyle(section: HomepageSectionView, fallback = "#fff") {
     "--decor-accent-color": String(layout.accentColor || "var(--primary-color, #c43d3d)"),
     "--text-color": String(layout.textColor || "var(--text-color, #111827)"),
     "--muted-color": String(layout.mutedColor || "var(--muted-color, #667085)"),
+    "--decor-surface-color": String(layout.surfaceColor || layout.backgroundColor || fallback),
+    "--decor-item-background": String(layout.itemBackgroundColor || "var(--decor-divider-background, #fffaf3)"),
+    "--decor-chip-background": String(layout.chipBackgroundColor || "var(--decor-divider-background, #fff7ec)"),
+    "--decor-image-radius": `${Number(layout.imageRadius ?? 12)}px`,
+    "--decor-card-gap": `${Number(layout.cardGap ?? 16)}rpx`,
     "--decor-button-radius": buttonRadius(layout.buttonStyle),
     "--decor-divider-background": layout.dividerStyle === "soft" ? "rgba(255, 250, 243, 0.82)" : "transparent"
   };
@@ -63,6 +68,22 @@ function heroStyle(section: HomepageSectionView) {
   return {
     ...sectionStyle({ ...section, layout: { ...(section.layout || {}), backgroundImage: config.backgroundImage || section.layout?.backgroundImage } }, String(config.backgroundColor || "#0f766e")),
     color: "#fff"
+  };
+}
+
+function quickNavStyle(section: HomepageSectionView) {
+  const layout = section.layout || {};
+  return {
+    gridTemplateColumns: `repeat(${Number(layout.columns || 4)}, 1fr)`,
+    marginBottom: `${Number(layout.spacingBottom ?? 18)}rpx`,
+    padding: layout.backgroundColor || layout.itemBackgroundColor ? densityPadding(layout.density) : "0",
+    background: String(layout.backgroundColor || "transparent"),
+    borderRadius: `${Number(layout.borderRadius ?? 8)}px`,
+    "--primary-color": String(layout.primaryColor || "var(--primary-color, #0f766e)"),
+    "--decor-accent-color": String(layout.accentColor || "var(--primary-color, #c43d3d)"),
+    "--text-color": String(layout.textColor || "var(--text-color, #111827)"),
+    "--decor-item-background": String(layout.itemBackgroundColor || "linear-gradient(180deg, #fff 0%, #fffbf5 100%)"),
+    "--decor-card-gap": `${Number(layout.cardGap ?? 14)}rpx`
   };
 }
 
@@ -134,7 +155,7 @@ function formatTime(value: string) {
       </view>
     </view>
 
-    <view v-else-if="section.type === 'quick_nav'" class="decor-quick-grid" :style="{ gridTemplateColumns: `repeat(${Number(section.layout.columns || 4)}, 1fr)` }">
+    <view v-else-if="section.type === 'quick_nav'" class="decor-quick-grid" :style="quickNavStyle(section)">
       <view v-for="item in ((section.config.items as any[]) || []).slice(0, 8)" :key="item.label" class="decor-quick-item" @click="goDecoratedLink(itemLink(item), item.action)">
         <text class="decor-quick-icon" :style="{ background: `${item.color || '#0f766e'}18`, color: item.color || '#0f766e' }">{{ quickInitial(item.label, item.icon) }}</text>
         <text>{{ item.label }}</text>
@@ -246,12 +267,12 @@ function formatTime(value: string) {
 .decor-title { margin-top: 10rpx; font-size: 40rpx; line-height: 1.22; font-weight: 900; }
 .decor-copy { margin-top: 12rpx; color: rgba(255,255,255,0.84); font-size: 25rpx; line-height: 1.55; }
 .decor-button { position: relative; z-index: 1; display: inline-flex; margin-top: 22rpx; padding: 14rpx 26rpx; border-radius: var(--decor-button-radius, 999px); background: rgba(255,255,255,0.92); color: var(--decor-accent-color, #5b2f24); font-size: 24rpx; font-weight: 900; box-shadow: 0 10rpx 26rpx rgba(91, 47, 36, 0.18); }
-.decor-quick-grid { display: grid; gap: 14rpx; margin-bottom: 18rpx; }
-.decor-quick-item { min-height: 122rpx; display: grid; gap: 9rpx; justify-items: center; align-content: center; border-radius: 16px; background: linear-gradient(180deg, #fff 0%, #fffbf5 100%); color: #3f3428; font-size: 23rpx; font-weight: 800; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); border: 1px solid rgba(139, 90, 43, 0.08); }
+.decor-quick-grid { display: grid; gap: var(--decor-card-gap, 14rpx); margin-bottom: 18rpx; }
+.decor-quick-item { min-height: 122rpx; display: grid; gap: 9rpx; justify-items: center; align-content: center; border-radius: 16px; background: var(--decor-item-background, linear-gradient(180deg, #fff 0%, #fffbf5 100%)); color: var(--text-color, #3f3428); font-size: 23rpx; font-weight: 800; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); border: 1px solid rgba(139, 90, 43, 0.08); }
 .decor-quick-icon { width: 54rpx; height: 54rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 24rpx; font-weight: 900; }
 .decor-banner, .decor-rich, .decor-notice, .decor-search { padding: 24rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); }
 .decor-banner { overflow: hidden; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); }
-.decor-banner image, .decor-rich image { width: 100%; border-radius: 12px; }
+.decor-banner image, .decor-rich image { width: 100%; border-radius: var(--decor-image-radius, 12px); }
 .decor-section-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; margin-bottom: 12rpx; }
 .decor-section-copy { margin: -4rpx 0 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.45; }
 .decor-rich-line { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.65; }
@@ -261,18 +282,18 @@ function formatTime(value: string) {
 .decor-category-scroll { width: 100%; height: 68rpx; white-space: nowrap; }
 .decor-category-track, .decor-tabs { display: inline-flex; gap: 14rpx; padding-right: 24rpx; }
 .decor-tabs { width: 100%; overflow-x: auto; margin-bottom: 18rpx; }
-.decor-category, .decor-tab { flex: 0 0 auto; padding: 14rpx 24rpx; border-radius: 999px; background: #fff7ec; color: var(--primary-color, #8b5a2b); font-size: 25rpx; font-weight: 800; border: 1px solid rgba(139, 90, 43, 0.12); }
-.decor-activity-list { display: grid; gap: 16rpx; }
-.decor-activity { display: grid; grid-template-columns: 154rpx 1fr; gap: 16rpx; min-height: 154rpx; padding: 14rpx; border-radius: 14px; background: linear-gradient(135deg, #fff 0%, #fffaf3 100%); border: 1px solid rgba(139, 90, 43, 0.08); }
-.decor-activity image, .decor-cover-fallback { width: 154rpx; height: 154rpx; border-radius: 12px; }
+.decor-category, .decor-tab { flex: 0 0 auto; padding: 14rpx 24rpx; border-radius: 999px; background: var(--decor-chip-background, #fff7ec); color: var(--primary-color, #8b5a2b); font-size: 25rpx; font-weight: 800; border: 1px solid rgba(139, 90, 43, 0.12); }
+.decor-activity-list { display: grid; gap: var(--decor-card-gap, 16rpx); }
+.decor-activity { display: grid; grid-template-columns: 154rpx 1fr; gap: 16rpx; min-height: 154rpx; padding: 14rpx; border-radius: 14px; background: var(--decor-item-background, linear-gradient(135deg, #fff 0%, #fffaf3 100%)); border: 1px solid rgba(139, 90, 43, 0.08); }
+.decor-activity image, .decor-cover-fallback { width: 154rpx; height: 154rpx; border-radius: var(--decor-image-radius, 12px); }
 .decor-cover-fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-weight: 900; }
 .decor-activity-body { min-width: 0; display: grid; align-content: space-between; gap: 8rpx; }
 .decor-activity-title { color: var(--text-color, #111827); font-size: 27rpx; line-height: 1.35; font-weight: 900; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
 .decor-activity-meta { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--muted-color, #667085); font-size: 23rpx; }
 .decor-activity-foot { display: flex; justify-content: space-between; gap: 12rpx; color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 900; }
-.decor-post-list { display: grid; gap: 14rpx; }
-.decor-post { display: grid; grid-template-columns: 128rpx 1fr; gap: 14rpx; padding: 14rpx; border-radius: 14px; background: var(--decor-divider-background, #fffaf3); border: 1px solid rgba(139, 90, 43, 0.08); }
-.decor-post image, .decor-post-fallback { width: 128rpx; height: 128rpx; border-radius: 12px; }
+.decor-post-list { display: grid; gap: var(--decor-card-gap, 14rpx); }
+.decor-post { display: grid; grid-template-columns: 128rpx 1fr; gap: 14rpx; padding: 14rpx; border-radius: 14px; background: var(--decor-item-background, var(--decor-divider-background, #fffaf3)); border: 1px solid rgba(139, 90, 43, 0.08); }
+.decor-post image, .decor-post-fallback { width: 128rpx; height: 128rpx; border-radius: var(--decor-image-radius, 12px); }
 .decor-post-fallback { display: flex; align-items: center; justify-content: center; background: #f3e7d6; color: #8b5a2b; font-weight: 900; }
 .decor-post-body { min-width: 0; display: grid; gap: 7rpx; align-content: center; }
 .decor-post-title { color: #3f3428; font-size: 25rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -285,6 +306,6 @@ function formatTime(value: string) {
 .decor-button.compact { margin-top: 14rpx; padding: 10rpx 18rpx; font-size: 23rpx; background: var(--decor-accent-color, #5b2f24); color: #fff; }
 .decor-link-block { cursor: pointer; }
 .decor-link-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; }
-.decor-link-item { min-height: 106rpx; display: grid; justify-items: center; align-content: center; gap: 8rpx; border-radius: 14px; background: var(--decor-divider-background, #fffaf3); color: var(--decor-accent-color, #5b2f24); font-size: 23rpx; font-weight: 800; }
+.decor-link-item { min-height: 106rpx; display: grid; justify-items: center; align-content: center; gap: 8rpx; border-radius: 14px; background: var(--decor-item-background, var(--decor-divider-background, #fffaf3)); color: var(--decor-accent-color, #5b2f24); font-size: 23rpx; font-weight: 800; }
 .decor-link-item text { width: 44rpx; height: 44rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: rgba(139, 90, 43, 0.12); color: var(--decor-accent-color, #c43d3d); font-weight: 900; }
 </style>

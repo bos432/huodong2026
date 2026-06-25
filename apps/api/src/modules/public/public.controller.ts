@@ -79,6 +79,16 @@ export class PublicController {
     return this.service.operationSetting(this.tenantContext(req, tenantCode));
   }
 
+  @Get("marketing-popups")
+  marketingPopup(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("pageKey") pageKey?: string, @Query("platform") platform?: string) {
+    return this.service.marketingPopup(this.tenantContext(req, tenantCode), pageKey || "home", platform || "h5");
+  }
+
+  @Post("marketing-popups/:id/events")
+  marketingPopupEvent(@Param("id", ParseIntPipe) id: number, @Body() dto: { event?: string }) {
+    return this.service.recordMarketingPopupEvent(id, String(dto?.event || "impression"));
+  }
+
   @Get("charity/summary")
   charitySummary() {
     return this.service.charitySummary();

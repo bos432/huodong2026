@@ -10142,3 +10142,51 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 服务器端同步这次提交后，重新构建并发布后台静态包。
 - 如需继续扩展 DIY 装修能力，再进入模板库管理、发布版本库、历史回滚增强等后续阶段。
+
+## 2026-06-25 - UI 模板套装与营销弹窗开发完成
+
+### 阶段名称
+
+试运营装修营销增强 - UI 模板套装、五行暖金特色模板与营销弹窗投放小阶段。
+
+### 本阶段完成内容
+
+- 后台前台全局装修新增 `UI 模板套装` 入口，支持整套应用和只套视觉风格。
+- 新增 `五行暖金商业版` 特色模板，保留慢π默认风格不变。
+- 新增独立后台菜单 `营销弹窗`，支持多条弹窗投放、筛选、预览、启停、删除和统计展示。
+- 新增营销弹窗后端表、管理接口、公开接口和曝光/点击/关闭计数接口。
+- H5/小程序端新增全局 `MarketingPopup` 组件，按当前页面、平台、商家和频次展示弹窗。
+- 增强装修模块移动端渲染，使五行暖金模板的卡片底色、宫格底色、圆角、间距等 layout 字段生效。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/entities/marketing-popup.entity.ts`
+- `apps/api/src/migrations/1782070000000-MarketingPopups.ts`
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/api/src/modules/public/public.controller.ts`
+- `apps/api/src/modules/public/public.service.ts`
+- `apps/admin/src/views/MarketingPopups.vue`
+- `apps/admin/src/views/HomepageBuilder.vue`
+- `apps/mobile/src/components/MarketingPopup.vue`
+- `apps/mobile/src/components/PageDecorationBlocks.vue`
+
+### 运行或测试结果
+
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅有既有 Rollup PURE 注释和 chunk 体积提示。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_DEFAULT_TENANT_CODE='qiwai-showcase'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅有 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 本阶段尚未在右侧浏览器做真实创建弹窗、前台弹出、统计回写的交互验收。
+- `marketing_popups` 需要在服务器执行 migration 后才会在线上可用。
+- 系统 UI 模板定义本轮仍在装修页内维护，后续可继续抽成独立模板模块以降低 `HomepageBuilder.vue` 体积。
+
+### 下一阶段应继续处理的事项
+
+- 在本地或线上后台创建一条 `五行暖金通知` 弹窗，验证 H5 首页首次弹出、关闭频次和点击跳转。
+- 服务器部署时执行新增 migration，并重新构建发布 API、后台、H5 与小程序包。

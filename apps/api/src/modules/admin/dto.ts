@@ -1135,6 +1135,74 @@ export class AnnouncementDto {
   pinned?: boolean;
 }
 
+export class MarketingPopupDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  subtitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  content?: string | null;
+
+  @IsOptional()
+  @IsString()
+  emphasis?: string | null;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  type?: string;
+
+  @IsOptional()
+  @IsArray()
+  platforms?: string[];
+
+  @IsOptional()
+  @IsArray()
+  placements?: string[];
+
+  @IsOptional()
+  @IsArray()
+  buttons?: Array<Record<string, unknown>>;
+
+  @IsOptional()
+  @IsString()
+  frequency?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  priority?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  dismissible?: boolean;
+
+  @IsOptional()
+  @IsString()
+  startAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  endAt?: string | null;
+}
+
 export class HomepageSectionDto {
   @IsOptional()
   @IsString()

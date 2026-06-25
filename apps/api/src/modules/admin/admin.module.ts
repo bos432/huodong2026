@@ -38,6 +38,7 @@ import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageDecorationTemplate } from "../../entities/homepage-decoration-template.entity";
 import { HomepageDecorationVersion } from "../../entities/homepage-decoration-version.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
+import { MarketingPopup } from "../../entities/marketing-popup.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
@@ -76,7 +77,7 @@ import { CharityFundService } from "../charity-fund.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, Course, H5AuthCodeLog, HomepageSection, HomepageDecorationVersion, HomepageDecorationTemplate, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, Certificate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord]),
+    TypeOrmModule.forFeature([Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, Course, H5AuthCodeLog, HomepageSection, HomepageDecorationVersion, HomepageDecorationTemplate, MarketingPopup, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, Certificate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

@@ -57,6 +57,7 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "notification.manage", label: "通知中心", group: "会员运营" },
   { key: "review.manage", label: "评价管理", group: "会员运营" },
   { key: "homepage.manage", label: "首页装修", group: "装修营销" },
+  { key: "marketing_popup.manage", label: "营销弹窗", group: "装修营销" },
   { key: "announcement.manage", label: "公告管理", group: "装修营销" },
   { key: "operation_settings.manage", label: "运营设置", group: "装修营销" },
   { key: "tenant_profile.manage", label: "商家资料", group: "商家设置" },
@@ -104,6 +105,7 @@ const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
   "mall.order.view",
   "mall.order.manage",
   "homepage.manage",
+  "marketing_popup.manage",
   "announcement.manage",
   "operation_settings.manage",
   "tenant_profile.manage",
@@ -228,6 +230,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "uploads/settlement-proofs") return "upload.settlement_proof";
   if (path === "categories" || path.startsWith("categories/")) return "category.manage";
   if (path.startsWith("announcements")) return "announcement.manage";
+  if (path.startsWith("marketing-popups")) return "marketing_popup.manage";
   if (path.startsWith("homepage/")) return "homepage.manage";
   if (path === "activities" && verb === "GET") return "activity.view";
   if (path === "activities/:id" && verb === "GET") return "activity.view";

@@ -245,6 +245,29 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
       { type: "activity_feed", title: "搭配近期活动", subtitle: "从活动场景自然进入购买" },
       { type: "testimonial_feed", title: "参与者反馈", subtitle: "用真实体验提升商品和活动信任" }
     ]
+  },
+  {
+    key: "festival_campaign",
+    label: "节日专题版",
+    rows: [
+      { type: "hero", title: "节日活动专题", subtitle: "限时活动、专题课程和优惠入口集中展示，适合节日会场与线下大会。", config: { ...defaultConfig.hero, eyebrow: "限时专题", primaryButtonText: "查看专题活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#c43d3d" }, layout: { backgroundColor: "#c43d3d", primaryColor: "#c43d3d", accentColor: "#ffd45a", textColor: "#ffffff", mutedColor: "rgba(255,255,255,0.84)", density: "spacious", cardStyle: "elevated" } },
+      { type: "quick_nav", title: null, config: { items: [{ label: "专题活动", icon: "专", color: "#C43D3D", link: "/pages/activity/list" }, { label: "优惠好物", icon: "惠", color: "#c2410c", link: "/pages/mall/index" }, { label: "课程礼包", icon: "课", color: "#4a6b8a", link: "/pages/courses/index" }, { label: "我的订单", icon: "单", color: "#8b5a2b", link: "/pages/user/my" }] }, layout: { columns: 4, backgroundColor: "#fff7ec", itemBackgroundColor: "#fffdf5", primaryColor: "#c43d3d", accentColor: "#c2410c" } },
+      { type: "image_banner", title: "节日主推 Banner", config: { imageUrl: "", link: "/pages/activity/list", ratio: "3:1", fit: "cover" }, layout: { backgroundColor: "#fff2b8", borderRadius: 14, cardStyle: "elevated" } },
+      { type: "featured_activities", title: "节日精选活动", subtitle: "优先展示最适合转化的活动", layout: { backgroundColor: "#fffdf5", primaryColor: "#c43d3d", accentColor: "#ffd45a", cardStyle: "soft" } },
+      { type: "mall_showcase", title: "节日好物", subtitle: "把活动场景延伸到商品和优惠" }
+    ]
+  },
+  {
+    key: "wuxing_gold_business",
+    label: "五行暖金商业版",
+    rows: [
+      { type: "search_bar", title: null, config: { cityLabel: "搜", placeholder: "搜索商品、商家、活动" }, layout: { backgroundColor: "#FFF2B8", primaryColor: "#E8412F", textColor: "#9E1B12", borderRadius: 999, cardStyle: "outlined" } },
+      { type: "hero", title: "清冠优选商城", subtitle: "统一商城展示、筛选与交易动态，金土暖色承载信任，红色强调转化。", config: { ...defaultConfig.hero, eyebrow: "实时更新", primaryButtonText: "发现好物", primaryButtonLink: "/pages/mall/index", backgroundColor: "#FFD45A" }, layout: { backgroundColor: "linear-gradient(135deg, #FFD45A 0%, #FFF2B8 100%)", primaryColor: "#E8412F", accentColor: "#9E1B12", textColor: "#9E1B12", mutedColor: "#9A6A24", borderRadius: 16, density: "spacious", buttonStyle: "pill", cardStyle: "soft", dividerStyle: "soft", surfaceColor: "#FFFDF5", itemBackgroundColor: "#FFF9E8" } },
+      { type: "image_banner", title: "精选推荐", config: { imageUrl: "", link: "/pages/mall/index", ratio: "3:1", fit: "cover" }, layout: { backgroundColor: "#FFFDF5", primaryColor: "#E8412F", accentColor: "#FFD45A", borderRadius: 14, cardStyle: "elevated" } },
+      { type: "mall_showcase", title: "商家信息", subtitle: "持续更新优质商家与商品信息", layout: { backgroundColor: "#FFFDF5", primaryColor: "#E8412F", accentColor: "#9E1B12", textColor: "#9E1B12", mutedColor: "#9A6A24", borderRadius: 14, itemBackgroundColor: "#FFF9E8", cardStyle: "soft" } },
+      { type: "rich_text", title: "交易播报", config: { content: "1762***4319 购买了 1 件商品，平台好物持续更新。", imageUrl: "", link: "" }, layout: { backgroundColor: "#FFFDF5", primaryColor: "#E8412F", accentColor: "#9E1B12", textColor: "#5B2F24", mutedColor: "#9A6A24", borderRadius: 14 } },
+      { type: "quick_nav", title: "推荐工具", config: { items: [{ label: "客服中心", icon: "客", color: "#E8412F", link: "/pages/service/index" }, { label: "平台资讯", icon: "讯", color: "#D98A1E", link: "/pages/announcement/list" }, { label: "商家信息", icon: "商", color: "#9A6A24", link: "/pages/mall/index" }, { label: "订单核销", icon: "核", color: "#E8412F", link: "/pages/user/my" }, { label: "数据分析", icon: "数", color: "#D98A1E", link: "/pages/user/my" }, { label: "续费中心", icon: "续", color: "#9A6A24", link: "/pages/user/my" }] }, layout: { columns: 3, backgroundColor: "#FFFDF5", itemBackgroundColor: "#FFF9E8", primaryColor: "#E8412F", accentColor: "#9E1B12", textColor: "#5B2F24", mutedColor: "#9A6A24", borderRadius: 16, cardStyle: "soft" } }
+    ]
   }
 ];
 const visualPresets = [
@@ -311,8 +334,52 @@ const visualPresets = [
       cardStyle: "elevated",
       dividerStyle: "none"
     }
+  },
+  {
+    key: "wuxing_gold",
+    label: "五行暖金",
+    layout: {
+      primaryColor: "#E8412F",
+      accentColor: "#9E1B12",
+      textColor: "#5B2F24",
+      mutedColor: "#9A6A24",
+      backgroundColor: "#FFFDF5",
+      surfaceColor: "#FFFDF5",
+      itemBackgroundColor: "#FFF9E8",
+      chipBackgroundColor: "#FFF2B8",
+      fontStyle: "system",
+      density: "comfortable",
+      buttonStyle: "pill",
+      cardStyle: "soft",
+      dividerStyle: "soft",
+      borderRadius: 14,
+      imageRadius: 12,
+      cardGap: 14
+    }
   }
 ];
+type UiTemplateKit = {
+  key: string;
+  label: string;
+  category: string;
+  description: string;
+  scene: string;
+  palette: string[];
+  stylePresetKey: string;
+  rows: TemplateRow[];
+};
+const uiTemplateKits: UiTemplateKit[] = decorationTemplates.map((template) => {
+  const meta: Record<string, Omit<UiTemplateKit, "key" | "label" | "rows">> = {
+    activity_ops: { category: "活动", description: "搜索、精选活动、心得口碑组合，适合报名转化。", scene: "活动首页 / 本地活动运营", palette: ["#0f766e", "#4a6b8a", "#ffffff", "#667085"], stylePresetKey: "quiet_work" },
+    academy_brand: { category: "品牌", description: "品牌故事、同学故事和公益入口，适合讲清慢π理念。", scene: "品牌首页 / 文化空间", palette: ["#5b2f24", "#fff7ec", "#c43d3d", "#8b5a2b"], stylePresetKey: "warm_academy" },
+    course_conversion: { category: "课程", description: "课程推荐与活动体验联动，适合课程转化。", scene: "课程首页 / 训练营", palette: ["#4a6b8a", "#0f766e", "#ffffff", "#667085"], stylePresetKey: "quiet_work" },
+    charity_recruit: { category: "公益", description: "公益公示、志愿服务和帮扶入口，突出可信共建。", scene: "公益池 / 志愿招募", palette: ["#5b8c5a", "#0f766e", "#f0fdf4", "#173b28"], stylePresetKey: "public_green" },
+    mall_guide: { category: "商城", description: "商城入口、活动联动和反馈口碑，适合商品导购。", scene: "商城首页 / 文化好物", palette: ["#7a4b24", "#c2410c", "#fffaf3", "#3f3428"], stylePresetKey: "mall_editorial" },
+    festival_campaign: { category: "专题", description: "大 Banner、限时入口和节日活动组合，适合短期专题投放。", scene: "节日专题 / 线下大会", palette: ["#c43d3d", "#ffd45a", "#fff7ec", "#8b5a2b"], stylePresetKey: "warm_academy" },
+    wuxing_gold_business: { category: "特色", description: "参考五行金土暖色，适合商城、会员中心、广告和工具入口。", scene: "商城营销 / 商家工具 / 广告活动", palette: ["#FFD45A", "#FFF2B8", "#FFFDF5", "#E8412F", "#9E1B12", "#9A6A24"], stylePresetKey: "wuxing_gold" }
+  };
+  return { key: template.key, label: template.label, rows: template.rows, ...(meta[template.key] || meta.activity_ops) };
+});
 const rows = ref<HomepageSectionView[]>([]);
 const tenants = ref<any[]>([]);
 const route = useRoute();
@@ -339,6 +406,8 @@ const healthDialogVisible = ref(false);
 const healthIssues = ref<HealthIssue[]>([]);
 const linkPickerVisible = ref(false);
 const crossCopyDialogVisible = ref(false);
+const uiKitDialogVisible = ref(false);
+const uiKitApplyingKey = ref("");
 const crossCopySubmitting = ref(false);
 const crossCopyResult = ref("");
 const versionDialogVisible = ref(false);
@@ -1231,6 +1300,15 @@ function templatePayload(row: TemplateRow, index: number) {
   };
 }
 
+function withHomeGlobalRows(nextRows: TemplateRow[]) {
+  if (filters.pageKey !== "home") return nextRows;
+  const rows = [...nextRows];
+  for (const type of ["bottom_nav", "my_page", "inner_pages"]) {
+    if (!rows.some((row) => row.type === type)) rows.push({ type, title: type === "bottom_nav" ? "前台底部导航" : type === "my_page" ? "我的活动" : "内页布局", config: defaultConfig[type], layout: defaultLayout[type], enabled: true });
+  }
+  return rows;
+}
+
 async function replaceCurrentSections(nextRows: TemplateRow[] | HomepageSectionView[], message: string, options: { updateSnapshot?: boolean; skipBeforeSnapshot?: boolean } = {}) {
   if (!canEdit.value) return;
   if (!options.skipBeforeSnapshot) rememberBeforeMutation();
@@ -1262,7 +1340,58 @@ async function replaceCurrentSections(nextRows: TemplateRow[] | HomepageSectionV
 async function applyTemplate() {
   const template = decorationTemplates.find((item) => item.key === selectedTemplateKey.value) || decorationTemplates[0];
   await ElMessageBox.confirm(`应用「${template.label}」会替换当前页面模块，确认继续？`, "应用装修模板", { type: "warning" });
-  await replaceCurrentSections(template.rows, `已应用「${template.label}」`);
+  await replaceCurrentSections(withHomeGlobalRows(template.rows), `已应用「${template.label}」`);
+}
+
+function uiKitStyle(kit: UiTemplateKit) {
+  return cloneJson(visualPresets.find((item) => item.key === kit.stylePresetKey)?.layout || {}) as Record<string, any>;
+}
+
+async function applyUiTemplateKit(kit: UiTemplateKit) {
+  await ElMessageBox.confirm(`应用「${kit.label}」会替换当前页面模块。建议先点“保存版本”保留当前装修，确认继续？`, "应用 UI 模板套装", { type: "warning" });
+  uiKitApplyingKey.value = kit.key;
+  try {
+    await replaceCurrentSections(withHomeGlobalRows(kit.rows), `已应用「${kit.label}」`);
+    uiKitDialogVisible.value = false;
+  } finally {
+    uiKitApplyingKey.value = "";
+  }
+}
+
+async function applyUiTemplateStyle(kit: UiTemplateKit) {
+  if (!orderedRows.value.length) return ElMessage.warning("当前页面没有模块，无法只套用视觉风格");
+  await ElMessageBox.confirm(`只套用「${kit.label}」的颜色、卡片和按钮风格，不改变模块内容和顺序，确认继续？`, "套用视觉风格", { type: "info" });
+  rememberBeforeMutation();
+  uiKitApplyingKey.value = `${kit.key}:style`;
+  try {
+    const style = uiKitStyle(kit);
+    const saved: HomepageSectionView[] = [];
+    for (const row of orderedRows.value) {
+      const layout = { ...(row.layout || {}), ...style };
+      if (row.type === "bottom_nav") {
+        layout.activeColor = style.primaryColor || row.layout?.activeColor;
+        layout.textColor = style.mutedColor || row.layout?.textColor;
+        layout.backgroundColor = style.surfaceColor || style.backgroundColor || row.layout?.backgroundColor;
+      }
+      if (row.type === "hero") {
+        layout.backgroundColor = row.layout?.backgroundColor || style.backgroundColor;
+      }
+      saved.push(await api.patch<any, HomepageSectionView>(`/admin/homepage/sections/${row.id}`, {
+        pageKey: filters.pageKey,
+        type: row.type,
+        title: row.title,
+        subtitle: row.subtitle || "",
+        enabled: row.enabled,
+        sortOrder: row.sortOrder,
+        config: cloneJson(row.config || {}),
+        layout
+      }, homepageScopeParams()));
+    }
+    rows.value = saved.sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+    ElMessage.success(`已套用「${kit.label}」视觉风格`);
+  } finally {
+    uiKitApplyingKey.value = "";
+  }
 }
 
 async function restoreLastPublished() {
@@ -1713,6 +1842,7 @@ onMounted(async () => {
           <el-option v-for="item in decorationTemplates" :key="item.key" :label="item.label" :value="item.key" />
         </el-select>
         <el-button v-if="canEdit" type="success" @click="applyTemplate">应用模板</el-button>
+        <el-button v-if="canEdit" type="warning" plain @click="uiKitDialogVisible = true">UI 模板套装</el-button>
         <el-button v-if="canEdit" type="primary" plain :loading="versionSaving" @click="saveVersion">保存版本</el-button>
         <el-button v-if="canEdit" @click="openVersionHistory">版本历史</el-button>
         <el-button v-if="canEdit" type="success" plain @click="saveCurrentAsTemplate">保存为模板</el-button>
@@ -1736,6 +1866,40 @@ onMounted(async () => {
     </div>
 
     <div v-if="scopeTip" class="scope-tip" :class="{ muted: isPlatformAdmin() && filters.tenantId }">{{ scopeTip }}</div>
+
+    <el-dialog v-model="uiKitDialogVisible" title="UI 模板套装" width="980px" destroy-on-close>
+      <div class="ui-kit-grid">
+        <article v-for="kit in uiTemplateKits" :key="kit.key" class="ui-kit-card" :class="{ featured: kit.key === 'wuxing_gold_business' }">
+          <div class="ui-kit-preview" :style="{ background: `linear-gradient(135deg, ${kit.palette[0]} 0%, ${kit.palette[1] || kit.palette[0]} 100%)` }">
+            <div class="ui-kit-phone-card" :style="{ background: kit.palette[2] || '#fff', color: kit.palette[4] || kit.palette[0] }">
+              <strong>{{ kit.label }}</strong>
+              <span>{{ kit.scene }}</span>
+              <div class="ui-kit-mini-grid">
+                <i v-for="color in kit.palette.slice(0, 4)" :key="color" :style="{ background: color }"></i>
+              </div>
+            </div>
+          </div>
+          <div class="ui-kit-body">
+            <div class="ui-kit-title-row">
+              <strong>{{ kit.label }}</strong>
+              <el-tag size="small" :type="kit.key === 'wuxing_gold_business' ? 'warning' : 'info'">{{ kit.category }}</el-tag>
+            </div>
+            <p>{{ kit.description }}</p>
+            <div class="ui-kit-palette">
+              <span v-for="color in kit.palette" :key="color" :style="{ background: color }" :title="color"></span>
+            </div>
+            <div class="ui-kit-meta">{{ kit.rows.length }} 个模块 · {{ kit.scene }}</div>
+            <div class="ui-kit-actions">
+              <el-button size="small" type="primary" :loading="uiKitApplyingKey === kit.key" @click="applyUiTemplateKit(kit)">应用整套模板</el-button>
+              <el-button size="small" plain :loading="uiKitApplyingKey === `${kit.key}:style`" @click="applyUiTemplateStyle(kit)">只套视觉风格</el-button>
+            </div>
+          </div>
+        </article>
+      </div>
+      <template #footer>
+        <el-alert type="warning" show-icon :closable="false" title="应用整套模板会替换当前页面模块；正式页面建议先保存版本。只套视觉风格不会改变当前模块顺序和内容。" />
+      </template>
+    </el-dialog>
 
     <el-dialog v-model="helpDialogVisible" title="后台装修使用教程" width="760px">
       <div class="builder-help">
@@ -2662,6 +2826,23 @@ onMounted(async () => {
 .builder-help-grid strong { color: #0f766e; }
 .builder-help-grid span { color: #475569; font-size: 13px; }
 .builder-help-warning { padding: 12px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; }
+.ui-kit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
+.ui-kit-card { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.ui-kit-card.featured { border-color: #f1c76a; box-shadow: 0 14px 34px rgba(154, 106, 36, 0.12); }
+.ui-kit-preview { height: 150px; display: grid; place-items: center; padding: 16px; }
+.ui-kit-phone-card { width: 78%; min-height: 92px; display: grid; align-content: center; gap: 8px; padding: 14px; border-radius: 16px; box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16); }
+.ui-kit-phone-card strong { font-size: 16px; }
+.ui-kit-phone-card span { color: inherit; opacity: 0.72; font-size: 12px; line-height: 1.4; }
+.ui-kit-mini-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.ui-kit-mini-grid i { height: 18px; border-radius: 999px; border: 1px solid rgba(15, 23, 42, 0.08); }
+.ui-kit-body { padding: 12px; display: grid; gap: 10px; }
+.ui-kit-title-row { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.ui-kit-title-row strong { color: #111827; }
+.ui-kit-body p { min-height: 42px; margin: 0; color: #475467; font-size: 13px; line-height: 1.6; }
+.ui-kit-palette { display: flex; gap: 6px; flex-wrap: wrap; }
+.ui-kit-palette span { width: 22px; height: 22px; border-radius: 999px; border: 1px solid rgba(15, 23, 42, 0.1); }
+.ui-kit-meta { color: #667085; font-size: 12px; }
+.ui-kit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .cross-copy-dialog { display: grid; gap: 16px; }
 .cross-copy-form { display: grid; gap: 6px; }
 .cross-copy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }

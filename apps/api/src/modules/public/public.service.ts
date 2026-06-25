@@ -29,6 +29,7 @@ import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-se
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
+import { MarketingPopup } from "../../entities/marketing-popup.entity";
 import { Order } from "../../entities/order.entity";
 import { OperationSetting } from "../../entities/operation-setting.entity";
 import { PaymentCallbackLog } from "../../entities/payment-callback-log.entity";
@@ -82,6 +83,7 @@ export class PublicService {
     @InjectRepository(AmbassadorApplication) private readonly ambassadorApplications: Repository<AmbassadorApplication>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
+    @InjectRepository(MarketingPopup) private readonly marketingPopups: Repository<MarketingPopup>,
     @InjectRepository(Registration) private readonly registrations: Repository<Registration>,
     @InjectRepository(Order) private readonly orders: Repository<Order>,
     @InjectRepository(OperationSetting) private readonly operationSettings: Repository<OperationSetting>,
@@ -581,6 +583,36 @@ export class PublicService {
   async operationSetting(context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     return this.publicOperationSetting(await this.ensureOperationSetting(tenant));
+  }
+
+  async marketingPopup(context?: PublicTenantContext, pageKey = "home", platform = "h5") {
+    const tenant = await this.resolveTenantContext(context);
+    const now = new Date();
+    const builder = this.marketingPopups
+      .createQueryBuilder("popup")
+      .leftJoinAndSelect("popup.tenant", "tenant")
+      .where("popup.enabled = :enabled", { enabled: true })
+      .andWhere("(popup.startAt IS NULL OR popup.startAt <= :now)", { now })
+      .andWhere("(popup.endAt IS NULL OR popup.endAt >= :now)", { now })
+      .orderBy("popup.priority", "DESC")
+      .addOrderBy("popup.updatedAt", "DESC")
+      .addOrderBy("popup.id", "DESC")
+      .take(30);
+    if (tenant) builder.andWhere("popup.tenantId = :tenantId", { tenantId: tenant.id });
+    else builder.andWhere("popup.tenantId IS NULL");
+    const rows = await builder.getMany();
+    const row = rows.find((item) => this.marketingPopupMatches(item.platforms, platform) && this.marketingPopupMatches(item.placements, pageKey));
+    return row ? this.publicMarketingPopup(row) : null;
+  }
+
+  async recordMarketingPopupEvent(id: number, event: string) {
+    const row = await this.marketingPopups.findOneBy({ id });
+    if (!row) return { ok: true };
+    if (event === "click") row.clickCount += 1;
+    else if (event === "close") row.closeCount += 1;
+    else row.impressionCount += 1;
+    await this.marketingPopups.save(row);
+    return { ok: true };
   }
 
   charitySummary() {
@@ -2259,6 +2291,33 @@ export class PublicService {
     const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
     publicSetting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
     return publicSetting;
+  }
+
+  private marketingPopupMatches(value: unknown, target?: string) {
+    const list = Array.isArray(value) ? value.map((item) => String(item)) : [];
+    const normalized = String(target || "").trim();
+    return list.includes("all") || (normalized ? list.includes(normalized) : false);
+  }
+
+  private publicMarketingPopup(row: MarketingPopup) {
+    return {
+      id: row.id,
+      title: row.title,
+      subtitle: row.subtitle,
+      content: row.content,
+      emphasis: row.emphasis,
+      imageUrl: row.imageUrl,
+      type: row.type,
+      platforms: row.platforms || ["all"],
+      placements: row.placements || ["home"],
+      buttons: row.buttons || [],
+      frequency: row.frequency,
+      priority: row.priority,
+      dismissible: row.dismissible,
+      startAt: row.startAt,
+      endAt: row.endAt,
+      updatedAt: row.updatedAt
+    };
   }
 
   private mergeAmbassadorConfig(input?: Record<string, unknown> | null) {

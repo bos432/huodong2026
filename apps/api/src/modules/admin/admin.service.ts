@@ -36,6 +36,7 @@ import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageDecorationTemplate } from "../../entities/homepage-decoration-template.entity";
 import { HomepageDecorationVersion, HomepageDecorationSnapshotRow } from "../../entities/homepage-decoration-version.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
+import { MarketingPopup } from "../../entities/marketing-popup.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
@@ -64,7 +65,7 @@ import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActo
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultPermissionsForRole, effectivePermissionsForAdmin, normalizeAdminPermissions } from "./admin-permissions";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { financeDailyReport, financeRiskAlerts } from "./finance-operations";
 import { tenantOperationHealth } from "./tenant-health";
 import { tenantRegionShapesConflict } from "./tenant-region-geometry";
@@ -144,6 +145,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
     @InjectRepository(HomepageDecorationVersion) private readonly homepageDecorationVersions: Repository<HomepageDecorationVersion>,
     @InjectRepository(HomepageDecorationTemplate) private readonly homepageDecorationTemplates: Repository<HomepageDecorationTemplate>,
+    @InjectRepository(MarketingPopup) private readonly marketingPopups: Repository<MarketingPopup>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(UserWallet) private readonly userWallets: Repository<UserWallet>,
@@ -1732,6 +1734,49 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     this.assertTenantSubscriptionWritable(row.tenant, admin);
     await this.announcements.delete(id);
     await this.logOperation(this.operationActorForTenant(admin, row.tenant), "announcement.delete", "announcement", id, `删除公告：${row.title}`, { type: row.type, enabled: row.enabled, pinned: row.pinned, tenantId: row.tenant?.id || null });
+    return { id, deleted: true };
+  }
+
+  async listMarketingPopups(admin?: AdminContext, query: { tenantId?: number; keyword?: string; enabled?: string; platform?: string; placement?: string } = {}) {
+    const builder = this.marketingPopups.createQueryBuilder("popup").leftJoinAndSelect("popup.tenant", "tenant").orderBy("popup.priority", "DESC").addOrderBy("popup.updatedAt", "DESC").addOrderBy("popup.id", "DESC").take(300);
+    this.applyTenantScope(builder, "popup", admin);
+    if (!this.isTenantScoped(admin) && query.tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
+    if (query.enabled === "true" || query.enabled === "false") builder.andWhere("popup.enabled = :enabled", { enabled: query.enabled === "true" });
+    if (query.keyword?.trim()) {
+      const keyword = `%${query.keyword.trim()}%`;
+      builder.andWhere("(popup.title LIKE :keyword OR popup.subtitle LIKE :keyword OR popup.content LIKE :keyword OR popup.emphasis LIKE :keyword)", { keyword });
+    }
+    const rows = await builder.getMany();
+    return rows.filter((row) => this.marketingPopupArrayMatches(row.platforms, query.platform) && this.marketingPopupArrayMatches(row.placements, query.placement));
+  }
+
+  async createMarketingPopup(dto: MarketingPopupDto, admin?: AdminContext) {
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, undefined, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const saved = await this.marketingPopups.save(this.marketingPopups.create({ tenant, ...this.marketingPopupPayload(dto) }));
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "marketing_popup.create", "marketing_popup", saved.id, `创建营销弹窗：${saved.title}`, { tenantId: saved.tenant?.id || null, type: saved.type, enabled: saved.enabled });
+    return saved;
+  }
+
+  async updateMarketingPopup(id: number, dto: MarketingPopupDto, admin?: AdminContext) {
+    const row = await this.marketingPopups.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("营销弹窗不存在");
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, row.tenant, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    Object.assign(row, { tenant, ...this.marketingPopupPayload(dto) });
+    const saved = await this.marketingPopups.save(row);
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "marketing_popup.update", "marketing_popup", saved.id, `更新营销弹窗：${saved.title}`, { tenantId: saved.tenant?.id || null, type: saved.type, enabled: saved.enabled });
+    return saved;
+  }
+
+  async deleteMarketingPopup(id: number, admin?: AdminContext) {
+    const row = await this.marketingPopups.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("营销弹窗不存在");
+    this.assertTenantSubscriptionWritable(row.tenant, admin);
+    await this.marketingPopups.delete(id);
+    await this.logOperation(this.operationActorForTenant(admin, row.tenant), "marketing_popup.delete", "marketing_popup", id, `删除营销弹窗：${row.title}`, { tenantId: row.tenant?.id || null, type: row.type });
     return { id, deleted: true };
   }
 
@@ -5237,6 +5282,62 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (value === undefined || value === null) return {};
     if (!isPlainJsonObject(value)) throw new BadRequestException(`${label} must be a JSON object`);
     return value;
+  }
+
+  private marketingPopupPayload(dto: MarketingPopupDto) {
+    const title = String(dto.title || "").trim();
+    if (!title) throw new BadRequestException("请填写弹窗标题");
+    const startAt = dto.startAt ? this.parseDate(dto.startAt) : null;
+    const endAt = dto.endAt ? this.parseDate(dto.endAt) : null;
+    if (startAt && endAt && startAt.getTime() >= endAt.getTime()) throw new BadRequestException("弹窗开始时间必须早于结束时间");
+    return {
+      title,
+      subtitle: this.nullableText(dto.subtitle),
+      content: this.nullableText(dto.content),
+      emphasis: this.nullableText(dto.emphasis),
+      imageUrl: this.nullableText(dto.imageUrl),
+      type: this.normalizeMarketingPopupChoice(dto.type, ["notice", "ad", "payment", "wuxing_gold"], "notice"),
+      platforms: this.normalizeMarketingPopupArray(dto.platforms, ["all", "h5", "mp-weixin"], ["all"]),
+      placements: this.normalizeMarketingPopupArray(dto.placements, ["all", "home", "mall_home", "activity_list", "activity_detail", "course_home", "course_detail", "community_home", "user_my"], ["home"]),
+      buttons: this.normalizeMarketingPopupButtons(dto.buttons),
+      frequency: this.normalizeMarketingPopupChoice(dto.frequency, ["every_visit", "once_per_day", "once_per_campaign"], "once_per_day"),
+      priority: Math.max(Math.min(Number(dto.priority ?? 0), 9999), -9999),
+      enabled: dto.enabled ?? true,
+      dismissible: dto.dismissible ?? true,
+      startAt,
+      endAt
+    };
+  }
+
+  private normalizeMarketingPopupArray(value: unknown, allowed: string[], fallback: string[]) {
+    const source = Array.isArray(value) ? value : fallback;
+    const list = source.map((item) => String(item || "").trim()).filter((item) => allowed.includes(item));
+    return Array.from(new Set(list.length ? list : fallback));
+  }
+
+  private normalizeMarketingPopupChoice(value: unknown, allowed: string[], fallback: string) {
+    const text = String(value || "").trim();
+    return allowed.includes(text) ? text : fallback;
+  }
+
+  private normalizeMarketingPopupButtons(value: unknown) {
+    if (!Array.isArray(value)) return [];
+    return value
+      .map((item) => {
+        const row = this.isPlainObject(item) ? item as Record<string, unknown> : {};
+        const text = String(row.text || "").trim();
+        if (!text) return null;
+        const style = String(row.style || "") === "secondary" ? "secondary" : "primary";
+        return { text: text.slice(0, 24), link: this.nullableText(String(row.link || "")) || "", style };
+      })
+      .filter(Boolean)
+      .slice(0, 2) as Array<{ text: string; link: string; style: "primary" | "secondary" }>;
+  }
+
+  private marketingPopupArrayMatches(value: unknown, target?: string) {
+    if (!target?.trim()) return true;
+    const list = Array.isArray(value) ? value.map((item) => String(item)) : [];
+    return list.includes("all") || list.includes(target.trim());
   }
 
   private nullableText(value?: string | null) {

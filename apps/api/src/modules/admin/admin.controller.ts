@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
@@ -597,6 +597,36 @@ export class AdminController {
   @Delete("announcements/:id")
   deleteAnnouncement(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.deleteAnnouncement(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("marketing-popups")
+  marketingPopups(@Query("tenantId") tenantId?: string, @Query("keyword") keyword?: string, @Query("enabled") enabled?: string, @Query("platform") platform?: string, @Query("placement") placement?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listMarketingPopups(admin, {
+      tenantId: tenantId ? Number(tenantId) : undefined,
+      keyword,
+      enabled,
+      platform,
+      placement
+    });
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("marketing-popups")
+  createMarketingPopup(@Body() dto: MarketingPopupDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createMarketingPopup(dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Patch("marketing-popups/:id")
+  updateMarketingPopup(@Param("id", ParseIntPipe) id: number, @Body() dto: MarketingPopupDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateMarketingPopup(id, dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Delete("marketing-popups/:id")
+  deleteMarketingPopup(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.deleteMarketingPopup(id, admin);
   }
 
   @AdminRoles(...OPERATION_ROLES)

@@ -48,6 +48,7 @@ import { InviteCode } from "./entities/invite-code.entity";
 import { MemberLevel } from "./entities/member-level.entity";
 import { MemberPointLog } from "./entities/member-point-log.entity";
 import { MemberProfile } from "./entities/member-profile.entity";
+import { MarketingPopup } from "./entities/marketing-popup.entity";
 import { MallAddress } from "./entities/mall-address.entity";
 import { MallCartItem } from "./entities/mall-cart-item.entity";
 import { MallBrowseHistory } from "./entities/mall-browse-history.entity";
@@ -162,6 +163,7 @@ export default new DataSource({
     CharityProjectUpdate,
     H5AuthCodeLog,
     HomepageSection,
+    MarketingPopup,
     MiniprogramReleaseSetting,
     MiniprogramReleaseLog,
     InviteCode,
