@@ -19,6 +19,32 @@ type SectionForm = {
 };
 
 type CrossCopyMode = "current_page" | "all_pages";
+type LinkPickerTarget =
+  | { kind: "config"; key: string; label: string }
+  | { kind: "array"; arrayKey: "items" | "tools"; index: number; key: string; label: string };
+type HealthIssue = { level: "error" | "warning"; title: string; detail: string; sectionId?: number };
+type DecorationVersion = {
+  id: number;
+  pageKey: string;
+  name?: string | null;
+  note?: string | null;
+  sectionCount: number;
+  createdByName?: string | null;
+  createdAt: string;
+  tenant?: { id: number; name?: string | null; code?: string | null } | null;
+};
+type DecorationTemplate = {
+  id: number;
+  pageKey: string;
+  name: string;
+  category?: string | null;
+  description?: string | null;
+  sectionCount: number;
+  createdByName?: string | null;
+  updatedAt: string;
+  createdAt: string;
+  tenant?: { id: number; name?: string | null; code?: string | null } | null;
+};
 
 const moduleTypes: Array<{ type: HomepageSectionType; label: string; description: string }> = [
   { type: "search_bar", label: "搜索栏", description: "城市与搜索入口" },
@@ -294,6 +320,8 @@ const router = useRouter();
 const loading = ref(false);
 const saving = ref(false);
 const drawer = ref(false);
+const editorOpen = ref(false);
+const editorTab = ref("content");
 const editingId = ref<number | null>(null);
 const draggedId = ref<number | null>(null);
 const formSnapshot = ref("");
@@ -307,9 +335,25 @@ const lastPublishedRows = ref<HomepageSectionView[]>([]);
 const lastPublishedLoaded = ref(false);
 const restoreSnapshotSavedAt = ref("");
 const helpDialogVisible = ref(false);
+const healthDialogVisible = ref(false);
+const healthIssues = ref<HealthIssue[]>([]);
+const linkPickerVisible = ref(false);
 const crossCopyDialogVisible = ref(false);
 const crossCopySubmitting = ref(false);
 const crossCopyResult = ref("");
+const versionDialogVisible = ref(false);
+const versionLoading = ref(false);
+const versionSaving = ref(false);
+const versionRestoringId = ref<number | null>(null);
+const versionDeletingId = ref<number | null>(null);
+const versions = ref<DecorationVersion[]>([]);
+const templateDialogVisible = ref(false);
+const templateLoading = ref(false);
+const templateSaving = ref(false);
+const templateApplyingId = ref<number | null>(null);
+const templateDeletingId = ref<number | null>(null);
+const savedTemplates = ref<DecorationTemplate[]>([]);
+const templateForm = reactive({ name: "", category: "运营模板", description: "" });
 const crossCopyForm = reactive({
   mode: "current_page" as CrossCopyMode,
   sourceTenantId: undefined as number | undefined,
@@ -317,6 +361,40 @@ const crossCopyForm = reactive({
   sourcePageKey: "home",
   targetPageKey: "home"
 });
+const linkPicker = reactive({
+  target: null as LinkPickerTarget | null,
+  mode: "page" as "page" | "detail" | "external",
+  pagePath: "/pages/index/index",
+  detailType: "activity" as "activity" | "course" | "product" | "community",
+  detailId: "",
+  externalUrl: "",
+  displayName: ""
+});
+
+const linkPageOptions = [
+  { label: "首页", path: "/pages/index/index", group: "常用页面" },
+  { label: "活动列表", path: "/pages/activity/list", group: "常用页面" },
+  { label: "课程首页", path: "/pages/courses/index", group: "常用页面" },
+  { label: "共修首页", path: "/pages/community/index", group: "常用页面" },
+  { label: "商城首页", path: "/pages/mall/index", group: "常用页面" },
+  { label: "我的", path: "/pages/user/my", group: "常用页面" },
+  { label: "今日打卡", path: "/pages/community/checkin", group: "常用页面" },
+  { label: "公告中心", path: "/pages/announcement/list", group: "服务页面" },
+  { label: "服务中心", path: "/pages/service/index", group: "服务页面" },
+  { label: "品牌故事", path: "/pages/brand/story", group: "服务页面" },
+  { label: "公益池", path: "/pages/charity/index", group: "服务页面" },
+  { label: "城市合伙人", path: "/pages/partner/index", group: "服务页面" },
+  { label: "登录", path: "/pages/user/login", group: "用户页面" },
+  { label: "我的订单", path: "/pages/user/orders", group: "用户页面" },
+  { label: "商城订单", path: "/pages/user/mall-orders", group: "用户页面" },
+  { label: "我的心得", path: "/pages/user/community-posts", group: "用户页面" }
+];
+const detailLinkOptions = [
+  { type: "activity", label: "活动详情", path: "/pages/activity/detail", idLabel: "活动 ID" },
+  { type: "course", label: "课程详情", path: "/pages/course/detail", idLabel: "课程 ID" },
+  { type: "product", label: "商品详情", path: "/pages/mall/detail", idLabel: "商品 ID" },
+  { type: "community", label: "动态详情", path: "/pages/community/detail", idLabel: "动态 ID" }
+] as const;
 
 const toolbarHelpItems = [
   { title: "选择页面", text: "决定你正在装修哪一个前台页面，例如首页、活动列表、动态详情、我的页面或底部导航。" },
@@ -324,6 +402,9 @@ const toolbarHelpItems = [
   { title: "发布前预览", text: "打开当前页面的 H5 预览链接，同时复制链接，方便用手机微信或浏览器检查真实效果。" },
   { title: "复制链接", text: "只复制当前预览地址，不打开新窗口，适合发给运营同事或在手机上测试。" },
   { title: "装修模板 / 应用模板", text: "模板是一套预设模块组合。应用模板会替换当前页面已有模块，适合新页面快速起步，已有装修请先确认再点。" },
+  { title: "保存版本", text: "把当前页面模块保存为一个数据库版本，适合每次大改前留档，后续可在版本历史中一键回滚。" },
+  { title: "版本历史", text: "查看当前页面、当前商家范围下保存过的版本，支持恢复和删除旧版本。" },
+  { title: "保存为模板 / 模板库", text: "把当前页面沉淀成可复用模板；模板库可以把保存过的模板应用到当前页面。" },
   { title: "复制页面配置", text: "从另一个页面复制模块到当前页面，会替换当前页面模块，适合复用布局后再微调文案和图片。" },
   { title: "跨商家复制", text: "平台超管把一个商家的装修复制到另一个商家，可复制当前页面，也可复制来源商家有配置的全部页面。" },
   { title: "恢复上次发布版本", text: "回到首次修改前自动保存的版本，适合改乱后撤回本次编辑。" },
@@ -343,6 +424,7 @@ const pageTitle = computed(() => (isPlatformAdmin() ? "前台全局装修" : "�
 const pageDescription = computed(() => (isPlatformAdmin() ? "配置平台默认或指定商家的 H5/小程序首页、底部菜单、我的页面和内页布局。" : "配置本商家 H5/小程序前台装修，保存后刷新前台立即生效。"));
 const selectedTenant = computed(() => tenants.value.find((tenant) => tenant.id === filters.tenantId));
 const saveScopeName = computed(() => (isPlatformAdmin() && filters.tenantId ? selectedTenant.value?.name || selectedTenant.value?.code || "选中商家" : isPlatformAdmin() ? "平台全局默认装修" : "当前商家装修"));
+const templateDefaultName = computed(() => `${saveScopeName.value} · ${currentPageOption.value.label}`);
 const previewTenantCode = computed(() => (isPlatformAdmin() ? selectedTenant.value?.code || "" : currentTenantCode()));
 const previewScopeName = computed(() => (isPlatformAdmin() && !previewTenantCode.value ? "平台默认首页" : selectedTenant.value?.name || tenantDisplayName({ tenant: { code: previewTenantCode.value } })));
 const previewUrl = computed(() => h5RoutePreviewUrl(previewTenantCode.value, currentPageOption.value.route));
@@ -371,6 +453,7 @@ const restoreSnapshotKey = computed(() => {
 });
 const restoreSnapshotHint = computed(() => restoreSnapshotSavedAt.value ? `已保留 ${restoreSnapshotSavedAt.value} 的恢复快照。` : "首次修改前会自动保留当前发布版本，刷新后台后仍可恢复。");
 const hasUnsavedChanges = computed(() => drawer.value && formSnapshot.value !== currentFormSnapshot.value);
+const hasEditorUnsavedChanges = computed(() => editorOpen.value && formSnapshot.value !== currentFormSnapshot.value);
 const drawerPreviewRow = computed(() => currentDraftPreviewRow());
 const defaultPreviewRows = computed(() => buildDefaultPreviewRows(filters.pageKey));
 const previewBaseRows = computed(() => (orderedRows.value.length ? orderedRows.value : defaultPreviewRows.value));
@@ -385,9 +468,234 @@ const previewRows = computed(() => {
   return list.filter((item) => item.enabled).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 });
 const hasDefaultPreviewFallback = computed(() => !orderedRows.value.length);
+const healthSummary = computed(() => {
+  const errors = healthIssues.value.filter((item) => item.level === "error").length;
+  const warnings = healthIssues.value.filter((item) => item.level === "warning").length;
+  if (!healthIssues.value.length) return "未检测";
+  if (errors) return `${errors} 个错误，${warnings} 个提醒`;
+  if (warnings) return `${warnings} 个提醒`;
+  return "通过";
+});
+const linkPageGroups = computed(() => [...new Set(linkPageOptions.map((item) => item.group))]);
+const linkPickerPreviewValue = computed(() => {
+  try {
+    return buildLinkPickerValue();
+  } catch {
+    return "请补全链接信息";
+  }
+});
 
 function typeLabel(type: string) {
   return moduleTypes.find((item) => item.type === type)?.label || type;
+}
+
+function normalizePagePath(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return "";
+  if (/^https?:\/\//i.test(text)) return text;
+  return text.startsWith("/") ? text : `/${text}`;
+}
+
+function linkDisplayName(value: unknown) {
+  const path = normalizePagePath(value);
+  if (!path) return "未设置";
+  const staticPage = linkPageOptions.find((item) => item.path === path);
+  if (staticPage) return staticPage.label;
+  const detail = detailLinkOptions.find((item) => path.startsWith(`${item.path}?`));
+  if (detail) {
+    const id = new URLSearchParams(path.split("?")[1] || "").get("id");
+    return `${detail.label}${id ? ` #${id}` : ""}`;
+  }
+  return /^https?:\/\//i.test(path) ? "外部 H5 链接" : path;
+}
+
+function linkPickerTargetValue(target: LinkPickerTarget | null) {
+  if (!target) return "";
+  if (target.kind === "config") return String(form.config[target.key] || "");
+  const list = Array.isArray(form.config[target.arrayKey]) ? form.config[target.arrayKey] : [];
+  return String(list[target.index]?.[target.key] || "");
+}
+
+function seedLinkPicker(value: string) {
+  const path = normalizePagePath(value);
+  const detail = detailLinkOptions.find((item) => path.startsWith(`${item.path}?`));
+  if (/^https?:\/\//i.test(path)) {
+    linkPicker.mode = "external";
+    linkPicker.externalUrl = path;
+  } else if (detail) {
+    linkPicker.mode = "detail";
+    linkPicker.detailType = detail.type;
+    linkPicker.detailId = new URLSearchParams(path.split("?")[1] || "").get("id") || "";
+  } else {
+    linkPicker.mode = "page";
+    linkPicker.pagePath = linkPageOptions.find((item) => item.path === path)?.path || path || "/pages/index/index";
+  }
+}
+
+function openConfigLinkPicker(key: string, label: string) {
+  linkPicker.target = { kind: "config", key, label };
+  seedLinkPicker(String(form.config[key] || ""));
+  linkPicker.displayName = linkDisplayName(form.config[key]);
+  linkPickerVisible.value = true;
+}
+
+function openArrayLinkPicker(arrayKey: "items" | "tools", index: number, key: string, label: string) {
+  linkPicker.target = { kind: "array", arrayKey, index, key, label };
+  const value = linkPickerTargetValue(linkPicker.target);
+  seedLinkPicker(value);
+  linkPicker.displayName = linkDisplayName(value);
+  linkPickerVisible.value = true;
+}
+
+function buildLinkPickerValue() {
+  if (linkPicker.mode === "external") return String(linkPicker.externalUrl || "").trim();
+  if (linkPicker.mode === "detail") {
+    const option = detailLinkOptions.find((item) => item.type === linkPicker.detailType) || detailLinkOptions[0];
+    const id = String(linkPicker.detailId || "").trim();
+    if (!id) throw new Error(`请输入${option.idLabel}`);
+    return `${option.path}?id=${encodeURIComponent(id)}`;
+  }
+  return normalizePagePath(linkPicker.pagePath);
+}
+
+function applyLinkPicker() {
+  if (!linkPicker.target) return;
+  let value = "";
+  try {
+    value = buildLinkPickerValue();
+  } catch (error: any) {
+    ElMessage.warning(error.message || "请选择链接");
+    return;
+  }
+  if (linkPicker.target.kind === "config") {
+    form.config[linkPicker.target.key] = value;
+  } else {
+    updateConfigArrayItem(linkPicker.target.arrayKey, linkPicker.target.index, linkPicker.target.key, value);
+  }
+  syncJsonText();
+  linkPicker.displayName = linkDisplayName(value);
+  linkPickerVisible.value = false;
+  ElMessage.success(`已选择：${linkDisplayName(value)}`);
+}
+
+function isProbablyImageUrl(value: unknown) {
+  const text = String(value || "").trim();
+  return Boolean(text && (/\.(png|jpe?g|webp|gif|svg)(\?|$)/i.test(text) || text.startsWith("/uploads/") || /^https?:\/\//i.test(text)));
+}
+
+function isSafeImageUrl(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return true;
+  return text.startsWith("/uploads/") || text.startsWith("https://") || text.startsWith("data:");
+}
+
+function collectLinks(row: HomepageSectionView) {
+  const config = (row.config || {}) as Record<string, any>;
+  const result: Array<{ value: string; source: string }> = [];
+  for (const key of ["link", "path", "url", "href", "primaryButtonLink"]) {
+    if (typeof config[key] === "string") result.push({ value: config[key], source: `${row.title || typeLabel(row.type)} / ${key}` });
+  }
+  for (const arrayKey of ["items", "tools"] as const) {
+    const items = Array.isArray(config[arrayKey]) ? config[arrayKey] : [];
+    items.forEach((item: any, index: number) => {
+      for (const key of ["link", "path", "url", "href"]) {
+        if (typeof item?.[key] === "string") result.push({ value: item[key], source: `${row.title || typeLabel(row.type)} / ${arrayKey}[${index + 1}].${key}` });
+      }
+    });
+  }
+  return result;
+}
+
+function collectImages(row: HomepageSectionView) {
+  const config = (row.config || {}) as Record<string, any>;
+  const layout = (row.layout || {}) as Record<string, any>;
+  const result: Array<{ value: string; source: string }> = [];
+  for (const [key, value] of Object.entries({ ...config, ...layout })) {
+    if (typeof value === "string" && isProbablyImageUrl(value)) result.push({ value, source: `${row.title || typeLabel(row.type)} / ${key}` });
+  }
+  for (const arrayKey of ["items", "tools"] as const) {
+    const items = Array.isArray(config[arrayKey]) ? config[arrayKey] : [];
+    items.forEach((item: any, index: number) => {
+      for (const [key, value] of Object.entries(item || {})) {
+        if (typeof value === "string" && isProbablyImageUrl(value)) result.push({ value, source: `${row.title || typeLabel(row.type)} / ${arrayKey}[${index + 1}].${key}` });
+      }
+    });
+  }
+  return result;
+}
+
+function isKnownMiniProgramPath(value: string) {
+  const path = normalizePagePath(value);
+  if (!path || /^https?:\/\//i.test(path)) return true;
+  if (linkPageOptions.some((item) => item.path === path)) return true;
+  return detailLinkOptions.some((item) => path.startsWith(`${item.path}?id=`));
+}
+
+function addHealthIssue(list: HealthIssue[], level: "error" | "warning", title: string, detail: string, sectionId?: number) {
+  list.push({ level, title, detail, sectionId });
+}
+
+function buildHealthIssues() {
+  const issues: HealthIssue[] = [];
+  const visibleRows = orderedRows.value.filter((row) => row.enabled);
+  if (!visibleRows.length) addHealthIssue(issues, "warning", "当前页面没有启用模块", "前台会显示默认兜底或空页面，建议至少保留一个主视觉或内容模块。");
+
+  for (const singletonType of ["bottom_nav", "my_page", "inner_pages"]) {
+    const matches = visibleRows.filter((row) => row.type === singletonType);
+    if (matches.length > 1) {
+      addHealthIssue(issues, "warning", `存在 ${matches.length} 个${typeLabel(singletonType)}`, "前台会按排序保留最后一份，后台建议只保留一份，避免运营误判。", matches[0]?.id);
+    }
+  }
+
+  for (const row of visibleRows) {
+    const config = (row.config || {}) as Record<string, any>;
+    if (row.type === "bottom_nav") {
+      const items = Array.isArray(config.items) ? config.items.filter((item: any) => item?.enabled !== false) : [];
+      if (items.length > 5) addHealthIssue(issues, "error", "底部导航超过 5 项", "小程序和 H5 底部导航最多建议 5 项，请删除或停用多余入口。", row.id);
+      if (!items.length) addHealthIssue(issues, "warning", "底部导航没有启用入口", "用户端底部会缺少主入口，请至少启用一个菜单。", row.id);
+    }
+    if (row.type === "image_banner" && !String(config.imageUrl || "").trim()) {
+      addHealthIssue(issues, "error", "图片广告缺少图片", "图片广告模块没有图片时前台会显示占位，不适合作为上线页面。", row.id);
+    }
+    if (row.type === "hero" && !String(row.title || "").trim()) {
+      addHealthIssue(issues, "warning", "主视觉缺少标题", "首屏标题为空会影响用户理解页面。", row.id);
+    }
+    for (const image of collectImages(row)) {
+      if (!isSafeImageUrl(image.value)) addHealthIssue(issues, "warning", "图片地址可能无法在小程序显示", `${image.source} 使用了非 HTTPS 或非 /uploads 地址：${image.value}`, row.id);
+    }
+    for (const link of collectLinks(row)) {
+      const value = normalizePagePath(link.value);
+      if (!value) {
+        addHealthIssue(issues, "warning", "存在空跳转", `${link.source} 为空，用户点击后不会跳转。`, row.id);
+      } else if (/^https?:\/\//i.test(value)) {
+        addHealthIssue(issues, "warning", "小程序外链需要业务域名", `${link.source} 是外部 H5：${value}，小程序正式版需要配置业务域名或改成内部页面。`, row.id);
+      } else if (!isKnownMiniProgramPath(value)) {
+        addHealthIssue(issues, "warning", "跳转路径未识别", `${link.source} 为 ${value}，建议用链接选择器重新选择。`, row.id);
+      }
+    }
+  }
+
+  if (isPlatformAdmin() && !filters.tenantId) {
+    addHealthIssue(issues, "warning", "当前编辑平台默认装修", "如果要修改慢π演示商家，请先在商家筛选中选中 qiwai-showcase；小程序默认租户也要随构建参数保持一致。");
+  }
+  if (previewTenantCode.value && previewTenantCode.value !== "qiwai-showcase") {
+    addHealthIssue(issues, "warning", "当前商家与试运营默认商家不同", `当前预览商家为 ${previewTenantCode.value}，小程序构建时的 VITE_DEFAULT_TENANT_CODE 需要与实际试运营商家一致。`);
+  }
+  return issues;
+}
+
+function runHealthCheck() {
+  healthIssues.value = buildHealthIssues();
+  healthDialogVisible.value = true;
+}
+
+function issueType(level: "error" | "warning") {
+  return level === "error" ? "error" : "warning";
+}
+
+function editIssueSection(issue: HealthIssue) {
+  const row = rows.value.find((item) => item.id === issue.sectionId);
+  if (row) edit(row);
 }
 
 function cloneJson<T>(value: T): T {
@@ -517,7 +825,7 @@ function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
 }
 
 function isFocusedPreviewRow(row: HomepageSectionView) {
-  if (!drawer.value || !drawerPreviewRow.value) return false;
+  if (!editorOpen.value || !drawerPreviewRow.value) return false;
   if (editingId.value) return row.id === editingId.value;
   return row.id === drawerPreviewRow.value.id;
 }
@@ -685,8 +993,9 @@ async function loadTenants() {
 }
 
 async function handleScopeChanged() {
-  if (drawer.value) {
-    if (hasUnsavedChanges.value) ElMessage.warning("已切换装修范围，当前未保存的模块编辑已关闭");
+  if (editorOpen.value) {
+    if (hasEditorUnsavedChanges.value) ElMessage.warning("已切换装修范围，当前未保存的模块编辑已关闭");
+    editorOpen.value = false;
     drawer.value = false;
     editingId.value = null;
     captureFormSnapshot();
@@ -700,7 +1009,9 @@ function addSection(type: HomepageSectionType) {
   editingId.value = null;
   resetForm(type);
   captureFormSnapshot();
-  drawer.value = true;
+  editorTab.value = "content";
+  editorOpen.value = true;
+  drawer.value = false;
 }
 
 function edit(row: HomepageSectionView) {
@@ -717,7 +1028,19 @@ function edit(row: HomepageSectionView) {
   });
   syncJsonText();
   captureFormSnapshot();
-  drawer.value = true;
+  editorTab.value = "content";
+  editorOpen.value = true;
+  drawer.value = false;
+}
+
+function selectPreviewRow(row: HomepageSectionView) {
+  if (!canEdit.value) return;
+  const saved = rows.value.find((item) => item.id === row.id);
+  if (!saved) {
+    ElMessage.info("这是默认预览模块，请先添加或恢复默认装修后再编辑。");
+    return;
+  }
+  edit(saved);
 }
 
 async function copy(row: HomepageSectionView) {
@@ -780,7 +1103,7 @@ function parseJsonOrNull(text: string) {
 }
 
 function currentDraftPreviewRow(): HomepageSectionView | null {
-  if (!drawer.value) return null;
+  if (!editorOpen.value) return null;
   const config = parseJsonOrNull(configText.value);
   const layout = parseJsonOrNull(layoutText.value);
   if (!config || !layout) return null;
@@ -815,6 +1138,7 @@ async function submit() {
     else await api.post("/admin/homepage/sections", payload, homepageScopeParams());
     ElMessage.success(`已保存到「${saveScopeName.value}」，刷新前台预览即可查看最新效果`);
     captureFormSnapshot();
+    editorOpen.value = false;
     drawer.value = false;
     load({ updateSnapshot: false });
   } finally {
@@ -823,9 +1147,12 @@ async function submit() {
 }
 
 async function closeDrawer(done?: () => void) {
-  if (!hasUnsavedChanges.value) {
+  if (!hasEditorUnsavedChanges.value) {
     if (done) done();
-    else drawer.value = false;
+    else {
+      editorOpen.value = false;
+      drawer.value = false;
+    }
     return;
   }
   try {
@@ -836,7 +1163,10 @@ async function closeDrawer(done?: () => void) {
     });
     captureFormSnapshot();
     if (done) done();
-    else drawer.value = false;
+    else {
+      editorOpen.value = false;
+      drawer.value = false;
+    }
   } catch {
     // Keep editing.
   }
@@ -942,6 +1272,165 @@ async function restoreLastPublished() {
   clearRestoreSnapshot();
   lastPublishedRows.value = cloneJson(rows.value);
   lastPublishedLoaded.value = true;
+}
+
+function acceptServerRows(nextRows: HomepageSectionView[], options: { clearRestore?: boolean; updateSnapshot?: boolean } = {}) {
+  rows.value = nextRows;
+  if (options.updateSnapshot !== false) {
+    lastPublishedRows.value = cloneJson(nextRows);
+    lastPublishedLoaded.value = true;
+  }
+  if (options.clearRestore !== false) clearRestoreSnapshot();
+}
+
+async function loadVersions() {
+  versionLoading.value = true;
+  try {
+    versions.value = await api.get<any, DecorationVersion[]>("/admin/homepage/versions", homepageScopeParams());
+  } finally {
+    versionLoading.value = false;
+  }
+}
+
+async function openVersionHistory() {
+  versionDialogVisible.value = true;
+  await loadVersions();
+}
+
+async function saveVersion() {
+  if (!canEdit.value) return;
+  const defaultNote = `${templateDefaultName.value} ${formatSnapshotTime(new Date().toISOString())}`;
+  try {
+    const result = await ElMessageBox.prompt("给这个版本写一句备注，方便以后回滚时识别。", "保存当前装修版本", {
+      inputValue: defaultNote,
+      inputPlaceholder: "例如：上线前版本 / 节日活动改版前",
+      confirmButtonText: "保存版本",
+      cancelButtonText: "取消",
+      inputValidator: (value) => Boolean(String(value || "").trim()) || "请输入版本备注"
+    });
+    versionSaving.value = true;
+    await api.post("/admin/homepage/versions", { note: String(result.value || defaultNote).trim() }, homepageScopeParams());
+    ElMessage.success("当前装修版本已保存");
+    if (versionDialogVisible.value) await loadVersions();
+  } catch (error: any) {
+    if (error !== "cancel" && error !== "close") throw error;
+  } finally {
+    versionSaving.value = false;
+  }
+}
+
+async function restoreVersion(version: DecorationVersion) {
+  await ElMessageBox.confirm(`确认恢复「${version.note || version.name || `版本 ${version.id}`}」？当前页面模块会被这个版本替换。`, "恢复装修版本", {
+    type: "warning",
+    confirmButtonText: "确认恢复",
+    cancelButtonText: "取消"
+  });
+  versionRestoringId.value = version.id;
+  try {
+    const nextRows = await api.post<any, HomepageSectionView[]>(`/admin/homepage/versions/${version.id}/restore`, {}, homepageScopeParams());
+    acceptServerRows(nextRows);
+    await loadVersions();
+    ElMessage.success("已恢复到选中版本");
+  } finally {
+    versionRestoringId.value = null;
+  }
+}
+
+async function deleteVersion(version: DecorationVersion) {
+  await ElMessageBox.confirm("删除后不能从版本历史中找回，确认删除？", "删除装修版本", { type: "warning" });
+  versionDeletingId.value = version.id;
+  try {
+    await api.delete(`/admin/homepage/versions/${version.id}`, homepageScopeParams());
+    versions.value = versions.value.filter((item) => item.id !== version.id);
+    ElMessage.success("版本已删除");
+  } finally {
+    versionDeletingId.value = null;
+  }
+}
+
+function seedTemplateForm() {
+  if (!templateForm.name.trim()) templateForm.name = templateDefaultName.value;
+  if (!templateForm.category.trim()) templateForm.category = "运营模板";
+}
+
+async function loadSavedTemplates() {
+  templateLoading.value = true;
+  try {
+    savedTemplates.value = await api.get<any, DecorationTemplate[]>("/admin/homepage/templates", homepageScopeParams());
+  } finally {
+    templateLoading.value = false;
+  }
+}
+
+async function openTemplateLibrary() {
+  seedTemplateForm();
+  templateDialogVisible.value = true;
+  await loadSavedTemplates();
+}
+
+async function saveCurrentAsTemplate() {
+  if (!orderedRows.value.length) return ElMessage.warning("当前页面没有模块，不能保存为模板");
+  seedTemplateForm();
+  templateDialogVisible.value = true;
+  await loadSavedTemplates();
+}
+
+async function saveTemplate() {
+  if (!templateForm.name.trim()) return ElMessage.warning("请输入模板名称");
+  if (!orderedRows.value.length) return ElMessage.warning("当前页面没有模块，不能保存为模板");
+  templateSaving.value = true;
+  try {
+    await api.post("/admin/homepage/templates", {
+      name: templateForm.name.trim(),
+      category: templateForm.category.trim(),
+      description: templateForm.description.trim()
+    }, homepageScopeParams());
+    ElMessage.success("模板已保存");
+    templateForm.name = "";
+    templateForm.description = "";
+    seedTemplateForm();
+    await loadSavedTemplates();
+  } finally {
+    templateSaving.value = false;
+  }
+}
+
+async function applySavedTemplate(template: DecorationTemplate) {
+  await ElMessageBox.confirm(`应用「${template.name}」会替换当前页面模块，确认继续？`, "应用模板库模板", {
+    type: "warning",
+    confirmButtonText: "确认应用",
+    cancelButtonText: "取消"
+  });
+  templateApplyingId.value = template.id;
+  try {
+    rememberBeforeMutation();
+    const nextRows = await api.post<any, HomepageSectionView[]>(`/admin/homepage/templates/${template.id}/apply`, {}, homepageScopeParams());
+    acceptServerRows(nextRows, { clearRestore: false, updateSnapshot: false });
+    ElMessage.success(`已应用「${template.name}」`);
+  } finally {
+    templateApplyingId.value = null;
+  }
+}
+
+function canDeleteSavedTemplate(template: DecorationTemplate) {
+  return isPlatformAdmin() || Boolean(template.tenant?.id);
+}
+
+async function deleteSavedTemplate(template: DecorationTemplate) {
+  await ElMessageBox.confirm(`确认删除模板「${template.name}」？`, "删除装修模板", { type: "warning" });
+  templateDeletingId.value = template.id;
+  try {
+    await api.delete(`/admin/homepage/templates/${template.id}`, homepageScopeParams());
+    savedTemplates.value = savedTemplates.value.filter((item) => item.id !== template.id);
+    ElMessage.success("模板已删除");
+  } finally {
+    templateDeletingId.value = null;
+  }
+}
+
+function templateScopeLabel(template: DecorationTemplate) {
+  if (!template.tenant?.id) return "平台模板";
+  return template.tenant.name || template.tenant.code || "商家模板";
 }
 
 async function copyFromPage() {
@@ -1219,10 +1708,15 @@ onMounted(async () => {
         </el-select>
         <el-button :icon="View" @click="openCurrentPreview">发布前预览</el-button>
         <el-button :icon="CopyDocument" @click="copyH5PreviewUrl">复制链接</el-button>
+        <el-button type="warning" plain @click="runHealthCheck">生效检测</el-button>
         <el-select v-if="canEdit" v-model="selectedTemplateKey" placeholder="装修模板" style="width: 150px">
           <el-option v-for="item in decorationTemplates" :key="item.key" :label="item.label" :value="item.key" />
         </el-select>
         <el-button v-if="canEdit" type="success" @click="applyTemplate">应用模板</el-button>
+        <el-button v-if="canEdit" type="primary" plain :loading="versionSaving" @click="saveVersion">保存版本</el-button>
+        <el-button v-if="canEdit" @click="openVersionHistory">版本历史</el-button>
+        <el-button v-if="canEdit" type="success" plain @click="saveCurrentAsTemplate">保存为模板</el-button>
+        <el-button v-if="canEdit" @click="openTemplateLibrary">模板库</el-button>
         <el-select v-if="canEdit" v-model="copyFromPageKey" placeholder="复制来源" style="width: 150px">
           <el-option v-for="page in pageOptions" :key="page.key" :label="page.label" :value="page.key" />
         </el-select>
@@ -1275,6 +1769,167 @@ onMounted(async () => {
       </div>
     </el-dialog>
 
+    <el-dialog v-model="healthDialogVisible" title="装修生效检测" width="760px">
+      <div class="health-dialog">
+        <el-alert
+          :type="healthIssues.some((item) => item.level === 'error') ? 'error' : healthIssues.length ? 'warning' : 'success'"
+          show-icon
+          :closable="false"
+          :title="healthIssues.length ? `检测完成：${healthSummary}` : '检测通过：当前页面没有发现明显装修生效问题'"
+        />
+        <div v-if="!healthIssues.length" class="health-empty">
+          当前页面模块、链接、图片和 H5/小程序兼容性没有发现明显风险。保存后 H5 刷新即可验证，小程序仍需重新构建或上传最新版。
+        </div>
+        <div v-else class="health-list">
+          <article v-for="(issue, index) in healthIssues" :key="index" class="health-item" :class="issue.level">
+            <el-tag :type="issueType(issue.level)" size="small">{{ issue.level === "error" ? "错误" : "提醒" }}</el-tag>
+            <div>
+              <strong>{{ issue.title }}</strong>
+              <p>{{ issue.detail }}</p>
+            </div>
+            <el-button v-if="issue.sectionId" size="small" link type="primary" @click="editIssueSection(issue)">定位模块</el-button>
+          </article>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="healthDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="versionDialogVisible" title="装修版本历史" width="820px" destroy-on-close>
+      <div class="version-dialog" v-loading="versionLoading">
+        <el-alert
+          type="info"
+          show-icon
+          :closable="false"
+          :title="`${templateDefaultName} · 当前最多展示最近 30 个版本`"
+        />
+        <div v-if="!versions.length" class="version-empty">
+          当前页面还没有保存过数据库版本。点击“保存版本”后，后续可以在这里一键恢复。
+        </div>
+        <div v-else class="version-list">
+          <article v-for="version in versions" :key="version.id" class="version-item">
+            <div>
+              <strong>{{ version.note || version.name || `版本 ${version.id}` }}</strong>
+              <span>{{ formatSnapshotTime(version.createdAt) }} · {{ version.sectionCount }} 个模块 · {{ version.createdByName || "system" }}</span>
+            </div>
+            <div class="version-actions">
+              <el-button size="small" type="primary" plain :loading="versionRestoringId === version.id" @click="restoreVersion(version)">恢复</el-button>
+              <el-button size="small" type="danger" plain :loading="versionDeletingId === version.id" @click="deleteVersion(version)">删除</el-button>
+            </div>
+          </article>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="loadVersions">刷新</el-button>
+        <el-button type="primary" plain :loading="versionSaving" @click="saveVersion">保存当前版本</el-button>
+        <el-button @click="versionDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="templateDialogVisible" title="装修模板库" width="880px" destroy-on-close>
+      <div class="template-dialog">
+        <el-alert
+          type="warning"
+          show-icon
+          :closable="false"
+          title="应用模板会替换当前页面模块。正式运营页面建议先保存版本，再应用模板。"
+        />
+        <section class="template-save-box">
+          <div class="template-save-head">
+            <strong>保存当前页面为模板</strong>
+            <span>{{ templateDefaultName }}</span>
+          </div>
+          <el-form label-position="top" class="template-save-form">
+            <el-form-item label="模板名称" required>
+              <el-input v-model="templateForm.name" placeholder="例如：慢π首页活动转化版" />
+            </el-form-item>
+            <el-form-item label="分类">
+              <el-input v-model="templateForm.category" placeholder="运营模板 / 节日模板 / 商城模板" />
+            </el-form-item>
+            <el-form-item label="说明" class="template-description">
+              <el-input v-model="templateForm.description" type="textarea" :rows="2" placeholder="说明适合什么页面、什么时候使用" />
+            </el-form-item>
+            <el-form-item class="template-save-action">
+              <el-button type="primary" :loading="templateSaving" @click="saveTemplate">保存为模板</el-button>
+            </el-form-item>
+          </el-form>
+        </section>
+        <section class="template-list-box" v-loading="templateLoading">
+          <div class="template-list-head">
+            <strong>可用模板</strong>
+            <el-button size="small" @click="loadSavedTemplates">刷新</el-button>
+          </div>
+          <div v-if="!savedTemplates.length" class="version-empty">
+            暂无保存过的模板。可以先把当前页面保存为模板，后续复制到其他页面或商家时直接复用。
+          </div>
+          <div v-else class="template-list">
+            <article v-for="template in savedTemplates" :key="template.id" class="template-item">
+              <div>
+                <strong>{{ template.name }}</strong>
+                <span>{{ templateScopeLabel(template) }} · {{ template.category || "未分类" }} · {{ template.sectionCount }} 个模块 · {{ formatSnapshotTime(template.updatedAt || template.createdAt) }}</span>
+                <p v-if="template.description">{{ template.description }}</p>
+              </div>
+              <div class="version-actions">
+                <el-button size="small" type="primary" plain :loading="templateApplyingId === template.id" @click="applySavedTemplate(template)">应用</el-button>
+                <el-button v-if="canDeleteSavedTemplate(template)" size="small" type="danger" plain :loading="templateDeletingId === template.id" @click="deleteSavedTemplate(template)">删除</el-button>
+              </div>
+            </article>
+          </div>
+        </section>
+      </div>
+      <template #footer>
+        <el-button @click="templateDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="linkPickerVisible" title="选择跳转链接" width="640px" destroy-on-close>
+      <div class="link-picker">
+        <el-alert
+          type="info"
+          show-icon
+          :closable="false"
+          :title="linkPicker.target ? `正在设置：${linkPicker.target.label}` : '选择链接'"
+        />
+        <el-radio-group v-model="linkPicker.mode">
+          <el-radio-button value="page">系统页面</el-radio-button>
+          <el-radio-button value="detail">详情页</el-radio-button>
+          <el-radio-button value="external">外部 H5</el-radio-button>
+        </el-radio-group>
+        <el-form label-position="top">
+          <el-form-item v-if="linkPicker.mode === 'page'" label="选择页面">
+            <el-select v-model="linkPicker.pagePath" filterable style="width: 100%">
+              <el-option-group v-for="group in linkPageGroups" :key="group" :label="group">
+                <el-option v-for="item in linkPageOptions.filter((option) => option.group === group)" :key="item.path" :label="item.label" :value="item.path" />
+              </el-option-group>
+            </el-select>
+          </el-form-item>
+          <template v-if="linkPicker.mode === 'detail'">
+            <el-form-item label="详情类型">
+              <el-select v-model="linkPicker.detailType" style="width: 100%">
+                <el-option v-for="item in detailLinkOptions" :key="item.type" :label="item.label" :value="item.type" />
+              </el-select>
+            </el-form-item>
+            <el-form-item :label="detailLinkOptions.find((item) => item.type === linkPicker.detailType)?.idLabel || 'ID'">
+              <el-input v-model="linkPicker.detailId" placeholder="输入后台列表里的 ID，系统会自动生成小程序路径" />
+            </el-form-item>
+          </template>
+          <el-form-item v-if="linkPicker.mode === 'external'" label="外部 H5 链接">
+            <el-input v-model="linkPicker.externalUrl" placeholder="https://example.com/path" />
+          </el-form-item>
+        </el-form>
+        <div class="link-preview">
+          <strong>将写入路径</strong>
+          <span>{{ linkPickerPreviewValue }}</span>
+          <small>运营只需要选择页面或填写 ID，不需要手写 `/pages/...` 路径。</small>
+        </div>
+      </div>
+      <template #footer>
+        <el-button @click="linkPickerVisible = false">取消</el-button>
+        <el-button type="primary" @click="applyLinkPicker">应用链接</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="crossCopyDialogVisible" title="跨商家复制" width="760px" destroy-on-close>
       <div class="cross-copy-dialog">
         <el-alert
@@ -1286,8 +1941,8 @@ onMounted(async () => {
         <el-form label-position="top" class="cross-copy-form">
           <el-form-item label="复制范围">
             <el-radio-group v-model="crossCopyForm.mode">
-              <el-radio-button label="current_page">当前页面</el-radio-button>
-              <el-radio-button label="all_pages">全部页面</el-radio-button>
+              <el-radio-button value="current_page">当前页面</el-radio-button>
+              <el-radio-button value="all_pages">全部页面</el-radio-button>
             </el-radio-group>
           </el-form-item>
           <div class="cross-copy-grid">
@@ -1346,7 +2001,7 @@ onMounted(async () => {
           v-for="(row, index) in orderedRows"
           :key="row.id"
           class="section-row"
-          :class="{ disabled: !row.enabled }"
+          :class="{ disabled: !row.enabled, active: editorOpen && editingId === row.id }"
           :draggable="canEdit"
           @dragstart="onDragStart(row)"
           @dragover.prevent
@@ -1377,7 +2032,7 @@ onMounted(async () => {
         <div class="phone-frame">
           <div class="phone-status"></div>
           <div class="preview-scroll">
-            <div v-for="row in previewRows" :key="row.id" class="preview-row-shell" :class="{ focused: isFocusedPreviewRow(row), fallback: hasDefaultPreviewFallback }">
+            <div v-for="row in previewRows" :key="row.id" class="preview-row-shell" :class="{ focused: isFocusedPreviewRow(row), fallback: hasDefaultPreviewFallback }" @click="selectPreviewRow(row)">
               <div v-if="row.type === 'search_bar'" class="preview-search">
                 <span>{{ (row.config as any).cityLabel || "本地" }}</span>
                 <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
@@ -1419,6 +2074,226 @@ onMounted(async () => {
             </div>
           </div>
         </div>
+      </aside>
+
+      <aside class="builder-inspector">
+        <div v-if="!editorOpen" class="inspector-empty">
+          <h3>模块配置</h3>
+          <p>点击左侧模块行，或直接点击手机预览中的模块，在这里编辑内容、样式、跳转和数据源。</p>
+          <el-button type="primary" plain @click="runHealthCheck">先做生效检测</el-button>
+        </div>
+        <template v-else>
+          <div class="inspector-head">
+            <div>
+              <strong>{{ editingId ? "编辑模块" : "新增模块" }}</strong>
+              <span>{{ form.title || typeLabel(form.type) }}</span>
+            </div>
+            <el-tag v-if="hasEditorUnsavedChanges" type="warning" effect="plain">未保存</el-tag>
+          </div>
+          <el-tabs v-model="editorTab" stretch>
+            <el-tab-pane label="内容" name="content">
+              <el-form label-position="top" class="inspector-form">
+                <div class="form-grid">
+                  <el-form-item label="模块类型">
+                    <el-select v-model="form.type" @change="onTypeChange">
+                      <el-option v-for="item in moduleTypes" :key="item.type" :label="item.label" :value="item.type" />
+                    </el-select>
+                  </el-form-item>
+                  <el-form-item label="是否显示">
+                    <el-switch v-model="form.enabled" />
+                  </el-form-item>
+                </div>
+                <el-form-item label="标题"><el-input v-model="form.title" /></el-form-item>
+                <el-form-item label="副标题"><el-input v-model="form.subtitle" /></el-form-item>
+
+                <template v-if="form.type === 'hero'">
+                  <el-divider>主视觉</el-divider>
+                  <el-form-item label="角标"><el-input v-model="form.config.eyebrow" @input="syncJsonText" /></el-form-item>
+                  <el-form-item label="按钮文案"><el-input v-model="form.config.primaryButtonText" @input="syncJsonText" /></el-form-item>
+                </template>
+
+                <template v-if="form.type === 'quick_nav'">
+                  <el-divider>快捷入口</el-divider>
+                  <div class="compact-editor">
+                    <div v-for="(item, index) in (form.config.items || [])" :key="index" class="compact-row">
+                      <el-input :model-value="item.label" placeholder="名称" @input="(value: string) => updateQuickLabel(index, value)" />
+                      <el-button @click="openArrayLinkPicker('items', index, 'link', `${item.label || '入口'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
+                      <el-color-picker :model-value="item.color" @change="(value: string | null) => updateQuickColor(index, value)" />
+                      <el-button type="danger" :icon="Delete" @click="removeQuickItem(index)" />
+                    </div>
+                    <el-button :icon="Plus" @click="addQuickItem">新增入口</el-button>
+                  </div>
+                </template>
+
+                <template v-if="form.type === 'image_banner'">
+                  <el-divider>图片广告</el-divider>
+                  <el-form-item label="图片">
+                    <div class="upload-line">
+                      <el-input v-model="form.config.imageUrl" @input="syncJsonText" />
+                      <el-upload :show-file-list="false" :before-upload="uploadBannerImage">
+                        <el-button :icon="Upload">上传</el-button>
+                      </el-upload>
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="展示比例">
+                    <el-select v-model="form.config.ratio" @change="syncJsonText">
+                      <el-option label="横幅 3:1" value="3:1" />
+                      <el-option label="宽屏 16:9" value="16:9" />
+                      <el-option label="方图 1:1" value="1:1" />
+                      <el-option label="海报 4:5" value="4:5" />
+                    </el-select>
+                  </el-form-item>
+                </template>
+
+                <template v-if="form.type === 'rich_text'">
+                  <el-divider>富文本</el-divider>
+                  <el-form-item label="内容"><el-input v-model="form.config.content" type="textarea" :rows="5" @input="syncJsonText" /></el-form-item>
+                  <el-form-item label="图片">
+                    <div class="upload-line">
+                      <el-input v-model="form.config.imageUrl" @input="syncJsonText" />
+                      <el-upload :show-file-list="false" :before-upload="uploadRichTextImage">
+                        <el-button :icon="Upload">上传</el-button>
+                      </el-upload>
+                    </div>
+                  </el-form-item>
+                </template>
+
+                <template v-if="form.type === 'bottom_nav'">
+                  <el-divider>底部导航</el-divider>
+                  <el-alert class="editor-tip" type="info" show-icon :closable="false" title="底部导航最多 5 项。H5 保存后刷新生效，小程序需要重新构建并上传最新版。" />
+                  <div class="compact-editor">
+                    <div v-for="(item, index) in (form.config.items || [])" :key="index" class="compact-row nav-compact-row">
+                      <el-input :model-value="item.label" placeholder="名称" @input="(value: string) => updateConfigArrayItem('items', index, 'label', value)" />
+                      <el-input :model-value="item.icon" placeholder="图标" @input="(value: string) => updateConfigArrayItem('items', index, 'icon', value)" />
+                      <el-button @click="openArrayLinkPicker('items', index, 'link', `${item.label || '菜单'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
+                      <el-switch :model-value="item.enabled !== false" @change="(value: string | number | boolean) => updateConfigArrayItemBoolean('items', index, 'enabled', Boolean(value))" />
+                      <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('items', index)" />
+                    </div>
+                    <el-button :icon="Plus" :disabled="Array.isArray(form.config.items) && form.config.items.length >= 5" @click="addNavItem">新增菜单</el-button>
+                  </div>
+                </template>
+
+                <template v-if="form.type === 'my_page'">
+                  <el-divider>我的页入口</el-divider>
+                  <el-form-item label="头部标题"><el-input v-model="form.config.greeting" @input="syncJsonText" /></el-form-item>
+                  <div class="compact-editor">
+                    <div v-for="(item, index) in (form.config.tools || [])" :key="index" class="compact-row">
+                      <el-input :model-value="item.label" placeholder="名称" @input="(value: string) => updateConfigArrayItem('tools', index, 'label', value)" />
+                      <el-button @click="openArrayLinkPicker('tools', index, 'link', `${item.label || '入口'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
+                      <el-color-picker :model-value="item.color" @change="(value: string | null) => updateConfigArrayItem('tools', index, 'color', String(value || '#0f766e'))" />
+                      <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('tools', index)" />
+                    </div>
+                    <el-button :icon="Plus" @click="addMyTool">新增我的页入口</el-button>
+                  </div>
+                </template>
+
+                <template v-if="form.type === 'inner_pages'">
+                  <el-divider>内页配置</el-divider>
+                  <div class="compact-editor">
+                    <div v-for="(item, index) in (form.config.pages || [])" :key="index" class="inner-page-row compact-inner-row">
+                      <el-input :model-value="item.key" placeholder="页面 key" @input="(value: string) => updateInnerPage(index, 'key', value)" />
+                      <el-input :model-value="item.title" placeholder="标题" @input="(value: string) => updateInnerPage(index, 'title', value)" />
+                      <el-checkbox :model-value="item.showBottomNav !== false" @change="(value: string | number | boolean) => updateInnerPage(index, 'showBottomNav', Boolean(value))">底栏</el-checkbox>
+                      <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('pages', index)" />
+                    </div>
+                    <el-button :icon="Plus" @click="addInnerPage">新增内页配置</el-button>
+                  </div>
+                </template>
+              </el-form>
+            </el-tab-pane>
+
+            <el-tab-pane label="样式" name="style">
+              <el-form label-position="top" class="inspector-form">
+                <el-form-item label="视觉预设">
+                  <div class="visual-preset-list">
+                    <el-button v-for="preset in visualPresets" :key="preset.key" @click="applyVisualPreset(preset.key)">{{ preset.label }}</el-button>
+                  </div>
+                </el-form-item>
+                <template v-if="form.type === 'hero'">
+                  <el-form-item label="背景色"><el-color-picker v-model="form.config.backgroundColor" @change="syncJsonText" /></el-form-item>
+                  <el-form-item label="背景图">
+                    <div class="upload-line">
+                      <el-input v-model="form.config.backgroundImage" @input="syncJsonText" />
+                      <el-upload :show-file-list="false" :before-upload="uploadHeroBackground">
+                        <el-button :icon="Upload">上传</el-button>
+                      </el-upload>
+                    </div>
+                  </el-form-item>
+                  <el-form-item label="遮罩透明度"><el-slider v-model="form.config.overlayOpacity" :min="0" :max="95" show-input @change="syncJsonText" /></el-form-item>
+                </template>
+                <div class="form-grid">
+                  <el-form-item label="主题色"><el-color-picker v-model="form.layout.primaryColor" @change="syncJsonText" /></el-form-item>
+                  <el-form-item label="强调色"><el-color-picker v-model="form.layout.accentColor" @change="syncJsonText" /></el-form-item>
+                  <el-form-item label="文字色"><el-color-picker v-model="form.layout.textColor" @change="syncJsonText" /></el-form-item>
+                  <el-form-item label="背景色"><el-color-picker v-model="form.layout.backgroundColor" show-alpha @change="syncJsonText" /></el-form-item>
+                  <el-form-item label="下方间距"><el-input-number v-model="form.layout.spacingBottom" :min="0" :max="80" @change="syncJsonText" /></el-form-item>
+                  <el-form-item label="圆角"><el-input-number v-model="form.layout.borderRadius" :min="0" :max="24" @change="syncJsonText" /></el-form-item>
+                </div>
+              </el-form>
+            </el-tab-pane>
+
+            <el-tab-pane label="跳转" name="link">
+              <div class="link-list">
+                <div v-if="form.config.primaryButtonLink !== undefined" class="link-row">
+                  <span>主按钮</span>
+                  <el-button @click="openConfigLinkPicker('primaryButtonLink', '主按钮跳转')">{{ linkDisplayName(form.config.primaryButtonLink) }}</el-button>
+                </div>
+                <div v-if="form.config.link !== undefined" class="link-row">
+                  <span>模块链接</span>
+                  <el-button @click="openConfigLinkPicker('link', '模块链接')">{{ linkDisplayName(form.config.link) }}</el-button>
+                </div>
+                <div v-for="(item, index) in (form.config.items || [])" :key="`items-${index}`" class="link-row">
+                  <span>{{ item.label || `入口 ${index + 1}` }}</span>
+                  <el-button @click="openArrayLinkPicker('items', index, 'link', `${item.label || '入口'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
+                </div>
+                <div v-for="(item, index) in (form.config.tools || [])" :key="`tools-${index}`" class="link-row">
+                  <span>{{ item.label || `工具 ${index + 1}` }}</span>
+                  <el-button @click="openArrayLinkPicker('tools', index, 'link', `${item.label || '工具'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
+                </div>
+                <el-empty v-if="form.config.primaryButtonLink === undefined && form.config.link === undefined && !(form.config.items || []).length && !(form.config.tools || []).length" description="这个模块没有可配置跳转" />
+              </div>
+            </el-tab-pane>
+
+            <el-tab-pane label="数据源" name="data">
+              <el-form label-position="top" class="inspector-form">
+                <template v-if="['featured_activities', 'activity_feed', 'testimonial_feed', 'featured_testimonials', 'activity_testimonials'].includes(form.type)">
+                  <el-form-item label="数据来源">
+                    <el-select v-model="form.config.source" clearable @change="syncJsonText">
+                      <el-option label="精选/推荐" value="featured" />
+                      <el-option label="最新" value="latest" />
+                      <el-option label="参与者内容" value="participant" />
+                      <el-option label="按活动" value="activity" />
+                    </el-select>
+                  </el-form-item>
+                </template>
+                <el-form-item v-if="form.config.limit !== undefined" label="展示数量">
+                  <el-input-number v-model="form.config.limit" :min="1" :max="30" @change="syncJsonText" />
+                </el-form-item>
+                <el-form-item v-if="form.config.pageSize !== undefined" label="每页数量">
+                  <el-input-number v-model="form.config.pageSize" :min="1" :max="12" @change="syncJsonText" />
+                </el-form-item>
+                <el-alert type="info" show-icon :closable="false" title="数据源配置只决定模块如何取内容；活动、课程、商品本身仍在对应业务模块维护。" />
+              </el-form>
+            </el-tab-pane>
+
+            <el-tab-pane label="兼容性" name="compat">
+              <div class="compat-panel">
+                <el-alert type="warning" show-icon :closable="false" title="H5 保存后刷新可见；小程序需要重新构建并上传最新版，外部 H5 链接需要配置业务域名。" />
+                <el-button type="warning" plain @click="runHealthCheck">运行整页生效检测</el-button>
+                <el-divider>高级 JSON</el-divider>
+                <el-form label-position="top">
+                  <el-form-item label="config 高级配置"><el-input v-model="configText" type="textarea" :rows="7" /></el-form-item>
+                  <el-form-item label="layout 布局配置"><el-input v-model="layoutText" type="textarea" :rows="7" /></el-form-item>
+                </el-form>
+              </div>
+            </el-tab-pane>
+          </el-tabs>
+          <div class="inspector-actions">
+            <el-button @click="closeDrawer()">取消</el-button>
+            <el-button :icon="View" @click="openCurrentPreview">打开已保存H5</el-button>
+            <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
+          </div>
+        </template>
       </aside>
     </div>
 
@@ -1468,8 +2343,8 @@ onMounted(async () => {
           </el-form-item>
           <el-form-item label="背景适配">
             <el-radio-group v-model="form.config.backgroundFit" @change="syncJsonText">
-              <el-radio-button label="cover">裁切铺满</el-radio-button>
-              <el-radio-button label="contain">完整显示</el-radio-button>
+              <el-radio-button value="cover">裁切铺满</el-radio-button>
+              <el-radio-button value="contain">完整显示</el-radio-button>
             </el-radio-group>
           </el-form-item>
           <el-form-item label="遮罩颜色"><el-color-picker v-model="form.config.overlayColor" @change="syncJsonText" /></el-form-item>
@@ -1505,8 +2380,8 @@ onMounted(async () => {
             <el-form-item label="每页数量"><el-input-number v-model="form.config.pageSize" :min="1" :max="12" @change="syncJsonText" /></el-form-item>
             <el-form-item label="分页样式">
               <el-radio-group v-model="form.config.pagination" @change="syncJsonText">
-                <el-radio-button label="pager">上一页 / 下一页</el-radio-button>
-                <el-radio-button label="load_more">加载更多</el-radio-button>
+                <el-radio-button value="pager">上一页 / 下一页</el-radio-button>
+                <el-radio-button value="load_more">加载更多</el-radio-button>
               </el-radio-group>
             </el-form-item>
           </template>
@@ -1536,8 +2411,8 @@ onMounted(async () => {
           </el-form-item>
           <el-form-item label="图片适配">
             <el-radio-group v-model="form.config.fit" @change="syncJsonText">
-              <el-radio-button label="cover">裁切铺满</el-radio-button>
-              <el-radio-button label="contain">完整显示</el-radio-button>
+              <el-radio-button value="cover">裁切铺满</el-radio-button>
+              <el-radio-button value="contain">完整显示</el-radio-button>
             </el-radio-group>
           </el-form-item>
         </template>
@@ -1792,8 +2667,8 @@ onMounted(async () => {
 .cross-copy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .cross-copy-plan { display: grid; gap: 6px; padding: 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1d4ed8; }
 .cross-copy-plan strong { color: #1e3a8a; }
-.builder-layout { display: grid; grid-template-columns: 220px minmax(420px, 1fr) 340px; gap: 16px; align-items: start; }
-.module-palette, .section-list, .phone-preview { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+.builder-layout { display: grid; grid-template-columns: 220px minmax(360px, 0.9fr) 340px minmax(360px, 0.9fr); gap: 16px; align-items: start; }
+.module-palette, .section-list, .phone-preview, .builder-inspector { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
 .module-palette h3, .list-head h3 { margin: 0 0 12px; }
 .module-option { width: 100%; display: grid; gap: 4px; text-align: left; border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; }
 .module-option:hover { border-color: #0f766e; background: #f0fdfa; }
@@ -1802,18 +2677,20 @@ onMounted(async () => {
 .list-head { display: flex; justify-content: space-between; align-items: center; color: #667085; }
 .section-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fff; }
 .section-row.disabled { opacity: 0.62; }
+.section-row.active { border-color: #f97316; background: #fff7ed; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12); }
 .drag-handle { color: #98a2b3; font-weight: 900; cursor: grab; }
 .section-main { cursor: pointer; min-width: 0; }
 .section-title { display: flex; align-items: center; gap: 8px; }
 .section-main p { margin: 6px 0 0; color: #667085; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-actions { display: flex; gap: 6px; align-items: center; }
 .empty { padding: 40px 0; color: #98a2b3; text-align: center; }
-.phone-preview { position: sticky; top: 20px; }
+.phone-preview, .builder-inspector { position: sticky; top: 20px; }
 .phone-frame { width: 292px; height: 600px; margin: 0 auto; border: 10px solid #111827; border-radius: 30px; background: #f4f6f8; overflow: hidden; }
 .phone-status { height: 28px; background: #111827; }
 .preview-scroll { height: 552px; overflow: hidden; padding: 12px; }
 .preview-fallback-tip { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 800; }
 .preview-row-shell { position: relative; border: 2px solid transparent; border-radius: 12px; margin: -2px -2px 8px; padding: 2px; }
+.preview-row-shell:not(.fallback) { cursor: pointer; }
 .preview-row-shell.focused { border-color: #f97316; background: rgba(249, 115, 22, 0.08); box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12); }
 .preview-row-shell.focused::before { content: "正在编辑"; position: absolute; top: -10px; right: 8px; z-index: 2; padding: 2px 7px; border-radius: 999px; background: #f97316; color: #fff; font-size: 10px; font-weight: 900; }
 .preview-row-shell.fallback:not(.focused) { opacity: 0.92; }
@@ -1842,6 +2719,50 @@ onMounted(async () => {
 .preview-inner-pages span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: #f3f4f6; color: #475467; font-size: 12px; }
 .upload-line { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .visual-preset-list { display: flex; flex-wrap: wrap; gap: 8px; }
+.builder-inspector { max-height: calc(100vh - 40px); overflow: auto; }
+.inspector-empty { min-height: 360px; display: grid; align-content: center; justify-items: start; gap: 12px; color: #667085; }
+.inspector-empty h3 { margin: 0; color: #111827; }
+.inspector-empty p { margin: 0; line-height: 1.6; }
+.inspector-head { position: sticky; top: -16px; z-index: 4; display: flex; justify-content: space-between; gap: 12px; align-items: center; margin: -16px -16px 12px; padding: 14px 16px; border-bottom: 1px solid #e5e7eb; background: #fff; }
+.inspector-head strong { display: block; color: #111827; }
+.inspector-head span { display: block; max-width: 240px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #667085; font-size: 12px; margin-top: 4px; }
+.inspector-form { display: grid; gap: 4px; }
+.compact-editor { display: grid; gap: 10px; margin-bottom: 14px; }
+.compact-row { display: grid; grid-template-columns: minmax(82px, 1fr) minmax(110px, 1.2fr) 42px 34px; gap: 8px; align-items: center; }
+.compact-row.nav-compact-row { grid-template-columns: minmax(78px, 1fr) 58px minmax(118px, 1.2fr) 56px 34px; }
+.compact-row .el-button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.compact-inner-row { grid-template-columns: 96px minmax(110px, 1fr) 64px 34px; }
+.link-list { display: grid; gap: 10px; }
+.link-row { display: grid; grid-template-columns: 92px 1fr; gap: 10px; align-items: center; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+.link-row span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #475467; font-weight: 800; }
+.link-row .el-button { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.compat-panel { display: grid; gap: 12px; }
+.inspector-actions { position: sticky; bottom: -16px; z-index: 4; display: flex; justify-content: flex-end; gap: 8px; margin: 12px -16px -16px; padding: 12px 16px; border-top: 1px solid #e5e7eb; background: #fff; }
+.health-dialog, .health-list, .link-picker { display: grid; gap: 14px; }
+.health-empty { padding: 16px; border: 1px solid #bbf7d0; border-radius: 8px; background: #f0fdf4; color: #166534; font-weight: 700; line-height: 1.6; }
+.health-item { display: grid; grid-template-columns: auto 1fr auto; gap: 10px; align-items: start; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #f8fafc; }
+.health-item.error { border-color: #fecaca; background: #fef2f2; }
+.health-item.warning { border-color: #fed7aa; background: #fff7ed; }
+.health-item strong { color: #111827; }
+.health-item p { margin: 4px 0 0; color: #475467; line-height: 1.55; }
+.version-dialog, .template-dialog { display: grid; gap: 14px; }
+.version-empty { padding: 16px; border: 1px dashed #d0d5dd; border-radius: 8px; background: #f8fafc; color: #667085; line-height: 1.6; }
+.version-list, .template-list { display: grid; gap: 10px; }
+.version-item, .template-item { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; padding: 12px 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.version-item strong, .template-item strong { display: block; color: #111827; }
+.version-item span, .template-item span { display: block; margin-top: 4px; color: #667085; font-size: 12px; line-height: 1.5; }
+.template-item p { margin: 6px 0 0; color: #475467; font-size: 13px; line-height: 1.55; }
+.version-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.template-save-box, .template-list-box { display: grid; gap: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fafafa; }
+.template-save-head, .template-list-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.template-save-head strong, .template-list-head strong { color: #111827; }
+.template-save-head span { color: #667085; font-size: 12px; }
+.template-save-form { display: grid; gap: 2px; }
+.template-description { margin-bottom: 0; }
+.template-save-action { margin-top: 4px; }
+.link-preview { display: grid; gap: 6px; padding: 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1d4ed8; }
+.link-preview span { word-break: break-all; font-family: ui-monospace, SFMono-Regular, Consolas, "Liberation Mono", monospace; }
+.link-preview small { color: #4b5563; }
 .drawer-save-bar { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: -8px 0 16px; padding: 12px; border: 1px solid #dbeafe; border-radius: 8px; background: #f8fbff; box-shadow: 0 8px 18px rgba(15, 23, 42, 0.06); }
 .drawer-save-bar strong { display: block; color: #111827; font-size: 14px; }
 .drawer-save-bar span { display: block; max-width: 220px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #667085; font-size: 12px; margin-top: 3px; }
@@ -1860,9 +2781,13 @@ onMounted(async () => {
 .quick-row.my-tool-row { grid-template-columns: 70px 110px 1fr 130px 42px 34px; }
 .inner-page-row { display: grid; grid-template-columns: 110px 130px 1fr 120px 34px; gap: 8px; align-items: center; }
 @media (max-width: 1280px) {
-  .builder-layout { grid-template-columns: 200px minmax(420px, 1fr); }
+  .builder-layout { grid-template-columns: 220px minmax(420px, 1fr) minmax(340px, 0.9fr); }
   .phone-preview { display: none; }
   .drawer-live-preview { display: none; }
+}
+@media (max-width: 1024px) {
+  .builder-layout { grid-template-columns: 1fr; }
+  .module-palette, .section-list, .builder-inspector { position: static; max-height: none; }
 }
 </style>
 

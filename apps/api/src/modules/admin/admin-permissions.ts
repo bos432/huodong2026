@@ -228,7 +228,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "uploads/settlement-proofs") return "upload.settlement_proof";
   if (path === "categories" || path.startsWith("categories/")) return "category.manage";
   if (path.startsWith("announcements")) return "announcement.manage";
-  if (path.startsWith("homepage/sections")) return "homepage.manage";
+  if (path.startsWith("homepage/")) return "homepage.manage";
   if (path === "activities" && verb === "GET") return "activity.view";
   if (path === "activities/:id" && verb === "GET") return "activity.view";
   if (path.includes("approval-logs") || path.includes("channel-report") || path.endsWith("/channels") && verb === "GET") return "activity.view";

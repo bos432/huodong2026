@@ -9956,3 +9956,189 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 - 部署本次提交后，在服务器端带 `VITE_DEFAULT_TENANT_CODE=qiwai-showcase` 重新构建小程序包。
 - 微信开发者工具导入最新 `apps/mobile/dist/build/mp-weixin`，清缓存后打开首页，确认顶部和底栏均来自慢π演示中心。
 - 如果仍显示旧内容，检查开发工具是否导入了错误目录，必须是项目下的 `apps/mobile/dist/build/mp-weixin`。
+
+## 2026-06-25 - DIY 装修系统第一阶段优化
+
+### 阶段名称
+
+上线试运营前 - 后台前台全局装修三栏编辑器与生效检测小阶段。
+
+### 本阶段完成内容
+
+- 将后台“前台全局装修”从原来的“模块列表 + 抽屉编辑”升级为更接近运营 DIY 的三栏体验：
+  - 左侧继续保留模块添加、模块列表、排序、复制、删除、启停。
+  - 中间手机预览支持点击已保存模块直接打开右侧配置。
+  - 右侧新增“模块配置”面板，按内容、样式、跳转、数据源、兼容性分组。
+- 新增链接选择器：
+  - 支持系统页面、详情页、外部 H5 三类链接。
+  - 活动详情、课程详情、商品详情、动态详情只需要输入 ID，自动生成 `/pages/.../detail?id=...` 路径。
+  - 右侧跳转标签里不再要求运营手写路径。
+- 新增装修生效检测：
+  - 检查重复底部导航/我的页/内页布局、底部导航超过 5 项、图片广告缺图片、非 HTTPS 图片、空跳转、无法识别路径、小程序外链业务域名风险、平台默认装修/指定商家范围风险。
+  - 检测结果分为错误和提醒，并支持定位到对应模块。
+- 保留现有 `homepage_sections` 数据结构和后台装修接口，没有新增 migration。
+- 更新后台装修教程，补充三栏编辑器、链接选择器、生效检测和上线前检查说明。
+- 更新二次开发说明升级记录。
+
+### 修改/新增的主要文件
+
+- `apps/admin/src/views/HomepageBuilder.vue`
+- `docs/后台装修使用教程.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-25 +08:00。
+- `npm.cmd --prefix apps/admin run build`：通过；仅有既有 Rollup PURE 注释和大 chunk 提示。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_H5_ORIGIN='https://rd.chaimen666.com'; $env:VITE_DEFAULT_TENANT_CODE='qiwai-showcase'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过，并完成小程序授权配置 patch。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+- 右侧浏览器本地验证：
+  - 打开 `http://127.0.0.1:5174/admin/homepage-builder?pageKey=home`，页面可进入后台装修页。
+  - 确认“生效检测”和“模块配置”区域可见。
+  - 点击模块列表第一条模块，右侧配置面板出现“内容 / 样式 / 跳转 / 数据源 / 兼容性”标签和“保存模块”按钮。
+  - 点击“生效检测”，弹出“装修生效检测”结果，并能提示当前正在编辑平台默认装修的范围风险。
+  - 在“跳转”标签打开链接选择器，确认系统页面、详情页、外部 H5 三类入口可见。
+  - 切换到详情页并输入 ID `18`，确认能生成详情页路径。
+
+### 遗留问题
+
+- 本阶段仍是“立即保存到 live 配置”，没有引入草稿/发布/版本回滚表；第二阶段再做版本化。
+- 详情页链接选择器当前采用“输入 ID 自动生成路径”，未直接拉取活动/课程/商品/动态列表做可搜索选择；后续可增强为真正的数据选择器。
+- 手机预览是后台模拟预览，不能完全替代 H5/小程序真实端渲染；上线前仍需打开前台实际页面和微信开发者工具复验。
+- 小程序端装修内容如果依赖静态包默认商家或页面包逻辑，仍需重新构建并上传体验版/正式版。
+
+### 下一阶段应继续处理的事项
+
+- 第二阶段开发装修模板库、草稿发布、版本历史和一键回滚。
+- 将详情链接选择器升级为可搜索活动、课程、商品、动态数据的选择弹窗。
+- 将生效检测结果接入“保存前提醒”或“发布前检查”，避免运营带错误项上线。
+
+## 2026-06-25 - DIY 装修系统第二阶段实现
+
+### 阶段名称
+
+上线试运营前 - 后台前台全局装修版本历史与模板库小阶段。
+
+### 本阶段完成内容
+
+- 在后台前台装修体系上新增两张数据库旁路表：
+  - `homepage_decoration_versions`：保存当前页面、当前范围的装修快照，支持版本历史和回滚。
+  - `homepage_decoration_templates`：保存可复用模板，支持模板库应用和删除。
+- 后端新增装修版本/模板接口：
+  - 保存当前版本、查看版本历史、恢复版本、删除版本。
+  - 保存当前页面为模板、查看模板库、应用模板、删除模板。
+- 后端继续沿用 `homepage_sections` 作为前台 live 配置，版本和模板只保存快照，不改变公开读取链路。
+- 后台“前台全局装修”新增：
+  - “保存版本”
+  - “版本历史”
+  - “保存为模板”
+  - “模板库”
+  - 版本历史弹窗支持恢复、删除和刷新。
+  - 模板库弹窗支持保存当前页面为模板、应用、删除和刷新。
+- 文档同步：
+  - 更新《后台装修使用教程》，补充版本历史、模板库和操作建议。
+  - 更新《开发方案与二次开发说明》的升级记录。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/entities/homepage-decoration-version.entity.ts`
+- `apps/api/src/entities/homepage-decoration-template.entity.ts`
+- `apps/api/src/migrations/1782060000000-HomepageDecorationVersionsAndTemplates.ts`
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.module.ts`
+- `apps/api/src/modules/admin/admin-permissions.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/api/src/modules/admin/dto.ts`
+- `apps/api/src/modules/app.module.ts`
+- `apps/admin/src/views/HomepageBuilder.vue`
+- `docs/后台装修使用教程.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-25 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅有既有 Rollup PURE 注释和 chunk 提示。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅提示 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 版本历史和模板库尚未做右侧浏览器的真实点击验收，需确认弹窗打开、保存、恢复、删除和应用都能正常走通。
+- `homepage_decoration_versions` / `homepage_decoration_templates` 需要在服务器上跑对应 migration，才能在生产库里真正可用。
+
+### 下一阶段应继续处理的事项
+
+- 在右侧浏览器打开后台装修页，逐项验收“保存版本 / 版本历史 / 保存为模板 / 模板库”。
+- 如果浏览器验收发现问题，优先在本轮范围内修复后再回归。
+- 验收通过后，再补最终上线验收记录。
+
+## 2026-06-25 - DIY 装修系统第二阶段浏览器验收完成
+
+### 阶段名称
+
+上线试运营前 - 后台前台全局装修版本历史与模板库浏览器验收小阶段。
+
+### 本阶段完成内容
+
+- 在本地 Docker API 上执行装修版本/模板 migration，创建 `homepage_decoration_versions` 与 `homepage_decoration_templates`。
+- 重建本地 `activity-api` 容器，使后台开发页命中新接口而不是旧 404 服务。
+- 在右侧浏览器完成后台装修页真交互验收：
+  - 保存装修版本。
+  - 打开版本历史。
+  - 恢复刚保存的版本。
+  - 删除刚保存的版本。
+  - 保存当前页面为模板。
+  - 打开模板库。
+  - 应用刚保存的模板。
+  - 删除刚保存的模板。
+- 验证本轮测试数据已回收，数据库中不再残留本阶段创建的测试版本和测试模板。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/entities/homepage-decoration-version.entity.ts`
+- `apps/api/src/entities/homepage-decoration-template.entity.ts`
+- `apps/api/src/migrations/1782060000000-HomepageDecorationVersionsAndTemplates.ts`
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.module.ts`
+- `apps/api/src/modules/admin/admin-permissions.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/api/src/modules/admin/dto.ts`
+- `apps/api/src/modules/app.module.ts`
+- `apps/admin/src/views/HomepageBuilder.vue`
+- `docs/后台装修使用教程.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-25 08:13 +08:00。
+- `npm.cmd --prefix apps/api run migration:run`：通过；已创建两张装修版本/模板表。
+- `docker compose -p activity-registration -f docker-compose.yml up -d --build api`：通过；本地 `activity-api` 已切到当前代码。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `git diff --check`：通过，仅有 Windows 工作区 LF/CRLF 警告。
+- 浏览器验收结果：
+  - 5177 端口后台能正确代理到 `http://127.0.0.1:18080`。
+  - 商家 `tenantId=3` 的装修页可正常打开。
+  - 版本历史可见新保存版本，恢复后页面仍为 1 个模块。
+  - 刚创建的版本可被删除，版本历史回到空状态。
+  - 模板库可保存模板、显示模板、应用模板并删除模板。
+  - 浏览器控制台未出现本轮新增的 5177 前端 error/warn。
+
+### 遗留问题
+
+- 本轮浏览器验收过程中，旧的 5174 dev 进程仍指向 `VITE_DEV_API_PROXY=http://127.0.0.1:3100`，会报历史 500；本轮已改用 5177 作为验收端口。
+- 装修页仍会显示部分历史烟测模块，这属于既有本地测试数据，不影响版本/模板链路验收。
+
+### 下一阶段应继续处理的事项
+
+- 服务器端同步这次提交后，重新构建并发布后台静态包。
+- 如需继续扩展 DIY 装修能力，再进入模板库管理、发布版本库、历史回滚增强等后续阶段。

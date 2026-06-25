@@ -33,6 +33,8 @@ import { Coupon } from "../../entities/coupon.entity";
 import { ConversionEvent } from "../../entities/conversion-event.entity";
 import { Course } from "../../entities/course.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
+import { HomepageDecorationTemplate } from "../../entities/homepage-decoration-template.entity";
+import { HomepageDecorationVersion, HomepageDecorationSnapshotRow } from "../../entities/homepage-decoration-version.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
@@ -62,7 +64,7 @@ import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActo
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultPermissionsForRole, effectivePermissionsForAdmin, normalizeAdminPermissions } from "./admin-permissions";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { financeDailyReport, financeRiskAlerts } from "./finance-operations";
 import { tenantOperationHealth } from "./tenant-health";
 import { tenantRegionShapesConflict } from "./tenant-region-geometry";
@@ -140,6 +142,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(Course) private readonly courses: Repository<Course>,
     @InjectRepository(H5AuthCodeLog) private readonly h5AuthCodeLogs: Repository<H5AuthCodeLog>,
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
+    @InjectRepository(HomepageDecorationVersion) private readonly homepageDecorationVersions: Repository<HomepageDecorationVersion>,
+    @InjectRepository(HomepageDecorationTemplate) private readonly homepageDecorationTemplates: Repository<HomepageDecorationTemplate>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(UserWallet) private readonly userWallets: Repository<UserWallet>,
@@ -1823,6 +1827,113 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const saved = await this.createDefaultHomepageSections(admin, targetTenant, normalizedPageKey);
     await this.logOperation(admin, "homepage.section.reset_default", "homepage_section", null, "恢复默认H5装修配置", { count: saved.length, pageKey: normalizedPageKey });
     return saved;
+  }
+
+  async listHomepageDecorationVersions(admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const builder = this.homepageDecorationVersions.createQueryBuilder("version").leftJoinAndSelect("version.tenant", "tenant").where("version.pageKey = :pageKey", { pageKey: normalizedPageKey }).orderBy("version.createdAt", "DESC").addOrderBy("version.id", "DESC").take(30);
+    if (targetTenant) builder.andWhere("version.tenantId = :tenantId", { tenantId: targetTenant.id });
+    else builder.andWhere("version.tenantId IS NULL");
+    return builder.getMany();
+  }
+
+  async createHomepageDecorationVersion(dto: HomepageDecorationVersionDto, admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const sections = await this.snapshotHomepageSections(targetTenant, normalizedPageKey);
+    const saved = await this.homepageDecorationVersions.save(this.homepageDecorationVersions.create({
+      tenant: targetTenant,
+      pageKey: normalizedPageKey,
+      name: this.nullableText(dto.name),
+      note: this.nullableText(dto.note),
+      sections,
+      sectionCount: sections.length,
+      createdById: admin?.id || null,
+      createdByName: this.actorName(admin)
+    }));
+    await this.logOperation(admin, "homepage.version.create", "homepage_decoration_version", saved.id, "保存前台装修版本", { pageKey: normalizedPageKey, tenantId: targetTenant?.id || null, sectionCount: saved.sectionCount, note: saved.note });
+    return saved;
+  }
+
+  async restoreHomepageDecorationVersion(id: number, admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const version = await this.homepageDecorationVersions.findOne({ where: { id } });
+    if (!version) throw new NotFoundException("装修版本不存在");
+    this.assertHomepageDecorationScope(version, targetTenant, normalizedPageKey, "装修版本");
+    const saved = await this.replaceHomepageSectionsFromSnapshot(admin, targetTenant, normalizedPageKey, version.sections || [], "homepage.version.restore", "恢复前台装修版本", "homepage_decoration_version", version.id);
+    return saved;
+  }
+
+  async deleteHomepageDecorationVersion(id: number, admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const version = await this.homepageDecorationVersions.findOne({ where: { id } });
+    if (!version) throw new NotFoundException("装修版本不存在");
+    this.assertHomepageDecorationScope(version, targetTenant, normalizedPageKey, "装修版本");
+    await this.homepageDecorationVersions.delete(id);
+    await this.logOperation(admin, "homepage.version.delete", "homepage_decoration_version", id, "删除前台装修版本", { pageKey: normalizedPageKey, tenantId: targetTenant?.id || null });
+    return { id, deleted: true };
+  }
+
+  async listHomepageDecorationTemplates(admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const builder = this.homepageDecorationTemplates.createQueryBuilder("template").leftJoinAndSelect("template.tenant", "tenant").where("template.pageKey = :pageKey", { pageKey: normalizedPageKey }).orderBy("template.updatedAt", "DESC").addOrderBy("template.id", "DESC").take(80);
+    if (targetTenant) builder.andWhere("(template.tenantId IS NULL OR template.tenantId = :tenantId)", { tenantId: targetTenant.id });
+    else builder.andWhere("template.tenantId IS NULL");
+    return builder.getMany();
+  }
+
+  async createHomepageDecorationTemplate(dto: HomepageDecorationTemplateDto, admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const sections = await this.snapshotHomepageSections(targetTenant, normalizedPageKey);
+    if (!sections.length) throw new BadRequestException("当前页面没有可保存为模板的模块");
+    const saved = await this.homepageDecorationTemplates.save(this.homepageDecorationTemplates.create({
+      tenant: targetTenant,
+      pageKey: normalizedPageKey,
+      name: dto.name.trim(),
+      category: this.nullableText(dto.category),
+      description: this.nullableText(dto.description),
+      sections,
+      sectionCount: sections.length,
+      createdById: admin?.id || null,
+      createdByName: this.actorName(admin)
+    }));
+    await this.logOperation(admin, "homepage.template.create", "homepage_decoration_template", saved.id, `保存前台装修模板：${saved.name}`, { pageKey: normalizedPageKey, tenantId: targetTenant?.id || null, sectionCount: saved.sectionCount });
+    return saved;
+  }
+
+  async applyHomepageDecorationTemplate(id: number, admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    this.assertTenantSubscriptionWritable(targetTenant, admin);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const template = await this.homepageDecorationTemplates.findOne({ where: { id } });
+    if (!template) throw new NotFoundException("装修模板不存在");
+    this.assertHomepageTemplateReadable(template, targetTenant, normalizedPageKey);
+    const saved = await this.replaceHomepageSectionsFromSnapshot(admin, targetTenant, normalizedPageKey, template.sections || [], "homepage.template.apply", `应用前台装修模板：${template.name}`, "homepage_decoration_template", template.id);
+    return saved;
+  }
+
+  async deleteHomepageDecorationTemplate(id: number, admin?: AdminContext, tenantId?: number, pageKey?: string) {
+    const targetTenant = await this.resolveHomepageTenant(admin, tenantId);
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const template = await this.homepageDecorationTemplates.findOne({ where: { id } });
+    if (!template) throw new NotFoundException("装修模板不存在");
+    if ((template.pageKey || "home") !== normalizedPageKey) throw new NotFoundException("装修模板不属于当前页面");
+    if (template.tenant?.id) {
+      if (this.isTenantScoped(admin) && template.tenant.id !== targetTenant?.id) throw new NotFoundException("装修模板不属于当前商家");
+    } else if (!this.isPlatformAdmin(admin)) {
+      throw new ForbiddenException("平台模板只能由平台超管删除");
+    }
+    await this.homepageDecorationTemplates.delete(id);
+    await this.logOperation(admin, "homepage.template.delete", "homepage_decoration_template", id, `删除前台装修模板：${template.name}`, { pageKey: normalizedPageKey, tenantId: template.tenant?.id || null });
+    return { id, deleted: true };
   }
 
   async createCategory(dto: CategoryDto, admin?: AdminContext) {
@@ -4566,6 +4677,68 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       return;
     }
     if (section.tenant?.id) throw new NotFoundException("Homepage section not found in global scope");
+  }
+
+  private async snapshotHomepageSections(targetTenant: Tenant | null, pageKey: string): Promise<HomepageDecorationSnapshotRow[]> {
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const builder = this.homepageSections.createQueryBuilder("section").where("section.pageKey = :pageKey", { pageKey: normalizedPageKey }).orderBy("section.sortOrder", "ASC").addOrderBy("section.id", "ASC");
+    if (targetTenant) builder.andWhere("section.tenantId = :tenantId", { tenantId: targetTenant.id });
+    else builder.andWhere("section.tenantId IS NULL");
+    const sections = await builder.getMany();
+    return this.normalizeHomepageSnapshotRows(sections.map((section) => ({
+      type: section.type,
+      title: section.title,
+      subtitle: section.subtitle,
+      enabled: section.enabled,
+      sortOrder: section.sortOrder,
+      config: section.config,
+      layout: section.layout
+    })));
+  }
+
+  private normalizeHomepageSnapshotRows(rows: any[]): HomepageDecorationSnapshotRow[] {
+    if (!Array.isArray(rows)) throw new BadRequestException("装修快照格式不正确");
+    return rows.map((row, index) => ({
+      type: this.normalizeHomepageType(row.type),
+      title: this.nullableText(row.title),
+      subtitle: this.nullableText(row.subtitle),
+      enabled: row.enabled !== false,
+      sortOrder: (index + 1) * 10,
+      config: this.normalizeJsonObject(row.config || {}, "config"),
+      layout: this.normalizeJsonObject(row.layout || {}, "layout")
+    }));
+  }
+
+  private assertHomepageDecorationScope(row: { tenant?: Tenant | null; pageKey?: string | null }, targetTenant: Tenant | null, pageKey: string, label: string) {
+    if ((row.pageKey || "home") !== normalizePageKey(pageKey)) throw new NotFoundException(`${label}不属于当前页面`);
+    if (targetTenant) {
+      if (row.tenant?.id !== targetTenant.id) throw new NotFoundException(`${label}不属于当前商家`);
+      return;
+    }
+    if (row.tenant?.id) throw new NotFoundException(`${label}不属于平台默认装修`);
+  }
+
+  private assertHomepageTemplateReadable(template: HomepageDecorationTemplate, targetTenant: Tenant | null, pageKey: string) {
+    if ((template.pageKey || "home") !== normalizePageKey(pageKey)) throw new NotFoundException("装修模板不属于当前页面");
+    if (!template.tenant?.id) return;
+    if (targetTenant?.id === template.tenant.id) return;
+    throw new NotFoundException("装修模板不属于当前商家");
+  }
+
+  private async replaceHomepageSectionsFromSnapshot(admin: AdminContext | undefined, targetTenant: Tenant | null, pageKey: string, rows: any[], action: string, summary: string, targetType: string, targetId: string | number | null) {
+    const normalizedPageKey = normalizePageKey(pageKey);
+    const snapshot = this.normalizeHomepageSnapshotRows(rows);
+    const saved = await this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(HomepageSection);
+      const deleteBuilder = repo.createQueryBuilder().delete().where("pageKey = :pageKey", { pageKey: normalizedPageKey });
+      if (targetTenant) deleteBuilder.andWhere("tenantId = :tenantId", { tenantId: targetTenant.id });
+      else deleteBuilder.andWhere("tenantId IS NULL");
+      await deleteBuilder.execute();
+      if (!snapshot.length) return [];
+      return repo.save(snapshot.map((row) => repo.create({ ...row, pageKey: normalizedPageKey, tenant: targetTenant })));
+    });
+    await this.logOperation(admin, action, targetType, targetId, summary, { pageKey: normalizedPageKey, tenantId: targetTenant?.id || null, sectionCount: saved.length });
+    return saved;
   }
 
   private async resolveAgentTenant(tenantId?: number | null, fallback?: Tenant | null, admin?: AdminContext) {

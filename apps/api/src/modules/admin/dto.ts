@@ -1185,6 +1185,35 @@ export class HomepageReorderDto {
   items!: HomepageReorderItemDto[];
 }
 
+export class HomepageDecorationVersionDto {
+  @IsOptional()
+  @IsString()
+  @Length(0, 120)
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 500)
+  note?: string;
+}
+
+export class HomepageDecorationTemplateDto {
+  @IsString()
+  @IsNotEmpty()
+  @Length(1, 120)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 60)
+  category?: string;
+
+  @IsOptional()
+  @IsString()
+  @Length(0, 500)
+  description?: string;
+}
+
 export class ReviewModerationDto {
   @IsString()
   status!: string;

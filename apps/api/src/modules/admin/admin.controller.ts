@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
@@ -633,6 +633,54 @@ export class AdminController {
   @Post("homepage/sections/reset-default")
   resetHomepageSections(@Query("tenantId") tenantId: string | undefined, @Query("pageKey") pageKey: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.resetHomepageSections(admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("homepage/versions")
+  homepageVersions(@Query("tenantId") tenantId?: string, @Query("pageKey") pageKey?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listHomepageDecorationVersions(admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("homepage/versions")
+  createHomepageVersion(@Body() dto: HomepageDecorationVersionDto, @Query("tenantId") tenantId: string | undefined, @Query("pageKey") pageKey: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createHomepageDecorationVersion(dto, admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("homepage/versions/:id/restore")
+  restoreHomepageVersion(@Param("id", ParseIntPipe) id: number, @Query("tenantId") tenantId: string | undefined, @Query("pageKey") pageKey: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.restoreHomepageDecorationVersion(id, admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Delete("homepage/versions/:id")
+  deleteHomepageVersion(@Param("id", ParseIntPipe) id: number, @Query("tenantId") tenantId: string | undefined, @Query("pageKey") pageKey: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.deleteHomepageDecorationVersion(id, admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("homepage/templates")
+  homepageTemplates(@Query("tenantId") tenantId?: string, @Query("pageKey") pageKey?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listHomepageDecorationTemplates(admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("homepage/templates")
+  createHomepageTemplate(@Body() dto: HomepageDecorationTemplateDto, @Query("tenantId") tenantId: string | undefined, @Query("pageKey") pageKey: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createHomepageDecorationTemplate(dto, admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("homepage/templates/:id/apply")
+  applyHomepageTemplate(@Param("id", ParseIntPipe) id: number, @Query("tenantId") tenantId: string | undefined, @Query("pageKey") pageKey: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.applyHomepageDecorationTemplate(id, admin, tenantId ? Number(tenantId) : undefined, pageKey);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Delete("homepage/templates/:id")
+  deleteHomepageTemplate(@Param("id", ParseIntPipe) id: number, @Query("tenantId") tenantId: string | undefined, @Query("pageKey") pageKey: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.deleteHomepageDecorationTemplate(id, admin, tenantId ? Number(tenantId) : undefined, pageKey);
   }
 
   @AdminRoles(...OPERATION_ROLES)
