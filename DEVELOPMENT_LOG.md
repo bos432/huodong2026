@@ -2,6 +2,33 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-25 - 营销弹窗商家角色权限补齐
+
+### 阶段名称
+
+试运营装修营销增强 - 演示商家运营角色营销弹窗权限补齐小阶段。
+
+### 本阶段完成内容
+
+- 线上角色只读登录验证发现：
+  - `showcase_admin`、`showcase_ops` 登录正常且拥有 `homepage.manage`。
+  - 两个运营账号缺少新增的 `marketing_popup.manage`，导致商家侧无法看到/进入营销弹窗菜单。
+  - `showcase_finance` 和 `showcase_checkin` 不应拥有营销弹窗权限，保持不变。
+- 修复 `scripts/seed-online-showcase.mjs` 的演示商家权限清单，新增 `marketing_popup.manage`，后续重跑 seed 会自动补齐运营角色。
+
+### 修改/新增的主要文件
+
+- `scripts/seed-online-showcase.mjs`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 线上只读登录接口验证：`showcase_admin`、`showcase_ops` 当前缺少 `marketing_popup.manage`，定位为历史账号权限数组未随新增权限自动回填。
+
+### 遗留问题
+
+- 服务器需要执行一次现有账号权限回填命令，给 `showcase_admin`、`showcase_ops` 增加 `marketing_popup.manage`。
+
 ## 2026-06-25 - 营销弹窗线上触发链路修复
 
 ### 阶段名称

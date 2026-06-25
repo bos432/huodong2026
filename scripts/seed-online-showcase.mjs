@@ -74,6 +74,7 @@ const permissions = [
   "notification.manage",
   "review.manage",
   "homepage.manage",
+  "marketing_popup.manage",
   "announcement.manage",
   "operation_settings.manage",
   "tenant_profile.manage",
