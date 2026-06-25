@@ -2,6 +2,44 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-25 - 后台装修优化提交与部署准备
+
+### 阶段名称
+
+试运营装修体验增强 - 后台静态包提交推送与线上发布命令准备小阶段。
+
+### 本阶段完成内容
+
+- 将后台装修 UI 模板预览、实时预览和吸顶检测改动提交到本地 Git。
+- 推送当前分支 `feature/qiwai-ui-experiment` 到远端 `origin`。
+- 尝试通过 SSH 直连 `rd.chaimen666.com` 进行线上部署，但当前本机没有服务器 SSH 免密授权，返回 `Permission denied`。
+- 确认本次只涉及后台前端静态资源和开发日志，不需要执行数据库 migration，不需要重启 API。
+- 准备宝塔终端部署命令：服务器拉取最新分支后，只需构建 `apps/admin` 并重载 Nginx。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-06-25 15:10 +08:00。
+- `git commit -m "feat: improve homepage builder live preview"`：通过，提交 `cfacd934`。
+- `git push origin feature/qiwai-ui-experiment`：通过。
+- SSH 探测：
+  - 首次连接因本机未记录 host key 失败。
+  - 使用 `StrictHostKeyChecking=accept-new` 接受新指纹后，服务器返回 `Permission denied (publickey,gssapi-keyex,gssapi-with-mic,password)`。
+- 当前本地工作区仅剩 `.local-logs/`、`.local-mariadb/` 本地运行目录未跟踪，未纳入提交。
+
+### 遗留问题
+
+- 由于本机没有服务器 SSH 免密授权，线上后台静态包需要用户在宝塔终端执行部署命令。
+- 部署后需要在右侧浏览器刷新线上 `/admin/homepage-builder?pageKey=home`，确认 UI 模板预览、实时预览和吸顶生效。
+
+### 下一阶段应继续处理的事项
+
+- 用户在服务器终端执行部署命令后，继续做线上后台装修页浏览器复验。
+- 如需我直接部署，需要先提供可用的 SSH 登录方式或在服务器侧配置本机公钥。
+
 ## 2026-06-25 - 后台装修 UI 模板预览与实时预览优化
 
 ### 阶段名称
