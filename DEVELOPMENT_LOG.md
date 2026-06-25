@@ -2,6 +2,40 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-25 - 广告中心提交推送完成
+
+### 阶段名称
+
+试运营商业化增强 - 广告中心代码提交与远端同步小阶段。
+
+### 本阶段完成内容
+
+- 暂存广告中心相关源码、migration、H5/小程序组件、后台页面和文档记录。
+- 明确排除本地测试目录 `.local-logs/`、`.local-mariadb/`，不提交本地数据库和运行日志。
+- 创建提交 `f8d77492 feat: add ad center monetization workflows`。
+- 推送当前分支 `feature/qiwai-ui-experiment` 到远端 `origin`。
+
+### 修改/新增的主要文件
+
+- 广告中心相关已在提交 `f8d77492` 中同步到远端。
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- `git diff --cached --check`：通过。
+- `git commit -m "feat: add ad center monetization workflows"`：通过，生成提交 `f8d77492`。
+- `git push origin feature/qiwai-ui-experiment`：通过，远端分支从 `e85b441a` 更新到 `f8d77492`。
+
+### 遗留问题
+
+- 服务器还没有拉取 `f8d77492`，线上广告中心表和静态资源尚未发布。
+- 推送后本地会继续保留 `.local-logs/`、`.local-mariadb/` 未跟踪目录，属于本地测试运行产物。
+
+### 下一阶段应继续处理的事项
+
+- 进入服务器部署命令准备与线上部署后验收小阶段。
+- 服务器部署必须先执行数据库备份和 `npm --prefix apps/api run migration:run`，再重启 API、构建后台/H5、小程序包和发布静态资源。
+
 ## 2026-06-25 - 广告中心交付文档与提交准备
 
 ### 阶段名称
