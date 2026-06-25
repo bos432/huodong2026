@@ -3086,13 +3086,26 @@ onMounted(async () => {
 .quick-row.my-tool-row { grid-template-columns: 70px 110px 1fr 130px 42px 34px; }
 .inner-page-row { display: grid; grid-template-columns: 110px 130px 1fr 120px 34px; gap: 8px; align-items: center; }
 @media (max-width: 1280px) {
-  .builder-layout { grid-template-columns: 220px minmax(420px, 1fr) minmax(340px, 0.9fr); }
-  .phone-preview { display: none; }
+  .builder-layout { grid-template-columns: 180px minmax(300px, 1fr) 240px; }
+  .module-palette { grid-column: 1; grid-row: 1 / span 2; }
+  .section-list { grid-column: 2; grid-row: 1 / span 2; }
+  .phone-preview { grid-column: 3; grid-row: 1; }
+  .builder-inspector { grid-column: 3; grid-row: 2; }
+  .phone-preview, .builder-inspector { top: 248px; max-height: calc(100vh - 264px); }
+  .phone-preview { display: grid; padding: 12px; }
+  .preview-panel-head { display: grid; gap: 8px; }
+  .preview-panel-head span { font-size: 11px; }
+  .preview-panel-actions { justify-content: flex-start; }
+  .phone-preview .phone-frame { width: 220px; height: clamp(320px, calc(100vh - 450px), 420px); border-width: 8px; border-radius: 24px; }
+  .phone-preview .phone-status { height: 22px; }
+  .phone-preview .preview-scroll { padding: 10px; }
   .drawer-live-preview { display: none; }
 }
 @media (max-width: 1024px) {
   .builder-layout { grid-template-columns: 1fr; }
-  .module-palette, .section-list, .builder-inspector { position: static; max-height: none; }
+  .module-palette, .section-list, .phone-preview, .builder-inspector { grid-column: auto; grid-row: auto; }
+  .module-palette, .section-list, .phone-preview, .builder-inspector { position: static; max-height: none; }
+  .phone-preview .phone-frame { width: min(292px, 100%); height: 520px; }
 }
 </style>
 
