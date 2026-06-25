@@ -407,6 +407,7 @@ const healthIssues = ref<HealthIssue[]>([]);
 const linkPickerVisible = ref(false);
 const crossCopyDialogVisible = ref(false);
 const uiKitDialogVisible = ref(false);
+const uiKitPreviewKey = ref(uiTemplateKits[0]?.key || "activity_ops");
 const uiKitApplyingKey = ref("");
 const crossCopySubmitting = ref(false);
 const crossCopyResult = ref("");
@@ -545,6 +546,8 @@ const healthSummary = computed(() => {
   if (warnings) return `${warnings} 个提醒`;
   return "通过";
 });
+const selectedUiTemplateKit = computed(() => uiTemplateKits.find((item) => item.key === uiKitPreviewKey.value) || uiTemplateKits[0]);
+const uiKitPreviewRows = computed(() => selectedUiTemplateKit.value ? templateRowsToPreviewRows(selectedUiTemplateKit.value.rows) : []);
 const linkPageGroups = computed(() => [...new Set(linkPageOptions.map((item) => item.group))]);
 const linkPickerPreviewValue = computed(() => {
   try {
@@ -1347,6 +1350,30 @@ function uiKitStyle(kit: UiTemplateKit) {
   return cloneJson(visualPresets.find((item) => item.key === kit.stylePresetKey)?.layout || {}) as Record<string, any>;
 }
 
+function templateRowsToPreviewRows(templateRows: TemplateRow[]) {
+  return withHomeGlobalRows(templateRows).map((row, index) => {
+    const config = { ...cloneJson(defaultConfig[row.type] || {}), ...cloneJson(row.config || {}) };
+    const layout = { ...cloneJson(defaultLayout[row.type] || {}), ...cloneJson(row.layout || {}) };
+    return previewRow(index, row.type, {
+      title: row.title === null ? null : row.title || typeLabel(row.type),
+      subtitle: row.subtitle || null,
+      enabled: row.enabled !== false,
+      sortOrder: (index + 1) * 10,
+      config,
+      layout
+    });
+  }).filter((row) => row.enabled);
+}
+
+function openUiKitDialog() {
+  uiKitPreviewKey.value = uiKitPreviewKey.value || selectedTemplateKey.value || uiTemplateKits[0]?.key || "activity_ops";
+  uiKitDialogVisible.value = true;
+}
+
+function previewUiTemplateKit(kit: UiTemplateKit) {
+  uiKitPreviewKey.value = kit.key;
+}
+
 async function applyUiTemplateKit(kit: UiTemplateKit) {
   await ElMessageBox.confirm(`应用「${kit.label}」会替换当前页面模块。建议先点“保存版本”保留当前装修，确认继续？`, "应用 UI 模板套装", { type: "warning" });
   uiKitApplyingKey.value = kit.key;
@@ -1842,7 +1869,7 @@ onMounted(async () => {
           <el-option v-for="item in decorationTemplates" :key="item.key" :label="item.label" :value="item.key" />
         </el-select>
         <el-button v-if="canEdit" type="success" @click="applyTemplate">应用模板</el-button>
-        <el-button v-if="canEdit" type="warning" plain @click="uiKitDialogVisible = true">UI 模板套装</el-button>
+        <el-button v-if="canEdit" type="warning" plain @click="openUiKitDialog">UI 模板套装</el-button>
         <el-button v-if="canEdit" type="primary" plain :loading="versionSaving" @click="saveVersion">保存版本</el-button>
         <el-button v-if="canEdit" @click="openVersionHistory">版本历史</el-button>
         <el-button v-if="canEdit" type="success" plain @click="saveCurrentAsTemplate">保存为模板</el-button>
@@ -1867,34 +1894,102 @@ onMounted(async () => {
 
     <div v-if="scopeTip" class="scope-tip" :class="{ muted: isPlatformAdmin() && filters.tenantId }">{{ scopeTip }}</div>
 
-    <el-dialog v-model="uiKitDialogVisible" title="UI 模板套装" width="980px" destroy-on-close>
-      <div class="ui-kit-grid">
-        <article v-for="kit in uiTemplateKits" :key="kit.key" class="ui-kit-card" :class="{ featured: kit.key === 'wuxing_gold_business' }">
-          <div class="ui-kit-preview" :style="{ background: `linear-gradient(135deg, ${kit.palette[0]} 0%, ${kit.palette[1] || kit.palette[0]} 100%)` }">
-            <div class="ui-kit-phone-card" :style="{ background: kit.palette[2] || '#fff', color: kit.palette[4] || kit.palette[0] }">
-              <strong>{{ kit.label }}</strong>
-              <span>{{ kit.scene }}</span>
-              <div class="ui-kit-mini-grid">
-                <i v-for="color in kit.palette.slice(0, 4)" :key="color" :style="{ background: color }"></i>
+    <el-dialog v-model="uiKitDialogVisible" title="UI 模板套装" width="1180px" destroy-on-close>
+      <div class="ui-kit-dialog-body">
+        <div class="ui-kit-grid">
+          <article
+            v-for="kit in uiTemplateKits"
+            :key="kit.key"
+            class="ui-kit-card"
+            :class="{ featured: kit.key === 'wuxing_gold_business', active: selectedUiTemplateKit?.key === kit.key }"
+            @click="previewUiTemplateKit(kit)"
+          >
+            <div class="ui-kit-preview" :style="{ background: `linear-gradient(135deg, ${kit.palette[0]} 0%, ${kit.palette[1] || kit.palette[0]} 100%)` }">
+              <div class="ui-kit-phone-card" :style="{ background: kit.palette[2] || '#fff', color: kit.palette[4] || kit.palette[0] }">
+                <strong>{{ kit.label }}</strong>
+                <span>{{ kit.scene }}</span>
+                <div class="ui-kit-mini-grid">
+                  <i v-for="color in kit.palette.slice(0, 4)" :key="color" :style="{ background: color }"></i>
+                </div>
+              </div>
+            </div>
+            <div class="ui-kit-body">
+              <div class="ui-kit-title-row">
+                <strong>{{ kit.label }}</strong>
+                <el-tag size="small" :type="kit.key === 'wuxing_gold_business' ? 'warning' : 'info'">{{ kit.category }}</el-tag>
+              </div>
+              <p>{{ kit.description }}</p>
+              <div class="ui-kit-palette">
+                <span v-for="color in kit.palette" :key="color" :style="{ background: color }" :title="color"></span>
+              </div>
+              <div class="ui-kit-meta">{{ kit.rows.length }} 个模块 · {{ kit.scene }}</div>
+              <div class="ui-kit-actions">
+                <el-button size="small" plain @click.stop="previewUiTemplateKit(kit)">预览</el-button>
+                <el-button size="small" type="primary" :loading="uiKitApplyingKey === kit.key" @click.stop="applyUiTemplateKit(kit)">应用整套模板</el-button>
+                <el-button size="small" plain :loading="uiKitApplyingKey === `${kit.key}:style`" @click.stop="applyUiTemplateStyle(kit)">只套视觉风格</el-button>
+              </div>
+            </div>
+          </article>
+        </div>
+        <aside class="ui-kit-live-preview">
+          <div class="ui-kit-live-preview-head">
+            <div>
+              <strong>{{ selectedUiTemplateKit?.label || "模板预览" }}</strong>
+              <span>{{ selectedUiTemplateKit?.scene || "点击模板卡片或预览按钮切换" }}</span>
+            </div>
+            <el-tag size="small" type="warning" effect="plain">实时预览</el-tag>
+          </div>
+          <div class="phone-frame ui-kit-phone-frame">
+            <div class="phone-status"></div>
+            <div class="preview-scroll">
+              <div v-for="row in uiKitPreviewRows" :key="row.id" class="preview-row-shell fallback" :class="{ focused: row.id === uiKitPreviewRows[0]?.id }">
+                <div v-if="row.type === 'search_bar'" class="preview-search">
+                  <span>{{ (row.config as any).cityLabel || "本地" }}</span>
+                  <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
+                </div>
+                <div v-else-if="row.type === 'hero'" class="preview-hero" :style="previewHeroStyle(row)">
+                  <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "慢π活动运营" }}</small>
+                  <h4 :style="{ opacity: clampPercent((row.config as any).titleOpacity, 100) / 100 }">{{ row.title }}</h4>
+                  <p :style="{ opacity: clampPercent((row.config as any).subtitleOpacity, 86) / 100 }">{{ row.subtitle }}</p>
+                  <div v-if="(row.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (row.config as any).buttonOpacity, 18) }">{{ (row.config as any).primaryButtonText }}</div>
+                  <div v-if="(row.config as any).showStats !== false" class="preview-hero-stats">
+                    <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">9<br />报名中</span>
+                    <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">10<br />全部活动</span>
+                  </div>
+                </div>
+                <div v-else-if="row.type === 'quick_nav'" class="preview-grid">
+                  <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+                </div>
+                <div v-else-if="row.type === 'image_banner'" class="preview-banner">
+                  <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
+                  <span v-else>图片 Banner</span>
+                </div>
+                <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav" :style="{ '--preview-nav-count': previewNavCount(row) }">
+                  <span v-for="item in enabledNavItems(row)" :key="item.label">
+                    <b>{{ item.icon || item.label?.slice(0, 1) }}</b>{{ item.label }}
+                  </span>
+                </div>
+                <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
+                  <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
+                  <span v-for="item in ((row.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
+                </div>
+                <div v-else-if="row.type === 'inner_pages'" class="preview-inner-pages">
+                  <strong>{{ row.title || "内页布局" }}</strong>
+                  <span v-for="item in ((row.config as any).pages || []).slice(0, 4)" :key="item.key">{{ item.title }}</span>
+                </div>
+                <div v-else class="preview-section" :style="previewSectionStyle(row)">
+                  <strong>{{ row.title || typeLabel(row.type) }}</strong>
+                  <span>{{ typeLabel(row.type) }}</span>
+                </div>
               </div>
             </div>
           </div>
-          <div class="ui-kit-body">
-            <div class="ui-kit-title-row">
-              <strong>{{ kit.label }}</strong>
-              <el-tag size="small" :type="kit.key === 'wuxing_gold_business' ? 'warning' : 'info'">{{ kit.category }}</el-tag>
-            </div>
-            <p>{{ kit.description }}</p>
-            <div class="ui-kit-palette">
-              <span v-for="color in kit.palette" :key="color" :style="{ background: color }" :title="color"></span>
-            </div>
-            <div class="ui-kit-meta">{{ kit.rows.length }} 个模块 · {{ kit.scene }}</div>
-            <div class="ui-kit-actions">
-              <el-button size="small" type="primary" :loading="uiKitApplyingKey === kit.key" @click="applyUiTemplateKit(kit)">应用整套模板</el-button>
-              <el-button size="small" plain :loading="uiKitApplyingKey === `${kit.key}:style`" @click="applyUiTemplateStyle(kit)">只套视觉风格</el-button>
-            </div>
-          </div>
-        </article>
+          <el-alert type="warning" :closable="false" show-icon title="这里是实时模板预览，不会保存数据。可先切换模板查看整体排版，再决定是否应用。">
+            <template #default>
+              <div class="ui-kit-preview-note">选中的模板仅用于预览；点击“应用整套模板”才会替换当前页面模块。</div>
+            </template>
+          </el-alert>
+        </aside>
       </div>
       <template #footer>
         <el-alert type="warning" show-icon :closable="false" title="应用整套模板会替换当前页面模块；正式页面建议先保存版本。只套视觉风格不会改变当前模块顺序和内容。" />
@@ -2192,6 +2287,16 @@ onMounted(async () => {
       </main>
 
       <aside class="phone-preview">
+        <div class="preview-panel-head">
+          <div>
+            <strong>实时预览</strong>
+            <span>编辑时同步更新，往下滚动也能一直看到当前布局。</span>
+          </div>
+          <div class="preview-panel-actions">
+            <el-button size="small" type="warning" plain @click="runHealthCheck">生效检测</el-button>
+            <el-button size="small" :icon="View" @click="openCurrentPreview">已保存H5</el-button>
+          </div>
+        </div>
         <div v-if="hasDefaultPreviewFallback" class="preview-fallback-tip">当前页面还没有保存模块，下面展示默认装修效果。</div>
         <div class="phone-frame">
           <div class="phone-status"></div>
@@ -2807,7 +2912,7 @@ onMounted(async () => {
 
 <style scoped>
 .builder-page { padding: 20px; }
-.builder-toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.builder-toolbar { position: sticky; top: 0; z-index: 30; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin: 0 -20px 16px; padding: 16px 20px 14px; border-bottom: 1px solid #e5e7eb; background: rgba(245, 247, 251, 0.96); backdrop-filter: blur(10px); }
 .builder-toolbar h2 { margin: 0; font-size: 22px; }
 .builder-toolbar p { margin: 6px 0 0; color: #667085; }
 .toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
@@ -2826,9 +2931,11 @@ onMounted(async () => {
 .builder-help-grid strong { color: #0f766e; }
 .builder-help-grid span { color: #475569; font-size: 13px; }
 .builder-help-warning { padding: 12px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; }
-.ui-kit-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; }
-.ui-kit-card { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.ui-kit-dialog-body { display: grid; grid-template-columns: minmax(0, 1.05fr) 360px; gap: 16px; align-items: start; }
+.ui-kit-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; max-height: min(68vh, 760px); overflow: auto; padding-right: 4px; }
+.ui-kit-card { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; cursor: pointer; transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.15s ease; }
 .ui-kit-card.featured { border-color: #f1c76a; box-shadow: 0 14px 34px rgba(154, 106, 36, 0.12); }
+.ui-kit-card.active { border-color: #0f766e; box-shadow: 0 16px 38px rgba(15, 118, 110, 0.15); transform: translateY(-1px); }
 .ui-kit-preview { height: 150px; display: grid; place-items: center; padding: 16px; }
 .ui-kit-phone-card { width: 78%; min-height: 92px; display: grid; align-content: center; gap: 8px; padding: 14px; border-radius: 16px; box-shadow: 0 16px 36px rgba(15, 23, 42, 0.16); }
 .ui-kit-phone-card strong { font-size: 16px; }
@@ -2843,6 +2950,16 @@ onMounted(async () => {
 .ui-kit-palette span { width: 22px; height: 22px; border-radius: 999px; border: 1px solid rgba(15, 23, 42, 0.1); }
 .ui-kit-meta { color: #667085; font-size: 12px; }
 .ui-kit-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.ui-kit-live-preview { position: sticky; top: 0; display: grid; gap: 12px; align-self: start; }
+.ui-kit-live-preview-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; }
+.ui-kit-live-preview-head strong { display: block; color: #7c2d12; font-size: 14px; }
+.ui-kit-live-preview-head span { display: block; margin-top: 4px; color: #9a3412; font-size: 12px; line-height: 1.5; }
+.ui-kit-phone-frame { width: 100%; }
+.ui-kit-phone-frame .phone-status { border-radius: 20px 20px 0 0; }
+.ui-kit-phone-frame .preview-scroll { height: clamp(420px, calc(68vh - 92px), 560px); overflow-y: auto; scrollbar-width: thin; overscroll-behavior: contain; }
+.ui-kit-phone-frame .preview-scroll::-webkit-scrollbar { width: 6px; }
+.ui-kit-phone-frame .preview-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(100, 116, 139, 0.42); }
+.ui-kit-preview-note { margin-top: 8px; color: #9a3412; font-size: 12px; line-height: 1.55; }
 .cross-copy-dialog { display: grid; gap: 16px; }
 .cross-copy-form { display: grid; gap: 6px; }
 .cross-copy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
@@ -2865,10 +2982,17 @@ onMounted(async () => {
 .section-main p { margin: 6px 0 0; color: #667085; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-actions { display: flex; gap: 6px; align-items: center; }
 .empty { padding: 40px 0; color: #98a2b3; text-align: center; }
-.phone-preview, .builder-inspector { position: sticky; top: 20px; }
-.phone-frame { width: 292px; height: 600px; margin: 0 auto; border: 10px solid #111827; border-radius: 30px; background: #f4f6f8; overflow: hidden; }
+.phone-preview, .builder-inspector { position: sticky; top: 112px; }
+.phone-preview { display: grid; gap: 12px; max-height: calc(100vh - 128px); overflow: auto; }
+.preview-panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 4px 2px 0; }
+.preview-panel-head strong { display: block; color: #111827; font-size: 15px; }
+.preview-panel-head span { display: block; margin-top: 4px; color: #667085; font-size: 12px; line-height: 1.5; }
+.preview-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
+.phone-frame { width: 292px; height: clamp(500px, calc(100vh - 320px), 620px); margin: 0 auto; border: 10px solid #111827; border-radius: 30px; background: #f4f6f8; overflow: hidden; display: flex; flex-direction: column; }
 .phone-status { height: 28px; background: #111827; }
-.preview-scroll { height: 552px; overflow: hidden; padding: 12px; }
+.preview-scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 12px; scrollbar-width: thin; overscroll-behavior: contain; }
+.preview-scroll::-webkit-scrollbar { width: 6px; }
+.preview-scroll::-webkit-scrollbar-thumb { border-radius: 999px; background: rgba(148, 163, 184, 0.55); }
 .preview-fallback-tip { margin: 0 0 10px; padding: 8px 10px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; color: #9a3412; font-size: 12px; font-weight: 800; }
 .preview-row-shell { position: relative; border: 2px solid transparent; border-radius: 12px; margin: -2px -2px 8px; padding: 2px; }
 .preview-row-shell:not(.fallback) { cursor: pointer; }
@@ -2900,7 +3024,7 @@ onMounted(async () => {
 .preview-inner-pages span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: #f3f4f6; color: #475467; font-size: 12px; }
 .upload-line { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .visual-preset-list { display: flex; flex-wrap: wrap; gap: 8px; }
-.builder-inspector { max-height: calc(100vh - 40px); overflow: auto; }
+.builder-inspector { max-height: calc(100vh - 128px); overflow: auto; }
 .inspector-empty { min-height: 360px; display: grid; align-content: center; justify-items: start; gap: 12px; color: #667085; }
 .inspector-empty h3 { margin: 0; color: #111827; }
 .inspector-empty p { margin: 0; line-height: 1.6; }

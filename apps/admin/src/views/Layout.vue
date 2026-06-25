@@ -551,7 +551,7 @@ watch(
           <el-button :icon="SwitchButton" @click="logout">退出</el-button>
         </div>
       </el-header>
-      <el-main><router-view /></el-main>
+      <el-main :class="{ 'homepage-builder-main': route.path === '/homepage-builder' }"><router-view /></el-main>
     </el-container>
   </el-container>
 
@@ -594,6 +594,7 @@ watch(
 .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .tenant-switcher { display: flex; align-items: center; gap: 8px; color: #475569; font-size: 12px; }
 .tenant-switcher .el-select { width: 220px; }
+.homepage-builder-main { overflow: visible; }
 .el-menu { border-right: 0; }
 :deep(.el-sub-menu__title) { height: 46px; color: #b7c2d6; font-weight: 700; }
 :deep(.el-sub-menu__title:hover), :deep(.el-menu-item:hover) { background-color: #1e2b43; }
