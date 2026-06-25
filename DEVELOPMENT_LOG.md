@@ -2,6 +2,38 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-25 - 广告中心服务器部署命令准备
+
+### 阶段名称
+
+试运营商业化增强 - 广告中心线上部署命令与发布顺序准备小阶段。
+
+### 本阶段完成内容
+
+- 重新读取最新 `DEVELOPMENT_LOG.md` 和 `docs/线上部署结构与发布说明.md`，确认线上为宝塔 + Nginx + PM2 直出部署。
+- 确认远端分支 `feature/qiwai-ui-experiment` 最新提交为 `e5734d7f`，包含广告中心实现和日志补记。
+- 整理服务器部署顺序：拉取代码、导出生产数据库环境变量、执行 API migration、构建 API、重启 PM2、构建 Admin/H5、发布 webroot、重载 Nginx、等待 API ready。
+- 明确小程序上传前还需要单独执行 `build:mp-weixin`，并使用 `VITE_API_BASE=https://rd.chaimen666.com/api`、`VITE_DEFAULT_TENANT_CODE=qiwai-showcase`。
+
+### 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- `git rev-parse --short HEAD`：`e5734d7f`。
+- `git status --short`：仅剩 `.local-logs/`、`.local-mariadb/` 本地未跟踪目录。
+
+### 遗留问题
+
+- 我当前没有服务器交互 shell，不能直接替用户在 `/www/wwwroot/rd.chaimen666.com` 执行部署命令。
+- 线上右侧浏览器仍是部署前状态，广告中心线上全流程验收需要服务器执行部署命令后继续。
+
+### 下一阶段应继续处理的事项
+
+- 用户在服务器终端执行本次部署命令后，继续右侧浏览器线上验收广告中心和多角色权限。
+- 如部署时 migration、构建、PM2 或 Nginx reload 报错，按报错继续排查并记录新小阶段。
+
 ## 2026-06-25 - 广告中心提交推送完成
 
 ### 阶段名称
