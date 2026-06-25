@@ -1,5 +1,6 @@
 <template>
   <view class="detail-page">
+    <SplashAd />
     <image v-if="product.coverUrl" class="hero-img" :src="product.coverUrl" mode="aspectFill" />
     <view v-else class="hero-img placeholder">慢π严选</view>
     <view class="card">
@@ -25,6 +26,9 @@
       <text class="desc">{{ product.description || "暂无详情说明" }}</text>
       <view class="note">配送：{{ product.deliveryNote || "默认快递发货" }}</view>
       <view class="note">售后：{{ product.afterSaleNote || "未发货可申请退款" }}</view>
+    </view>
+    <view class="detail-ad-wrap">
+      <AdSlotRenderer slot-key="mall_product_detail_middle" page-key="mall_product_detail" />
     </view>
     <view v-if="currentFlashSale" class="card flash-card">
       <view class="section-head">
@@ -107,6 +111,8 @@
 import { computed, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
+import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
+import SplashAd from "../../components/SplashAd.vue";
 
 const product = ref<any>({});
 const skuId = ref(0);
@@ -236,6 +242,7 @@ onLoad((query) => load(Number(query?.id || 0)));
 
 <style scoped>
 .detail-page { min-height:100vh; background:#f8fafc; padding-bottom:130rpx; }
+.detail-ad-wrap { margin: 0 24rpx 24rpx; }
 .hero-img { width:100%; height:560rpx; background:#fed7aa; display:grid; place-items:center; color:#9a3412; font-weight:900; }
 .card { margin: -34rpx 24rpx 24rpx; background:#fff; border-radius:32rpx; padding:30rpx; position:relative; box-shadow:0 16rpx 40rpx rgba(15,23,42,.08); }
 .top-row { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-bottom:14rpx; }

@@ -37,6 +37,13 @@ import { HomepageDecorationTemplate } from "../../entities/homepage-decoration-t
 import { HomepageDecorationVersion, HomepageDecorationSnapshotRow } from "../../entities/homepage-decoration-version.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MarketingPopup } from "../../entities/marketing-popup.entity";
+import { AdAdvertiser } from "../../entities/ad-advertiser.entity";
+import { AdCampaign } from "../../entities/ad-campaign.entity";
+import { AdContract } from "../../entities/ad-contract.entity";
+import { AdDailyStat } from "../../entities/ad-daily-stat.entity";
+import { AdOfficialRevenueImport } from "../../entities/ad-official-revenue-import.entity";
+import { AdSettlementItem } from "../../entities/ad-settlement-item.entity";
+import { AdSettlement } from "../../entities/ad-settlement.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
@@ -65,7 +72,7 @@ import { applyTenantScopeToQuery, assertTenantAccessForActor, isTenantScopedActo
 import { AdminRole, normalizeAdminRole } from "./admin-roles";
 import { defaultPermissionsForRole, effectivePermissionsForAdmin, normalizeAdminPermissions } from "./admin-permissions";
 import { defaultHomepageSections, HOMEPAGE_SECTION_TYPES, isPlainJsonObject, normalizePageKey } from "../homepage-defaults";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdAdvertiserDto, AdCampaignDto, AdContractDto, AdOfficialRevenueImportDto, AdSettlementGenerateDto, AdSettlementStatusDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderItemDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, PaymentStatementImportItemDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { financeDailyReport, financeRiskAlerts } from "./finance-operations";
 import { tenantOperationHealth } from "./tenant-health";
 import { tenantRegionShapesConflict } from "./tenant-region-geometry";
@@ -146,6 +153,13 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(HomepageDecorationVersion) private readonly homepageDecorationVersions: Repository<HomepageDecorationVersion>,
     @InjectRepository(HomepageDecorationTemplate) private readonly homepageDecorationTemplates: Repository<HomepageDecorationTemplate>,
     @InjectRepository(MarketingPopup) private readonly marketingPopups: Repository<MarketingPopup>,
+    @InjectRepository(AdAdvertiser) private readonly adAdvertisers: Repository<AdAdvertiser>,
+    @InjectRepository(AdContract) private readonly adContracts: Repository<AdContract>,
+    @InjectRepository(AdCampaign) private readonly adCampaigns: Repository<AdCampaign>,
+    @InjectRepository(AdDailyStat) private readonly adDailyStats: Repository<AdDailyStat>,
+    @InjectRepository(AdSettlement) private readonly adSettlements: Repository<AdSettlement>,
+    @InjectRepository(AdSettlementItem) private readonly adSettlementItems: Repository<AdSettlementItem>,
+    @InjectRepository(AdOfficialRevenueImport) private readonly adOfficialRevenueImports: Repository<AdOfficialRevenueImport>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(UserWallet) private readonly userWallets: Repository<UserWallet>,
@@ -1778,6 +1792,267 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     await this.marketingPopups.delete(id);
     await this.logOperation(this.operationActorForTenant(admin, row.tenant), "marketing_popup.delete", "marketing_popup", id, `删除营销弹窗：${row.title}`, { tenantId: row.tenant?.id || null, type: row.type });
     return { id, deleted: true };
+  }
+
+  async listAdAdvertisers(admin?: AdminContext, query: { tenantId?: number; keyword?: string; status?: string } = {}) {
+    const builder = this.adAdvertisers.createQueryBuilder("advertiser").leftJoinAndSelect("advertiser.tenant", "tenant").orderBy("advertiser.updatedAt", "DESC").addOrderBy("advertiser.id", "DESC").take(500);
+    this.applyTenantScope(builder, "advertiser", admin);
+    if (!this.isTenantScoped(admin) && query.tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
+    if (query.status) builder.andWhere("advertiser.status = :status", { status: query.status });
+    if (query.keyword?.trim()) {
+      const keyword = `%${query.keyword.trim()}%`;
+      builder.andWhere("(advertiser.companyName LIKE :keyword OR advertiser.contactName LIKE :keyword OR advertiser.contactPhone LIKE :keyword OR advertiser.wechat LIKE :keyword)", { keyword });
+    }
+    return builder.getMany();
+  }
+
+  async createAdAdvertiser(dto: AdAdvertiserDto, admin?: AdminContext) {
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, undefined, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const saved = await this.adAdvertisers.save(this.adAdvertisers.create({ tenant, ...this.adAdvertiserPayload(dto) }));
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.advertiser.create", "ad_advertiser", saved.id, `创建广告主：${saved.companyName}`, { tenantId: saved.tenant?.id || null, status: saved.status });
+    return saved;
+  }
+
+  async updateAdAdvertiser(id: number, dto: AdAdvertiserDto, admin?: AdminContext) {
+    const row = await this.adAdvertisers.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告主不存在");
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, row.tenant, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    Object.assign(row, { tenant, ...this.adAdvertiserPayload(dto) });
+    const saved = await this.adAdvertisers.save(row);
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.advertiser.update", "ad_advertiser", saved.id, `更新广告主：${saved.companyName}`, { tenantId: saved.tenant?.id || null, status: saved.status });
+    return saved;
+  }
+
+  async deleteAdAdvertiser(id: number, admin?: AdminContext) {
+    const row = await this.adAdvertisers.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告主不存在");
+    this.assertTenantSubscriptionWritable(row.tenant, admin);
+    await this.adAdvertisers.delete(id);
+    await this.logOperation(this.operationActorForTenant(admin, row.tenant), "ad.advertiser.delete", "ad_advertiser", id, `删除广告主：${row.companyName}`, { tenantId: row.tenant?.id || null });
+    return { id, deleted: true };
+  }
+
+  async listAdContracts(admin?: AdminContext, query: { tenantId?: number; advertiserId?: number; keyword?: string; status?: string } = {}) {
+    const builder = this.adContracts.createQueryBuilder("contract").leftJoinAndSelect("contract.tenant", "tenant").leftJoinAndSelect("contract.advertiser", "advertiser").orderBy("contract.updatedAt", "DESC").addOrderBy("contract.id", "DESC").take(500);
+    this.applyTenantScope(builder, "contract", admin);
+    if (!this.isTenantScoped(admin) && query.tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
+    if (query.advertiserId) builder.andWhere("advertiser.id = :advertiserId", { advertiserId: query.advertiserId });
+    if (query.status) builder.andWhere("contract.status = :status", { status: query.status });
+    if (query.keyword?.trim()) {
+      const keyword = `%${query.keyword.trim()}%`;
+      builder.andWhere("(contract.contractNo LIKE :keyword OR contract.title LIKE :keyword OR advertiser.companyName LIKE :keyword)", { keyword });
+    }
+    return builder.getMany();
+  }
+
+  async createAdContract(dto: AdContractDto, admin?: AdminContext) {
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, undefined, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const advertiser = await this.resolveAdAdvertiser(dto.advertiserId, tenant, admin);
+    const saved = await this.adContracts.save(this.adContracts.create({ tenant, advertiser, ...this.adContractPayload(dto) }));
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.contract.create", "ad_contract", saved.id, `创建广告合同：${saved.contractNo}`, { tenantId: saved.tenant?.id || null, billingModel: saved.billingModel, amount: saved.amount });
+    return saved;
+  }
+
+  async updateAdContract(id: number, dto: AdContractDto, admin?: AdminContext) {
+    const row = await this.adContracts.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告合同不存在");
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, row.tenant, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const advertiser = await this.resolveAdAdvertiser(dto.advertiserId, tenant, admin);
+    Object.assign(row, { tenant, advertiser, ...this.adContractPayload(dto) });
+    const saved = await this.adContracts.save(row);
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.contract.update", "ad_contract", saved.id, `更新广告合同：${saved.contractNo}`, { tenantId: saved.tenant?.id || null, billingModel: saved.billingModel, amount: saved.amount });
+    return saved;
+  }
+
+  async deleteAdContract(id: number, admin?: AdminContext) {
+    const row = await this.adContracts.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告合同不存在");
+    this.assertTenantSubscriptionWritable(row.tenant, admin);
+    await this.adContracts.delete(id);
+    await this.logOperation(this.operationActorForTenant(admin, row.tenant), "ad.contract.delete", "ad_contract", id, `删除广告合同：${row.contractNo}`, { tenantId: row.tenant?.id || null });
+    return { id, deleted: true };
+  }
+
+  async listAdCampaigns(admin?: AdminContext, query: { tenantId?: number; advertiserId?: number; contractId?: number; keyword?: string; enabled?: string; source?: string; slotKey?: string } = {}) {
+    const builder = this.adCampaigns.createQueryBuilder("campaign").leftJoinAndSelect("campaign.tenant", "tenant").leftJoinAndSelect("campaign.advertiser", "advertiser").leftJoinAndSelect("campaign.contract", "contract").orderBy("campaign.priority", "DESC").addOrderBy("campaign.updatedAt", "DESC").addOrderBy("campaign.id", "DESC").take(500);
+    this.applyTenantScope(builder, "campaign", admin);
+    if (!this.isTenantScoped(admin) && query.tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
+    if (query.advertiserId) builder.andWhere("advertiser.id = :advertiserId", { advertiserId: query.advertiserId });
+    if (query.contractId) builder.andWhere("contract.id = :contractId", { contractId: query.contractId });
+    if (query.enabled === "true" || query.enabled === "false") builder.andWhere("campaign.enabled = :enabled", { enabled: query.enabled === "true" });
+    if (query.source) builder.andWhere("campaign.source = :source", { source: query.source });
+    if (query.slotKey) builder.andWhere("campaign.slotKey = :slotKey", { slotKey: query.slotKey });
+    if (query.keyword?.trim()) {
+      const keyword = `%${query.keyword.trim()}%`;
+      builder.andWhere("(campaign.name LIKE :keyword OR campaign.title LIKE :keyword OR campaign.subtitle LIKE :keyword OR advertiser.companyName LIKE :keyword OR contract.contractNo LIKE :keyword)", { keyword });
+    }
+    return builder.getMany();
+  }
+
+  async createAdCampaign(dto: AdCampaignDto, admin?: AdminContext) {
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, undefined, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const advertiser = await this.resolveAdAdvertiser(dto.advertiserId, tenant, admin);
+    const contract = await this.resolveAdContract(dto.contractId, tenant, admin);
+    const saved = await this.adCampaigns.save(this.adCampaigns.create({ tenant, advertiser, contract, ...this.adCampaignPayload(dto) }));
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.campaign.create", "ad_campaign", saved.id, `创建广告计划：${saved.name}`, { tenantId: saved.tenant?.id || null, source: saved.source, format: saved.format, slotKey: saved.slotKey });
+    return saved;
+  }
+
+  async updateAdCampaign(id: number, dto: AdCampaignDto, admin?: AdminContext) {
+    const row = await this.adCampaigns.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告计划不存在");
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, row.tenant, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const advertiser = await this.resolveAdAdvertiser(dto.advertiserId, tenant, admin);
+    const contract = await this.resolveAdContract(dto.contractId, tenant, admin);
+    Object.assign(row, { tenant, advertiser, contract, ...this.adCampaignPayload(dto) });
+    const saved = await this.adCampaigns.save(row);
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.campaign.update", "ad_campaign", saved.id, `更新广告计划：${saved.name}`, { tenantId: saved.tenant?.id || null, source: saved.source, format: saved.format, slotKey: saved.slotKey, enabled: saved.enabled });
+    return saved;
+  }
+
+  async deleteAdCampaign(id: number, admin?: AdminContext) {
+    const row = await this.adCampaigns.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告计划不存在");
+    this.assertTenantSubscriptionWritable(row.tenant, admin);
+    await this.adCampaigns.delete(id);
+    await this.logOperation(this.operationActorForTenant(admin, row.tenant), "ad.campaign.delete", "ad_campaign", id, `删除广告计划：${row.name}`, { tenantId: row.tenant?.id || null, source: row.source, slotKey: row.slotKey });
+    return { id, deleted: true };
+  }
+
+  async adCampaignSummary(admin?: AdminContext, query: { tenantId?: number; startDate?: string; endDate?: string } = {}) {
+    const statsBuilder = this.adDailyStats.createQueryBuilder("stat").leftJoinAndSelect("stat.tenant", "tenant").leftJoinAndSelect("stat.advertiser", "advertiser").leftJoinAndSelect("stat.campaign", "campaign");
+    this.applyTenantScope(statsBuilder, "stat", admin);
+    if (!this.isTenantScoped(admin) && query.tenantId) statsBuilder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
+    if (query.startDate) statsBuilder.andWhere("stat.statDate >= :startDate", { startDate: query.startDate });
+    if (query.endDate) statsBuilder.andWhere("stat.statDate <= :endDate", { endDate: query.endDate });
+    const stats = await statsBuilder.getMany();
+    const officialBuilder = this.adOfficialRevenueImports.createQueryBuilder("revenue").leftJoinAndSelect("revenue.tenant", "tenant");
+    this.applyTenantScope(officialBuilder, "revenue", admin);
+    if (!this.isTenantScoped(admin) && query.tenantId) officialBuilder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
+    if (query.startDate) officialBuilder.andWhere("revenue.importDate >= :startDate", { startDate: query.startDate });
+    if (query.endDate) officialBuilder.andWhere("revenue.importDate <= :endDate", { endDate: query.endDate });
+    const officialRows = await officialBuilder.getMany();
+    const totals = this.adStatsTotals(stats);
+    const officialRevenue = officialRows.reduce((sum, row) => sum + this.money(row.revenueAmount), 0);
+    const byAdvertiser = new Map<string, { advertiserName: string; impressions: number; clicks: number; amount: number }>();
+    for (const row of stats) {
+      const key = row.advertiser?.id ? String(row.advertiser.id) : "none";
+      const current = byAdvertiser.get(key) || { advertiserName: row.advertiser?.companyName || "未绑定广告主", impressions: 0, clicks: 0, amount: 0 };
+      current.impressions += row.impressionCount || 0;
+      current.clicks += row.clickCount || 0;
+      current.amount += this.money(row.spentAmount);
+      byAdvertiser.set(key, current);
+    }
+    return {
+      totals: {
+        ...totals,
+        officialRevenue: this.roundMoney(officialRevenue),
+        totalRevenue: this.roundMoney(totals.amount + officialRevenue),
+        ctr: totals.impressions ? Number(((totals.clicks / totals.impressions) * 100).toFixed(2)) : 0
+      },
+      byAdvertiser: Array.from(byAdvertiser.values()).sort((a, b) => b.amount - a.amount),
+      officialRevenueImports: officialRows.slice(0, 30)
+    };
+  }
+
+  async listAdSettlements(admin?: AdminContext, query: { tenantId?: number; contractId?: number; advertiserId?: number; status?: string } = {}) {
+    const builder = this.adSettlements.createQueryBuilder("settlement").leftJoinAndSelect("settlement.tenant", "tenant").leftJoinAndSelect("settlement.advertiser", "advertiser").leftJoinAndSelect("settlement.contract", "contract").orderBy("settlement.createdAt", "DESC").addOrderBy("settlement.id", "DESC").take(300);
+    this.applyTenantScope(builder, "settlement", admin);
+    if (!this.isTenantScoped(admin) && query.tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
+    if (query.contractId) builder.andWhere("contract.id = :contractId", { contractId: query.contractId });
+    if (query.advertiserId) builder.andWhere("advertiser.id = :advertiserId", { advertiserId: query.advertiserId });
+    if (query.status) builder.andWhere("settlement.status = :status", { status: query.status });
+    const rows = await builder.getMany();
+    const ids = rows.map((row) => row.id);
+    const items = ids.length ? await this.adSettlementItems.find({ where: { settlement: { id: In(ids) } }, order: { id: "ASC" } }) : [];
+    const grouped = new Map<number, AdSettlementItem[]>();
+    for (const item of items) {
+      const key = item.settlement.id;
+      grouped.set(key, [...(grouped.get(key) || []), item]);
+    }
+    return rows.map((row) => ({ ...row, items: grouped.get(row.id) || [] }));
+  }
+
+  async generateAdSettlement(dto: AdSettlementGenerateDto, admin?: AdminContext) {
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, undefined, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const contract = await this.resolveAdContract(dto.contractId, tenant, admin);
+    if (!contract) throw new BadRequestException("请选择要结算的广告合同");
+    const periodStart = this.normalizeDateText(dto.periodStart, "结算开始日期");
+    const periodEnd = this.normalizeDateText(dto.periodEnd, "结算结束日期");
+    if (periodStart > periodEnd) throw new BadRequestException("结算结束日期不能早于开始日期");
+    const campaigns = await this.adCampaigns.find({ where: { contract: { id: contract.id } }, order: { id: "ASC" } });
+    const stats = await this.adDailyStats
+      .createQueryBuilder("stat")
+      .leftJoinAndSelect("stat.campaign", "campaign")
+      .where("stat.contractId = :contractId", { contractId: contract.id })
+      .andWhere("stat.statDate >= :periodStart AND stat.statDate <= :periodEnd", { periodStart, periodEnd })
+      .getMany();
+    const items = this.buildAdSettlementItems(contract, campaigns, stats);
+    const amount = this.roundMoney(items.reduce((sum, item) => sum + item.amount, 0));
+    const settlement = await this.adSettlements.save(this.adSettlements.create({
+      tenant,
+      advertiser: contract.advertiser,
+      contract,
+      settlementNo: `AD${new Date().toISOString().replace(/\D/g, "").slice(0, 14)}${String(contract.id).padStart(4, "0")}`,
+      periodStart,
+      periodEnd,
+      billingModel: contract.billingModel,
+      amount: amount.toFixed(2),
+      status: "pending",
+      remark: this.nullableText(dto.remark)
+    }));
+    const savedItems = await this.adSettlementItems.save(items.map((item) => this.adSettlementItems.create({
+      settlement,
+      campaign: item.campaign,
+      description: item.description,
+      billingModel: item.billingModel,
+      quantity: item.quantity.toFixed(2),
+      unitPrice: item.unitPrice.toFixed(4),
+      amount: item.amount.toFixed(2)
+    })));
+    await this.logOperation(this.operationActorForTenant(admin, settlement.tenant), "ad.settlement.generate", "ad_settlement", settlement.id, `生成广告结算单：${settlement.settlementNo}`, { tenantId: settlement.tenant?.id || null, contractId: contract.id, amount: settlement.amount });
+    return { ...settlement, items: savedItems };
+  }
+
+  async updateAdSettlementStatus(id: number, dto: AdSettlementStatusDto, admin?: AdminContext) {
+    const row = await this.adSettlements.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告结算单不存在");
+    const allowed = ["pending", "confirmed", "invoiced", "paid", "voided"];
+    row.status = this.normalizeChoice(dto.status, allowed, row.status);
+    const saved = await this.adSettlements.save(row);
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.settlement.status", "ad_settlement", saved.id, `更新广告结算单状态：${saved.settlementNo}`, { tenantId: saved.tenant?.id || null, status: saved.status });
+    return saved;
+  }
+
+  async importAdOfficialRevenue(dto: AdOfficialRevenueImportDto, admin?: AdminContext) {
+    const tenant = await this.resolveAnnouncementTenant(dto.tenantId, undefined, admin);
+    this.assertTenantSubscriptionWritable(tenant, admin);
+    const saved = await this.adOfficialRevenueImports.save(this.adOfficialRevenueImports.create({
+      tenant,
+      importDate: this.normalizeDateText(dto.importDate, "导入日期"),
+      revenueAmount: this.roundMoney(dto.revenueAmount || 0).toFixed(2),
+      impressionCount: Math.max(0, Number(dto.impressionCount || 0)),
+      clickCount: Math.max(0, Number(dto.clickCount || 0)),
+      ecpm: this.roundMoney(dto.ecpm || 0).toFixed(4),
+      fileUrl: this.nullableText(dto.fileUrl),
+      remark: this.nullableText(dto.remark)
+    }));
+    await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.official_revenue.import", "ad_official_revenue_import", saved.id, `导入官方流量主收益：${saved.importDate}`, { tenantId: saved.tenant?.id || null, revenueAmount: saved.revenueAmount });
+    return saved;
   }
 
   async listHomepageSections(admin?: AdminContext, tenantId?: number, pageKey?: string) {
@@ -5282,6 +5557,177 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (value === undefined || value === null) return {};
     if (!isPlainJsonObject(value)) throw new BadRequestException(`${label} must be a JSON object`);
     return value;
+  }
+
+  private adAdvertiserPayload(dto: AdAdvertiserDto) {
+    const companyName = String(dto.companyName || "").trim();
+    if (!companyName) throw new BadRequestException("请填写广告主公司名称");
+    return {
+      companyName,
+      contactName: this.nullableText(dto.contactName),
+      contactPhone: this.nullableText(dto.contactPhone),
+      wechat: this.nullableText(dto.wechat),
+      licenseUrl: this.nullableText(dto.licenseUrl),
+      remark: this.nullableText(dto.remark),
+      status: this.normalizeChoice(dto.status, ["active", "paused", "archived"], "active")
+    };
+  }
+
+  private adContractPayload(dto: AdContractDto) {
+    const contractNo = String(dto.contractNo || "").trim();
+    const title = String(dto.title || "").trim();
+    if (!contractNo) throw new BadRequestException("请填写广告合同编号");
+    if (!title) throw new BadRequestException("请填写广告合同标题");
+    const startAt = dto.startAt ? this.parseDate(dto.startAt) : null;
+    const endAt = dto.endAt ? this.parseDate(dto.endAt) : null;
+    if (startAt && endAt && startAt.getTime() > endAt.getTime()) throw new BadRequestException("合同结束时间不能早于开始时间");
+    const billingModel = this.normalizeChoice(dto.billingModel, ["fixed", "cpm", "cpc", "mixed"], "fixed");
+    const fixedFee = this.roundMoney(dto.fixedFee ?? (billingModel === "fixed" ? dto.amount || 0 : 0));
+    return {
+      contractNo,
+      title,
+      billingModel,
+      amount: this.roundMoney(dto.amount || fixedFee).toFixed(2),
+      fixedFee: fixedFee.toFixed(2),
+      cpmPrice: this.roundMoney(dto.cpmPrice || 0, 4).toFixed(4),
+      cpcPrice: this.roundMoney(dto.cpcPrice || 0, 4).toFixed(4),
+      startAt,
+      endAt,
+      paymentStatus: this.normalizeChoice(dto.paymentStatus, ["unpaid", "partial", "paid", "refunded"], "unpaid"),
+      attachmentUrl: this.nullableText(dto.attachmentUrl),
+      remark: this.nullableText(dto.remark),
+      status: this.normalizeChoice(dto.status, ["active", "paused", "archived"], "active")
+    };
+  }
+
+  private adCampaignPayload(dto: AdCampaignDto) {
+    const name = String(dto.name || "").trim();
+    const title = String(dto.title || "").trim();
+    if (!name) throw new BadRequestException("请填写广告计划名称");
+    if (!title) throw new BadRequestException("请填写前台广告标题");
+    const startAt = dto.startAt ? this.parseDate(dto.startAt) : null;
+    const endAt = dto.endAt ? this.parseDate(dto.endAt) : null;
+    if (startAt && endAt && startAt.getTime() > endAt.getTime()) throw new BadRequestException("广告结束时间不能早于开始时间");
+    const source = this.normalizeChoice(dto.source, ["custom", "wechat_official"], "custom");
+    const format = this.normalizeChoice(dto.format, ["splash", "inline_card", "banner", "official_banner", "official_video", "official_grid", "official_interstitial", "official_rewarded_video"], source === "wechat_official" ? "official_banner" : "banner");
+    return {
+      name,
+      title,
+      subtitle: this.nullableText(dto.subtitle),
+      imageUrl: this.nullableText(dto.imageUrl),
+      source,
+      format,
+      slotKey: this.normalizeChoice(dto.slotKey, ["app_splash", "home_top_banner", "home_feed_inline", "activity_detail_middle", "course_detail_middle", "mall_product_detail_middle", "community_feed_inline", "user_my_banner"], "home_top_banner"),
+      pageKey: this.normalizeChoice(dto.pageKey, ["all", "home", "mall_home", "mall_product_detail", "activity_list", "activity_detail", "course_home", "course_detail", "community_home", "community_detail", "user_my"], "home"),
+      platforms: this.normalizeMarketingPopupArray(dto.platforms, ["all", "h5", "mp-weixin"], source === "wechat_official" ? ["mp-weixin"] : ["all"]),
+      link: this.nullableText(dto.link),
+      billingModel: this.normalizeChoice(dto.billingModel, ["fixed", "cpm", "cpc", "mixed"], "fixed"),
+      fixedFee: this.roundMoney(dto.fixedFee || 0).toFixed(2),
+      cpmPrice: this.roundMoney(dto.cpmPrice || 0, 4).toFixed(4),
+      cpcPrice: this.roundMoney(dto.cpcPrice || 0, 4).toFixed(4),
+      totalBudget: this.roundMoney(dto.totalBudget || 0).toFixed(2),
+      dailyBudget: this.roundMoney(dto.dailyBudget || 0).toFixed(2),
+      impressionLimit: Math.max(0, Number(dto.impressionLimit || 0)),
+      clickLimit: Math.max(0, Number(dto.clickLimit || 0)),
+      officialAdUnitId: this.nullableText(dto.officialAdUnitId),
+      officialAdType: this.nullableText(dto.officialAdType),
+      frequency: this.normalizeChoice(dto.frequency, ["every_visit", "once_per_day", "once_per_campaign"], "once_per_day"),
+      priority: Math.max(Math.min(Number(dto.priority ?? 0), 9999), -9999),
+      enabled: dto.enabled ?? true,
+      startAt,
+      endAt
+    };
+  }
+
+  private async resolveAdAdvertiser(id: number | null | undefined, tenant: Tenant | null, admin?: AdminContext) {
+    if (!id) return null;
+    const row = await this.adAdvertisers.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告主不存在");
+    this.assertAdTenantMatches(row.tenant, tenant, "广告主不属于当前投放商家");
+    return row;
+  }
+
+  private async resolveAdContract(id: number | null | undefined, tenant: Tenant | null, admin?: AdminContext) {
+    if (!id) return null;
+    const row = await this.adContracts.findOneBy({ id });
+    this.assertTenantAccess(row, admin);
+    if (!row) throw new NotFoundException("广告合同不存在");
+    this.assertAdTenantMatches(row.tenant, tenant, "广告合同不属于当前投放商家");
+    return row;
+  }
+
+  private assertAdTenantMatches(rowTenant: Tenant | null | undefined, targetTenant: Tenant | null | undefined, message: string) {
+    const rowTenantId = rowTenant?.id || null;
+    const targetTenantId = targetTenant?.id || null;
+    if (rowTenantId !== targetTenantId) throw new BadRequestException(message);
+  }
+
+  private adStatsTotals(stats: AdDailyStat[]) {
+    return stats.reduce(
+      (sum, row) => ({
+        impressions: sum.impressions + Number(row.impressionCount || 0),
+        clicks: sum.clicks + Number(row.clickCount || 0),
+        skips: sum.skips + Number(row.skipCount || 0),
+        closes: sum.closes + Number(row.closeCount || 0),
+        loads: sum.loads + Number(row.loadCount || 0),
+        errors: sum.errors + Number(row.errorCount || 0),
+        rewards: sum.rewards + Number(row.rewardCount || 0),
+        amount: this.roundMoney(sum.amount + this.money(row.spentAmount))
+      }),
+      { impressions: 0, clicks: 0, skips: 0, closes: 0, loads: 0, errors: 0, rewards: 0, amount: 0 }
+    );
+  }
+
+  private buildAdSettlementItems(contract: AdContract, campaigns: AdCampaign[], stats: AdDailyStat[]) {
+    const items: Array<{ campaign: AdCampaign | null; description: string; billingModel: string; quantity: number; unitPrice: number; amount: number }> = [];
+    const billingModel = contract.billingModel || "fixed";
+    const fixedFee = this.money(contract.fixedFee) || this.money(contract.amount);
+    if ((billingModel === "fixed" || billingModel === "mixed") && fixedFee > 0) {
+      items.push({ campaign: null, description: `${contract.title} 固定费用`, billingModel: "fixed", quantity: 1, unitPrice: fixedFee, amount: fixedFee });
+    }
+    const statsByCampaign = new Map<number, AdDailyStat[]>();
+    for (const row of stats) {
+      const id = row.campaign?.id || 0;
+      if (!id) continue;
+      statsByCampaign.set(id, [...(statsByCampaign.get(id) || []), row]);
+    }
+    for (const campaign of campaigns) {
+      const totals = this.adStatsTotals(statsByCampaign.get(campaign.id) || []);
+      const cpmPrice = this.money(campaign.cpmPrice) || this.money(contract.cpmPrice);
+      const cpcPrice = this.money(campaign.cpcPrice) || this.money(contract.cpcPrice);
+      if ((billingModel === "cpm" || billingModel === "mixed") && cpmPrice > 0 && totals.impressions > 0) {
+        const quantity = totals.impressions / 1000;
+        items.push({ campaign, description: `${campaign.name} CPM 曝光计费`, billingModel: "cpm", quantity, unitPrice: cpmPrice, amount: this.roundMoney(quantity * cpmPrice) });
+      }
+      if ((billingModel === "cpc" || billingModel === "mixed") && cpcPrice > 0 && totals.clicks > 0) {
+        items.push({ campaign, description: `${campaign.name} CPC 点击计费`, billingModel: "cpc", quantity: totals.clicks, unitPrice: cpcPrice, amount: this.roundMoney(totals.clicks * cpcPrice) });
+      }
+    }
+    return items.length ? items : [{ campaign: null, description: `${contract.title} 暂无可结算消耗`, billingModel, quantity: 0, unitPrice: 0, amount: 0 }];
+  }
+
+  private normalizeDateText(value: string, label: string) {
+    const text = String(value || "").trim();
+    const date = new Date(text);
+    if (!text || Number.isNaN(date.getTime())) throw new BadRequestException(`${label}格式不正确`);
+    const pad = (num: number) => String(num).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+  }
+
+  private normalizeChoice(value: unknown, allowed: string[], fallback: string) {
+    const text = String(value || "").trim();
+    return allowed.includes(text) ? text : fallback;
+  }
+
+  private money(value: unknown) {
+    const num = Number(value || 0);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  private roundMoney(value: unknown, digits = 2) {
+    const factor = 10 ** digits;
+    return Math.round(this.money(value) * factor) / factor;
   }
 
   private marketingPopupPayload(dto: MarketingPopupDto) {

@@ -2,6 +2,104 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-06-25 - 广告中心交付文档与提交准备
+
+### 阶段名称
+
+试运营商业化增强 - 广告中心二开文档、项目进度和部署注意事项收口小阶段。
+
+### 本阶段完成内容
+
+- 按持续开发规则重新读取 `DEVELOPMENT_LOG.md`、开发交接说明、慢π SaaS 落地方案、上线清单、生产 Runbook、本地验收方案、微信分享海报真机验收清单、真实支付接入计划和项目进度表。
+- 确认广告中心第一版已经完成本地实现与构建验证，但尚未提交和线上部署。
+- 补充 `docs/project-progress.md`，将 V3 商业化交易进度更新为包含广告中心第一版，并新增广告中心商业化第一版里程碑。
+- 补充 `docs/开发方案与二次开发说明.md` 升级记录，明确广告中心新增表、后台/API/H5/小程序影响、migration 和线上发布注意事项。
+- 再次确认真实支付、沙箱支付、商城真实微信支付、店铺直收和代理真实打款开关仍不得打开；广告中心只涉及广告投放与统计，不代表真实资金结算已上线。
+
+### 修改/新增的主要文件
+
+- `docs/project-progress.md`
+- `docs/开发方案与二次开发说明.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- `git diff --check`：通过；仅有 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 广告中心代码仍需完成 git 提交和推送，服务器尚未拉取、执行 migration、构建和发布。
+- 线上部署后还需要在右侧浏览器走广告中心创建广告主、合同、投放、事件统计、结算和多角色权限流程。
+
+### 下一阶段应继续处理的事项
+
+- 进入 git 提交推送小阶段，排除 `.local-logs/` 和 `.local-mariadb/` 本地测试目录。
+- 提供并记录服务器部署命令，确保先执行 API migration 再重启 API 与发布前端静态资源。
+
+## 2026-06-25 - 广告中心与商业化结算第一版开发完成
+
+### 阶段名称
+
+试运营商业化增强 - 广告中心、官方流量主、自有广告投放与结算对账小阶段。
+
+### 本阶段完成内容
+
+- 新增独立后台菜单 `广告中心`，权限为 `ad_center.manage`，放在 `装修营销` 下。
+- 后台广告中心包含投放计划、广告位配置、广告主管理、合同管理、结算对账、数据报表/接入教程 6 个标签。
+- 新增广告主、合同、投放计划、日统计、结算单、结算明细、官方流量主收益导入 7 张表和 migration。
+- 支持自有开屏、Banner、信息流、内页植入广告，以及微信官方 banner/video/grid/插屏/激励视频配置。
+- 支持固定费用、CPM、CPC、组合计费，曝光/点击/预算上限达到后自动停投。
+- 新增公开广告接口，前台按 `tenantCode + pageKey + slotKey + platform` 拉取广告并回传曝光、点击、关闭、跳过、加载、错误、激励事件。
+- H5/小程序新增 `AdSlotRenderer` 和 `SplashAd`，接入首页顶部、首页信息流、活动详情、课程详情、商品详情、共修信息流、我的页横幅和开屏广告。
+- 微信官方流量主广告仅在小程序端渲染；H5 遇到官方广告配置不会展示。
+- 修复广告事件首次写入日统计时计数字段未初始化导致的 `NaN` 入库问题，避免曝光/点击上报失败。
+
+### 修改/新增的主要文件
+
+- `apps/api/src/entities/ad-advertiser.entity.ts`
+- `apps/api/src/entities/ad-contract.entity.ts`
+- `apps/api/src/entities/ad-campaign.entity.ts`
+- `apps/api/src/entities/ad-daily-stat.entity.ts`
+- `apps/api/src/entities/ad-settlement.entity.ts`
+- `apps/api/src/entities/ad-settlement-item.entity.ts`
+- `apps/api/src/entities/ad-official-revenue-import.entity.ts`
+- `apps/api/src/migrations/1782200000000-AdCenter.ts`
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/api/src/modules/public/public.controller.ts`
+- `apps/api/src/modules/public/public.service.ts`
+- `apps/admin/src/views/AdCenter.vue`
+- `apps/admin/src/views/Layout.vue`
+- `apps/mobile/src/components/AdSlotRenderer.vue`
+- `apps/mobile/src/components/SplashAd.vue`
+- `apps/mobile/src/pages/index/index.vue`
+- `apps/mobile/src/pages/activity/detail.vue`
+- `apps/mobile/src/pages/course/detail.vue`
+- `apps/mobile/src/pages/mall/detail.vue`
+- `apps/mobile/src/pages/community/index.vue`
+- `apps/mobile/src/pages/user/my.vue`
+
+### 运行或测试结果
+
+- 本地执行 `npm.cmd --prefix apps/api run migration:run`：通过，广告中心 migration 已在本地库无待执行项。
+- 本地浏览器打开 `http://127.0.0.1:5182/admin/ad-center`：通过，菜单和 6 个标签页正常显示。
+- 本地接口闭环验证：创建 `Codex广告中心本地测试-*` 广告主、固定费用/CPM/CPC 合同与投放计划，公开广告位按 `tenantCode=qiwai-showcase` 返回正确广告。
+- 本地事件与结算验证：5 次 CPM 曝光生成 `0.10` 消耗，2 次 CPC 点击生成 `3.00` 消耗并触发点击上限自动停投，固定费用结算生成 `88.00` 且可确认。
+- 本地官方流量主收益导入验证：导入 `12.34` 后报表总收入为自有广告 `3.10` + 官方收入 `12.34` = `15.44`。
+- 本地角色验证：`showcase_ops`、`showcase_finance` 可访问广告中心接口，`showcase_checkin` 访问广告中心接口返回 `403`。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅有既有 Rollup PURE 注释和 chunk 体积提示。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_DEFAULT_TENANT_CODE='qiwai-showcase'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过。
+- `npm.cmd run test:preflight-guards`：通过。
+- `git diff --check`：通过；仅有 Windows 工作区 LF/CRLF 转换警告。
+
+### 遗留问题
+
+- 服务器部署时需要执行新增 migration，线上后台才会出现广告中心相关表。
+- 线上角色如果是历史账号，可能需要给运营/财务角色补 `ad_center.manage` 权限。
+- 微信官方流量主收益以微信公众平台为准，本系统第一版只做广告位配置、事件记录和收益手动导入。
+
 ## 2026-06-25 - 营销弹窗商家角色权限补齐
 
 ### 阶段名称

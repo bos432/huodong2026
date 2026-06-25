@@ -39,6 +39,13 @@ import { HomepageDecorationTemplate } from "../../entities/homepage-decoration-t
 import { HomepageDecorationVersion } from "../../entities/homepage-decoration-version.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MarketingPopup } from "../../entities/marketing-popup.entity";
+import { AdAdvertiser } from "../../entities/ad-advertiser.entity";
+import { AdCampaign } from "../../entities/ad-campaign.entity";
+import { AdContract } from "../../entities/ad-contract.entity";
+import { AdDailyStat } from "../../entities/ad-daily-stat.entity";
+import { AdOfficialRevenueImport } from "../../entities/ad-official-revenue-import.entity";
+import { AdSettlementItem } from "../../entities/ad-settlement-item.entity";
+import { AdSettlement } from "../../entities/ad-settlement.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
@@ -77,7 +84,7 @@ import { CharityFundService } from "../charity-fund.service";
 
 @Module({
   imports: [
-    TypeOrmModule.forFeature([Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, Course, H5AuthCodeLog, HomepageSection, HomepageDecorationVersion, HomepageDecorationTemplate, MarketingPopup, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, Certificate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord]),
+    TypeOrmModule.forFeature([Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, Course, H5AuthCodeLog, HomepageSection, HomepageDecorationVersion, HomepageDecorationTemplate, MarketingPopup, AdAdvertiser, AdContract, AdCampaign, AdDailyStat, AdSettlement, AdSettlementItem, AdOfficialRevenueImport, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberProfile, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, Certificate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],

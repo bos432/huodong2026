@@ -5,6 +5,7 @@
     </view>
 
     <PageDecorationBlocks :sections="decorationSections" />
+    <AdSlotRenderer slot-key="community_feed_inline" page-key="community_home" compact />
 
     <!-- 文化大使入口 -->
     <view class="ambassador-card" @click="goAmbassador">
@@ -113,6 +114,7 @@ import { normalizeCommunityPosts, type CommunityPost } from "../../community-pos
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
+import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 
 onShow(() => {
   loadPageTheme();

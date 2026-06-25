@@ -4,6 +4,7 @@ import { ensureUser, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -257,6 +258,8 @@ onMounted(loadDecoration);
           <view><text>{{ activity.shareVisitCount }}</text><text>分享访问</text></view>
         </view>
       </view>
+
+      <AdSlotRenderer slot-key="activity_detail_middle" page-key="activity_detail" />
 
       <view class="card info">
         <view class="section-title">活动信息</view>

@@ -49,6 +49,13 @@ import { MemberLevel } from "./entities/member-level.entity";
 import { MemberPointLog } from "./entities/member-point-log.entity";
 import { MemberProfile } from "./entities/member-profile.entity";
 import { MarketingPopup } from "./entities/marketing-popup.entity";
+import { AdAdvertiser } from "./entities/ad-advertiser.entity";
+import { AdCampaign } from "./entities/ad-campaign.entity";
+import { AdContract } from "./entities/ad-contract.entity";
+import { AdDailyStat } from "./entities/ad-daily-stat.entity";
+import { AdOfficialRevenueImport } from "./entities/ad-official-revenue-import.entity";
+import { AdSettlementItem } from "./entities/ad-settlement-item.entity";
+import { AdSettlement } from "./entities/ad-settlement.entity";
 import { MallAddress } from "./entities/mall-address.entity";
 import { MallCartItem } from "./entities/mall-cart-item.entity";
 import { MallBrowseHistory } from "./entities/mall-browse-history.entity";
@@ -164,6 +171,13 @@ export default new DataSource({
     H5AuthCodeLog,
     HomepageSection,
     MarketingPopup,
+    AdAdvertiser,
+    AdContract,
+    AdCampaign,
+    AdDailyStat,
+    AdSettlement,
+    AdSettlementItem,
+    AdOfficialRevenueImport,
     MiniprogramReleaseSetting,
     MiniprogramReleaseLog,
     InviteCode,

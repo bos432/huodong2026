@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdAdvertiserDto, AdCampaignDto, AdContractDto, AdOfficialRevenueImportDto, AdSettlementGenerateDto, AdSettlementStatusDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
@@ -627,6 +627,108 @@ export class AdminController {
   @Delete("marketing-popups/:id")
   deleteMarketingPopup(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.deleteMarketingPopup(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("ad-advertisers")
+  adAdvertisers(@Query("tenantId") tenantId?: string, @Query("keyword") keyword?: string, @Query("status") status?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listAdAdvertisers(admin, { tenantId: tenantId ? Number(tenantId) : undefined, keyword, status });
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("ad-advertisers")
+  createAdAdvertiser(@Body() dto: AdAdvertiserDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createAdAdvertiser(dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Patch("ad-advertisers/:id")
+  updateAdAdvertiser(@Param("id", ParseIntPipe) id: number, @Body() dto: AdAdvertiserDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateAdAdvertiser(id, dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Delete("ad-advertisers/:id")
+  deleteAdAdvertiser(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.deleteAdAdvertiser(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("ad-contracts")
+  adContracts(@Query("tenantId") tenantId?: string, @Query("advertiserId") advertiserId?: string, @Query("keyword") keyword?: string, @Query("status") status?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listAdContracts(admin, { tenantId: tenantId ? Number(tenantId) : undefined, advertiserId: advertiserId ? Number(advertiserId) : undefined, keyword, status });
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("ad-contracts")
+  createAdContract(@Body() dto: AdContractDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createAdContract(dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Patch("ad-contracts/:id")
+  updateAdContract(@Param("id", ParseIntPipe) id: number, @Body() dto: AdContractDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateAdContract(id, dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Delete("ad-contracts/:id")
+  deleteAdContract(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.deleteAdContract(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("ad-campaigns")
+  adCampaigns(@Query("tenantId") tenantId?: string, @Query("advertiserId") advertiserId?: string, @Query("contractId") contractId?: string, @Query("keyword") keyword?: string, @Query("enabled") enabled?: string, @Query("source") source?: string, @Query("slotKey") slotKey?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listAdCampaigns(admin, { tenantId: tenantId ? Number(tenantId) : undefined, advertiserId: advertiserId ? Number(advertiserId) : undefined, contractId: contractId ? Number(contractId) : undefined, keyword, enabled, source, slotKey });
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("ad-campaigns/summary")
+  adCampaignSummary(@Query("tenantId") tenantId?: string, @Query("startDate") startDate?: string, @Query("endDate") endDate?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adCampaignSummary(admin, { tenantId: tenantId ? Number(tenantId) : undefined, startDate, endDate });
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("ad-campaigns")
+  createAdCampaign(@Body() dto: AdCampaignDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.createAdCampaign(dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Patch("ad-campaigns/:id")
+  updateAdCampaign(@Param("id", ParseIntPipe) id: number, @Body() dto: AdCampaignDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateAdCampaign(id, dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Delete("ad-campaigns/:id")
+  deleteAdCampaign(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.deleteAdCampaign(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get("ad-settlements")
+  adSettlements(@Query("tenantId") tenantId?: string, @Query("contractId") contractId?: string, @Query("advertiserId") advertiserId?: string, @Query("status") status?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listAdSettlements(admin, { tenantId: tenantId ? Number(tenantId) : undefined, contractId: contractId ? Number(contractId) : undefined, advertiserId: advertiserId ? Number(advertiserId) : undefined, status });
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("ad-settlements/generate")
+  generateAdSettlement(@Body() dto: AdSettlementGenerateDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.generateAdSettlement(dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Patch("ad-settlements/:id/confirm")
+  confirmAdSettlement(@Param("id", ParseIntPipe) id: number, @Body() dto: AdSettlementStatusDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.updateAdSettlementStatus(id, dto, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("ad-official-revenue-imports")
+  importAdOfficialRevenue(@Body() dto: AdOfficialRevenueImportDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.importAdOfficialRevenue(dto, admin);
   }
 
   @AdminRoles(...OPERATION_ROLES)

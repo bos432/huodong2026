@@ -1203,6 +1203,303 @@ export class MarketingPopupDto {
   endAt?: string | null;
 }
 
+export class AdAdvertiserDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  companyName!: string;
+
+  @IsOptional()
+  @IsString()
+  contactName?: string | null;
+
+  @IsOptional()
+  @IsString()
+  contactPhone?: string | null;
+
+  @IsOptional()
+  @IsString()
+  wechat?: string | null;
+
+  @IsOptional()
+  @IsString()
+  licenseUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  remark?: string | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+export class AdContractDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  advertiserId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  contractNo!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  billingModel?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  amount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  fixedFee?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cpmPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cpcPrice?: number;
+
+  @IsOptional()
+  @IsString()
+  startAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  endAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  paymentStatus?: string;
+
+  @IsOptional()
+  @IsString()
+  attachmentUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  remark?: string | null;
+
+  @IsOptional()
+  @IsString()
+  status?: string;
+}
+
+export class AdCampaignDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  advertiserId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  contractId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  name!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  title!: string;
+
+  @IsOptional()
+  @IsString()
+  subtitle?: string | null;
+
+  @IsOptional()
+  @IsString()
+  imageUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  source?: string;
+
+  @IsOptional()
+  @IsString()
+  format?: string;
+
+  @IsOptional()
+  @IsString()
+  slotKey?: string;
+
+  @IsOptional()
+  @IsString()
+  pageKey?: string;
+
+  @IsOptional()
+  @IsArray()
+  platforms?: string[];
+
+  @IsOptional()
+  @IsString()
+  link?: string | null;
+
+  @IsOptional()
+  @IsString()
+  billingModel?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  fixedFee?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cpmPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  cpcPrice?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  totalBudget?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  dailyBudget?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  impressionLimit?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  clickLimit?: number;
+
+  @IsOptional()
+  @IsString()
+  officialAdUnitId?: string | null;
+
+  @IsOptional()
+  @IsString()
+  officialAdType?: string | null;
+
+  @IsOptional()
+  @IsString()
+  frequency?: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  priority?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  enabled?: boolean;
+
+  @IsOptional()
+  @IsString()
+  startAt?: string | null;
+
+  @IsOptional()
+  @IsString()
+  endAt?: string | null;
+}
+
+export class AdSettlementGenerateDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number | null;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  contractId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  periodStart!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  periodEnd!: string;
+
+  @IsOptional()
+  @IsString()
+  remark?: string | null;
+}
+
+export class AdSettlementStatusDto {
+  @IsString()
+  @IsNotEmpty()
+  status!: string;
+}
+
+export class AdOfficialRevenueImportDto {
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  tenantId?: number | null;
+
+  @IsString()
+  @IsNotEmpty()
+  importDate!: string;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  revenueAmount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  impressionCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  clickCount?: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  ecpm?: number;
+
+  @IsOptional()
+  @IsString()
+  fileUrl?: string | null;
+
+  @IsOptional()
+  @IsString()
+  remark?: string | null;
+}
+
 export class HomepageSectionDto {
   @IsOptional()
   @IsString()

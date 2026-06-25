@@ -14,6 +14,7 @@
     </view>
 
     <PageDecorationBlocks :sections="contentSections" />
+    <AdSlotRenderer slot-key="home_top_banner" page-key="home" />
 
     <!-- 金刚区 2x4 -->
     <view class="card" style="padding:16rpx 8rpx;">
@@ -78,6 +79,8 @@
       <EmptyState v-if="!hotCourses.length" icon="📖" text="暂无热门课程，请先在后台发布课程" />
     </view>
 
+    <AdSlotRenderer slot-key="home_feed_inline" page-key="home" compact />
+
     <!-- 文化大使入口 -->
     <view class="ambassador-card" @click="goAmbassador">
       <view class="ambassador-content">
@@ -135,6 +138,7 @@ import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
+import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import { usePageDecoration } from "../../decoration";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 

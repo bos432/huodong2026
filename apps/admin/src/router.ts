@@ -12,6 +12,7 @@ const Recaps = () => import("./views/Recaps.vue");
 const Announcements = () => import("./views/Announcements.vue");
 const HomepageBuilder = () => import("./views/HomepageBuilder.vue");
 const MarketingPopups = () => import("./views/MarketingPopups.vue");
+const AdCenter = () => import("./views/AdCenter.vue");
 const Notifications = () => import("./views/Notifications.vue");
 const Reviews = () => import("./views/Reviews.vue");
 const Registrations = () => import("./views/Registrations.vue");
@@ -102,6 +103,7 @@ export const router = createRouter({
         { path: "announcements", component: Announcements, meta: { roles: ["announcement.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "homepage-builder", component: HomepageBuilder, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
         { path: "marketing-popups", component: MarketingPopups, meta: { roles: ["marketing_popup.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "ad-center", component: AdCenter, meta: { roles: ["ad_center.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "notifications", component: Notifications, meta: { roles: ["notification.manage"], scope: "tenant" } },
         { path: "reviews", component: Reviews, meta: { roles: ["review.manage"], scope: "tenant" } },
         { path: "registrations", component: Registrations, meta: { roles: permissions.registrationView, scope: "tenantOrPlatformAdmin" } },

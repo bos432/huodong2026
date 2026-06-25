@@ -64,6 +64,7 @@ const tenantScopedRoutePaths = new Set([
   "/agents",
   "/announcements",
   "/marketing-popups",
+  "/ad-center",
   "/homepage-builder",
   "/operation-logs",
   "/courses",
@@ -119,10 +120,19 @@ const menuGroups = [
       { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: ["activity.approve"], scope: "platform" },
       { index: "/activities", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
       { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
-      { index: "/homepage-builder", icon: "Grid", label: "前台全局装修", roles: ["homepage.manage"], scope: "platform" },
-      { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.manage"], scope: "platform" },
       { index: "/announcements", icon: "Bell", label: "公告监管", roles: ["announcement.manage"], scope: "platform" },
       { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: ["category.manage"], scope: "platform" }
+    ]
+  },
+  {
+    index: "platform-marketing",
+    icon: "Grid",
+    label: "平台端 · 装修营销",
+    scope: "platform",
+    items: [
+      { index: "/homepage-builder", icon: "Grid", label: "前台全局装修", roles: ["homepage.manage"], scope: "platform" },
+      { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.manage"], scope: "platform" },
+      { index: "/ad-center", icon: "Money", label: "广告中心", roles: ["ad_center.manage"], scope: "platform" }
     ]
   },
   {
@@ -293,6 +303,7 @@ const menuGroups = [
     items: [
       { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: permissions.operation, scope: "tenant" },
       { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.manage"], scope: "tenant" },
+      { index: "/ad-center", icon: "Money", label: "广告中心", roles: ["ad_center.manage"], scope: "tenant" },
       { index: "/announcements", icon: "Bell", label: "公告管理", roles: ["announcement.manage"], scope: "tenant" },
       { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: ["activity.view"], scope: "tenant" },
       { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: ["activity.view"], scope: "tenant" }

@@ -1,5 +1,6 @@
 <template>
   <view class="container course-detail-page">
+    <SplashAd />
     <view class="custom-nav">
       <view class="nav-back" @click="goBack">返回</view>
       <view class="nav-title">课程详情</view>
@@ -35,6 +36,8 @@
           <view v-if="course.tag" class="tag" :class="course.tag === '限时优惠' ? 'tag-warning' : 'tag-success'">{{ course.tag }}</view>
         </view>
       </view>
+
+      <AdSlotRenderer slot-key="course_detail_middle" page-key="course_detail" />
 
       <view class="detail-tabs">
         <view
@@ -107,6 +110,8 @@ import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
 import { priceText } from "../../course-data";
 import EmptyState from "../../components/EmptyState.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
+import SplashAd from "../../components/SplashAd.vue";
 
 const activeTab = ref("detail");
 const isFav = ref(false);

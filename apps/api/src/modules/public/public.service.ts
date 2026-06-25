@@ -30,6 +30,8 @@ import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
 import { MarketingPopup } from "../../entities/marketing-popup.entity";
+import { AdCampaign } from "../../entities/ad-campaign.entity";
+import { AdDailyStat } from "../../entities/ad-daily-stat.entity";
 import { Order } from "../../entities/order.entity";
 import { OperationSetting } from "../../entities/operation-setting.entity";
 import { PaymentCallbackLog } from "../../entities/payment-callback-log.entity";
@@ -84,6 +86,8 @@ export class PublicService {
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(HomepageSection) private readonly homepageSections: Repository<HomepageSection>,
     @InjectRepository(MarketingPopup) private readonly marketingPopups: Repository<MarketingPopup>,
+    @InjectRepository(AdCampaign) private readonly adCampaigns: Repository<AdCampaign>,
+    @InjectRepository(AdDailyStat) private readonly adDailyStats: Repository<AdDailyStat>,
     @InjectRepository(Registration) private readonly registrations: Repository<Registration>,
     @InjectRepository(Order) private readonly orders: Repository<Order>,
     @InjectRepository(OperationSetting) private readonly operationSettings: Repository<OperationSetting>,
@@ -613,6 +617,88 @@ export class PublicService {
     else row.impressionCount += 1;
     await this.marketingPopups.save(row);
     return { ok: true };
+  }
+
+  async adSlot(context?: PublicTenantContext, pageKey = "home", slotKey = "home_top_banner", platform = "h5") {
+    const tenant = await this.resolveTenantContext(context);
+    const now = new Date();
+    const builder = this.adCampaigns
+      .createQueryBuilder("campaign")
+      .leftJoinAndSelect("campaign.tenant", "tenant")
+      .leftJoinAndSelect("campaign.advertiser", "advertiser")
+      .leftJoinAndSelect("campaign.contract", "contract")
+      .where("campaign.enabled = :enabled", { enabled: true })
+      .andWhere("(campaign.startAt IS NULL OR campaign.startAt <= :now)", { now })
+      .andWhere("(campaign.endAt IS NULL OR campaign.endAt >= :now)", { now })
+      .andWhere("campaign.slotKey = :slotKey", { slotKey })
+      .orderBy("campaign.priority", "DESC")
+      .addOrderBy("campaign.updatedAt", "DESC")
+      .addOrderBy("campaign.id", "DESC")
+      .take(30);
+    if (tenant) builder.andWhere("campaign.tenantId = :tenantId", { tenantId: tenant.id });
+    else builder.andWhere("campaign.tenantId IS NULL");
+    const rows = await builder.getMany();
+    const row = rows.find((item) => this.adCampaignMatches(item, pageKey, platform));
+    return row ? this.publicAdCampaign(row) : null;
+  }
+
+  async recordAdSlotEvent(id: number, event: string, platform = "h5") {
+    const row = await this.adCampaigns.findOne({ where: { id }, relations: ["tenant", "advertiser", "contract"] });
+    if (!row) return { ok: true };
+    const normalizedEvent = this.normalizeAdEvent(event);
+    const spentDelta = this.adEventSpentDelta(row, normalizedEvent);
+    if (normalizedEvent === "impression") row.impressionCount = Number(row.impressionCount || 0) + 1;
+    else if (normalizedEvent === "click") row.clickCount = Number(row.clickCount || 0) + 1;
+    else if (normalizedEvent === "skip") row.skipCount = Number(row.skipCount || 0) + 1;
+    else if (normalizedEvent === "close") row.closeCount = Number(row.closeCount || 0) + 1;
+    else if (normalizedEvent === "load") row.loadCount = Number(row.loadCount || 0) + 1;
+    else if (normalizedEvent === "error") row.errorCount = Number(row.errorCount || 0) + 1;
+    else if (normalizedEvent === "reward") row.rewardCount = Number(row.rewardCount || 0) + 1;
+    row.spentAmount = this.adRoundMoney(this.adMoney(row.spentAmount) + spentDelta).toFixed(2);
+
+    const statDate = this.todayDateText();
+    let stat = await this.adDailyStats
+      .createQueryBuilder("stat")
+      .leftJoinAndSelect("stat.campaign", "campaign")
+      .where("stat.campaignId = :campaignId", { campaignId: row.id })
+      .andWhere("stat.statDate = :statDate", { statDate })
+      .andWhere("stat.platform = :platform", { platform })
+      .getOne();
+    if (!stat) {
+      stat = this.adDailyStats.create({
+        tenant: row.tenant,
+        advertiser: row.advertiser,
+        contract: row.contract,
+        campaign: row,
+        statDate,
+        source: row.source,
+        format: row.format,
+        slotKey: row.slotKey,
+        pageKey: row.pageKey,
+        platform,
+        impressionCount: 0,
+        clickCount: 0,
+        skipCount: 0,
+        closeCount: 0,
+        loadCount: 0,
+        errorCount: 0,
+        rewardCount: 0,
+        spentAmount: "0.00"
+      });
+    }
+    if (normalizedEvent === "impression") stat.impressionCount = Number(stat.impressionCount || 0) + 1;
+    else if (normalizedEvent === "click") stat.clickCount = Number(stat.clickCount || 0) + 1;
+    else if (normalizedEvent === "skip") stat.skipCount = Number(stat.skipCount || 0) + 1;
+    else if (normalizedEvent === "close") stat.closeCount = Number(stat.closeCount || 0) + 1;
+    else if (normalizedEvent === "load") stat.loadCount = Number(stat.loadCount || 0) + 1;
+    else if (normalizedEvent === "error") stat.errorCount = Number(stat.errorCount || 0) + 1;
+    else if (normalizedEvent === "reward") stat.rewardCount = Number(stat.rewardCount || 0) + 1;
+    stat.spentAmount = this.adRoundMoney(this.adMoney(stat.spentAmount) + spentDelta).toFixed(2);
+
+    if (this.adBudgetExceeded(row, stat)) row.enabled = false;
+    await this.adDailyStats.save(stat);
+    await this.adCampaigns.save(row);
+    return { ok: true, disabled: !row.enabled };
   }
 
   charitySummary() {
@@ -2297,6 +2383,71 @@ export class PublicService {
     const list = Array.isArray(value) ? value.map((item) => String(item)) : [];
     const normalized = String(target || "").trim();
     return list.includes("all") || (normalized ? list.includes(normalized) : false);
+  }
+
+  private adCampaignMatches(row: AdCampaign, pageKey: string, platform: string) {
+    if (platform === "h5" && row.source === "wechat_official") return false;
+    const platformMatched = this.marketingPopupMatches(row.platforms, platform);
+    const pageMatched = row.pageKey === "all" || row.pageKey === pageKey;
+    return platformMatched && pageMatched;
+  }
+
+  private publicAdCampaign(row: AdCampaign) {
+    return {
+      id: row.id,
+      name: row.name,
+      title: row.title,
+      subtitle: row.subtitle,
+      imageUrl: row.imageUrl,
+      source: row.source,
+      format: row.format,
+      slotKey: row.slotKey,
+      pageKey: row.pageKey,
+      platforms: row.platforms || ["all"],
+      link: row.link,
+      officialAdUnitId: row.officialAdUnitId,
+      officialAdType: row.officialAdType,
+      frequency: row.frequency,
+      priority: row.priority,
+      updatedAt: row.updatedAt
+    };
+  }
+
+  private normalizeAdEvent(event: string) {
+    const text = String(event || "").trim();
+    return ["impression", "click", "skip", "close", "load", "error", "reward"].includes(text) ? text : "impression";
+  }
+
+  private adEventSpentDelta(row: AdCampaign, event: string) {
+    if (event === "impression" && ["cpm", "mixed"].includes(row.billingModel)) return this.adMoney(row.cpmPrice) / 1000;
+    if (event === "click" && ["cpc", "mixed"].includes(row.billingModel)) return this.adMoney(row.cpcPrice);
+    return 0;
+  }
+
+  private adBudgetExceeded(row: AdCampaign, stat?: AdDailyStat | null) {
+    const spent = this.adMoney(row.spentAmount);
+    const totalBudget = this.adMoney(row.totalBudget);
+    if (totalBudget > 0 && spent >= totalBudget) return true;
+    const dailyBudget = this.adMoney(row.dailyBudget);
+    if (dailyBudget > 0 && stat && this.adMoney(stat.spentAmount) >= dailyBudget) return true;
+    if (row.impressionLimit > 0 && row.impressionCount >= row.impressionLimit) return true;
+    if (row.clickLimit > 0 && row.clickCount >= row.clickLimit) return true;
+    return false;
+  }
+
+  private adMoney(value: unknown) {
+    const num = Number(value || 0);
+    return Number.isFinite(num) ? num : 0;
+  }
+
+  private adRoundMoney(value: unknown) {
+    return Math.round(this.adMoney(value) * 100) / 100;
+  }
+
+  private todayDateText() {
+    const date = new Date();
+    const pad = (num: number) => String(num).padStart(2, "0");
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
   }
 
   private publicMarketingPopup(row: MarketingPopup) {

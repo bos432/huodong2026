@@ -2,6 +2,7 @@
 import type { HomepageSectionView } from "@activity/shared";
 import { goDecoratedLink, quickInitial } from "../decoration";
 import MarketingPopup from "./MarketingPopup.vue";
+import SplashAd from "./SplashAd.vue";
 
 defineProps<{
   sections: HomepageSectionView[];
@@ -259,6 +260,7 @@ function formatTime(value: string) {
       </view>
     </view>
   </template>
+  <SplashAd />
   <MarketingPopup />
 </template>
 

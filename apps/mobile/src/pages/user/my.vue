@@ -1,5 +1,6 @@
 <template>
   <view class="profile-page has-custom-nav">
+    <SplashAd />
     <view
       class="member-card"
       :style="{
@@ -33,6 +34,8 @@
         <view v-if="canCompleteWechatProfile" class="member-action" @click="openWechatProfilePanel()">完善头像昵称</view>
       </view>
     </view>
+
+    <AdSlotRenderer slot-key="user_my_banner" page-key="user_my" />
 
     <!-- 核心入口宫格 -->
     <view class="card profile-grid-card">
@@ -159,6 +162,8 @@ import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayloa
 import TabBar from "../../components/TabBar.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import MarketingPopup from "../../components/MarketingPopup.vue";
+import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
+import SplashAd from "../../components/SplashAd.vue";
 
 const profile = ref<any>(null);
 const wallet = ref<any>(null);

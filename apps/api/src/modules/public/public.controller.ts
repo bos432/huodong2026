@@ -89,6 +89,16 @@ export class PublicController {
     return this.service.recordMarketingPopupEvent(id, String(dto?.event || "impression"));
   }
 
+  @Get("ad-slots")
+  adSlot(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("pageKey") pageKey?: string, @Query("slotKey") slotKey?: string, @Query("platform") platform?: string) {
+    return this.service.adSlot(this.tenantContext(req, tenantCode), pageKey || "home", slotKey || "home_top_banner", platform || "h5");
+  }
+
+  @Post("ad-slots/:id/events")
+  adSlotEvent(@Param("id", ParseIntPipe) id: number, @Body() dto: { event?: string; platform?: string }) {
+    return this.service.recordAdSlotEvent(id, String(dto?.event || "impression"), String(dto?.platform || "h5"));
+  }
+
   @Get("charity/summary")
   charitySummary() {
     return this.service.charitySummary();
