@@ -878,9 +878,16 @@ function assertPublicMallPaymentMethodsSafe(label, value) {
 }
 
 function formatLocalDateTime(date) {
-  // The API container may run in UTC while the operator laptop uses Asia/Shanghai.
-  // Send an ISO-derived SQL datetime so short group-buy windows keep the same instant.
-  return date.toISOString().slice(0, 19).replace("T", " ");
+  const pad = (value) => String(value).padStart(2, "0");
+  return [
+    date.getFullYear(),
+    pad(date.getMonth() + 1),
+    pad(date.getDate())
+  ].join("-") + " " + [
+    pad(date.getHours()),
+    pad(date.getMinutes()),
+    pad(date.getSeconds())
+  ].join(":");
 }
 
 async function financeChecks(financeToken, orderId) {
