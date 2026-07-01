@@ -135,6 +135,7 @@ async function main() {
   const showcaseAdmin = await loginShowcaseAdmin("showcase_admin");
   await ensureOperationSettings(showcaseAdmin.token);
   await ensureHomepage(showcaseAdmin.token);
+  await ensureMarketingPopup(showcaseAdmin.token, tenant.id);
   await ensureAnnouncements(showcaseAdmin.token, tenant.id);
   await ensureActivities(showcaseAdmin.token, tenant.id);
   await ensureCourses(showcaseAdmin.token, tenant.id);
@@ -425,6 +426,33 @@ async function ensureHomepage(token) {
     await api("/admin/homepage/sections?pageKey=home", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
   }
   reportStep("H5 首页装修已重置为演示版");
+}
+
+async function ensureMarketingPopup(token, tenantId) {
+  const title = "浏览器验收首页弹窗";
+  const existing = pickList(await api(`/admin/marketing-popups?keyword=${encodeURIComponent(title)}`, { headers: auth(token) }));
+  const payload = {
+    tenantId,
+    title,
+    subtitle: "线上全流程验收",
+    content: "用于验证 H5 首页营销弹窗组件、广告首屏和后台生效检测。",
+    emphasis: "验收通过",
+    imageUrl: "https://dummyimage.com/900x500/fff2b8/9e1b12.png&text=POPUP",
+    type: "wuxing_gold",
+    platforms: ["h5"],
+    placements: ["home"],
+    buttons: [{ text: "查看活动", link: "/pages/activity/list", style: "primary" }],
+    frequency: "every_visit",
+    priority: 999,
+    enabled: true,
+    dismissible: true,
+    startAt: "2026-01-01 00:00:00",
+    endAt: "2027-12-31 23:59:59"
+  };
+  const row = existing.find((item) => item.title === title);
+  if (row) await api(`/admin/marketing-popups/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
+  else await api("/admin/marketing-popups", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
+  reportStep("H5 首页营销弹窗已配置", title);
 }
 
 async function ensureAnnouncements(token, tenantId) {

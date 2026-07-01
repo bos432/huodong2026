@@ -391,7 +391,7 @@ async function runFeaturePages(browser) {
   const h5Context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const h5Page = await h5Context.newPage();
   await h5Page.goto(`${WEB_BASE}/?tenantCode=${encodeURIComponent(TENANT_CODE)}#/`, { waitUntil: "domcontentloaded" });
-  await waitForBodyText(h5Page, "Codex验收弹窗", "H5 home popup visible");
+  await waitForBodyText(h5Page, ["浏览器验收首页弹窗", "Codex验收弹窗", "联调弹窗-慢π首页", "五行暖金模板已上线"], "H5 home popup visible");
   await screenshot(h5Page, "feature-06-h5-popup-ad-home.png");
   record("H5 首页弹窗与广告首屏", "passed", { screenshot: "feature-06-h5-popup-ad-home.png" });
   await h5Context.close();
