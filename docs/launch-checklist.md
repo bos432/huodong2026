@@ -43,16 +43,20 @@
 - 执行 `npm run smoke`。
 - 执行 `npm run smoke:flow`。
 - 执行 `npm run smoke:community-sharing`，确认参与者心得发布、后台审核、公开展示、分享统计和 H5 装修心得模块读取均通过。
+- 执行 `npm run browser:online-showcase`，确认 H5 新手机号验证码登录、报名、财务确认线下收款、签到核销、八类后台角色、弹窗、广告、会员详情和首页模板入口均通过，并保留 `.local-logs/browser-acceptance-*/result.json` 与截图。
 - 如启用或展示多商户商城，执行 `npm run smoke:mall-multi-merchant`，确认生成 `deploy/mall-multi-merchant-smoke-result.json` 且 `passed=true`；上线前再设置 `MALL_MULTI_MERCHANT_PREFLIGHT_PASSED=true`，该结果会被 `npm run preflight` 和 `npm run prelaunch:online-showcase` 检查，避免未跑多商户店铺、跨店拆单、结算凭证、已结算后退款扣回/冲抵和运营后台验收就开放商城。
 - 在真实手机微信内执行 [慢π微信分享与海报真机验收清单](wechat-share-poster-acceptance.md)，确认活动分享、心得发布、海报生成、长按保存、二维码扫码回流和朋友圈传播均通过。
+- 按 [小程序上传发布说明](小程序上传发布说明.md) 的“体验版验收记录表”复验小程序登录、首页装修、弹窗、广告和跳转限制；后台“系统设置 / 部署配置 / 小程序体验版验收”可复制验收模板。
 - 执行 `npm --prefix apps/api run migration:show`，确认待执行迁移符合预期。
 - 生产数据库备份后执行 `npm --prefix apps/api run migration:run`。
+- 发布静态包前建议设置 `STRICT_RELEASE_VERSION=true` 再执行 `npm run publish:webroot`；如需灰度允许差异，至少确认发布脚本的版本不一致警告已经写入验收报告。
 - 执行 `docker compose --env-file deploy/.env.production up -d --build`。
 - 访问 `/api/health`，确认 API 和数据库均为 `up`。
 - 访问 `/api/health`，确认 `release.version` 和 `release.commit` 与发布记录一致。
 - 访问 `/api/health/ready`，确认返回 `ready: true` 后再切流量。
 - 访问 `/api/health/metrics`，确认包含 `activity_api_up`、`activity_database_up`、`activity_config_error`、`activity_process_uptime_seconds` 和 `activity_build_info`。
 - 访问后台“上线体检”，确认生产配置状态符合预期。
+- 访问后台“系统设置 / 部署配置”，点击“复制版本信息”，留存 API/Admin/H5 的 commit、buildTime 和差异结论。
 - 访问 H5 首页，确认公告、分类、推荐活动和活动列表显示正常。
 - 访问后台登录页，使用管理员账号登录。
 
@@ -168,7 +172,7 @@
 - 通知发送记录包含渠道、标题、活动、用户、状态、服务商、重试次数、错误原因和备注。
 - 通知失败记录可重试，重试次数会递增并保留最新错误原因。
 - 如果接入真实短信、邮件或微信订阅消息，需额外验证服务商账号、签名、模板审核、失败重试和发送频控。
-- 生产环境如果设置 `SMS_PROVIDER_ENABLED=true`，建议同步填写 `SMS_PROVIDER`、`SMS_ACCESS_KEY_ID`、`SMS_ACCESS_KEY_SECRET`、`SMS_SIGN_NAME` 和 `SMS_TEMPLATE_ID`；若凭证放在后台系统设置中，需在上线体检和 H5 验证码实发测试中确认短信通道已就绪。
+- 生产环境如果设置 `SMS_PROVIDER_ENABLED=true`，建议同步填写 `SMS_PROVIDER`、`SMS_ACCESS_KEY_ID`、`SMS_ACCESS_KEY_SECRET`、`SMS_SIGN_NAME`、`SMS_TEMPLATE_ID` 和 `SMS_SDK_APP_ID`；若凭证放在后台系统设置中，需在上线体检和 H5 验证码实发测试中确认短信通道已就绪。
 - 生产环境如果设置 `EMAIL_PROVIDER_ENABLED=true`，需填写 `EMAIL_PROVIDER`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。
 - 生产环境如果设置 `WECHAT_MESSAGE_PROVIDER_ENABLED=true`，需填写 `WECHAT_MESSAGE_PROVIDER`、`WECHAT_APP_ID` 和 `WECHAT_APP_SECRET`。
 

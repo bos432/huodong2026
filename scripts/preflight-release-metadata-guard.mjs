@@ -68,6 +68,11 @@ checkSourceIncludesAll(adminSystemSettings, [
   'envLine("BUILD_COMMIT", deployment.buildCommit)',
   "发布提交",
   "BUILD_COMMIT",
+  "staticVersionSummary",
+  "copyStaticVersionSummary",
+  "复制版本信息",
+  "小程序体验版验收",
+  "copyMiniprogramAcceptanceTemplate",
   "仍是占位值",
   "生成配置时自动写入",
   "可用于上线体检、健康检查和回滚定位"

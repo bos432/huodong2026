@@ -75,6 +75,7 @@ const permissions = [
   "review.manage",
   "homepage.manage",
   "marketing_popup.manage",
+  "ad_center.manage",
   "announcement.manage",
   "operation_settings.manage",
   "tenant_profile.manage",
@@ -90,7 +91,10 @@ const accounts = [
   { username: "showcase_admin", role: "operator", permissions },
   { username: "showcase_ops", role: "operator", permissions: permissions.filter((item) => !item.startsWith("finance") && !item.startsWith("agent_settlement") && !item.startsWith("payment_account") && item !== "order.refund" && item !== "order.export") },
   { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "mall.merchant.manage", "mall.merchant.view", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "member.view", "upload.settlement_proof"] },
-  { username: "showcase_checkin", role: "checkin_staff", permissions: ["dashboard.view", "activity.view", "registration.view", "checkin.manage"] }
+  { username: "showcase_checkin", role: "checkin_staff", permissions: ["dashboard.view", "activity.view", "registration.view", "checkin.manage"] },
+  { username: "showcase_store_owner", role: "operator", permissions: ["dashboard.view", "mall.merchant.view", "mall.product.manage", "mall.review.manage", "mall.logistics.manage", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "upload.image", "tenant_profile.manage"] },
+  { username: "showcase_store_finance", role: "finance", permissions: ["dashboard.view", "mall.merchant.view", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "upload.settlement_proof"] },
+  { username: "showcase_agent_owner", role: "finance", permissions: ["dashboard.view", "activity.view", "registration.view", "order.view", "finance.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.export", "mall.merchant.view", "mall.order.view", "mall.finance.view", "mall.statistics.view", "upload.settlement_proof"] }
 ];
 
 const activities = [
@@ -140,7 +144,7 @@ async function main() {
 
   console.log("\n线上演示商家数据已准备完成。");
   console.log(`H5 演示入口：https://rd.chaimen666.com/?tenantCode=${TENANT_CODE}#/`);
-  console.log("后台账号：showcase_admin / showcase_ops / showcase_finance / showcase_checkin");
+  console.log("后台账号：showcase_admin / showcase_ops / showcase_finance / showcase_checkin / showcase_store_owner / showcase_store_finance / showcase_agent_owner");
   console.log("演示用户手机号：13990000001 - 13990000005，密码使用 SHOWCASE_PASSWORD。");
 }
 
@@ -239,13 +243,13 @@ async function ensureMallDefaultStore(token, tenantId) {
   let merchant = existing
     ? existing
     : await api("/admin/mall/merchants", { method: "POST", headers: auth(token), body: JSON.stringify({ ...payload, status: "disabled", mallEnabled: false }) });
-  for (const username of ["showcase_admin", "showcase_ops", "showcase_finance"]) {
+  for (const username of ["showcase_admin", "showcase_ops", "showcase_finance", "showcase_store_owner", "showcase_store_finance", "showcase_agent_owner"]) {
     const admin = await findAdminByUsername(token, username);
     if (!admin) continue;
     await api("/admin/mall/merchant-access", {
       method: "POST",
       headers: auth(token),
-      body: JSON.stringify({ adminId: admin.id, merchantId: merchant.id, accessRole: username.includes("finance") ? "finance" : "manager", enabled: true })
+      body: JSON.stringify({ adminId: admin.id, merchantId: merchant.id, accessRole: username.includes("finance") ? "finance" : username.includes("agent") ? "viewer" : "manager", enabled: true })
     });
   }
   const mutablePayload = existing

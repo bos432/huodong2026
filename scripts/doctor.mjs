@@ -94,7 +94,7 @@ function configChecks(env) {
   rows.push(...realPaymentRolloutChecks(env, production));
   rows.push(...multiTenantRolloutChecks(env, production));
   rows.push(...mallMultiMerchantRolloutChecks(env, production));
-  rows.push(providerCheck("SMS provider", env.SMS_PROVIDER_ENABLED, env, ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"], false));
+  rows.push(providerCheck("SMS provider", env.SMS_PROVIDER_ENABLED, env, ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"], false));
   rows.push(providerCheck("Email provider", env.EMAIL_PROVIDER_ENABLED, env, ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"], production));
   rows.push(providerCheck("WeChat message provider", env.WECHAT_MESSAGE_PROVIDER_ENABLED, env, ["WECHAT_APP_ID", "WECHAT_APP_SECRET"], production));
   rows.push(notificationForceFailCheck(env.NOTIFICATION_FORCE_FAIL ?? "false", production));

@@ -197,6 +197,20 @@ const defaultLayout: Record<string, Record<string, any>> = {
 type TemplateRow = { type: HomepageSectionType | string; title: string | null; subtitle?: string | null; config?: Record<string, any>; layout?: Record<string, any>; enabled?: boolean };
 const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow[] }> = [
   {
+    key: "launch_simple",
+    label: "上线简洁版",
+    rows: [
+      { type: "search_bar", title: null, config: { cityLabel: "本地", placeholder: "搜索活动、课程、好物" }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", borderRadius: 999, cardStyle: "outlined", spacingBottom: 10 } },
+      { type: "hero", title: "慢π活动与课程", subtitle: "精选活动、系统课程、商城好物和社区动态，一站式完成浏览、报名、下单和会员服务。", config: { ...defaultConfig.hero, eyebrow: "上线运营简洁版", primaryButtonText: "查看精选活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" }, layout: { backgroundColor: "linear-gradient(135deg, #0f766e 0%, #4a6b8a 100%)", primaryColor: "#0f766e", accentColor: "#c43d3d", textColor: "#ffffff", mutedColor: "rgba(255,255,255,0.82)", borderRadius: 12, density: "comfortable", cardStyle: "soft" } },
+      { type: "announcement_bar", title: "平台公告", config: { limit: 3, pinnedFirst: true, link: "/pages/announcement/list" }, layout: { backgroundColor: "#fff7ec", primaryColor: "#c43d3d", borderRadius: 8, spacingBottom: 10 } },
+      { type: "featured_activities", title: "精选活动", subtitle: "近期重点推荐，适合优先报名", config: { source: "featured", limit: 6 }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", cardStyle: "soft", borderRadius: 8 } },
+      { type: "image_banner", title: "商城与广告入口", config: { imageUrl: "", link: "/pages/mall/index", ratio: "3:1", fit: "cover" }, layout: { backgroundColor: "#f8fafc", primaryColor: "#c43d3d", borderRadius: 10, cardStyle: "outlined" } },
+      { type: "course_recommendations", title: "课程入口", subtitle: "把活动体验延伸为持续学习", config: defaultConfig.course_recommendations, layout: { backgroundColor: "#ffffff", primaryColor: "#4a6b8a", borderRadius: 8, cardStyle: "soft" } },
+      { type: "testimonial_feed", title: "动态与心得", subtitle: "查看参与者反馈和社区内容", config: { source: "participant", limit: 3, link: "/pages/community/index" }, layout: { backgroundColor: "#ffffff", primaryColor: "#8b5a2b", borderRadius: 8, cardStyle: "soft" } },
+      { type: "bottom_nav", title: "前台底部导航", config: defaultConfig.bottom_nav, layout: defaultLayout.bottom_nav }
+    ]
+  },
+  {
     key: "activity_ops",
     label: "活动运营型",
     rows: [
@@ -370,6 +384,7 @@ type UiTemplateKit = {
 };
 const uiTemplateKits: UiTemplateKit[] = decorationTemplates.map((template) => {
   const meta: Record<string, Omit<UiTemplateKit, "key" | "label" | "rows">> = {
+    launch_simple: { category: "上线", description: "搜索、主视觉、公告、活动、商城广告、课程和动态入口，适合正式上线默认首页。", scene: "上线首页 / 简洁运营", palette: ["#0f766e", "#4a6b8a", "#ffffff", "#c43d3d"], stylePresetKey: "quiet_work" },
     activity_ops: { category: "活动", description: "搜索、精选活动、心得口碑组合，适合报名转化。", scene: "活动首页 / 本地活动运营", palette: ["#0f766e", "#4a6b8a", "#ffffff", "#667085"], stylePresetKey: "quiet_work" },
     academy_brand: { category: "品牌", description: "品牌故事、同学故事和公益入口，适合讲清慢π理念。", scene: "品牌首页 / 文化空间", palette: ["#5b2f24", "#fff7ec", "#c43d3d", "#8b5a2b"], stylePresetKey: "warm_academy" },
     course_conversion: { category: "课程", description: "课程推荐与活动体验联动，适合课程转化。", scene: "课程首页 / 训练营", palette: ["#4a6b8a", "#0f766e", "#ffffff", "#667085"], stylePresetKey: "quiet_work" },
@@ -1346,6 +1361,29 @@ async function applyTemplate() {
   await replaceCurrentSections(withHomeGlobalRows(template.rows), `已应用「${template.label}」`);
 }
 
+async function saveVersionWithNote(note: string) {
+  versionSaving.value = true;
+  try {
+    await api.post("/admin/homepage/versions", { note }, homepageScopeParams());
+    if (versionDialogVisible.value) await loadVersions();
+  } finally {
+    versionSaving.value = false;
+  }
+}
+
+async function applyLaunchSimpleTemplate() {
+  const template = decorationTemplates.find((item) => item.key === "launch_simple");
+  if (!template) return;
+  await ElMessageBox.confirm("应用上线简洁版模板前会自动保存当前装修版本，随后替换当前页面模块。确认继续？", "应用上线简洁版模板", {
+    type: "warning",
+    confirmButtonText: "保存并应用",
+    cancelButtonText: "取消"
+  });
+  await saveVersionWithNote(`应用上线简洁版前自动备份 ${formatSnapshotTime(new Date().toISOString())}`);
+  await replaceCurrentSections(withHomeGlobalRows(template.rows), "已应用上线简洁版模板");
+  selectedTemplateKey.value = template.key;
+}
+
 function uiKitStyle(kit: UiTemplateKit) {
   return cloneJson(visualPresets.find((item) => item.key === kit.stylePresetKey)?.layout || {}) as Record<string, any>;
 }
@@ -1464,14 +1502,10 @@ async function saveVersion() {
       cancelButtonText: "取消",
       inputValidator: (value) => Boolean(String(value || "").trim()) || "请输入版本备注"
     });
-    versionSaving.value = true;
-    await api.post("/admin/homepage/versions", { note: String(result.value || defaultNote).trim() }, homepageScopeParams());
+    await saveVersionWithNote(String(result.value || defaultNote).trim());
     ElMessage.success("当前装修版本已保存");
-    if (versionDialogVisible.value) await loadVersions();
   } catch (error: any) {
     if (error !== "cancel" && error !== "close") throw error;
-  } finally {
-    versionSaving.value = false;
   }
 }
 
@@ -1869,6 +1903,7 @@ onMounted(async () => {
           <el-option v-for="item in decorationTemplates" :key="item.key" :label="item.label" :value="item.key" />
         </el-select>
         <el-button v-if="canEdit" type="success" @click="applyTemplate">应用模板</el-button>
+        <el-button v-if="canEdit" type="success" plain :loading="versionSaving" @click="applyLaunchSimpleTemplate">应用上线简洁版模板</el-button>
         <el-button v-if="canEdit" type="warning" plain @click="openUiKitDialog">UI 模板套装</el-button>
         <el-button v-if="canEdit" type="primary" plain :loading="versionSaving" @click="saveVersion">保存版本</el-button>
         <el-button v-if="canEdit" @click="openVersionHistory">版本历史</el-button>

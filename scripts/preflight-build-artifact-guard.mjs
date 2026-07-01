@@ -19,6 +19,7 @@ const apiPackage = JSON.parse(read("apps/api/package.json"));
 const adminPackage = JSON.parse(read("apps/admin/package.json"));
 const mobilePackage = JSON.parse(read("apps/mobile/package.json"));
 const preflight = read("scripts/preflight.mjs");
+const publishWebroot = read("scripts/publish-webroot.mjs");
 const apiDockerfile = read("apps/api/Dockerfile");
 const compose = read("docker-compose.yml");
 const nginxGuard = read("scripts/preflight-nginx-guard.mjs");
@@ -43,7 +44,9 @@ checkSourceIncludes(apiPackage.scripts?.["migration:run"] || "", "npm run build"
 checkSourceIncludes(adminPackage.scripts?.build || "", "vue-tsc --noEmit", "admin build script");
 checkSourceIncludes(adminPackage.scripts?.build || "", "vite build", "admin build script");
 checkSourceIncludes(adminPackage.scripts?.build || "", "--configLoader runner", "admin build script");
-check(mobilePackage.scripts?.["build:h5"] === "uni build -p h5", "mobile build:h5 must build Uni H5 artifacts.");
+checkSourceIncludes(mobilePackage.scripts?.["build:h5"] || "", "uni build -p h5", "mobile build:h5");
+checkSourceIncludes(mobilePackage.scripts?.["build:h5"] || "", "write-static-version.mjs", "mobile build:h5");
+checkSourceIncludes(adminPackage.scripts?.build || "", "write-static-version.mjs", "admin build script");
 
 for (const artifact of [
   "apps/api/dist/main.js",
@@ -59,6 +62,11 @@ checkSourceIncludes(preflight, "checkAdminBuildBase", "preflight");
 checkSourceIncludes(preflight, 'base: "./"', "preflight");
 checkSourceIncludes(preflight, 'src="/assets/', "preflight");
 checkSourceIncludes(preflight, 'href="/assets/', "preflight");
+checkSourceIncludes(publishWebroot, "assertStaticVersionConsistency", "publish webroot script");
+checkSourceIncludes(publishWebroot, "STRICT_RELEASE_VERSION", "publish webroot script");
+checkSourceIncludes(publishWebroot, "REQUIRE_RELEASE_VERSION_MATCH", "publish webroot script");
+checkSourceIncludes(publishWebroot, "version.json", "publish webroot script");
+checkSourceIncludes(publishWebroot, "Record this known difference", "publish webroot script");
 
 checkSourceIncludes(apiDockerfile, "RUN npm --prefix apps/api run build", "API Dockerfile");
 checkSourceIncludes(apiDockerfile, "COPY --from=build /app/apps/api/dist ./apps/api/dist", "API Dockerfile");
@@ -71,6 +79,8 @@ checkSourceIncludes(nginxGuard, "./apps/mobile/dist/build/h5:/usr/share/nginx/h5
 checkSourceIncludes(migrationGuard, "apps/api/dist/data-source.js", "migration guard");
 
 checkSourceIncludes(launchChecklist, "npm run build", "launch checklist");
+checkSourceIncludes(launchChecklist, "STRICT_RELEASE_VERSION", "launch checklist");
+checkSourceIncludes(launchChecklist, "复制版本信息", "launch checklist");
 checkSourceIncludes(launchChecklist, "--configLoader runner", "launch checklist");
 checkSourceIncludes(launchChecklist, "构建产物", "launch checklist");
 checkSourceIncludes(launchChecklist, "docker compose --env-file deploy/.env.production up -d --build", "launch checklist");

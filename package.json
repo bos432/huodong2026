@@ -24,6 +24,7 @@
     "report:qiwai-demo": "node scripts/qiwai-demo-report.mjs",
     "seed:online-showcase": "node scripts/seed-online-showcase.mjs",
     "smoke:online-showcase": "node scripts/smoke-online-showcase.mjs",
+    "browser:online-showcase": "node scripts/browser-online-showcase-acceptance.cjs",
     "smoke:mall-multi-merchant": "node scripts/smoke-mall-multi-merchant.mjs",
     "cleanup:online-showcase": "node scripts/cleanup-online-showcase.mjs",
     "prelaunch:online-showcase": "node scripts/prelaunch-online-showcase.mjs",

@@ -7,6 +7,7 @@ import { api } from "../api";
 import { isPlatformAdmin } from "../permissions";
 
 type TenantOption = { id: number; name?: string; code?: string; enabled?: boolean };
+type TenantWithSettings = TenantOption & { settings?: Record<string, unknown> | null };
 type Advertiser = { id: number; companyName: string; contactName?: string | null; contactPhone?: string | null; wechat?: string | null; licenseUrl?: string | null; remark?: string | null; status: string; tenant?: TenantOption | null };
 type Contract = { id: number; contractNo: string; title: string; billingModel: string; amount: string; fixedFee: string; cpmPrice: string; cpcPrice: string; startAt?: string | null; endAt?: string | null; paymentStatus: string; attachmentUrl?: string | null; remark?: string | null; status: string; advertiser?: Advertiser | null; tenant?: TenantOption | null };
 type Campaign = {
@@ -49,7 +50,7 @@ const route = useRoute();
 const activeTab = ref("campaigns");
 const loading = ref(false);
 const saving = ref(false);
-const tenants = ref<TenantOption[]>([]);
+const tenants = ref<TenantWithSettings[]>([]);
 const advertisers = ref<Advertiser[]>([]);
 const contracts = ref<Contract[]>([]);
 const campaigns = ref<Campaign[]>([]);
@@ -180,7 +181,7 @@ function rowPayload<T extends Record<string, any>>(form: T) {
 }
 
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, TenantOption[]>("/admin/tenants") : [];
+  tenants.value = isPlatformAdmin() ? await api.get<any, TenantWithSettings[]>("/admin/tenants") : [];
 }
 
 async function loadAdvertisers() {
@@ -314,6 +315,8 @@ function editCampaign(row: Campaign) {
 
 async function submitCampaign() {
   if (!campaignForm.name.trim() || !campaignForm.title.trim()) return ElMessage.warning("请填写广告计划名称和前台标题");
+  const blockers = campaignEnableBlockers(campaignForm);
+  if (campaignForm.enabled && blockers.length) return ElMessage.warning(blockers[0]);
   saving.value = true;
   try {
     if (editingCampaignId.value) await api.patch(`/admin/ad-campaigns/${editingCampaignId.value}`, rowPayload(campaignForm));
@@ -329,6 +332,10 @@ async function submitCampaign() {
 }
 
 async function toggleCampaign(row: Campaign) {
+  if (!row.enabled) {
+    const blockers = campaignEnableBlockers(row);
+    if (blockers.length) return ElMessage.warning(blockers[0]);
+  }
   await api.patch(`/admin/ad-campaigns/${row.id}`, { ...rowPayload({ ...row, tenantId: row.tenant?.id, advertiserId: row.advertiser?.id, contractId: row.contract?.id }), enabled: !row.enabled });
   ElMessage.success(row.enabled ? "广告计划已停用" : "广告计划已启用");
   await loadAll();
@@ -375,12 +382,32 @@ function campaignWarnings(row: Campaign) {
     if (!row.officialAdUnitId) warnings.push("缺少官方 adUnitId");
     if (!(row.platforms || []).includes("mp-weixin")) warnings.push("官方广告仅小程序有效");
   } else {
-    if (!row.imageUrl) warnings.push("自有广告缺少图片");
+    if (!row.imageUrl && !tenantDefaultAdImage(row.tenant?.id)) warnings.push("自有广告缺少图片");
+    if (!row.imageUrl && tenantDefaultAdImage(row.tenant?.id)) warnings.push("使用商家默认广告图兜底");
     if (row.imageUrl && !/^https:\/\//i.test(row.imageUrl) && !row.imageUrl.startsWith("/uploads/")) warnings.push("图片建议使用 HTTPS");
   }
   if (!row.link && row.source === "custom") warnings.push("自有广告缺少跳转链接");
   if (Number(row.totalBudget || 0) > 0 && Number(row.spentAmount || 0) >= Number(row.totalBudget || 0)) warnings.push("已达到总预算");
   return warnings;
+}
+
+function campaignEnableBlockers(row: { tenantId?: number; tenant?: TenantOption | null; source?: string; title?: string; imageUrl?: string | null; link?: string | null }) {
+  if (row.source !== "custom") return [];
+  const blockers: string[] = [];
+  if (!String(row.title || "").trim()) blockers.push("启用自有广告前请填写标题");
+  const imageUrl = String(row.imageUrl || "").trim();
+  const fallback = tenantDefaultAdImage(row.tenantId || row.tenant?.id);
+  if (!imageUrl && !fallback && isPlatformAdmin()) blockers.push("请上传广告图或选择商家默认广告图");
+  if (imageUrl && !/^https:\/\//i.test(imageUrl) && !imageUrl.startsWith("/uploads/")) blockers.push("广告图必须使用 HTTPS 或 /uploads/ 地址");
+  if (!String(row.link || "").trim()) blockers.push("启用自有广告前请填写跳转链接");
+  return blockers;
+}
+
+function tenantDefaultAdImage(tenantId?: number) {
+  const tenant = tenants.value.find((item) => item.id === tenantId);
+  const settings = tenant?.settings || {};
+  const value = settings.defaultAdImageUrl || settings.defaultShareImageUrl || settings.shareImageUrl;
+  return typeof value === "string" && (/^https:\/\//i.test(value) || value.startsWith("/uploads/")) ? value : "";
 }
 
 function exportCampaignCsv() {

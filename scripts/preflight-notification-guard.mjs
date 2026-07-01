@@ -1,6 +1,6 @@
 import fs from "node:fs";
 
-const smsRequiredFields = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"];
+const smsRequiredFields = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"];
 const providerEnabledKeys = ["SMS_PROVIDER_ENABLED", "EMAIL_PROVIDER_ENABLED", "WECHAT_MESSAGE_PROVIDER_ENABLED"];
 const providerNameKeys = ["SMS_PROVIDER", "EMAIL_PROVIDER", "WECHAT_MESSAGE_PROVIDER"];
 const emailRequiredFields = ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"];

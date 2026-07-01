@@ -600,5 +600,21 @@ watch(
 :deep(.el-sub-menu__title:hover), :deep(.el-menu-item:hover) { background-color: #1e2b43; }
 :deep(.el-menu-item) { height: 42px; padding-left: 44px !important; }
 :deep(.el-menu-item.is-active) { background: #243653; font-weight: 700; }
+
+@media (max-width: 768px) {
+  .shell { display: block; }
+  .aside { width: 100% !important; overflow-x: auto; }
+  .brand { height: 52px; padding: 0 14px; font-size: 17px; }
+  .el-menu { display: flex; min-width: max-content; }
+  :deep(.el-sub-menu) { flex: 0 0 auto; }
+  :deep(.el-sub-menu__title), :deep(.el-menu-item) { height: 40px; padding: 0 14px !important; }
+  :deep(.el-sub-menu .el-menu) { position: static; display: block; min-width: 180px; }
+  .header { height: auto; min-height: 56px; padding: 10px 12px; align-items: flex-start; flex-wrap: wrap; }
+  .header-title { width: 100%; }
+  .header-actions { width: 100%; justify-content: flex-start; gap: 8px; }
+  .tenant-switcher { width: 100%; align-items: flex-start; flex-wrap: wrap; }
+  .tenant-switcher .el-select { width: min(260px, 100%); }
+  :deep(.el-main) { padding: 12px; min-width: 0; overflow-x: hidden; }
+}
 </style>
 

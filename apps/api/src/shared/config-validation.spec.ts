@@ -90,7 +90,8 @@ describe("runtime config validation", () => {
         SMS_ACCESS_KEY_ID: "sms-key",
         SMS_ACCESS_KEY_SECRET: "sms-secret",
         SMS_SIGN_NAME: "activity",
-        SMS_TEMPLATE_ID: "template-001"
+        SMS_TEMPLATE_ID: "template-001",
+        SMS_SDK_APP_ID: "1400000000"
       })
     );
     expect(report.checks.find((check) => check.key === "SMS_PROVIDER_ENABLED")?.status).toBe("ok");

@@ -78,6 +78,7 @@ import { tenantOperationHealth } from "./tenant-health";
 import { tenantRegionShapesConflict } from "./tenant-region-geometry";
 import { normalizeTenantPackageExpiresAt, normalizeTenantPackagePlan, tenantPackagePermissionTemplate, tenantRenewalReminder, tenantSubscriptionStatus, tenantSubscriptionWriteRestriction } from "./tenant-subscription";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
+import { NotificationProviderService } from "../v1/notification-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
 import { RefundCompletionService } from "../refund-completion.service";
 import { paymentStatementOrderWhere } from "./payment-statement-import";
@@ -103,6 +104,8 @@ type MemberListQuery = {
   levelId?: string | number;
   activeStart?: string;
   activeEnd?: string;
+  quickFilter?: string;
+  tag?: string;
   sortBy?: string;
   sortOrder?: string;
 };
@@ -181,6 +184,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
     private readonly paymentProvider: PaymentProviderService,
+    private readonly notificationProvider: NotificationProviderService,
     private readonly refundCompletion: RefundCompletionService,
     private readonly charityFund: CharityFundService
   ) {}
@@ -1794,6 +1798,31 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return { id, deleted: true };
   }
 
+  async marketingPopupEffectiveCheck(admin?: AdminContext, query: { id?: number; tenantId?: number; pageKey?: string; platform?: string } = {}) {
+    const pageKey = this.normalizeMarketingPopupChoice(query.pageKey, ["home", "user_my", "activity_detail", "course_detail", "mall_product_detail", "mall_home", "activity_list", "course_home", "community_home"], "home");
+    const platform = this.normalizeMarketingPopupChoice(query.platform, ["h5", "mp-weixin"], "h5");
+    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : query.tenantId ? await this.tenants.findOneBy({ id: query.tenantId }) : null;
+    if (query.tenantId && !tenant) throw new NotFoundException("商家不存在");
+    const builder = this.marketingPopups.createQueryBuilder("popup").leftJoinAndSelect("popup.tenant", "tenant").orderBy("popup.priority", "DESC").addOrderBy("popup.updatedAt", "DESC").addOrderBy("popup.id", "DESC").take(query.id ? 1 : 300);
+    this.applyTenantScope(builder, "popup", admin);
+    if (query.id) builder.andWhere("popup.id = :id", { id: query.id });
+    else if (tenant) builder.andWhere("tenant.id = :tenantId", { tenantId: tenant.id });
+    else if (!this.isTenantScoped(admin)) builder.andWhere("popup.tenantId IS NULL");
+    const rows = await builder.getMany();
+    if (query.id && !rows.length) throw new NotFoundException("营销弹窗不存在");
+    const checks = rows.map((row) => this.marketingPopupEffectiveResult(row, pageKey, platform, tenant?.id || null));
+    const hit = checks.find((item) => item.matched) || null;
+    return {
+      pageKey,
+      platform,
+      tenant: tenant ? { id: tenant.id, code: tenant.code, name: tenant.name } : null,
+      matched: Boolean(hit),
+      hit,
+      publicPopup: hit ? hit.popup : null,
+      checks: query.id ? checks : checks.slice(0, 50)
+    };
+  }
+
   async listAdAdvertisers(admin?: AdminContext, query: { tenantId?: number; keyword?: string; status?: string } = {}) {
     const builder = this.adAdvertisers.createQueryBuilder("advertiser").leftJoinAndSelect("advertiser.tenant", "tenant").orderBy("advertiser.updatedAt", "DESC").addOrderBy("advertiser.id", "DESC").take(500);
     this.applyTenantScope(builder, "advertiser", admin);
@@ -1902,7 +1931,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     this.assertTenantSubscriptionWritable(tenant, admin);
     const advertiser = await this.resolveAdAdvertiser(dto.advertiserId, tenant, admin);
     const contract = await this.resolveAdContract(dto.contractId, tenant, admin);
-    const saved = await this.adCampaigns.save(this.adCampaigns.create({ tenant, advertiser, contract, ...this.adCampaignPayload(dto) }));
+    const saved = await this.adCampaigns.save(this.adCampaigns.create({ tenant, advertiser, contract, ...this.adCampaignPayload(dto, tenant) }));
     await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.campaign.create", "ad_campaign", saved.id, `创建广告计划：${saved.name}`, { tenantId: saved.tenant?.id || null, source: saved.source, format: saved.format, slotKey: saved.slotKey });
     return saved;
   }
@@ -1915,7 +1944,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     this.assertTenantSubscriptionWritable(tenant, admin);
     const advertiser = await this.resolveAdAdvertiser(dto.advertiserId, tenant, admin);
     const contract = await this.resolveAdContract(dto.contractId, tenant, admin);
-    Object.assign(row, { tenant, advertiser, contract, ...this.adCampaignPayload(dto) });
+    Object.assign(row, { tenant, advertiser, contract, ...this.adCampaignPayload(dto, tenant) });
     const saved = await this.adCampaigns.save(row);
     await this.logOperation(this.operationActorForTenant(admin, saved.tenant), "ad.campaign.update", "ad_campaign", saved.id, `更新广告计划：${saved.name}`, { tenantId: saved.tenant?.id || null, source: saved.source, format: saved.format, slotKey: saved.slotKey, enabled: saved.enabled });
     return saved;
@@ -3665,7 +3694,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       smsAccessKeyId: dto.smsAccessKeyId?.trim() || null,
       smsAccessKeySecret: dto.smsAccessKeySecret?.trim() || null,
       smsSignName: dto.smsSignName?.trim() || null,
-      smsTemplateId: dto.smsTemplateId?.trim() || null
+      smsTemplateId: dto.smsTemplateId?.trim() || null,
+      smsSdkAppId: dto.smsSdkAppId?.trim() || null
     });
     if (paymentSettingsEditable) {
       this.assertOperationPaymentSettingPayload(dto);
@@ -3684,6 +3714,42 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const saved = await this.operationSettings.save(setting);
     await this.logOperation(admin, "settings.operation.update", "operation_setting", saved.id, "更新运营设置", { registrationEnabled: saved.registrationEnabled, customerServicePhone: saved.customerServicePhone, customerServiceWechat: saved.customerServiceWechat, smsProviderEnabled: saved.smsProviderEnabled, launchConfigSaved: !this.isTenantScoped(admin) && dto.launchConfig !== undefined });
     return saved;
+  }
+
+  async sendTestSms(dto: { phone: string }, admin?: AdminContext) {
+    this.assertSmsTestPermission(admin);
+    const phone = this.normalizePhone(dto.phone);
+    const setting = await this.ensureOperationSetting(admin);
+    const code = "123456";
+    const result = await this.notificationProvider.deliver({
+      channel: "sms",
+      title: "后台测试短信",
+      content: `验证码 ${code}，5 分钟内有效。请勿转发给他人。`,
+      to: { phone }
+    }, {
+      sms: {
+        enabled: setting.smsProviderEnabled,
+        provider: setting.smsProvider,
+        accessKeyId: setting.smsAccessKeyId,
+        accessKeySecret: setting.smsAccessKeySecret,
+        signName: setting.smsSignName,
+        templateId: setting.smsTemplateId,
+        appId: setting.smsSdkAppId
+      }
+    });
+    await this.h5AuthCodeLogs.save(this.h5AuthCodeLogs.create({
+      phone,
+      clientIp: null,
+      mode: "sms_test",
+      status: result.status === "sent" ? "sent" : "failed",
+      provider: result.provider,
+      providerMessageId: result.providerMessageId || null,
+      message: result.status === "sent" ? "后台发送测试短信成功" : result.errorMessage || "后台发送测试短信失败",
+      expiresAt: result.status === "sent" ? new Date(Date.now() + 5 * 60 * 1000) : null
+    }));
+    if (result.status !== "sent") throw new BadRequestException(result.errorMessage || "测试短信发送失败");
+    await this.logOperation(admin, "settings.sms.test", "operation_setting", setting.id, `发送测试短信：${this.maskPhone(phone)}`, { provider: result.provider, providerMessageId: result.providerMessageId || null });
+    return { provider: result.provider, providerMessageId: result.providerMessageId, status: result.status, message: "测试短信已提交服务商" };
   }
 
   async refundOrder(orderId: number, dto: RefundDto, admin: AdminContext) {
@@ -4082,6 +4148,24 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const activeEnd = this.memberDateFilter(query.activeEnd, true);
     if (activeStart) builder.andWhere("profile.lastActiveAt >= :activeStart", { activeStart });
     if (activeEnd) builder.andWhere("profile.lastActiveAt <= :activeEnd", { activeEnd });
+    const quickFilter = String(query.quickFilter || "").trim();
+    if (quickFilter === "active7") builder.andWhere("profile.lastActiveAt >= :quickActive7", { quickActive7: new Date(Date.now() - 7 * 24 * 60 * 60 * 1000) });
+    if (quickFilter === "inactive30") builder.andWhere("(profile.lastActiveAt IS NULL OR profile.lastActiveAt < :quickInactive30)", { quickInactive30: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) });
+    if (quickFilter === "spent") builder.andWhere("CAST(profile.totalSpent AS DECIMAL(12,2)) > 0");
+    if (quickFilter === "no_spent") builder.andWhere("CAST(profile.totalSpent AS DECIMAL(12,2)) <= 0");
+    if (quickFilter === "registered") builder.andWhere("profile.registrationCount > 0");
+    if (quickFilter === "no_registered") builder.andWhere("profile.registrationCount <= 0");
+    const tag = String(query.tag || "").trim();
+    if (tag) {
+      builder.andWhere((qb) => {
+        const subQuery = qb.subQuery()
+          .select("tag.userId")
+          .from(UserTag, "tag")
+          .where("tag.name = :memberTag")
+          .getQuery();
+        return `user.id IN ${subQuery}`;
+      }, { memberTag: tag });
+    }
   }
 
   private memberBooleanFilter(value: unknown) {
@@ -4190,23 +4274,62 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     await this.assertUserTenantAccess(userId, admin);
     const profile = await this.ensureMemberProfile(user);
     if (this.isTenantScoped(admin)) {
-      const [registrations, orders, checkIns, reviews] = await Promise.all([
+      const [registrations, orders, checkIns, reviews, tags, refunds, walletTransactions] = await Promise.all([
         this.visibleRegistrationsForUser(userId, admin),
         this.visibleOrdersForUser(userId, admin),
         this.visibleCheckInsForUser(userId, admin),
-        this.visibleReviewsForUser(userId, admin)
+        this.visibleReviewsForUser(userId, admin),
+        this.listUserTags({ userId }, admin),
+        this.visibleRefundsForUser(userId, admin),
+        this.visibleWalletTransactionsForUser(userId, admin)
       ]);
       const points = await this.visiblePointLogsForUser(userId, registrations, orders, checkIns, reviews);
-      return { profile, registrations, orders, checkIns, reviews, points };
+      return { profile, registrations, orders, checkIns, reviews, points, tags, timeline: this.memberTimeline({ user, registrations, orders, checkIns, reviews, points, refunds, walletTransactions }) };
     }
-    const [registrations, orders, checkIns, reviews, points] = await Promise.all([
+    const [registrations, orders, checkIns, reviews, points, tags, refunds, walletTransactions] = await Promise.all([
       this.registrations.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 50 }),
       this.orders.find({ where: { registration: { user: { id: userId } } }, order: { createdAt: "DESC" }, take: 50 }),
       this.checkIns.find({ where: { registration: { user: { id: userId } } }, order: { createdAt: "DESC" }, take: 50 }),
       this.activityReviews.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 50 }),
-      this.memberPointLogs.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 100 })
+      this.memberPointLogs.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 100 }),
+      this.listUserTags({ userId }, admin),
+      this.refunds.find({ where: { order: { registration: { user: { id: userId } } } }, order: { createdAt: "DESC" }, take: 50 }),
+      this.walletTransactions.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 50 })
     ]);
-    return { profile, registrations, orders, checkIns, reviews, points };
+    return { profile, registrations, orders, checkIns, reviews, points, tags, timeline: this.memberTimeline({ user, registrations, orders, checkIns, reviews, points, refunds, walletTransactions }) };
+  }
+
+  async bulkTagMembers(input: { userIds?: number[]; name?: string; color?: string; remark?: string }, admin?: AdminContext) {
+    const userIds = Array.from(new Set((Array.isArray(input.userIds) ? input.userIds : []).map((id) => Math.trunc(Number(id))).filter((id) => id > 0))).slice(0, 500);
+    const name = String(input.name || "").trim().slice(0, 40);
+    if (!userIds.length) throw new BadRequestException("请选择要打标签的会员");
+    if (!name) throw new BadRequestException("请填写标签名称");
+    const tenant = this.tenantRelation(admin);
+    let createdCount = 0;
+    let skippedCount = 0;
+    for (const userId of userIds) {
+      await this.assertUserTenantAccess(userId, admin);
+      const user = await this.users.findOneBy({ id: userId });
+      if (!user) {
+        skippedCount += 1;
+        continue;
+      }
+      const exists = await this.userTags
+        .createQueryBuilder("tag")
+        .leftJoin("tag.user", "user")
+        .leftJoin("tag.tenant", "tenant")
+        .where("user.id = :userId", { userId })
+        .andWhere("tag.name = :name", { name });
+      this.applyTenantScope(exists, "tag", admin);
+      if (await exists.getExists()) {
+        skippedCount += 1;
+        continue;
+      }
+      await this.userTags.save(this.userTags.create({ user, tenant, name, color: input.color || "default", remark: input.remark || null }));
+      createdCount += 1;
+    }
+    await this.logOperation(admin, "user_tag.bulk_members", "user", null, `批量标记会员：${name}`, { userCount: userIds.length, createdCount, skippedCount });
+    return { name, createdCount, skippedCount };
   }
 
   async listWallets(keyword?: string, admin?: AdminContext) {
@@ -4363,6 +4486,23 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       defaultAdmin.tenant = null;
       await this.admins.save(defaultAdmin);
     }
+  }
+
+  private normalizePhone(phone: string) {
+    const normalized = String(phone || "").trim();
+    if (!/^1\d{10}$/.test(normalized)) throw new BadRequestException("请输入正确的手机号");
+    return normalized;
+  }
+
+  private maskPhone(phone: string) {
+    const text = String(phone || "");
+    return text.length === 11 ? `${text.slice(0, 3)}****${text.slice(-4)}` : text;
+  }
+
+  private assertSmsTestPermission(admin?: AdminContext) {
+    const permissions = effectivePermissionsForAdmin({ role: admin?.role, tenantId: admin?.tenantId, permissions: admin?.permissions });
+    if (permissions.includes("system.manage") || permissions.includes("operation_settings.manage")) return;
+    throw new ForbiddenException("当前账号无权限发送测试短信");
   }
 
   private uploadRoot() {
@@ -5296,6 +5436,34 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return builder.getMany();
   }
 
+  private visibleRefundsForUser(userId: number, admin?: AdminContext) {
+    const builder = this.refunds
+      .createQueryBuilder("refund")
+      .leftJoinAndSelect("refund.order", "order")
+      .leftJoinAndSelect("order.registration", "registration")
+      .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("refund.tenant", "tenant")
+      .where("user.id = :userId", { userId })
+      .orderBy("refund.createdAt", "DESC")
+      .take(50);
+    if (this.isTenantScoped(admin)) builder.andWhere("(refund.tenantId = :tenantId OR order.tenantId = :tenantId OR registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId: admin?.tenantId });
+    return builder.getMany();
+  }
+
+  private visibleWalletTransactionsForUser(userId: number, admin?: AdminContext) {
+    const builder = this.walletTransactions
+      .createQueryBuilder("transaction")
+      .leftJoinAndSelect("transaction.user", "user")
+      .leftJoinAndSelect("transaction.tenant", "tenant")
+      .leftJoinAndSelect("transaction.order", "order")
+      .where("user.id = :userId", { userId })
+      .orderBy("transaction.createdAt", "DESC")
+      .take(50);
+    this.applyTenantScope(builder, "transaction", admin);
+    return builder.getMany();
+  }
+
   private async visiblePointLogsForUser(userId: number, registrations: Registration[], orders: Order[], checkIns: CheckIn[], reviews: ActivityReview[]) {
     const sourcePairs = [
       ...orders.map((order) => ({ sourceType: "order_paid", sourceId: String(order.id) })),
@@ -5308,6 +5476,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const allowed = new Set(sourcePairs.map((pair) => `${pair.sourceType}:${pair.sourceId}`));
     const logs = await this.memberPointLogs.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 300 });
     return logs.filter((log) => allowed.has(`${log.sourceType}:${log.sourceId}`) || log.sourceType.startsWith("mall_")).slice(0, 100);
+  }
+
+  private memberTimeline(input: { user: User; registrations: Registration[]; orders: Order[]; checkIns: CheckIn[]; reviews: ActivityReview[]; points: MemberPointLog[]; refunds: Refund[]; walletTransactions: WalletTransaction[] }) {
+    const rows: Array<{ type: string; title: string; description: string; amount?: string | null; time: Date | null; status?: string | null }> = [];
+    rows.push({ type: "login", title: "最近登录", description: `${input.user.lastLoginChannel || input.user.sourceChannel || "未知端"} 登录`, time: input.user.lastLoginAt || input.user.updatedAt || null });
+    for (const registration of input.registrations) rows.push({ type: "registration", title: "报名", description: registration.activity?.title || `报名 ${registration.id}`, time: registration.createdAt, status: registration.status });
+    for (const order of input.orders) rows.push({ type: "order_payment", title: "订单", description: order.orderNo, amount: order.amount, time: order.paidAt || order.createdAt, status: order.status });
+    for (const checkIn of input.checkIns) rows.push({ type: "check_in", title: "核销", description: checkIn.registration?.activity?.title || `核销 ${checkIn.id}`, time: checkIn.createdAt, status: "checked_in" });
+    for (const refund of input.refunds) rows.push({ type: "refund", title: "退款", description: refund.refundNo, amount: refund.amount, time: refund.completedAt || refund.reviewedAt || refund.createdAt, status: refund.status });
+    for (const point of input.points) rows.push({ type: "points", title: "积分变动", description: point.remark || point.sourceType, amount: String(point.points), time: point.createdAt, status: point.sourceType });
+    for (const transaction of input.walletTransactions) rows.push({ type: "wallet", title: "余额变动", description: transaction.remark || transaction.type, amount: transaction.amount, time: transaction.createdAt, status: transaction.direction });
+    for (const review of input.reviews) rows.push({ type: "review", title: "评价", description: review.activity?.title || `评价 ${review.id}`, time: review.createdAt, status: "reviewed" });
+    return rows
+      .filter((row) => row.time)
+      .sort((a, b) => new Date(b.time as Date).getTime() - new Date(a.time as Date).getTime())
+      .slice(0, 120);
   }
 
   private assertOperationPaymentSettingPayload(dto: OperationSettingDto): asserts dto is OperationSettingDto & { offlinePaymentInstructions: string; refundInstructions: string } {
@@ -5339,7 +5523,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       smsAccessKeyId: null,
       smsAccessKeySecret: null,
       smsSignName: null,
-      smsTemplateId: null
+      smsTemplateId: null,
+      smsSdkAppId: null
     });
     return this.operationSettings.save(setting);
   }
@@ -5600,7 +5785,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private adCampaignPayload(dto: AdCampaignDto) {
+  private adCampaignPayload(dto: AdCampaignDto, tenant?: Tenant | null) {
     const name = String(dto.name || "").trim();
     const title = String(dto.title || "").trim();
     if (!name) throw new BadRequestException("请填写广告计划名称");
@@ -5610,17 +5795,26 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (startAt && endAt && startAt.getTime() > endAt.getTime()) throw new BadRequestException("广告结束时间不能早于开始时间");
     const source = this.normalizeChoice(dto.source, ["custom", "wechat_official"], "custom");
     const format = this.normalizeChoice(dto.format, ["splash", "inline_card", "banner", "official_banner", "official_video", "official_grid", "official_interstitial", "official_rewarded_video"], source === "wechat_official" ? "official_banner" : "banner");
+    const imageUrl = this.nullableText(dto.imageUrl);
+    const link = this.nullableText(dto.link);
+    const enabled = dto.enabled ?? true;
+    const fallbackImage = this.tenantDefaultAdImage(tenant);
+    if (enabled && source === "custom") {
+      if (!imageUrl && !fallbackImage) throw new BadRequestException("请上传广告图或选择商家默认广告图后再启用");
+      if (imageUrl && !this.isUsableAdImage(imageUrl)) throw new BadRequestException("广告图必须使用 HTTPS 或 /uploads/ 地址");
+      if (!link) throw new BadRequestException("启用自有广告前请填写跳转链接");
+    }
     return {
       name,
       title,
       subtitle: this.nullableText(dto.subtitle),
-      imageUrl: this.nullableText(dto.imageUrl),
+      imageUrl,
       source,
       format,
       slotKey: this.normalizeChoice(dto.slotKey, ["app_splash", "home_top_banner", "home_feed_inline", "activity_detail_middle", "course_detail_middle", "mall_product_detail_middle", "community_feed_inline", "user_my_banner"], "home_top_banner"),
       pageKey: this.normalizeChoice(dto.pageKey, ["all", "home", "mall_home", "mall_product_detail", "activity_list", "activity_detail", "course_home", "course_detail", "community_home", "community_detail", "user_my"], "home"),
       platforms: this.normalizeMarketingPopupArray(dto.platforms, ["all", "h5", "mp-weixin"], source === "wechat_official" ? ["mp-weixin"] : ["all"]),
-      link: this.nullableText(dto.link),
+      link,
       billingModel: this.normalizeChoice(dto.billingModel, ["fixed", "cpm", "cpc", "mixed"], "fixed"),
       fixedFee: this.roundMoney(dto.fixedFee || 0).toFixed(2),
       cpmPrice: this.roundMoney(dto.cpmPrice || 0, 4).toFixed(4),
@@ -5633,10 +5827,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       officialAdType: this.nullableText(dto.officialAdType),
       frequency: this.normalizeChoice(dto.frequency, ["every_visit", "once_per_day", "once_per_campaign"], "once_per_day"),
       priority: Math.max(Math.min(Number(dto.priority ?? 0), 9999), -9999),
-      enabled: dto.enabled ?? true,
+      enabled,
       startAt,
       endAt
     };
+  }
+
+  private isUsableAdImage(value: string) {
+    const text = String(value || "").trim();
+    return text.startsWith("https://") || text.startsWith("/uploads/");
+  }
+
+  private tenantDefaultAdImage(tenant?: Tenant | null) {
+    const settings = this.isPlainObject(tenant?.settings) ? tenant?.settings || {} : {};
+    const value = settings.defaultAdImageUrl || settings.defaultShareImageUrl || settings.shareImageUrl;
+    const text = typeof value === "string" ? value.trim() : "";
+    return text && this.isUsableAdImage(text) ? text : "";
   }
 
   private async resolveAdAdvertiser(id: number | null | undefined, tenant: Tenant | null, admin?: AdminContext) {
@@ -5744,7 +5950,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       imageUrl: this.nullableText(dto.imageUrl),
       type: this.normalizeMarketingPopupChoice(dto.type, ["notice", "ad", "payment", "wuxing_gold"], "notice"),
       platforms: this.normalizeMarketingPopupArray(dto.platforms, ["all", "h5", "mp-weixin"], ["all"]),
-      placements: this.normalizeMarketingPopupArray(dto.placements, ["all", "home", "mall_home", "activity_list", "activity_detail", "course_home", "course_detail", "community_home", "user_my"], ["home"]),
+      placements: this.normalizeMarketingPopupArray(dto.placements, ["all", "home", "mall_home", "activity_list", "activity_detail", "course_home", "course_detail", "mall_product_detail", "community_home", "user_my"], ["home"]),
       buttons: this.normalizeMarketingPopupButtons(dto.buttons),
       frequency: this.normalizeMarketingPopupChoice(dto.frequency, ["every_visit", "once_per_day", "once_per_campaign"], "once_per_day"),
       priority: Math.max(Math.min(Number(dto.priority ?? 0), 9999), -9999),
@@ -5753,6 +5959,64 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       startAt,
       endAt
     };
+  }
+
+  private marketingPopupEffectiveResult(row: MarketingPopup, pageKey: string, platform: string, tenantId: number | null) {
+    const now = new Date();
+    const reasons: Array<{ code: string; message: string }> = [];
+    const warnings: Array<{ code: string; message: string }> = [];
+    if (!row.enabled) reasons.push({ code: "disabled", message: "已停用" });
+    if (row.startAt && row.startAt.getTime() > now.getTime()) reasons.push({ code: "not_started", message: "未开始" });
+    if (row.endAt && row.endAt.getTime() < now.getTime()) reasons.push({ code: "expired", message: "已过期" });
+    if (tenantId && row.tenant?.id !== tenantId) reasons.push({ code: "tenant_mismatch", message: "商家不匹配" });
+    if (!tenantId && row.tenant) reasons.push({ code: "tenant_mismatch", message: "当前检测为平台全局，弹窗归属于指定商家" });
+    if (!this.marketingPopupArrayMatches(row.platforms, platform)) reasons.push({ code: "platform_mismatch", message: "平台不匹配" });
+    if (!this.marketingPopupArrayMatches(row.placements, pageKey)) reasons.push({ code: "page_mismatch", message: "页面不匹配" });
+    if (row.imageUrl && !this.isUsableMarketingPopupImage(row.imageUrl)) warnings.push({ code: "image_abnormal", message: "图片建议使用 HTTPS 或 /uploads/ 地址" });
+    const buttons = Array.isArray(row.buttons) ? row.buttons : [];
+    const abnormalButton = buttons.find((button) => button?.link && !this.isUsableMarketingPopupLink(button.link, platform));
+    if (abnormalButton) warnings.push({ code: "jump_abnormal", message: platform === "mp-weixin" ? "小程序端按钮不支持普通外链，请改用 /pages/... 路径" : "跳转链接格式异常" });
+    const matched = reasons.length === 0;
+    return {
+      id: row.id,
+      title: row.title,
+      status: matched ? "effective" : reasons[0]?.code || "blocked",
+      statusText: matched ? "生效中" : reasons[0]?.message || "未生效",
+      matched,
+      reasons,
+      warnings,
+      popup: {
+        id: row.id,
+        title: row.title,
+        subtitle: row.subtitle,
+        content: row.content,
+        emphasis: row.emphasis,
+        imageUrl: row.imageUrl,
+        type: row.type,
+        platforms: row.platforms || ["all"],
+        placements: row.placements || ["home"],
+        buttons: row.buttons || [],
+        frequency: row.frequency,
+        priority: row.priority,
+        dismissible: row.dismissible,
+        startAt: row.startAt,
+        endAt: row.endAt,
+        updatedAt: row.updatedAt
+      }
+    };
+  }
+
+  private isUsableMarketingPopupImage(value: string) {
+    const text = String(value || "").trim();
+    return text.startsWith("https://") || text.startsWith("/uploads/");
+  }
+
+  private isUsableMarketingPopupLink(value: string, platform: string) {
+    const text = String(value || "").trim();
+    if (!text) return true;
+    if (text.startsWith("/pages/") || text.startsWith("/subpkg/") || text.startsWith("/")) return true;
+    if (platform === "mp-weixin") return false;
+    return text.startsWith("https://") || text.startsWith("http://");
   }
 
   private normalizeMarketingPopupArray(value: unknown, allowed: string[], fallback: string[]) {

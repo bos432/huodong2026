@@ -1739,6 +1739,16 @@ export class OperationSettingDto {
   @IsOptional()
   @IsString()
   smsTemplateId?: string;
+
+  @IsOptional()
+  @IsString()
+  smsSdkAppId?: string;
+}
+
+export class SmsTestDto {
+  @IsString()
+  @IsNotEmpty()
+  phone!: string;
 }
 
 export class TicketTypeDto {

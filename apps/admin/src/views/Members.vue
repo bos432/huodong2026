@@ -22,6 +22,8 @@ const phoneBound = ref(String(route.query.phoneBound || ""));
 const levelId = ref(String(route.query.levelId || ""));
 const activeStart = ref(String(route.query.activeStart || ""));
 const activeEnd = ref(String(route.query.activeEnd || ""));
+const quickFilter = ref(String(route.query.quickFilter || ""));
+const tagFilter = ref(String(route.query.tag || ""));
 const sortBy = ref(String(route.query.sortBy || "lastActiveAt"));
 const sortOrder = ref(String(route.query.sortOrder || "DESC"));
 const page = ref(Number(route.query.page || 1) || 1);
@@ -34,12 +36,15 @@ const memberDialog = ref(false);
 const editMemberDialog = ref(false);
 const passwordDialog = ref(false);
 const walletDialog = ref(false);
+const bulkTagDialog = ref(false);
 const saving = ref(false);
 const memberSaving = ref(false);
 const editMemberSaving = ref(false);
 const passwordSaving = ref(false);
 const walletSaving = ref(false);
+const bulkTagSaving = ref(false);
 const editingLevelId = ref<number | null>(null);
+const selectedRows = ref<any[]>([]);
 
 const levelForm = reactive({
   name: "",
@@ -72,6 +77,11 @@ const editMemberForm = reactive({
 const passwordForm = reactive({
   password: "",
   confirmPassword: ""
+});
+const bulkTagForm = reactive({
+  name: "",
+  color: "default",
+  remark: ""
 });
 
 function routeActivityId() {
@@ -121,6 +131,8 @@ function memberQueryParams() {
     levelId: levelId.value || undefined,
     activeStart: activeStart.value || undefined,
     activeEnd: activeEnd.value || undefined,
+    quickFilter: quickFilter.value || undefined,
+    tag: tagFilter.value || undefined,
     sortBy: sortBy.value || undefined,
     sortOrder: sortOrder.value || undefined,
     page: page.value,
@@ -151,6 +163,8 @@ function syncRouteQuery() {
       levelId: levelId.value || undefined,
       activeStart: activeStart.value || undefined,
       activeEnd: activeEnd.value || undefined,
+      quickFilter: quickFilter.value || undefined,
+      tag: tagFilter.value || undefined,
       sortBy: sortBy.value !== "lastActiveAt" ? sortBy.value : undefined,
       sortOrder: sortOrder.value !== "DESC" ? sortOrder.value : undefined,
       page: page.value > 1 ? page.value : undefined,
@@ -173,11 +187,49 @@ function resetFilter() {
   levelId.value = "";
   activeStart.value = "";
   activeEnd.value = "";
+  quickFilter.value = "";
+  tagFilter.value = "";
   sortBy.value = "lastActiveAt";
   sortOrder.value = "DESC";
   page.value = 1;
   syncRouteQuery();
   load();
+}
+
+function applyQuickFilter(value: string) {
+  quickFilter.value = quickFilter.value === value ? "" : value;
+  applyFilter();
+}
+
+function selectionChange(selection: any[]) {
+  selectedRows.value = selection;
+}
+
+function openBulkTagDialog() {
+  if (!selectedRows.value.length) return ElMessage.warning("请先选择会员");
+  Object.assign(bulkTagForm, { name: "", color: "default", remark: "" });
+  bulkTagDialog.value = true;
+}
+
+async function saveBulkTag() {
+  if (!bulkTagForm.name.trim()) return ElMessage.warning("请填写标签名称");
+  bulkTagSaving.value = true;
+  try {
+    const result = await api.post<any, any>("/admin/tags/bulk-members", {
+      userIds: selectedRows.value.map((row) => row.user?.id).filter(Boolean),
+      name: bulkTagForm.name.trim(),
+      color: bulkTagForm.color,
+      remark: bulkTagForm.remark.trim() || undefined
+    });
+    ElMessage.success(`已新增 ${result.createdCount || 0} 个标签，跳过 ${result.skippedCount || 0} 个重复项`);
+    bulkTagDialog.value = false;
+    tagFilter.value = bulkTagForm.name.trim();
+    await load();
+  } catch (error: any) {
+    ElMessage.error(error.message || "批量打标签失败");
+  } finally {
+    bulkTagSaving.value = false;
+  }
 }
 
 function clearActivityFilter() {
@@ -409,6 +461,8 @@ watch(
       levelId: String(route.query.levelId || ""),
       activeStart: String(route.query.activeStart || ""),
       activeEnd: String(route.query.activeEnd || ""),
+      quickFilter: String(route.query.quickFilter || ""),
+      tagFilter: String(route.query.tag || ""),
       sortBy: String(route.query.sortBy || "lastActiveAt"),
       sortOrder: String(route.query.sortOrder || "DESC"),
       page: Number(route.query.page || 1) || 1,
@@ -423,6 +477,8 @@ watch(
       levelId.value === next.levelId &&
       activeStart.value === next.activeStart &&
       activeEnd.value === next.activeEnd &&
+      quickFilter.value === next.quickFilter &&
+      tagFilter.value === next.tagFilter &&
       sortBy.value === next.sortBy &&
       sortOrder.value === next.sortOrder &&
       page.value === next.page &&
@@ -436,6 +492,8 @@ watch(
     levelId.value = next.levelId;
     activeStart.value = next.activeStart;
     activeEnd.value = next.activeEnd;
+    quickFilter.value = next.quickFilter;
+    tagFilter.value = next.tagFilter;
     sortBy.value = next.sortBy;
     sortOrder.value = next.sortOrder;
     page.value = next.page;
@@ -526,6 +584,7 @@ watch(
         </el-form-item>
         <el-form-item label="活跃开始"><el-date-picker v-model="activeStart" type="date" value-format="YYYY-MM-DD" placeholder="开始日期" /></el-form-item>
         <el-form-item label="活跃结束"><el-date-picker v-model="activeEnd" type="date" value-format="YYYY-MM-DD" placeholder="结束日期" /></el-form-item>
+        <el-form-item label="标签"><el-input v-model="tagFilter" clearable placeholder="输入标签名" /></el-form-item>
         <el-form-item label="排序">
           <div class="sort-row">
             <el-select v-model="sortBy">
@@ -548,7 +607,21 @@ watch(
         </el-form-item>
         <el-button v-if="activityId" @click="clearActivityFilter">查看全部会员</el-button>
       </el-form>
-      <el-table v-loading="loading" :data="rows" stripe empty-text="暂无会员">
+      <div class="quick-filter-row">
+        <el-button :type="phoneBound === 'true' ? 'primary' : 'default'" size="small" @click="phoneBound='true'; applyFilter()">已绑定手机号</el-button>
+        <el-button :type="phoneBound === 'false' ? 'primary' : 'default'" size="small" @click="phoneBound='false'; applyFilter()">未绑定手机号</el-button>
+        <el-button :type="wechatBound === 'true' ? 'primary' : 'default'" size="small" @click="wechatBound='true'; applyFilter()">已绑定微信</el-button>
+        <el-button :type="wechatBound === 'false' ? 'primary' : 'default'" size="small" @click="wechatBound='false'; applyFilter()">未绑定微信</el-button>
+        <el-button :type="quickFilter === 'active7' ? 'primary' : 'default'" size="small" @click="applyQuickFilter('active7')">近 7 日活跃</el-button>
+        <el-button :type="quickFilter === 'inactive30' ? 'primary' : 'default'" size="small" @click="applyQuickFilter('inactive30')">近 30 日未活跃</el-button>
+        <el-button :type="quickFilter === 'spent' ? 'primary' : 'default'" size="small" @click="applyQuickFilter('spent')">有消费</el-button>
+        <el-button :type="quickFilter === 'no_spent' ? 'primary' : 'default'" size="small" @click="applyQuickFilter('no_spent')">无消费</el-button>
+        <el-button :type="quickFilter === 'registered' ? 'primary' : 'default'" size="small" @click="applyQuickFilter('registered')">有报名</el-button>
+        <el-button :type="quickFilter === 'no_registered' ? 'primary' : 'default'" size="small" @click="applyQuickFilter('no_registered')">无报名</el-button>
+        <el-button type="success" size="small" :disabled="!selectedRows.length" @click="openBulkTagDialog">批量打标签 {{ selectedRows.length ? `(${selectedRows.length})` : "" }}</el-button>
+      </div>
+      <el-table v-loading="loading" :data="rows" stripe empty-text="暂无会员" @selection-change="selectionChange">
+        <el-table-column type="selection" width="44" />
         <el-table-column label="会员" min-width="180"><template #default="{ row }">{{ row.user.nickname || row.user.phone || `用户${row.user.id}` }}</template></el-table-column>
         <el-table-column label="手机号" width="140"><template #default="{ row }">{{ row.user.phone || "-" }}</template></el-table-column>
         <el-table-column label="来源" width="115">
@@ -616,6 +689,9 @@ watch(
           <el-button :icon="Edit" @click="openEditMember">编辑资料</el-button>
           <el-button :icon="Key" @click="openPasswordDialog">重置密码</el-button>
         </div>
+        <div v-if="detail.tags?.length" class="member-tags">
+          <el-tag v-for="tag in detail.tags" :key="tag.id" :type="tag.color === 'danger' ? 'danger' : tag.color === 'success' ? 'success' : tag.color === 'warning' ? 'warning' : 'info'">{{ tag.name }}</el-tag>
+        </div>
         <div class="identity-card">
           <div><span>来源端</span><strong>{{ sourceChannelText(detail.profile.user.sourceChannel) }}</strong></div>
           <div><span>微信绑定</span><strong>{{ detail.profile.user.openid ? "已绑定" : "未绑定" }}</strong><small>{{ maskIdentity(detail.profile.user.openid) }}</small></div>
@@ -637,6 +713,15 @@ watch(
           </div>
         </div>
         <el-tabs>
+          <el-tab-pane label="用户时间线">
+            <el-timeline>
+              <el-timeline-item v-for="(item, index) in detail.timeline || []" :key="`${item.type}-${index}`" :timestamp="formatTime(item.time)" placement="top">
+                <strong>{{ item.title }}</strong>
+                <p class="timeline-copy">{{ item.description }}<span v-if="item.amount"> · {{ item.type === 'points' ? item.amount + ' 积分' : '¥' + money(item.amount) }}</span></p>
+                <el-tag v-if="item.status" size="small">{{ item.status }}</el-tag>
+              </el-timeline-item>
+            </el-timeline>
+          </el-tab-pane>
           <el-tab-pane v-if="isPlatformAdmin()" label="余额流水">
             <el-table :data="walletTransactions" stripe empty-text="暂无余额流水">
               <el-table-column prop="transactionNo" label="流水号" min-width="170" />
@@ -710,6 +795,23 @@ watch(
       </el-form>
       <template #footer><el-button @click="walletDialog=false">取消</el-button><el-button type="primary" :loading="walletSaving" @click="saveWalletAdjust">保存</el-button></template>
     </el-dialog>
+
+    <el-dialog v-model="bulkTagDialog" width="480px" title="批量打标签">
+      <el-alert class="dialog-alert" type="info" show-icon :closable="false" :title="`已选择 ${selectedRows.length} 位会员`" description="重复标签会自动跳过，标签会进入会员详情和列表筛选。" />
+      <el-form label-position="top">
+        <el-form-item label="标签名称"><el-input v-model="bulkTagForm.name" maxlength="40" placeholder="例如：高意向、线下到店、重点回访" /></el-form-item>
+        <el-form-item label="颜色">
+          <el-select v-model="bulkTagForm.color" style="width: 100%">
+            <el-option label="默认" value="default" />
+            <el-option label="成功" value="success" />
+            <el-option label="提醒" value="warning" />
+            <el-option label="重点" value="danger" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="bulkTagForm.remark" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer><el-button @click="bulkTagDialog=false">取消</el-button><el-button type="primary" :loading="bulkTagSaving" @click="saveBulkTag">保存标签</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -722,9 +824,10 @@ watch(
 .summary-card { display: grid; gap: 6px; padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .summary-card span { color: #667085; font-size: 13px; }
 .summary-card strong { color: #111827; font-size: 24px; line-height: 1.1; }
-.member-filters { display: grid; grid-template-columns: 220px 150px 130px 130px 150px 170px 170px 290px 170px auto; gap: 12px; align-items: end; margin-bottom: 14px; }
+.member-filters { display: grid; grid-template-columns: 220px 150px 130px 130px 150px 170px 170px 160px 290px 170px auto; gap: 12px; align-items: end; margin-bottom: 14px; }
 .member-filters :deep(.el-form-item) { margin-right: 0; margin-bottom: 0; }
 .member-filters :deep(.el-select), .member-filters :deep(.el-date-editor) { width: 100%; }
+.quick-filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin: 0 0 12px; }
 .sort-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 8px; }
 .filter-actions :deep(.el-form-item__content) { display: flex; gap: 8px; flex-wrap: nowrap; }
 .pagination-row { display: flex; justify-content: flex-end; margin-top: 14px; }
@@ -735,6 +838,7 @@ h3 { margin: 0; }
 .profile span { color: #667085; font-size: 13px; }
 .profile strong { font-size: 20px; }
 .detail-actions { display: flex; gap: 10px; align-items: center; margin-bottom: 18px; }
+.member-tags { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 18px; }
 .identity-card { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .identity-card div { border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; display: grid; gap: 6px; background: #f8fafc; }
 .identity-card span, .identity-card small { color: #667085; font-size: 13px; }
@@ -744,8 +848,9 @@ h3 { margin: 0; }
 .wallet-card span, .wallet-card small { color: #667085; font-size: 13px; }
 .wallet-card strong { color: #0f766e; font-size: 26px; }
 .wallet-actions { display: flex; gap: 8px; align-items: center; }
+.timeline-copy { margin: 6px 0 8px; color: #667085; line-height: 1.5; }
 @media (max-width: 1480px) {
-  .member-filters { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .member-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }
   .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }
 </style>

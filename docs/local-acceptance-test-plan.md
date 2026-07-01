@@ -43,6 +43,8 @@ admin / Admin123456
 
 先执行以下命令，确认当前代码和本地数据库处于可验收状态。
 
+- `npm run browser:online-showcase` 可作为线上演示商家浏览器全流程复验命令，结果会写入 `.local-logs/browser-acceptance-*/result.json`，截图会保留在同一目录。
+
 ```bash
 npm run build
 npm --prefix apps/api run migration:show

@@ -81,6 +81,7 @@ import { RolesGuard } from "./roles.guard";
 import { PaymentProviderService } from "../public/payment-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
+import { NotificationProviderService } from "../v1/notification-provider.service";
 
 @Module({
   imports: [
@@ -93,7 +94,7 @@ import { CharityFundService } from "../charity-fund.service";
     })
   ],
   controllers: [AdminController],
-  providers: [AdminService, MiniprogramReleaseService, JwtStrategy, RolesGuard, PaymentProviderService, RefundCompletionService, CharityFundService],
+  providers: [AdminService, MiniprogramReleaseService, JwtStrategy, RolesGuard, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
   exports: [AdminService]
 })
 export class AdminModule {}

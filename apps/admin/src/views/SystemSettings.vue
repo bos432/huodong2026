@@ -63,6 +63,12 @@ type ReleaseReadiness = {
   issues: string[];
 };
 
+type StaticVersion = {
+  name?: string;
+  commit?: string;
+  buildTime?: string;
+};
+
 type SecurityReadiness = {
   key: string;
   label: string;
@@ -120,8 +126,11 @@ const paymentSettingsReadonlyReason = computed(() =>
 );
 const loadingOperation = ref(false);
 const savingOperation = ref(false);
+const testingSms = ref(false);
 const loadingConfig = ref(false);
 const report = ref<ConfigInspection | null>(null);
+const adminVersion = ref<StaticVersion | null>(null);
+const h5Version = ref<StaticVersion | null>(null);
 const paymentReadiness = computed(() => [
   { key: "free", label: "免费报名", status: "已可用", type: "success", note: "适合免费活动，后端可直接完成报名。" },
   { key: "balance", label: "余额支付", status: "已可用", type: "success", note: "使用用户余额扣款，适合测试和会员账户场景。" },
@@ -153,8 +162,11 @@ const form = reactive({
   smsAccessKeyId: "",
   smsAccessKeySecret: "",
   smsSignName: "",
-  smsTemplateId: ""
+  smsTemplateId: "",
+  smsSdkAppId: ""
 });
+
+const smsTestForm = reactive({ phone: "" });
 
 const deployment = reactive({
   appVersion: "0.1.0",
@@ -189,6 +201,7 @@ const deployment = reactive({
   smsAccessKeySecret: "",
   smsSignName: "",
   smsTemplateId: "",
+  smsSdkAppId: "",
   emailEnabled: false,
   emailProvider: "smtp",
   smtpHost: "",
@@ -401,6 +414,7 @@ const domainCheckCommands = computed(() => buildDomainCheckCommands());
 const wechatH5AcceptanceLinks = computed(() => buildWechatH5AcceptanceLinks());
 const wechatH5AcceptanceChecks = computed<DomainBatchCheck[]>(() => buildWechatH5AcceptanceChecks());
 const wechatH5AcceptanceTemplate = computed(() => buildWechatH5AcceptanceTemplate());
+const miniprogramAcceptanceTemplate = computed(() => buildMiniprogramAcceptanceTemplate());
 
 const configGroups = computed(() => {
   const rows = report.value?.checks || [];
@@ -445,7 +459,8 @@ const notificationReadiness = computed<NotificationReadiness[]>(() => [
     ["smsAccessKeyId", "SMS_ACCESS_KEY_ID"],
     ["smsAccessKeySecret", "SMS_ACCESS_KEY_SECRET"],
     ["smsSignName", "SMS_SIGN_NAME"],
-    ["smsTemplateId", "SMS_TEMPLATE_ID"]
+    ["smsTemplateId", "SMS_TEMPLATE_ID"],
+    ["smsSdkAppId", "SMS_SDK_APP_ID"]
   ]),
   buildNotificationReadiness("email", "邮件通知", deployment.emailEnabled, "用于邮件通知和后续运营触达；不开启时不会阻塞 H5 验证码。", [
     ["emailProvider", "EMAIL_PROVIDER"],
@@ -473,6 +488,20 @@ const releaseReadiness = computed<ReleaseReadiness[]>(() => [
   buildReleaseReadiness("commit", "发布提交", "BUILD_COMMIT", deployment.buildCommit),
   { key: "buildTime", label: "构建时间", envKey: "BUILD_TIME", value: "生成配置时自动写入", status: "ready", statusText: "自动生成", issues: [] }
 ]);
+const staticVersionCards = computed(() => {
+  const apiRelease = report.value?.release || null;
+  const apiCommit = apiRelease?.commit || "";
+  const adminCommit = adminVersion.value?.commit || "";
+  const h5Commit = h5Version.value?.commit || "";
+  const commits = [apiCommit, adminCommit, h5Commit].filter(Boolean);
+  const mismatch = commits.length >= 2 && new Set(commits).size > 1;
+  return [
+    { key: "api", label: "API", commit: apiCommit || "-", buildTime: apiRelease?.buildTime || "-", status: apiRelease ? (mismatch ? "warning" : "ready") : "invalid", hint: "来自 /api/health/ready" },
+    { key: "admin", label: "Admin 静态包", commit: adminCommit || "-", buildTime: adminVersion.value?.buildTime || "-", status: adminVersion.value ? (mismatch ? "warning" : "ready") : "invalid", hint: "来自 /admin/version.json" },
+    { key: "h5", label: "H5 静态包", commit: h5Commit || "-", buildTime: h5Version.value?.buildTime || "-", status: h5Version.value ? (mismatch ? "warning" : "ready") : "invalid", hint: "来自 /version.json" }
+  ];
+});
+const staticVersionSummary = computed(() => buildStaticVersionSummary());
 
 const securityReadiness = computed<SecurityReadiness[]>(() => [
   buildSecretReadiness("dbPassword", "数据库密码", "DB_PASSWORD", deployment.mysqlPassword, 12),
@@ -943,8 +972,54 @@ function buildWechatH5AcceptanceTemplate() {
   ].join("\n");
 }
 
+function buildMiniprogramAcceptanceTemplate() {
+  return [
+    "小程序体验版验收结论：",
+    `- 验收时间：${deployment.wechatH5AcceptanceAt || ""}`,
+    `- API 地址：${deployment.apiOrigin || ""}`,
+    `- 默认租户：${deployment.wechatH5AcceptanceTenantCode || "qiwai-showcase"}`,
+    "- 构建目录：apps/mobile/dist/build/mp-weixin",
+    "- 体验版二维码或版本号：",
+    "- iOS 机型/微信版本：",
+    "- Android 机型/微信版本：",
+    "- 登录手机号：",
+    "- 首页装修：",
+    "- 营销弹窗：",
+    "- 广告位：",
+    "- 活动列表与活动详情：",
+    "- 报名入口与跳转限制：",
+    "- 我的报名状态刷新：",
+    "- 截图路径：",
+    "- 发现问题：",
+    "- 是否阻断上线：",
+    "- 处理人："
+  ].join("\n");
+}
+
+function buildStaticVersionSummary() {
+  const rows = staticVersionCards.value.map((item) => {
+    const status = item.status === "ready" ? "一致" : item.status === "warning" ? "不一致" : "缺失";
+    return `- ${item.label}：commit=${item.commit || "-"}；buildTime=${item.buildTime || "-"}；状态=${status}；来源=${item.hint}`;
+  });
+  const statuses = staticVersionCards.value.map((item) => item.status);
+  const conclusion = statuses.includes("invalid")
+    ? "结论：版本信息缺失，发布前需补齐 BUILD_COMMIT/BUILD_TIME 与静态 version.json。"
+    : statuses.includes("warning")
+      ? "结论：三端 commit 不一致，本次发布需重新统一构建或在验收报告记录已知差异。"
+      : "结论：API/Admin/H5 三端版本一致。";
+  return ["三端版本信息：", ...rows, conclusion].join("\n");
+}
+
 function copyWechatH5AcceptanceTemplate() {
   copyText(wechatH5AcceptanceTemplate.value, "已复制微信真机验收模板");
+}
+
+function copyMiniprogramAcceptanceTemplate() {
+  copyText(miniprogramAcceptanceTemplate.value, "已复制小程序验收模板");
+}
+
+function copyStaticVersionSummary() {
+  copyText(staticVersionSummary.value, "已复制版本信息");
 }
 
 function wechatAcceptanceStatusText(status: WechatH5AcceptanceStatus) {
@@ -1286,7 +1361,8 @@ async function loadOperation() {
       smsAccessKeyId: data.smsAccessKeyId || "",
       smsAccessKeySecret: data.smsAccessKeySecret || "",
       smsSignName: data.smsSignName || "",
-      smsTemplateId: data.smsTemplateId || ""
+      smsTemplateId: data.smsTemplateId || "",
+      smsSdkAppId: data.smsSdkAppId || ""
     });
     if (canManagePlatformSettings.value) {
       applyDeploymentConfig({
@@ -1295,12 +1371,26 @@ async function loadOperation() {
         smsAccessKeyId: data.smsAccessKeyId || "",
         smsAccessKeySecret: data.smsAccessKeySecret || "",
         smsSignName: data.smsSignName || "",
-        smsTemplateId: data.smsTemplateId || ""
+        smsTemplateId: data.smsTemplateId || "",
+        smsSdkAppId: data.smsSdkAppId || ""
       });
       applyDeploymentConfig(data.launchConfig || {});
     }
   } finally {
     loadingOperation.value = false;
+  }
+}
+
+async function sendTestSms() {
+  if (!/^1\d{10}$/.test(smsTestForm.phone.trim())) return ElMessage.error("请输入正确的测试手机号");
+  testingSms.value = true;
+  try {
+    const result = await api.post<any, any>("/admin/settings/sms/test", { phone: smsTestForm.phone.trim() });
+    ElMessage.success(`测试短信已发送：${result.providerMessageId || result.provider || "已提交"}`);
+  } catch (error: any) {
+    ElMessage.error(error.message || "测试短信发送失败");
+  } finally {
+    testingSms.value = false;
   }
 }
 
@@ -1340,11 +1430,25 @@ async function loadConfig() {
   if (!canManagePlatformSettings.value) return;
   loadingConfig.value = true;
   try {
-    report.value = await api.get<any, ConfigInspection>("/admin/system/config-check");
+    await Promise.all([
+      api.get<any, ConfigInspection>("/admin/system/config-check").then((row) => { report.value = row; }),
+      loadStaticVersion("/admin/version.json").then((row) => { adminVersion.value = row; }),
+      loadStaticVersion("/version.json").then((row) => { h5Version.value = row; })
+    ]);
   } catch (error: any) {
     ElMessage.error(error.message || "加载上线体检失败");
   } finally {
     loadingConfig.value = false;
+  }
+}
+
+async function loadStaticVersion(path: string) {
+  try {
+    const response = await fetch(`${path}?t=${Date.now()}`, { cache: "no-store" });
+    if (!response.ok) return null;
+    return await response.json() as StaticVersion;
+  } catch {
+    return null;
   }
 }
 
@@ -1469,6 +1573,16 @@ onMounted(async () => {
             </el-form-item>
             <el-form-item label="模板 ID">
               <el-input v-model="form.smsTemplateId" maxlength="120" />
+            </el-form-item>
+            <el-form-item label="短信 AppID">
+              <el-input v-model="form.smsSdkAppId" placeholder="腾讯云 SmsSdkAppId" maxlength="80" />
+            </el-form-item>
+            <el-form-item label="测试短信">
+              <div class="sms-test-row">
+                <el-input v-model="smsTestForm.phone" placeholder="输入手机号发送测试验证码" maxlength="11" />
+                <el-button type="primary" plain :loading="testingSms" @click="sendTestSms">发送测试短信</el-button>
+                <el-button text @click="go('/h5-code-logs')">查看验证码日志</el-button>
+              </div>
             </el-form-item>
             <el-form-item label="H5 页面主题">
               <div class="theme-panel">
@@ -1717,8 +1831,50 @@ onMounted(async () => {
               </div>
             </div>
 
+            <div class="table-card deploy-card wechat-acceptance-card">
+              <div class="card-title-row">
+                <div>
+                  <div class="card-title">小程序体验版验收</div>
+                  <p class="form-tip">用于记录微信开发者工具或体验版二维码的登录、首页装修、弹窗、广告、活动详情和跳转限制验收结果。</p>
+                </div>
+                <div class="preview-actions">
+                  <el-button type="primary" plain @click="copyMiniprogramAcceptanceTemplate">复制验收模板</el-button>
+                </div>
+              </div>
+              <el-alert
+                type="warning"
+                title="小程序体验版必须使用线上 HTTPS API 和真实微信环境；H5 浏览器验收不能替代微信登录、合法域名、体验版二维码和跳转限制检查。"
+                show-icon
+                :closable="false"
+                class="panel-alert"
+              />
+              <div class="wechat-template-preview">
+                <div class="mini-table-title">体验版验收记录模板</div>
+                <el-input class="env-textarea" type="textarea" :rows="14" :model-value="miniprogramAcceptanceTemplate" readonly />
+              </div>
+            </div>
+
             <div class="table-card deploy-card">
-              <div class="card-title">域名与基础信息</div>
+              <div class="card-title-row">
+                <div>
+                  <div class="card-title">域名与基础信息</div>
+                  <p class="form-tip">上线留档时复制 API/Admin/H5 三端版本信息，若 commit 不一致需在验收报告中记录原因和处理结论。</p>
+                </div>
+                <div class="preview-actions">
+                  <el-button type="primary" plain @click="copyStaticVersionSummary">复制版本信息</el-button>
+                </div>
+              </div>
+              <div class="static-version-grid">
+                <div v-for="item in staticVersionCards" :key="item.key" class="static-version-card">
+                  <div class="release-head">
+                    <strong>{{ item.label }}</strong>
+                    <el-tag :type="releaseType(item.status as ReleaseReadiness['status'])">{{ item.status === "ready" ? "一致" : item.status === "warning" ? "不一致" : "缺失" }}</el-tag>
+                  </div>
+                  <span>{{ item.hint }}</span>
+                  <p>{{ item.commit }}</p>
+                  <small>{{ formatTime(item.buildTime) }}</small>
+                </div>
+              </div>
               <div class="release-readiness">
                 <div v-for="item in releaseReadiness" :key="item.key" class="release-card">
                   <div class="release-head">
@@ -1814,6 +1970,7 @@ onMounted(async () => {
                 <el-form-item label="短信服务商"><el-input v-model="deployment.smsProvider" /></el-form-item>
                 <el-form-item label="短信签名"><el-input v-model="deployment.smsSignName" /></el-form-item>
                 <el-form-item label="短信模板 ID"><el-input v-model="deployment.smsTemplateId" /></el-form-item>
+                <el-form-item label="短信 SDK AppID"><el-input v-model="deployment.smsSdkAppId" /></el-form-item>
                 <el-form-item label="短信 Key"><el-input v-model="deployment.smsAccessKeyId" /></el-form-item>
                 <el-form-item label="短信 Secret"><el-input v-model="deployment.smsAccessKeySecret" show-password /></el-form-item>
                 <el-form-item label="邮件启用"><el-switch v-model="deployment.emailEnabled" /></el-form-item>
@@ -2005,6 +2162,7 @@ onMounted(async () => {
 .theme-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px 14px; }
 .theme-grid label { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; color: #475569; font-size: 13px; }
 .theme-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
+.sms-test-row { width: 100%; display: grid; grid-template-columns: minmax(180px, 280px) auto auto; gap: 10px; align-items: center; }
 .theme-sliders { display: grid; gap: 8px; }
 .theme-sliders > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: center; color: #475569; font-size: 13px; }
 .theme-preview { min-height: 280px; border-radius: 16px; padding: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e7eb; overflow: hidden; }
@@ -2049,7 +2207,12 @@ onMounted(async () => {
 .wechat-link-row strong { color: #111827; font-size: 13px; }
 .wechat-link-row span { color: #64748b; font-size: 12px; line-height: 1.45; }
 .wechat-link-row code { color: #0f766e; font-size: 12px; font-family: "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; white-space: normal; }
-.release-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.static-version-grid, .release-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.static-version-card { border: 1px solid #dbeafe; border-radius: 8px; padding: 12px; background: #f8fbff; display: grid; gap: 7px; min-width: 0; }
+.static-version-card span { color: #475569; font-size: 12px; font-family: "Cascadia Mono", Consolas, monospace; }
+.static-version-card p { margin: 0; color: #111827; font-size: 12px; line-height: 1.5; overflow-wrap: anywhere; }
+.static-version-card small { color: #64748b; font-size: 12px; line-height: 1.5; }
+.release-readiness { margin-bottom: 16px; }
 .release-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; display: grid; gap: 7px; min-width: 0; }
 .release-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .release-head strong { color: #111827; font-size: 14px; }
@@ -2099,7 +2262,7 @@ onMounted(async () => {
 .link-card strong { color: #111827; font-size: 16px; }
 .link-card span { color: #64748b; line-height: 1.5; }
 @media (max-width: 1100px) {
-  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .payment-readiness, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .theme-sliders > div, .domain-batch-grid, .domain-check-grid, .domain-command-grid, .domain-preview-row, .wechat-link-row { grid-template-columns: 1fr; }
+  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .payment-readiness, .static-version-grid, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .sms-test-row, .theme-sliders > div, .domain-batch-grid, .domain-check-grid, .domain-command-grid, .domain-preview-row, .wechat-link-row { grid-template-columns: 1fr; }
   .env-preview { position: static; }
 }
 </style>

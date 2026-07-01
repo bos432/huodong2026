@@ -1793,6 +1793,16 @@ export class PublicService {
       title: "H5 登录验证码",
       content: `验证码 ${code}，${expireMinutes} 分钟内有效。请勿转发给他人。`,
       to: { phone }
+    }, {
+      sms: {
+        enabled: setting.smsProviderEnabled,
+        provider: setting.smsProvider,
+        accessKeyId: setting.smsAccessKeyId,
+        accessKeySecret: setting.smsAccessKeySecret,
+        signName: setting.smsSignName,
+        templateId: setting.smsTemplateId,
+        appId: setting.smsSdkAppId
+      }
     });
     if (result.status !== "sent") throw new BadRequestException(result.errorMessage || "H5 验证码发送失败");
     return result;
@@ -2099,7 +2109,8 @@ export class PublicService {
       smsAccessKeyId: null,
       smsAccessKeySecret: null,
       smsSignName: null,
-      smsTemplateId: null
+      smsTemplateId: null,
+      smsSdkAppId: null
     });
     return this.operationSettings.save(setting);
   }
@@ -2374,7 +2385,7 @@ export class PublicService {
   }
 
   private publicOperationSetting(setting: OperationSetting) {
-    const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
+    const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, smsSdkAppId: _smsSdkAppId, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
     publicSetting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
     return publicSetting;
   }
@@ -2393,12 +2404,14 @@ export class PublicService {
   }
 
   private publicAdCampaign(row: AdCampaign) {
+    const resolvedImageUrl = this.resolvedAdImage(row);
     return {
       id: row.id,
       name: row.name,
       title: row.title,
       subtitle: row.subtitle,
       imageUrl: row.imageUrl,
+      resolvedImageUrl,
       source: row.source,
       format: row.format,
       slotKey: row.slotKey,
@@ -2411,6 +2424,19 @@ export class PublicService {
       priority: row.priority,
       updatedAt: row.updatedAt
     };
+  }
+
+  private resolvedAdImage(row: AdCampaign) {
+    const direct = this.usableAdImage(row.imageUrl);
+    if (direct) return direct;
+    const settings = row.tenant?.settings && typeof row.tenant.settings === "object" && !Array.isArray(row.tenant.settings) ? row.tenant.settings as Record<string, unknown> : {};
+    const fallback = this.usableAdImage(settings.defaultAdImageUrl) || this.usableAdImage(settings.defaultShareImageUrl) || this.usableAdImage(settings.shareImageUrl);
+    return fallback || "https://dummyimage.com/900x500/fff2b8/9e1b12.png&text=AD";
+  }
+
+  private usableAdImage(value: unknown) {
+    const text = typeof value === "string" ? value.trim() : "";
+    return text && (text.startsWith("https://") || text.startsWith("/uploads/")) ? text : "";
   }
 
   private normalizeAdEvent(event: string) {

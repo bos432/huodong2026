@@ -22,6 +22,7 @@ const packageJson = JSON.parse(read("package.json"));
 const smoke = read("scripts/smoke.mjs");
 const smokeFlow = read("scripts/smoke-flow.mjs");
 const smokeCommunitySharing = read("scripts/smoke-community-sharing.mjs");
+const browserOnlineShowcase = read("scripts/browser-online-showcase-acceptance.cjs");
 const launchChecklist = read("docs/launch-checklist.md");
 const runbook = read("docs/production-runbook.md");
 const localAcceptance = read("docs/local-acceptance-test-plan.md");
@@ -30,6 +31,7 @@ const progress = read("docs/project-progress.md");
 check(packageJson.scripts?.smoke === "node scripts/smoke.mjs", "package.json must expose smoke.");
 check(packageJson.scripts?.["smoke:flow"] === "node scripts/smoke-flow.mjs", "package.json must expose smoke:flow.");
 check(packageJson.scripts?.["smoke:community-sharing"] === "node scripts/smoke-community-sharing.mjs", "package.json must expose smoke:community-sharing.");
+check(packageJson.scripts?.["browser:online-showcase"] === "node scripts/browser-online-showcase-acceptance.cjs", "package.json must expose browser:online-showcase.");
 
 checkSourceIncludesAll(smoke, [
   "Smoke target:",
@@ -85,9 +87,23 @@ checkSourceIncludesAll(smokeCommunitySharing, [
   "Community sharing smoke test passed."
 ], "community sharing smoke script");
 
+checkSourceIncludesAll(browserOnlineShowcase, [
+  "browser-acceptance-",
+  "H5 新手机号验证码登录",
+  "财务角色确认线下收款",
+  "签到角色手工核销签到码",
+  "角色浏览器权限：",
+  "平台超管",
+  "店铺负责人",
+  "广告位 resolvedImageUrl",
+  "三端版本信息读取",
+  "result.json"
+], "browser online showcase acceptance script");
+
 checkSourceIncludes(launchChecklist, "执行 `npm run smoke`", "launch checklist");
 checkSourceIncludes(launchChecklist, "执行 `npm run smoke:flow`", "launch checklist");
 checkSourceIncludes(launchChecklist, "执行 `npm run smoke:community-sharing`", "launch checklist");
+checkSourceIncludes(launchChecklist, "执行 `npm run browser:online-showcase`", "launch checklist");
 checkSourceIncludes(runbook, "是否执行过 `npm run preflight`、`npm run smoke`、`npm run smoke:flow`", "production runbook");
 checkSourceIncludes(runbook, "顺序执行 `npm run smoke` 和 `npm run smoke:flow`", "production runbook");
 checkSourceIncludes(runbook, "不要并发运行", "production runbook");
@@ -96,6 +112,7 @@ checkSourceIncludes(runbook, "执行 `npm run smoke`", "production runbook rollb
 checkSourceIncludes(localAcceptance, "npm run smoke", "local acceptance test plan");
 checkSourceIncludes(localAcceptance, "npm run smoke:flow", "local acceptance test plan");
 checkSourceIncludes(localAcceptance, "npm run smoke:community-sharing", "local acceptance test plan");
+checkSourceIncludes(localAcceptance, "npm run browser:online-showcase", "local acceptance test plan");
 checkSourceIncludes(localAcceptance, "Smoke test passed.", "local acceptance test plan");
 checkSourceIncludes(localAcceptance, "Full business flow smoke test passed.", "local acceptance test plan");
 checkSourceIncludes(localAcceptance, "Community sharing smoke test passed.", "local acceptance test plan");

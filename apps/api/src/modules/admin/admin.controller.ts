@@ -6,7 +6,7 @@ import { join } from "path";
 import { AdminService } from "./admin.service";
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
-import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdAdvertiserDto, AdCampaignDto, AdContractDto, AdOfficialRevenueImportDto, AdSettlementGenerateDto, AdSettlementStatusDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
+import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdAdvertiserDto, AdCampaignDto, AdContractDto, AdOfficialRevenueImportDto, AdSettlementGenerateDto, AdSettlementStatusDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityProjectDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CouponDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelDto, MemberPointAdjustDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RefundDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SmsTestDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WalletAdjustDto } from "./dto";
 import { JwtAuthGuard } from "./jwt-auth.guard";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
@@ -612,6 +612,17 @@ export class AdminController {
   }
 
   @AdminRoles(...OPERATION_ROLES)
+  @Get("marketing-popups/effective-check")
+  marketingPopupEffectiveCheck(@Query("id") id?: string, @Query("tenantId") tenantId?: string, @Query("pageKey") pageKey?: string, @Query("platform") platform?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.marketingPopupEffectiveCheck(admin, {
+      id: id ? Number(id) : undefined,
+      tenantId: tenantId ? Number(tenantId) : undefined,
+      pageKey,
+      platform
+    });
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
   @Post("marketing-popups")
   createMarketingPopup(@Body() dto: MarketingPopupDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.createMarketingPopup(dto, admin);
@@ -1193,6 +1204,12 @@ export class AdminController {
     return this.service.saveOperationSetting(dto, admin);
   }
 
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("settings/sms/test")
+  testSmsSetting(@Body() dto: SmsTestDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null; permissions?: string[] }) {
+    return this.service.sendTestSms(dto, admin);
+  }
+
   @AdminRoles(...FINANCE_ROLES)
   @Post("orders/close-expired")
   closeExpiredOrders(@Body() body: { now?: string }, @CurrentAdmin() admin: { id: number; username: string }) {
@@ -1261,6 +1278,8 @@ export class AdminController {
       levelId: query.levelId,
       activeStart: query.activeStart,
       activeEnd: query.activeEnd,
+      quickFilter: query.quickFilter,
+      tag: query.tag,
       sortBy: query.sortBy,
       sortOrder: query.sortOrder
     }, admin);
@@ -1324,6 +1343,12 @@ export class AdminController {
   @Post("tags/bulk-activity")
   bulkActivityTag(@Body() body: BulkActivityTagDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.createActivityUserTags(body, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post("tags/bulk-members")
+  bulkMembersTag(@Body() body: { userIds?: number[]; name?: string; color?: string; remark?: string }, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.bulkTagMembers(body, admin);
   }
 
   @AdminRoles(...OPERATION_ROLES)

@@ -6,7 +6,7 @@
     "scripts": {
         "dev": "vite --host 0.0.0.0 --port 5174",
         "prebuild": "node ../../scripts/clean-admin-dist.mjs",
-        "build": "vue-tsc --noEmit && vite build --configLoader runner",
+        "build": "vue-tsc --noEmit && vite build --configLoader runner && node ../../scripts/write-static-version.mjs apps/admin/dist admin",
         "preview": "vite preview --host 0.0.0.0 --port 4174"
     },
     "dependencies": {

@@ -331,7 +331,7 @@ function addH5AuthCheck(checks: RuntimeConfigCheck[], config: ConfigService, str
 
 function addSmsProviderCheck(checks: RuntimeConfigCheck[], config: ConfigService) {
   const envEnabled = config.get("SMS_PROVIDER_ENABLED") === "true";
-  const missing = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"].filter((key) => !config.get<string>(key));
+  const missing = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"].filter((key) => !config.get<string>(key));
   if (!envEnabled) {
     addCheck(checks, "SMS_PROVIDER_ENABLED", "短信服务", "warning", "短信服务商参数已改为后台系统设置维护；首次部署可先启动后台再配置。", "后台配置");
     return;
@@ -364,7 +364,7 @@ function addAdminLoginRateLimitChecks(checks: RuntimeConfigCheck[], config: Conf
 function addSmsDbConfigCheck(checks: RuntimeConfigCheck[], config: ConfigService) {
   const enabled = config.get("SMS_PROVIDER_ENABLED") === "true";
   if (enabled) {
-    const missing = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"].filter((key) => !config.get<string>(key));
+    const missing = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"].filter((key) => !config.get<string>(key));
     if (missing.length) return addCheck(checks, "SMS_PROVIDER_ENABLED", "短信服务", "warning", "短信服务商参数已改为后台系统设置维护；首次部署可先启动后台再配置。", "后台配置");
     addCheck(checks, "SMS_PROVIDER_ENABLED", "短信服务", "ok", "短信服务在 .env 中已声明启用，实际使用后台系统设置中的密钥。", "环境变量已声明");
   } else {

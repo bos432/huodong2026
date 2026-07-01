@@ -28,6 +28,7 @@ const launchConfigEnvMap: Array<[string, string]> = [
   ["smsAccessKeySecret", "SMS_ACCESS_KEY_SECRET"],
   ["smsSignName", "SMS_SIGN_NAME"],
   ["smsTemplateId", "SMS_TEMPLATE_ID"],
+  ["smsSdkAppId", "SMS_SDK_APP_ID"],
   ["emailEnabled", "EMAIL_PROVIDER_ENABLED"],
   ["emailProvider", "EMAIL_PROVIDER"],
   ["smtpHost", "SMTP_HOST"],

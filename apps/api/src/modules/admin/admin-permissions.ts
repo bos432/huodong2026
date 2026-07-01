@@ -219,7 +219,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path.startsWith("mall/orders")) return "mall.order.manage";
   if (path === "mall/refunds" && verb === "GET") return "mall.finance.view";
   if (path.startsWith("mall/refunds")) return "mall.refund.manage";
-  if (path.startsWith("system/") || path === "settings/operation") return path === "settings/operation" ? (verb === "GET" ? "operation_settings.manage" : "operation_settings.manage") : "system.manage";
+  if (path.startsWith("system/") || path === "settings/operation" || path === "settings/sms/test") return path.startsWith("settings/") ? "operation_settings.manage" : "system.manage";
   if (path === "settings/charity") return write ? "charity.manage" : "charity.view";
   if (path.startsWith("charity/projects")) return path.includes("disbursements") ? "charity.finance" : write ? "charity.manage" : "charity.view";
   if (path === "charity/transactions") return "charity.finance";

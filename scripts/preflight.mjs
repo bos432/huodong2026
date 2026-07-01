@@ -477,7 +477,7 @@ function checkProductionEnv() {
   if (env.MALL_MULTI_MERCHANT_ENABLED === "true" || env.MALL_MULTI_MERCHANT_PREFLIGHT_PASSED === "true") checkMallMultiMerchantSmokeResult(env, envPath);
   warn(env.SMS_PROVIDER_ENABLED === "true", `${envPath} does not enable SMS_PROVIDER_ENABLED; H5 SMS provider settings may be maintained in the admin console, but production traffic must verify the backend settings page before release.`);
   if (env.SMS_PROVIDER_ENABLED === "true") {
-    const missingSmsEnvKeys = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"].filter((key) => !env[key]);
+    const missingSmsEnvKeys = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"].filter((key) => !env[key]);
     warn(!missingSmsEnvKeys.length, `${envPath} SMS env credentials are incomplete (${missingSmsEnvKeys.join(", ")}); this is allowed only when the admin System Settings page contains the production SMS provider credentials.`);
   }
   requireProviderKeys(env, "EMAIL_PROVIDER_ENABLED", ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"], "email provider");

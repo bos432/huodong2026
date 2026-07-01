@@ -9,6 +9,7 @@ type AdCampaignView = {
   title: string;
   subtitle?: string | null;
   imageUrl?: string | null;
+  resolvedImageUrl?: string | null;
   source: "custom" | "wechat_official";
   format: string;
   slotKey: string;
@@ -35,6 +36,7 @@ platform = "mp-weixin";
 const isSplash = computed(() => ad.value?.format === "splash" || ad.value?.slotKey === "app_splash");
 const isOfficial = computed(() => ad.value?.source === "wechat_official");
 const isOfficialInline = computed(() => isOfficial.value && ["official_banner", "official_video", "official_grid"].includes(ad.value?.format || ""));
+const displayImageUrl = computed(() => ad.value?.resolvedImageUrl || ad.value?.imageUrl || "");
 const officialAdType = computed(() => {
   if (ad.value?.format === "official_video") return "video";
   if (ad.value?.format === "official_grid") return "grid";
@@ -207,7 +209,7 @@ onBeforeUnmount(clearTimer);
   <view v-if="visible && ad">
     <view v-if="isSplash" class="ad-splash-mask">
       <view class="ad-splash-skip" @click="closeAd('skip')">跳过 {{ countdown }}</view>
-      <image v-if="ad.imageUrl" class="ad-splash-image" :src="ad.imageUrl" mode="aspectFill" @click="openAd" />
+      <image v-if="displayImageUrl" class="ad-splash-image" :src="displayImageUrl" mode="aspectFill" @click="openAd" />
       <view v-else class="ad-splash-fallback" @click="openAd">
         <text>{{ ad.title }}</text>
         <text>{{ ad.subtitle || "广告推广" }}</text>
@@ -225,7 +227,7 @@ onBeforeUnmount(clearTimer);
     <!-- #endif -->
 
     <view v-else-if="!isOfficial" :class="cardClass" @click="openAd">
-      <image v-if="ad.imageUrl" :src="ad.imageUrl" mode="aspectFill" />
+      <image v-if="displayImageUrl" :src="displayImageUrl" mode="aspectFill" />
       <view v-else class="ad-cover-fallback">AD</view>
       <view class="ad-slot-body">
         <view class="ad-slot-title">{{ ad.title }}</view>

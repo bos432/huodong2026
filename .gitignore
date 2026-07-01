@@ -17,6 +17,7 @@ runtime
 uploads
 *.lock
 .local-mysql
+.local-logs
 _release
 _attachment_changes.docx
 _attachment_images

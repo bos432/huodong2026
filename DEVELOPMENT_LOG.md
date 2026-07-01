@@ -2,6 +2,90 @@
 
 本文件记录无人值守持续开发模式下，每个小阶段的实施、验证和遗留事项。
 
+## 2026-07-01 - 线上全流程多角色验收与整改方案
+
+### 阶段名称
+
+上线前真实浏览器全流程验收 - H5 用户、财务确认、签到核销、多角色权限与新增运营页面验收小阶段。
+
+### 本阶段完成内容
+
+- 按用户要求在右侧浏览器和线上 API 完成真实验收，测试数据保留不删除。
+- 复用并继续上一轮已创建的保留测试会员和订单：
+  - 会员手机号 `13907011300`，昵称 `验收用户ACCEPT-20260701-1300`。
+  - 报名 ID `36`，订单 ID `36`，订单号 `OD178288224539436`。
+- H5 用户流程验证：
+  - H5 首页可打开，首页装修、活动列表、广告位和底部导航可展示。
+  - H5 密码登录成功。
+  - 报名详情在财务确认后显示 `报名成功 / 订单已付款`。
+  - 核销后刷新显示 `已签到 / 订单已付款`。
+- 财务流程验证：
+  - `showcase_finance` 登录后台成功。
+  - 订单页可查看测试订单。
+  - 通过后台确认线下收款接口完成收款，确认人写入 `showcase_finance`。
+  - 订单状态从 `pending_payment` 变为 `paid`，报名状态从 `pending_payment` 变为 `approved`。
+- 签到流程验证：
+  - `showcase_checkin` 登录后台成功。
+  - 核销接口成功创建核销记录 ID `16`，报名状态变为 `checked_in`。
+  - 浏览器复查发现签到核销页在窄屏下输入框宽度为 0，记录为高优先级整改项。
+- 多角色权限验证：
+  - 平台超管、商家管理员、运营、财务、签到账号登录和主要权限边界符合预期。
+  - 财务访问营销弹窗被拦截回工作台，签到账号访问订单/会员/广告中心被 API 拒绝。
+  - 店铺/代理相关账号当前密码不可用，未完成验收。
+- 新增页面验证：
+  - 会员管理可筛选到保留会员，并显示消费、报名、签到统计。
+  - 前台装修页可打开，UI 模板套装、版本历史、模板库、生效检测入口可见。
+  - 营销弹窗页可打开，当前保留弹窗为停用状态，公开接口返回空。
+  - 广告中心可打开，保留广告计划、广告主、合同、结算数据可见。
+- 新增详细测试文档和优化整改方案。
+
+### 修改/新增的主要文件
+
+- `docs/线上全流程验收报告与整改方案-20260701.md`
+- `DEVELOPMENT_LOG.md`
+
+### 运行或测试结果
+
+- 验证时间：2026-07-01 13:04 - 13:18 +08:00。
+- 验证环境：线上 `https://rd.chaimen666.com`，商家 `qiwai-showcase`。
+- API 健康检查：`ready=true`，`api=up`，`database=up`，`config=warning`。
+- API release：`9260d75`，构建时间 `2026-06-25T14:17:10+08:00`。
+- H5 报名详情最终状态：
+  - 报名：`已签到`
+  - 订单：`已付款`
+  - 活动：`【演示】家庭教育沟通工作坊`
+- 后台订单最终状态：
+  - 订单 `OD178288224539436` 状态 `paid`
+  - 确认人 `showcase_finance`
+  - 收款备注 `ACCEPT-20260701-1300 财务验收确认收款`
+- 后台核销最终状态：
+  - 核销记录 ID `16`
+  - 报名状态 `checked_in`
+  - 核销备注 `ACCEPT-20260701-1300 现场核销验收`
+- 页面控制台：
+  - H5 登录、首页、报名详情：未发现 error。
+  - 会员管理、装修、营销弹窗、广告中心：未发现业务页面 error。
+- 公开接口抽查：
+  - `/public/marketing-popups` 返回 `null`，原因是当前弹窗停用。
+  - `/public/ad-slots` 可返回首页广告，但广告图片为空。
+
+### 遗留问题
+
+- P0：短信服务未配置，新用户验证码登录失败，正式上线前必须处理。
+- P1：签到核销页在窄屏浏览器下主内容被侧边栏挤压，输入框宽度为 0，现场手动核销受影响。
+- P1：店铺/代理相关测试账号当前密码不可用，未完成店铺、代理、店铺财务角色验收。
+- P1：营销弹窗缺少“未生效原因/生效检测”，当前停用状态容易被误认为功能失效。
+- P2：广告中心保留广告计划缺少图片，正式投放视觉不完整。
+- P2：线上 API release commit 与本地当前分支 HEAD 不一致，需要增强三端版本可观测性。
+
+### 下一阶段应继续处理的事项
+
+- 优先修复短信服务配置和签到页窄屏布局。
+- 重置或重建店铺/代理演示账号后补测商城店铺、代理结算、店铺财务角色。
+- 给营销弹窗增加生效检测与前台预览，减少运营误判。
+- 给广告计划增加图片必填/兜底图校验。
+- 完成 P0/P1 后再跑一次最终上线验收。
+
 ## 2026-06-25 - 后台装修中等宽度线上复验完成
 
 ### 阶段名称
@@ -10723,3 +10807,409 @@ V6 区域保护升级 - 后台边界点录入与批量导入入口。
 
 - 在本地或线上后台创建一条 `五行暖金通知` 弹窗，验证 H5 首页首次弹出、关闭频次和点击跳转。
 - 服务器部署时执行新增 migration，并重新构建发布 API、后台、H5 与小程序包。
+# 2026-07-01 - 上线整改 P0/P1 短信与签到页修复
+
+## 阶段名称
+
+上线整改第一阶段 - 真实短信发送能力与后台签到核销响应式修复。
+
+## 本阶段完成内容
+
+- 在通知发送服务中新增腾讯云短信真实发送适配 `tencent-cloud-sms`，通过腾讯云官方 SDK 调用 `SendSms`。
+- H5 验证码发送继续使用原接口 `POST /public/auth/h5-code`，但现在会读取后台系统设置中的短信服务商、Key、Secret、签名、模板和 `SmsSdkAppId`。
+- 生产环境禁止 `mock-sms` 假成功；`aliyun-sms` 返回明确未适配提示，避免静默失败。
+- 新增后台测试短信接口 `POST /admin/settings/sms/test`，权限归属 `operation_settings.manage`，发送结果写入验证码日志。
+- 后台系统设置页新增“短信 AppID”和“发送测试短信”入口，可跳转验证码日志查看 provider、messageId 和失败原因。
+- 修复后台窄屏布局：小于 768px 时侧边栏转为顶部横向菜单，主内容占满视口，顶部按钮允许换行。
+- 重做签到核销页现场模式布局：大号输入框、扫码/核销/清空按钮、最近核销活动/用户/手机号/时间展示，窄屏下按钮纵向排列。
+
+## 修改/新增的主要文件
+
+- `apps/api/src/modules/v1/notification-provider.service.ts`
+- `apps/api/src/modules/public/public.service.ts`
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/api/src/modules/admin/admin.module.ts`
+- `apps/api/src/modules/admin/admin-permissions.ts`
+- `apps/api/src/modules/admin/dto.ts`
+- `apps/api/src/entities/operation-setting.entity.ts`
+- `apps/api/src/migrations/1782880000000-OperationSettingSmsSdkAppId.ts`
+- `apps/api/src/shared/launch-config.ts`
+- `apps/api/src/shared/config-validation.ts`
+- `apps/admin/src/views/SystemSettings.vue`
+- `apps/admin/src/views/Layout.vue`
+- `apps/admin/src/views/CheckIn.vue`
+- `apps/api/package.json`
+- `apps/api/package-lock.json`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅保留既有 Rollup PURE 注释和 chunk 体积提示。
+
+## 遗留问题
+
+- 腾讯云短信真实发送需要运营在后台填入已审核通过的 `SmsSdkAppId`、短信签名和模板 ID；本地未使用真实腾讯云凭证发送。
+- 新增 `smsSdkAppId` 字段需要服务器执行 migration 后才能保存。
+- 尚未完成右侧浏览器 375px/768px/1280px 签到页截图验收。
+
+## 下一阶段应继续处理的事项
+
+- 恢复店铺/代理/店铺财务演示账号，并补角色权限验收脚本和文档。
+- 继续营销弹窗生效检测、广告图片强校验和会员管理增强。
+
+# 2026-07-01 - 上线整改 P1 店铺/代理演示账号恢复
+
+## 阶段名称
+
+上线整改第二阶段 - 店铺/代理/店铺财务演示账号幂等恢复与角色验收脚本。
+
+## 本阶段完成内容
+
+- 更新线上演示商家 seed 脚本，新增并幂等重置：
+  - `showcase_store_owner`
+  - `showcase_agent_owner`
+  - `showcase_store_finance`
+- 账号密码继续从 `SHOWCASE_PASSWORD` 环境变量读取，脚本和公开文档不写明文密码。
+- 为店铺负责人分配授权店铺的商品、订单、售后、物流、商城财务和统计权限。
+- 为店铺财务分配店铺订单、售后、财务、支付、结算和统计权限，不包含 `mall.product.manage`。
+- 为代理负责人分配订单查看、财务查看、代理结算和商城订单/财务查看权限，不包含商品编辑权限。
+- 默认商城店铺授权扩展到新增账号，店铺负责人为 `manager`，店铺财务为 `finance`，代理负责人为 `viewer`。
+- 新增 `scripts/verify-online-showcase-roles.mjs`，用于线上部署后验证三类账号登录、允许访问页面和禁止访问页面。
+- 更新 `docs/role-operation-guide.md`，补充线上演示账号清单和每周权限抽查要求。
+
+## 修改/新增的主要文件
+
+- `scripts/seed-online-showcase.mjs`
+- `scripts/verify-online-showcase-roles.mjs`
+- `docs/role-operation-guide.md`
+- `DEVELOPMENT_LOG.md`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 +08:00。
+- `node --check scripts/seed-online-showcase.mjs`：通过。
+- `node --check scripts/verify-online-showcase-roles.mjs`：通过。
+- `npm.cmd --prefix apps/api run test -- admin-permissions`：通过，8 个权限映射用例全部通过。
+
+## 遗留问题
+
+- 新脚本尚未在线上服务器执行；执行后才能真正重置线上账号密码并补齐授权。
+- 店铺/代理账号仍需右侧浏览器真实登录验收，并保留测试数据。
+
+## 下一阶段应继续处理的事项
+
+- 实现营销弹窗生效检测和前台预览辅助，解决运营“不知道为什么不弹”的问题。
+- 继续广告图片强校验和会员管理增强。
+
+# 2026-07-01 - 上线整改 P1 营销弹窗生效检测
+
+## 阶段名称
+
+上线整改第三阶段 - 营销弹窗生效检测、未命中原因解释与前台预览辅助。
+
+## 本阶段完成内容
+
+- 新增后台接口 `GET /admin/marketing-popups/effective-check`，支持按弹窗 ID、商家、页面和平台模拟公开投放命中。
+- 检测结果返回：
+  - 是否命中。
+  - 当前会被公开接口返回的弹窗摘要。
+  - 每条弹窗的未命中原因：停用、未开始、已过期、商家不匹配、页面不匹配、平台不匹配。
+  - 风险提醒：图片非 HTTPS/非 `/uploads/`、小程序端按钮配置普通外链等。
+- 后台“营销弹窗”列表新增“生效检测”入口：
+  - 工具条可检测当前页面/平台整体命中情况。
+  - 每行可检测单条弹窗为什么不弹。
+  - 检测弹窗支持选择商家、页面、平台，展示命中结果和原因。
+- 后台增加“前台预览”和“清频次缓存”辅助：
+  - 前台预览打开带时间戳参数的 H5 首页。
+  - 清频次缓存会移除当前浏览器 `marketing_popup:*` 频次缓存，便于反复测试。
+- 补齐营销弹窗投放页面枚举 `mall_product_detail`，便于商品详情页后续投放和检测。
+- 保持前端 `MarketingPopup` 一次只展示最高优先级一条的规则不变。
+
+## 修改/新增的主要文件
+
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/admin/src/views/MarketingPopups.vue`
+- `DEVELOPMENT_LOG.md`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅保留既有 VueUse PURE 注释和 chunk 体积提示。
+
+## 遗留问题
+
+- 本阶段尚未在右侧浏览器创建/启用真实弹窗并验证 H5 首页弹出与统计回写。
+- “今日频次已拦截”目前由前端本地缓存控制，后台接口无法读取用户当前浏览器缓存，只能提供清缓存辅助。
+- 图片和跳转异常当前为风险提醒，不改变既有公开投放规则；若后续希望强制拦截，需要另起策略变更。
+
+## 下一阶段应继续处理的事项
+
+- 继续实现广告中心图片强校验、兜底图和公开接口 `resolvedImageUrl`。
+- 后续浏览器验收时补测营销弹窗生效检测、前台预览、清缓存和 H5 实际弹出。
+
+# 2026-07-01 - 上线整改 P2 广告图片校验与兜底图
+
+## 阶段名称
+
+上线整改第四阶段 - 广告中心自有广告启用强校验、默认广告图兜底与前台展示字段增强。
+
+## 本阶段完成内容
+
+- 后端广告计划保存逻辑增强：
+  - 自有广告可保存草稿/停用状态。
+  - 自有广告启用时必须有标题、跳转链接、可用广告图或商家默认广告图。
+  - 广告计划图仅允许 `https://` 或 `/uploads/` 地址。
+  - 官方流量主广告仍按原规则配置，不强制自有广告图。
+- 公开广告接口 `GET /public/ad-slots` 新增 `resolvedImageUrl`：
+  - 优先广告计划图。
+  - 其次读取商家配置中的 `defaultAdImageUrl`、`defaultShareImageUrl`、`shareImageUrl`。
+  - 最后使用系统 HTTPS 占位图。
+  - 原 `imageUrl` 字段保留兼容旧前端。
+- H5/小程序广告组件 `AdSlotRenderer` 优先使用 `resolvedImageUrl`，旧字段继续兼容。
+- 后台广告中心增加启用前本地提示：
+  - 缺标题、缺图、图片地址异常、缺跳转链接会直接提示。
+  - 平台超管可基于商家设置判断是否存在默认广告图。
+  - 列表 warning 能提示“使用商家默认广告图兜底”。
+
+## 修改/新增的主要文件
+
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/api/src/modules/public/public.service.ts`
+- `apps/admin/src/views/AdCenter.vue`
+- `apps/mobile/src/components/AdSlotRenderer.vue`
+- `DEVELOPMENT_LOG.md`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `npm.cmd --prefix apps/admin run build`：第一次因前端校验函数类型过窄失败，已修复后复跑通过；仅保留既有 VueUse PURE 注释和 chunk 体积提示。
+
+## 遗留问题
+
+- 商家默认广告图字段当前采用兼容读取 `tenant.settings.defaultAdImageUrl/defaultShareImageUrl/shareImageUrl`，后台暂未新增专门表单字段。
+- 系统兜底图使用外部 HTTPS 占位图；正式品牌上线前建议替换成自有 OSS/CDN 默认广告图。
+- 尚未在右侧浏览器创建缺图广告并验证启用拦截、有图广告前台展示。
+
+## 下一阶段应继续处理的事项
+
+- 继续会员管理增强：快捷筛选、详情时间线和批量打标签。
+- 后续浏览器验收时补测广告缺图启用拦截、有图广告 H5 展示和 `resolvedImageUrl` 返回。
+
+# 2026-07-01 - 上线整改 P2 会员管理增强
+
+## 阶段名称
+
+上线整改第五阶段 - 会员管理快捷筛选、批量标签与用户时间线。
+
+## 本阶段完成内容
+
+- 后台会员列表筛选增强：
+  - 新增标签筛选。
+  - 新增快捷筛选：已/未绑定手机号、已/未绑定微信、近 7 日活跃、近 30 日未活跃、有/无消费、有/无报名。
+  - 继续保持 `GET /admin/members` 旧数组模式兼容；带 `page/pageSize` 时仍返回分页对象。
+- 会员详情增强：
+  - 返回用户标签 `tags`。
+  - 返回统一 `timeline`，覆盖登录、报名、订单付款、核销、退款、积分变动、余额变动、评价。
+  - 后台详情抽屉新增标签展示和“用户时间线”标签页。
+- 新增批量打标签能力：
+  - 后端新增 `POST /admin/tags/bulk-members`。
+  - 前端会员表格支持多选后批量添加标签。
+  - 重复标签自动跳过，完成后可直接按该标签筛选会员。
+- 保留原有会员编辑、重置密码、余额调整、等级管理能力。
+
+## 修改/新增的主要文件
+
+- `apps/api/src/modules/admin/admin.controller.ts`
+- `apps/api/src/modules/admin/admin.service.ts`
+- `apps/admin/src/views/Members.vue`
+- `DEVELOPMENT_LOG.md`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅保留既有 VueUse PURE 注释和 chunk 体积提示。
+
+## 遗留问题
+
+- 批量标签和时间线尚未在右侧浏览器做真实点击验收。
+- 时间线第一版为运营视角聚合，不做复杂关联详情跳转；后续可增加点击跳转订单/报名详情。
+- 标签颜色沿用现有 `default/success/warning/danger` 简化枚举，未新增标签字典管理。
+
+## 下一阶段应继续处理的事项
+
+- 实现版本信息可观测：Admin/H5 静态版本文件、构建元信息和后台版本检查卡片。
+- 实现首页装修“上线简洁版模板”入口。
+
+# 2026-07-01 - 上线整改 P2 版本可观测与上线简洁版模板
+
+## 阶段名称
+
+上线整改第六阶段 - 三端版本信息可观测、静态版本文件发布和首页上线简洁版模板。
+
+## 本阶段完成内容
+
+- 新增静态版本写入脚本，Admin/H5 构建完成后自动生成 `version.json`，包含端类型、Git commit 和 buildTime。
+- Admin/H5 构建脚本接入静态版本写入：
+  - Admin 输出 `apps/admin/dist/version.json`。
+  - H5 输出 `apps/mobile/dist/build/h5/version.json`。
+- 后台系统设置的部署健康区新增三端版本卡片：
+  - API commit/buildTime 来自 `/api/health/ready`。
+  - Admin 静态包来自 `/admin/version.json`。
+  - H5 静态包来自 `/version.json`。
+  - 三端 commit 不一致时显示提醒，但不阻断运行。
+- 发布脚本增强：静态包复制发布时同步发布 Admin/H5 的 `version.json`，并在备份中保留旧版本文件。
+- 前台全局装修新增“上线简洁版”内置模板，模块控制为搜索、主视觉、公告、精选活动、商城广告入口、课程入口、动态入口和底部导航。
+- 装修工具条新增“应用上线简洁版模板”入口，应用前会自动保存当前装修版本，便于回滚。
+- `UI 模板套装` 同步展示“上线简洁版”，支持预览和整套应用。
+
+## 修改/新增的主要文件
+
+- `scripts/write-static-version.mjs`
+- `scripts/publish-webroot.mjs`
+- `apps/admin/package.json`
+- `apps/mobile/package.json`
+- `apps/admin/src/views/SystemSettings.vue`
+- `apps/admin/src/views/HomepageBuilder.vue`
+- `DEVELOPMENT_LOG.md`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 +08:00。
+- `npm.cmd --prefix apps/admin run build`：通过；生成 `apps/admin/dist/version.json`。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过；生成 `apps/mobile/dist/build/h5/version.json`。
+- `node --check scripts/write-static-version.mjs`：通过。
+- `node --check scripts/publish-webroot.mjs`：通过。
+- `git diff --check`：通过；仅保留 Windows 工作区 LF/CRLF 转换提示。
+- 本地生成版本文件示例：
+  - Admin commit：`a6fffcb1`
+  - H5 commit：`a6fffcb1`
+
+## 遗留问题
+
+- 上线简洁版模板尚未在右侧浏览器执行真实应用，避免在未确认前覆盖线上装修；后续浏览器验收时只做预览或在测试商家范围内应用。
+- 线上部署后需要重新构建并发布 Admin/H5，后台系统设置页才能读到最新 `/admin/version.json` 和 `/version.json`。
+
+## 下一阶段应继续处理的事项
+
+- 执行最终构建与静态预检：API、Admin、H5、小程序包、preflight guards 和 diff 检查。
+- 通过后进入右侧浏览器主流程验收，覆盖 H5、后台多角色、签到、营销弹窗、广告中心和会员管理。
+
+# 2026-07-01 - 上线整改最终构建与静态预检
+
+## 阶段名称
+
+上线整改第七阶段 - API/Admin/H5/小程序构建与预检守卫全量验证。
+
+## 本阶段完成内容
+
+- 按上线整改测试计划执行 API、后台、H5、小程序包构建。
+- 小程序构建继续导出到 `apps/mobile/dist/build/mp-weixin`，并完成授权配置 patch。
+- 修复构建产物预检脚本对 `build:h5` 的旧格式写死判断，允许 H5 构建后追加静态版本文件写入，同时强制检查 Admin/H5 都接入 `write-static-version.mjs`。
+- 复跑全量 preflight guards，确认版本写入改动没有破坏上线守卫。
+
+## 修改/新增的主要文件
+
+- `scripts/preflight-build-artifact-guard.mjs`
+- `DEVELOPMENT_LOG.md`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 +08:00。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅保留既有 VueUse/Rollup PURE 注释和 chunk 体积提示。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_DEFAULT_TENANT_CODE='qiwai-showcase'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过，并完成 `patch-mobile-mp-weixin-auth.mjs`。
+- `npm.cmd run test:preflight-guards`：通过，全部上线守卫为 OK。
+- `git diff --check`：通过；仅保留 Windows 工作区 LF/CRLF 转换提示。
+
+## 遗留问题
+
+- 本阶段只覆盖本地构建和静态预检，尚未完成右侧浏览器主流程验收。
+- 小程序包已生成，但仍需要微信开发者工具导入或上传体验版后做真机/开发者工具验收。
+
+## 下一阶段应继续处理的事项
+
+- 启动或复用本地 API/Admin/H5 服务。
+- 在右侧浏览器执行主流程验收：页面打开、后台多角色、签到核销响应式、会员管理、营销弹窗检测、广告中心缺图拦截与有图展示、版本信息卡片。
+
+# 2026-07-01 - 上线整改最终浏览器验收
+
+## 阶段名称
+
+上线整改第八阶段 - 本地 Docker 环境全流程复验、多角色权限抽查和上线剩余项确认。
+
+## 本阶段完成内容
+
+- 复用本地 Docker/Nginx/API 环境完成右侧浏览器验收，验证地址为 `http://127.0.0.1:18080`，租户为 `qiwai-showcase`。
+- H5 首页可正常打开，装修内容、营销弹窗和广告位可展示，页面控制台未发现阻塞型前端错误。
+- 后台平台/运营入口可登录，工作台、系统设置、前台装修、营销弹窗、广告中心、会员管理、签到核销页面可打开。
+- 签到核销页完成 375px、768px、1280px 三档视口复验，窄屏下输入框和操作按钮可用，无横向挤压到不可操作的问题。
+- 营销弹窗完成后台创建、启用、生效检测和 H5 首页展示复验：
+  - 测试弹窗：`Codex验收弹窗-20260701065627`
+  - 测试弹窗 ID：`2`
+  - 生效检测返回命中，H5 首页可弹出。
+- 广告中心完成缺图启用拦截、有图广告启用和公开接口展示复验：
+  - 缺图广告启用被拦截，提示“请上传广告图或选择商家默认广告图后再启用”。
+  - 有图广告：`Codex有图广告-20260701065627`
+  - 广告 ID：`7`
+  - 前台标题：`Codex上线验收广告`
+  - `GET /public/ad-slots` 返回 `resolvedImageUrl`，H5 广告位优先展示该字段。
+- 会员管理完成分页模式、旧数组模式、详情时间线、批量标签和快捷筛选 API/页面复验：
+  - 测试标签：`上线验收-20260701`
+  - 会员详情时间线返回 7 条记录。
+- 系统设置完成短信与部署版本卡片复验：
+  - 租户后台可见 SMS AppID 和“发送测试短信”入口。
+  - 平台部署配置页可见 API/Admin/H5 三端版本卡片。
+  - 本地 API commit 为 `local-docker-mobile-admin`，Admin/H5 静态 commit 为 `a6fffcb1`，系统能提示版本不一致。
+- 多角色浏览器和脚本复验通过：
+  - `showcase_finance` 不能访问营销弹窗。
+  - `showcase_checkin` 不能访问广告中心。
+  - `showcase_store_owner` 可访问店铺商品/订单。
+  - `showcase_store_finance` 可访问店铺订单/结算，不可编辑商品。
+  - `showcase_agent_owner` 可访问代理结算。
+- 本地演示数据脚本和角色验证脚本已修复并通过，支持重复执行恢复店铺/代理/财务测试账号。
+
+## 修改/新增的主要文件
+
+- `DEVELOPMENT_LOG.md`
+- `docs/线上全流程验收报告与整改方案-20260701.md`
+
+## 运行或测试结果
+
+- 验证时间：2026-07-01 15:07:19 +08:00。
+- 验证环境：Windows 本地工作区 + Docker Compose，入口 `http://127.0.0.1:18080`，API ready 为 `ready=true/api=up/database=up/config=warning`。
+- `npm.cmd --prefix apps/api run build`：通过。
+- `npm.cmd --prefix apps/admin run build`：通过；仅保留既有 VueUse/Rollup PURE 注释和 chunk 体积提示。
+- `npm.cmd --prefix apps/mobile run build:h5`：通过，生成 `apps/mobile/dist/build/h5/version.json`。
+- `$env:VITE_API_BASE='https://rd.chaimen666.com/api'; $env:VITE_DEFAULT_TENANT_CODE='qiwai-showcase'; npm.cmd --prefix apps/mobile run build:mp-weixin`：通过，生成小程序包并完成授权配置 patch。
+- `npm.cmd run test:preflight-guards`：通过。
+- `node --check scripts/seed-online-showcase.mjs`：通过。
+- `node --check scripts/verify-online-showcase-roles.mjs`：通过。
+- `node scripts/verify-online-showcase-roles.mjs`：本地通过，店铺/代理/店铺财务权限符合预期。
+- `git diff --check`：通过；仅保留 Windows 工作区 LF/CRLF 转换提示。
+
+## 遗留问题
+
+- 本地验证码环境为 `H5_AUTH_MODE=dev`，公开 H5 验证码接口会返回开发验证码；正式上线仍必须在服务器配置腾讯云短信参数并保持生产环境短信模式。
+- 本地 SMS 测试接口在未启用短信时会明确失败：`sms provider is not enabled`，符合预期；线上需要补全真实短信签名、模板、SDK AppID 和密钥后复测。
+- 小程序包已构建通过，但仍需导入微信开发者工具或上传体验版后完成开发者工具/真机验收。
+- 本地 API/Admin/H5 版本卡片能工作；线上部署后仍需确认服务器 API commit、Admin 静态包、H5 静态包是否一致。
+
+## 下一阶段应继续处理的事项
+
+- 提交代码并部署服务器后，执行生产 migration、API 重启、Admin/H5 静态发布和 Nginx reload。
+- 在服务器配置真实腾讯云短信后，复测 `POST /admin/settings/sms/test` 和 `POST /public/auth/h5-code`。
+- 使用微信开发者工具导入 `apps/mobile/dist/build/mp-weixin`，复验首页装修、营销弹窗、广告位、微信登录/手机号绑定和官方广告位。
+- 线上右侧浏览器再跑一遍保留数据闭环：新用户验证码登录、报名收费活动、财务确认线下收款、签到账号核销、会员管理统计更新。
+
+## 是否达到可上线运营标准
+
+- 本地代码和浏览器复验结论：整改计划内功能已完成，达到“可部署到线上进行最终上线验收”的状态。
+- 正式上线结论依赖生产环境两项外部配置：真实腾讯云短信配置、小程序开发者工具/体验版验收。完成这两项后，可按当前版本进入正式运营。

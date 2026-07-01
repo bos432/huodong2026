@@ -28,6 +28,25 @@ type PopupRow = {
   closeCount: number;
   tenant?: { id: number; name?: string | null; code?: string | null } | null;
 };
+type EffectiveCheckItem = {
+  id: number;
+  title: string;
+  status: string;
+  statusText: string;
+  matched: boolean;
+  reasons: Array<{ code: string; message: string }>;
+  warnings: Array<{ code: string; message: string }>;
+  popup?: PopupRow;
+};
+type EffectiveCheckResult = {
+  pageKey: string;
+  platform: string;
+  tenant?: { id: number; name?: string | null; code?: string | null } | null;
+  matched: boolean;
+  hit?: EffectiveCheckItem | null;
+  publicPopup?: PopupRow | null;
+  checks: EffectiveCheckItem[];
+};
 
 const typeOptions = [
   { label: "重要通知", value: "notice" },
@@ -48,6 +67,7 @@ const placementOptions = [
   { label: "活动详情", value: "activity_detail" },
   { label: "课程首页", value: "course_home" },
   { label: "课程详情", value: "course_detail" },
+  { label: "商城商品详情", value: "mall_product_detail" },
   { label: "共修首页", value: "community_home" },
   { label: "我的", value: "user_my" }
 ];
@@ -63,7 +83,11 @@ const loading = ref(false);
 const saving = ref(false);
 const drawer = ref(false);
 const editingId = ref<number | null>(null);
+const checkDialog = ref(false);
+const checkLoading = ref(false);
+const checkResult = ref<EffectiveCheckResult | null>(null);
 const filters = reactive({ tenantId: undefined as number | undefined, keyword: "", enabled: "", platform: "", placement: "" });
+const checkForm = reactive({ id: undefined as number | undefined, tenantId: undefined as number | undefined, pageKey: "home", platform: "h5" });
 const form = reactive({
   tenantId: undefined as number | undefined,
   title: "",
@@ -208,6 +232,51 @@ async function quickToggle(row: PopupRow) {
   }
 }
 
+function openEffectiveCheck(row?: PopupRow) {
+  checkForm.id = row?.id;
+  checkForm.tenantId = row?.tenant?.id || (isPlatformAdmin() ? filters.tenantId : undefined);
+  checkForm.pageKey = filters.placement || firstSpecific(row?.placements) || "home";
+  checkForm.platform = filters.platform || firstSpecific(row?.platforms) || "h5";
+  checkResult.value = null;
+  checkDialog.value = true;
+  void runEffectiveCheck();
+}
+
+async function runEffectiveCheck() {
+  checkLoading.value = true;
+  try {
+    const params = new URLSearchParams();
+    if (checkForm.id) params.set("id", String(checkForm.id));
+    if (isPlatformAdmin() && checkForm.tenantId) params.set("tenantId", String(checkForm.tenantId));
+    params.set("pageKey", checkForm.pageKey);
+    params.set("platform", checkForm.platform);
+    checkResult.value = await api.get<any, EffectiveCheckResult>("/admin/marketing-popups/effective-check", { params });
+  } catch (error: any) {
+    ElMessage.error(error.message || "生效检测失败");
+  } finally {
+    checkLoading.value = false;
+  }
+}
+
+function firstSpecific(value?: string[]) {
+  const item = Array.isArray(value) ? value.find((row) => row && row !== "all") : "";
+  return item || "";
+}
+
+function openFrontendPreview() {
+  const tenant = tenants.value.find((item) => item.id === checkForm.tenantId);
+  const query = new URLSearchParams();
+  if (tenant?.code) query.set("tenantCode", tenant.code);
+  query.set("t", `popup-preview-${Date.now()}`);
+  window.open(`${window.location.origin}/?${query.toString()}#/`, "_blank");
+}
+
+function clearPopupFrequencyCache() {
+  const keys = Object.keys(window.localStorage).filter((key) => key.includes("marketing_popup:"));
+  keys.forEach((key) => window.localStorage.removeItem(key));
+  ElMessage.success(keys.length ? `已清除 ${keys.length} 条弹窗频次缓存` : "当前浏览器没有弹窗频次缓存");
+}
+
 async function remove(row: PopupRow) {
   await ElMessageBox.confirm(`确认删除「${row.title}」？删除后前台不再展示。`, "删除营销弹窗", { type: "warning" });
   try {
@@ -271,6 +340,10 @@ function statusText(row: PopupRow) {
   if (!row.enabled) return "停用";
   if (row.startAt && new Date(row.startAt).getTime() > now) return "未开始";
   if (row.endAt && new Date(row.endAt).getTime() < now) return "已过期";
+  if (filters.platform && !arrayMatches(row.platforms, filters.platform)) return "平台不匹配";
+  if (filters.placement && !arrayMatches(row.placements, filters.placement)) return "页面不匹配";
+  if (row.imageUrl && !usableImage(row.imageUrl)) return "图片异常";
+  if ((row.buttons || []).some((button) => button.link && !usableLink(button.link, filters.platform || "h5"))) return "跳转异常";
   return "投放中";
 }
 
@@ -279,6 +352,21 @@ function statusType(row: PopupRow) {
   if (text === "投放中") return "success";
   if (text === "停用") return "info";
   return "warning";
+}
+
+function arrayMatches(value: string[], target: string) {
+  return !target || value.includes("all") || value.includes(target);
+}
+
+function usableImage(value: string) {
+  return value.startsWith("https://") || value.startsWith("/uploads/");
+}
+
+function usableLink(value: string, platform: string) {
+  if (!value) return true;
+  if (value.startsWith("/")) return true;
+  if (platform === "mp-weixin") return false;
+  return value.startsWith("https://") || value.startsWith("http://");
 }
 
 function formatTime(value?: string | null) {
@@ -320,6 +408,7 @@ onMounted(async () => {
         <el-select v-model="filters.placement" clearable placeholder="投放页面" style="width: 140px" @change="load">
           <el-option v-for="item in placementOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
+        <el-button :icon="View" @click="openEffectiveCheck()">生效检测</el-button>
         <el-button type="primary" :icon="Plus" @click="create">新增弹窗</el-button>
         <el-button :icon="Refresh" @click="load">刷新</el-button>
       </div>
@@ -364,8 +453,9 @@ onMounted(async () => {
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><el-tag :type="statusType(row)">{{ statusText(row) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="230" fixed="right">
+        <el-table-column label="操作" width="290" fixed="right">
           <template #default="{ row }">
+            <el-button size="small" :icon="View" @click="openEffectiveCheck(row)">检测</el-button>
             <el-button size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
             <el-button size="small" :type="row.enabled ? 'warning' : 'success'" :icon="Switch" @click="quickToggle(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
             <el-button size="small" type="danger" :icon="Delete" @click="remove(row)">删除</el-button>
@@ -473,6 +563,55 @@ onMounted(async () => {
         <el-button type="primary" :loading="saving" @click="submit">保存弹窗</el-button>
       </template>
     </el-drawer>
+
+    <el-dialog v-model="checkDialog" title="营销弹窗生效检测" width="860px">
+      <div class="check-panel">
+        <div class="check-form">
+          <el-select v-if="isPlatformAdmin()" v-model="checkForm.tenantId" clearable filterable placeholder="平台全局 / 选择商家">
+            <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name || tenant.code}（${tenant.code}）`" :value="tenant.id" />
+          </el-select>
+          <el-select v-model="checkForm.pageKey" placeholder="检测页面">
+            <el-option v-for="item in placementOptions.filter((item) => item.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" />
+            <el-option label="商城商品详情" value="mall_product_detail" />
+          </el-select>
+          <el-select v-model="checkForm.platform" placeholder="检测平台">
+            <el-option label="H5" value="h5" />
+            <el-option label="微信小程序" value="mp-weixin" />
+          </el-select>
+          <el-button type="primary" :loading="checkLoading" @click="runEffectiveCheck">开始检测</el-button>
+          <el-button @click="openFrontendPreview">前台预览</el-button>
+          <el-button @click="clearPopupFrequencyCache">清频次缓存</el-button>
+        </div>
+
+        <el-alert
+          v-if="checkResult"
+          :type="checkResult.matched ? 'success' : 'warning'"
+          show-icon
+          :closable="false"
+          :title="checkResult.matched ? `将展示：${checkResult.hit?.title}` : '当前页面和平台没有命中可展示弹窗'"
+        />
+
+        <el-table v-if="checkResult" v-loading="checkLoading" :data="checkResult.checks" border empty-text="暂无可检测弹窗">
+          <el-table-column label="弹窗" min-width="180" show-overflow-tooltip>
+            <template #default="{ row }"><strong>{{ row.title }}</strong></template>
+          </el-table-column>
+          <el-table-column label="结果" width="110">
+            <template #default="{ row }"><el-tag :type="row.matched ? 'success' : 'warning'">{{ row.statusText }}</el-tag></template>
+          </el-table-column>
+          <el-table-column label="未命中原因 / 风险提醒" min-width="320">
+            <template #default="{ row }">
+              <div v-if="row.reasons?.length" class="reason-list">
+                <el-tag v-for="item in row.reasons" :key="item.code" size="small" type="warning">{{ item.message }}</el-tag>
+              </div>
+              <div v-else class="reason-list"><el-tag size="small" type="success">会被公开接口返回</el-tag></div>
+              <div v-if="row.warnings?.length" class="reason-list warning-list">
+                <el-tag v-for="item in row.warnings" :key="item.code" size="small" type="danger">{{ item.message }}</el-tag>
+              </div>
+            </template>
+          </el-table-column>
+        </el-table>
+      </div>
+    </el-dialog>
   </div>
 </template>
 
@@ -503,6 +642,11 @@ onMounted(async () => {
 .preview-actions button { min-height: 40px; border: 0; border-radius: 999px; font-weight: 800; }
 .preview-actions .primary { background: linear-gradient(135deg, #2e5d7f 0%, #d77a4d 100%); color: #fff; }
 .preview-actions .secondary { background: #eef3f6; color: #344054; }
+.check-panel { display: grid; gap: 14px; }
+.check-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.check-form .el-select { width: 180px; }
+.reason-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.warning-list { margin-top: 6px; }
 @media (max-width: 1100px) {
   .popup-editor { grid-template-columns: 1fr; }
   .preview-phone { width: 100%; max-width: 360px; }
