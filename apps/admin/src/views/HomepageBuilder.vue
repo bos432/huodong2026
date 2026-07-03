@@ -21,7 +21,8 @@ type SectionForm = {
 type CrossCopyMode = "current_page" | "all_pages";
 type LinkPickerTarget =
   | { kind: "config"; key: string; label: string }
-  | { kind: "array"; arrayKey: "items" | "tools"; index: number; key: string; label: string };
+  | { kind: "array"; arrayKey: "items" | "tools"; index: number; key: string; label: string }
+  | { kind: "bannerImage"; index: number; label: string };
 type HealthIssue = { level: "error" | "warning"; title: string; detail: string; sectionId?: number };
 type DecorationVersion = {
   id: number;
@@ -599,6 +600,10 @@ function linkDisplayName(value: unknown) {
 function linkPickerTargetValue(target: LinkPickerTarget | null) {
   if (!target) return "";
   if (target.kind === "config") return String(form.config[target.key] || "");
+  if (target.kind === "bannerImage") {
+    const item = bannerImageItems(form.config)[target.index];
+    return String(item?.link || form.config.link || "");
+  }
   const list = Array.isArray(form.config[target.arrayKey]) ? form.config[target.arrayKey] : [];
   return String(list[target.index]?.[target.key] || "");
 }
@@ -634,6 +639,14 @@ function openArrayLinkPicker(arrayKey: "items" | "tools", index: number, key: st
   linkPickerVisible.value = true;
 }
 
+function openBannerImageLinkPicker(index: number) {
+  linkPicker.target = { kind: "bannerImage", index, label: `第 ${index + 1} 张图跳转` };
+  const value = linkPickerTargetValue(linkPicker.target);
+  seedLinkPicker(value);
+  linkPicker.displayName = linkDisplayName(value);
+  linkPickerVisible.value = true;
+}
+
 function buildLinkPickerValue() {
   if (linkPicker.mode === "external") return String(linkPicker.externalUrl || "").trim();
   if (linkPicker.mode === "detail") {
@@ -656,6 +669,8 @@ function applyLinkPicker() {
   }
   if (linkPicker.target.kind === "config") {
     form.config[linkPicker.target.key] = value;
+  } else if (linkPicker.target.kind === "bannerImage") {
+    updateBannerImageLink(linkPicker.target.index, value);
   } else {
     updateConfigArrayItem(linkPicker.target.arrayKey, linkPicker.target.index, linkPicker.target.key, value);
   }
@@ -2501,7 +2516,10 @@ onMounted(async () => {
                         <div v-for="(item, index) in bannerImageItems(form.config)" :key="item.imageUrl" class="banner-image-item">
                           <img :src="item.imageUrl" alt="Banner" />
                           <div class="banner-image-meta"><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
-                          <el-input class="banner-image-link" :model-value="item.link" placeholder="本图跳转链接，留空则使用模块链接" @input="(value: string) => updateBannerImageLink(index, value)" />
+                          <div class="banner-image-link">
+                            <span>本图跳转链接</span>
+                            <el-button size="small" @click="openBannerImageLinkPicker(index)">{{ linkDisplayName(item.link || form.config.link) }}</el-button>
+                          </div>
                         </div>
                       </div>
                       <div class="upload-line">
@@ -2775,7 +2793,10 @@ onMounted(async () => {
                 <div v-for="(item, index) in bannerImageItems(form.config)" :key="item.imageUrl" class="banner-image-item">
                   <img :src="item.imageUrl" alt="Banner" />
                   <div class="banner-image-meta"><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
-                  <el-input class="banner-image-link" :model-value="item.link" placeholder="本图跳转链接，留空则使用模块链接" @input="(value: string) => updateBannerImageLink(index, value)" />
+                  <div class="banner-image-link">
+                    <span>本图跳转链接</span>
+                    <el-button size="small" @click="openBannerImageLinkPicker(index)">{{ linkDisplayName(item.link || form.config.link) }}</el-button>
+                  </div>
                 </div>
               </div>
               <div class="upload-line">
@@ -3145,7 +3166,9 @@ onMounted(async () => {
 .banner-image-item { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .banner-image-item img { width: 100%; height: 86px; display: block; object-fit: cover; background: #f3f4f6; }
 .banner-image-meta { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 8px; color: #667085; font-size: 12px; }
-.banner-image-link { padding: 0 8px 8px; }
+.banner-image-link { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 0 8px 8px; color: #667085; font-size: 12px; }
+.banner-image-link .el-button { width: 100%; justify-content: flex-start; overflow: hidden; }
+.banner-image-link .el-button :deep(span) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .visual-preset-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .builder-inspector { max-height: calc(100vh - 128px); overflow: auto; }
 .inspector-empty { min-height: 360px; display: grid; align-content: center; justify-items: start; gap: 12px; color: #667085; }
