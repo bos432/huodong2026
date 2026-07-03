@@ -29,7 +29,10 @@
           <strong>{{ item.value }}</strong>
         </view>
       </view>
-      <view v-if="!profile?.phone || canCompleteWechatProfile" class="member-actions">
+      <view v-if="!isLoggedIn" class="member-actions single">
+        <view class="member-action primary" @click="goLogin">登录/注册</view>
+      </view>
+      <view v-else-if="!profile?.phone || canCompleteWechatProfile" class="member-actions">
         <view v-if="!profile?.phone" class="member-action primary" @click="openPhoneBindPanel">绑定手机号</view>
         <view v-if="canCompleteWechatProfile" class="member-action" @click="openWechatProfilePanel()">完善头像昵称</view>
       </view>
@@ -155,7 +158,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { clearUser, ensureUser, fetchMyProfile, getUserToken, request, updateMyProfile, uploadMyAvatar } from "../../api";
+import { clearUser, fetchMyProfile, getUserToken, request, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
@@ -233,7 +236,11 @@ function money(value: string | number | undefined | null) {
 async function loadProfile() {
   loadingProfile.value = true;
   try {
-    await ensureUser();
+    if (!getUserToken()) {
+      clearUser();
+      resetUserState();
+      return;
+    }
     const [profileData, walletData, charityData, adminData, courseRows, registrationRows, courseOrderRows, mallOrderRows] = await Promise.all([
       fetchMyProfile(),
       request<any>("/public/me/wallet").catch(() => null),
@@ -255,14 +262,12 @@ async function loadProfile() {
     if (shouldCompleteWechatProfile(profileData)) openWechatProfilePanel(true, profileData);
     else wechatProfilePanelVisible.value = false;
   } catch (error: any) {
-    profile.value = null;
-    wallet.value = null;
-    charity.value = null;
-    adminAccess.value = null;
-    courses.value = [];
-    registrations.value = [];
-    courseOrders.value = [];
-    mallOrders.value = [];
+    resetUserState();
+    const message = String(error?.message || "");
+    if (message.includes("登录凭证无效") || message.includes("登录已过期") || message.includes("登录已失效") || message.includes("请先完成")) {
+      clearUser();
+      return;
+    }
     if (!String(error?.message || "").includes("请先完成")) {
       uni.showToast({ title: error.message || "加载用户失败", icon: "none" });
     }
@@ -332,7 +337,14 @@ function goGrid(item: any) {
   };
   if (pages[item.page]) uni.navigateTo({ url: pages[item.page] });
 }
-function goEdit() { uni.navigateTo({ url:"/pages/user/profile" }); }
+function goLogin() { uni.navigateTo({ url: withTenantCode("/pages/user/login?redirect=%2Fpages%2Fuser%2Fmy") }); }
+function goEdit() {
+  if (!getUserToken()) {
+    goLogin();
+    return;
+  }
+  uni.navigateTo({ url:"/pages/user/profile" });
+}
 function goCharity() { uni.navigateTo({ url:"/pages/charity/index" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goWallet() { uni.navigateTo({ url:"/pages/user/wallet" }); }
@@ -524,6 +536,9 @@ function logoutUser() {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 14rpx;
   margin-top: 24rpx;
+}
+.member-actions.single {
+  grid-template-columns: 1fr;
 }
 .member-action {
   min-height: 74rpx;
