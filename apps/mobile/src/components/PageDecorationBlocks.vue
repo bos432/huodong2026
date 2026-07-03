@@ -180,11 +180,21 @@ function formatTime(value: string) {
     </view>
 
     <view v-else-if="section.type === 'image_banner'" class="decor-banner" :style="sectionStyle(section, '#dff4ee')" @click="goDecoratedLink(String(section.config.link || ''))">
-      <swiper v-if="imageList(section).length > 1" class="decor-banner-swiper" :style="bannerSwiperStyle(section)" circular autoplay indicator-dots>
+      <swiper
+        v-if="imageList(section).length > 1"
+        class="decor-banner-swiper"
+        :style="bannerSwiperStyle(section)"
+        circular
+        autoplay
+        indicator-dots
+        indicator-color="rgba(255,255,255,0.62)"
+        indicator-active-color="#ffffff"
+      >
         <swiper-item v-for="url in imageList(section)" :key="url">
           <image :src="url" mode="aspectFill" />
         </swiper-item>
       </swiper>
+      <view v-if="imageList(section).length > 1" class="decor-banner-count">{{ imageList(section).length }} 张轮播</view>
       <image v-else-if="imageList(section)[0]" :src="imageList(section)[0]" mode="widthFix" />
       <text v-else>{{ section.title || "图片 Banner" }}</text>
     </view>
@@ -295,10 +305,11 @@ function formatTime(value: string) {
 .decor-quick-item { min-height: 122rpx; display: grid; gap: 9rpx; justify-items: center; align-content: center; border-radius: 16px; background: var(--decor-item-background, linear-gradient(180deg, #fff 0%, #fffbf5 100%)); color: var(--text-color, #3f3428); font-size: 23rpx; font-weight: 800; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); border: 1px solid rgba(139, 90, 43, 0.08); }
 .decor-quick-icon { width: 54rpx; height: 54rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 24rpx; font-weight: 900; }
 .decor-banner, .decor-rich, .decor-notice, .decor-search { padding: 24rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); }
-.decor-banner { overflow: hidden; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); }
+.decor-banner { position: relative; overflow: hidden; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); }
 .decor-banner image, .decor-rich image { width: 100%; border-radius: var(--decor-image-radius, 12px); }
 .decor-banner-swiper { width: 100%; height: 220rpx; border-radius: var(--decor-image-radius, 12px); overflow: hidden; }
 .decor-banner-swiper image { width: 100%; height: 100%; display: block; border-radius: 0; }
+.decor-banner-count { position: absolute; top: 34rpx; right: 34rpx; z-index: 2; padding: 7rpx 14rpx; border-radius: 999rpx; background: rgba(15, 23, 42, 0.56); color: #fff; font-size: 21rpx; font-weight: 900; line-height: 1.2; }
 .decor-section-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; margin-bottom: 12rpx; }
 .decor-section-copy { margin: -4rpx 0 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.45; }
 .decor-rich-line { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.65; }

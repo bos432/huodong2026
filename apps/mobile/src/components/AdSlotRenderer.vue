@@ -238,11 +238,14 @@ onBeforeUnmount(clearTimer);
     <!-- #endif -->
 
     <view v-else-if="!isOfficial" :class="cardClass" @click="openAd">
-      <swiper v-if="displayImageUrls.length > 1" class="ad-slot-swiper" circular autoplay indicator-dots>
-        <swiper-item v-for="url in displayImageUrls" :key="url">
-          <image :src="url" mode="aspectFill" />
-        </swiper-item>
-      </swiper>
+      <view v-if="displayImageUrls.length > 1" class="ad-slot-media">
+        <swiper class="ad-slot-swiper" circular autoplay indicator-dots indicator-color="rgba(255,255,255,0.62)" indicator-active-color="#ffffff">
+          <swiper-item v-for="url in displayImageUrls" :key="url">
+            <image :src="url" mode="aspectFill" />
+          </swiper-item>
+        </swiper>
+        <view class="ad-slot-count">{{ displayImageUrls.length }} 张</view>
+      </view>
       <image v-else-if="displayImageUrl" :src="displayImageUrl" mode="aspectFill" />
       <view v-else class="ad-cover-fallback">AD</view>
       <view class="ad-slot-body">
@@ -256,10 +259,12 @@ onBeforeUnmount(clearTimer);
 <style scoped>
 .ad-slot-card { display: grid; grid-template-columns: 180rpx 1fr; gap: 18rpx; margin: 18rpx 0; padding: 18rpx; border-radius: 18rpx; background: #fffdf5; border: 1rpx solid rgba(241, 199, 106, 0.55); box-shadow: 0 12rpx 30rpx rgba(154, 106, 36, 0.10); }
 .ad-slot-card.compact { grid-template-columns: 140rpx 1fr; }
-.ad-slot-card image, .ad-slot-swiper, .ad-cover-fallback { width: 180rpx; height: 128rpx; border-radius: 14rpx; background: linear-gradient(135deg, #ffd45a 0%, #fff2b8 100%); }
-.ad-slot-card.compact image, .ad-slot-card.compact .ad-slot-swiper, .ad-slot-card.compact .ad-cover-fallback { width: 140rpx; height: 104rpx; }
+.ad-slot-card image, .ad-slot-media, .ad-slot-swiper, .ad-cover-fallback { width: 180rpx; height: 128rpx; border-radius: 14rpx; background: linear-gradient(135deg, #ffd45a 0%, #fff2b8 100%); }
+.ad-slot-card.compact image, .ad-slot-card.compact .ad-slot-media, .ad-slot-card.compact .ad-slot-swiper, .ad-slot-card.compact .ad-cover-fallback { width: 140rpx; height: 104rpx; }
+.ad-slot-media { position: relative; overflow: hidden; }
 .ad-slot-swiper { overflow: hidden; }
 .ad-slot-swiper image { width: 100%; height: 100%; display: block; }
+.ad-slot-count { position: absolute; z-index: 1; top: 8rpx; right: 8rpx; padding: 4rpx 10rpx; border-radius: 999rpx; background: rgba(15, 23, 42, 0.56); color: #fff; font-size: 18rpx; font-weight: 900; }
 .ad-cover-fallback { display: flex; align-items: center; justify-content: center; color: #9e1b12; font-weight: 900; }
 .ad-slot-body { min-width: 0; display: grid; align-content: center; gap: 8rpx; }
 .ad-slot-title { color: #1f2937; font-size: 28rpx; font-weight: 900; line-height: 1.35; }
