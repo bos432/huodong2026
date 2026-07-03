@@ -1014,20 +1014,20 @@ export class AdminController {
 
   @AdminRoles(...FINANCE_ROLES)
   @Get("finance/wallets")
-  wallets(@Query("keyword") keyword?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.listWallets(keyword, admin);
+  wallets(@Query("keyword") keyword?: string, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listWallets(keyword, admin, tenantId ? Number(tenantId) : undefined);
   }
 
   @AdminRoles(...FINANCE_ROLES)
   @Get("finance/wallet-transactions")
-  walletTransactions(@Query("userId") userId?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.listWalletTransactions(userId ? Number(userId) : undefined, admin);
+  walletTransactions(@Query("userId") userId?: string, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.listWalletTransactions(userId ? Number(userId) : undefined, admin, tenantId ? Number(tenantId) : undefined);
   }
 
   @AdminRoles(...FINANCE_ROLES)
   @Get("users/:userId/wallet")
-  userWallet(@Param("userId", ParseIntPipe) userId: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.getUserWallet(userId, admin);
+  userWallet(@Param("userId", ParseIntPipe) userId: number, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.getUserWallet(userId, admin, tenantId ? Number(tenantId) : undefined);
   }
 
   @AdminRoles(...FINANCE_ROLES)

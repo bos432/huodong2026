@@ -10,6 +10,7 @@ const route = useRoute();
 const router = useRouter();
 const rows = ref<any[]>([]);
 const levels = ref<any[]>([]);
+const tenants = ref<any[]>([]);
 const detail = ref<any>();
 const wallet = ref<any>();
 const walletTransactions = ref<any[]>([]);
@@ -45,6 +46,7 @@ const walletSaving = ref(false);
 const bulkTagSaving = ref(false);
 const editingLevelId = ref<number | null>(null);
 const selectedRows = ref<any[]>([]);
+const walletScopeTenantId = ref(storedPlatformTenantId());
 
 const levelForm = reactive({
   name: "",
@@ -58,6 +60,7 @@ const levelForm = reactive({
 const walletForm = reactive({
   type: "recharge" as "recharge" | "deduct" | "adjust",
   amount: 0,
+  tenantId: 0,
   remark: ""
 });
 
@@ -89,6 +92,11 @@ function routeActivityId() {
   return id && Number.isFinite(id) ? id : undefined;
 }
 
+function storedPlatformTenantId() {
+  const id = Number(localStorage.getItem("admin_selected_tenant_id") || 0);
+  return id && Number.isFinite(id) ? id : 0;
+}
+
 const focusedActivityName = computed(() => rows.value.find((row) => row.activity?.id === activityId.value)?.activity?.title || (activityId.value ? `活动 ID ${activityId.value}` : ""));
 const memberSummary = computed(() => {
   if (!activityId.value) return "";
@@ -96,13 +104,27 @@ const memberSummary = computed(() => {
   const reviewed = rows.value.filter((row) => Number(row.reviewCount || 0) > 0).length;
   return `本场活动沉淀 ${total.value || rows.value.length} 个会员线索，本页 ${paid} 人已有消费、${reviewed} 人留下评价。`;
 });
+const walletScopeName = computed(() => walletTenantLabel(walletScopeTenantId.value));
+const walletFormScopeName = computed(() => walletTenantLabel(walletForm.tenantId));
+
+function walletTenantLabel(id?: number) {
+  if (!id) return "平台钱包";
+  const tenant = tenants.value.find((item) => item.id === id);
+  return tenant ? `${tenant.name || tenant.code}（${tenant.code || `ID ${tenant.id}`}）` : `商家钱包 ID ${id}`;
+}
+
+function normalizedWalletTenantId(value: unknown) {
+  const id = Number(value || 0);
+  return id && Number.isFinite(id) ? id : 0;
+}
 
 async function load() {
   loading.value = true;
   try {
-    const [result, levelRows] = await Promise.all([
+    const [result, levelRows, tenantRows] = await Promise.all([
       api.get<any, any>("/admin/members", { params: memberQueryParams() }),
-      api.get<any, any[]>("/admin/member-levels")
+      api.get<any, any[]>("/admin/member-levels"),
+      isPlatformAdmin() ? api.get<any, any[]>("/admin/tenants") : Promise.resolve([])
     ]);
     if (Array.isArray(result)) {
       rows.value = result;
@@ -116,6 +138,8 @@ async function load() {
       summary.value = result.summary || buildSummaryFromRows(rows.value);
     }
     levels.value = levelRows;
+    tenants.value = tenantRows;
+    if (walletScopeTenantId.value && !tenants.value.some((tenant) => tenant.id === walletScopeTenantId.value)) walletScopeTenantId.value = 0;
   } finally {
     loading.value = false;
   }
@@ -253,10 +277,11 @@ function changePageSize(nextSize: number) {
 }
 
 async function openDetail(row: any) {
+  const walletParams = walletScopeTenantId.value ? { tenantId: walletScopeTenantId.value } : undefined;
   const [memberDetail, walletDetail, transactions] = await Promise.all([
     api.get(`/admin/members/${row.user.id}`),
-    isPlatformAdmin() ? api.get(`/admin/users/${row.user.id}/wallet`) : Promise.resolve(null),
-    isPlatformAdmin() ? api.get<any, any[]>("/admin/finance/wallet-transactions", { params: { userId: row.user.id } }) : Promise.resolve([])
+    isPlatformAdmin() ? api.get(`/admin/users/${row.user.id}/wallet`, { params: walletParams }) : Promise.resolve(null),
+    isPlatformAdmin() ? api.get<any, any[]>("/admin/finance/wallet-transactions", { params: { userId: row.user.id, ...(walletParams || {}) } }) : Promise.resolve([])
   ]);
   detail.value = memberDetail;
   wallet.value = walletDetail;
@@ -267,8 +292,14 @@ async function openDetail(row: any) {
 function openWalletDialog(type: "recharge" | "deduct" | "adjust") {
   walletForm.type = type;
   walletForm.amount = 0;
+  walletForm.tenantId = walletScopeTenantId.value;
   walletForm.remark = "";
   walletDialog.value = true;
+}
+
+async function reloadWalletDetail() {
+  if (!detail.value?.profile?.user) return;
+  await openDetail({ user: detail.value.profile.user });
 }
 
 async function saveWalletAdjust() {
@@ -279,9 +310,10 @@ async function saveWalletAdjust() {
   }
   walletSaving.value = true;
   try {
-    await api.post(`/admin/users/${detail.value.profile.user.id}/wallet/adjust`, { ...walletForm, amount: Number(walletForm.amount) });
+    await api.post(`/admin/users/${detail.value.profile.user.id}/wallet/adjust`, { ...walletForm, amount: Number(walletForm.amount), tenantId: walletForm.tenantId || undefined });
     ElMessage.success("余额已更新");
     walletDialog.value = false;
+    walletScopeTenantId.value = normalizedWalletTenantId(walletForm.tenantId);
     await openDetail({ user: detail.value.profile.user });
   } catch (error: any) {
     ElMessage.error(error.message);
@@ -529,7 +561,7 @@ watch(
       show-icon
       :closable="false"
       title="当前为平台超级管理员视角"
-      description="这里展示全平台会员。余额充值、扣减和调整会记录到平台钱包；如后续开启多机构，请使用商家账号处理对应商家的会员余额。"
+      description="这里展示全平台会员。余额充值、扣减和调整可选择平台钱包或具体商家钱包；H5/小程序会显示当前 tenantCode 对应商家钱包。"
     />
 
     <el-alert
@@ -702,11 +734,15 @@ watch(
         </div>
         <div v-if="isPlatformAdmin()" class="wallet-card">
           <div>
-            <span>账户余额</span>
+            <span>账户余额 · {{ walletScopeName }}</span>
             <strong>¥{{ money(wallet?.availableBalance) }}</strong>
             <small>累计充值 ¥{{ money(wallet?.totalRecharge) }} / 累计消费 ¥{{ money(wallet?.totalSpent) }}</small>
           </div>
           <div class="wallet-actions">
+            <el-select v-model="walletScopeTenantId" clearable filterable placeholder="平台钱包" style="width: 220px" @change="reloadWalletDetail">
+              <el-option label="平台钱包" :value="0" />
+              <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name || tenant.code}（${tenant.code}）`" :value="tenant.id" />
+            </el-select>
             <el-button type="primary" @click="openWalletDialog('recharge')">充值</el-button>
             <el-button @click="openWalletDialog('deduct')">扣减</el-button>
             <el-button @click="openWalletDialog('adjust')">调整</el-button>
@@ -781,6 +817,13 @@ watch(
 
     <el-dialog v-model="walletDialog" width="480px" title="调整余额">
       <el-form label-position="top">
+        <el-form-item label="钱包归属">
+          <el-select v-model="walletForm.tenantId" clearable filterable placeholder="平台钱包" style="width: 100%">
+            <el-option label="平台钱包" :value="0" />
+            <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name || tenant.code}（${tenant.code}）`" :value="tenant.id" />
+          </el-select>
+          <small class="form-tip">当前将写入：{{ walletFormScopeName }}。小程序/H5 带对应 tenantCode 时只显示对应商家钱包。</small>
+        </el-form-item>
         <el-form-item label="类型">
           <el-select v-model="walletForm.type" style="width: 100%">
             <el-option label="充值" value="recharge" />
@@ -848,6 +891,7 @@ h3 { margin: 0; }
 .wallet-card span, .wallet-card small { color: #667085; font-size: 13px; }
 .wallet-card strong { color: #0f766e; font-size: 26px; }
 .wallet-actions { display: flex; gap: 8px; align-items: center; }
+.form-tip { display: block; margin-top: 6px; color: #667085; font-size: 12px; line-height: 1.5; }
 .timeline-copy { margin: 6px 0 8px; color: #667085; line-height: 1.5; }
 @media (max-width: 1480px) {
   .member-filters { grid-template-columns: repeat(3, minmax(0, 1fr)); }

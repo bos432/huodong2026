@@ -4332,8 +4332,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return { name, createdCount, skippedCount };
   }
 
-  async listWallets(keyword?: string, admin?: AdminContext) {
-    const tenant = await this.walletTenantForAdmin(admin);
+  async listWallets(keyword?: string, admin?: AdminContext, tenantId?: number | null) {
+    const tenant = await this.walletTenantForAdmin(admin, tenantId);
     const builder = this.userWallets
       .createQueryBuilder("wallet")
       .leftJoinAndSelect("wallet.user", "user")
@@ -4346,18 +4346,18 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return builder.getMany();
   }
 
-  async getUserWallet(userId: number, admin?: AdminContext) {
+  async getUserWallet(userId: number, admin?: AdminContext, tenantId?: number | null) {
     const user = await this.users.findOneBy({ id: userId });
     if (!user) throw new NotFoundException("用户不存");
     await this.assertUserTenantAccess(userId, admin);
-    const tenant = await this.walletTenantForAdmin(admin);
+    const tenant = await this.walletTenantForAdmin(admin, tenantId);
     const tenantScopeKey = this.walletTenantScopeKey(tenant);
     const wallet = await this.userWallets.findOne({ where: { user: { id: userId }, tenantScopeKey } });
     return wallet || { user, tenant, tenantScopeKey, availableBalance: "0.00", frozenBalance: "0.00", totalRecharge: "0.00", totalSpent: "0.00" };
   }
 
-  async listWalletTransactions(userId: number | undefined, admin?: AdminContext) {
-    const tenant = await this.walletTenantForAdmin(admin);
+  async listWalletTransactions(userId: number | undefined, admin?: AdminContext, tenantId?: number | null) {
+    const tenant = await this.walletTenantForAdmin(admin, tenantId);
     const builder = this.walletTransactions
       .createQueryBuilder("tx")
       .leftJoinAndSelect("tx.user", "user")
@@ -5303,8 +5303,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return tenantRelationForActor<Tenant>(admin, fallback);
   }
 
-  private async walletTenantForAdmin(admin?: AdminContext) {
-    if (!this.isTenantScoped(admin)) return null;
+  private async walletTenantForAdmin(admin?: AdminContext, requestedTenantId?: number | null) {
+    if (!this.isTenantScoped(admin)) {
+      return requestedTenantId ? this.resolveWalletTenantForPlatform(requestedTenantId) : null;
+    }
+    if (requestedTenantId && requestedTenantId !== admin?.tenantId) throw new ForbiddenException("不能查看其他商家的会员钱包");
     const tenant = await this.tenants.findOneBy({ id: admin?.tenantId || 0 });
     if (!tenant || !tenant.enabled) throw new NotFoundException("当前商家不存在或已停用");
     return tenant;
