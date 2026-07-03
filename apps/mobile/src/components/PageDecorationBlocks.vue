@@ -65,6 +65,21 @@ function sectionStyle(section: HomepageSectionView, fallback = "#fff") {
   };
 }
 
+function imageList(section: HomepageSectionView) {
+  const config = section.config || {};
+  const urls = [
+    ...(Array.isArray(config.images) ? config.images : []),
+    config.imageUrl || ""
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+  return Array.from(new Set(urls));
+}
+
+function bannerSwiperStyle(section: HomepageSectionView) {
+  const ratio = String(section.config?.ratio || "3:1");
+  const heights: Record<string, string> = { "3:1": "220rpx", "16:9": "360rpx", "1:1": "640rpx", "4:5": "760rpx" };
+  return { height: heights[ratio] || "220rpx" };
+}
+
 function heroStyle(section: HomepageSectionView) {
   const config = section.config || {};
   return {
@@ -165,7 +180,12 @@ function formatTime(value: string) {
     </view>
 
     <view v-else-if="section.type === 'image_banner'" class="decor-banner" :style="sectionStyle(section, '#dff4ee')" @click="goDecoratedLink(String(section.config.link || ''))">
-      <image v-if="section.config.imageUrl" :src="String(section.config.imageUrl)" mode="widthFix" />
+      <swiper v-if="imageList(section).length > 1" class="decor-banner-swiper" :style="bannerSwiperStyle(section)" circular autoplay indicator-dots>
+        <swiper-item v-for="url in imageList(section)" :key="url">
+          <image :src="url" mode="aspectFill" />
+        </swiper-item>
+      </swiper>
+      <image v-else-if="imageList(section)[0]" :src="imageList(section)[0]" mode="widthFix" />
       <text v-else>{{ section.title || "图片 Banner" }}</text>
     </view>
 
@@ -277,6 +297,8 @@ function formatTime(value: string) {
 .decor-banner, .decor-rich, .decor-notice, .decor-search { padding: 24rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); }
 .decor-banner { overflow: hidden; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); }
 .decor-banner image, .decor-rich image { width: 100%; border-radius: var(--decor-image-radius, 12px); }
+.decor-banner-swiper { width: 100%; height: 220rpx; border-radius: var(--decor-image-radius, 12px); overflow: hidden; }
+.decor-banner-swiper image { width: 100%; height: 100%; display: block; border-radius: 0; }
 .decor-section-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; margin-bottom: 12rpx; }
 .decor-section-copy { margin: -4rpx 0 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.45; }
 .decor-rich-line { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.65; }

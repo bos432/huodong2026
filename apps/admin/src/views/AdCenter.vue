@@ -16,6 +16,7 @@ type Campaign = {
   title: string;
   subtitle?: string | null;
   imageUrl?: string | null;
+  imageUrls?: string[] | null;
   source: string;
   format: string;
   slotKey: string;
@@ -81,6 +82,7 @@ const campaignForm = reactive({
   title: "",
   subtitle: "",
   imageUrl: "",
+  imageUrls: [] as string[],
   source: "custom",
   format: "banner",
   slotKey: "home_top_banner",
@@ -173,7 +175,7 @@ function resetContractForm() {
 }
 
 function resetCampaignForm() {
-  Object.assign(campaignForm, { tenantId: activeTenantId(), advertiserId: undefined, contractId: undefined, name: "", title: "", subtitle: "", imageUrl: "", source: "custom", format: "banner", slotKey: "home_top_banner", pageKey: "home", platforms: ["all"], link: "/pages/index/index", billingModel: "fixed", fixedFee: 0, cpmPrice: 0, cpcPrice: 0, totalBudget: 0, dailyBudget: 0, impressionLimit: 0, clickLimit: 0, officialAdUnitId: "", officialAdType: "", frequency: "once_per_day", priority: 0, enabled: true, startAt: "", endAt: "" });
+  Object.assign(campaignForm, { tenantId: activeTenantId(), advertiserId: undefined, contractId: undefined, name: "", title: "", subtitle: "", imageUrl: "", imageUrls: [], source: "custom", format: "banner", slotKey: "home_top_banner", pageKey: "home", platforms: ["all"], link: "/pages/index/index", billingModel: "fixed", fixedFee: 0, cpmPrice: 0, cpcPrice: 0, totalBudget: 0, dailyBudget: 0, impressionLimit: 0, clickLimit: 0, officialAdUnitId: "", officialAdType: "", frequency: "once_per_day", priority: 0, enabled: true, startAt: "", endAt: "" });
 }
 
 function rowPayload<T extends Record<string, any>>(form: T) {
@@ -309,8 +311,48 @@ function createCampaign() {
 
 function editCampaign(row: Campaign) {
   editingCampaignId.value = row.id;
-  Object.assign(campaignForm, { tenantId: row.tenant?.id, advertiserId: row.advertiser?.id, contractId: row.contract?.id, name: row.name, title: row.title, subtitle: row.subtitle || "", imageUrl: row.imageUrl || "", source: row.source, format: row.format, slotKey: row.slotKey, pageKey: row.pageKey, platforms: row.platforms?.length ? row.platforms : ["all"], link: row.link || "", billingModel: row.billingModel, fixedFee: Number(row.fixedFee || 0), cpmPrice: Number(row.cpmPrice || 0), cpcPrice: Number(row.cpcPrice || 0), totalBudget: Number(row.totalBudget || 0), dailyBudget: Number(row.dailyBudget || 0), impressionLimit: Number(row.impressionLimit || 0), clickLimit: Number(row.clickLimit || 0), officialAdUnitId: row.officialAdUnitId || "", officialAdType: row.officialAdType || "", frequency: row.frequency, priority: Number(row.priority || 0), enabled: row.enabled, startAt: row.startAt ? String(row.startAt).slice(0, 19).replace("T", " ") : "", endAt: row.endAt ? String(row.endAt).slice(0, 19).replace("T", " ") : "" });
+  Object.assign(campaignForm, { tenantId: row.tenant?.id, advertiserId: row.advertiser?.id, contractId: row.contract?.id, name: row.name, title: row.title, subtitle: row.subtitle || "", imageUrl: row.imageUrl || "", imageUrls: campaignImageList(row), source: row.source, format: row.format, slotKey: row.slotKey, pageKey: row.pageKey, platforms: row.platforms?.length ? row.platforms : ["all"], link: row.link || "", billingModel: row.billingModel, fixedFee: Number(row.fixedFee || 0), cpmPrice: Number(row.cpmPrice || 0), cpcPrice: Number(row.cpcPrice || 0), totalBudget: Number(row.totalBudget || 0), dailyBudget: Number(row.dailyBudget || 0), impressionLimit: Number(row.impressionLimit || 0), clickLimit: Number(row.clickLimit || 0), officialAdUnitId: row.officialAdUnitId || "", officialAdType: row.officialAdType || "", frequency: row.frequency, priority: Number(row.priority || 0), enabled: row.enabled, startAt: row.startAt ? String(row.startAt).slice(0, 19).replace("T", " ") : "", endAt: row.endAt ? String(row.endAt).slice(0, 19).replace("T", " ") : "" });
   campaignDrawer.value = true;
+}
+
+function normalizeImageUrls(value: unknown) {
+  const list = Array.isArray(value) ? value : [];
+  return Array.from(new Set(list.map((item) => String(item || "").trim()).filter(Boolean))).slice(0, 10);
+}
+
+function campaignImageList(row: { imageUrl?: string | null; imageUrls?: string[] | null }) {
+  return normalizeImageUrls([...(Array.isArray(row.imageUrls) ? row.imageUrls : []), row.imageUrl || ""]);
+}
+
+function campaignPayload() {
+  const imageUrls = normalizeImageUrls(campaignForm.imageUrls);
+  campaignForm.imageUrls = imageUrls;
+  campaignForm.imageUrl = String(campaignForm.imageUrl || imageUrls[0] || "").trim();
+  return { ...rowPayload(campaignForm), imageUrl: campaignForm.imageUrl || null, imageUrls };
+}
+
+async function uploadCampaignImage(file: File) {
+  if (campaignForm.imageUrls.length >= 10) {
+    ElMessage.warning("最多上传 10 张广告图");
+    return false;
+  }
+  const data = new FormData();
+  data.append("file", file);
+  try {
+    const result = await api.post<any, any>("/admin/uploads/images", data, { headers: { "Content-Type": "multipart/form-data" } });
+    const url = String(result?.url || "").trim();
+    if (url && !campaignForm.imageUrls.includes(url)) campaignForm.imageUrls.push(url);
+    if (!campaignForm.imageUrl && url) campaignForm.imageUrl = url;
+    ElMessage.success("广告图已上传");
+  } catch (error: any) {
+    ElMessage.error(error.message || "上传广告图失败");
+  }
+  return false;
+}
+
+function removeCampaignImage(index: number) {
+  campaignForm.imageUrls.splice(index, 1);
+  if (!campaignForm.imageUrls.includes(campaignForm.imageUrl)) campaignForm.imageUrl = campaignForm.imageUrls[0] || "";
 }
 
 async function submitCampaign() {
@@ -319,8 +361,9 @@ async function submitCampaign() {
   if (campaignForm.enabled && blockers.length) return ElMessage.warning(blockers[0]);
   saving.value = true;
   try {
-    if (editingCampaignId.value) await api.patch(`/admin/ad-campaigns/${editingCampaignId.value}`, rowPayload(campaignForm));
-    else await api.post("/admin/ad-campaigns", rowPayload(campaignForm));
+    const payload = campaignPayload();
+    if (editingCampaignId.value) await api.patch(`/admin/ad-campaigns/${editingCampaignId.value}`, payload);
+    else await api.post("/admin/ad-campaigns", payload);
     ElMessage.success("广告计划已保存");
     campaignDrawer.value = false;
     await loadAll();
@@ -336,7 +379,8 @@ async function toggleCampaign(row: Campaign) {
     const blockers = campaignEnableBlockers(row);
     if (blockers.length) return ElMessage.warning(blockers[0]);
   }
-  await api.patch(`/admin/ad-campaigns/${row.id}`, { ...rowPayload({ ...row, tenantId: row.tenant?.id, advertiserId: row.advertiser?.id, contractId: row.contract?.id }), enabled: !row.enabled });
+  const imageUrls = campaignImageList(row);
+  await api.patch(`/admin/ad-campaigns/${row.id}`, { ...rowPayload({ ...row, tenantId: row.tenant?.id, advertiserId: row.advertiser?.id, contractId: row.contract?.id, imageUrl: row.imageUrl || imageUrls[0] || "", imageUrls }), enabled: !row.enabled });
   ElMessage.success(row.enabled ? "广告计划已停用" : "广告计划已启用");
   await loadAll();
 }
@@ -382,23 +426,26 @@ function campaignWarnings(row: Campaign) {
     if (!row.officialAdUnitId) warnings.push("缺少官方 adUnitId");
     if (!(row.platforms || []).includes("mp-weixin")) warnings.push("官方广告仅小程序有效");
   } else {
-    if (!row.imageUrl && !tenantDefaultAdImage(row.tenant?.id)) warnings.push("自有广告缺少图片");
-    if (!row.imageUrl && tenantDefaultAdImage(row.tenant?.id)) warnings.push("使用商家默认广告图兜底");
-    if (row.imageUrl && !/^https:\/\//i.test(row.imageUrl) && !row.imageUrl.startsWith("/uploads/")) warnings.push("图片建议使用 HTTPS");
+    const imageUrls = campaignImageList(row);
+    if (!imageUrls.length && !tenantDefaultAdImage(row.tenant?.id)) warnings.push("自有广告缺少图片");
+    if (!imageUrls.length && tenantDefaultAdImage(row.tenant?.id)) warnings.push("使用商家默认广告图兜底");
+    if (imageUrls.some((url) => !/^https:\/\//i.test(url) && !url.startsWith("/uploads/"))) warnings.push("图片建议使用 HTTPS");
+    if (imageUrls.length > 1) warnings.push(`已配置 ${imageUrls.length} 张轮播图`);
   }
   if (!row.link && row.source === "custom") warnings.push("自有广告缺少跳转链接");
   if (Number(row.totalBudget || 0) > 0 && Number(row.spentAmount || 0) >= Number(row.totalBudget || 0)) warnings.push("已达到总预算");
   return warnings;
 }
 
-function campaignEnableBlockers(row: { tenantId?: number; tenant?: TenantOption | null; source?: string; title?: string; imageUrl?: string | null; link?: string | null }) {
+function campaignEnableBlockers(row: { tenantId?: number; tenant?: TenantOption | null; source?: string; title?: string; imageUrl?: string | null; imageUrls?: string[] | null; link?: string | null }) {
   if (row.source !== "custom") return [];
   const blockers: string[] = [];
   if (!String(row.title || "").trim()) blockers.push("启用自有广告前请填写标题");
   const imageUrl = String(row.imageUrl || "").trim();
+  const imageUrls = campaignImageList(row);
   const fallback = tenantDefaultAdImage(row.tenantId || row.tenant?.id);
-  if (!imageUrl && !fallback && isPlatformAdmin()) blockers.push("请上传广告图或选择商家默认广告图");
-  if (imageUrl && !/^https:\/\//i.test(imageUrl) && !imageUrl.startsWith("/uploads/")) blockers.push("广告图必须使用 HTTPS 或 /uploads/ 地址");
+  if (!imageUrl && !imageUrls.length && !fallback && isPlatformAdmin()) blockers.push("请上传广告图或选择商家默认广告图");
+  if ([imageUrl, ...imageUrls].filter(Boolean).some((url) => !/^https:\/\//i.test(url) && !url.startsWith("/uploads/"))) blockers.push("广告图必须使用 HTTPS 或 /uploads/ 地址");
   if (!String(row.link || "").trim()) blockers.push("启用自有广告前请填写跳转链接");
   return blockers;
 }
@@ -588,7 +635,23 @@ onMounted(async () => {
         <el-form-item label="计划名称"><el-input v-model="campaignForm.name" /></el-form-item>
         <el-form-item label="前台标题"><el-input v-model="campaignForm.title" /></el-form-item>
         <el-form-item label="副标题"><el-input v-model="campaignForm.subtitle" /></el-form-item>
-        <el-form-item label="图片地址"><el-input v-model="campaignForm.imageUrl" placeholder="https:// 或 /uploads/..." /></el-form-item>
+        <el-form-item label="广告 Banner 图">
+          <div class="campaign-image-manager">
+            <div v-if="campaignForm.imageUrls.length" class="campaign-image-list">
+              <div v-for="(url, index) in campaignForm.imageUrls" :key="url" class="campaign-image-item">
+                <img :src="url" alt="广告图" />
+                <div class="campaign-image-meta">
+                  <span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span>
+                  <el-button size="small" type="danger" text @click="removeCampaignImage(index)">删除</el-button>
+                </div>
+              </div>
+            </div>
+            <el-upload multiple :show-file-list="false" :before-upload="uploadCampaignImage">
+              <el-button :icon="Plus">上传图片</el-button>
+            </el-upload>
+            <el-input v-model="campaignForm.imageUrl" placeholder="主图地址，上传后自动填入，也可填写 https:// 或 /uploads/..." />
+          </div>
+        </el-form-item>
         <el-form-item label="跳转链接"><el-input v-model="campaignForm.link" placeholder="/pages/... 或 https://..." /></el-form-item>
         <div class="form-grid">
           <el-form-item label="广告主"><el-select v-model="campaignForm.advertiserId" clearable filterable><el-option v-for="item in advertisers" :key="item.id" :label="item.companyName" :value="item.id" /></el-select></el-form-item>
@@ -667,6 +730,11 @@ onMounted(async () => {
 .muted { margin-top: 4px; color: #667085; font-size: 12px; line-height: 1.45; }
 .warning-list { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.campaign-image-manager { width: 100%; display: grid; gap: 10px; }
+.campaign-image-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.campaign-image-item { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.campaign-image-item img { width: 100%; height: 96px; display: block; object-fit: cover; background: #f3f4f6; }
+.campaign-image-meta { min-height: 34px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 8px; color: #667085; font-size: 12px; }
 .settlement-form, .revenue-form { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0; }
 .settlement-form .el-select { width: 320px; }
 .summary-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin: 14px 0; }

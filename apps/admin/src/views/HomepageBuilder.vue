@@ -133,7 +133,7 @@ const defaultConfig: Record<string, Record<string, any>> = {
     ]
   },
   brand_story_entry: { buttonText: "了解品牌故事", link: "/pages/brand/story", imageUrl: "" },
-  image_banner: { imageUrl: "", link: "/pages/activity/list", ratio: "3:1", fit: "cover" },
+  image_banner: { imageUrl: "", images: [], link: "/pages/activity/list", ratio: "3:1", fit: "cover" },
   rich_text: { content: "报名须知", imageUrl: "", link: "" },
   bottom_nav: {
     items: [
@@ -699,6 +699,11 @@ function collectImages(row: HomepageSectionView) {
   const result: Array<{ value: string; source: string }> = [];
   for (const [key, value] of Object.entries({ ...config, ...layout })) {
     if (typeof value === "string" && isProbablyImageUrl(value)) result.push({ value, source: `${row.title || typeLabel(row.type)} / ${key}` });
+    if (Array.isArray(value)) {
+      value.forEach((item, index) => {
+        if (typeof item === "string" && isProbablyImageUrl(item)) result.push({ value: item, source: `${row.title || typeLabel(row.type)} / ${key}[${index + 1}]` });
+      });
+    }
   }
   for (const arrayKey of ["items", "tools"] as const) {
     const items = Array.isArray(config[arrayKey]) ? config[arrayKey] : [];
@@ -722,6 +727,10 @@ function addHealthIssue(list: HealthIssue[], level: "error" | "warning", title: 
   list.push({ level, title, detail, sectionId });
 }
 
+function bannerImages(config: Record<string, any>) {
+  return Array.from(new Set([...(Array.isArray(config.images) ? config.images : []), config.imageUrl || ""].map((item) => String(item || "").trim()).filter(Boolean))).slice(0, 10);
+}
+
 function buildHealthIssues() {
   const issues: HealthIssue[] = [];
   const visibleRows = orderedRows.value.filter((row) => row.enabled);
@@ -741,7 +750,7 @@ function buildHealthIssues() {
       if (items.length > 5) addHealthIssue(issues, "error", "底部导航超过 5 项", "小程序和 H5 底部导航最多建议 5 项，请删除或停用多余入口。", row.id);
       if (!items.length) addHealthIssue(issues, "warning", "底部导航没有启用入口", "用户端底部会缺少主入口，请至少启用一个菜单。", row.id);
     }
-    if (row.type === "image_banner" && !String(config.imageUrl || "").trim()) {
+    if (row.type === "image_banner" && !bannerImages(config).length) {
       addHealthIssue(issues, "error", "图片广告缺少图片", "图片广告模块没有图片时前台会显示占位，不适合作为上线页面。", row.id);
     }
     if (row.type === "hero" && !String(row.title || "").trim()) {
@@ -1751,8 +1760,29 @@ function uploadHeroBackground(file: File) {
   return uploadImage(file, "backgroundImage");
 }
 
-function uploadBannerImage(file: File) {
-  return uploadImage(file, "imageUrl");
+async function uploadBannerImage(file: File) {
+  const current = bannerImages(form.config);
+  if (current.length >= 10) {
+    ElMessage.warning("最多上传 10 张 Banner 图");
+    return false;
+  }
+  const data = new FormData();
+  data.append("file", file);
+  const result = await api.post<any, any>("/admin/uploads/images", data, { headers: { "Content-Type": "multipart/form-data" } });
+  const url = result.url || result.path;
+  form.config.images = Array.from(new Set([...current, url].filter(Boolean)));
+  form.config.imageUrl = form.config.imageUrl || url;
+  syncJsonText();
+  ElMessage.success("Banner 图已上传");
+  return false;
+}
+
+function removeBannerImage(index: number) {
+  const next = bannerImages(form.config);
+  next.splice(index, 1);
+  form.config.images = next;
+  if (!next.includes(form.config.imageUrl)) form.config.imageUrl = next[0] || "";
+  syncJsonText();
 }
 
 function uploadRichTextImage(file: File) {
@@ -2432,11 +2462,19 @@ onMounted(async () => {
                 <template v-if="form.type === 'image_banner'">
                   <el-divider>图片广告</el-divider>
                   <el-form-item label="图片">
-                    <div class="upload-line">
-                      <el-input v-model="form.config.imageUrl" @input="syncJsonText" />
-                      <el-upload :show-file-list="false" :before-upload="uploadBannerImage">
-                        <el-button :icon="Upload">上传</el-button>
-                      </el-upload>
+                    <div class="banner-image-manager">
+                      <div v-if="bannerImages(form.config).length" class="banner-image-list">
+                        <div v-for="(url, index) in bannerImages(form.config)" :key="url" class="banner-image-item">
+                          <img :src="url" alt="Banner" />
+                          <div><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
+                        </div>
+                      </div>
+                      <div class="upload-line">
+                        <el-input v-model="form.config.imageUrl" placeholder="主图地址，上传后自动填入" @input="syncJsonText" />
+                        <el-upload multiple :show-file-list="false" :before-upload="uploadBannerImage">
+                          <el-button :icon="Upload">上传</el-button>
+                        </el-upload>
+                      </div>
                     </div>
                   </el-form-item>
                   <el-form-item label="展示比例">
@@ -2697,11 +2735,19 @@ onMounted(async () => {
 
         <template v-if="form.type === 'image_banner'">
           <el-form-item label="图片">
-            <div class="upload-line">
-              <el-input v-model="form.config.imageUrl" @input="syncJsonText" />
-              <el-upload :show-file-list="false" :before-upload="uploadBannerImage">
-                <el-button :icon="Upload">上传</el-button>
-              </el-upload>
+            <div class="banner-image-manager">
+              <div v-if="bannerImages(form.config).length" class="banner-image-list">
+                <div v-for="(url, index) in bannerImages(form.config)" :key="url" class="banner-image-item">
+                  <img :src="url" alt="Banner" />
+                  <div><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
+                </div>
+              </div>
+              <div class="upload-line">
+                <el-input v-model="form.config.imageUrl" placeholder="主图地址，上传后自动填入" @input="syncJsonText" />
+                <el-upload multiple :show-file-list="false" :before-upload="uploadBannerImage">
+                  <el-button :icon="Upload">上传</el-button>
+                </el-upload>
+              </div>
             </div>
           </el-form-item>
           <el-form-item label="链接"><el-input v-model="form.config.link" @input="syncJsonText" /></el-form-item>
@@ -3058,6 +3104,11 @@ onMounted(async () => {
 .preview-inner-pages { display: grid; gap: 8px; margin-bottom: 10px; padding: 14px; border-radius: 8px; background: #fff; color: #111827; border: 1px solid #e5e7eb; }
 .preview-inner-pages span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: #f3f4f6; color: #475467; font-size: 12px; }
 .upload-line { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
+.banner-image-manager { width: 100%; display: grid; gap: 10px; }
+.banner-image-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.banner-image-item { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.banner-image-item img { width: 100%; height: 86px; display: block; object-fit: cover; background: #f3f4f6; }
+.banner-image-item div { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 8px; color: #667085; font-size: 12px; }
 .visual-preset-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .builder-inspector { max-height: calc(100vh - 128px); overflow: auto; }
 .inspector-empty { min-height: 360px; display: grid; align-content: center; justify-items: start; gap: 12px; color: #667085; }

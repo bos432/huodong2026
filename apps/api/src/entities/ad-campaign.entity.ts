@@ -29,6 +29,9 @@ export class AdCampaign {
   @Column({ type: "varchar", length: 500, nullable: true })
   imageUrl!: string | null;
 
+  @Column({ type: "json", nullable: true })
+  imageUrls!: string[] | null;
+
   @Column({ type: "varchar", length: 40, default: "custom" })
   source!: string;
 

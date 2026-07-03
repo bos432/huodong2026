@@ -1339,6 +1339,11 @@ export class AdCampaignDto {
   imageUrl?: string | null;
 
   @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  imageUrls?: string[] | null;
+
+  @IsOptional()
   @IsString()
   source?: string;
 

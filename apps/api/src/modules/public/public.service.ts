@@ -2404,14 +2404,17 @@ export class PublicService {
   }
 
   private publicAdCampaign(row: AdCampaign) {
-    const resolvedImageUrl = this.resolvedAdImage(row);
+    const resolvedImageUrls = this.resolvedAdImages(row);
+    const resolvedImageUrl = resolvedImageUrls[0] || "";
     return {
       id: row.id,
       name: row.name,
       title: row.title,
       subtitle: row.subtitle,
       imageUrl: row.imageUrl,
+      imageUrls: row.imageUrls || [],
       resolvedImageUrl,
+      resolvedImageUrls,
       source: row.source,
       format: row.format,
       slotKey: row.slotKey,
@@ -2427,11 +2430,18 @@ export class PublicService {
   }
 
   private resolvedAdImage(row: AdCampaign) {
-    const direct = this.usableAdImage(row.imageUrl);
-    if (direct) return direct;
+    return this.resolvedAdImages(row)[0] || "";
+  }
+
+  private resolvedAdImages(row: AdCampaign) {
+    const directImages = [
+      ...(Array.isArray(row.imageUrls) ? row.imageUrls : []),
+      row.imageUrl
+    ].map((item) => this.usableAdImage(item)).filter(Boolean);
+    if (directImages.length) return Array.from(new Set(directImages));
     const settings = row.tenant?.settings && typeof row.tenant.settings === "object" && !Array.isArray(row.tenant.settings) ? row.tenant.settings as Record<string, unknown> : {};
     const fallback = this.usableAdImage(settings.defaultAdImageUrl) || this.usableAdImage(settings.defaultShareImageUrl) || this.usableAdImage(settings.shareImageUrl);
-    return fallback || "https://dummyimage.com/900x500/fff2b8/9e1b12.png&text=AD";
+    return [fallback || "https://dummyimage.com/900x500/fff2b8/9e1b12.png&text=AD"];
   }
 
   private usableAdImage(value: unknown) {

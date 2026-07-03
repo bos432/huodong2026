@@ -5798,13 +5798,16 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (startAt && endAt && startAt.getTime() > endAt.getTime()) throw new BadRequestException("广告结束时间不能早于开始时间");
     const source = this.normalizeChoice(dto.source, ["custom", "wechat_official"], "custom");
     const format = this.normalizeChoice(dto.format, ["splash", "inline_card", "banner", "official_banner", "official_video", "official_grid", "official_interstitial", "official_rewarded_video"], source === "wechat_official" ? "official_banner" : "banner");
-    const imageUrl = this.nullableText(dto.imageUrl);
+    const imageUrls = this.normalizeAdImageUrls(dto.imageUrls);
+    const imageUrl = this.nullableText(dto.imageUrl) || imageUrls[0] || null;
     const link = this.nullableText(dto.link);
     const enabled = dto.enabled ?? true;
     const fallbackImage = this.tenantDefaultAdImage(tenant);
     if (enabled && source === "custom") {
-      if (!imageUrl && !fallbackImage) throw new BadRequestException("请上传广告图或选择商家默认广告图后再启用");
-      if (imageUrl && !this.isUsableAdImage(imageUrl)) throw new BadRequestException("广告图必须使用 HTTPS 或 /uploads/ 地址");
+      if (!imageUrl && !imageUrls.length && !fallbackImage) throw new BadRequestException("请上传广告图或选择商家默认广告图后再启用");
+      for (const item of [imageUrl, ...imageUrls].filter((value): value is string => Boolean(value))) {
+        if (!this.isUsableAdImage(item)) throw new BadRequestException("广告图必须使用 HTTPS 或 /uploads/ 地址");
+      }
       if (!link) throw new BadRequestException("启用自有广告前请填写跳转链接");
     }
     return {
@@ -5812,6 +5815,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       title,
       subtitle: this.nullableText(dto.subtitle),
       imageUrl,
+      imageUrls,
       source,
       format,
       slotKey: this.normalizeChoice(dto.slotKey, ["app_splash", "home_top_banner", "home_feed_inline", "activity_detail_middle", "course_detail_middle", "mall_product_detail_middle", "community_feed_inline", "user_my_banner"], "home_top_banner"),
@@ -5839,6 +5843,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private isUsableAdImage(value: string) {
     const text = String(value || "").trim();
     return text.startsWith("https://") || text.startsWith("/uploads/");
+  }
+
+  private normalizeAdImageUrls(value: unknown) {
+    const list = Array.isArray(value) ? value : [];
+    return Array.from(new Set(list.map((item) => String(item || "").trim()).filter(Boolean))).slice(0, 10);
   }
 
   private tenantDefaultAdImage(tenant?: Tenant | null) {

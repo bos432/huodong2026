@@ -9,7 +9,9 @@ type AdCampaignView = {
   title: string;
   subtitle?: string | null;
   imageUrl?: string | null;
+  imageUrls?: string[] | null;
   resolvedImageUrl?: string | null;
+  resolvedImageUrls?: string[] | null;
   source: "custom" | "wechat_official";
   format: string;
   slotKey: string;
@@ -36,7 +38,16 @@ platform = "mp-weixin";
 const isSplash = computed(() => ad.value?.format === "splash" || ad.value?.slotKey === "app_splash");
 const isOfficial = computed(() => ad.value?.source === "wechat_official");
 const isOfficialInline = computed(() => isOfficial.value && ["official_banner", "official_video", "official_grid"].includes(ad.value?.format || ""));
-const displayImageUrl = computed(() => ad.value?.resolvedImageUrl || ad.value?.imageUrl || "");
+const displayImageUrls = computed(() => {
+  const urls = [
+    ...(Array.isArray(ad.value?.resolvedImageUrls) ? ad.value?.resolvedImageUrls || [] : []),
+    ad.value?.resolvedImageUrl || "",
+    ...(Array.isArray(ad.value?.imageUrls) ? ad.value?.imageUrls || [] : []),
+    ad.value?.imageUrl || ""
+  ].map((item) => String(item || "").trim()).filter(Boolean);
+  return Array.from(new Set(urls));
+});
+const displayImageUrl = computed(() => displayImageUrls.value[0] || "");
 const officialAdType = computed(() => {
   if (ad.value?.format === "official_video") return "video";
   if (ad.value?.format === "official_grid") return "grid";
@@ -227,7 +238,12 @@ onBeforeUnmount(clearTimer);
     <!-- #endif -->
 
     <view v-else-if="!isOfficial" :class="cardClass" @click="openAd">
-      <image v-if="displayImageUrl" :src="displayImageUrl" mode="aspectFill" />
+      <swiper v-if="displayImageUrls.length > 1" class="ad-slot-swiper" circular autoplay indicator-dots>
+        <swiper-item v-for="url in displayImageUrls" :key="url">
+          <image :src="url" mode="aspectFill" />
+        </swiper-item>
+      </swiper>
+      <image v-else-if="displayImageUrl" :src="displayImageUrl" mode="aspectFill" />
       <view v-else class="ad-cover-fallback">AD</view>
       <view class="ad-slot-body">
         <view class="ad-slot-title">{{ ad.title }}</view>
@@ -240,8 +256,10 @@ onBeforeUnmount(clearTimer);
 <style scoped>
 .ad-slot-card { display: grid; grid-template-columns: 180rpx 1fr; gap: 18rpx; margin: 18rpx 0; padding: 18rpx; border-radius: 18rpx; background: #fffdf5; border: 1rpx solid rgba(241, 199, 106, 0.55); box-shadow: 0 12rpx 30rpx rgba(154, 106, 36, 0.10); }
 .ad-slot-card.compact { grid-template-columns: 140rpx 1fr; }
-.ad-slot-card image, .ad-cover-fallback { width: 180rpx; height: 128rpx; border-radius: 14rpx; background: linear-gradient(135deg, #ffd45a 0%, #fff2b8 100%); }
-.ad-slot-card.compact image, .ad-slot-card.compact .ad-cover-fallback { width: 140rpx; height: 104rpx; }
+.ad-slot-card image, .ad-slot-swiper, .ad-cover-fallback { width: 180rpx; height: 128rpx; border-radius: 14rpx; background: linear-gradient(135deg, #ffd45a 0%, #fff2b8 100%); }
+.ad-slot-card.compact image, .ad-slot-card.compact .ad-slot-swiper, .ad-slot-card.compact .ad-cover-fallback { width: 140rpx; height: 104rpx; }
+.ad-slot-swiper { overflow: hidden; }
+.ad-slot-swiper image { width: 100%; height: 100%; display: block; }
 .ad-cover-fallback { display: flex; align-items: center; justify-content: center; color: #9e1b12; font-weight: 900; }
 .ad-slot-body { min-width: 0; display: grid; align-content: center; gap: 8rpx; }
 .ad-slot-title { color: #1f2937; font-size: 28rpx; font-weight: 900; line-height: 1.35; }
