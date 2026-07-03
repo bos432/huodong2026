@@ -690,6 +690,11 @@ function collectLinks(row: HomepageSectionView) {
       }
     });
   }
+  if (Array.isArray(config.images)) {
+    config.images.forEach((item: any, index: number) => {
+      if (item && typeof item === "object" && typeof item.link === "string") result.push({ value: item.link, source: `${row.title || typeLabel(row.type)} / images[${index + 1}].link` });
+    });
+  }
   return result;
 }
 
@@ -702,6 +707,11 @@ function collectImages(row: HomepageSectionView) {
     if (Array.isArray(value)) {
       value.forEach((item, index) => {
         if (typeof item === "string" && isProbablyImageUrl(item)) result.push({ value: item, source: `${row.title || typeLabel(row.type)} / ${key}[${index + 1}]` });
+        if (item && typeof item === "object") {
+          for (const [innerKey, innerValue] of Object.entries(item)) {
+            if (typeof innerValue === "string" && isProbablyImageUrl(innerValue)) result.push({ value: innerValue, source: `${row.title || typeLabel(row.type)} / ${key}[${index + 1}].${innerKey}` });
+          }
+        }
       });
     }
   }
@@ -727,8 +737,23 @@ function addHealthIssue(list: HealthIssue[], level: "error" | "warning", title: 
   list.push({ level, title, detail, sectionId });
 }
 
+function bannerImageItems(config: Record<string, any>) {
+  const items = Array.isArray(config.images) ? config.images : [];
+  const normalized = items.map((item: any) => {
+    if (typeof item === "string") return { imageUrl: item.trim(), link: String(config.link || "") };
+    return { imageUrl: String(item?.imageUrl || item?.url || "").trim(), link: String(item?.link || config.link || "").trim() };
+  });
+  if (config.imageUrl) normalized.push({ imageUrl: String(config.imageUrl || "").trim(), link: String(config.link || "") });
+  const seen = new Set<string>();
+  return normalized.filter((item) => {
+    if (!item.imageUrl || seen.has(item.imageUrl)) return false;
+    seen.add(item.imageUrl);
+    return true;
+  }).slice(0, 10);
+}
+
 function bannerImages(config: Record<string, any>) {
-  return Array.from(new Set([...(Array.isArray(config.images) ? config.images : []), config.imageUrl || ""].map((item) => String(item || "").trim()).filter(Boolean))).slice(0, 10);
+  return bannerImageItems(config).map((item) => item.imageUrl);
 }
 
 function buildHealthIssues() {
@@ -1761,7 +1786,7 @@ function uploadHeroBackground(file: File) {
 }
 
 async function uploadBannerImage(file: File) {
-  const current = bannerImages(form.config);
+  const current = bannerImageItems(form.config);
   if (current.length >= 10) {
     ElMessage.warning("最多上传 10 张 Banner 图");
     return false;
@@ -1770,7 +1795,8 @@ async function uploadBannerImage(file: File) {
   data.append("file", file);
   const result = await api.post<any, any>("/admin/uploads/images", data, { headers: { "Content-Type": "multipart/form-data" } });
   const url = result.url || result.path;
-  form.config.images = Array.from(new Set([...current, url].filter(Boolean)));
+  if (url && !current.some((item) => item.imageUrl === url)) current.push({ imageUrl: url, link: String(form.config.link || "") });
+  form.config.images = current;
   form.config.imageUrl = form.config.imageUrl || url;
   syncJsonText();
   ElMessage.success("Banner 图已上传");
@@ -1778,10 +1804,18 @@ async function uploadBannerImage(file: File) {
 }
 
 function removeBannerImage(index: number) {
-  const next = bannerImages(form.config);
+  const next = bannerImageItems(form.config);
   next.splice(index, 1);
   form.config.images = next;
-  if (!next.includes(form.config.imageUrl)) form.config.imageUrl = next[0] || "";
+  if (!next.some((item) => item.imageUrl === form.config.imageUrl)) form.config.imageUrl = next[0]?.imageUrl || "";
+  syncJsonText();
+}
+
+function updateBannerImageLink(index: number, value: string) {
+  const next = bannerImageItems(form.config);
+  if (!next[index]) return;
+  next[index] = { ...next[index], link: value };
+  form.config.images = next;
   syncJsonText();
 }
 
@@ -2463,10 +2497,11 @@ onMounted(async () => {
                   <el-divider>图片广告</el-divider>
                   <el-form-item label="图片">
                     <div class="banner-image-manager">
-                      <div v-if="bannerImages(form.config).length" class="banner-image-list">
-                        <div v-for="(url, index) in bannerImages(form.config)" :key="url" class="banner-image-item">
-                          <img :src="url" alt="Banner" />
-                          <div><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
+                      <div v-if="bannerImageItems(form.config).length" class="banner-image-list">
+                        <div v-for="(item, index) in bannerImageItems(form.config)" :key="item.imageUrl" class="banner-image-item">
+                          <img :src="item.imageUrl" alt="Banner" />
+                          <div class="banner-image-meta"><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
+                          <el-input class="banner-image-link" :model-value="item.link" placeholder="本图跳转链接，留空则使用模块链接" @input="(value: string) => updateBannerImageLink(index, value)" />
                         </div>
                       </div>
                       <div class="upload-line">
@@ -2736,10 +2771,11 @@ onMounted(async () => {
         <template v-if="form.type === 'image_banner'">
           <el-form-item label="图片">
             <div class="banner-image-manager">
-              <div v-if="bannerImages(form.config).length" class="banner-image-list">
-                <div v-for="(url, index) in bannerImages(form.config)" :key="url" class="banner-image-item">
-                  <img :src="url" alt="Banner" />
-                  <div><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
+              <div v-if="bannerImageItems(form.config).length" class="banner-image-list">
+                <div v-for="(item, index) in bannerImageItems(form.config)" :key="item.imageUrl" class="banner-image-item">
+                  <img :src="item.imageUrl" alt="Banner" />
+                  <div class="banner-image-meta"><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
+                  <el-input class="banner-image-link" :model-value="item.link" placeholder="本图跳转链接，留空则使用模块链接" @input="(value: string) => updateBannerImageLink(index, value)" />
                 </div>
               </div>
               <div class="upload-line">
@@ -3108,7 +3144,8 @@ onMounted(async () => {
 .banner-image-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
 .banner-image-item { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .banner-image-item img { width: 100%; height: 86px; display: block; object-fit: cover; background: #f3f4f6; }
-.banner-image-item div { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 8px; color: #667085; font-size: 12px; }
+.banner-image-meta { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 8px; color: #667085; font-size: 12px; }
+.banner-image-link { padding: 0 8px 8px; }
 .visual-preset-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .builder-inspector { max-height: calc(100vh - 128px); overflow: auto; }
 .inspector-empty { min-height: 360px; display: grid; align-content: center; justify-items: start; gap: 12px; color: #667085; }

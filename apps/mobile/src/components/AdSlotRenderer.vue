@@ -244,7 +244,6 @@ onBeforeUnmount(clearTimer);
             <image :src="url" mode="aspectFill" />
           </swiper-item>
         </swiper>
-        <view class="ad-slot-count">{{ displayImageUrls.length }} 张</view>
       </view>
       <image v-else-if="displayImageUrl" :src="displayImageUrl" mode="aspectFill" />
       <view v-else class="ad-cover-fallback">AD</view>
@@ -264,7 +263,6 @@ onBeforeUnmount(clearTimer);
 .ad-slot-media { position: relative; overflow: hidden; }
 .ad-slot-swiper { overflow: hidden; }
 .ad-slot-swiper image { width: 100%; height: 100%; display: block; }
-.ad-slot-count { position: absolute; z-index: 1; top: 8rpx; right: 8rpx; padding: 4rpx 10rpx; border-radius: 999rpx; background: rgba(15, 23, 42, 0.56); color: #fff; font-size: 18rpx; font-weight: 900; }
 .ad-cover-fallback { display: flex; align-items: center; justify-content: center; color: #9e1b12; font-weight: 900; }
 .ad-slot-body { min-width: 0; display: grid; align-content: center; gap: 8rpx; }
 .ad-slot-title { color: #1f2937; font-size: 28rpx; font-weight: 900; line-height: 1.35; }

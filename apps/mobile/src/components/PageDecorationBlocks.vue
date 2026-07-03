@@ -65,13 +65,27 @@ function sectionStyle(section: HomepageSectionView, fallback = "#fff") {
   };
 }
 
-function imageList(section: HomepageSectionView) {
+function bannerImageItems(section: HomepageSectionView) {
   const config = section.config || {};
-  const urls = [
-    ...(Array.isArray(config.images) ? config.images : []),
-    config.imageUrl || ""
-  ].map((item) => String(item || "").trim()).filter(Boolean);
-  return Array.from(new Set(urls));
+  const items = Array.isArray(config.images) ? config.images : [];
+  const normalized = items.map((item: any) => {
+    if (typeof item === "string") return { imageUrl: item.trim(), link: String(config.link || "") };
+    return {
+      imageUrl: String(item?.imageUrl || item?.url || "").trim(),
+      link: String(item?.link || config.link || "").trim()
+    };
+  });
+  if (config.imageUrl) normalized.push({ imageUrl: String(config.imageUrl || "").trim(), link: String(config.link || "") });
+  const seen = new Set<string>();
+  return normalized.filter((item) => {
+    if (!item.imageUrl || seen.has(item.imageUrl)) return false;
+    seen.add(item.imageUrl);
+    return true;
+  });
+}
+
+function imageList(section: HomepageSectionView) {
+  return bannerImageItems(section).map((item) => item.imageUrl);
 }
 
 function bannerSwiperStyle(section: HomepageSectionView) {
@@ -179,9 +193,9 @@ function formatTime(value: string) {
       </view>
     </view>
 
-    <view v-else-if="section.type === 'image_banner'" class="decor-banner" :style="sectionStyle(section, '#dff4ee')" @click="goDecoratedLink(String(section.config.link || ''))">
+    <view v-else-if="section.type === 'image_banner'" class="decor-banner" :style="sectionStyle(section, '#dff4ee')">
       <swiper
-        v-if="imageList(section).length > 1"
+        v-if="bannerImageItems(section).length > 1"
         class="decor-banner-swiper"
         :style="bannerSwiperStyle(section)"
         circular
@@ -190,12 +204,11 @@ function formatTime(value: string) {
         indicator-color="rgba(255,255,255,0.62)"
         indicator-active-color="#ffffff"
       >
-        <swiper-item v-for="url in imageList(section)" :key="url">
-          <image :src="url" mode="aspectFill" />
+        <swiper-item v-for="item in bannerImageItems(section)" :key="item.imageUrl">
+          <image :src="item.imageUrl" mode="aspectFill" @click="goDecoratedLink(item.link)" />
         </swiper-item>
       </swiper>
-      <view v-if="imageList(section).length > 1" class="decor-banner-count">{{ imageList(section).length }} 张轮播</view>
-      <image v-else-if="imageList(section)[0]" :src="imageList(section)[0]" mode="widthFix" />
+      <image v-else-if="bannerImageItems(section)[0]" :src="bannerImageItems(section)[0].imageUrl" mode="widthFix" @click="goDecoratedLink(bannerImageItems(section)[0].link)" />
       <text v-else>{{ section.title || "图片 Banner" }}</text>
     </view>
 
@@ -309,7 +322,6 @@ function formatTime(value: string) {
 .decor-banner image, .decor-rich image { width: 100%; border-radius: var(--decor-image-radius, 12px); }
 .decor-banner-swiper { width: 100%; height: 220rpx; border-radius: var(--decor-image-radius, 12px); overflow: hidden; }
 .decor-banner-swiper image { width: 100%; height: 100%; display: block; border-radius: 0; }
-.decor-banner-count { position: absolute; top: 34rpx; right: 34rpx; z-index: 2; padding: 7rpx 14rpx; border-radius: 999rpx; background: rgba(15, 23, 42, 0.56); color: #fff; font-size: 21rpx; font-weight: 900; line-height: 1.2; }
 .decor-section-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; margin-bottom: 12rpx; }
 .decor-section-copy { margin: -4rpx 0 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.45; }
 .decor-rich-line { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.65; }
