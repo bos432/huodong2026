@@ -2514,11 +2514,19 @@ onMounted(async () => {
                     <div class="banner-image-manager">
                       <div v-if="bannerImageItems(form.config).length" class="banner-image-list">
                         <div v-for="(item, index) in bannerImageItems(form.config)" :key="item.imageUrl" class="banner-image-item">
-                          <img :src="item.imageUrl" alt="Banner" />
-                          <div class="banner-image-meta"><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
-                          <div class="banner-image-link">
-                            <span>本图跳转链接</span>
-                            <el-button size="small" @click="openBannerImageLinkPicker(index)">{{ linkDisplayName(item.link || form.config.link) }}</el-button>
+                          <img class="banner-image-thumb" :src="item.imageUrl" alt="Banner" />
+                          <div class="banner-image-content">
+                            <div class="banner-image-meta">
+                              <div>
+                                <strong>图片 {{ index + 1 }}</strong>
+                                <small>{{ index === 0 ? "首张展示" : "参与轮播" }}</small>
+                              </div>
+                              <el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button>
+                            </div>
+                            <div class="banner-image-link">
+                              <span>本图跳转链接</span>
+                              <el-button size="small" type="primary" plain @click="openBannerImageLinkPicker(index)">{{ linkDisplayName(item.link || form.config.link) }}</el-button>
+                            </div>
                           </div>
                         </div>
                       </div>
@@ -2791,11 +2799,19 @@ onMounted(async () => {
             <div class="banner-image-manager">
               <div v-if="bannerImageItems(form.config).length" class="banner-image-list">
                 <div v-for="(item, index) in bannerImageItems(form.config)" :key="item.imageUrl" class="banner-image-item">
-                  <img :src="item.imageUrl" alt="Banner" />
-                  <div class="banner-image-meta"><span>{{ index === 0 ? "主图" : `轮播 ${index + 1}` }}</span><el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button></div>
-                  <div class="banner-image-link">
-                    <span>本图跳转链接</span>
-                    <el-button size="small" @click="openBannerImageLinkPicker(index)">{{ linkDisplayName(item.link || form.config.link) }}</el-button>
+                  <img class="banner-image-thumb" :src="item.imageUrl" alt="Banner" />
+                  <div class="banner-image-content">
+                    <div class="banner-image-meta">
+                      <div>
+                        <strong>图片 {{ index + 1 }}</strong>
+                        <small>{{ index === 0 ? "首张展示" : "参与轮播" }}</small>
+                      </div>
+                      <el-button size="small" type="danger" text @click="removeBannerImage(index)">删除</el-button>
+                    </div>
+                    <div class="banner-image-link">
+                      <span>本图跳转链接</span>
+                      <el-button size="small" type="primary" plain @click="openBannerImageLinkPicker(index)">{{ linkDisplayName(item.link || form.config.link) }}</el-button>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -3162,13 +3178,16 @@ onMounted(async () => {
 .preview-inner-pages span { display: inline-flex; margin-right: 6px; padding: 5px 8px; border-radius: 999px; background: #f3f4f6; color: #475467; font-size: 12px; }
 .upload-line { width: 100%; display: grid; grid-template-columns: 1fr auto; gap: 8px; }
 .banner-image-manager { width: 100%; display: grid; gap: 10px; }
-.banner-image-list { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
-.banner-image-item { overflow: hidden; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
-.banner-image-item img { width: 100%; height: 86px; display: block; object-fit: cover; background: #f3f4f6; }
-.banner-image-meta { min-height: 32px; display: flex; align-items: center; justify-content: space-between; gap: 6px; padding: 3px 8px; color: #667085; font-size: 12px; }
-.banner-image-link { display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 8px; padding: 0 8px 8px; color: #667085; font-size: 12px; }
+.banner-image-list { display: grid; gap: 10px; }
+.banner-image-item { display: grid; grid-template-columns: 116px minmax(0, 1fr); gap: 12px; align-items: stretch; padding: 8px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.banner-image-thumb { width: 116px; height: 82px; display: block; object-fit: cover; border-radius: 6px; background: #f3f4f6; }
+.banner-image-content { min-width: 0; display: grid; align-content: space-between; gap: 10px; }
+.banner-image-meta { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; min-width: 0; color: #667085; font-size: 12px; }
+.banner-image-meta strong { display: block; color: #344054; font-size: 13px; font-weight: 600; line-height: 1.4; }
+.banner-image-meta small { display: block; margin-top: 2px; color: #98a2b3; font-size: 12px; line-height: 1.3; }
+.banner-image-link { display: grid; grid-template-columns: 84px minmax(0, 1fr); align-items: center; gap: 8px; min-width: 0; color: #667085; font-size: 12px; }
 .banner-image-link .el-button { width: 100%; justify-content: flex-start; overflow: hidden; }
-.banner-image-link .el-button :deep(span) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.banner-image-link :deep(.el-button > span) { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .visual-preset-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .builder-inspector { max-height: calc(100vh - 128px); overflow: auto; }
 .inspector-empty { min-height: 360px; display: grid; align-content: center; justify-items: start; gap: 12px; color: #667085; }
