@@ -8,6 +8,7 @@ import { isPlatformAdmin } from "../permissions";
 
 const route = useRoute();
 const router = useRouter();
+const DEFAULT_MINIPROGRAM_TENANT_CODE = "qiwai-showcase";
 const rows = ref<any[]>([]);
 const levels = ref<any[]>([]);
 const tenants = ref<any[]>([]);
@@ -116,6 +117,17 @@ function walletTenantLabel(id?: number) {
 function normalizedWalletTenantId(value: unknown) {
   const id = Number(value || 0);
   return id && Number.isFinite(id) ? id : 0;
+}
+
+function tenantIdByCode(code: string) {
+  return tenants.value.find((tenant) => tenant.code === code)?.id || 0;
+}
+
+function defaultWalletTenantIdForMember(row: any) {
+  if (!isPlatformAdmin()) return 0;
+  const user = row?.user || row?.profile?.user;
+  if (user?.sourceChannel !== "mp_weixin") return walletScopeTenantId.value;
+  return tenantIdByCode(DEFAULT_MINIPROGRAM_TENANT_CODE) || walletScopeTenantId.value;
 }
 
 async function load() {
@@ -276,7 +288,10 @@ function changePageSize(nextSize: number) {
   load();
 }
 
-async function openDetail(row: any) {
+async function openDetail(row: any, options: { applyDefaultWalletScope?: boolean } = { applyDefaultWalletScope: true }) {
+  if (options.applyDefaultWalletScope !== false) {
+    walletScopeTenantId.value = defaultWalletTenantIdForMember(row);
+  }
   const walletParams = walletScopeTenantId.value ? { tenantId: walletScopeTenantId.value } : undefined;
   const [memberDetail, walletDetail, transactions] = await Promise.all([
     api.get(`/admin/members/${row.user.id}`),
@@ -299,7 +314,7 @@ function openWalletDialog(type: "recharge" | "deduct" | "adjust") {
 
 async function reloadWalletDetail() {
   if (!detail.value?.profile?.user) return;
-  await openDetail({ user: detail.value.profile.user });
+  await openDetail({ user: detail.value.profile.user }, { applyDefaultWalletScope: false });
 }
 
 async function saveWalletAdjust() {
@@ -314,7 +329,7 @@ async function saveWalletAdjust() {
     ElMessage.success("余额已更新");
     walletDialog.value = false;
     walletScopeTenantId.value = normalizedWalletTenantId(walletForm.tenantId);
-    await openDetail({ user: detail.value.profile.user });
+    await openDetail({ user: detail.value.profile.user }, { applyDefaultWalletScope: false });
   } catch (error: any) {
     ElMessage.error(error.message);
   } finally {
