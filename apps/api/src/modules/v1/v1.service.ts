@@ -227,7 +227,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   async enhancedActivity(id: number, userId?: number, tracking?: ActivityTrackingInput, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(id, true);
     if (!activity) throw new NotFoundException("活动不存在");
-    await this.assertPublicActivityTenantAccess(activity, context);
+    const tenant = await this.assertPublicActivityTenantAccess(activity, context);
 
     const user = userId ? await this.users.findOneBy({ id: userId }) : null;
     const channel = await this.resolveActivityChannel(activity, tracking?.channelCode);
@@ -235,15 +235,29 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (tracking?.inviteCode) await this.trackShare(id, { code: tracking.inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
 
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [hosts, sections, stats, reviews, memberAccess] = await Promise.all([
+    const [hosts, sections, stats, reviews, memberAccess, operationSetting] = await Promise.all([
       this.hosts.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.sections.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.activityStats(id, activity.capacity),
       this.activityReviews(id, context),
-      this.memberAccessSnapshot(activity, user || undefined)
+      this.memberAccessSnapshot(activity, user || undefined),
+      this.findOperationSetting(tenant || activity.tenant || null)
     ]);
 
-    return { ...activity, ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews, memberAccess };
+    return { ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews, memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
+  }
+
+  private publicActivity(activity: Activity) {
+    const { groupQrCodeUrl: _groupQrCodeUrl, ...publicActivity } = activity as Activity & { groupQrCodeUrl?: string | null };
+    return publicActivity;
+  }
+
+  private findOperationSetting(tenant?: Tenant | null) {
+    return this.operationSettings.findOneBy({ id: tenant?.id || 1 });
+  }
+
+  private hasGroupQrCode(activity: Activity, setting?: OperationSetting | null) {
+    return Boolean(activity.groupQrCodeUrl?.trim() || setting?.defaultGroupQrCodeUrl?.trim());
   }
 
   private async resolveActivityChannel(activity: Activity, channelCode?: string) {

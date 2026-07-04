@@ -147,13 +147,14 @@ function removeSection(index: number) {
   sections.value.splice(index, 1);
 }
 
-async function chooseImage(target: "cover" | "section", index = 0) {
+async function chooseImage(target: "cover" | "groupQr" | "section", index = 0) {
   try {
     const chosen = await new Promise<UniApp.ChooseImageSuccessCallbackResult>((resolve, reject) => uni.chooseImage({ count: 1, success: resolve, fail: reject }));
     const filePath = chosen.tempFilePaths[0];
     if (!filePath) return;
     const uploaded = await uploadAdminImage(filePath);
     if (target === "cover") form.value.coverUrl = uploaded.url;
+    else if (target === "groupQr") form.value.groupQrCodeUrl = uploaded.url;
     else sections.value[index].imageUrl = uploaded.url;
   } catch (err: any) {
     uni.showToast({ title: err.message || "上传失败", icon: "none" });
@@ -366,6 +367,15 @@ onMounted(load);
           <view :class="{ on: form.allowCancel }" @click="setBoolean('allowCancel', !form.allowCancel)">允许取消</view>
           <view :class="{ on: form.featured }" @click="setBoolean('featured', !form.featured)">推荐展示</view>
         </view>
+        <view class="field">
+          <view class="label">报名成功入群二维码</view>
+          <view class="hint-line">报名成功后在报名详情页显示，公开活动页只提示入群流程，不直接展示二维码。</view>
+          <view class="upload qr-upload" @click="chooseImage('groupQr')">
+            <image v-if="form.groupQrCodeUrl" :src="form.groupQrCodeUrl" mode="aspectFit" />
+            <text v-else>上传入群二维码</text>
+          </view>
+          <input v-model="form.groupQrCodeUrl" class="input input-after-upload" placeholder="也可粘贴二维码图片链接" />
+        </view>
         <view class="grid2">
           <view class="field"><view class="label">会员门槛</view><picker :range="['无门槛'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('minMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.minMemberLevelId)?.name || "无门槛" }}</view></picker></view>
           <view class="field"><view class="label">优先会员</view><picker :range="['无优先'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('priorityMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.priorityMemberLevelId)?.name || "无优先" }}</view></picker></view>
@@ -440,8 +450,12 @@ onMounted(load);
 .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; }
 .upload { min-height: 260rpx; display: flex; align-items: center; justify-content: center; border: 1rpx dashed rgba(15, 118, 110, 0.36); border-radius: 22rpx; background: #f8fbf8; color: #0f766e; font-weight: 900; overflow: hidden; }
 .upload.compact { min-height: 170rpx; margin-top: 14rpx; }
+.upload.qr-upload { min-height: 220rpx; background: #fff; }
 .upload image { width: 100%; height: 260rpx; display: block; }
 .upload.compact image { height: 170rpx; }
+.upload.qr-upload image { height: 220rpx; }
+.hint-line { margin: -2rpx 0 12rpx; color: #7a5b52; font-size: 23rpx; line-height: 1.55; }
+.input-after-upload { margin-top: 12rpx; }
 .toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; margin-bottom: 18rpx; }
 .toggles view { height: 68rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #fff4e6; color: #7a5b52; font-size: 24rpx; font-weight: 900; }
 .toggles view.on { background: #e6f2ef; color: #0f766e; }

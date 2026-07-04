@@ -124,6 +124,8 @@ function showMemberAccess() {
   return Boolean(activity.value?.minMemberLevel || activity.value?.memberAccess?.priorityMemberLevel || activity.value?.memberAccess?.requiredLevel);
 }
 
+const hasGroupQrCode = computed(() => Boolean(activity.value?.hasGroupQrCode));
+
 async function makeInvite() {
   try {
     await ensureUser();
@@ -301,6 +303,10 @@ onMounted(loadDecoration);
         <view v-if="registrationPaused()" class="operation-notice">
           <view class="name">报名通道暂停</view>
           <view class="subtle">{{ registrationPausedMessage() }}</view>
+        </view>
+        <view v-if="hasGroupQrCode" class="group-flow">
+          <view class="name">报名成功后可加入活动群</view>
+          <view class="subtle">群二维码不会在公开活动页展示；报名提交并进入报名详情后，可查看入群入口和后续通知。</view>
         </view>
       </view>
 
@@ -506,6 +512,8 @@ onMounted(loadDecoration);
 .member-access { margin-top: 18rpx; padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); border: 1px solid rgba(74, 107, 138, 0.12); }
 .member-access.blocked { background: rgba(255, 159, 0, 0.08); border-color: rgba(255, 159, 0, 0.18); }
 .operation-notice { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: #fff7ed; border: 1px solid #fed7aa; }
+.group-flow { margin-top: 18rpx; padding: 18rpx; border-radius: 18rpx; background: #eef8f5; border: 1px solid rgba(15, 118, 110, 0.16); }
+.group-flow .name { color: #0f766e; font-weight: 800; margin-bottom: 8rpx; }
 .action-card { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18rpx; }
 .action-card .section-title { grid-column: 1 / -1; margin-bottom: 0; }
 .action-item { display: grid; gap: 10rpx; justify-items: center; color: #666666; font-size: 24rpx; font-weight: 600; }

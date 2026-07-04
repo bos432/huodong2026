@@ -1543,7 +1543,7 @@ onMounted(async () => {
             </el-form-item>
             <el-form-item label="默认入群二维码">
               <div class="qr-field">
-                <el-input v-model="form.defaultGroupQrCodeUrl" placeholder="活动未配置二维码时使用；不填则报名后不显示入群二维码" />
+                <el-input v-model="form.defaultGroupQrCodeUrl" placeholder="活动未单独配置时使用；报名成功后在报名详情页显示，公开活动页不展示二维码" />
                 <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleDefaultGroupQrSuccess" :on-error="handleUploadError">
                   <el-button :icon="UploadFilled">上传二维码</el-button>
                 </el-upload>

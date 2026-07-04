@@ -1100,11 +1100,12 @@ export class PublicService {
     const user = userId ? await this.users.findOneBy({ id: userId }) : null;
     await this.recordActivityView(activity, user || null, tracking);
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [ticketTypes, memberAccess] = await Promise.all([
+    const [ticketTypes, memberAccess, operationSetting] = await Promise.all([
       this.findPublicTicketTypes(id),
-      this.memberAccessSnapshot(activity, userId)
+      this.memberAccessSnapshot(activity, userId),
+      this.ensureOperationSetting(activity.tenant || null)
     ]);
-    return { ...(await this.withPublicStats(activity)), ticketTypes, memberAccess };
+    return { ...(await this.withPublicStats(activity)), ticketTypes, memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
   }
 
   async quote(activityId: number, dto: QuoteDto, user: User, context?: PublicTenantContext) {
@@ -2382,6 +2383,10 @@ export class PublicService {
   private publicActivity(activity: Activity) {
     const { groupQrCodeUrl: _groupQrCodeUrl, ...publicActivity } = activity as Activity & { groupQrCodeUrl?: string | null };
     return publicActivity;
+  }
+
+  private hasGroupQrCode(activity: Activity, setting?: OperationSetting | null) {
+    return Boolean(activity.groupQrCodeUrl?.trim() || setting?.defaultGroupQrCodeUrl?.trim());
   }
 
   private publicOperationSetting(setting: OperationSetting) {

@@ -930,11 +930,11 @@ onMounted(async () => {
               <el-form-item class="full" label="地图链接">
                 <el-input v-model="form.locationMapUrl" placeholder="可填写腾讯地图、高德地图或百度地图分享链接；无经纬度时前台会显示可点击地图入口" />
               </el-form-item>
-              <el-form-item class="full" label="活动群二维码">
+              <el-form-item class="full" label="报名成功入群二维码">
                 <div class="qr-field">
-                  <el-input v-model="form.groupQrCodeUrl" placeholder="可上传活动专属企业群二维码；不填则使用全局默认二维码" />
+                  <el-input v-model="form.groupQrCodeUrl" placeholder="报名成功后在报名详情页显示；公开活动页只显示入群提示，不直接展示二维码" />
                   <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeCoverUpload" :on-success="handleGroupQrSuccess" :on-error="handleCoverError">
-                    <el-button :icon="UploadFilled">上传二维码</el-button>
+                    <el-button :icon="UploadFilled">上传入群二维码</el-button>
                   </el-upload>
                   <img v-if="form.groupQrCodeUrl" class="qr-preview" :src="form.groupQrCodeUrl" alt="活动群二维码预览" />
                 </div>

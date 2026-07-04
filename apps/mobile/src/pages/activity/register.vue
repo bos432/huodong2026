@@ -80,6 +80,7 @@ const seatsText = computed(() => {
   if (activity.value.remainingSeats <= 0) return "名额已满，可先加入候补";
   return `剩余 ${activity.value.remainingSeats} 个名额`;
 });
+const hasGroupQrCode = computed(() => Boolean(activity.value?.hasGroupQrCode));
 
 function isFilled(value: any) {
   if (Array.isArray(value)) return value.length > 0;
@@ -309,6 +310,10 @@ watch(couponCode, () => {
         <view class="section-kicker">提交前确认</view>
         <view class="title small">报名说明</view>
         <view class="subtle hint">{{ paymentHint }}</view>
+        <view v-if="hasGroupQrCode" class="group-flow">
+          <view class="member-title">报名成功后可加入活动群</view>
+          <view class="subtle">群二维码不会在公开报名流程中展示；提交后进入报名详情页，可查看入群入口和活动通知。</view>
+        </view>
         <view v-if="registrationPaused" class="operation-notice">
           <view class="member-title">报名通道暂停</view>
           <view class="subtle">{{ registrationPausedMessage }}</view>
@@ -550,6 +555,8 @@ watch(couponCode, () => {
 .member-access { margin-top: 2rpx; padding: 20rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); border: 1px solid rgba(74, 107, 138, 0.12); }
 .member-access.blocked { background: rgba(255, 159, 0, 0.08); border-color: rgba(255, 159, 0, 0.18); }
 .operation-notice { margin-top: 2rpx; padding: 20rpx; border-radius: 18rpx; background: #fff7ed; border: 1px solid #fed7aa; }
+.group-flow { padding: 20rpx; border-radius: 18rpx; background: #eef8f5; border: 1px solid rgba(15, 118, 110, 0.16); }
+.group-flow .member-title { color: #0f766e; }
 .member-title { color: #333333; font-weight: 700; margin-bottom: 8rpx; font-family: "STKaiti", "KaiTi", serif; }
 .price-card { display: grid; gap: 18rpx; }
 .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
