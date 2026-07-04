@@ -205,7 +205,7 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
   try {
     const data = payload(targetStatus);
     const saved = id.value
-      ? await mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PATCH", data })
+      ? await mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data })
       : await mobileAdminRequest<any>("/admin/activities", { method: "POST", data });
     id.value = saved.id;
     uni.showToast({ title: targetStatus === ActivityStatus.Draft ? "已保存" : "已发布", icon: "success" });

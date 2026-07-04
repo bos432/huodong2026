@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Req, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 import { mkdirSync } from "fs";
@@ -288,6 +288,12 @@ export class PublicController {
   async toggleFavoriteCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.toggleFavoriteCourse(id, user);
+  }
+
+  @Put("me/profile")
+  async updateMyProfileByPut(@Body() dto: UpdateProfileDto, @Req() req: any) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.updateMyProfile(user, dto);
   }
 
   @Patch("me/profile")

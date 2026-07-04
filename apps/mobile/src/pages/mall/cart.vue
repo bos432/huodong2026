@@ -94,7 +94,7 @@ async function load() {
 async function changeQty(item: any, delta: number) {
   const quantity = Math.max(0, Number(item.quantity || 0) + delta);
   try {
-    await request(`/public/me/mall/cart/${item.id}`, { method: "PATCH", data: { quantity } });
+    await request(`/public/me/mall/cart/${item.id}`, { method: "PUT", data: { quantity } });
     load();
   } catch (error: any) {
     uni.showToast({ title: error.message || "调整失败", icon: "none" });

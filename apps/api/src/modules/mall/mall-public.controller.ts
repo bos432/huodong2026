@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Query, Req } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req } from "@nestjs/common";
 import { PublicService, PublicTenantContext } from "../public/public.service";
 import { CreateMallOrderDto, MallAddressDto, MallCartItemDto, MallCartQuantityDto, MallListQueryDto, MallOrderQuoteDto, MallProviderPayDto, MallRefundRequestDto, MallReviewDto } from "./mall.dto";
 import { MallService } from "./mall.service";
@@ -132,6 +132,12 @@ export class MallPublicController {
     return this.service.saveMyAddress(user, dto, undefined, this.tenantContext(req, tenantCode));
   }
 
+  @Put("me/mall/addresses/:id")
+  async updateAddressByPut(@Param("id", ParseIntPipe) id: number, @Body() dto: MallAddressDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.saveMyAddress(user, dto, id, this.tenantContext(req, tenantCode));
+  }
+
   @Patch("me/mall/addresses/:id")
   async updateAddress(@Param("id", ParseIntPipe) id: number, @Body() dto: MallAddressDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
@@ -154,6 +160,12 @@ export class MallPublicController {
   async addCart(@Body() dto: MallCartItemDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.addCartItem(user, dto, this.tenantContext(req, tenantCode));
+  }
+
+  @Put("me/mall/cart/:id")
+  async updateCartByPut(@Param("id", ParseIntPipe) id: number, @Body() dto: MallCartQuantityDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.updateCartItem(user, id, dto, this.tenantContext(req, tenantCode));
   }
 
   @Patch("me/mall/cart/:id")

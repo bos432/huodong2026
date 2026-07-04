@@ -887,6 +887,12 @@ export class AdminController {
   }
 
   @AdminRoles(...OPERATION_ROLES)
+  @Put("activities/:id")
+  updateActivityByPut(@Param("id", ParseIntPipe) id: number, @Body() dto: ActivityDto, @CurrentAdmin() admin: { id: number; username: string }) {
+    return this.service.saveActivity(dto, id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
   @Patch("activities/:id")
   updateActivity(@Param("id", ParseIntPipe) id: number, @Body() dto: ActivityDto, @CurrentAdmin() admin: { id: number; username: string }) {
     return this.service.saveActivity(dto, id, admin);

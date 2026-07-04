@@ -252,7 +252,7 @@ export async function requestRegistrationRefund(id: number) {
 }
 
 export async function updateMyProfile(data: { nickname?: string; avatarUrl?: string }) {
-  const profile = await request<any>("/public/me/profile", { method: "PATCH", data });
+  const profile = await request<any>("/public/me/profile", { method: "PUT", data });
   saveProfileSession(profile);
   return profile;
 }
