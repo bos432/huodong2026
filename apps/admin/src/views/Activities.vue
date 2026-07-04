@@ -480,14 +480,32 @@ function validateForm() {
   return "";
 }
 
+function optionalNumber(value: unknown) {
+  const number = Number(value || 0);
+  return number > 0 && Number.isFinite(number) ? number : undefined;
+}
+
 function cleanPayload() {
+  const tenantId = optionalNumber(form.tenantId || form.tenant?.id || filters.tenantId);
   return {
-    ...form,
+    tenantId,
+    title: form.title.trim(),
+    coverUrl: form.coverUrl?.trim() || undefined,
+    description: form.description.trim(),
+    notice: form.notice?.trim() || undefined,
+    location: form.location.trim(),
     requireReview: registrationReviewEnabled.value ? form.requireReview : false,
-    categoryId: form.categoryId || undefined,
-    agentId: form.agentId || undefined,
-    minMemberLevelId: form.minMemberLevelId || undefined,
-    priorityMemberLevelId: form.priorityMemberLevelId || undefined,
+    featured: Boolean(form.featured),
+    allowCancel: Boolean(form.allowCancel),
+    status: form.status,
+    startTime: form.startTime,
+    endTime: form.endTime,
+    registrationDeadline: form.registrationDeadline,
+    capacity: Number(form.capacity),
+    categoryId: optionalNumber(form.categoryId),
+    agentId: optionalNumber(form.agentId),
+    minMemberLevelId: optionalNumber(form.minMemberLevelId),
+    priorityMemberLevelId: optionalNumber(form.priorityMemberLevelId),
     locationLatitude: form.locationLatitude === "" || form.locationLatitude === null || form.locationLatitude === undefined ? undefined : Number(form.locationLatitude),
     locationLongitude: form.locationLongitude === "" || form.locationLongitude === null || form.locationLongitude === undefined ? undefined : Number(form.locationLongitude),
     locationMapUrl: form.locationMapUrl?.trim() || undefined,
@@ -495,18 +513,31 @@ function cleanPayload() {
     priorityRegistrationEndsAt: form.priorityRegistrationEndsAt || undefined,
     price: Number(form.price),
     fields: form.fields.map((field: any, index: number) => ({
-      ...field,
       label: field.label.trim(),
+      type: field.type,
+      required: Boolean(field.required),
       sortOrder: field.sortOrder || index + 1,
       options: [FieldType.SingleChoice, FieldType.MultipleChoice].includes(field.type)
         ? (field.options || []).filter((option: any) => option.label?.trim()).map((option: any, optionIndex: number) => ({ label: option.label.trim(), value: option.value || `option_${optionIndex + 1}` }))
         : []
     })),
-    hosts: form.hosts.filter((host: any) => host.name?.trim()).map((host: any, index: number) => ({ ...host, name: host.name.trim(), sortOrder: host.sortOrder || index + 1 })),
+    hosts: form.hosts.filter((host: any) => host.name?.trim()).map((host: any, index: number) => ({
+      name: host.name.trim(),
+      title: host.title?.trim() || undefined,
+      avatarUrl: host.avatarUrl?.trim() || undefined,
+      bio: host.bio?.trim() || undefined,
+      sortOrder: host.sortOrder || index + 1
+    })),
     sections: form.sections
       .filter((section: any) => section.title?.trim() && section.content?.trim())
       .sort((a: any, b: any) => Number(a.sortOrder || 0) - Number(b.sortOrder || 0))
-      .map((section: any, index: number) => ({ ...section, title: section.title.trim(), content: section.content.trim(), imageUrl: section.imageUrl?.trim() || undefined, sortOrder: index + 1 }))
+      .map((section: any, index: number) => ({
+        type: section.type,
+        title: section.title.trim(),
+        content: section.content.trim(),
+        imageUrl: section.imageUrl?.trim() || undefined,
+        sortOrder: index + 1
+      }))
   };
 }
 
