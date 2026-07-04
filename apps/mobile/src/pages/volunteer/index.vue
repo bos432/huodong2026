@@ -139,7 +139,7 @@ onMounted(load);
         </view>
       </view>
     </template>
-    <AppBottomNav current-path="/pages/user/my" />
+    <AppBottomNav current-path="/pages/volunteer/index" />
   </view>
 </template>
 

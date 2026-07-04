@@ -2,11 +2,16 @@
 import { computed, onMounted, ref } from "vue";
 import { loginH5, loginH5Password, loginWechat, requestH5Code, uploadMyAvatar, withTenantCode } from "../../api";
 import { isTabUrl, usePageDecoration } from "../../decoration";
-import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+
+type WechatProfilePayload = {
+  nickname?: string;
+  avatarUrl?: string;
+  authorized?: boolean;
+};
 
 const phone = ref("");
 const password = ref("");
@@ -64,11 +69,17 @@ function syncH5LoginInputs() {
 function redirectTarget() {
   const pages = getCurrentPages();
   const options = (pages[pages.length - 1] as any)?.options || {};
-  return decodeURIComponent(options.redirect || "/pages/index/index");
+  const target = decodeURIComponent(options.redirect || "/pages/index/index");
+  if (!target.startsWith("/pages/") || target.split("?")[0] === "/pages/user/login") return "/pages/index/index";
+  return target;
 }
 
 function goAdminLogin() {
   uni.navigateTo({ url: "/pages/admin/login" });
+}
+
+function goHome() {
+  uni.reLaunch({ url: withTenantCode("/pages/index/index") });
 }
 
 function goAfterLogin() {
@@ -169,18 +180,10 @@ async function submitWechat() {
   if (loggingIn.value) return;
   loggingIn.value = true;
   try {
-    const profile = await requestWechatProfile();
-    if (profile.authorized && hasWechatProfilePayload(profile)) {
-      const user = await finishWechatLogin(profile);
-      continueAfterWechatLogin(user);
-      return;
-    }
-    wechatAuthNickname.value = profile.nickname || "";
-    wechatAuthAvatarPath.value = profile.avatarUrl || "";
-    wechatAuthMessage.value = profile.unavailable ? "当前环境未返回微信资料，请在这里授权头像和昵称。" : "请确认授权头像和昵称后继续登录。";
-    wechatAuthVisible.value = true;
+    const user = await finishWechatLogin();
+    continueAfterWechatLogin(user);
   } catch (error: any) {
-    uni.showToast({ title: error.message || "微信授权失败", icon: "none" });
+    uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
   } finally {
     loggingIn.value = false;
   }
@@ -266,6 +269,9 @@ onMounted(loadDecoration);
       <view class="admin-login-entry" @click="goAdminLogin">
         <text>管理端入口</text>
       </view>
+      <view class="home-entry" @click="goHome">
+        <text>先逛首页</text>
+      </view>
     </view>
     <!-- #ifdef MP-WEIXIN -->
     <view v-if="wechatAuthVisible" class="wechat-auth-mask">
@@ -298,7 +304,7 @@ onMounted(loadDecoration);
       @close="closePhoneBindAfterLogin"
       @bound="handlePhoneBoundAfterLogin"
     />
-    <AppBottomNav v-if="showBottomNav" :section="bottomNavSection" current-path="/pages/user/my" />
+    <AppBottomNav v-if="showBottomNav" :section="bottomNavSection" current-path="/pages/user/login" />
   </view>
 </template>
 
@@ -390,6 +396,7 @@ onMounted(loadDecoration);
 .native-button::after { border: 0; }
 .native-button[disabled] { color: #fff; opacity: .68; }
 .admin-login-entry { display: flex; align-items: center; justify-content: center; min-height: 68rpx; padding: 8rpx 18rpx; border-radius: 16rpx; background: #f9f4ee; color: #4a6b8a; font-size: 24rpx; font-weight: 800; }
+.home-entry { display: flex; align-items: center; justify-content: center; min-height: 64rpx; color: #8b3f32; font-size: 24rpx; font-weight: 900; }
 .wechat-auth-mask {
   position: fixed;
   inset: 0;

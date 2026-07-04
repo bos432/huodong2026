@@ -22,8 +22,13 @@
   </view>
 </template>
 <script setup lang="ts">
-import { clearUser } from "../../api";
+import { onMounted } from "vue";
+import { clearUser, ensureUser } from "../../api";
 import TabBar from "../../components/TabBar.vue";
+
+onMounted(() => {
+  ensureUser().catch(() => {});
+});
 
 function goBack() { uni.navigateBack(); }
 function goSecurity() { uni.navigateTo({ url:"/pages/user/security" }); }

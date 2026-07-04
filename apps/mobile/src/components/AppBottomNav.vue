@@ -48,6 +48,7 @@ const items = computed(() => {
 function isCurrent(url?: string) {
   const current = props.currentPath;
   const target = String(url || "").split("?")[0];
+  if (current === "/pages/user/login") return false;
   if (target === current) return true;
   if (current.startsWith("/pages/course/") || current.startsWith("/pages/user/courses") || current.startsWith("/pages/user/learning")) return target === "/pages/courses/index";
   if (current.startsWith("/pages/community/")) return target === "/pages/community/index";

@@ -259,8 +259,7 @@ async function loadProfile() {
     registrations.value = Array.isArray(registrationRows) ? registrationRows : [];
     courseOrders.value = Array.isArray(courseOrderRows) ? courseOrderRows : [];
     mallOrders.value = Array.isArray(mallOrderRows) ? mallOrderRows : [];
-    if (shouldCompleteWechatProfile(profileData)) openWechatProfilePanel(true, profileData);
-    else wechatProfilePanelVisible.value = false;
+    wechatProfilePanelVisible.value = false;
   } catch (error: any) {
     resetUserState();
     const message = String(error?.message || "");
@@ -311,12 +310,47 @@ const orderTabs = computed(() => [
   { icon:"📋", label:"全部", count: registrations.value.length + courses.value.length + mallOrders.value.length, status:"all" }
 ]);
 
+const protectedGridPages = new Set(["courses", "learning", "favorites", "mallFavorites", "mallHistory", "certificates", "mallCart", "mallOrders", "mallAddresses", "settings"]);
+const protectedPageUrls = new Set([
+  "/pages/mall/cart",
+  "/pages/mall/addresses",
+  "/pages/mall/favorites",
+  "/pages/mall/history"
+]);
+
+function routePath(url: string) {
+  return String(url || "").split("?")[0];
+}
+
+function needsLoginForUrl(url: string) {
+  const path = routePath(url);
+  if (path.startsWith("/pages/user/") && !["/pages/user/my", "/pages/user/login"].includes(path)) return true;
+  return protectedPageUrls.has(path);
+}
+
+function goLogin(redirect: unknown = "/pages/user/my") {
+  const target = typeof redirect === "string" ? redirect : "/pages/user/my";
+  uni.navigateTo({ url: withTenantCode(`/pages/user/login?redirect=${encodeURIComponent(target)}`) });
+}
+
+function requireLogin(redirect = "/pages/user/my") {
+  if (getUserToken()) return false;
+  goLogin(redirect);
+  return true;
+}
+
+function navigateProtected(url: string) {
+  if (requireLogin(url)) return;
+  uni.navigateTo({ url: withTenantCode(url) });
+}
+
 function goGrid(item: any) {
   if (item.action === "refresh") {
     loadProfile();
     return;
   }
   if (item.link) {
+    if (needsLoginForUrl(item.link) && requireLogin(item.link)) return;
     goDecoratedLink(item.link, item.action);
     return;
   }
@@ -335,26 +369,25 @@ function goGrid(item: any) {
     ambassador: "/pages/ambassador/index",
     settings: "/pages/user/settings"
   };
-  if (pages[item.page]) uni.navigateTo({ url: pages[item.page] });
+  const target = pages[item.page];
+  if (!target) return;
+  if (protectedGridPages.has(item.page) || needsLoginForUrl(target)) navigateProtected(target);
+  else uni.navigateTo({ url: withTenantCode(target) });
 }
-function goLogin() { uni.navigateTo({ url: withTenantCode("/pages/user/login?redirect=%2Fpages%2Fuser%2Fmy") }); }
 function goEdit() {
-  if (!getUserToken()) {
-    goLogin();
-    return;
-  }
-  uni.navigateTo({ url:"/pages/user/profile" });
+  navigateProtected("/pages/user/profile");
 }
 function goCharity() { uni.navigateTo({ url:"/pages/charity/index" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
-function goWallet() { uni.navigateTo({ url:"/pages/user/wallet" }); }
-function goCommunityPosts() { uni.navigateTo({ url:"/pages/user/community-posts" }); }
+function goWallet() { navigateProtected("/pages/user/wallet"); }
+function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
 function goOrders(tab: any) {
   const status = tab?.status || "all";
-  uni.navigateTo({ url:`/pages/user/orders?status=${status}` });
+  navigateProtected(`/pages/user/orders?status=${status}`);
 }
 function goAdmin() { uni.navigateTo({ url:"/pages/admin/home" }); }
 function openPhoneBindPanel() {
+  if (requireLogin()) return;
   phoneBindVisible.value = true;
 }
 function closePhoneBindPanel() {

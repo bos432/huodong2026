@@ -7,6 +7,23 @@ const TENANT_CODE_STORAGE_KEY = "h5_tenant_code";
 const TENANT_CODE_SOURCE_STORAGE_KEY = "h5_tenant_code_source";
 const ACTIVITY_LIST_INTENT_STORAGE_KEY = "h5_activity_list_intent";
 const USER_TOKEN_STORAGE_KEY = "user_token";
+const HOME_PAGE_URL = "/pages/index/index";
+const LOGIN_PAGE_URL = "/pages/user/login";
+const GUEST_PAGE_URLS = new Set([HOME_PAGE_URL, LOGIN_PAGE_URL, "/pages/user/my"]);
+const PROTECTED_PAGE_URLS = new Set([
+  "/pages/activity/register",
+  "/pages/community/checkin",
+  "/pages/community/publish",
+  "/pages/course/player",
+  "/pages/mall/addresses",
+  "/pages/mall/cart",
+  "/pages/mall/checkout",
+  "/pages/mall/coupons",
+  "/pages/mall/favorites",
+  "/pages/mall/history",
+  "/pages/mall/logistics",
+  "/pages/order/confirm"
+]);
 
 export type ActivityListIntent = {
   categoryId?: number | "all";
@@ -188,12 +205,35 @@ export function getUserId() {
 export function getCurrentRouteWithQuery() {
   const pages = getCurrentPages();
   const page = pages[pages.length - 1] as any;
-  if (!page?.route) return "/pages/index/index";
+  if (!page?.route) return HOME_PAGE_URL;
   const options = { ...(page.options || {}) };
   const tenantCode = getCurrentTenantCode();
   if (tenantCode && !options.tenantCode) options.tenantCode = tenantCode;
   const query = stringifyQuery(options);
   return `/${page.route}${query ? `?${query}` : ""}`;
+}
+
+function routePath(url: string) {
+  return String(url || "").split("?")[0] || HOME_PAGE_URL;
+}
+
+function loginRedirectTarget(currentUrl = getCurrentRouteWithQuery()) {
+  const currentPath = routePath(currentUrl);
+  return GUEST_PAGE_URLS.has(currentPath) ? HOME_PAGE_URL : currentUrl;
+}
+
+function shouldReplaceCurrentPageForLogin(currentUrl = getCurrentRouteWithQuery()) {
+  const currentPath = routePath(currentUrl);
+  if (currentPath.startsWith("/pages/user/") && !GUEST_PAGE_URLS.has(currentPath)) return true;
+  return PROTECTED_PAGE_URLS.has(currentPath);
+}
+
+function goLoginForCurrentRoute() {
+  const currentUrl = getCurrentRouteWithQuery();
+  const redirect = encodeURIComponent(loginRedirectTarget(currentUrl));
+  const loginUrl = withTenantCode(`${LOGIN_PAGE_URL}?redirect=${redirect}`);
+  if (shouldReplaceCurrentPageForLogin(currentUrl)) uni.redirectTo({ url: loginUrl });
+  else uni.navigateTo({ url: loginUrl });
 }
 
 export function clearUser() {
@@ -385,8 +425,7 @@ export async function ensureUser() {
   }
   if (existing && !existingToken) clearUser();
   if (!import.meta.env.DEV) {
-    const redirect = encodeURIComponent(getCurrentRouteWithQuery());
-    uni.navigateTo({ url: `/pages/user/login?redirect=${redirect}` });
+    goLoginForCurrentRoute();
     throw new Error("请先完成手机号验证码登录");
   }
   const code = await requestH5Code(DEV_PHONE);

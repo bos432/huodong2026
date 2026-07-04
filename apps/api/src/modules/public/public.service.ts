@@ -185,7 +185,7 @@ export class PublicService {
     this.verifyH5Token(phone, dto.verificationCode, dto.verificationToken);
     let user = await this.users.findOne({ where: { phone } });
     if (!user) user = this.users.create({ phone, nickname: dto.nickname || `本地用户${phone.slice(-4)}`, sourceChannel: "h5" });
-    user.nickname = dto.nickname || user.nickname;
+    else if (dto.nickname && !user.nickname) user.nickname = dto.nickname;
     user.lastLoginChannel = "h5";
     user.lastLoginAt = new Date();
     const saved = await this.users.save(user);
