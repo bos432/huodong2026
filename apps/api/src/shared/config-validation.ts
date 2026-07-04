@@ -6,6 +6,8 @@ export type RuntimeConfigCheck = {
   key: string;
   label: string;
   status: RuntimeConfigCheckStatus;
+  resolution?: "blocking" | "before_launch" | "optional";
+  resolutionText?: string;
   message: string;
   value?: string;
 };
@@ -18,6 +20,9 @@ export type RuntimeConfigInspection = {
     okCount: number;
     warningCount: number;
     errorCount: number;
+    blockingCount: number;
+    beforeLaunchCount: number;
+    optionalCount: number;
   };
   checks: RuntimeConfigCheck[];
 };
@@ -66,17 +71,65 @@ export function inspectRuntimeConfig(config: ConfigService): RuntimeConfigInspec
   addNumberCheck(checks, "OFFLINE_PAYMENT_EXPIRE_MINUTES", "线下付款有效期", Number(config.get("OFFLINE_PAYMENT_EXPIRE_MINUTES", 1440)), 5, 43200, "分钟");
   addWorkerCheck(checks, config, isProduction);
 
+  const annotatedChecks = checks.map((check) => annotateCheck(check, environment));
   const summary = {
-    okCount: checks.filter((check) => check.status === "ok").length,
-    warningCount: checks.filter((check) => check.status === "warning").length,
-    errorCount: checks.filter((check) => check.status === "error").length
+    okCount: annotatedChecks.filter((check) => check.status === "ok").length,
+    warningCount: annotatedChecks.filter((check) => check.status === "warning").length,
+    errorCount: annotatedChecks.filter((check) => check.status === "error").length,
+    blockingCount: annotatedChecks.filter((check) => check.resolution === "blocking").length,
+    beforeLaunchCount: annotatedChecks.filter((check) => check.resolution === "before_launch").length,
+    optionalCount: annotatedChecks.filter((check) => check.resolution === "optional").length
   };
   const status: RuntimeConfigCheckStatus = summary.errorCount > 0 ? "error" : summary.warningCount > 0 ? "warning" : "ok";
-  return { status, environment, checkedAt: new Date().toISOString(), summary, checks };
+  return { status, environment, checkedAt: new Date().toISOString(), summary, checks: annotatedChecks };
 }
 
 function addCheck(checks: RuntimeConfigCheck[], key: string, label: string, status: RuntimeConfigCheckStatus, message: string, value?: string) {
   checks.push({ key, label, status, message, value });
+}
+
+const optionalWarningKeys = new Set([
+  "SMS_PROVIDER_ENABLED",
+  "EMAIL_PROVIDER_ENABLED",
+  "WECHAT_MESSAGE_PROVIDER_ENABLED",
+  "ORDER_CLOSE_WORKER_ENABLED",
+  "NOTIFICATION_SCHEDULE_WORKER_ENABLED",
+  "H5_SMS_PROVIDER"
+]);
+
+const productionRequiredKeys = new Set([
+  "NODE_ENV",
+  "JWT_SECRET",
+  "DB_PASSWORD",
+  "DB_SYNCHRONIZE",
+  "CORS_ORIGIN",
+  "PUBLIC_H5_ORIGIN",
+  "PUBLIC_ADMIN_ORIGIN",
+  "PUBLIC_API_ORIGIN",
+  "SECURITY_HEADERS_ENABLED",
+  "SECURITY_HSTS_ENABLED",
+  "VALIDATION_FORBID_NON_WHITELISTED",
+  "ACCESS_LOG_ENABLED",
+  "TRUST_PROXY",
+  "PAYMENT_SANDBOX_ENABLED",
+  "H5_AUTH_MODE",
+  "H5_AUTH_SECRET"
+]);
+
+function annotateCheck(check: RuntimeConfigCheck, environment: string): RuntimeConfigCheck {
+  if (check.status === "error") {
+    return { ...check, resolution: "blocking", resolutionText: "必须修复" };
+  }
+  if (check.status === "ok") {
+    return check;
+  }
+  if (optionalWarningKeys.has(check.key)) {
+    return { ...check, resolution: "optional", resolutionText: "按需确认" };
+  }
+  if (environment !== "production" && productionRequiredKeys.has(check.key)) {
+    return { ...check, resolution: "before_launch", resolutionText: "生产上线前处理" };
+  }
+  return { ...check, resolution: "before_launch", resolutionText: "上线前确认" };
 }
 
 function isPlaceholderValue(value?: string) {

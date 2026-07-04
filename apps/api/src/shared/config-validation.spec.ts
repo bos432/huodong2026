@@ -110,6 +110,14 @@ describe("runtime config validation", () => {
     expect(report.checks.find((check) => check.key === "SMS_PROVIDER_ENABLED")?.status).toBe("ok");
   });
 
+  it("separates optional warnings from blocking production errors", () => {
+    const report = inspectRuntimeConfig(config({ NODE_ENV: "production" }));
+    expect(report.summary.errorCount).toBeGreaterThan(0);
+    expect(report.summary.blockingCount).toBe(report.summary.errorCount);
+    expect(report.checks.find((check) => check.key === "SMS_PROVIDER_ENABLED")?.resolution).toBe("optional");
+    expect(report.summary.optionalCount).toBeGreaterThan(0);
+  });
+
   it("marks notification force fail as an error in production", () => {
     const report = inspectRuntimeConfig(config({ NODE_ENV: "production", NOTIFICATION_FORCE_FAIL: "true" }));
     const item = report.checks.find((check) => check.key === "NOTIFICATION_FORCE_FAIL");

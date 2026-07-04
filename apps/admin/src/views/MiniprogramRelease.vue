@@ -53,6 +53,15 @@ const readiness = computed(() => [
   { label: "构建目录", ok: Boolean(form.projectPath), hint: "默认读取 apps/mobile/dist/build/mp-weixin，发布前先构建小程序。" }
 ]);
 
+const acceptanceChecklist = [
+  "未登录进入“我的”后，可以返回首页、活动页和管理端入口",
+  "首次获取头像昵称后，第二次登录不再强制重复获取",
+  "活动详情可报名，报名成功后流程提示清晰",
+  "报名详情可查看签到码/签到二维码",
+  "手机管理端可保存草稿、发布活动，并能看到错误提示",
+  "签到员可扫码或输入签到码完成核销"
+];
+
 const latestQrCode = computed(() => logs.value.find((item) => item.qrCodeUrl)?.qrCodeUrl || "");
 
 const actionLabels: Record<string, string> = {
@@ -247,6 +256,22 @@ onMounted(load);
           <el-empty v-else description="上传体验版后显示二维码" />
         </div>
       </div>
+
+      <div class="card checklist-card">
+        <h3>体验版验收清单</h3>
+        <el-alert
+          type="info"
+          :closable="false"
+          show-icon
+          title="上传体验版后，先按清单验收，再提交微信审核。"
+        />
+        <div class="checklist">
+          <div v-for="(item, index) in acceptanceChecklist" :key="item" class="check-item">
+            <span>{{ index + 1 }}</span>
+            <p>{{ item }}</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -286,9 +311,15 @@ onMounted(load);
 .qr-box { min-height: 260px; display: grid; place-items: center; margin-top: 16px; padding: 16px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; }
 .qr-box img { width: 220px; height: 220px; object-fit: contain; background: #fff; border-radius: 8px; }
 .qr-box span { color: #64748b; font-size: 13px; }
+.checklist-card { grid-column: 2; }
+.checklist { display: grid; gap: 10px; margin-top: 12px; }
+.check-item { display: grid; grid-template-columns: 26px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+.check-item span { width: 24px; height: 24px; display: grid; place-items: center; border-radius: 999px; background: #0f766e; color: #fff; font-size: 12px; font-weight: 800; }
+.check-item p { margin: 1px 0 0; color: #334155; font-size: 13px; line-height: 1.5; }
 .detail-json { margin: 0; padding: 12px; border-radius: 8px; background: #0f172a; color: #e2e8f0; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 1200px) {
   .readiness { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .layout { grid-template-columns: 1fr; }
+  .checklist-card { grid-column: auto; }
 }
 </style>

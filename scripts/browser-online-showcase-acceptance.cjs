@@ -32,7 +32,9 @@ const WEB_BASE = (process.env.WEB_BASE || "http://127.0.0.1:18080").replace(/\/$
 const API_BASE = (process.env.API_BASE || `${WEB_BASE}/api`).replace(/\/$/, "");
 const TENANT_CODE = process.env.TENANT_CODE || "qiwai-showcase";
 const SHOWCASE_PASSWORD = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
-const ADMIN_PASSWORD = process.env.SHOWCASE_ADMIN_PASSWORD || "Admin123456";
+const PLATFORM_ADMIN_USERNAME = process.env.PLATFORM_ADMIN_USERNAME || "admin";
+const PLATFORM_ADMIN_PASSWORD = process.env.PLATFORM_ADMIN_PASSWORD || process.env.SHOWCASE_ADMIN_PASSWORD || "";
+const RUN_PLATFORM_ADMIN = process.env.ACCEPTANCE_SKIP_PLATFORM_ADMIN === "true" ? false : Boolean(PLATFORM_ADMIN_PASSWORD);
 const H5_LOGIN_MODE = process.env.H5_LOGIN_MODE || (WEB_BASE.startsWith("https://rd.chaimen666.com") ? "password" : "code");
 const H5_SMS_CODE = process.env.H5_SMS_CODE || "";
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -315,7 +317,6 @@ async function h5VerifyCheckedIn(h5) {
 
 async function runRoleMatrix(browser) {
   const roles = [
-    { username: "admin", password: ADMIN_PASSWORD, label: "平台超管", allowed: [{ route: "/tenants", text: "商家" }, { route: "/system-settings", text: "系统设置" }, { route: "/miniprogram-release", text: "小程序" }] },
     { username: "showcase_admin", password: SHOWCASE_PASSWORD, label: "商家管理员", allowed: [{ route: "/marketing-popups", text: "营销弹窗" }, { route: "/ad-center", text: "广告中心" }, { route: "/homepage-builder", text: "首页装修" }, { route: "/members", text: "会员" }] },
     { username: "showcase_ops", password: SHOWCASE_PASSWORD, label: "运营", allowed: [{ route: "/activities", text: "活动" }, { route: "/registrations", text: "报名" }, { route: "/marketing-popups", text: "营销弹窗" }] },
     { username: "showcase_finance", password: SHOWCASE_PASSWORD, label: "财务", allowed: [{ route: "/orders", text: "订单" }, { route: "/finance", text: "财务" }], denied: ["/marketing-popups"] },
@@ -324,6 +325,11 @@ async function runRoleMatrix(browser) {
     { username: "showcase_store_finance", password: SHOWCASE_PASSWORD, label: "店铺财务", allowed: [{ route: "/mall-orders", text: "商城订单" }, { route: "/mall-settlements", text: "结算" }], denied: ["/mall-products"] },
     { username: "showcase_agent_owner", password: SHOWCASE_PASSWORD, label: "代理负责人", allowed: [{ route: "/agent-settlements", text: "代理" }, { route: "/mall-orders", text: "商城订单" }], denied: ["/mall-products"] }
   ];
+  if (RUN_PLATFORM_ADMIN) {
+    roles.unshift({ username: PLATFORM_ADMIN_USERNAME, password: PLATFORM_ADMIN_PASSWORD, label: "平台超管", allowed: [{ route: "/tenants", text: "商家" }, { route: "/system-settings", text: "系统设置" }, { route: "/miniprogram-release", text: "小程序" }] });
+  } else {
+    record("角色浏览器权限：平台超管", "warning", { note: "未提供 PLATFORM_ADMIN_PASSWORD，已跳过平台超管浏览器验收。" });
+  }
 
   for (const role of roles) {
     const { context, page } = await loginAdminUi(browser, role.username, role.password);
@@ -380,13 +386,17 @@ async function runFeaturePages(browser) {
 
   await context.close();
 
-  const { context: platformContext, page: platformPage } = await loginAdminUi(browser, "admin", ADMIN_PASSWORD);
-  await gotoAdmin(platformPage, "/system-settings");
-  await clickText(platformPage, "部署配置");
-  await waitForBodyText(platformPage, ["短信 SDK AppID", "Admin 静态包", "H5 静态包"], "system settings version and sms cards");
-  await screenshot(platformPage, "feature-05-system-settings-version-sms.png");
-  record("系统设置版本与短信配置卡片", "passed", { screenshot: "feature-05-system-settings-version-sms.png" });
-  await platformContext.close();
+  if (RUN_PLATFORM_ADMIN) {
+    const { context: platformContext, page: platformPage } = await loginAdminUi(browser, PLATFORM_ADMIN_USERNAME, PLATFORM_ADMIN_PASSWORD);
+    await gotoAdmin(platformPage, "/system-settings");
+    await clickText(platformPage, "部署配置");
+    await waitForBodyText(platformPage, ["短信 SDK AppID", "Admin 静态包", "H5 静态包"], "system settings version and sms cards");
+    await screenshot(platformPage, "feature-05-system-settings-version-sms.png");
+    record("系统设置版本与短信配置卡片", "passed", { screenshot: "feature-05-system-settings-version-sms.png" });
+    await platformContext.close();
+  } else {
+    record("系统设置版本与短信配置卡片", "warning", { note: "未提供 PLATFORM_ADMIN_PASSWORD，已跳过平台设置浏览器验收。" });
+  }
 
   const h5Context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const h5Page = await h5Context.newPage();

@@ -9,6 +9,8 @@ type ConfigCheck = {
   key: string;
   label: string;
   status: CheckStatus;
+  resolution?: "blocking" | "before_launch" | "optional";
+  resolutionText?: string;
   message: string;
   value?: string;
 };
@@ -26,6 +28,9 @@ type ConfigInspection = {
     okCount: number;
     warningCount: number;
     errorCount: number;
+    blockingCount?: number;
+    beforeLaunchCount?: number;
+    optionalCount?: number;
   };
   checks: ConfigCheck[];
 };
@@ -91,6 +96,7 @@ function formatTime(value?: string) {
 }
 
 function statusLabel(row: ConfigCheck) {
+  if (row.resolutionText) return row.resolutionText;
   if (row.status !== "warning") return statusText[row.status];
   if (optionalProviderKeys.has(row.key)) return "按需启用";
   if (report.value?.environment !== "production" && productionRequiredKeys.has(row.key)) return "生产必须处理";
@@ -189,7 +195,15 @@ onMounted(load);
       </div>
       <div class="summary-card error">
         <span>需修复</span>
-        <strong>{{ report.summary.errorCount }}</strong>
+        <strong>{{ report.summary.blockingCount ?? report.summary.errorCount }}</strong>
+      </div>
+      <div class="summary-card warning">
+        <span>上线前确认</span>
+        <strong>{{ report.summary.beforeLaunchCount ?? report.summary.warningCount }}</strong>
+      </div>
+      <div class="summary-card">
+        <span>按需确认</span>
+        <strong>{{ report.summary.optionalCount ?? 0 }}</strong>
       </div>
       <div class="summary-card">
         <span>检查时间</span>

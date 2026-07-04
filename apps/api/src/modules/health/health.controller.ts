@@ -43,6 +43,10 @@ export class HealthController {
       api: "up",
       database,
       config: configInspection.status,
+      configSummary: configInspection.summary,
+      configWarnings: configInspection.checks
+        .filter((check) => check.status !== "ok")
+        .map((check) => ({ key: check.key, status: check.status, resolution: check.resolution, label: check.label })),
       release: this.releaseInfo(),
       uptimeSeconds: this.uptimeSeconds(),
       time: new Date().toISOString()
