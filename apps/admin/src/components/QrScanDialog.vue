@@ -28,7 +28,7 @@ onMounted(async () => {
       () => {}
     );
   } catch (err: any) {
-    error.value = err?.message || "???????";
+    error.value = err?.message || "摄像头启动失败，请检查浏览器权限";
     scanning.value = false;
   }
 });
@@ -57,17 +57,17 @@ onUnmounted(() => {
   <div v-if="visible" class="scan-mask" @click.self="close">
     <div class="scan-dialog">
       <div class="scan-header">
-        <strong>????</strong>
-        <span class="scan-close" @click="close">??</span>
+        <strong>扫码核销</strong>
+        <span class="scan-close" @click="close">关闭</span>
       </div>
       <div class="scan-body">
         <div v-if="error" class="scan-error">{{ error }}</div>
-        <div v-else-if="!scanning" class="scan-error">??????…</div>
+        <div v-else-if="!scanning" class="scan-error">正在启动摄像头...</div>
         <div :id="scannerId" class="scanner-frame" />
-        <p class="scan-hint">???????????????</p>
+        <p class="scan-hint">请将用户报名详情里的签到二维码放入取景框，识别后会自动核销。</p>
       </div>
       <div class="scan-footer">
-        <span class="scan-link" @click="handleManualEntry">????</span>
+        <span class="scan-link" @click="handleManualEntry">手动输入签到码</span>
       </div>
     </div>
   </div>
