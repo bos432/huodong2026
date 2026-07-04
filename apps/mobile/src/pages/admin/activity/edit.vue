@@ -11,6 +11,9 @@ const id = ref(0);
 const step = ref(0);
 const loading = ref(true);
 const saving = ref(false);
+const actionNotice = ref("");
+const actionNoticeTone = ref<"info" | "success" | "error">("info");
+const actionBusyLabel = ref("");
 const bootstrap = ref<any>(null);
 const form = ref<any>(defaultForm());
 const fields = ref<FieldDraft[]>([defaultField()]);
@@ -44,6 +47,13 @@ const saveActionLabel = computed(() => {
 });
 const showPublishAction = computed(() => form.value.status !== ActivityStatus.Open && form.value.status !== ActivityStatus.PendingApproval);
 const compliance = computed(() => checkActivityContentCompliance({ title: form.value.title, description: form.value.description, notice: form.value.notice, sections: sections.value }));
+
+function showActionNotice(message: string, tone: "info" | "success" | "error" = "error", targetStep?: number) {
+  actionNotice.value = message;
+  actionNoticeTone.value = tone;
+  if (typeof targetStep === "number") step.value = targetStep;
+  uni.showToast({ title: message.length > 28 ? `${message.slice(0, 27)}...` : message, icon: tone === "success" ? "success" : "none" });
+}
 
 function defaultForm() {
   const now = new Date();
@@ -206,26 +216,30 @@ function payload(status: ActivityStatus) {
 }
 
 function validateBeforeSave(targetStatus: ActivityStatus) {
-  if (!canWriteActivities.value) return "当前账号没有活动保存权限";
-  if (canSelectTenant.value && !form.value.tenantId) return "平台超级管理员发布活动前必须选择商家";
-  if (!form.value.title.trim()) return "请填写活动标题";
-  if (!form.value.description.trim()) return "请填写活动介绍";
-  if (!form.value.location.trim()) return "请填写活动地点";
-  if (!fields.value.length || fields.value.some((field) => !field.label.trim())) return "请完善报名字段";
-  if (targetStatus !== ActivityStatus.Draft && sections.value.some((section) => !section.title.trim() || !section.content.trim())) return "请完善详情模块标题和内容";
-  if (!compliance.value.passed) return compliance.value.blockingIssues[0]?.message || "活动内容存在合规风险";
-  if (targetStatus === ActivityStatus.Open && !canDirectOpen.value && form.value.status !== ActivityStatus.Open) return "当前商家活动发布需要平台审核，请先提交审核";
-  return "";
+  if (!canWriteActivities.value) return { message: "当前账号没有活动保存权限，请换运营/超级管理员账号登录。", step: 3 };
+  if (canSelectTenant.value && !form.value.tenantId) return { message: "平台超级管理员发布活动前必须选择商家。", step: 0 };
+  if (!form.value.title.trim()) return { message: "请填写活动标题。", step: 0 };
+  if (!form.value.description.trim()) return { message: "请填写活动介绍。", step: 0 };
+  if (!form.value.location.trim()) return { message: "请填写活动地点。", step: 0 };
+  if (!fields.value.length || fields.value.some((field) => !field.label.trim())) return { message: "请完善报名字段。", step: 1 };
+  if (targetStatus !== ActivityStatus.Draft && sections.value.some((section) => !section.title.trim() || !section.content.trim())) return { message: "发布前请完善详情模块标题和内容。", step: 2 };
+  if (!compliance.value.passed) return { message: compliance.value.blockingIssues[0]?.message || "活动内容存在合规风险。", step: 3 };
+  if (targetStatus === ActivityStatus.Open && !canDirectOpen.value && form.value.status !== ActivityStatus.Open) return { message: "当前商家活动发布需要平台审核，请点击提交审核。", step: 3 };
+  return null;
 }
 
 async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
   if (saving.value) return null;
-  const message = validateBeforeSave(targetStatus);
-  if (message) {
-    uni.showToast({ title: message, icon: "none" });
+  const validation = validateBeforeSave(targetStatus);
+  if (validation) {
+    showActionNotice(validation.message, "error", validation.step);
     return null;
   }
   saving.value = true;
+  actionBusyLabel.value = targetStatus === ActivityStatus.Open ? "发布中..." : "保存中...";
+  actionNotice.value = actionBusyLabel.value;
+  actionNoticeTone.value = "info";
+  uni.showLoading({ title: actionBusyLabel.value, mask: true });
   try {
     const data = payload(targetStatus);
     const saved = id.value
@@ -234,13 +248,15 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
     id.value = saved.id;
     const previousStatus = form.value.status;
     form.value.status = saved.status || targetStatus;
-    uni.showToast({ title: targetStatus === ActivityStatus.Open && previousStatus !== ActivityStatus.Open ? "已发布" : "已保存", icon: "success" });
+    showActionNotice(targetStatus === ActivityStatus.Open && previousStatus !== ActivityStatus.Open ? "已发布" : "已保存", "success");
     if (redirectAfterSave) setTimeout(() => uni.redirectTo({ url: `/pages/admin/activity/edit?id=${saved.id}` }), 350);
     return saved;
   } catch (err: any) {
-    uni.showToast({ title: err.message || "保存失败", icon: "none" });
+    showActionNotice(err.message || "保存失败，请稍后重试。", "error");
     return null;
   } finally {
+    uni.hideLoading();
+    actionBusyLabel.value = "";
     saving.value = false;
   }
 }
@@ -253,22 +269,40 @@ async function submitApproval() {
   }
   const message = validateBeforeSave(ActivityStatus.PendingApproval);
   if (message) {
-    uni.showToast({ title: message, icon: "none" });
+    showActionNotice(message.message, "error", message.step);
     return;
   }
   const saved = await save(ActivityStatus.Draft, false);
   if (!saved) return;
   if (saved.status === ActivityStatus.PendingApproval || saved.status === ActivityStatus.Open) return;
   saving.value = true;
+  actionBusyLabel.value = "提交中...";
+  actionNotice.value = "提交审核中...";
+  actionNoticeTone.value = "info";
+  uni.showLoading({ title: "提交中...", mask: true });
   try {
     await mobileAdminRequest(`/admin/activities/${id.value}/submit-approval`, { method: "POST" });
-    uni.showToast({ title: "已提交审核", icon: "success" });
+    showActionNotice("已提交审核", "success");
     await loadActivity();
   } catch (err: any) {
-    uni.showToast({ title: err.message || "提交失败", icon: "none" });
+    showActionNotice(err.message || "提交失败，请稍后重试。", "error");
   } finally {
+    uni.hideLoading();
+    actionBusyLabel.value = "";
     saving.value = false;
   }
+}
+
+function handleSaveTap() {
+  void save(saveTargetStatus.value);
+}
+
+function handlePublishTap() {
+  void save(ActivityStatus.Open);
+}
+
+function handleSubmitApprovalTap() {
+  void submitApproval();
 }
 
 function preview() {
@@ -449,12 +483,13 @@ onMounted(load);
       </view>
     </template>
 
+    <view class="action-notice" v-if="actionNotice" :class="actionNoticeTone">{{ actionNotice }}</view>
     <view class="bottom" :class="{ compact: !showPublishAction }">
-      <view class="ghost" @click="step = Math.max(step - 1, 0)">上一步</view>
-      <view class="ghost" @click="step = Math.min(step + 1, steps.length - 1)">下一步</view>
-      <view class="save" :class="{ disabled: saving || !canWriteActivities }" @click="save(saveTargetStatus)">{{ saveActionLabel }}</view>
-      <view v-if="canDirectOpen && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @click="save(ActivityStatus.Open)">发布</view>
-      <view v-else-if="canSubmitApproval && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @click="submitApproval">提交审核</view>
+      <view class="ghost" @tap="step = Math.max(step - 1, 0)">上一步</view>
+      <view class="ghost" @tap="step = Math.min(step + 1, steps.length - 1)">下一步</view>
+      <view class="save" :class="{ disabled: saving || !canWriteActivities }" @tap="handleSaveTap">{{ actionBusyLabel || saveActionLabel }}</view>
+      <view v-if="canDirectOpen && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @tap="handlePublishTap">{{ actionBusyLabel || "发布" }}</view>
+      <view v-else-if="canSubmitApproval && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @tap="handleSubmitApprovalTap">{{ actionBusyLabel || "提交审核" }}</view>
     </view>
   </view>
 </template>
@@ -502,6 +537,10 @@ onMounted(load);
 .bad, .issue { color: #b42318; }
 .issue { margin-top: 14rpx; padding: 16rpx; border-radius: 18rpx; background: #fff1f3; font-size: 24rpx; line-height: 1.5; }
 .link { margin-top: 22rpx; padding: 18rpx; border-radius: 18rpx; background: #e6f2ef; color: #0f766e; text-align: center; font-size: 25rpx; font-weight: 900; }
+.action-notice { position: fixed; left: 18rpx; right: 18rpx; bottom: calc(116rpx + env(safe-area-inset-bottom)); z-index: 9; padding: 16rpx 18rpx; border-radius: 18rpx; font-size: 24rpx; font-weight: 900; line-height: 1.45; box-shadow: 0 12rpx 28rpx rgba(91,47,36,.12); }
+.action-notice.info { background: #eff6ff; color: #175cd3; }
+.action-notice.success { background: #ecfdf3; color: #067647; }
+.action-notice.error { background: #fff1f3; color: #b42318; }
 .bottom { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1.25fr; gap: 10rpx; padding: 16rpx 18rpx calc(16rpx + env(safe-area-inset-bottom)); background: rgba(255,252,247,.96); border-top: 1rpx solid rgba(91, 47, 36, 0.08); box-shadow: 0 -12rpx 34rpx rgba(91,47,36,.12); backdrop-filter: blur(16px); }
 .bottom.compact { grid-template-columns: 1fr 1fr 1.25fr; }
 .bottom view { min-height: 76rpx; display: flex; align-items: center; justify-content: center; border-radius: 20rpx; font-size: 25rpx; font-weight: 900; }
