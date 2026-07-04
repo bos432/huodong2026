@@ -2106,7 +2106,7 @@ export class PublicService {
       refundInstructions: "如需取消报名或申请退款，请先联系主办方客服。已签到或活动开始后的退款规则以活动报名须知为准。",
       invoiceInstructions: "如需发票，请在付款后联系客服登记抬头、税号和接收邮箱。",
       smsProviderEnabled: false,
-      smsProvider: "tencent-cloud-sms",
+      smsProvider: "luosimao-sms",
       smsAccessKeyId: null,
       smsAccessKeySecret: null,
       smsSignName: null,

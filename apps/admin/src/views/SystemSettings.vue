@@ -158,7 +158,7 @@ const form = reactive({
   refundInstructions: "",
   invoiceInstructions: "",
   smsProviderEnabled: false,
-  smsProvider: "tencent-cloud-sms",
+  smsProvider: "luosimao-sms",
   smsAccessKeyId: "",
   smsAccessKeySecret: "",
   smsSignName: "",
@@ -196,7 +196,7 @@ const deployment = reactive({
   backupRetentionDays: 30,
   h5AuthMode: "sms",
   smsEnabled: true,
-  smsProvider: "tencent-cloud-sms",
+  smsProvider: "luosimao-sms",
   smsAccessKeyId: "",
   smsAccessKeySecret: "",
   smsSignName: "",
@@ -320,6 +320,13 @@ const generatedEnv = computed(() => {
     envLine("PUBLIC_API_ORIGIN", deployment.apiOrigin),
     envLine("UPLOAD_DIR", deployment.uploadDir),
     envLine("H5_AUTH_MODE", deployment.h5AuthMode),
+    envLine("SMS_PROVIDER_ENABLED", boolValue(deployment.smsEnabled)),
+    envLine("SMS_PROVIDER", deployment.smsProvider),
+    envLine("SMS_ACCESS_KEY_ID", deployment.smsAccessKeyId),
+    envLine("SMS_ACCESS_KEY_SECRET", deployment.smsAccessKeySecret),
+    envLine("SMS_SIGN_NAME", deployment.smsSignName),
+    envLine("SMS_TEMPLATE_ID", deployment.smsTemplateId),
+    envLine("SMS_SDK_APP_ID", deployment.smsSdkAppId),
     envLine("EMAIL_PROVIDER_ENABLED", boolValue(deployment.emailEnabled)),
     envLine("EMAIL_PROVIDER", deployment.emailProvider),
     envLine("SMTP_HOST", deployment.smtpHost),
@@ -454,14 +461,7 @@ const configGroups = computed(() => {
 });
 
 const notificationReadiness = computed<NotificationReadiness[]>(() => [
-  buildNotificationReadiness("sms", "短信验证码", deployment.smsEnabled, "H5 手机号验证码依赖短信通道，上线前必须确认签名和模板已审核。", [
-    ["smsProvider", "SMS_PROVIDER"],
-    ["smsAccessKeyId", "SMS_ACCESS_KEY_ID"],
-    ["smsAccessKeySecret", "SMS_ACCESS_KEY_SECRET"],
-    ["smsSignName", "SMS_SIGN_NAME"],
-    ["smsTemplateId", "SMS_TEMPLATE_ID"],
-    ["smsSdkAppId", "SMS_SDK_APP_ID"]
-  ]),
+  buildSmsNotificationReadiness(),
   buildNotificationReadiness("email", "邮件通知", deployment.emailEnabled, "用于邮件通知和后续运营触达；不开启时不会阻塞 H5 验证码。", [
     ["emailProvider", "EMAIL_PROVIDER"],
     ["smtpHost", "SMTP_HOST"],
@@ -1322,6 +1322,37 @@ function downloadGeneratedEnv() {
   URL.revokeObjectURL(url);
 }
 
+function buildSmsNotificationReadiness(): NotificationReadiness {
+  const description = deployment.smsProvider === "luosimao-sms"
+    ? "H5 手机号验证码依赖短信通道；螺丝帽需确认 API Key、短信签名和账户余额。"
+    : "H5 手机号验证码依赖短信通道；腾讯云需确认签名、模板和 SDK AppID 已审核。";
+  if (!deployment.smsEnabled) return { key: "sms", label: "短信验证码", enabled: false, status: "disabled", statusText: "已关闭", description, missing: [] };
+  const missing: string[] = [];
+  if (!hasDeploymentValue("smsProvider")) missing.push("SMS_PROVIDER");
+  if (!hasDeploymentValue("smsSignName")) missing.push("SMS_SIGN_NAME");
+  if (deployment.smsProvider === "luosimao-sms") {
+    if (!hasDeploymentValue("smsAccessKeySecret") && !hasDeploymentValue("smsAccessKeyId")) missing.push("SMS_ACCESS_KEY_SECRET");
+  } else {
+    [
+      ["smsAccessKeyId", "SMS_ACCESS_KEY_ID"],
+      ["smsAccessKeySecret", "SMS_ACCESS_KEY_SECRET"],
+      ["smsTemplateId", "SMS_TEMPLATE_ID"],
+      ["smsSdkAppId", "SMS_SDK_APP_ID"]
+    ].forEach(([field, envKey]) => {
+      if (!hasDeploymentValue(field as keyof typeof deployment)) missing.push(envKey);
+    });
+  }
+  return {
+    key: "sms",
+    label: "短信验证码",
+    enabled: true,
+    status: missing.length ? "missing" : "ready",
+    statusText: missing.length ? "缺配置" : "已就绪",
+    description,
+    missing
+  };
+}
+
 function applyDeploymentConfig(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const input = value as Record<string, unknown>;
@@ -1357,7 +1388,7 @@ async function loadOperation() {
       refundInstructions: data.refundInstructions || "",
       invoiceInstructions: data.invoiceInstructions || "",
       smsProviderEnabled: Boolean(data.smsProviderEnabled),
-      smsProvider: data.smsProvider || "tencent-cloud-sms",
+      smsProvider: data.smsProvider || "luosimao-sms",
       smsAccessKeyId: data.smsAccessKeyId || "",
       smsAccessKeySecret: data.smsAccessKeySecret || "",
       smsSignName: data.smsSignName || "",
@@ -1560,22 +1591,22 @@ onMounted(async () => {
               </div>
             </el-form-item>
             <el-form-item label="短信服务商">
-              <el-input v-model="form.smsProvider" placeholder="tencent-cloud-sms / aliyun-sms" maxlength="80" />
+              <el-input v-model="form.smsProvider" placeholder="luosimao-sms / tencent-cloud-sms" maxlength="80" />
             </el-form-item>
-            <el-form-item label="AccessKey ID">
-              <el-input v-model="form.smsAccessKeyId" maxlength="120" autocomplete="off" />
+            <el-form-item label="短信 Key">
+              <el-input v-model="form.smsAccessKeyId" placeholder="螺丝帽可留空；腾讯云填 SecretId" maxlength="120" autocomplete="off" />
             </el-form-item>
-            <el-form-item label="AccessKey Secret">
-              <el-input v-model="form.smsAccessKeySecret" show-password maxlength="200" autocomplete="new-password" />
+            <el-form-item label="短信 Secret/API Key">
+              <el-input v-model="form.smsAccessKeySecret" placeholder="螺丝帽填完整 API Key，例如 key-xxxx；腾讯云填 SecretKey" show-password maxlength="200" autocomplete="new-password" />
             </el-form-item>
             <el-form-item label="短信签名">
-              <el-input v-model="form.smsSignName" maxlength="100" />
+              <el-input v-model="form.smsSignName" placeholder="填写已审核签名，不带【】" maxlength="100" />
             </el-form-item>
             <el-form-item label="模板 ID">
-              <el-input v-model="form.smsTemplateId" maxlength="120" />
+              <el-input v-model="form.smsTemplateId" placeholder="螺丝帽可留空；腾讯云必填模板 ID" maxlength="120" />
             </el-form-item>
             <el-form-item label="短信 AppID">
-              <el-input v-model="form.smsSdkAppId" placeholder="腾讯云 SmsSdkAppId" maxlength="80" />
+              <el-input v-model="form.smsSdkAppId" placeholder="螺丝帽可留空；腾讯云填 SmsSdkAppId" maxlength="80" />
             </el-form-item>
             <el-form-item label="测试短信">
               <div class="sms-test-row">
@@ -1967,12 +1998,12 @@ onMounted(async () => {
               <div class="deploy-grid">
                 <el-form-item label="登录模式"><el-input v-model="deployment.h5AuthMode" /></el-form-item>
                 <el-form-item label="短信启用"><el-switch v-model="deployment.smsEnabled" /></el-form-item>
-                <el-form-item label="短信服务商"><el-input v-model="deployment.smsProvider" /></el-form-item>
-                <el-form-item label="短信签名"><el-input v-model="deployment.smsSignName" /></el-form-item>
-                <el-form-item label="短信模板 ID"><el-input v-model="deployment.smsTemplateId" /></el-form-item>
-                <el-form-item label="短信 SDK AppID"><el-input v-model="deployment.smsSdkAppId" /></el-form-item>
-                <el-form-item label="短信 Key"><el-input v-model="deployment.smsAccessKeyId" /></el-form-item>
-                <el-form-item label="短信 Secret"><el-input v-model="deployment.smsAccessKeySecret" show-password /></el-form-item>
+                <el-form-item label="短信服务商"><el-input v-model="deployment.smsProvider" placeholder="luosimao-sms / tencent-cloud-sms" /></el-form-item>
+                <el-form-item label="短信签名"><el-input v-model="deployment.smsSignName" placeholder="不带【】" /></el-form-item>
+                <el-form-item label="短信模板 ID"><el-input v-model="deployment.smsTemplateId" placeholder="螺丝帽可留空；腾讯云必填" /></el-form-item>
+                <el-form-item label="短信 SDK AppID"><el-input v-model="deployment.smsSdkAppId" placeholder="螺丝帽可留空；腾讯云必填" /></el-form-item>
+                <el-form-item label="短信 Key"><el-input v-model="deployment.smsAccessKeyId" placeholder="螺丝帽可留空；腾讯云填 SecretId" /></el-form-item>
+                <el-form-item label="短信 Secret/API Key"><el-input v-model="deployment.smsAccessKeySecret" placeholder="螺丝帽填 key-xxxx；腾讯云填 SecretKey" show-password /></el-form-item>
                 <el-form-item label="邮件启用"><el-switch v-model="deployment.emailEnabled" /></el-form-item>
                 <el-form-item label="邮件服务商"><el-input v-model="deployment.emailProvider" /></el-form-item>
                 <el-form-item label="SMTP 主机"><el-input v-model="deployment.smtpHost" /></el-form-item>

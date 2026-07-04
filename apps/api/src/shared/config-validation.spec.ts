@@ -97,6 +97,19 @@ describe("runtime config validation", () => {
     expect(report.checks.find((check) => check.key === "SMS_PROVIDER_ENABLED")?.status).toBe("ok");
   });
 
+  it("marks Luosimao SMS provider ok with API key and sign name", () => {
+    const report = inspectRuntimeConfig(
+      config({
+        NODE_ENV: "production",
+        SMS_PROVIDER_ENABLED: "true",
+        SMS_PROVIDER: "luosimao-sms",
+        SMS_ACCESS_KEY_SECRET: "key-test",
+        SMS_SIGN_NAME: "activity"
+      })
+    );
+    expect(report.checks.find((check) => check.key === "SMS_PROVIDER_ENABLED")?.status).toBe("ok");
+  });
+
   it("marks notification force fail as an error in production", () => {
     const report = inspectRuntimeConfig(config({ NODE_ENV: "production", NOTIFICATION_FORCE_FAIL: "true" }));
     const item = report.checks.find((check) => check.key === "NOTIFICATION_FORCE_FAIL");

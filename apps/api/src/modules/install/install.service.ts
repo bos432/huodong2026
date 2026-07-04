@@ -227,7 +227,7 @@ export class InstallService {
   }
 
   private envValues(dto: InstallerWriteConfigDto, installerEnabled: boolean) {
-    const smsEnabled = Boolean(dto.smsAccessKeyId && dto.smsAccessKeySecret && dto.smsSignName && dto.smsTemplateId);
+    const smsEnabled = Boolean((dto.smsAccessKeySecret || dto.smsAccessKeyId) && dto.smsSignName);
     const wechatPayConfigured = Boolean(dto.wechatPayAppId && dto.wechatPayMchId && dto.wechatPayApiV3Key);
     return {
       NODE_ENV: "production",
@@ -268,7 +268,7 @@ export class InstallService {
       ALIPAY_ENABLED: "false",
       MULTI_TENANT_ENABLED: "false",
       SMS_PROVIDER_ENABLED: smsEnabled ? "true" : "false",
-      SMS_PROVIDER: "tencent-cloud-sms",
+      SMS_PROVIDER: "luosimao-sms",
       SMS_ACCESS_KEY_ID: dto.smsAccessKeyId || "",
       SMS_ACCESS_KEY_SECRET: dto.smsAccessKeySecret || "",
       SMS_SIGN_NAME: dto.smsSignName || "",

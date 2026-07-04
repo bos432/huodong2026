@@ -172,7 +172,7 @@
 - 通知发送记录包含渠道、标题、活动、用户、状态、服务商、重试次数、错误原因和备注。
 - 通知失败记录可重试，重试次数会递增并保留最新错误原因。
 - 如果接入真实短信、邮件或微信订阅消息，需额外验证服务商账号、签名、模板审核、失败重试和发送频控。
-- 生产环境如果设置 `SMS_PROVIDER_ENABLED=true`，建议同步填写 `SMS_PROVIDER`、`SMS_ACCESS_KEY_ID`、`SMS_ACCESS_KEY_SECRET`、`SMS_SIGN_NAME`、`SMS_TEMPLATE_ID` 和 `SMS_SDK_APP_ID`；若凭证放在后台系统设置中，需在上线体检和 H5 验证码实发测试中确认短信通道已就绪。
+- 生产环境如果设置 `SMS_PROVIDER_ENABLED=true`，建议同步填写短信服务商参数；`luosimao-sms` 需要 `SMS_ACCESS_KEY_SECRET=key-xxxx` 和 `SMS_SIGN_NAME`，`SMS_TEMPLATE_ID`、`SMS_SDK_APP_ID` 可留空；`tencent-cloud-sms` 仍需模板 ID 和 SDK AppID。若凭证放在后台系统设置中，需在上线体检和 H5 验证码实发测试中确认短信通道已就绪。
 - 生产环境如果设置 `EMAIL_PROVIDER_ENABLED=true`，需填写 `EMAIL_PROVIDER`、`SMTP_HOST`、`SMTP_PORT`、`SMTP_USER`、`SMTP_PASSWORD` 和 `SMTP_FROM`。
 - 生产环境如果设置 `WECHAT_MESSAGE_PROVIDER_ENABLED=true`，需填写 `WECHAT_MESSAGE_PROVIDER`、`WECHAT_APP_ID` 和 `WECHAT_APP_SECRET`。
 

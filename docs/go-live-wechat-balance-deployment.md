@@ -94,11 +94,11 @@ WECHAT_APP_SECRET=<小程序 secret>
 
 ```env
 SMS_PROVIDER_ENABLED=true
-SMS_PROVIDER=tencent-cloud-sms
-SMS_ACCESS_KEY_ID=<短信 access key>
-SMS_ACCESS_KEY_SECRET=<短信 secret>
+SMS_PROVIDER=luosimao-sms
+SMS_ACCESS_KEY_ID=
+SMS_ACCESS_KEY_SECRET=<螺丝帽 API Key，例如 key-xxxx>
 SMS_SIGN_NAME=<短信签名>
-SMS_TEMPLATE_ID=<验证码模板 ID>
+SMS_TEMPLATE_ID=
 ```
 
 保持关闭：

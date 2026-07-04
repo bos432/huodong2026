@@ -331,7 +331,8 @@ function addH5AuthCheck(checks: RuntimeConfigCheck[], config: ConfigService, str
 
 function addSmsProviderCheck(checks: RuntimeConfigCheck[], config: ConfigService) {
   const envEnabled = config.get("SMS_PROVIDER_ENABLED") === "true";
-  const missing = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"].filter((key) => !config.get<string>(key));
+  const provider = config.get<string>("SMS_PROVIDER", "tencent-cloud-sms");
+  const missing = smsProviderMissingEnvKeys(config, provider);
   if (!envEnabled) {
     addCheck(checks, "SMS_PROVIDER_ENABLED", "短信服务", "warning", "短信服务商参数已改为后台系统设置维护；首次部署可先启动后台再配置。", "后台配置");
     return;
@@ -344,6 +345,17 @@ function addSmsProviderCheck(checks: RuntimeConfigCheck[], config: ConfigService
     missing.length ? `环境变量短信配置不完整：${missing.join(", ")}。建议改到后台系统设置维护，不再作为启动阻断项。` : "环境变量短信配置完整；也可在后台系统设置中维护。",
     missing.length ? "环境变量不完整" : "已配置"
   );
+}
+
+function smsProviderMissingEnvKeys(config: ConfigService, provider: string) {
+  if (provider === "luosimao-sms") {
+    const hasApiKey = Boolean(config.get<string>("SMS_ACCESS_KEY_SECRET") || config.get<string>("SMS_ACCESS_KEY_ID"));
+    return [
+      ...(hasApiKey ? [] : ["SMS_ACCESS_KEY_SECRET"]),
+      ...(!config.get<string>("SMS_SIGN_NAME") ? ["SMS_SIGN_NAME"] : [])
+    ];
+  }
+  return ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"].filter((key) => !config.get<string>(key));
 }
 
 function addH5CodeRateLimitChecks(checks: RuntimeConfigCheck[], config: ConfigService) {
@@ -364,7 +376,7 @@ function addAdminLoginRateLimitChecks(checks: RuntimeConfigCheck[], config: Conf
 function addSmsDbConfigCheck(checks: RuntimeConfigCheck[], config: ConfigService) {
   const enabled = config.get("SMS_PROVIDER_ENABLED") === "true";
   if (enabled) {
-    const missing = ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"].filter((key) => !config.get<string>(key));
+    const missing = smsProviderMissingEnvKeys(config, config.get<string>("SMS_PROVIDER", "tencent-cloud-sms"));
     if (missing.length) return addCheck(checks, "SMS_PROVIDER_ENABLED", "短信服务", "warning", "短信服务商参数已改为后台系统设置维护；首次部署可先启动后台再配置。", "后台配置");
     addCheck(checks, "SMS_PROVIDER_ENABLED", "短信服务", "ok", "短信服务在 .env 中已声明启用，实际使用后台系统设置中的密钥。", "环境变量已声明");
   } else {

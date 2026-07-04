@@ -74,7 +74,8 @@ export class NotificationProviderService {
     const missing = this.missingSms(provider, settings);
     if (missing.length) return this.failed(provider, `短信服务缺少配置：${missing.join(", ")}`);
     if (provider === "tencent-cloud-sms") return this.deliverTencentSms(input, settings);
-    if (provider === "aliyun-sms") return this.failed(provider, "当前版本暂未启用阿里云短信适配，请切换腾讯云短信或补充阿里云适配");
+    if (provider === "luosimao-sms") return this.deliverLuosimaoSms(input, settings);
+    if (provider === "aliyun-sms") return this.failed(provider, "当前版本暂未启用阿里云短信适配，请切换螺丝帽或腾讯云短信");
     return this.failed(provider, `不支持的短信服务商：${provider}`);
   }
 
@@ -139,6 +140,15 @@ export class NotificationProviderService {
 
   private missingSms(provider: string, settings?: SmsProviderSettings | null) {
     if (provider === "mock-sms") return this.canUseMockSms() ? [] : ["SMS_PROVIDER"];
+    if (provider === "luosimao-sms") {
+      const apiKey = this.luosimaoApiKey(settings);
+      const signName = settings?.signName || this.config.get("SMS_SIGN_NAME");
+      const pairs: Array<[string, unknown]> = [
+        ["smsAccessKeySecret", apiKey],
+        ["smsSignName", signName]
+      ];
+      return pairs.filter(([, value]) => !String(value || "").trim()).map(([key]) => key);
+    }
     const keys = provider === "tencent-cloud-sms"
       ? ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID", "SMS_SDK_APP_ID"]
       : ["SMS_ACCESS_KEY_ID", "SMS_ACCESS_KEY_SECRET", "SMS_SIGN_NAME", "SMS_TEMPLATE_ID"];
@@ -191,6 +201,33 @@ export class NotificationProviderService {
     }
   }
 
+  private async deliverLuosimaoSms(input: NotificationDeliveryInput, settings?: SmsProviderSettings | null): Promise<NotificationDeliveryResult> {
+    const apiKey = this.luosimaoApiKey(settings);
+    const phone = this.normalizeMainlandPhone(input.to?.phone || "");
+    const message = this.withChineseSmsSignature(input.content, String(settings?.signName || this.config.get("SMS_SIGN_NAME") || ""));
+    const body = new URLSearchParams({ mobile: phone, message });
+    try {
+      const response = await fetch("https://sms-api.luosimao.com/v1/send.json", {
+        method: "POST",
+        headers: {
+          Authorization: `Basic ${Buffer.from(`api:${apiKey}`).toString("base64")}`,
+          "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body
+      });
+      const payload = await response.json().catch(() => null) as { error?: number | string; msg?: string } | null;
+      if (!response.ok) return this.failed("luosimao-sms", payload?.msg || `螺丝帽短信请求失败：HTTP ${response.status}`);
+      if (Number(payload?.error) !== 0) return this.failed("luosimao-sms", payload?.msg || `螺丝帽短信发送失败：${payload?.error ?? "未知错误"}`);
+      return {
+        status: "sent",
+        provider: "luosimao-sms",
+        providerMessageId: `luosimao_${Date.now()}`
+      };
+    } catch (error: any) {
+      return this.failed("luosimao-sms", error?.message || "螺丝帽短信发送失败");
+    }
+  }
+
   private smsTemplateParams(content: string) {
     const matches = String(content || "").match(/\d+/g) || [];
     const code = matches.find((item) => item.length === 6) || matches[0] || "";
@@ -203,6 +240,21 @@ export class NotificationProviderService {
     if (/^\+\d{8,20}$/.test(text)) return text;
     if (/^1\d{10}$/.test(text)) return `+86${text}`;
     return text;
+  }
+
+  private luosimaoApiKey(settings?: SmsProviderSettings | null) {
+    return String(settings?.accessKeySecret || settings?.accessKeyId || this.config.get("SMS_ACCESS_KEY_SECRET") || this.config.get("SMS_ACCESS_KEY_ID") || "");
+  }
+
+  private normalizeMainlandPhone(phone: string) {
+    return phone.trim().replace(/^\+86/, "");
+  }
+
+  private withChineseSmsSignature(content: string, signName: string) {
+    const text = String(content || "").trim();
+    const sign = signName.trim().replace(/^【/, "").replace(/】$/, "");
+    if (!sign || /【[^】]+】$/.test(text)) return text;
+    return `${text}【${sign}】`;
   }
 
   private canUseMockSms() {
