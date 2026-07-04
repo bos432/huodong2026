@@ -16,7 +16,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const ctx = host.switchToHttp();
     const request = ctx.getRequest<{ requestId?: string; originalUrl?: string; url?: string }>();
     const response = ctx.getResponse();
-    const status = exception instanceof HttpException ? exception.getStatus() : HttpStatus.INTERNAL_SERVER_ERROR;
+    const status = this.httpStatus(exception);
     const exceptionResponse = exception instanceof HttpException ? exception.getResponse() : null;
     const { message, details } = this.normalizeExceptionResponse(exceptionResponse, exception);
     const body: ErrorResponseBody = {
@@ -36,6 +36,15 @@ export class ApiExceptionFilter implements ExceptionFilter {
     response.status(status).json(body);
   }
 
+  private httpStatus(exception: unknown) {
+    if (exception instanceof HttpException) return exception.getStatus();
+    const record = exception && typeof exception === "object" ? (exception as Record<string, unknown>) : {};
+    if (record.type === "entity.too.large") return HttpStatus.PAYLOAD_TOO_LARGE;
+    const statusCode = Number(record.statusCode || record.status || 0);
+    if (statusCode === HttpStatus.PAYLOAD_TOO_LARGE) return HttpStatus.PAYLOAD_TOO_LARGE;
+    return HttpStatus.INTERNAL_SERVER_ERROR;
+  }
+
   private normalizeExceptionResponse(response: unknown, exception: unknown) {
     if (typeof response === "string") return { message: response };
     if (response && typeof response === "object") {
@@ -49,6 +58,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     }
     const databaseMessage = this.normalizeDatabaseExceptionMessage(exception);
     if (databaseMessage) return { message: databaseMessage };
+    if (this.httpStatus(exception) === HttpStatus.PAYLOAD_TOO_LARGE) return { message: "上传内容过大，请压缩图片后重试" };
     if (exception instanceof Error && exception.message) return { message: exception.message };
     return { message: "服务器开小差了，请稍后再试" };
   }

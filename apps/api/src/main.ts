@@ -15,11 +15,18 @@ function installerBootstrapMode(config: ConfigService) {
   return config.get<string>("INSTALLER_ENABLED", "false") === "true" && !fs.existsSync(join(process.cwd(), "runtime", "install.lock"));
 }
 
+function bodyParserLimit(config: ConfigService) {
+  return config.get<string>("BODY_PARSER_LIMIT", "10mb");
+}
+
 async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true, bodyParser: false });
   const config = app.get(ConfigService);
   const installing = installerBootstrapMode(config);
   if (!installing) validateRuntimeConfig(config);
+  const parserLimit = bodyParserLimit(config);
+  app.useBodyParser("json", { limit: parserLimit });
+  app.useBodyParser("urlencoded", { limit: parserLimit, extended: true });
   const origins = config.get<string>("CORS_ORIGIN", "").split(",").filter(Boolean);
   const production = config.get("NODE_ENV") === "production";
   const express = app.getHttpAdapter().getInstance();
