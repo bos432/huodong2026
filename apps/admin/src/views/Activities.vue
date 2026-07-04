@@ -54,12 +54,10 @@ const activityFormSteps = [
 ];
 const activeActivityStep = ref(activityFormSteps[0].name);
 const activeActivityStepIndex = computed(() => Math.max(activityFormSteps.findIndex((item) => item.name === activeActivityStep.value), 0));
-const pageTitle = computed(() => (isPlatformAdmin() ? "活动审核" : "活动管理"));
-const defaultActivityStatus = () => (isPlatformAdmin() ? ActivityStatus.PendingApproval : ActivityStatus.Open);
 const routeStatus = () => {
   const status = typeof route.query.status === "string" ? route.query.status : "";
   if (status === "all") return "";
-  return Object.values(ActivityStatus).includes(status as ActivityStatus) ? (status as ActivityStatus) : defaultActivityStatus();
+  return Object.values(ActivityStatus).includes(status as ActivityStatus) ? (status as ActivityStatus) : "";
 };
 const routeTenantId = () => {
   const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
@@ -77,6 +75,7 @@ const filters = reactive({
 });
 const routeFocusedActivityId = ref<number | undefined>(routeActivityId());
 const activeStatusFilter = computed(() => filters.status);
+const pageTitle = computed(() => (isPlatformAdmin() && filters.status === ActivityStatus.PendingApproval ? "活动审核" : isPlatformAdmin() ? "全部活动" : "活动管理"));
 const pagination = reactive({
   page: 1,
   pageSize: 20,
@@ -261,7 +260,7 @@ function setStatusFilter(status: string) {
 
 function resetFilters() {
   filters.keyword = "";
-  filters.status = defaultActivityStatus();
+  filters.status = "";
   filters.categoryId = undefined;
   filters.tenantId = undefined;
   search();
@@ -714,7 +713,7 @@ onMounted(async () => {
         show-icon
         :closable="false"
         title="平台审核视图"
-        description="这里默认筛选待平台审核活动；可切换状态查看全部商家活动，并对违规活动执行通过、驳回或下架。"
+        description="全部活动默认展示所有商家活动；点击待审核活动或状态标签可筛选，并对违规活动执行通过、驳回或下架。"
       />
       <el-alert
         v-if="!canOperateActivities"
