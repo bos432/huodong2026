@@ -2496,7 +2496,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const tenant = await this.resolveActivityTenant(admin, activity.tenant, dto.tenantId);
     this.assertTenantSubscriptionWritable(tenant, admin);
     const permissions = this.tenantPermissions(tenant);
-    if (dto.requireReview && this.isTenantScoped(admin) && !permissions.registrationReviewEnabled) throw new BadRequestException("当前商家未开启报名审核权限");
+    if (dto.requireReview && tenant && !permissions.registrationReviewEnabled) throw new BadRequestException("当前商家未开启报名审核权限");
     const fromStatus = id ? activity.status : null;
     const nextStatus = this.resolveActivitySaveStatus(dto.status, activity.status, permissions, admin);
 

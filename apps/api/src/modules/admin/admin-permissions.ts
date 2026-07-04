@@ -245,7 +245,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "agent-settlements/export") return "agent_settlement.export";
   if (path.startsWith("agent-settlements")) return "agent_settlement.manage";
   if (path.includes("/refund") || path.startsWith("refunds/")) return "order.refund";
-  if (path.includes("/approve") || path.includes("/reject")) return "activity.approve";
+  if (path.startsWith("activities") && (path.includes("/approve") || path.includes("/reject"))) return "activity.approve";
   if (path.startsWith("activities")) return "activity.manage";
   if (path === "registrations" && verb === "GET") return "registration.view";
   if (path === "registrations/export") return "registration.export";

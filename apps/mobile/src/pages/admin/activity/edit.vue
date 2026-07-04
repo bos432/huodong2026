@@ -25,11 +25,24 @@ const fieldTypes = [
   { label: "备注", value: FieldType.Remark }
 ];
 
+const canWriteActivities = computed(() => Boolean(bootstrap.value?.permissions?.canWriteActivities));
 const canSelectTenant = computed(() => Boolean(bootstrap.value?.permissions?.canSelectTenant));
 const selectedTenant = computed(() => (bootstrap.value?.tenants || []).find((item: any) => item.id === form.value.tenantId));
 const tenantPermissions = computed(() => selectedTenant.value?.settings || bootstrap.value?.admin?.tenant?.settings || {});
 const canSubmitApproval = computed(() => Boolean(bootstrap.value?.admin?.tenantId));
 const canDirectOpen = computed(() => bootstrap.value?.admin?.role === "super_admin" || tenantPermissions.value.activityPublishReviewRequired === false);
+const registrationReviewEnabled = computed(() => tenantPermissions.value.registrationReviewEnabled !== false);
+const saveTargetStatus = computed(() => {
+  if (form.value.status === ActivityStatus.Open) return ActivityStatus.Open;
+  if (form.value.status === ActivityStatus.PendingApproval) return ActivityStatus.PendingApproval;
+  return ActivityStatus.Draft;
+});
+const saveActionLabel = computed(() => {
+  if (form.value.status === ActivityStatus.Open) return "保存上线";
+  if (form.value.status === ActivityStatus.PendingApproval) return "保存待审";
+  return "保存";
+});
+const showPublishAction = computed(() => form.value.status !== ActivityStatus.Open && form.value.status !== ActivityStatus.PendingApproval);
 const compliance = computed(() => checkActivityContentCompliance({ title: form.value.title, description: form.value.description, notice: form.value.notice, sections: sections.value }));
 
 function defaultForm() {
@@ -87,6 +100,10 @@ function numberOrUndefined(value: unknown) {
 }
 
 function setBoolean(key: string, value: boolean) {
+  if (key === "requireReview" && value && !registrationReviewEnabled.value) {
+    uni.showToast({ title: "当前商家未开启报名审核权限", icon: "none" });
+    return;
+  }
   form.value[key] = value;
 }
 
@@ -94,6 +111,7 @@ function pickTenant(e: any) {
   const tenant = (bootstrap.value?.tenants || [])[Number(e.detail.value)];
   if (!tenant) return;
   form.value.tenantId = tenant.id;
+  if (tenant.settings?.registrationReviewEnabled === false) form.value.requireReview = false;
 }
 
 function pickCategory(e: any) {
@@ -166,9 +184,11 @@ function normalizeOptions(text: string) {
 }
 
 function payload(status: ActivityStatus) {
+  const completeSections = sections.value.filter((section) => section.title.trim() && section.content.trim());
   return {
     ...form.value,
     status,
+    requireReview: registrationReviewEnabled.value ? form.value.requireReview : false,
     tenantId: canSelectTenant.value ? numberOrUndefined(form.value.tenantId) : undefined,
     categoryId: numberOrUndefined(form.value.categoryId),
     agentId: numberOrUndefined(form.value.agentId),
@@ -181,22 +201,25 @@ function payload(status: ActivityStatus) {
     priorityRegistrationEndsAt: form.value.priorityMemberLevelId ? form.value.priorityRegistrationEndsAt : undefined,
     fields: fields.value.map((field, index) => ({ label: field.label, type: field.type, required: field.required, options: normalizeOptions(field.optionsText), sortOrder: index + 1 })),
     hosts: hosts.value.filter((host) => host.name.trim()).map((host, index) => ({ ...host, sortOrder: index + 1 })),
-    sections: sections.value.map((section, index) => ({ ...section, type: section.type || "rich_text", sortOrder: index + 1 }))
+    sections: completeSections.map((section, index) => ({ ...section, type: section.type || "rich_text", sortOrder: index + 1 }))
   };
 }
 
 function validateBeforeSave(targetStatus: ActivityStatus) {
+  if (!canWriteActivities.value) return "当前账号没有活动保存权限";
   if (canSelectTenant.value && !form.value.tenantId) return "平台超级管理员发布活动前必须选择商家";
   if (!form.value.title.trim()) return "请填写活动标题";
   if (!form.value.description.trim()) return "请填写活动介绍";
   if (!form.value.location.trim()) return "请填写活动地点";
   if (!fields.value.length || fields.value.some((field) => !field.label.trim())) return "请完善报名字段";
-  if (sections.value.some((section) => !section.title.trim() || !section.content.trim())) return "请完善详情模块标题和内容";
+  if (targetStatus !== ActivityStatus.Draft && sections.value.some((section) => !section.title.trim() || !section.content.trim())) return "请完善详情模块标题和内容";
   if (!compliance.value.passed) return compliance.value.blockingIssues[0]?.message || "活动内容存在合规风险";
+  if (targetStatus === ActivityStatus.Open && !canDirectOpen.value && form.value.status !== ActivityStatus.Open) return "当前商家活动发布需要平台审核，请先提交审核";
   return "";
 }
 
 async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
+  if (saving.value) return null;
   const message = validateBeforeSave(targetStatus);
   if (message) {
     uni.showToast({ title: message, icon: "none" });
@@ -209,7 +232,9 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
       ? await mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data })
       : await mobileAdminRequest<any>("/admin/activities", { method: "POST", data });
     id.value = saved.id;
-    uni.showToast({ title: targetStatus === ActivityStatus.Draft ? "已保存" : "已发布", icon: "success" });
+    const previousStatus = form.value.status;
+    form.value.status = saved.status || targetStatus;
+    uni.showToast({ title: targetStatus === ActivityStatus.Open && previousStatus !== ActivityStatus.Open ? "已发布" : "已保存", icon: "success" });
     if (redirectAfterSave) setTimeout(() => uni.redirectTo({ url: `/pages/admin/activity/edit?id=${saved.id}` }), 350);
     return saved;
   } catch (err: any) {
@@ -221,14 +246,19 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
 }
 
 async function submitApproval() {
-  if (!id.value) {
-    const saved = await save(ActivityStatus.Draft, false);
-    if (!saved) return;
-  }
-  if (!compliance.value.passed) {
-    uni.showToast({ title: compliance.value.blockingIssues[0]?.message || "活动内容存在合规风险", icon: "none" });
+  if (saving.value) return;
+  if (form.value.status === ActivityStatus.Open) {
+    await save(ActivityStatus.Open, false);
     return;
   }
+  const message = validateBeforeSave(ActivityStatus.PendingApproval);
+  if (message) {
+    uni.showToast({ title: message, icon: "none" });
+    return;
+  }
+  const saved = await save(ActivityStatus.Draft, false);
+  if (!saved) return;
+  if (saved.status === ActivityStatus.PendingApproval || saved.status === ActivityStatus.Open) return;
   saving.value = true;
   try {
     await mobileAdminRequest(`/admin/activities/${id.value}/submit-approval`, { method: "POST" });
@@ -282,7 +312,7 @@ async function loadActivity() {
     price: Number(activity.price || 0),
     status: activity.status || ActivityStatus.Draft,
     featured: Boolean(activity.featured),
-    requireReview: Boolean(activity.requireReview),
+    requireReview: registrationReviewEnabled.value ? Boolean(activity.requireReview) : false,
     allowCancel: Boolean(activity.allowCancel),
     categoryId: activity.category?.id,
     agentId: activity.agent?.id,
@@ -363,10 +393,11 @@ onMounted(load);
 
       <view v-show="step === 1" class="panel">
         <view class="toggles">
-          <view :class="{ on: form.requireReview }" @click="setBoolean('requireReview', !form.requireReview)">报名审核</view>
+          <view :class="{ on: form.requireReview, disabled: !registrationReviewEnabled }" @click="setBoolean('requireReview', !form.requireReview)">报名审核</view>
           <view :class="{ on: form.allowCancel }" @click="setBoolean('allowCancel', !form.allowCancel)">允许取消</view>
           <view :class="{ on: form.featured }" @click="setBoolean('featured', !form.featured)">推荐展示</view>
         </view>
+        <view v-if="!registrationReviewEnabled" class="issue">当前商家未开通报名审核权限，活动报名将自动通过或进入付款流程。</view>
         <view class="field">
           <view class="label">报名成功入群二维码</view>
           <view class="hint-line">报名成功后在报名详情页显示，公开活动页只提示入群流程，不直接展示二维码。</view>
@@ -418,12 +449,12 @@ onMounted(load);
       </view>
     </template>
 
-    <view class="bottom">
+    <view class="bottom" :class="{ compact: !showPublishAction }">
       <view class="ghost" @click="step = Math.max(step - 1, 0)">上一步</view>
       <view class="ghost" @click="step = Math.min(step + 1, steps.length - 1)">下一步</view>
-      <view class="save" :class="{ disabled: saving }" @click="save(ActivityStatus.Draft)">保存</view>
-      <view v-if="canDirectOpen" class="publish" :class="{ disabled: saving }" @click="save(ActivityStatus.Open)">发布</view>
-      <view v-else-if="canSubmitApproval" class="publish" :class="{ disabled: saving }" @click="submitApproval">提交审核</view>
+      <view class="save" :class="{ disabled: saving || !canWriteActivities }" @click="save(saveTargetStatus)">{{ saveActionLabel }}</view>
+      <view v-if="canDirectOpen && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @click="save(ActivityStatus.Open)">发布</view>
+      <view v-else-if="canSubmitApproval && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @click="submitApproval">提交审核</view>
     </view>
   </view>
 </template>
@@ -459,6 +490,7 @@ onMounted(load);
 .toggles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12rpx; margin-bottom: 18rpx; }
 .toggles view { height: 68rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #fff4e6; color: #7a5b52; font-size: 24rpx; font-weight: 900; }
 .toggles view.on { background: #e6f2ef; color: #0f766e; }
+.toggles view.disabled { opacity: .55; }
 .section-head, .row, .switch-line, .review-line { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .section-head { margin: 24rpx 0 12rpx; font-size: 28rpx; font-weight: 900; }
 .section-head view:last-child { color: #0f766e; font-size: 24rpx; }
@@ -471,6 +503,7 @@ onMounted(load);
 .issue { margin-top: 14rpx; padding: 16rpx; border-radius: 18rpx; background: #fff1f3; font-size: 24rpx; line-height: 1.5; }
 .link { margin-top: 22rpx; padding: 18rpx; border-radius: 18rpx; background: #e6f2ef; color: #0f766e; text-align: center; font-size: 25rpx; font-weight: 900; }
 .bottom { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1.25fr; gap: 10rpx; padding: 16rpx 18rpx calc(16rpx + env(safe-area-inset-bottom)); background: rgba(255,252,247,.96); border-top: 1rpx solid rgba(91, 47, 36, 0.08); box-shadow: 0 -12rpx 34rpx rgba(91,47,36,.12); backdrop-filter: blur(16px); }
+.bottom.compact { grid-template-columns: 1fr 1fr 1.25fr; }
 .bottom view { min-height: 76rpx; display: flex; align-items: center; justify-content: center; border-radius: 20rpx; font-size: 25rpx; font-weight: 900; }
 .ghost { background: #fff4e6; color: #7a5b52; }
 .save { background: #e6f2ef; color: #0f766e; }

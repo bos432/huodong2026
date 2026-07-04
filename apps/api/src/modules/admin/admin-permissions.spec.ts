@@ -7,6 +7,11 @@ describe("admin route permissions", () => {
     expect(resolveAdminRoutePermission("POST", "refunds/:id/reject")).toBe("order.refund");
   });
 
+  it("maps registration review routes to registration management", () => {
+    expect(resolveAdminRoutePermission("POST", "registrations/:id/approve")).toBe("registration.manage");
+    expect(resolveAdminRoutePermission("POST", "registrations/:id/reject")).toBe("registration.manage");
+  });
+
   it("keeps activity review routes mapped to activity approval", () => {
     expect(resolveAdminRoutePermission("POST", "activities/:id/approve")).toBe("activity.approve");
     expect(resolveAdminRoutePermission("POST", "activities/:id/reject")).toBe("activity.approve");

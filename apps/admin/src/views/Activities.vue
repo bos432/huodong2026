@@ -81,7 +81,13 @@ const pagination = reactive({
   pageSize: 20,
   total: 0
 });
-const registrationReviewEnabled = computed(() => isPlatformAdmin() || currentTenantSettings().registrationReviewEnabled);
+const activityTenantSettings = computed(() => {
+  if (!isPlatformAdmin()) return currentTenantSettings();
+  const tenantId = Number(form.tenantId || form.tenant?.id || 0);
+  const tenant = tenants.value.find((item) => item.id === tenantId) || form.tenant;
+  return tenant?.settings || currentTenantSettings();
+});
+const registrationReviewEnabled = computed(() => activityTenantSettings.value.registrationReviewEnabled !== false);
 const registrationReviewDisabledReason = computed(() =>
   registrationReviewEnabled.value ? "" : "平台未开通本商家的报名审核权限，活动报名将自动通过或进入付款流程。"
 );
