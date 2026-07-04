@@ -1,7 +1,7 @@
+import { API_BASE } from "./api-base";
 import { clientError } from "./error-reporting";
 import { queryFromUrl, queryParam, stringifyQuery } from "./query";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const DEV_PHONE = "13800000001";
 const TENANT_CODE_STORAGE_KEY = "h5_tenant_code";
 const TENANT_CODE_SOURCE_STORAGE_KEY = "h5_tenant_code_source";

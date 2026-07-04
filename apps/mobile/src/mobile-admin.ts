@@ -1,6 +1,5 @@
+import { API_BASE } from "./api-base";
 import { clientError } from "./error-reporting";
-
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 
 const ADMIN_TOKEN_KEY = "mobile_admin_token";
 const ADMIN_ROLE_KEY = "mobile_admin_role";

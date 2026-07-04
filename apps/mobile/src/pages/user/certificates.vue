@@ -27,10 +27,10 @@
 </template>
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
+import { API_BASE } from "../../api-base";
 import { ensureUser, getUserToken, request } from "../../api";
 import TabBar from "../../components/TabBar.vue";
 
-const API_BASE = import.meta.env.VITE_API_BASE || "/api";
 const loading = ref(true);
 const certificates = ref<any[]>([]);
 
