@@ -1,7 +1,7 @@
 <template>
   <view class="container has-custom-nav">
     <view class="page-header">
-      <text class="title-lg">全部课程</text>
+      <text class="title-lg">专题内容</text>
     </view>
 
     <PageDecorationBlocks :sections="decorationSections" />
@@ -17,7 +17,7 @@
     </scroll-view>
 
     <view class="sort-bar">
-      <text class="subtle">共 {{ filteredCourses.length }} 门课</text>
+      <text class="subtle">共 {{ filteredCourses.length }} 项内容</text>
       <view class="sort-options">
         <text
           v-for="opt in sortOptions"
@@ -53,7 +53,7 @@
         </view>
       </view>
     </view>
-    <empty-state v-else icon="📚" text="暂无课程，请先在后台新增并发布课程" />
+    <empty-state v-else icon="📚" text="暂无专题内容，请先在后台新增并发布内容" />
 
     <view style="height:120rpx;"></view>
     <TabBar current="courses" />
@@ -76,7 +76,7 @@ const categories = [
   { key: "国学", label: "国学" },
   { key: "东方哲学", label: "东方哲学" },
   { key: "书法", label: "书法" },
-  { key: "教育", label: "教育" },
+  { key: "亲子沟通", label: "亲子沟通" },
   { key: "健康", label: "健康" },
   { key: "创业", label: "创业" },
   { key: "技能", label: "技能" }
@@ -95,7 +95,7 @@ const error = ref("");
 const allCourses = ref<any[]>([]);
 const { contentSections, loadDecoration } = usePageDecoration("course_home", "/pages/courses/index");
 const decorationSections = computed(() => contentSections.value.filter((section) => {
-  if (section.type === "hero" && section.title === "课程首页") return false;
+  if (section.type === "hero" && section.title === "专题内容") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;
   return true;
 }));
@@ -106,7 +106,7 @@ async function loadCourses() {
   try {
     allCourses.value = await fetchPublishedCourses();
   } catch (err: any) {
-    error.value = err.message || "课程加载失败";
+    error.value = err.message || "内容加载失败";
   } finally {
     loading.value = false;
   }

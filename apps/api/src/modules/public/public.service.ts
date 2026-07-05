@@ -254,7 +254,7 @@ export class PublicService {
   async createCourseOrder(courseId: number, dto: CreateCourseOrderDto, user: User, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     const course = await this.courses.findOne({ where: this.tenantCourseWhere({ id: courseId, status: "published" }, tenant) });
-    if (!course) throw new NotFoundException("课程不存在或未发布");
+    if (!course) throw new NotFoundException("内容不存在或未发布");
     if (await this.hasCourseAccess(user.id, course.id)) {
       return { owned: true, order: null, course: this.publicCourse(course) };
     }
@@ -278,7 +278,7 @@ export class PublicService {
       await this.grantCourseAccess(user, course);
       return { owned: true, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
     }
-    if (paymentMethod !== PaymentMethod.Offline) throw new BadRequestException("课程在线支付暂未接入，请选择线下收款");
+    if (paymentMethod !== PaymentMethod.Offline) throw new BadRequestException("在线支付暂未接入，请选择线下收款");
     await this.assertPaymentMethodEnabled(PaymentMethod.Offline, tenant);
 
     const existing = await this.courseOrders.findOne({
@@ -306,28 +306,28 @@ export class PublicService {
   async courseOrderDetail(orderId: number, user: User, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
-    if (!order) throw new NotFoundException("课程订单不存在");
+    if (!order) throw new NotFoundException("内容订单不存在");
     this.assertCourseTenantAccess(order.course, tenant);
     return { order: this.publicCourseOrder(order), course: this.publicCourse(order.course), owned: await this.hasCourseAccess(user.id, order.course.id) };
   }
 
   async mockPayCourseOrder(orderId: number, dto: MockPayDto, user: User, context?: PublicTenantContext) {
-    this.paymentProvider.assertSandboxAllowed("课程 mock 支付");
+    this.paymentProvider.assertSandboxAllowed("内容 mock 支付");
     const tenant = await this.resolveTenantContext(context);
     const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
-    if (!order) throw new NotFoundException("课程订单不存在");
+    if (!order) throw new NotFoundException("内容订单不存在");
     this.assertCourseTenantAccess(order.course, tenant);
     if (order.status === CourseOrderStatus.Paid) {
       await this.grantCourseAccess(user, order.course);
       return { order: this.publicCourseOrder(order), course: this.publicCourse(order.course), owned: true };
     }
-    if (order.status !== CourseOrderStatus.PendingPayment) throw new BadRequestException("当前课程订单不可支付");
+    if (order.status !== CourseOrderStatus.PendingPayment) throw new BadRequestException("当前内容订单不可支付");
     if (this.isExpiredCourseOrder(order)) {
       order.status = CourseOrderStatus.Closed;
       order.closedAt = new Date();
-      order.closeReason = "课程订单超时关闭";
+      order.closeReason = "内容订单超时关闭";
       await this.courseOrders.save(order);
-      throw new BadRequestException("课程订单已超时，请重新下单");
+      throw new BadRequestException("内容订单已超时，请重新下单");
     }
     order.status = CourseOrderStatus.Paid;
     order.transactionNo = dto.transactionNo || `COURSE-MOCK-${Date.now()}`;
@@ -398,14 +398,14 @@ export class PublicService {
 
   async favoriteCourseState(courseId: number, user: User) {
     const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
-    if (!course) throw new NotFoundException("课程不存在或未发布");
+    if (!course) throw new NotFoundException("内容不存在或未发布");
     const count = await this.userFavorites.count({ where: { userId: user.id, courseId } });
     return { courseId, favorited: count > 0 };
   }
 
   async toggleFavoriteCourse(courseId: number, user: User) {
     const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
-    if (!course) throw new NotFoundException("课程不存在或未发布");
+    if (!course) throw new NotFoundException("内容不存在或未发布");
     const row = await this.userFavorites.findOne({ where: { userId: user.id, courseId } });
     if (row) {
       await this.userFavorites.delete(row.id);
@@ -2377,7 +2377,7 @@ export class PublicService {
   }
 
   private assertCourseTenantAccess(course: Course, tenant?: Tenant | null) {
-    if (tenant && course.tenant?.id !== tenant.id) throw new NotFoundException("课程订单不存在");
+    if (tenant && course.tenant?.id !== tenant.id) throw new NotFoundException("内容订单不存在");
   }
 
   private publicActivity(activity: Activity) {
@@ -2526,7 +2526,7 @@ export class PublicService {
     return {
       heroTitle: "寻找100位“慢π大使”",
       heroSubtitle: "一起用7把钥匙，打开中国人的精神家园",
-      heroCopy: "不用辞职、不用囤货，只需把你的热爱变成课程，平台帮你搞定技术、流量和变现。",
+      heroCopy: "不用辞职、不用囤货，只需把你的热爱变成活动服务，平台帮你梳理运营工具和本地触达。",
       ctaText: "立即申请，锁定早鸟名额",
       originalPrice: "2999",
       earlyBirdPrice: "999",
@@ -2535,34 +2535,34 @@ export class PublicService {
       customerWechat: "",
       customerPhone: "",
       backgroundImageUrl: "",
-      painPoints: ["你在传统文化、书法、教育、健康、创业或技能领域有积累，却缺一个被看见的舞台。", "你试过做内容，但流量不稳定，转化不系统。", "你想把知识做成课程，却被技术、运营和交付卡住。", "你不想只做卖课的人，更想进入一个共创、成长、长期沉淀品牌的圈子。"],
-      solutionItems: ["独立小程序店铺 + 专属H5主页，一键开课。", "平台全域流量扶持，结合城市线下活动导流。", "每月闭门共创会，授课技能训练，关键阶段策略陪跑。", "链接传统文化、书法、教育、健康、创业、技能等领域的共创者。"],
-      benefits: ["官方认证身份：颁发“慢π·特聘文化大使”证书，并获得平台个人品牌展示机会。", "课程收益支持：首批入驻享平台扶持政策，具体规则以审核沟通为准。", "高端私密社群：进入慢π共创圈，资源互换、经验复盘。", "全年赋能陪跑：闭门策略会、线下大课、课程打磨与运营指导。"],
-      requirements: ["有真才实学：在传统文化、东方哲学、民俗文化、书法、教育、健康、创业、技能任一领域有扎实积累。", "有利他之心：愿意分享，愿意帮助他人成长。", "有长期主义：不是来赚快钱，而是想打造个人品牌、沉淀长期资产。"],
+      painPoints: ["你在传统文化、书法、亲子沟通、健康、创业或技能领域有积累，却缺一个被看见的舞台。", "你试过做内容，但流量不稳定，转化不系统。", "你想把内容做成线下活动，却被技术、运营和服务流程卡住。", "你不想只做单次销售，更想进入一个共创、成长、长期沉淀品牌的圈子。"],
+      solutionItems: ["独立小程序店铺 + 专属H5主页，一键发布活动。", "平台全域流量扶持，结合城市线下活动导流。", "每月闭门共创会，表达与服务训练，关键阶段策略陪跑。", "链接传统文化、书法、亲子沟通、健康、创业、技能等领域的共创者。"],
+      benefits: ["官方认证身份：颁发“慢π·特聘文化大使”证书，并获得平台个人品牌展示机会。", "活动收益支持：首批入驻享平台扶持政策，具体规则以审核沟通为准。", "高端私密社群：进入慢π共创圈，资源互换、经验复盘。", "全年赋能陪跑：闭门策略会、线下分享会、活动打磨与运营指导。"],
+      requirements: ["有真才实学：在传统文化、东方哲学、民俗文化、书法、亲子沟通、健康、创业、技能任一领域有扎实积累。", "有利他之心：愿意分享，愿意帮助他人成长。", "有长期主义：不是来赚快钱，而是想打造个人品牌、沉淀长期资产。"],
       faqs: [
-        { question: "我没有录制课程经验，怎么办？", answer: "平台会协助你梳理课程大纲、设计表达结构，并陪跑第一门课程上线。" },
-        { question: "入驻后多久能看到收益？", answer: "收益取决于课程质量、运营投入和受众匹配度，平台会提供流量、工具和运营建议。" },
-        { question: "早鸟费用是一次性还是每年？", answer: "默认展示为首年早鸟价，具体续费和权益可在后台文案中调整。" }
+        { question: "我没有活动经验，怎么办？", answer: "平台会协助你梳理活动大纲、设计表达结构，并陪跑第一场样板活动上线。" },
+        { question: "入驻后多久能看到收益？", answer: "收益取决于活动质量、运营投入和受众匹配度，平台会提供流量、工具和运营建议。" },
+        { question: "首期费用是一次性还是每年？", answer: "默认展示为首年首期费用，具体续费和权益可在后台文案中调整。" }
       ],
       entryPages: {
         brandStory: {
           eyebrow: "慢π · 品牌故事",
-          title: "把传统文化，做成可学习、可体验、可持续运营的现代学习空间。",
-          copy: "慢π连接课程、活动、共修、公益与本地服务，让每一座城市都能拥有自己的学习空间。",
+          title: "把传统文化，做成可体验、可参与、可持续运营的现代活动空间。",
+          copy: "慢π连接活动、共修、公益与本地服务，让每一座城市都能拥有自己的文化空间。",
           primaryActionText: "申请成为院长",
           secondaryActionText: "了解帮扶计划",
           sectionTitle: "我们相信",
-          items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一节课、一次共修和一段长期陪伴。", "空间要能运营：活动获客、课程交付、报名收款、退款审核、学员服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、学员成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
+          items: ["文化要落到日常：不是只停留在口号里，而是变成一次晨读、一次分享、一次共修和一段长期陪伴。", "空间要能运营：活动获客、内容服务、报名收款、退款审核、参与者服务都应该有清晰后台承接。", "善意要可追踪：公益帮扶、参与者成长和本地资源连接，都需要被记录、被服务、被持续改进。"],
           flowTitle: "一套完整的慢π闭环",
-          flowItems: ["品牌认知", "活动体验", "课程学习", "共修打卡", "公益帮扶", "本地慢π"],
+          flowItems: ["品牌认知", "活动体验", "内容参与", "共修打卡", "公益帮扶", "本地慢π"],
           joinTitle: "你可以如何参与"
         },
         deanRecruit: {
           eyebrow: "院长招募",
           title: "招募一批真正愿意把慢π服务落在本地的人。",
-          copy: "院长不是普通代理，而是本地学习空间的负责人：组织活动、服务学员、链接老师和公益资源。",
+          copy: "院长不是普通代理，而是本地活动空间的负责人：组织活动、服务参与者、链接主理人和公益资源。",
           sectionTitle: "适合谁",
-          items: ["有本地文化空间或稳定社群", "愿意长期做课程与活动交付", "能服务学员并维护当地口碑", "认同慢π品牌与公益理念"],
+          items: ["有本地文化空间或稳定社群", "愿意长期做好活动服务", "能服务参与者并维护当地口碑", "认同慢π品牌与公益理念"],
           formTitle: "提交院长申请",
           submitText: "提交院长申请",
           successMessage: "院长招募申请已进入后台，我们会尽快联系你。"
@@ -2572,7 +2572,7 @@ export class PublicService {
           title: "把你的热爱，变成能被更多人看见的文化服务。",
           copy: "适合讲师、主理人、内容创作者、社群组织者申请成为慢π大使。",
           sectionTitle: "你将参与",
-          items: ["课程共创", "活动共办", "品牌露出", "学员服务", "公益参与", "长期成长"],
+          items: ["内容共创", "活动共办", "品牌露出", "参与者服务", "公益参与", "长期成长"],
           formTitle: "提交大使申请",
           submitText: "提交大使申请",
           successMessage: "大使申请已进入后台，我们会尽快联系你。"
@@ -2580,9 +2580,9 @@ export class PublicService {
         aidApply: {
           eyebrow: "帮扶申请",
           title: "让需要帮助的人和愿意做事的项目，被看见、被连接、被持续服务。",
-          copy: "个人可申请学习帮扶/公益名额，项目方可提交公益项目合作需求。",
+          copy: "个人可申请活动帮扶/公益名额，项目方可提交公益项目合作需求。",
           sectionTitle: "申请类型",
-          items: ["个人学习帮扶", "公益项目合作", "课程/活动名额支持", "本地资源连接"],
+          items: ["个人活动帮扶", "公益项目合作", "活动名额支持", "本地资源连接"],
           formTitle: "提交帮扶申请",
           submitText: "提交帮扶申请",
           successMessage: "帮扶申请已进入后台，我们会尽快联系你核实信息。"

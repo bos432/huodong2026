@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { request } from "../../api";
+import { reviewSafeData } from "../../review-safe-text";
 
 type Faq = { question: string; answer: string };
 type CaseItem = { id: number; name: string; field?: string; avatarUrl?: string; metrics?: string; quote?: string };
@@ -60,7 +61,7 @@ function normalizeFaqs(value: unknown) {
 async function load() {
   loading.value = true;
   try {
-    assignLanding(await request<any>("/public/ambassador/landing"));
+    assignLanding(reviewSafeData(await request<any>("/public/ambassador/landing")));
   } catch (error: any) {
     uni.showToast({ title: error.message || "页面加载失败", icon: "none" });
   } finally {
@@ -173,8 +174,8 @@ onLoad((options: any) => {
       <view class="price-panel">
         <text class="quota">{{ config.quotaText }}</text>
         <view class="price-line">
-          <text class="old-price">原价 {{ config.originalPrice }} 元/年</text>
-          <text class="new-price">早鸟价 {{ config.earlyBirdPrice }} 元/年</text>
+          <text class="old-price">标准费用 {{ config.originalPrice }} 元/年</text>
+          <text class="new-price">首期费用 {{ config.earlyBirdPrice }} 元/年</text>
         </view>
         <text class="refund">{{ config.refundText }}</text>
         <button class="cta wide" @click="scrollToForm">{{ config.ctaText }}</button>
@@ -199,8 +200,8 @@ onLoad((options: any) => {
         <input v-model="form.name" class="input" placeholder="姓名" :disabled="submitted" />
         <input v-model="form.phone" class="input" placeholder="手机号" type="number" maxlength="11" :disabled="submitted" />
         <input v-model="form.city" class="input" placeholder="所在城市" :disabled="submitted" />
-        <input v-model="form.expertise" class="input" placeholder="擅长领域，例如书法 / 教育 / 传统文化" :disabled="submitted" />
-        <textarea v-model="form.experience" class="textarea" placeholder="简单介绍你的经验、资源或想做的课程方向" :disabled="submitted" />
+        <input v-model="form.expertise" class="input" placeholder="擅长领域，例如书法 / 亲子沟通 / 传统文化" :disabled="submitted" />
+        <textarea v-model="form.experience" class="textarea" placeholder="简单介绍你的经验、资源或想做的活动方向" :disabled="submitted" />
         <input v-model="form.wechat" class="input" placeholder="微信号" :disabled="submitted" />
         <button class="cta wide" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.ctaText }}</button>
         <text v-if="config.customerWechat || config.customerPhone" class="contact">客服：{{ config.customerWechat || config.customerPhone }}</text>

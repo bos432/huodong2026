@@ -57,10 +57,10 @@ const moduleTypes: Array<{ type: HomepageSectionType; label: string; description
   { type: "activity_tabs", label: "分类标签", description: "活动流筛选标签" },
   { type: "activity_feed", label: "活动信息流", description: "活动列表" },
   { type: "testimonial_feed", label: "参与者心得", description: "展示审核通过的用户心得" },
-  { type: "featured_testimonials", label: "精选心得", description: "突出学员案例和活动口碑" },
+  { type: "featured_testimonials", label: "精选心得", description: "突出参与者案例和活动口碑" },
   { type: "activity_testimonials", label: "活动口碑墙", description: "适合活动详情页展示反馈" },
   { type: "charity_summary", label: "公益公示摘要", description: "公益池、公示项目入口" },
-  { type: "course_recommendations", label: "课程推荐", description: "课程转化入口" },
+  { type: "course_recommendations", label: "专题推荐", description: "专题内容入口" },
   { type: "mall_showcase", label: "商城精选", description: "文化好物导购入口" },
   { type: "brand_story_entry", label: "品牌故事入口", description: "品牌理念与共建入口" },
   { type: "image_banner", label: "图片广告", description: "运营 Banner" },
@@ -84,14 +84,14 @@ const pageOptions = [
   { key: "review_page", label: "评价", route: "/pages/user/review" },
   { key: "community_home", label: "共修首页", route: "/pages/community/index" },
   { key: "community_detail", label: "动态详情", route: "/pages/community/detail" },
-  { key: "course_home", label: "课程首页", route: "/pages/courses/index" },
+  { key: "course_home", label: "专题内容", route: "/pages/courses/index" },
   { key: "charity_page", label: "公益页", route: "/pages/charity/index" },
   { key: "mall_home", label: "商城首页", route: "/pages/mall/index" },
   { key: "brand_story", label: "品牌故事", route: "/pages/brand/story" }
 ];
 
 const defaultConfig: Record<string, Record<string, any>> = {
-  search_bar: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、培训" },
+  search_bar: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、活动" },
   hero: { eyebrow: "慢π活动运营", primaryButtonText: "浏览活动", primaryButtonLink: "/pages/activity/list", showStats: true, backgroundColor: "#0f766e", backgroundImage: "", backgroundFit: "cover", overlayColor: "#0f2327", overlayOpacity: 42, textOpacity: 100, titleOpacity: 100, subtitleOpacity: 86, buttonOpacity: 18, statsOpacity: 14 },
   announcement_bar: { limit: 5, pinnedFirst: true, link: "/pages/announcement/list" },
   quick_nav: {
@@ -120,8 +120,8 @@ const defaultConfig: Record<string, Record<string, any>> = {
   course_recommendations: {
     link: "/pages/courses/index",
     items: [
-      { label: "系统课程", icon: "课" },
-      { label: "学习记录", icon: "学" },
+      { label: "专题内容", icon: "专" },
+      { label: "浏览记录", icon: "览" },
       { label: "证书成长", icon: "证" }
     ]
   },
@@ -139,7 +139,7 @@ const defaultConfig: Record<string, Record<string, any>> = {
   bottom_nav: {
     items: [
       { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", enabled: true },
-      { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "专题", icon: "专", activeIcon: "专", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", enabled: true },
       { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", enabled: true },
       { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D", enabled: true },
       { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D", enabled: true }
@@ -156,7 +156,7 @@ const defaultConfig: Record<string, Record<string, any>> = {
   },
   inner_pages: {
     pages: [
-      { key: "activity_list", title: "活动", subtitle: "筛选近期活动，快速找到适合参加的课程和线下活动。", showBottomNav: true },
+      { key: "activity_list", title: "活动", subtitle: "筛选近期活动，快速找到适合参加的线下活动。", showBottomNav: true },
       { key: "announcement_list", title: "公告中心", subtitle: "活动通知、报名提醒和现场须知都会集中展示在这里。", showBottomNav: true },
       { key: "service_center", title: "服务中心", subtitle: "付款、退款、发票和客服信息，都可以在这里快速找到。", showBottomNav: true },
       { key: "activity_detail", title: "活动详情", subtitle: "查看活动介绍、报名规则、服务说明和现场信息。", showBottomNav: false },
@@ -164,7 +164,7 @@ const defaultConfig: Record<string, Record<string, any>> = {
       { key: "registration_detail", title: "报名详情", subtitle: "查看报名状态、订单、签到码、入群二维码和主办方服务信息。", showBottomNav: true },
       { key: "review_page", title: "评价活动", subtitle: "你的反馈会帮助主办方持续改进活动体验。", showBottomNav: true },
       { key: "login_page", title: "手机号登录", subtitle: "用于查看报名、订单、签到码和会员权益。", showBottomNav: false },
-      { key: "partner_page", title: "城市合伙人", subtitle: "适合文化空间、书院、培训机构和本地社群运营者，用 SaaS 后台独立发布活动、收款对账和沉淀会员。", showBottomNav: true }
+      { key: "partner_page", title: "城市合伙人", subtitle: "适合文化空间、书院和本地社群运营者，用 SaaS 后台独立发布活动、收款对账和沉淀会员。", showBottomNav: true }
     ]
   }
 };
@@ -201,12 +201,12 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
     key: "launch_simple",
     label: "上线简洁版",
     rows: [
-      { type: "search_bar", title: null, config: { cityLabel: "本地", placeholder: "搜索活动、课程、好物" }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", borderRadius: 999, cardStyle: "outlined", spacingBottom: 10 } },
-      { type: "hero", title: "慢π活动与课程", subtitle: "精选活动、系统课程、商城好物和社区动态，一站式完成浏览、报名、下单和会员服务。", config: { ...defaultConfig.hero, eyebrow: "上线运营简洁版", primaryButtonText: "查看精选活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" }, layout: { backgroundColor: "linear-gradient(135deg, #0f766e 0%, #4a6b8a 100%)", primaryColor: "#0f766e", accentColor: "#c43d3d", textColor: "#ffffff", mutedColor: "rgba(255,255,255,0.82)", borderRadius: 12, density: "comfortable", cardStyle: "soft" } },
+      { type: "search_bar", title: null, config: { cityLabel: "本地", placeholder: "搜索活动、内容、好物" }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", borderRadius: 999, cardStyle: "outlined", spacingBottom: 10 } },
+      { type: "hero", title: "慢π活动与内容", subtitle: "精选活动、专题内容、商城好物和社区动态，一站式完成浏览、报名、下单和会员服务。", config: { ...defaultConfig.hero, eyebrow: "上线运营简洁版", primaryButtonText: "查看精选活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" }, layout: { backgroundColor: "linear-gradient(135deg, #0f766e 0%, #4a6b8a 100%)", primaryColor: "#0f766e", accentColor: "#c43d3d", textColor: "#ffffff", mutedColor: "rgba(255,255,255,0.82)", borderRadius: 12, density: "comfortable", cardStyle: "soft" } },
       { type: "announcement_bar", title: "平台公告", config: { limit: 3, pinnedFirst: true, link: "/pages/announcement/list" }, layout: { backgroundColor: "#fff7ec", primaryColor: "#c43d3d", borderRadius: 8, spacingBottom: 10 } },
       { type: "featured_activities", title: "精选活动", subtitle: "近期重点推荐，适合优先报名", config: { source: "featured", limit: 6 }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", cardStyle: "soft", borderRadius: 8 } },
       { type: "image_banner", title: "商城与广告入口", config: { imageUrl: "", link: "/pages/mall/index", ratio: "3:1", fit: "cover" }, layout: { backgroundColor: "#f8fafc", primaryColor: "#c43d3d", borderRadius: 10, cardStyle: "outlined" } },
-      { type: "course_recommendations", title: "课程入口", subtitle: "把活动体验延伸为持续学习", config: defaultConfig.course_recommendations, layout: { backgroundColor: "#ffffff", primaryColor: "#4a6b8a", borderRadius: 8, cardStyle: "soft" } },
+      { type: "course_recommendations", title: "专题入口", subtitle: "把活动体验延伸为持续参与", config: defaultConfig.course_recommendations, layout: { backgroundColor: "#ffffff", primaryColor: "#4a6b8a", borderRadius: 8, cardStyle: "soft" } },
       { type: "testimonial_feed", title: "动态与心得", subtitle: "查看参与者反馈和社区内容", config: { source: "participant", limit: 3, link: "/pages/community/index" }, layout: { backgroundColor: "#ffffff", primaryColor: "#8b5a2b", borderRadius: 8, cardStyle: "soft" } },
       { type: "bottom_nav", title: "前台底部导航", config: defaultConfig.bottom_nav, layout: defaultLayout.bottom_nav }
     ]
@@ -225,20 +225,20 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
     key: "academy_brand",
     label: "慢π品牌型",
     rows: [
-      { type: "hero", title: "慢π", subtitle: "在城市里共建东方文化学习、活动和公益服务场。", config: { ...defaultConfig.hero, eyebrow: "东方文化共建", primaryButtonText: "了解品牌故事", primaryButtonLink: "/pages/brand/story", backgroundColor: "#5b2f24" } },
-      { type: "brand_story_entry", title: "慢π在做什么", subtitle: "讲清理念、课程、活动和城市共建路径" },
-      { type: "featured_testimonials", title: "同学故事", subtitle: "来自活动现场与课程学习的真实反馈" },
+      { type: "hero", title: "慢π", subtitle: "在城市里共建东方文化、活动和公益服务场。", config: { ...defaultConfig.hero, eyebrow: "东方文化共建", primaryButtonText: "了解品牌故事", primaryButtonLink: "/pages/brand/story", backgroundColor: "#5b2f24" } },
+      { type: "brand_story_entry", title: "慢π在做什么", subtitle: "讲清理念、活动、内容和城市共建路径" },
+      { type: "featured_testimonials", title: "参与者故事", subtitle: "来自活动现场与内容参与的真实反馈" },
       { type: "charity_summary", title: "公益可信公示", subtitle: "公益池、项目进展和志愿服务入口" }
     ]
   },
   {
     key: "course_conversion",
-    label: "课程转化型",
+    label: "专题转化型",
     rows: [
-      { type: "hero", title: "系统学习东方文化", subtitle: "从活动体验进入课程学习，用证书和成长记录沉淀长期关系。", config: { ...defaultConfig.hero, primaryButtonText: "查看课程", primaryButtonLink: "/pages/courses/index", backgroundColor: "#4a6b8a" } },
-      { type: "course_recommendations", title: "课程推荐", subtitle: "课程、学习记录和证书成长入口" },
-      { type: "testimonial_feed", title: "学习与活动心得", subtitle: "用参与者内容提升信任感" },
-      { type: "activity_feed", title: "近期活动", subtitle: "先体验，再系统学习" }
+      { type: "hero", title: "系统了解东方文化", subtitle: "从活动体验进入专题内容，用证书和成长记录沉淀长期关系。", config: { ...defaultConfig.hero, primaryButtonText: "查看专题", primaryButtonLink: "/pages/courses/index", backgroundColor: "#4a6b8a" } },
+      { type: "course_recommendations", title: "专题推荐", subtitle: "专题内容、浏览记录和证书成长入口" },
+      { type: "testimonial_feed", title: "内容与活动心得", subtitle: "用参与者内容提升信任感" },
+      { type: "activity_feed", title: "近期活动", subtitle: "先体验，再深入了解" }
     ]
   },
   {
@@ -255,7 +255,7 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
     key: "mall_guide",
     label: "商城导购型",
     rows: [
-      { type: "hero", title: "慢π文化好物", subtitle: "课程周边、城市店铺与精选商品，配合活动形成转化。", config: { ...defaultConfig.hero, primaryButtonText: "进入商城", primaryButtonLink: "/pages/mall/index", backgroundColor: "#8b5a2b" } },
+      { type: "hero", title: "慢π文化好物", subtitle: "活动周边、城市店铺与精选商品，配合活动形成转化。", config: { ...defaultConfig.hero, primaryButtonText: "进入商城", primaryButtonLink: "/pages/mall/index", backgroundColor: "#8b5a2b" } },
       { type: "mall_showcase", title: "商城精选", subtitle: "文化好物、店铺精选和优惠活动入口" },
       { type: "activity_feed", title: "搭配近期活动", subtitle: "从活动场景自然进入购买" },
       { type: "testimonial_feed", title: "参与者反馈", subtitle: "用真实体验提升商品和活动信任" }
@@ -265,8 +265,8 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
     key: "festival_campaign",
     label: "节日专题版",
     rows: [
-      { type: "hero", title: "节日活动专题", subtitle: "限时活动、专题课程和优惠入口集中展示，适合节日会场与线下大会。", config: { ...defaultConfig.hero, eyebrow: "限时专题", primaryButtonText: "查看专题活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#c43d3d" }, layout: { backgroundColor: "#c43d3d", primaryColor: "#c43d3d", accentColor: "#ffd45a", textColor: "#ffffff", mutedColor: "rgba(255,255,255,0.84)", density: "spacious", cardStyle: "elevated" } },
-      { type: "quick_nav", title: null, config: { items: [{ label: "专题活动", icon: "专", color: "#C43D3D", link: "/pages/activity/list" }, { label: "优惠好物", icon: "惠", color: "#c2410c", link: "/pages/mall/index" }, { label: "课程礼包", icon: "课", color: "#4a6b8a", link: "/pages/courses/index" }, { label: "我的订单", icon: "单", color: "#8b5a2b", link: "/pages/user/my" }] }, layout: { columns: 4, backgroundColor: "#fff7ec", itemBackgroundColor: "#fffdf5", primaryColor: "#c43d3d", accentColor: "#c2410c" } },
+      { type: "hero", title: "节日活动专题", subtitle: "限时活动、专题内容和优惠入口集中展示，适合节日会场与线下大会。", config: { ...defaultConfig.hero, eyebrow: "限时专题", primaryButtonText: "查看专题活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#c43d3d" }, layout: { backgroundColor: "#c43d3d", primaryColor: "#c43d3d", accentColor: "#ffd45a", textColor: "#ffffff", mutedColor: "rgba(255,255,255,0.84)", density: "spacious", cardStyle: "elevated" } },
+      { type: "quick_nav", title: null, config: { items: [{ label: "专题活动", icon: "专", color: "#C43D3D", link: "/pages/activity/list" }, { label: "优惠好物", icon: "惠", color: "#c2410c", link: "/pages/mall/index" }, { label: "专题礼包", icon: "专", color: "#4a6b8a", link: "/pages/courses/index" }, { label: "我的订单", icon: "单", color: "#8b5a2b", link: "/pages/user/my" }] }, layout: { columns: 4, backgroundColor: "#fff7ec", itemBackgroundColor: "#fffdf5", primaryColor: "#c43d3d", accentColor: "#c2410c" } },
       { type: "image_banner", title: "节日主推 Banner", config: { imageUrl: "", link: "/pages/activity/list", ratio: "3:1", fit: "cover" }, layout: { backgroundColor: "#fff2b8", borderRadius: 14, cardStyle: "elevated" } },
       { type: "featured_activities", title: "节日精选活动", subtitle: "优先展示最适合转化的活动", layout: { backgroundColor: "#fffdf5", primaryColor: "#c43d3d", accentColor: "#ffd45a", cardStyle: "soft" } },
       { type: "mall_showcase", title: "节日好物", subtitle: "把活动场景延伸到商品和优惠" }
@@ -385,10 +385,10 @@ type UiTemplateKit = {
 };
 const uiTemplateKits: UiTemplateKit[] = decorationTemplates.map((template) => {
   const meta: Record<string, Omit<UiTemplateKit, "key" | "label" | "rows">> = {
-    launch_simple: { category: "上线", description: "搜索、主视觉、公告、活动、商城广告、课程和动态入口，适合正式上线默认首页。", scene: "上线首页 / 简洁运营", palette: ["#0f766e", "#4a6b8a", "#ffffff", "#c43d3d"], stylePresetKey: "quiet_work" },
+    launch_simple: { category: "上线", description: "搜索、主视觉、公告、活动、商城广告、专题和动态入口，适合正式上线默认首页。", scene: "上线首页 / 简洁运营", palette: ["#0f766e", "#4a6b8a", "#ffffff", "#c43d3d"], stylePresetKey: "quiet_work" },
     activity_ops: { category: "活动", description: "搜索、精选活动、心得口碑组合，适合报名转化。", scene: "活动首页 / 本地活动运营", palette: ["#0f766e", "#4a6b8a", "#ffffff", "#667085"], stylePresetKey: "quiet_work" },
     academy_brand: { category: "品牌", description: "品牌故事、同学故事和公益入口，适合讲清慢π理念。", scene: "品牌首页 / 文化空间", palette: ["#5b2f24", "#fff7ec", "#c43d3d", "#8b5a2b"], stylePresetKey: "warm_academy" },
-    course_conversion: { category: "课程", description: "课程推荐与活动体验联动，适合课程转化。", scene: "课程首页 / 训练营", palette: ["#4a6b8a", "#0f766e", "#ffffff", "#667085"], stylePresetKey: "quiet_work" },
+    course_conversion: { category: "专题", description: "专题推荐与活动体验联动，适合内容转化。", scene: "专题首页 / 活动运营", palette: ["#4a6b8a", "#0f766e", "#ffffff", "#667085"], stylePresetKey: "quiet_work" },
     charity_recruit: { category: "公益", description: "公益公示、志愿服务和帮扶入口，突出可信共建。", scene: "公益池 / 志愿招募", palette: ["#5b8c5a", "#0f766e", "#f0fdf4", "#173b28"], stylePresetKey: "public_green" },
     mall_guide: { category: "商城", description: "商城入口、活动联动和反馈口碑，适合商品导购。", scene: "商城首页 / 文化好物", palette: ["#7a4b24", "#c2410c", "#fffaf3", "#3f3428"], stylePresetKey: "mall_editorial" },
     festival_campaign: { category: "专题", description: "大 Banner、限时入口和节日活动组合，适合短期专题投放。", scene: "节日专题 / 线下大会", palette: ["#c43d3d", "#ffd45a", "#fff7ec", "#8b5a2b"], stylePresetKey: "warm_academy" },
@@ -460,7 +460,7 @@ const linkPicker = reactive({
 const linkPageOptions = [
   { label: "首页", path: "/pages/index/index", group: "常用页面" },
   { label: "活动列表", path: "/pages/activity/list", group: "常用页面" },
-  { label: "课程首页", path: "/pages/courses/index", group: "常用页面" },
+  { label: "专题内容", path: "/pages/courses/index", group: "常用页面" },
   { label: "共修首页", path: "/pages/community/index", group: "常用页面" },
   { label: "商城首页", path: "/pages/mall/index", group: "常用页面" },
   { label: "我的", path: "/pages/user/my", group: "常用页面" },
@@ -477,7 +477,7 @@ const linkPageOptions = [
 ];
 const detailLinkOptions = [
   { type: "activity", label: "活动详情", path: "/pages/activity/detail", idLabel: "活动 ID" },
-  { type: "course", label: "课程详情", path: "/pages/course/detail", idLabel: "课程 ID" },
+  { type: "course", label: "内容详情", path: "/pages/course/detail", idLabel: "内容 ID" },
   { type: "product", label: "商品详情", path: "/pages/mall/detail", idLabel: "商品 ID" },
   { type: "community", label: "动态详情", path: "/pages/community/detail", idLabel: "动态 ID" }
 ] as const;
@@ -913,7 +913,7 @@ function previewRow(
 function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
   if (pageKey === "home") {
     return [
-      previewRow(0, "search_bar", { title: null, config: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、培训" } }),
+      previewRow(0, "search_bar", { title: null, config: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、活动" } }),
       previewRow(1, "hero", {
         title: "发现值得参加的线下活动",
         subtitle: "沙龙、读书会、训练营和社群聚会，一站完成筛选、报名、付款确认和签到。"
@@ -930,12 +930,12 @@ function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
 
   const label = currentPageOption.value.label;
   const subtitleMap: Record<string, string> = {
-    activity_list: "筛选近期活动，快速找到适合参加的课程和线下活动。",
+    activity_list: "筛选近期活动，快速找到适合参加的线下活动。",
     activity_detail: "查看活动介绍、报名规则、服务说明和现场信息。",
     activity_register: "确认票种、优惠和报名信息，提交后可在我的活动查看进度。",
     announcement_list: "活动通知、报名提醒和现场须知都会集中展示在这里。",
     service_center: "付款、退款、发票和客服信息，都可以在这里快速找到。",
-    partner_page: "适合文化空间、书院、培训机构和本地社群运营者。",
+    partner_page: "适合文化空间、书院和本地社群运营者。",
     user_my: "报名、付款、审核、签到状态都在这里。",
     login_page: "用于查看报名、订单、签到码和会员权益。",
     registration_detail: "查看报名状态、订单、签到码、入群二维码和主办方服务信息。",
@@ -943,7 +943,7 @@ function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
   };
   const hideNav = ["activity_detail", "activity_register", "login_page"].includes(pageKey);
   const list = [
-    ...(pageKey === "user_my" ? [previewRow(0, "my_page", { title: "我的", subtitle: "会员权益、订单、课程和管理入口", sortOrder: 5 })] : []),
+    ...(pageKey === "user_my" ? [previewRow(0, "my_page", { title: "我的", subtitle: "会员权益、订单、内容和管理入口", sortOrder: 5 })] : []),
     previewRow(1, "hero", {
       title: label,
       subtitle: subtitleMap[pageKey] || "",
@@ -2675,7 +2675,7 @@ onMounted(async () => {
                 <el-form-item v-if="form.config.pageSize !== undefined" label="每页数量">
                   <el-input-number v-model="form.config.pageSize" :min="1" :max="12" @change="syncJsonText" />
                 </el-form-item>
-                <el-alert type="info" show-icon :closable="false" title="数据源配置只决定模块如何取内容；活动、课程、商品本身仍在对应业务模块维护。" />
+                <el-alert type="info" show-icon :closable="false" title="数据源配置只决定模块如何取内容；活动、专题、商品本身仍在对应业务模块维护。" />
               </el-form>
             </el-tab-pane>
 
@@ -2858,7 +2858,7 @@ onMounted(async () => {
             type="info"
             show-icon
             :closable="false"
-            title="这里控制前台页面底部固定导航，也就是手机底部的“慢π / 课程 / 共修 / 活动 / 我的”。保存后 H5 刷新生效，小程序需要重新上传审核。"
+            title="这里控制前台页面底部固定导航，也就是手机底部的“慢π / 专题 / 共修 / 活动 / 我的”。保存后 H5 刷新生效，小程序需要重新上传审核。"
           />
           <div class="quick-editor">
             <div v-for="(item, index) in (form.config.items || [])" :key="index" class="quick-row nav-row">

@@ -9,13 +9,13 @@
     <view v-if="loading" class="card subtle">加载中...</view>
     <view v-else-if="error" class="card state-card">
       <view>{{ error }}</view>
-      <view class="button block state-button" @click="goDetail">返回课程详情</view>
+      <view class="button block state-button" @click="goDetail">返回内容详情</view>
     </view>
 
     <template v-else>
     <view class="player-hero">
-      <view class="player-kicker">课程学习</view>
-      <view class="player-scroll-icon">课</view>
+      <view class="player-kicker">内容播放</view>
+      <view class="player-scroll-icon">播</view>
       <view class="player-controls">
         <text class="player-btn">上一节</text>
         <text class="player-btn player-btn-play" @click="markProgress(60)">播放</text>
@@ -35,7 +35,7 @@
     <view class="lesson-card">
       <text class="chapter-title">{{ currentChapterTitle }}</text>
       <text class="lesson-title">{{ currentLessonTitle }}</text>
-      <view class="button block complete-button" :class="{ disabled: savingProgress }" @click="markProgress(100)">{{ savingProgress ? "保存中..." : "标记本课时完成" }}</view>
+      <view class="button block complete-button" :class="{ disabled: savingProgress }" @click="markProgress(100)">{{ savingProgress ? "保存中..." : "标记本小节完成" }}</view>
     </view>
 
     <view class="button secondary block catalog-toggle" @click="showCatalog = !showCatalog">
@@ -59,6 +59,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
+import { reviewSafeText } from "../../review-safe-text";
 
 const showCatalog = ref(false);
 const loading = ref(true);
@@ -66,14 +67,18 @@ const savingProgress = ref(false);
 const error = ref("");
 const rawCourse = ref<any>();
 const selectedLessonId = ref(0);
-const chapters = computed(() => rawCourse.value?.chapters || []);
-const courseTitle = computed(() => rawCourse.value?.title || "课程学习");
+const chapters = computed(() => (rawCourse.value?.chapters || []).map((chapter: any) => ({
+  ...chapter,
+  title: reviewSafeText(chapter.title || ""),
+  lessons: (chapter.lessons || []).map((lesson: any) => ({ ...lesson, title: reviewSafeText(lesson.title || "") }))
+})));
+const courseTitle = computed(() => reviewSafeText(rawCourse.value?.title || "内容播放"));
 const currentLesson = computed(() => {
   const lessons = chapters.value.flatMap((chapter: any) => chapter.lessons || []).filter((lesson: any) => !lesson.locked);
   return lessons.find((lesson: any) => lesson.id === selectedLessonId.value) || lessons[0];
 });
-const currentChapterTitle = computed(() => chapters.value.find((chapter: any) => (chapter.lessons || []).some((lesson: any) => lesson.id === currentLesson.value?.id))?.title || "课程目录");
-const currentLessonTitle = computed(() => currentLesson.value?.title || "暂无可学习课时，请先在后台维护课程目录");
+const currentChapterTitle = computed(() => chapters.value.find((chapter: any) => (chapter.lessons || []).some((lesson: any) => lesson.id === currentLesson.value?.id))?.title || "内容目录");
+const currentLessonTitle = computed(() => currentLesson.value?.title || "暂无可播放小节，请先在后台维护内容目录");
 const currentProgress = computed(() => Math.max(0, Math.min(Number(currentLesson.value?.progress || 0), 100)));
 
 function currentCourseId() {
@@ -87,18 +92,18 @@ async function loadCourse() {
   error.value = "";
   const id = currentCourseId();
   if (!id) {
-    error.value = "缺少课程ID";
+    error.value = "缺少内容ID";
     loading.value = false;
     return;
   }
   try {
     await ensureUser();
     rawCourse.value = await request<any>(`/public/courses/${id}/player`);
-    if (!rawCourse.value) error.value = "课程不存在或未发布";
+    if (!rawCourse.value) error.value = "内容不存在或未发布";
     selectedLessonId.value = chapters.value.flatMap((chapter: any) => chapter.lessons || []).find((lesson: any) => !lesson.locked)?.id || 0;
   } catch (err: any) {
     rawCourse.value = null;
-    error.value = err.message || "暂时无法进入学习";
+    error.value = reviewSafeText(err.message || "暂时无法进入内容");
   } finally {
     loading.value = false;
   }
@@ -108,7 +113,7 @@ function goBack() { uni.navigateBack(); }
 function goDetail() { uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${currentCourseId() || 1}`) }); }
 function selectLesson(lesson: any) {
   if (lesson.locked) {
-    uni.showToast({ title: "该课时需购买后学习", icon: "none" });
+    uni.showToast({ title: "该小节需加入后观看", icon: "none" });
     return;
   }
   selectedLessonId.value = lesson.id;
@@ -122,16 +127,16 @@ async function markProgress(progress: number) {
       data: { lessonId: currentLesson.value.id, progress }
     });
     currentLesson.value.progress = Number(result?.lessonLearning?.progress || progress);
-    uni.showToast({ title: progress >= 100 ? "已完成本课时" : "学习进度已保存", icon: "none" });
+    uni.showToast({ title: progress >= 100 ? "已完成本小节" : "观看进度已保存", icon: "none" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "保存进度失败", icon: "none" });
+    uni.showToast({ title: reviewSafeText(error.message || "保存进度失败"), icon: "none" });
   } finally {
     savingProgress.value = false;
   }
 }
 function showMore() {
   uni.showActionSheet({
-    itemList: ["查看课程详情", "反馈问题"],
+    itemList: ["查看内容详情", "反馈问题"],
     success(result) {
       if (result.tapIndex === 0) goDetail();
       if (result.tapIndex === 1) uni.navigateTo({ url:"/pages/service/index" });

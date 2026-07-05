@@ -3,7 +3,7 @@
     <SplashAd />
     <view class="custom-nav">
       <view class="nav-back" @click="goBack">返回</view>
-      <view class="nav-title">课程详情</view>
+      <view class="nav-title">内容详情</view>
       <view class="nav-share" @click="share">分享</view>
     </view>
 
@@ -25,7 +25,7 @@
         <view class="row teacher-row">
           <image class="avatar-sm" :src="course.teacherAvatar || '/static/avatar1.png'" mode="aspectFill" />
           <text class="body-text">{{ course.teacher }}</text>
-          <view class="tag tag-secondary">讲师</view>
+          <view class="tag tag-secondary">主理人</view>
         </view>
         <view class="row rating-row">
           <text class="rating-text">评分 {{ course.rating }}（{{ course.reviewCount }}人评价）</text>
@@ -50,7 +50,7 @@
       </view>
 
       <view v-if="activeTab === 'detail'" class="card tab-card">
-        <text class="course-description">{{ course.description || "课程介绍正在完善中。" }}</text>
+        <text class="course-description">{{ course.description || "内容介绍正在完善中。" }}</text>
       </view>
 
       <view v-if="activeTab === 'catalog'" class="card tab-card">
@@ -66,7 +66,7 @@
             </view>
           </view>
         </view>
-        <empty-state v-else icon="📖" text="暂无章节，请先在后台维护课程目录" />
+        <empty-state v-else icon="📖" text="暂无目录，请先在后台维护内容目录" />
       </view>
 
       <view v-if="activeTab === 'reviews'" class="card tab-card">
@@ -89,15 +89,15 @@
           <text class="subtle">收藏</text>
         </view>
         <view class="button buy-button" @click="buyCourse">
-          {{ Number(course.price) > 0 ? `立即购买 ${priceText(course.price)}` : "免费加入" }}
+          {{ Number(course.price) > 0 ? `立即加入 ${priceText(course.price)}` : "免费加入" }}
         </view>
       </view>
     </template>
     <WechatPhoneBindSheet
       :visible="phoneBindVisible"
-      title="购买课程前绑定手机号"
-      message="课程订单和学习权益需要手机号，授权后将继续当前操作。"
-      close-text="暂不购买"
+      title="加入内容前绑定手机号"
+      message="订单和参与权益需要手机号，授权后将继续当前操作。"
+      close-text="暂不加入"
       @close="closePhoneBindPanel"
       @bound="handlePhoneBound"
     />
@@ -108,6 +108,7 @@
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
 import { priceText } from "../../course-data";
+import { reviewSafeText } from "../../review-safe-text";
 import EmptyState from "../../components/EmptyState.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
@@ -137,8 +138,8 @@ const course = computed(() => {
   const price = Number(row.price || 0);
   return {
     id: row.id,
-    title: row.title,
-    teacher: row.teacherName || "慢π",
+    title: reviewSafeText(row.title),
+    teacher: reviewSafeText(row.teacherName || "慢π"),
     teacherAvatar: row.teacherAvatar || "",
     price,
     originalPrice: Number(row.originalPrice || 0),
@@ -147,15 +148,19 @@ const course = computed(() => {
     color: palette[Number(row.id || 0) % palette.length],
     rating: Number(row.rating || 0).toFixed(1),
     reviewCount: Number(row.reviewCount || 0),
-    tag: tags[0] || (price === 0 ? "限时免费" : ""),
-    description: row.description || ""
+    tag: reviewSafeText(tags[0] || (price === 0 ? "限时免费" : "")),
+    description: reviewSafeText(row.description || "")
   };
 });
-const chapters = computed(() => rawCourse.value?.chapters || []);
+const chapters = computed(() => (rawCourse.value?.chapters || []).map((chapter: any) => ({
+  ...chapter,
+  title: reviewSafeText(chapter.title || ""),
+  lessons: (chapter.lessons || []).map((lesson: any) => ({ ...lesson, title: reviewSafeText(lesson.title || "") }))
+})));
 
 const reviews = [
-  { avatar: "/static/avatar1.png", nickname: "学而时习", rating: 5, content: "课程内容扎实，适合系统学习。", time: "3天前" },
-  { avatar: "/static/avatar2.png", nickname: "书道中人", rating: 4, content: "目录清晰，后续期待更多课时。", time: "1周前" }
+  { avatar: "/static/avatar1.png", nickname: "学而时习", rating: 5, content: "内容扎实，适合系统了解。", time: "3天前" },
+  { avatar: "/static/avatar2.png", nickname: "书道中人", rating: 4, content: "目录清晰，后续期待更多小节。", time: "1周前" }
 ];
 
 function currentCourseId() {
@@ -169,9 +174,9 @@ async function loadCourse() {
   error.value = "";
   try {
     const id = currentCourseId();
-    if (!id) throw new Error("缺少课程ID");
+    if (!id) throw new Error("缺少内容ID");
     const data = await request<any>(`/public/courses/${id}`);
-    if (!data) throw new Error("课程不存在或未发布");
+    if (!data) throw new Error("内容不存在或未发布");
     rawCourse.value = data;
     try {
       await ensureUser();
@@ -181,7 +186,7 @@ async function loadCourse() {
       isFav.value = false;
     }
   } catch (err: any) {
-    error.value = err.message || "课程加载失败";
+    error.value = reviewSafeText(err.message || "内容加载失败");
   } finally {
     loading.value = false;
   }
@@ -208,9 +213,9 @@ async function toggleFavorite() {
     await ensureUser();
     const result = await request<any>(`/public/me/course-favorites/${course.value.id}`, { method: "POST" });
     isFav.value = Boolean(result?.favorited);
-    uni.showToast({ title: isFav.value ? "已收藏课程" : "已取消收藏", icon: "none" });
+    uni.showToast({ title: isFav.value ? "已收藏内容" : "已取消收藏", icon: "none" });
   } catch (err: any) {
-    uni.showToast({ title: err.message || "收藏失败", icon: "none" });
+    uni.showToast({ title: reviewSafeText(err.message || "收藏失败"), icon: "none" });
   }
 }
 async function buyCourse() {
@@ -226,7 +231,7 @@ async function buyCourse() {
       await request(`/public/courses/${course.value.id}/orders`, { method: "POST", data: {} });
       uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&mode=free&id=${course.value.id}`) });
     } catch (err: any) {
-      uni.showToast({ title: err.message || "加入课程失败", icon: "none" });
+      uni.showToast({ title: reviewSafeText(err.message || "加入内容失败"), icon: "none" });
     } finally {
       joining.value = false;
     }

@@ -2,13 +2,13 @@
   <view class="container user-subpage has-custom-nav">
     <view class="custom-nav">
       <view class="nav-back" @click="goBack">‹ 返回</view>
-      <text class="nav-title">我的课程</text>
+      <text class="nav-title">我的内容</text>
       <view class="nav-placeholder"></view>
     </view>
     <view class="page-hero">
-      <view class="hero-kicker">学习中心</view>
-      <view class="hero-title">继续你的课程</view>
-      <view class="hero-desc">查看已加入课程，按进度继续学习。</view>
+      <view class="hero-kicker">内容中心</view>
+      <view class="hero-title">继续你的内容</view>
+      <view class="hero-desc">查看已加入内容，按进度继续观看。</view>
     </view>
     <view class="my-tabs">
       <view v-for="t in tabs" :key="t.key" class="my-tab" :class="{active:activeTab===t.key}" @click="activeTab=t.key">{{ t.label }}</view>
@@ -22,11 +22,11 @@
         <view class="course-info">
           <text class="course-title">{{ c.title }}</text>
           <view class="progress-bar"><view class="progress-fill" :style="{width:c.progress+'%'}"></view></view>
-          <text class="course-progress">已学 {{ c.progress }}%</text>
+          <text class="course-progress">进度 {{ c.progress }}%</text>
         </view>
       </view>
     </view>
-    <empty-state v-if="!visibleCourses.length" icon="📖" text="暂无学习中的课程" />
+    <empty-state v-if="!visibleCourses.length" icon="📖" text="暂无进行中的内容" />
     <TabBar current="courses" />
   </view>
 </template>

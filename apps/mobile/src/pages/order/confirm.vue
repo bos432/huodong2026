@@ -14,9 +14,9 @@
 
     <template v-else-if="course">
       <view class="confirm-hero">
-        <view class="hero-kicker">课程订单</view>
-        <view class="hero-title">确认学习席位</view>
-        <view class="hero-desc">提交后将生成课程订单，付款完成或后台确认后开通学习权限。</view>
+        <view class="hero-kicker">内容订单</view>
+        <view class="hero-title">确认参与权益</view>
+        <view class="hero-desc">提交后将生成订单，付款完成或后台确认后开通参与权益。</view>
       </view>
 
       <view class="course-card">
@@ -27,7 +27,7 @@
           </view>
           <view class="course-info">
             <text class="course-title">{{ course.title }}</text>
-            <text class="course-meta">线上课程 · 学习权限</text>
+            <text class="course-meta">专题内容 · 参与权益</text>
             <text class="course-price">{{ priceText(course.price) }}</text>
           </view>
         </view>
@@ -38,7 +38,7 @@
           <text class="section-title">支付方式</text>
           <text class="section-badge">线下确认</text>
         </view>
-        <view class="payment-notice">课程在线支付尚未接入，当前仅支持线下收款。后台确认后才会开通学习权限。</view>
+        <view class="payment-notice">当前仅支持线下收款。后台确认后才会开通参与权益。</view>
         <view v-for="(pm, i) in paymentMethods" :key="i" class="payment-option" @click="selectedPayment = i">
           <text class="payment-icon">{{ pm.icon }}</text>
           <text class="payment-label">{{ pm.label }}</text>
@@ -48,7 +48,7 @@
 
       <view class="section-card">
         <view class="summary-row">
-          <text class="summary-label">课程小计</text>
+          <text class="summary-label">内容小计</text>
           <text class="summary-price">{{ priceText(course.price) }}</text>
         </view>
         <view class="summary-row muted-row">
@@ -63,8 +63,8 @@
     </template>
     <WechatPhoneBindSheet
       :visible="phoneBindVisible"
-      title="提交课程订单前绑定手机号"
-      message="课程订单、线下确认和学习权益需要手机号，授权后将继续提交订单。"
+      title="提交内容订单前绑定手机号"
+      message="订单、线下确认和参与权益需要手机号，授权后将继续提交订单。"
       close-text="暂不提交"
       @close="closePhoneBindPanel"
       @bound="handlePhoneBound"
@@ -76,6 +76,7 @@
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import { reviewSafeText } from "../../review-safe-text";
 
 const selectedPayment = ref(0);
 const loading = ref(true);
@@ -89,7 +90,7 @@ const paymentMethods = [
 ];
 const payButtonText = computed(() => {
   if (paying.value) return "处理中...";
-  return Number(course.value?.price || 0) > 0 ? `提交线下付款订单 ${priceText(course.value.price)}` : "免费开通课程";
+  return Number(course.value?.price || 0) > 0 ? `提交线下付款订单 ${priceText(course.value.price)}` : "免费开通内容";
 });
 
 function currentCourseId() {
@@ -103,12 +104,12 @@ async function loadCourse() {
   error.value = "";
   try {
     const id = currentCourseId();
-    if (!id) throw new Error("缺少课程ID");
+    if (!id) throw new Error("缺少内容ID");
     const data = await request<any>(`/public/courses/${id}`);
-    if (!data) throw new Error("课程不存在或未发布");
-    course.value = data;
+    if (!data) throw new Error("内容不存在或未发布");
+    course.value = { ...data, title: reviewSafeText(data.title || "") };
   } catch (err: any) {
-    error.value = err.message || "订单加载失败";
+    error.value = reviewSafeText(err.message || "订单加载失败");
   } finally {
     loading.value = false;
   }
@@ -136,7 +137,7 @@ async function doPay() {
       return;
     }
     const order = result?.order;
-    if (!order?.id) throw new Error("课程订单创建失败");
+    if (!order?.id) throw new Error("内容订单创建失败");
     if (Number(order.amount || 0) <= 0 || order.status === "paid") {
       uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&id=${course.value.id}&orderId=${order.id}`) });
       return;
@@ -145,7 +146,7 @@ async function doPay() {
       url: withTenantCode(`/pages/order/payment?status=pending&id=${course.value.id}&orderId=${order.id}`)
     });
   } catch (err: any) {
-    uni.showToast({ title: err.message || "支付失败", icon: "none" });
+    uni.showToast({ title: reviewSafeText(err.message || "支付失败"), icon: "none" });
   } finally {
     paying.value = false;
   }

@@ -65,7 +65,7 @@
 
     <!-- 动态广场 -->
     <view class="section-title post-section-title" style="margin-top:8rpx;">
-      <text class="title-md">{{ activityFilterId ? "📖 活动口碑" : "📖 学员动态" }}</text>
+      <text class="title-md">{{ activityFilterId ? "📖 活动口碑" : "📖 参与者动态" }}</text>
       <text v-if="activityFilterId" class="subtle">仅展示当前活动关联心得</text>
     </view>
     <view v-for="(post, idx) in posts" :key="idx" class="card post-card" @click="goPost(post)">
@@ -92,7 +92,7 @@
       </view>
     </view>
     <view v-if="!posts.length" class="empty-post-card">
-      <text class="empty-title">{{ activityFilterId ? "还没有活动心得" : "暂无学员动态" }}</text>
+      <text class="empty-title">{{ activityFilterId ? "还没有活动心得" : "暂无参与者动态" }}</text>
       <text class="empty-copy">{{ activityFilterId ? "完成签到，或活动结束且报名成功/已付款后，可以发布这场活动的心得。" : "参与活动后发布照片和感悟，审核通过后会展示在这里。" }}</text>
       <view class="button secondary sm" @click="goPublish">{{ activityFilterId ? "发布这场心得" : "去发布心得" }}</view>
     </view>

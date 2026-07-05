@@ -9,6 +9,7 @@ import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryEntries } from "../../query";
+import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 
 const registrationStatusText: Record<RegistrationStatus, string> = {
   [RegistrationStatus.PendingPayment]: "待付款",
@@ -156,7 +157,7 @@ async function load() {
     userId.value = await ensureUser();
     const pages = getCurrentPages();
     const id = Number((pages[pages.length - 1] as any).options.id);
-    detail.value = await request(`/public/me/registrations/${id}`);
+    detail.value = reviewSafeData(await request(`/public/me/registrations/${id}`));
     code.value = "";
     codeQrUrl.value = "";
     qrCanvasVisible.value = false;
@@ -164,7 +165,7 @@ async function load() {
     groupDialogVisible.value = Boolean(detail.value?.groupQrCodeUrl);
     if (canShowCheckInCode.value) showCode(false);
   } catch (error: any) {
-    loadError.value = error?.message || "加载报名详情失败，请稍后重试。";
+    loadError.value = reviewSafeText(error?.message || "加载报名详情失败，请稍后重试。");
     uni.showToast({ title: loadError.value, icon: "none" });
   } finally {
     loading.value = false;
@@ -239,7 +240,7 @@ async function doCancel() {
     uni.showToast({ title: "已取消报名" });
     await load();
   } catch (error: any) {
-    uni.showToast({ title: error.message, icon: "none" });
+    uni.showToast({ title: reviewSafeText(error.message), icon: "none" });
   }
 }
 
@@ -258,7 +259,7 @@ async function requestRefund() {
         uni.showToast({ title: "已提交退款申请" });
         await load();
       } catch (error: any) {
-        uni.showToast({ title: error.message || "申请失败", icon: "none" });
+        uni.showToast({ title: reviewSafeText(error.message || "申请失败"), icon: "none" });
       } finally {
         refunding.value = false;
       }
@@ -273,7 +274,7 @@ async function showCode(scroll = true) {
     await generateCheckInQr(code.value);
     if (scroll) scrollToCode();
   } catch (error: any) {
-    uni.showToast({ title: error.message, icon: "none" });
+    uni.showToast({ title: reviewSafeText(error.message), icon: "none" });
   }
 }
 
@@ -332,7 +333,7 @@ async function payOrder(provider: "wechat" | "alipay" | "balance") {
     }
     await load();
   } catch (error: any) {
-    uni.showToast({ title: error.message || "支付失败", icon: "none" });
+    uni.showToast({ title: reviewSafeText(error.message || "支付失败"), icon: "none" });
   } finally {
     paying.value = "";
   }

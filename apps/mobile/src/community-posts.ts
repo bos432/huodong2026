@@ -1,3 +1,5 @@
+import { reviewSafeText } from "./review-safe-text";
+
 export type CommunityPost = {
   id: number;
   avatar: string;
@@ -45,9 +47,9 @@ export function normalizeCommunityPosts(payload: any) {
   return rows.map((item: any, index: number) => ({
     id: Number(item.id || index + 1),
     avatar: item.avatar || `/static/avatar${(index % 3) + 1}.png`,
-    nickname: item.nickname || item.user?.nickname || "慢π同学",
+    nickname: reviewSafeText(item.nickname || item.user?.nickname || "慢π同学"),
     time: relativeTime(item.createdAt || item.time),
-    content: item.content || "",
+    content: reviewSafeText(item.content || ""),
     likes: Number(item.likes || 0),
     comments: Number(item.comments || 0),
     liked: Boolean(item.liked),
@@ -55,6 +57,6 @@ export function normalizeCommunityPosts(payload: any) {
     source: item.source || "official",
     status: item.status || "approved",
     shareCount: Number(item.shareCount || 0),
-    activity: item.activity || null
+    activity: item.activity ? { ...item.activity, title: reviewSafeText(item.activity.title || "") } : null
   }));
 }

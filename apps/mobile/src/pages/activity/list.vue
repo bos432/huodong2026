@@ -76,7 +76,7 @@ function clearKeyword() {
   loadFirstPage();
 }
 
-const heroSubtitle = computed(() => innerPageConfig.value.subtitle || "筛选近期活动，快速找到适合参加的课程和线下活动。");
+const heroSubtitle = computed(() => innerPageConfig.value.subtitle || "筛选近期活动，快速找到适合参加的线下活动。");
 const resultHint = computed(() => {
   const categoryName = activeCategoryId.value === "all"
     ? "全部分类"

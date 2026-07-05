@@ -2,13 +2,13 @@
   <view class="container user-subpage has-custom-nav">
     <view class="custom-nav">
       <view class="nav-back" @click="goBack">‹ 返回</view>
-      <text class="nav-title">学习记录</text>
+      <text class="nav-title">浏览记录</text>
       <view class="nav-placeholder"></view>
     </view>
     <view class="page-hero">
-      <view class="hero-kicker">学习足迹</view>
+      <view class="hero-kicker">浏览足迹</view>
       <view class="hero-title">每一次进步都算数</view>
-      <view class="hero-desc">查看最近课程进度和最后学习时间。</view>
+      <view class="hero-desc">查看最近内容进度和最后浏览时间。</view>
     </view>
     <view v-for="r in records" :key="r.id" class="record-card">
       <view class="record-row">
@@ -23,8 +23,8 @@
     </view>
     <view v-if="!loading && !records.length" class="empty-card">
       <view class="empty-icon">时</view>
-      <view class="empty-title">暂无学习记录</view>
-      <view class="empty-desc">完成一次课程学习后，进度会在这里展示。</view>
+      <view class="empty-title">暂无浏览记录</view>
+      <view class="empty-desc">完成一次内容观看后，进度会在这里展示。</view>
     </view>
     <TabBar current="courses" />
   </view>
@@ -33,12 +33,13 @@
 import { onMounted, ref } from "vue";
 import { ensureUser, request } from "../../api";
 import TabBar from "../../components/TabBar.vue";
+import { reviewSafeText } from "../../review-safe-text";
 
 const loading = ref(true);
 const records = ref<any[]>([]);
 
 function formatTime(value?: string) {
-  if (!value) return "暂无学习时间";
+  if (!value) return "暂无浏览时间";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
   return date.toLocaleString("zh-CN", { hour12: false });
@@ -51,7 +52,7 @@ async function loadRecords() {
     const rows = await request<any[]>("/public/me/courses");
     records.value = (Array.isArray(rows) ? rows : []).map((course) => ({
       id: course.learning?.id || course.id,
-      title: course.title || "未命名课程",
+      title: reviewSafeText(course.title || "未命名内容"),
       icon: "📚",
       time: formatTime(course.learning?.updatedAt),
       progress: Number(course.learning?.progress || 0)

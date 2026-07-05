@@ -11,7 +11,7 @@
       </view>
       <view class="action-stack">
         <view class="button block primary-action" @click="goPrimary">{{ primaryText }}</view>
-        <view class="button secondary block secondary-action" @click="goBack">返回课程</view>
+        <view class="button secondary block secondary-action" @click="goBack">返回内容</view>
       </view>
     </view>
   </view>
@@ -39,7 +39,7 @@ onLoad((query) => {
 const iconText = computed(() => isSuccess.value ? "🎉" : isPending.value ? "⏳" : "😢");
 const statusClass = computed(() => isSuccess.value ? "is-success" : isPending.value ? "is-pending" : "is-fail");
 const statusKicker = computed(() => {
-  if (isSuccess.value) return accessMode.value === "free" ? "课程已加入" : "课程已开通";
+  if (isSuccess.value) return accessMode.value === "free" ? "内容已加入" : "内容已开通";
   return isPending.value ? "线下付款待确认" : "订单未完成";
 });
 const titleText = computed(() => {
@@ -47,11 +47,11 @@ const titleText = computed(() => {
   return isPending.value ? "等待确认收款" : "支付失败";
 });
 const bodyText = computed(() => {
-  if (isSuccess.value) return accessMode.value === "free" ? "课程已加入，可直接开始学习" : "恭喜您获得课程学习权限";
-  if (isPending.value) return "课程订单已提交，当前不会自动开通学习权限。请联系运营方完成线下付款，后台确认收款后再学习。";
+  if (isSuccess.value) return accessMode.value === "free" ? "内容已加入，可直接开始观看" : "恭喜您获得内容参与权益";
+  if (isPending.value) return "订单已提交，当前不会自动开通参与权益。请联系运营方完成线下付款，后台确认收款后再观看。";
   return "请稍后重试或联系客服";
 });
-const primaryText = computed(() => isSuccess.value ? "去学习" : isPending.value ? "返回课程" : "重新支付");
+const primaryText = computed(() => isSuccess.value ? "去观看" : isPending.value ? "返回内容" : "重新支付");
 function goPrimary() {
   if (isSuccess.value) uni.navigateTo({ url: withTenantCode(`/pages/course/player?id=${courseId.value || 1}`) });
   else if (isPending.value) uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${courseId.value || 1}`) });

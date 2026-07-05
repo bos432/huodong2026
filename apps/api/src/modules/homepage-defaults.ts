@@ -66,7 +66,7 @@ export const H5_PAGE_LABELS: Record<string, string> = {
   review_page: "评价",
   community_home: "共修首页",
   community_detail: "动态详情",
-  course_home: "课程首页",
+  course_home: "专题内容",
   charity_page: "公益页",
   mall_home: "商城首页",
   brand_story: "品牌故事"
@@ -75,7 +75,7 @@ export const H5_PAGE_LABELS: Record<string, string> = {
 const bottomNav = {
   items: [
     { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D" },
-    { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
+    { label: "专题", icon: "专", activeIcon: "专", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D" },
     { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D" },
     { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D" },
     { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D" }
@@ -102,7 +102,7 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
       subtitle: null,
       enabled: true,
       sortOrder: 10,
-      config: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、培训" },
+      config: { cityLabel: "本地", placeholder: "搜索沙龙、读书会、活动" },
       layout: { spacingBottom: 10, background: "transparent" }
     },
     {
@@ -207,7 +207,7 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
       pageKey: "home",
       type: "brand_story_entry",
       title: "慢π在做什么",
-      subtitle: "用活动、课程和公益共建一座城市里的东方文化学习场。",
+      subtitle: "用活动、内容和公益共建一座城市里的东方文化空间。",
       enabled: true,
       sortOrder: 86,
       config: { buttonText: "了解品牌故事", link: "/pages/brand/story", imageUrl: "" },
@@ -254,7 +254,7 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
       sortOrder: 110,
       config: {
         pages: [
-          { key: "activity_list", title: "活动", subtitle: "筛选近期活动，快速找到适合参加的课程和线下活动。", showBottomNav: true },
+          { key: "activity_list", title: "活动", subtitle: "筛选近期活动，快速找到适合参加的线下活动。", showBottomNav: true },
           { key: "announcement_list", title: "公告中心", subtitle: "活动通知、报名提醒和现场须知都会集中展示在这里。", showBottomNav: true },
           { key: "service_center", title: "服务中心", subtitle: "付款、退款、发票和客服信息，都可以在这里快速找到。", showBottomNav: true },
           { key: "activity_detail", title: "活动详情", subtitle: "查看活动介绍、报名规则、服务说明和现场信息。", showBottomNav: false },
@@ -262,12 +262,12 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
           { key: "registration_detail", title: "报名详情", subtitle: "查看报名状态、订单、签到码、入群二维码和主办方服务信息。", showBottomNav: true },
           { key: "review_page", title: "评价活动", subtitle: "你的反馈会帮助主办方持续改进活动体验。", showBottomNav: true },
           { key: "login_page", title: "手机号登录", subtitle: "用于查看报名、订单、签到码和会员权益。", showBottomNav: false },
-          { key: "partner_page", title: "城市合伙人", subtitle: "适合文化空间、书院、培训机构和本地社群运营者，用 SaaS 后台独立发布活动、收款对账和沉淀会员。", showBottomNav: true },
+          { key: "partner_page", title: "城市合伙人", subtitle: "适合文化空间、书院和本地社群运营者，用 SaaS 后台独立发布活动、收款对账和沉淀会员。", showBottomNav: true },
           { key: "community_home", title: "共修", subtitle: "活动心得、打卡任务和同学动态集中展示。", showBottomNav: true },
           { key: "community_detail", title: "动态详情", subtitle: "查看参与者心得、图片、评论与分享海报。", showBottomNav: false },
-          { key: "course_home", title: "全部课程", subtitle: "系统学习东方文化与活动方法。", showBottomNav: true },
+          { key: "course_home", title: "专题内容", subtitle: "了解东方文化与活动方法。", showBottomNav: true },
           { key: "charity_page", title: "公益池", subtitle: "公开展示公益金、公示项目和执行动态。", showBottomNav: true },
-          { key: "mall_home", title: "慢π商城", subtitle: "精选文化好物、课程周边与城市店铺。", showBottomNav: true },
+          { key: "mall_home", title: "慢π商城", subtitle: "精选文化好物、活动周边与城市店铺。", showBottomNav: true },
           { key: "brand_story", title: "品牌故事", subtitle: "讲清慢π的理念、路径与共建方式。", showBottomNav: true }
         ]
       },
@@ -286,21 +286,21 @@ function defaultInnerPageSections(pageKey: string): HomepageSectionTemplate[] {
   const label = H5_PAGE_LABELS[pageKey] || "页面";
   const hideNav = ["activity_detail", "activity_register", "login_page", "community_detail"].includes(pageKey);
   const subtitleMap: Record<string, string> = {
-    activity_list: "筛选近期活动，快速找到适合参加的课程和线下活动。",
+    activity_list: "筛选近期活动，快速找到适合参加的线下活动。",
     activity_detail: "查看活动介绍、报名规则、服务说明和现场信息。",
     activity_register: "确认票种、优惠和报名信息，提交后可在我的活动查看进度。",
     announcement_list: "活动通知、报名提醒和现场须知都会集中展示在这里。",
     service_center: "付款、退款、发票和客服信息，都可以在这里快速找到。",
-    partner_page: "适合文化空间、书院、培训机构和本地社群运营者。",
+    partner_page: "适合文化空间、书院和本地社群运营者。",
     user_my: "报名、付款、审核、签到状态都在这里。",
     login_page: "用于查看报名、订单、签到码和会员权益。",
     registration_detail: "查看报名状态、订单、签到码、入群二维码和主办方服务信息。",
     review_page: "你的反馈会帮助主办方持续改进活动体验。",
     community_home: "活动心得、打卡任务和同学动态集中展示。",
     community_detail: "查看参与者心得、图片、评论与分享海报。",
-    course_home: "系统学习东方文化与活动方法。",
+    course_home: "了解东方文化与活动方法。",
     charity_page: "公开展示公益金、公示项目和执行动态。",
-    mall_home: "精选文化好物、课程周边与城市店铺。",
+    mall_home: "精选文化好物、活动周边与城市店铺。",
     brand_story: "讲清慢π的理念、路径与共建方式。"
   };
   const sections: HomepageSectionTemplate[] = [
@@ -308,14 +308,14 @@ function defaultInnerPageSections(pageKey: string): HomepageSectionTemplate[] {
       pageKey,
       type: "my_page",
       title: "我的",
-      subtitle: "会员权益、订单、课程和管理入口",
+      subtitle: "会员权益、订单、内容和管理入口",
       enabled: true,
       sortOrder: 5,
       config: {
         greeting: "我的",
         tools: [
           { label: "我的订单", icon: "单", color: "#c43d3d", link: "/pages/user/orders", action: "navigate" },
-          { label: "我的课程", icon: "课", color: "#4a6b8a", link: "/pages/user/courses", action: "navigate" },
+          { label: "我的内容", icon: "内", color: "#4a6b8a", link: "/pages/user/courses", action: "navigate" },
           { label: "服务中心", icon: "服", color: "#475467", link: "/pages/service/index", action: "navigate" },
           { label: "账号设置", icon: "设", color: "#7c3aed", link: "/pages/user/settings", action: "navigate" }
         ]

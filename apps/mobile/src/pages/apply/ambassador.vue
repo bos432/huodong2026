@@ -19,8 +19,8 @@
       <input v-model="form.phone" class="input" placeholder="手机号" type="number" maxlength="11" />
       <input v-model="form.city" class="input" placeholder="所在城市" />
       <input v-model="form.wechat" class="input" placeholder="微信号" />
-      <input v-model="form.expertise" class="input" placeholder="擅长领域，例如书法/教育/国学/健康" />
-      <textarea v-model="form.experience" class="textarea" placeholder="请介绍你的经验、课程方向或可提供的服务" />
+      <input v-model="form.expertise" class="input" placeholder="擅长领域，例如书法/亲子沟通/国学/健康" />
+      <textarea v-model="form.experience" class="textarea" placeholder="请介绍你的经验、活动方向或可提供的服务" />
       <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.submitText }}</button>
     </view>
   </view>

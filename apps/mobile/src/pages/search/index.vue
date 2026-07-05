@@ -3,7 +3,7 @@
     <view class="search-bar">
       <view class="search-input-wrap">
         <text class="search-icon">搜</text>
-        <input class="search-input" v-model="keyword" placeholder="搜索课程、讲师..." confirm-type="search" @confirm="doSearch" />
+        <input class="search-input" v-model="keyword" placeholder="搜索活动、内容、主理人..." confirm-type="search" @confirm="doSearch" />
       </view>
       <text class="search-cancel" @click="goBack">取消</text>
     </view>
@@ -11,8 +11,8 @@
     <view v-if="!keyword">
       <view class="search-hero">
         <view class="hero-kicker">慢π搜索</view>
-        <view class="hero-title">找到想学的课程</view>
-        <view class="hero-desc">可以按课程名称、讲师或分类快速筛选。</view>
+        <view class="hero-title">找到想看的内容</view>
+        <view class="hero-desc">可以按内容名称、主理人或分类快速筛选。</view>
       </view>
 
       <view class="section-title"><text class="title-md">热门搜索</text></view>
@@ -40,7 +40,7 @@
           </view>
         </view>
       </view>
-      <view v-if="!results.length" class="empty-search">没有找到匹配课程，换个关键词试试。</view>
+      <view v-if="!results.length" class="empty-search">没有找到匹配内容，换个关键词试试。</view>
     </view>
   </view>
 </template>

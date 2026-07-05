@@ -282,8 +282,8 @@ onShow(() => {
 });
 
 const defaultGridItems = [
-  { icon:"📖", label:"我的课程", page:"courses" },
-  { icon:"🕐", label:"学习记录", page:"learning" },
+  { icon:"📖", label:"我的内容", page:"courses" },
+  { icon:"🕐", label:"浏览记录", page:"learning" },
   { icon:"❤", label:"商城收藏", page:"mallFavorites" },
   { icon:"👣", label:"浏览足迹", page:"mallHistory" },
   { icon:"🛒", label:"购物车", page:"mallCart" },
@@ -305,7 +305,7 @@ const gridItems = computed(() => {
 
 const orderTabs = computed(() => [
   { icon:"💳", label:"待付款", count: pendingRegistrationCount.value, status:"pending" },
-  { icon:"📚", label:"待学习", count: learningCourseCount.value, status:"learning" },
+  { icon:"📚", label:"待观看", count: learningCourseCount.value, status:"learning" },
   { icon:"✅", label:"已完成", count: completedCourseCount.value, status:"completed" },
   { icon:"📋", label:"全部", count: registrations.value.length + courses.value.length + mallOrders.value.length, status:"all" }
 ]);
@@ -502,7 +502,7 @@ async function saveWechatProfilePanel() {
 function logoutUser() {
   uni.showModal({
     title: "确认退出",
-    content: "退出后需要重新登录才能查看报名、订单、课程和打卡记录。",
+    content: "退出后需要重新登录才能查看报名、订单、内容和打卡记录。",
     confirmText: "退出登录",
     success(res) {
       if (!res.confirm) return;

@@ -176,7 +176,7 @@ onMounted(() => {
         <view>
           <view class="ambassador-label">公益参与</view>
           <view class="ambassador-title">报名志愿任务，沉淀服务记录</view>
-          <view class="ambassador-copy">活动协助、课程助教、公益执行和帮扶回访都可形成可追踪的志愿服务记录。</view>
+          <view class="ambassador-copy">活动协助、现场支持、公益执行和帮扶回访都可形成可追踪的志愿服务记录。</view>
         </view>
         <view class="login-link" @click="goVolunteer">查看志愿任务</view>
       </view>

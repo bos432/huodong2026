@@ -72,7 +72,7 @@ onShow(() => {
     <view class="hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
       <view class="eyebrow">慢π城市合伙人</view>
       <view class="headline" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "把一座城市的好活动，装进自己的运营后台" }}</view>
-      <view class="desc" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "适合文化空间、书院、培训机构、书法教室、读书会主理人和本地社群运营者，用 SaaS 后台独立发布活动、管理报名、收款对账和沉淀会员。" }}</view>
+      <view class="desc" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "适合文化空间、书院、书法教室、读书会主理人和本地社群运营者，用 SaaS 后台独立发布活动、管理报名、收款对账和沉淀会员。" }}</view>
       <view class="hero-actions">
         <view class="primary-action" @click="copy(setting?.customerServiceWechat || setting?.customerServicePhone)">咨询合作</view>
         <view class="secondary-action" @click="callPhone">电话沟通</view>
@@ -87,7 +87,7 @@ onShow(() => {
         <view class="target-item">文化空间</view>
         <view class="target-item">书院/读书会</view>
         <view class="target-item">书法美育机构</view>
-        <view class="target-item">家庭教育机构</view>
+        <view class="target-item">亲子沟通机构</view>
         <view class="target-item">健康养生工作室</view>
         <view class="target-item">创业技能社群</view>
       </view>
@@ -124,10 +124,10 @@ onShow(() => {
         </view>
         <view class="activity-card">
           <view class="activity-title">书法 / 美育</view>
-          <view class="activity-desc">硬笔、毛笔、亲子书法、成人美育、作品创作和线下体验课。</view>
+          <view class="activity-desc">硬笔、毛笔、亲子书法、成人美育、作品创作和线下体验活动。</view>
         </view>
         <view class="activity-card">
-          <view class="activity-title">家庭教育 / 健康养生 / 创业技能</view>
+          <view class="activity-title">亲子沟通 / 健康养生 / 创业技能</view>
           <view class="activity-desc">每个城市先选择一个更容易变现的方向，跑通活动报名和复购。</view>
         </view>
       </view>

@@ -1,14 +1,14 @@
 {
   "name": "活动报名",
   "appid": "__UNI__ACTIVITY",
-  "description": "沙龙、读书会、培训活动报名系统",
+  "description": "沙龙、读书会、线下活动报名系统",
   "versionName": "0.1.0",
   "versionCode": "1",
   "mp-weixin": {
     "appid": "wx4373059ed6b7793b",
     "permission": {
       "scope.userLocation": {
-        "desc": "用于定位城市展示本地活动课程"
+        "desc": "用于定位城市展示本地活动"
       }
     },
     "setting": {

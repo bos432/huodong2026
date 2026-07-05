@@ -12,7 +12,7 @@ type AdminContext = { id?: number; username?: string; role?: string; tenantId?: 
 type ReleaseAction = "upload" | "submit_audit" | "audit_status" | "release";
 type ReleaseStatus = "success" | "failed" | "processing";
 
-const SAFE_USER_LOCATION_DESC = "用于定位城市展示本地活动课程";
+const SAFE_USER_LOCATION_DESC = "用于定位城市展示本地活动";
 const SAFE_MP_BOX_SIZING_SELECTOR = "view,text,image,button,input,textarea,scroll-view,swiper,swiper-item,navigator,form,label";
 
 @Injectable()

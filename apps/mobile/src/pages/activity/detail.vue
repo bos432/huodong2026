@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
+import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
@@ -54,7 +55,7 @@ function actionHint() {
 
 function register() {
   if (!canRegister()) {
-    uni.showToast({ title: registrationPaused() ? registrationPausedMessage() : activity.value?.memberAccess?.message || "暂不可报名", icon: "none" });
+    uni.showToast({ title: reviewSafeText(registrationPaused() ? registrationPausedMessage() : activity.value?.memberAccess?.message || "暂不可报名"), icon: "none" });
     return;
   }
   const query = [
@@ -132,7 +133,7 @@ async function makeInvite() {
     invite.value = await request(`/public/activities/${activity.value.id}/share-poster`, { method: "POST", data: {} });
     uni.showToast({ title: "邀请链接已生成", icon: "success" });
   } catch (err: any) {
-    uni.showToast({ title: err.message || "生成失败", icon: "none" });
+    uni.showToast({ title: reviewSafeText(err.message || "生成失败"), icon: "none" });
   }
 }
 
@@ -201,10 +202,10 @@ async function load() {
       request(`/public/activities/${id}/enhanced?${query}`),
       request("/public/settings/operation")
     ]);
-    activity.value = detail;
-    operationSetting.value = setting;
+    activity.value = reviewSafeData(detail);
+    operationSetting.value = reviewSafeData(setting);
   } catch (err: any) {
-    error.value = err.message || "加载失败";
+    error.value = reviewSafeText(err.message || "加载失败");
   } finally {
     loading.value = false;
   }

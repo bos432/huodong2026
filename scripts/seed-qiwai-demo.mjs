@@ -31,10 +31,10 @@ const tenants = [
         section: "节气文化导入、经典片段共读、城市生活应用讨论、会员活动介绍。"
       },
       {
-        title: "硬笔书法 30 天入门公开课",
+        title: "硬笔书法 30 天入门公开活动",
         price: 49,
         location: "杭州西湖文化空间",
-        description: "面向零基础成人和亲子家庭的书法体验课，用一场活动验证书法美育方向的报名转化。",
+        description: "面向零基础成人和亲子家庭的书法体验活动，用一场活动验证书法美育方向的报名转化。",
         host: "杭州书法主理人",
         section: "握笔与坐姿、基础笔画、常用字练习、训练营报名说明。"
       }
@@ -53,19 +53,19 @@ const tenants = [
     agentName: "苏州书院活动中心",
     activities: [
       {
-        title: "国学经典导读体验课",
+        title: "国学经典导读体验活动",
         price: 69,
         location: "苏州书院活动中心",
         description: "用轻量导读方式带用户进入国学经典，重点验证读书会和训练营转化。",
         host: "苏州书院讲师",
-        section: "经典导读、互动讨论、学习路径说明、会员权益介绍。"
+        section: "经典导读、互动讨论、参与路径说明、会员权益介绍。"
       },
       {
-        title: "亲子沟通与家庭教育沙龙",
+        title: "亲子沟通沙龙",
         price: 129,
         location: "苏州书院活动中心",
-        description: "面向家长的线下沟通沙龙，沉淀家庭教育方向的高复购用户。",
-        host: "家庭教育顾问",
+        description: "面向家长的线下沟通沙龙，沉淀亲子沟通方向的高复购用户。",
+        host: "亲子沟通顾问",
         section: "亲子冲突场景拆解、沟通练习、问答交流、后续训练营介绍。"
       }
     ]
@@ -83,7 +83,7 @@ const tenants = [
     agentName: "成都身心成长空间",
     activities: [
       {
-        title: "节气养生与身心减压体验课",
+        title: "节气养生与身心减压体验活动",
         price: 79,
         location: "成都身心成长空间",
         description: "围绕节气养生、正念减压和生活方式管理做线下体验，验证健康养生方向。",
@@ -273,7 +273,7 @@ async function upsertOperationSettings(connection, tenant, tenantId) {
   const updateValues = [
     true,
     "",
-    `线下活动支持到场后核销，付费活动请以活动页订单状态为准。${tenant.name} 将按活动说明提供服务。`,
+    `线下活动支持到场后核销，收费活动请以活动页订单状态为准。${tenant.name} 将按活动说明提供服务。`,
     tenant.contactName,
     tenant.contactPhone,
     `${tenant.code}_service`,
@@ -307,7 +307,7 @@ async function upsertOperationSettings(connection, tenant, tenantId) {
       [
         true,
         "",
-        `线下活动支持到场后核销，付费活动请以活动页订单状态为准。${tenant.name} 将按活动说明提供服务。`,
+        `线下活动支持到场后核销，收费活动请以活动页订单状态为准。${tenant.name} 将按活动说明提供服务。`,
         tenant.contactName,
         tenant.contactPhone,
         `${tenant.code}_service`,
@@ -392,7 +392,7 @@ async function upsertActivity(connection, tenantId, agentId, activity, index) {
       VALUES
         (?, 'highlights', '活动亮点', ?, 'https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=80', 1),
         (?, 'agenda', '活动流程', ?, NULL, 2),
-        (?, 'notice', '合规说明', '本活动聚焦文化、教育、美育和生活方式学习，不提供算命、改运、破灾、预测财富婚姻疾病等服务。', NULL, 3)
+        (?, 'notice', '合规说明', '本活动聚焦文化、美育和生活方式体验，不提供算命、改运、破灾、预测财富婚姻疾病等服务。', NULL, 3)
     `,
     [activityId, activity.description, activityId, activity.section, activityId]
   );

@@ -98,30 +98,30 @@ const accounts = [
 ];
 
 const activities = [
-  ["【演示】国学经典晨读体验营", 0, "国学", "清晨共读《大学》与《论语》片段，用 60 分钟体验慢π式学习节奏，适合第一次到访的新学员。"],
-  ["【演示】硬笔书法入门公开课", 0, "书法", "从握笔、坐姿、基础笔画开始，现场完成一张入门作品，适合零基础成人和亲子家庭。"],
-  ["【演示】节气养生与身心舒展", 0, "身心健康", "结合节气生活方式、呼吸放松和轻运动，做一场温和体验课，帮助用户建立健康打卡习惯。"],
-  ["【演示】家庭教育沟通工作坊", 59, "家庭教育", "拆解亲子沟通场景，用练习帮助家长建立更稳定的表达方式，适合转化为系列课。"],
-  ["【演示】东方美学书法半日课", 99, "书法", "半日沉浸式书法与东方美学体验，包含作品点评、茶歇交流和后续系统课推荐。"],
-  ["【演示】个人成长与副业定位课", 199, "创业技能", "帮助学员梳理个人优势、服务定位和第一次成交路径，适合验证付费报名和交付闭环。"]
+  ["【演示】国学经典晨读体验营", 0, "国学", "清晨共读《大学》与《论语》片段，用 60 分钟体验慢π式活动节奏，适合第一次到访的新参与者。"],
+  ["【演示】硬笔书法入门公开活动", 0, "书法", "从握笔、坐姿、基础笔画开始，现场完成一张入门作品，适合零基础成人和亲子家庭。"],
+  ["【演示】节气养生与身心舒展", 0, "身心健康", "结合节气生活方式、呼吸放松和轻运动，做一场温和体验活动，帮助用户建立健康打卡习惯。"],
+  ["【演示】亲子沟通工作坊", 59, "亲子沟通", "拆解亲子沟通场景，用练习帮助家长建立更稳定的表达方式，适合转化为系列活动。"],
+  ["【演示】东方美学书法半日活动", 99, "书法", "半日沉浸式书法与东方美学体验，包含作品点评、茶歇交流和后续活动建议。"],
+  ["【演示】个人成长与副业定位活动", 199, "创业技能", "帮助参与者梳理个人优势、服务定位和第一次成交路径，适合验证收费报名和交付闭环。"]
 ];
 
 const courses = [
-  ["【演示】国学入门十分钟", 0, "慢π导学老师", ["国学", "体验课", "新人必看"]],
-  ["【演示】书法基础体验课", 0, "书法主理人", ["书法", "免费体验", "作品练习"]],
-  ["【演示】传统文化系统课", 299, "慢π讲师团", ["传统文化", "系统课", "30天学习"]],
-  ["【演示】家庭教育进阶课", 199, "家庭教育顾问", ["家庭教育", "进阶", "亲子沟通"]]
+  ["【演示】国学入门十分钟", 0, "慢π导览员", ["国学", "体验活动", "新人必看"]],
+  ["【演示】书法基础体验活动", 0, "书法主理人", ["书法", "免费体验", "作品练习"]],
+  ["【演示】传统文化专题服务", 299, "慢π主理团队", ["传统文化", "专题服务", "30天参与"]],
+  ["【演示】亲子沟通进阶活动", 199, "亲子沟通顾问", ["亲子沟通", "进阶", "家庭沟通"]]
 ];
 
 const posts = [
-  "今日晨读摘记：把经典句子落回日常选择里，才是真正开始学习。新同学可以先从免费晨读体验营进入。",
-  "书法体验课现场：横画不只是写直，更是在练稳定、呼吸和观察力。下周半日课会增加作品点评环节。",
-  "家庭教育沙龙复盘：先处理情绪，再处理事情，是很多家长今天带走的一句话。评论区欢迎留下你的场景。",
-  "节气身心课预告：这周从饮食、睡眠和轻运动三个角度做生活方式练习，适合加入共修打卡。",
-  "学员笔记精选：学习传统文化不是背答案，而是多一个看世界的角度。今天的笔记已经整理进课程资料。",
+  "今日晨读摘记：把经典句子落回日常选择里，才是真正开始参与。新朋友可以先从免费晨读体验营进入。",
+  "书法体验活动现场：横画不只是写直，更是在练稳定、呼吸和观察力。下周半日活动会增加作品点评环节。",
+  "亲子沟通沙龙复盘：先处理情绪，再处理事情，是很多家长今天带走的一句话。评论区欢迎留下你的场景。",
+  "节气身心活动预告：这周从饮食、睡眠和轻运动三个角度做生活方式练习，适合加入共修打卡。",
+  "参与者笔记精选：了解传统文化不是背参考内容，而是多一个看世界的角度。今天的笔记已经整理进活动资料。",
   "慢π城市日常：下午的空间很安静，适合阅读、抄写，也适合和自己待一会儿。欢迎预约到店体验。",
   "共修打卡第 7 天：有人开始早睡，有人开始每天读 10 分钟书，小变化会积累，后台也能看到打卡记录。",
-  "创业技能小课预告：用一页纸梳理用户、产品和第一次成交路径，适合想做本地文化服务的人。"
+  "创业技能小分享预告：用一页纸梳理用户、产品和第一次成交路径，适合想做本地文化服务的人。"
 ];
 
 async function main() {
@@ -237,7 +237,7 @@ async function ensureMallDefaultStore(token, tenantId) {
     region: "重庆市铜梁区",
     contactName: "慢π演示运营",
     contactPhone: "13990009999",
-    notice: "慢π自营商品、课程周边和公益好物统一从这里发货。",
+    notice: "慢π自营商品、活动周边和公益好物统一从这里发货。",
     remark: `demoScenario:${SCENARIO} default mall merchant`
   };
   const existing = merchants.find((item) => item.code === payload.code);
@@ -290,7 +290,7 @@ async function ensureOperationSettings(token) {
       invoiceInstructions: "演示订单如需发票，请联系演示客服登记开票信息。",
       pageTheme: {
         brandName: "慢π",
-        slogan: "传统文化、课程学习、活动报名一站式演示中心",
+        slogan: "传统文化、活动内容、活动报名一站式演示中心",
         primaryColor: "#8B5A2B",
         accentColor: "#D8A24A",
         logoUrl: cover(1),
@@ -311,7 +311,7 @@ async function ensureHomepage(token) {
     {
       type: "hero",
       title: "慢π演示中心",
-      subtitle: "一座可运营的线上慢π空间：活动报名、课程学习、共修打卡、动态互动和财务追溯完整闭环。",
+      subtitle: "一座可运营的线上慢π空间：活动报名、内容参与、共修打卡、动态互动和财务追溯完整闭环。",
       sortOrder: 1,
       config: {
         eyebrow: "上线演示商家",
@@ -326,7 +326,7 @@ async function ensureHomepage(token) {
     {
       type: "announcement_bar",
       title: "运营公告",
-      subtitle: "演示商家已准备活动、课程、动态、余额支付、退款与签到核销数据",
+      subtitle: "演示商家已准备活动、内容、动态、余额支付、退款与签到核销数据",
       sortOrder: 2,
       config: { limit: 3, pinnedFirst: true, link: "/pages/announcement/list", demoScenario: SCENARIO },
       layout: { spacingBottom: 14, backgroundColor: "#FFF7EC", borderRadius: 14 }
@@ -334,7 +334,7 @@ async function ensureHomepage(token) {
     {
       type: "quick_nav",
       title: "慢π服务",
-      subtitle: "从体验、学习到复购服务，用户路径一眼可见",
+      subtitle: "从体验、参与到复购服务，用户路径一眼可见",
       sortOrder: 3,
       config: {
         items: [
@@ -343,7 +343,7 @@ async function ensureHomepage(token) {
           { label: "大使申请", icon: "使", color: "#C43D3D", link: "/pages/apply/ambassador" },
           { label: "帮扶申请", icon: "扶", color: "#5B8C5A", link: "/pages/apply/aid" },
           { label: "活动报名", icon: "活", color: "#8B5A2B", link: "/pages/activity/list", action: "mainPage" },
-          { label: "课程学习", icon: "课", color: "#4A6B8A", link: "/pages/courses/index", action: "mainPage" },
+          { label: "专题内容", icon: "专", color: "#4A6B8A", link: "/pages/courses/index", action: "mainPage" },
           { label: "共修打卡", icon: "修", color: "#5B8C5A", link: "/pages/community/checkin" },
           { label: "慢π动态", icon: "动", color: "#B45309", link: "/pages/community/index", action: "mainPage" }
         ],
@@ -351,11 +351,11 @@ async function ensureHomepage(token) {
       },
       layout: { columns: 4, spacingBottom: 18 }
     },
-    { type: "featured_activities", title: "近期精选活动", subtitle: "免费体验课负责获客，收费工作坊负责转化", sortOrder: 4, config: { source: "featured", limit: 6, demoScenario: SCENARIO }, layout: { display: "horizontal", spacingBottom: 18, borderRadius: 16 } },
-    { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、家庭教育、身心成长", sortOrder: 5, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12 } },
+    { type: "featured_activities", title: "近期精选活动", subtitle: "免费体验活动负责获客，收费工作坊负责转化", sortOrder: 4, config: { source: "featured", limit: 6, demoScenario: SCENARIO }, layout: { display: "horizontal", spacingBottom: 18, borderRadius: 16 } },
+    { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、亲子沟通、身心成长", sortOrder: 5, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12 } },
     { type: "activity_feed", title: "全部演示活动", subtitle: "覆盖免费报名、收费报名、余额支付、退款和签到核销", sortOrder: 6, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list", borderRadius: 16 } },
-    { type: "image_banner", title: "课程学习专区", subtitle: "体验课与系统课同步展示", sortOrder: 7, config: { imageUrl: cover(8), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, backgroundColor: "#F7E7D0", borderRadius: 16 } },
-    { type: "rich_text", title: "运营闭环看板", subtitle: "用户路径与后台动作已经打通", sortOrder: 8, config: { content: "用户侧：浏览首页 -> 报名活动 -> 余额支付 -> 申请退款 -> 学习课程 -> 互动评论\n后台侧：发布内容 -> 确认收款 -> 审核退款 -> 核销签到 -> 审核评论 -> 查看财务流水", link: "/pages/community/index", demoScenario: SCENARIO }, layout: { spacingBottom: 18, backgroundColor: "#FFFCF6", borderRadius: 16 } },
+    { type: "image_banner", title: "专题内容专区", subtitle: "体验活动与专题服务同步展示", sortOrder: 7, config: { imageUrl: cover(8), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, backgroundColor: "#F7E7D0", borderRadius: 16 } },
+    { type: "rich_text", title: "运营闭环看板", subtitle: "用户路径与后台动作已经打通", sortOrder: 8, config: { content: "用户侧：浏览首页 -> 报名活动 -> 余额支付 -> 申请退款 -> 查看内容 -> 互动评论\n后台侧：发布内容 -> 确认收款 -> 审核退款 -> 核销签到 -> 审核评论 -> 查看财务流水", link: "/pages/community/index", demoScenario: SCENARIO }, layout: { spacingBottom: 18, backgroundColor: "#FFFCF6", borderRadius: 16 } },
     {
       type: "bottom_nav",
       title: "底部导航",
@@ -363,7 +363,7 @@ async function ensureHomepage(token) {
       config: {
         items: [
           { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#8B5A2B" },
-          { label: "课程", icon: "课", activeIcon: "课", link: "/pages/courses/index", action: "mainPage", color: "#8B5A2B" },
+          { label: "专题", icon: "专", activeIcon: "专", link: "/pages/courses/index", action: "mainPage", color: "#8B5A2B" },
           { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#8B5A2B" },
           { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#8B5A2B" },
           { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#8B5A2B" }
@@ -375,14 +375,14 @@ async function ensureHomepage(token) {
     {
       type: "my_page",
       title: "我的慢π",
-      subtitle: "报名、订单、课程、钱包和管理入口",
+      subtitle: "报名、订单、内容、钱包和管理入口",
       sortOrder: 100,
       config: {
         greeting: "我的慢π",
         tools: [
           { label: "我的订单", icon: "单", color: "#8B5A2B", link: "/pages/user/orders", action: "navigate" },
           { label: "商城订单", icon: "商", color: "#C2410C", link: "/pages/user/mall-orders", action: "navigate" },
-          { label: "我的课程", icon: "课", color: "#4A6B8A", link: "/pages/user/courses", action: "navigate" },
+          { label: "我的内容", icon: "内", color: "#4A6B8A", link: "/pages/user/courses", action: "navigate" },
           { label: "服务中心", icon: "服", color: "#7A6858", link: "/pages/service/index", action: "navigate" },
           { label: "账号设置", icon: "设", color: "#B45309", link: "/pages/user/settings", action: "navigate" }
         ],
@@ -401,7 +401,7 @@ async function ensureHomepage(token) {
       sortOrder: 110,
       config: {
         pages: [
-          { key: "activity_list", title: "活动", subtitle: "筛选近期活动，快速找到适合参加的课程和线下活动。", showBottomNav: true },
+          { key: "activity_list", title: "活动", subtitle: "筛选近期活动，快速找到适合参加的线下活动。", showBottomNav: true },
           { key: "announcement_list", title: "公告中心", subtitle: "活动通知、报名提醒和现场须知都会集中展示在这里。", showBottomNav: true },
           { key: "service_center", title: "服务中心", subtitle: "付款、退款、发票和客服信息，都可以在这里快速找到。", showBottomNav: true },
           { key: "activity_detail", title: "活动详情", subtitle: "查看活动介绍、报名规则、服务说明和现场信息。", showBottomNav: false },
@@ -462,7 +462,7 @@ async function ensureAnnouncements(token, tenantId) {
     tenantId,
     title,
     type: "operation",
-    content: "本页面为 qiwai-showcase 演示商家，覆盖活动报名、余额支付、退款、签到、课程学习、动态评论审核等上线验收场景。",
+    content: "本页面为 qiwai-showcase 演示商家，覆盖活动报名、余额支付、退款、签到、内容参与、动态评论审核等上线验收场景。",
     enabled: true,
     pinned: true
   };
@@ -529,12 +529,12 @@ function activityPayload(title, price, category, description, index, capacity = 
       { label: "姓名", type: "text", required: true, sortOrder: 1, options: [] },
       { label: "手机号", type: "phone", required: true, sortOrder: 2, options: [] },
       { label: "微信号", type: "text", required: false, sortOrder: 3, options: [] },
-      { label: "学习兴趣", type: "single_choice", required: false, sortOrder: 4, options: [{ label: category, value: category }, { label: "其他", value: "其他" }] }
+      { label: "参与兴趣", type: "single_choice", required: false, sortOrder: 4, options: [{ label: category, value: category }, { label: "其他", value: "其他" }] }
     ],
     hosts: [{ name: "慢π演示讲师", title: category, avatarUrl: "", bio: "负责演示商家内容交付和用户服务。", sortOrder: 1 }],
     sections: [
-      { type: "highlights", title: "你会获得什么", content: `一次完整的${category}体验：现场讲解、互动练习、老师答疑，以及后续课程/共修建议。`, imageUrl: cover(index + 1), sortOrder: 1 },
-      { type: "agenda", title: "活动流程", content: "签到入场 -> 主题导入 -> 互动体验 -> 作品/问题点评 -> 后续学习建议。", imageUrl: "", sortOrder: 2 },
+      { type: "highlights", title: "你会获得什么", content: `一次完整的${category}体验：现场讲解、互动练习、主理人答疑，以及后续活动/共修建议。`, imageUrl: cover(index + 1), sortOrder: 1 },
+      { type: "agenda", title: "活动流程", content: "签到入场 -> 主题导入 -> 互动体验 -> 作品/问题点评 -> 后续参与建议。", imageUrl: "", sortOrder: 2 },
       { type: "notice", title: "服务保障", content: "报名后可在“我的”查看订单和签到码；收费报名支持余额支付演示，退款会进入后台审核并退回余额。", imageUrl: "", sortOrder: 3 }
     ]
   };
@@ -554,7 +554,7 @@ async function ensureCourses(token, tenantId) {
     const payload = {
       tenantId,
       title,
-      description: `${title}适合作为慢π线上课程样板：包含试看课时、系统课时、后台确认收款、已购课程和学习进度记录。`,
+      description: `${title}适合作为慢π线上内容样板：包含试看小节、系统小节、后台确认收款、已加入内容和观看进度记录。`,
       coverUrl: cover(index + 3),
       teacherName,
       teacherAvatar: "",
@@ -573,19 +573,19 @@ async function ensureCourses(token, tenantId) {
       : await api("/admin/courses", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
     await ensureCourseContent(token, course.id);
   }
-  reportStep("课程与章节课时已创建/更新", "4 门课程");
+  reportStep("专题内容与章节小节已创建/更新", "4 项内容");
 }
 
 async function ensureCourseContent(token, courseId) {
   const chapters = pickList(await api(`/admin/courses/${courseId}/chapters`, { headers: auth(token) }));
-  let chapter = chapters.find((item) => item.title === "第一章：演示学习闭环");
+  let chapter = chapters.find((item) => item.title === "第一章：演示内容闭环");
   if (!chapter) {
-    chapter = await api("/admin/course-chapters", { method: "POST", headers: auth(token), body: JSON.stringify({ courseId, title: "第一章：演示学习闭环", sortOrder: 1 }) });
+    chapter = await api("/admin/course-chapters", { method: "POST", headers: auth(token), body: JSON.stringify({ courseId, title: "第一章：演示内容闭环", sortOrder: 1 }) });
   }
   const lessons = pickList(await api(`/admin/course-chapters/${chapter.id}/lessons`, { headers: auth(token) }));
   const lessonPayloads = [
-    { title: "课时 1：课程介绍与学习目标", duration: "08:00", isFree: true, content: "本节用于试看：了解课程目标、适合人群和学习路径。" },
-    { title: "课时 2：核心方法与练习", duration: "16:00", isFree: false, content: "本节用于付费交付演示：后台确认购买后可学习，并写回学习进度。" }
+    { title: "小节 1：内容介绍与参与目标", duration: "08:00", isFree: true, content: "本节用于试看：了解内容目标、适合人群和参与路径。" },
+    { title: "小节 2：核心方法与练习", duration: "16:00", isFree: false, content: "本节用于收费服务演示：后台确认后可观看，并写回观看进度。" }
   ];
   for (const payload of lessonPayloads) {
     const existing = lessons.find((item) => item.title === payload.title);
@@ -648,7 +648,7 @@ async function ensureCommunity(token, tenantId) {
 async function ensureMall(token, tenantId, merchantId) {
   assert(merchantId, "演示商城 seed 缺少默认店铺 merchantId");
   const merchantQuery = `merchantId=${merchantId}`;
-  const categoryNames = ["慢π文创", "学习用品", "公益好物"];
+  const categoryNames = ["慢π文创", "活动用品", "公益好物"];
   const existingCategories = pickList(await api(`/admin/mall/categories?${merchantQuery}`, { headers: auth(token) }));
   const categories = [];
   for (const [index, name] of categoryNames.entries()) {
@@ -661,10 +661,10 @@ async function ensureMall(token, tenantId, merchantId) {
   }
   const existing = pickList(await api(`/admin/mall/products?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
   const products = [
-    ["【演示】慢π读书手账", "学习用品", 39, 69, "适合晨读、课程笔记和共修打卡记录，演示商城余额支付与线下收款。"],
-    ["【演示】东方美学书签套装", "慢π文创", 19, 39, "铜版纸书签 6 枚装，适合作为活动伴手礼和课程赠品。"],
+    ["【演示】慢π读书手账", "活动用品", 39, 69, "适合晨读、活动笔记和共修打卡记录，演示商城余额支付与线下收款。"],
+    ["【演示】东方美学书签套装", "慢π文创", 19, 39, "铜版纸书签 6 枚装，适合作为活动伴手礼。"],
     ["【演示】节气香囊公益礼盒", "公益好物", 59, 99, "用于公益好物演示，售后、发货、库存流水均可追踪。"],
-    ["【演示】书法入门练习套装", "学习用品", 89, 129, "含练习纸、基础字帖和控笔练习说明，适合书法体验课转化。"]
+    ["【演示】书法入门练习套装", "活动用品", 89, 129, "含练习纸、基础字帖和控笔练习说明，适合书法体验活动转化。"]
   ];
   for (const [index, [title, categoryName, price, originalPrice, description]] of products.entries()) {
     const category = categories.find((item) => item.name === categoryName);
@@ -692,12 +692,12 @@ async function ensureMall(token, tenantId, merchantId) {
     else await api("/admin/mall/products", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
   }
   const seededProducts = pickList(await api(`/admin/mall/products?pageSize=200&${merchantQuery}`, { headers: auth(token) }));
-  const stationeryCategory = categories.find((item) => item.name === "学习用品");
+  const stationeryCategory = categories.find((item) => item.name === "活动用品");
   const calligraphyProduct = seededProducts.find((item) => item.title === "【演示】书法入门练习套装");
   const couponPayload = { tenantId, merchantId, code: "SHOWCASE10", name: "演示商城满 50 减 10", minAmount: 50, discountAmount: 10, scope: "all", usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" };
   const couponPayloads = [
     couponPayload,
-    { tenantId, merchantId, code: "STUDY8", name: "学习用品满 80 减 8", minAmount: 80, discountAmount: 8, scope: "category", scopeCategoryId: stationeryCategory?.id, usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
+    { tenantId, merchantId, code: "STUDY8", name: "活动用品满 80 减 8", minAmount: 80, discountAmount: 8, scope: "category", scopeCategoryId: stationeryCategory?.id, usageLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
     { tenantId, merchantId, code: "CALLIGRAPHY12", name: "书法套装专享满 80 减 12", minAmount: 80, discountAmount: 12, scope: "product", scopeProductId: calligraphyProduct?.id, usageLimit: 0, perUserLimit: 0, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" },
     { tenantId, merchantId, code: "ONCE5", name: "新人每人限用满 50 减 5", minAmount: 50, discountAmount: 5, scope: "all", usageLimit: 0, perUserLimit: 1, enabled: true, startsAt: "2026-01-01 00:00:00", endsAt: "2027-12-31 23:59:59" }
   ];

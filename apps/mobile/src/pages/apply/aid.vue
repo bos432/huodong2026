@@ -20,7 +20,7 @@
       <input v-model="form.phone" class="input" placeholder="手机号" type="number" maxlength="11" />
       <input v-model="form.city" class="input" placeholder="所在城市/服务区域" />
       <input v-model="form.wechat" class="input" placeholder="微信号" />
-      <input v-model="form.expertise" class="input" :placeholder="active === 'personal' ? '希望获得的帮扶，例如课程名额/活动名额' : '项目名称/帮扶方向'" />
+      <input v-model="form.expertise" class="input" :placeholder="active === 'personal' ? '希望获得的帮扶，例如活动名额/服务名额' : '项目名称/帮扶方向'" />
       <textarea v-model="form.experience" class="textarea" :placeholder="active === 'personal' ? '请说明你的情况、需要的帮助和可参与时间' : '请说明项目背景、服务对象、资金/资源需求和联系方式'" />
       <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.submitText }}</button>
     </view>

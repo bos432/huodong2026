@@ -36,7 +36,7 @@
       </view>
     </scroll-view>
 
-    <!-- 限时体验课 -->
+    <!-- 限时体验 -->
     <view class="section-with-title">
       <view class="row">
         <text class="title-md">🔥 限时体验</text>
@@ -56,13 +56,13 @@
           </view>
         </view>
       </scroll-view>
-      <EmptyState v-if="!trialCourses.length" icon="📚" text="暂无体验课，请先在后台发布课程" />
+      <EmptyState v-if="!trialCourses.length" icon="📚" text="暂无体验内容，请先在后台发布内容" />
     </view>
 
-    <!-- 热门好课 -->
+    <!-- 热门内容 -->
     <view class="section-with-title" style="margin-top:24rpx;">
       <view class="row">
-        <text class="title-md">📚 热门好课</text>
+        <text class="title-md">📚 热门内容</text>
         <text class="subtle" style="color:#C43D3D;" @click="goAllCourses">查看全部 &gt;</text>
       </view>
       <scroll-view class="scroll-x" scroll-x :show-scrollbar="false" style="margin-top:16rpx;">
@@ -76,7 +76,7 @@
           <text class="price" style="font-size:28rpx;">{{ priceText(course.price) }}</text>
         </view>
       </scroll-view>
-      <EmptyState v-if="!hotCourses.length" icon="📖" text="暂无热门课程，请先在后台发布课程" />
+      <EmptyState v-if="!hotCourses.length" icon="📖" text="暂无热门内容，请先在后台发布内容" />
     </view>
 
     <AdSlotRenderer slot-key="home_feed_inline" page-key="home" compact />
@@ -170,7 +170,7 @@ const jingang = [
 
 const banners = [
   { title: "寻找100位慢π大使", sub: "一起用7把钥匙，打开中国人的精神家园", bg: "#C43D3D", link: "ambassador" },
-  { title: "精选课程：慢π好课", sub: "从基础到进阶，跟随老师系统学习", bg: "#4A6B8A", link: "course" },
+  { title: "精选专题：慢π内容", sub: "从体验到进阶，跟随主理人深入了解", bg: "#4A6B8A", link: "course" },
   { title: "线上共修会报名中", sub: "与百位同修一起精进", bg: "#5B8C5A", link: "community" }
 ];
 

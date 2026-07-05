@@ -8,7 +8,7 @@
     <view class="page-hero">
       <view class="hero-kicker">成长凭证</view>
       <view class="hero-title">记录完成与认可</view>
-      <view class="hero-desc">课程或活动达成后，证书会集中展示在这里。</view>
+      <view class="hero-desc">内容或活动达成后，证书会集中展示在这里。</view>
     </view>
     <view v-for="c in certificates" :key="c.id" class="certificate-card">
       <image v-if="c.imageUrl" class="cert-image" :src="c.imageUrl" mode="aspectFill" />
@@ -20,7 +20,7 @@
     <view v-if="!loading && !certificates.length" class="empty-card">
       <view class="empty-icon">证</view>
       <view class="empty-title">暂无证书</view>
-      <view class="empty-desc">完成可发证的课程或活动后，证书会自动出现在这里。</view>
+      <view class="empty-desc">完成可发证的内容或活动后，证书会自动出现在这里。</view>
     </view>
     <TabBar current="user" />
   </view>

@@ -46,6 +46,7 @@ import { computed, onMounted, ref } from "vue";
 import { ensureUser, request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
 import TabBar from "../../components/TabBar.vue";
+import { reviewSafeText } from "../../review-safe-text";
 
 type OrderTab = "all" | "pending" | "learning" | "completed";
 type UiOrder = {
@@ -71,7 +72,7 @@ type UiOrder = {
 const tabs = [
   { key: "all", label: "全部" },
   { key: "pending", label: "待付款/确认" },
-  { key: "learning", label: "待学习" },
+  { key: "learning", label: "待观看" },
   { key: "completed", label: "已完成" }
 ] as const;
 const activeTab = ref<OrderTab>("all");
@@ -117,7 +118,7 @@ async function loadOrders() {
     courses.value = Array.isArray(courseRows) ? courseRows : [];
     courseOrders.value = Array.isArray(courseOrderRows) ? courseOrderRows : [];
   } catch (error: any) {
-    loadError.value = error?.message || "订单加载失败";
+    loadError.value = reviewSafeText(error?.message || "订单加载失败");
   } finally {
     loading.value = false;
   }
@@ -152,8 +153,8 @@ function toCourseOrder(order: any): UiOrder {
   return {
     key: `course-order-${order.id}`,
     type: "course",
-    typeLabel: "课程订单",
-    title: order.course?.title || "未命名课程",
+    typeLabel: "内容订单",
+    title: reviewSafeText(order.course?.title || "未命名内容"),
     orderNo: order.orderNo,
     amount: order.amount,
     paymentMethod: order.paymentMethod,
@@ -164,8 +165,8 @@ function toCourseOrder(order: any): UiOrder {
     courseId: order.course?.id,
     owned,
     progress,
-    tip: order.status === "pending_payment" ? "线下付款订单已提交，后台确认收款后才会开通学习权限。" : owned ? `学习进度 ${progress}%` : "",
-    actionText: owned ? "去学习" : "查看课程"
+    tip: order.status === "pending_payment" ? "线下付款订单已提交，后台确认收款后才会开通参与权益。" : owned ? `观看进度 ${progress}%` : "",
+    actionText: owned ? "去观看" : "查看内容"
   };
 }
 
@@ -174,19 +175,19 @@ function toLearningOrder(course: any): UiOrder {
   return {
     key: `course-learning-${course.id}`,
     type: "course",
-    typeLabel: "已购课程",
-    title: course.title || "未命名课程",
+    typeLabel: "已加入内容",
+    title: reviewSafeText(course.title || "未命名内容"),
     amount: course.price,
     paymentMethod: Number(course.price || 0) > 0 ? "offline" : "free",
     status: progress >= 100 ? "completed" : "learning",
-    statusText: progress >= 100 ? "已完成" : "学习中",
+    statusText: progress >= 100 ? "已完成" : "观看中",
     statusClass: progress >= 100 ? "done" : "learning",
     createdAt: course.learning?.updatedAt,
     courseId: course.id,
     owned: true,
     progress,
-    tip: `学习进度 ${progress}%`,
-    actionText: "继续学习"
+    tip: `观看进度 ${progress}%`,
+    actionText: "继续观看"
   };
 }
 
@@ -211,10 +212,10 @@ function registrationStatusText(status: string) {
 
 function courseOrderStatusText(status: string, owned: boolean, completed = false) {
   if (completed) return "已完成";
-  if (owned) return "待学习";
+  if (owned) return "待观看";
   if (status === "pending_payment") return "待确认收款";
   if (status === "closed") return "已关闭";
-  return "课程订单";
+  return "内容订单";
 }
 
 function activityTip(status: string, order: any) {

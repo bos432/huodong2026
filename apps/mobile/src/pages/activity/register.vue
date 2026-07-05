@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { FieldType } from "@activity/shared";
 import { ensureUser, fetchMyProfile, request, getCurrentRouteWithQuery, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
+import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
@@ -172,7 +173,7 @@ async function doSubmit() {
     uni.showToast({ title: "报名已提交", icon: "success" });
     uni.redirectTo({ url: withTenantCode(`/pages/user/registration?id=${result.registration.id}`) });
   } catch (error: any) {
-    uni.showModal({ title: "提交失败", content: error.message || "请稍后再试，或联系主办方协助处理。", showCancel: false, confirmText: "知道了" });
+    uni.showModal({ title: "提交失败", content: reviewSafeText(error.message || "请稍后再试，或联系主办方协助处理。"), showCancel: false, confirmText: "知道了" });
   } finally {
     submitting.value = false;
   }
@@ -205,9 +206,9 @@ async function refreshQuote(showError = false) {
   quoteError.value = "";
   try {
     userId.value ||= await ensureUser();
-    quote.value = await request(`/public/activities/${activity.value.id}/quote`, { method: "POST", data: { ticketTypeId: selectedTicketTypeId.value, couponCode: couponCode.value.trim() || undefined, pointsToUse: pointsToUse.value || undefined } });
+    quote.value = reviewSafeData(await request(`/public/activities/${activity.value.id}/quote`, { method: "POST", data: { ticketTypeId: selectedTicketTypeId.value, couponCode: couponCode.value.trim() || undefined, pointsToUse: pointsToUse.value || undefined } }));
   } catch (error: any) {
-    quoteError.value = error.message || "优惠码不可用";
+    quoteError.value = reviewSafeText(error.message || "优惠码不可用");
     quote.value = undefined;
     if (showError) uni.showToast({ title: quoteError.value, icon: "none" });
   } finally {
@@ -249,15 +250,15 @@ onMounted(async () => {
       request(`/public/activities/${id}${query ? `?${query}` : ""}`),
       request("/public/settings/operation")
     ]);
-    activity.value = detail;
-    operationSetting.value = setting;
+    activity.value = reviewSafeData(detail);
+    operationSetting.value = reviewSafeData(setting);
     if (payableNumber.value > 0 && !paymentMethods.value[paymentMethod.value]) {
       paymentMethod.value = availablePaymentMethods.value[0]?.value || "offline";
     }
     selectedTicketTypeId.value = activity.value.ticketTypes?.[0]?.id;
     await refreshQuote();
   } catch (error: any) {
-    loadError.value = error?.message || "报名页面加载失败，请重新进入活动后再试。";
+    loadError.value = reviewSafeText(error?.message || "报名页面加载失败，请重新进入活动后再试。");
     uni.showToast({ title: loadError.value, icon: "none" });
   } finally {
     loading.value = false;

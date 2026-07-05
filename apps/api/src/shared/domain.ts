@@ -154,9 +154,9 @@ export function checkActivityContentCompliance(input: ActivityComplianceInput) {
       keyword,
       message:
         severity === "blocking"
-          ? `「${field}」含有高风险表述「${keyword}」，请改为东方哲学、传统文化、民俗文化或课程学习类表达。`
-          : `「${field}」含有需人工确认的表述「${keyword}」，建议弱化为文化解读、体验学习或生活方式表达。`,
-      suggestion: "建议使用：易经文化、民俗文化、节气文化、传统哲学、国学经典解读、书法美育、家庭教育等合规表述。"
+          ? `「${field}」含有高风险表述「${keyword}」，请改为东方哲学、传统文化、民俗文化或文化活动类表达。`
+          : `「${field}」含有需人工确认的表述「${keyword}」，建议弱化为文化解读、体验参与或生活方式表达。`,
+      suggestion: "建议使用：易经文化、民俗文化、节气文化、传统哲学、国学经典解读、书法美育、亲子沟通等合规表述。"
     });
   };
 

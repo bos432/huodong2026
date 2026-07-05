@@ -2,7 +2,7 @@
   <view class="mall-page has-custom-nav">
     <view class="mall-hero">
       <text class="eyebrow">慢π严选</text>
-      <text class="hero-title">把课程、活动和好物放进同一个慢π服务闭环</text>
+      <text class="hero-title">把活动、内容和好物放进同一个慢π服务闭环</text>
       <text class="hero-sub">支持余额支付与线下收款，订单状态后台可追踪。</text>
       <view class="hero-actions">
         <view class="hero-action" @click="goCart">购物车 / 地址 / 订单结算</view>

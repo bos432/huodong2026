@@ -1,4 +1,5 @@
 import { request } from "./api";
+import { reviewSafeText } from "./review-safe-text";
 
 export type CourseCard = {
   id: number;
@@ -29,18 +30,18 @@ export function normalizeCourse(row: any, index = 0): CourseCard {
   const id = Number(row?.id || 0);
   return {
     id,
-    title: row?.title || "未命名课程",
-    teacher: row?.teacherName || "慢π",
+    title: reviewSafeText(row?.title || "未命名内容"),
+    teacher: reviewSafeText(row?.teacherName || "慢π"),
     teacherAvatar: row?.teacherAvatar || "",
     price,
     originalPrice: Number(row?.originalPrice || 0),
     coverUrl: row?.coverUrl || "",
     icon: icons[(id || index) % icons.length],
     color: palette[(id || index) % palette.length],
-    category: row?.categoryName || "全部",
+    category: reviewSafeText(row?.categoryName || "全部"),
     rating: Number(row?.rating || 0).toFixed(1),
     reviewCount: Number(row?.reviewCount || 0),
-    tag: tags[0] || (price === 0 ? "限时免费" : ""),
+    tag: reviewSafeText(tags[0] || (price === 0 ? "限时免费" : "")),
     hot: Number(row?.hotCount || 0),
     createdAt: row?.createdAt || "",
     progress: Number(row?.progress || 0)

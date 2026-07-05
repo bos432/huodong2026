@@ -88,7 +88,7 @@ onShow(() => {
       <view class="card">
         <view class="card-kicker">合作入口</view>
         <view class="card-title">城市合伙人</view>
-        <view class="content">面向文化空间、培训机构、书院、书法教室、读书会主理人开放合作。你可以拥有自己的活动后台、收款方式、会员和报名数据。</view>
+        <view class="content">面向文化空间、书院、书法教室、读书会主理人和本地社群开放合作。你可以拥有自己的活动后台、收款方式、会员和报名数据。</view>
         <view class="partner-entry" @click="goPartner">
           <text>查看合作方案</text>
           <text>进入</text>

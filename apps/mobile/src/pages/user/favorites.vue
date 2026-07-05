@@ -7,8 +7,8 @@
     </view>
     <view class="page-hero">
       <view class="hero-kicker">收藏夹</view>
-      <view class="hero-title">留住想学的内容</view>
-      <view class="hero-desc">把感兴趣的课程先收藏，方便稍后继续了解。</view>
+      <view class="hero-title">留住想看的内容</view>
+      <view class="hero-desc">把感兴趣的内容先收藏，方便稍后继续了解。</view>
     </view>
     <view class="course-grid">
       <view v-for="c in favorites" :key="c.id" class="course-card" @click="goDetail(c)">
@@ -23,7 +23,7 @@
     <view v-if="!favorites.length" class="empty-card">
       <view class="empty-icon">藏</view>
       <view class="empty-title">暂无收藏</view>
-      <view class="empty-desc">遇到喜欢的课程时，点收藏后会出现在这里。</view>
+      <view class="empty-desc">遇到喜欢的内容时，点收藏后会出现在这里。</view>
     </view>
     <TabBar current="user" />
   </view>
