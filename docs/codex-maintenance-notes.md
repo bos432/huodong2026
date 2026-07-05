@@ -35,6 +35,7 @@ npm --prefix apps/mobile run build:h5
 | 问题 | 相关提交 | 后续再遇到时先看 |
 | --- | --- | --- |
 | 首页装修图片广告只能一张、多图样式和每图跳转 | `f192d15c`、`17d41bf0`、`87720079`、`8afd59d9`、`8b016995` | `apps/admin/src/views/HomepageBuilder.vue`、移动端首页渲染 |
+| 小程序/H5 底部菜单偶发不显示 | 本次提交 | `apps/mobile/src/decoration.ts`、`apps/mobile/src/components/AppBottomNav.vue`，缺底部导航模块或配置项为空时用默认菜单兜底，显式禁用仍不显示 |
 | 小程序“我的”未登录后无法返回其他页面 | `4ef5ed0c` | `apps/mobile/src/pages/user/*`、登录拦截、tab/switchTab 跳转 |
 | 小程序 API 地址兜底导致体验版请求异常 | `7fc0ce13` | `apps/mobile/src/api-base.ts`、`VITE_API_BASE`、构建命令里的环境变量 |
 | 超管后台看不到前端存在的活动 | `9d36b084` | PC 后台活动列表默认筛选、租户/平台边界 |

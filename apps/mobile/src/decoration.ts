@@ -11,7 +11,7 @@ type InnerPageConfig = {
 
 const globalSingletonTypes = ["bottom_nav", "my_page", "inner_pages"];
 
-const defaultBottomNavSection: HomepageSectionView = {
+export const defaultBottomNavSection: HomepageSectionView = {
   id: -900,
   pageKey: "home",
   type: "bottom_nav",
@@ -97,8 +97,9 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   const sections = ref<HomepageSectionView[]>([]);
   const tenant = ref<HomepagePayload["tenant"] | null>(null);
   const loadFailed = ref(false);
+  const decorationLoaded = ref(false);
 
-  const bottomNavSection = computed(() => sections.value.find((item) => item.type === "bottom_nav") || (loadFailed.value ? defaultBottomNavSection : null));
+  const bottomNavSection = computed(() => sections.value.find((item) => item.type === "bottom_nav") || (loadFailed.value || decorationLoaded.value ? defaultBottomNavSection : null));
   const innerPagesSection = computed(() => sections.value.find((item) => item.enabled && item.type === "inner_pages") || defaultInnerPagesSection);
   const innerPageLayout = computed<Record<string, any>>(() => ({ ...defaultInnerPagesSection.layout, ...(innerPagesSection.value.layout || {}) }));
   const innerPageConfig = computed<InnerPageConfig>(() => {
@@ -126,10 +127,12 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
         sections.value = [...localSections, ...inherited];
       }
       tenant.value = payload.tenant || null;
+      decorationLoaded.value = true;
     } catch {
       sections.value = [];
       tenant.value = null;
       loadFailed.value = true;
+      decorationLoaded.value = true;
     }
   }
 

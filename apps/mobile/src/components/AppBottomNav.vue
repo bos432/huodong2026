@@ -2,7 +2,7 @@
 import { computed } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import type { HomepageSectionView } from "@activity/shared";
-import { goDecoratedLink, usePageDecoration } from "../decoration";
+import { defaultBottomNavSection, goDecoratedLink, usePageDecoration } from "../decoration";
 
 const props = defineProps<{
   section?: HomepageSectionView | null;
@@ -11,6 +11,7 @@ const props = defineProps<{
 
 const autoDecoration = usePageDecoration("home", props.currentPath);
 const activeSection = computed(() => props.section === undefined ? autoDecoration.bottomNavSection.value : props.section);
+const defaultItems = Array.isArray(defaultBottomNavSection.config?.items) ? defaultBottomNavSection.config.items : [];
 
 onShow(() => {
   if (props.section === undefined) void autoDecoration.loadDecoration();
@@ -35,14 +36,17 @@ const items = computed(() => {
         .filter((item: any) => item.enabled && item.label && item.link)
         .slice(0, 5)
     : [];
-  if (configuredItems) return configured;
-  return [
-    { label: "慢π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", icon: "π", activeIcon: "π" },
-    { label: "课程", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", icon: "📖", activeIcon: "📚" },
-    { label: "共修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", icon: "🪷", activeIcon: "🌸" },
-    { label: "活动", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D", icon: "📅", activeIcon: "🎯" },
-    { label: "我的", link: "/pages/user/my", action: "mainPage", color: "#C43D3D", icon: "⛰", activeIcon: "🏔" }
-  ];
+  if (configured.length) return configured;
+  return defaultItems.map((item: any) => ({
+    label: String(item?.label || "").trim(),
+    link: String(item?.link || "").trim(),
+    action: String(item?.action || "mainPage").trim(),
+    color: String(item?.color || defaultBottomNavSection.layout?.activeColor || "#C43D3D"),
+    icon: String(item?.icon || "").trim(),
+    activeIcon: String(item?.activeIcon || "").trim(),
+    iconUrl: String(item?.iconUrl || "").trim(),
+    enabled: item?.enabled !== false
+  })).filter((item: any) => item.enabled && item.label && item.link);
 });
 
 function isCurrent(url?: string) {
