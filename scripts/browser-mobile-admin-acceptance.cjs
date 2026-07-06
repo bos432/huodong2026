@@ -140,7 +140,9 @@ async function login(page) {
   await waitForText(page, "手机管理端", "mobile admin login loaded");
   await fillFormControl(page, 0, USERNAME);
   await fillFormControl(page, 1, PASSWORD);
-  await clickVisibleText(page, "登录管理端");
+  const loginButton = page.locator("uni-button.button.primary, button.button.primary, .button.primary").filter({ hasText: "登录管理端" }).first();
+  await loginButton.scrollIntoViewIfNeeded().catch(() => {});
+  await loginButton.click({ timeout: 10000 });
   await page.waitForFunction(() => window.location.hash === "#/pages/admin/home", null, { timeout: 15000 });
   await waitForText(page, ["手机管理", "发布活动", "活动管理"], "mobile admin logged in");
   await waitForText(page, "最近活动", "mobile admin home loaded");

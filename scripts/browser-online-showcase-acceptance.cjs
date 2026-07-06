@@ -176,6 +176,22 @@ async function fillLoginInput(page, field, value) {
   await page.locator(selector).first().fill(value, { timeout: 10000 });
 }
 
+async function submitH5Login(page) {
+  const submitButton = page.locator(".phone-login-section .button").filter({ hasText: /^登录$/ }).last();
+  if (await submitButton.count()) {
+    await submitButton.scrollIntoViewIfNeeded().catch(() => {});
+    await submitButton.click({ timeout: 10000 });
+    return;
+  }
+  await page.evaluate(() => {
+    const candidates = Array.from(document.querySelectorAll(".phone-login-section .button, .login-card .button"));
+    const target = candidates.find((element) => (element.textContent || "").trim() === "登录");
+    if (!(target instanceof HTMLElement)) throw new Error("H5 login submit button not found");
+    target.scrollIntoView({ block: "center" });
+    target.click();
+  });
+}
+
 async function dismissH5Overlays(page) {
   await page.waitForTimeout(350);
   await clickTextIfVisible(page, "知道了");
@@ -228,7 +244,7 @@ async function h5LoginAndRegister(browser, activity) {
       }
     }
   }
-  await clickText(page, "登录");
+  await submitH5Login(page);
   await waitForBodyText(page, activity.title, "H5 redirected to activity detail");
   await dismissH5Overlays(page);
   await screenshot(page, "h5-01-login-activity-detail.png");

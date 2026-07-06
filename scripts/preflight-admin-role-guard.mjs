@@ -26,6 +26,7 @@ const apiAdminRoleSpec = read("apps/api/src/modules/admin/admin-roles.spec.ts");
 const adminPermissions = read("apps/admin/src/permissions.ts");
 const adminRouter = read("apps/admin/src/router.ts");
 const adminLayout = read("apps/admin/src/views/Layout.vue");
+const adminMenu = read("apps/admin/src/navigation/admin-menu.ts");
 const adminActivitiesView = read("apps/admin/src/views/Activities.vue");
 const adminRegistrationsView = read("apps/admin/src/views/Registrations.vue");
 const adminApi = read("apps/admin/src/api.ts");
@@ -118,7 +119,7 @@ checkSourceIncludesAll(adminRouter, [
   "to.meta.roles && !canAccess"
 ], "admin router");
 
-checkSourceIncludesAll(adminLayout, [
+checkSourceIncludesAll(adminLayout + adminMenu, [
   "item.roles",
   "canAccess(item.roles)",
   "menuItemLabel",

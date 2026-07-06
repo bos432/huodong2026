@@ -20,6 +20,7 @@ const outputDir = path.join(root, ".local-logs", "auto-audit", runId);
 const resultJsonPath = path.join(outputDir, "result.json");
 const latestReportPath = path.join(root, "docs", "auto-audit-report-latest.md");
 const npmCommand = process.platform === "win32" ? "npm.cmd" : "npm";
+const compatibleMpWeixinNodeDir = findCompatibleMpWeixinNodeDir();
 
 fs.mkdirSync(outputDir, { recursive: true });
 fs.mkdirSync(path.dirname(latestReportPath), { recursive: true });
@@ -130,6 +131,30 @@ function runSync(command, commandArgs = []) {
   };
 }
 
+function nodeMajorOf(nodeExe) {
+  const res = spawnSync(nodeExe, ["-v"], { encoding: "utf8", windowsHide: true });
+  if (res.status !== 0) return 0;
+  const match = String(res.stdout || res.stderr || "").match(/v(\d+)\./);
+  return match ? Number(match[1]) : 0;
+}
+
+function findCompatibleMpWeixinNodeDir() {
+  if (process.platform !== "win32") return "";
+  const candidates = [
+    process.env.CODEX_MP_WEIXIN_NODE_DIR,
+    path.join(os.homedir(), ".cache", "codex-runtimes", "codex-primary-runtime", "dependencies", "node", "bin"),
+    path.join(os.homedir(), "AppData", "Local", "easyclaw", "ai", "tool_cache", "resources", "tools", "win", "node-24.13.0")
+  ].filter(Boolean);
+
+  for (const dir of candidates) {
+    const nodeExe = path.join(dir, "node.exe");
+    if (!fs.existsSync(nodeExe)) continue;
+    const major = nodeMajorOf(nodeExe);
+    if (major === 22 || major === 24) return dir;
+  }
+  return "";
+}
+
 function collectEnvironment() {
   const npmVersion = runSync(npmCommand, ["--version"]);
   result.environment = {
@@ -141,10 +166,14 @@ function collectEnvironment() {
 
   const nodeMajor = Number(process.versions.node.split(".")[0]);
   if (nodeMajor >= 25) {
-    addIssue("P2", "Node version may break uni-app mp-weixin build", `Current Node is ${process.version}.`, {
-      advice: "Use Node 22 or 24 for npm --prefix apps/mobile run build:mp-weixin."
-    });
-    addCheck("Node version", "warning", { value: process.version });
+    if (compatibleMpWeixinNodeDir) {
+      addCheck("Node version", "passed", { value: process.version, mpWeixinBuildNodeDir: compatibleMpWeixinNodeDir });
+    } else {
+      addIssue("P2", "Node version may break uni-app mp-weixin build", `Current Node is ${process.version}.`, {
+        advice: "Use Node 22 or 24 for npm --prefix apps/mobile run build:mp-weixin, or set CODEX_MP_WEIXIN_NODE_DIR to a compatible node bin directory."
+      });
+      addCheck("Node version", "warning", { value: process.version });
+    }
   } else {
     addCheck("Node version", "passed", { value: process.version });
   }
@@ -357,13 +386,7 @@ async function runProfileCommands() {
     timeoutMs: 720000
   });
 
-  await runCommandStep({
-    name: "wechat mini program build",
-    command: npmCommand,
-    args: ["--prefix", "apps/mobile", "run", "build:mp-weixin"],
-    required: true,
-    timeoutMs: 420000
-  });
+  await runCommandStep(mpWeixinBuildStep());
 
   const acceptanceOutputDir = path.join(outputDir, "acceptance");
   await runCommandStep({
@@ -385,6 +408,37 @@ async function runProfileCommands() {
   });
 
   collectAcceptanceArtifacts(acceptanceOutputDir);
+}
+
+function mpWeixinBuildStep() {
+  const nodeMajor = Number(process.versions.node.split(".")[0]);
+  if (process.platform === "win32" && nodeMajor >= 25 && compatibleMpWeixinNodeDir) {
+    const script = [
+      `$nodeDir = '${compatibleMpWeixinNodeDir.replace(/'/g, "''")}'`,
+      "$env:PATH = $nodeDir + ';' + $env:PATH",
+      "node -v",
+      "Push-Location apps/mobile",
+      ".\\node_modules\\.bin\\uni.cmd build -p mp-weixin",
+      "$code = $LASTEXITCODE",
+      "Pop-Location",
+      "if ($code -ne 0) { exit $code }",
+      "node scripts/patch-mobile-mp-weixin-auth.mjs"
+    ].join("; ");
+    return {
+      name: "wechat mini program build",
+      command: "powershell",
+      args: ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", script],
+      required: true,
+      timeoutMs: 420000
+    };
+  }
+  return {
+    name: "wechat mini program build",
+    command: npmCommand,
+    args: ["--prefix", "apps/mobile", "run", "build:mp-weixin"],
+    required: true,
+    timeoutMs: 420000
+  };
 }
 
 function collectAcceptanceArtifacts(baseDir) {

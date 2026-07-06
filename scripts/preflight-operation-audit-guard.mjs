@@ -24,6 +24,7 @@ const adminController = read("apps/api/src/modules/admin/admin.controller.ts");
 const adminService = read("apps/api/src/modules/admin/admin.service.ts");
 const operationLogsView = read("apps/admin/src/views/OperationLogs.vue");
 const layoutView = read("apps/admin/src/views/Layout.vue");
+const adminMenu = read("apps/admin/src/navigation/admin-menu.ts");
 const smoke = read("scripts/smoke.mjs");
 const smokeFlow = read("scripts/smoke-flow.mjs");
 const launchChecklist = read("docs/launch-checklist.md");
@@ -120,7 +121,7 @@ checkSourceIncludesAll(operationLogsView, [
   "detailText"
 ], "operation logs view");
 
-checkSourceIncludesAll(layoutView, [
+checkSourceIncludesAll(layoutView + adminMenu, [
   'index: "/operation-logs"',
   "permissions.superAdmin"
 ], "admin layout");

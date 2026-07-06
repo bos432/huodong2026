@@ -188,7 +188,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
   {
     index: "platform-security",
     icon: "Tools",
-    label: "系统安全",
+    label: "系统与安全",
     scope: "platform",
     items: [
       { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.manage"], scope: "platform" },
@@ -239,7 +239,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
   {
     index: "tenant-finance",
     icon: "Wallet",
-    label: "订单财务",
+    label: "票务与财务",
     scope: "tenant",
     items: [
       { index: "/orders", icon: "Wallet", label: "订单管理", roles: ["order.view"], scope: "tenant" },

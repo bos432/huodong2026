@@ -21,6 +21,7 @@ function checkSourceIncludesAll(source, needles, label) {
 const packageJson = JSON.parse(read("package.json"));
 const router = read("apps/admin/src/router.ts");
 const layout = read("apps/admin/src/views/Layout.vue");
+const adminMenu = read("apps/admin/src/navigation/admin-menu.ts");
 const opsRoutine = read("apps/admin/src/views/OpsRoutine.vue");
 const configCheck = read("apps/admin/src/views/ConfigCheck.vue");
 const finance = read("apps/admin/src/views/Finance.vue");
@@ -71,7 +72,7 @@ checkSourceIncludesAll(router, [
   'path: "ops-routine"'
 ], "admin routine check routes");
 
-checkSourceIncludesAll(layout, [
+checkSourceIncludesAll(layout + adminMenu, [
   "财务对账",
   "上线体检",
   "运营巡检",
