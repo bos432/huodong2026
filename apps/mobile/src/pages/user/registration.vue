@@ -32,7 +32,7 @@ const orderStatusText: Record<OrderStatus, string> = {
 const detail = ref<any>();
 const code = ref("");
 const codeQrUrl = ref("");
-const codeQrMatrix = ref<number[][]>([]);
+const codeQrMatrix = ref<boolean[][]>([]);
 const userId = ref(0);
 const loading = ref(true);
 const loadError = ref("");
@@ -175,9 +175,25 @@ function buildCheckInQrMatrix(value: string) {
   const qr = (QRCode as any).create(value, { errorCorrectionLevel: "M", margin: 1 });
   const modules = qr.modules;
   const size = Number(modules.size || 0);
-  const data = modules.data || [];
-  if (!size || !data.length) throw new Error("签到二维码生成失败");
-  return Array.from({ length: size }, (_, y) => Array.from({ length: size }, (_, x) => (data[y * size + x] ? 1 : 0)));
+  if (!size) throw new Error("签到二维码生成失败");
+
+  const quietZone = 4;
+  const matrixSize = size + quietZone * 2;
+  const matrix: boolean[][] = [];
+  for (let row = 0; row < matrixSize; row += 1) {
+    const line: boolean[] = [];
+    for (let col = 0; col < matrixSize; col += 1) {
+      const sourceRow = row - quietZone;
+      const sourceCol = col - quietZone;
+      const inQr = sourceRow >= 0 && sourceRow < size && sourceCol >= 0 && sourceCol < size;
+      const isDark = inQr && (typeof modules.get === "function"
+        ? Boolean(modules.get(sourceRow, sourceCol))
+        : Boolean(modules.data?.[sourceRow * size + sourceCol]));
+      line.push(isDark);
+    }
+    matrix.push(line);
+  }
+  return matrix;
 }
 
 async function generateCheckInQr(value: string) {
@@ -185,8 +201,8 @@ async function generateCheckInQr(value: string) {
   codeQrMatrix.value = [];
   try {
     codeQrMatrix.value = buildCheckInQrMatrix(value);
-    return;
-  } catch (error) {
+    if (codeQrMatrix.value.length) return;
+  } catch {
     codeQrMatrix.value = [];
   }
   try {
@@ -198,6 +214,7 @@ async function generateCheckInQr(value: string) {
     });
   } catch {
     codeQrUrl.value = "";
+    codeQrMatrix.value = [];
   }
 }
 
@@ -480,12 +497,12 @@ onMounted(() => {
 
       <view v-if="code" class="card code">
         <view class="subtle">现场签到二维码</view>
-        <image v-if="codeQrUrl" class="code-qr" :src="codeQrUrl" mode="widthFix" />
-        <view v-else-if="codeQrMatrix.length" class="code-qr-matrix">
+        <view v-if="codeQrMatrix.length" class="code-qr-matrix">
           <view v-for="(row, rowIndex) in codeQrMatrix" :key="rowIndex" class="code-qr-row">
             <view v-for="(cell, cellIndex) in row" :key="cellIndex" class="code-qr-cell" :class="{ dark: cell }" />
           </view>
         </view>
+        <image v-else-if="codeQrUrl" class="code-qr" :src="codeQrUrl" mode="widthFix" />
         <view v-else class="notice muted">二维码暂未生成，可先复制下方签到码让工作人员手动核销。</view>
         <view class="code-text">{{ code }}</view>
         <view class="code-tip">现场可出示二维码扫码核销，也可让工作人员手动输入下方签到码。</view>
@@ -661,8 +678,9 @@ onMounted(() => {
 .group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: var(--card-bg, #fff); }
 .code { text-align: center; }
 .code-qr,
-.code-qr-matrix { display: block; width: 360rpx; height: 360rpx; margin: 18rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: #fff; }
-.code-qr-matrix { box-sizing: border-box; padding: 18rpx; overflow: hidden; display: flex; flex-direction: column; }
+.code-qr-matrix { width: 360rpx; height: 360rpx; margin: 18rpx auto 0; border-radius: 8rpx; border: 1px solid #e8e0d8; background: #fff; overflow: hidden; box-sizing: border-box; }
+.code-qr { display: block; }
+.code-qr-matrix { display: flex; flex-direction: column; }
 .code-qr-row { display: flex; width: 100%; flex: 1 1 0; min-height: 0; }
 .code-qr-cell { flex: 1 1 0; min-width: 0; background: #ffffff; }
 .code-qr-cell.dark { background: #111827; }
