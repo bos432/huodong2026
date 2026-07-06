@@ -1,6 +1,6 @@
 # 优化整改方案与执行记录
 
-生成时间：2026-07-06 08:55 +08:00
+生成时间：2026-07-06 10:35 +08:00
 
 ## 1. 整改结论
 
@@ -13,8 +13,10 @@
 | 接口 smoke 选中了保留旧数据里的已截止活动 | `npm run smoke:online-showcase` 报“报名已截止” | 修改 `scripts/smoke-online-showcase.mjs`，只从 `displayStatus === "open"` 的活动中选择免费/收费报名活动 | `npm run smoke:online-showcase` 通过 |
 | 页面验收脚本默认 H5/Admin 同域 | 本地 H5 `5173`、Admin `5174` 分离时无法跑完整页面验收 | 修改 `scripts/browser-online-showcase-acceptance.cjs`，新增 `ADMIN_WEB_BASE` | `npm run browser:online-showcase` 通过 |
 | 演示 seed 未创建广告中心自有广告计划 | 广告位公开接口返回 `null`，页面验收失败 | 修改 `scripts/seed-online-showcase.mjs`，新增幂等 `ensureAdCampaign` | 公开广告位返回 `resolvedImageUrl`，页面验收通过 |
-| 菜单抽取后测试仍读取旧 `Layout.vue` | API 测试 `menu-integrity.spec.ts` 失败 | 修改 `apps/api/src/modules/admin/menu-integrity.spec.ts`，改为读取 `apps/admin/src/navigation/admin-menu.ts` | API 测试 179/179 通过 |
+| 菜单抽取后测试仍读取旧 `Layout.vue` | API 测试 `menu-integrity.spec.ts` 失败 | 修改 `apps/api/src/modules/admin/menu-integrity.spec.ts`，改为读取 `apps/admin/src/navigation/admin-menu.ts` | API 测试通过，当前 180/180 |
 | Node 25 运行小程序构建时 uni 原生崩溃 | `build:mp-weixin` 退出码 `-1073740791` | 改用 Node 24 执行标准命令，并记录为部署要求 | `npm --prefix apps/mobile run build:mp-weixin` 通过 |
+| 商城商品编辑保存提交后端只读字段 | 生产严格 DTO 校验报 `property id/tenant/merchant/category/createdAt/updatedAt/salesStats should not exist`，导致后台商品无法保存 | 修改 `apps/admin/src/views/MallProducts.vue`，编辑表单只接收可编辑字段，保存时构造白名单 payload；SKU 只提交 `id/name/skuCode/price/originalPrice/stock/sortOrder/enabled` | 后台构建通过；浏览器抓包保存 `productId=172`，PATCH 请求体无非法字段 |
+| 商城优惠券保存/启停存在同类整行提交风险 | 可能在严格 DTO 校验下提交 `tenant/merchant/runtimeStatus/usedCount` 等展示字段 | 修改 `apps/admin/src/views/MallProducts.vue`，优惠券保存和启停统一构造白名单 payload | 浏览器抓包保存 `couponId=4`，PATCH 请求体无非法字段 |
 
 ## 3. 第一阶段落地内容
 
@@ -34,7 +36,9 @@
 | `npm run smoke:online-showcase` | 通过 |
 | `npm run browser:online-showcase` | 通过 |
 | `npm run browser:mobile-admin` | 通过 |
-| `npm --prefix apps/api run test` | 通过，179 个用例 |
+| 商城商品保存定向回归 | 通过，商品 PATCH payload 已去除 `tenant/merchant/category/createdAt/updatedAt/salesStats` |
+| 商城优惠券保存定向回归 | 通过，优惠券 PATCH payload 已去除关联对象和运行态字段 |
+| `npm --prefix apps/api run test` | 通过，180 个用例 |
 | `npm --prefix apps/api run build` | 通过 |
 | `npm --prefix apps/admin run build` | 通过 |
 | `npm --prefix apps/mobile run build:h5` | 通过 |

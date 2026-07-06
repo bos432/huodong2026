@@ -1,6 +1,6 @@
 # UI 与后端重编排本地全流程验收报告
 
-生成时间：2026-07-06 08:55 +08:00
+生成时间：2026-07-06 10:35 +08:00
 
 ## 1. 验收结论
 
@@ -10,7 +10,7 @@
 E:\2027\AI全自动开发1.0\活动报名-重编排工作副本
 ```
 
-验收结论：通过本地部署、接口闭环、后台/H5 页面级自动化、手机管理端页面级自动化、构建和单元测试。测试数据已按要求保留在本地 MariaDB 数据库中。
+验收结论：通过本地部署、接口闭环、后台/H5 页面级自动化、手机管理端页面级自动化、商城商品保存定向回归、构建和单元测试。测试数据已按要求保留在本地 MariaDB 数据库中。
 
 说明：本轮 Codex 会话未暴露右侧 Browser 的控制工具，无法真实驱动右侧内嵌浏览器面板。因此页面级验收使用 Playwright Chromium 自动化完成，并保留截图与 `result.json`。未伪称完成右侧面板手工点击。
 
@@ -29,7 +29,7 @@ E:\2027\AI全自动开发1.0\活动报名-重编排工作副本
 | 服务 | PID | 说明 |
 | --- | ---: | --- |
 | MariaDB | `54264` | 使用原项目 `.local-mariadb\data` |
-| API | `15292` | `node --enable-source-maps apps/api/dist/main` |
+| API | `22856` | `node --enable-source-maps apps/api/dist/main` |
 | Admin dev | `63972` | Vite `5174` |
 | Mobile H5 dev | `59420` | uni H5 `5173` |
 
@@ -48,7 +48,7 @@ API ready 的本地配置为 `warning`，无 blocking error。告警集中在生
 | 店铺财务 | `showcase_store_finance` | `Qiwai123456` | 商城订单与结算 |
 | 代理负责人 | `showcase_agent_owner` | `Qiwai123456` | 代理结算与商城订单 |
 | 演示会员 A-E | `13990000001` - `13990000005` | `Qiwai123456` | seed 保留演示用户 |
-| 本次 H5 验收用户 | `13998703705` | 本地验证码登录，开发码 `123456` 或页面返回码 | 报名、收款、签到闭环保留 |
+| 本次 H5 验收用户 | `13905022087` | 本地验证码登录，开发码 `123456` 或页面返回码 | 报名、收款、签到闭环保留 |
 
 租户：`qiwai-showcase`，名称：`慢π演示中心`。
 
@@ -57,11 +57,13 @@ API ready 的本地配置为 `warning`，无 blocking error。告警集中在生
 | 数据 | 值 |
 | --- | --- |
 | 页面级验收活动 | `id=52`，`【演示】亲子沟通工作坊`，`59.00` |
-| 页面级 H5 手机号 | `13998703705` |
-| 页面级报名 | `registrationId=139` |
-| 页面级订单 | `orderId=139`，`orderNo=OD1783298707098139` |
-| 页面级签到码 | `419082cf-fb50-450d-83f5-a41d23390a24` |
-| 手机管理端验收活动 | `id=55`，`【手机验收保留】活动发布 20260706004617` |
+| 页面级 H5 手机号 | `13905022087` |
+| 页面级报名 | `registrationId=147` |
+| 页面级订单 | `orderId=147`，`orderNo=OD1783305025410147` |
+| 页面级签到码 | `7fe4bca2-c7c9-4867-b1d2-6683aa144917` |
+| 手机管理端验收活动 | `id=57`，`【手机验收保留】活动发布 20260706023133` |
+| 商城商品保存回归 | `merchantId=2`，`productId=172`，PATCH 请求体不含 `tenant/merchant/category/createdAt/updatedAt/salesStats` |
+| 商城优惠券保存回归 | `couponId=4`，PATCH 请求体不含 `tenant/merchant/createdAt/updatedAt/runtimeStatus/usedCount/remainingCount` |
 | 演示广告计划 | `浏览器验收首页顶部广告` |
 | 演示营销弹窗 | `浏览器验收首页弹窗` |
 
@@ -73,7 +75,9 @@ API ready 的本地配置为 `warning`，无 blocking error。告警集中在生
 | `npm run smoke:online-showcase` | 通过，覆盖免费报名、余额支付、退款、动态评论审核、专题内容、商城、财务追溯 |
 | `npm run browser:online-showcase` | 通过，覆盖 H5 登录报名、财务确认收款、签到核销、8 类后台角色权限、广告和装修入口 |
 | `npm run browser:mobile-admin` | 通过，覆盖手机管理端登录、活动创建发布、报名、订单、签到页 |
-| `npm --prefix apps/api run test` | 通过，15 个测试文件、179 个用例 |
+| 商城商品保存定向回归 | 通过，浏览器登录 `showcase_store_owner`，进入 `merchantId=2` 商品页，编辑并保存商品，抓取 PATCH 请求体确认只提交 DTO 字段 |
+| 商城优惠券保存定向回归 | 通过，浏览器登录 `showcase_store_owner`，编辑并保存优惠券，抓取 PATCH 请求体确认只提交 DTO 字段 |
+| `npm --prefix apps/api run test` | 通过，16 个测试文件、180 个用例 |
 | `npm --prefix apps/api run build` | 通过 |
 | `npm --prefix apps/admin run build` | 通过，有大 chunk 体积提示 |
 | `npm --prefix apps/mobile run build:h5` | 通过 |
@@ -85,15 +89,15 @@ API ready 的本地配置为 `warning`，无 blocking error。告警集中在生
 PC 后台 + H5 页面级验收：
 
 ```text
-E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\browser-acceptance-20260706004503\result.json
-E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\browser-acceptance-20260706004503\*.png
+E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\browser-acceptance-20260706023021\result.json
+E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\browser-acceptance-20260706023021\*.png
 ```
 
 手机管理端页面级验收：
 
 ```text
-E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\mobile-admin-acceptance-20260706004617\result.json
-E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\mobile-admin-acceptance-20260706004617\*.png
+E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\mobile-admin-acceptance-20260706023133\result.json
+E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\.local-logs\mobile-admin-acceptance-20260706023133\*.png
 ```
 
 ## 7. 重要说明

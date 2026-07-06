@@ -1,6 +1,6 @@
 # 本地部署文档
 
-生成时间：2026-07-06 08:55 +08:00
+生成时间：2026-07-06 10:35 +08:00
 
 ## 1. 推荐环境
 
@@ -158,7 +158,55 @@ $env:MOBILE_ADMIN_PASSWORD='Qiwai123456'
 npm run browser:mobile-admin
 ```
 
-## 7. 构建命令
+商城商品/优惠券严格校验回归：
+
+```powershell
+# 先登录后台，进入 http://127.0.0.1:5174/admin/mall-products?merchantId=2
+# 编辑商品后保存，应不再出现 should not exist 类校验错误。
+# 本次已用浏览器抓包验证：商品 PATCH 只提交 merchantId/categoryId/title/coverUrl/description/status/featured/sortOrder/deliveryNote/afterSaleNote/skus；
+# 优惠券 PATCH 只提交 merchantId/code/name/minAmount/discountAmount/usageLimit/enabled/startsAt/endsAt。
+```
+
+## 7. 宝塔生产部署命令
+
+在宝塔终端进入站点目录执行：
+
+```bash
+cd /www/wwwroot/rd.chaimen666.com
+set -e
+export PATH=/www/server/nodejs/v22.22.3/bin:$PATH
+PM2=/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2
+
+git fetch origin feature/qiwai-ui-experiment
+git pull --ff-only origin feature/qiwai-ui-experiment
+
+COMMIT=$(git rev-parse --short HEAD)
+NOW=$(date -Iseconds)
+export BUILD_COMMIT="$COMMIT"
+export BUILD_TIME="$NOW"
+
+sed -i "s|^BUILD_COMMIT=.*|BUILD_COMMIT=$COMMIT|" .env apps/api/.env
+sed -i "s|^BUILD_TIME=.*|BUILD_TIME=$NOW|" .env apps/api/.env
+
+npm --prefix apps/api run build
+npm --prefix apps/admin run build
+
+$PM2 restart activity-api --update-env
+$PM2 save
+
+/www/server/nginx/sbin/nginx -t
+/www/server/nginx/sbin/nginx -s reload
+
+for i in {1..30}; do
+  curl -fsS https://rd.chaimen666.com/api/health/ready && break
+  echo "API 启动中，等待 2 秒..."
+  sleep 2
+done
+
+curl -i --max-time 10 https://rd.chaimen666.com/admin/version.json
+```
+
+## 8. 构建命令
 
 建议先切到 Node 22/24：
 
@@ -186,7 +234,7 @@ apps/mobile/dist/build/mp-weixin
 
 线上优先使用后台“系统安全 -> 小程序发布”上传体验版、提交微信审核和发布线上版。微信开发者工具导入该目录仅作为后台发布失败时的兜底流程。
 
-## 8. 停止服务
+## 9. 停止服务
 
 按当前本地进程停止：
 
@@ -200,7 +248,7 @@ MariaDB 如仍需保留本地演示环境，不建议停止；若必须停止：
 Stop-Process -Id 54264 -Force
 ```
 
-## 9. 生产部署提醒
+## 10. 生产部署提醒
 
 - 生产环境必须替换默认 `admin / Admin123456`。
 - `H5_AUTH_MODE` 必须从 `dev` 切换到 `sms`，并配置真实短信服务。

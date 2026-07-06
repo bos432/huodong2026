@@ -1,6 +1,6 @@
 # 交付教程：活动报名系统 UI 与后端重编排阶段成果
 
-生成时间：2026-07-06 08:55 +08:00
+生成时间：2026-07-06 10:35 +08:00
 
 ## 1. 交付范围
 
@@ -104,11 +104,21 @@ E:\2027\AI全自动开发1.0\活动报名-重编排工作副本\apps\mobile\dist
 已保留手机端验收活动：
 
 ```text
-id=55
-标题=【手机验收保留】活动发布 20260706004617
+id=57
+标题=【手机验收保留】活动发布 20260706023133
 ```
 
-## 10. 小程序交付
+## 10. 商城商品与优惠券
+
+1. 使用 `showcase_store_owner / Qiwai123456` 登录后台。
+2. 进入“扩展 · 商城 -> 商品管理”。
+3. 店铺选择 `慢π自营店`，本地可直接访问 `http://127.0.0.1:5174/admin/mall-products?merchantId=2`。
+4. 点击商品“编辑”，修改标题、图片、价格、库存、上下架状态或配送/售后说明后保存。
+5. 点击“优惠券”，可新增、编辑、启停优惠券。
+
+本次已复验：商品和优惠券保存不会再提交后端只读字段，因此不会触发 `should not exist` 类严格校验错误。
+
+## 11. 小程序交付
 
 构建必须使用 Node 22/24：
 
@@ -129,7 +139,7 @@ npm --prefix apps/mobile run build:mp-weixin
 
 本次改动涉及 `apps/mobile`，必须重新上传并提交审核。
 
-## 11. 交付文件
+## 12. 交付文件
 
 | 文件/目录 | 说明 |
 | --- | --- |
@@ -139,13 +149,13 @@ npm --prefix apps/mobile run build:mp-weixin
 | `docs/remediation-execution-plan-20260706.md` | 优化整改方案与执行记录 |
 | `docs/delivery-guide-ui-reorchestration-20260706.md` | 本交付教程 |
 | `delivery/ui-reorchestration-20260706/DELIVERY_INDEX.md` | 交付资料索引 |
-| `.local-logs/browser-acceptance-20260706004503` | PC 后台 + H5 验收结果和截图 |
-| `.local-logs/mobile-admin-acceptance-20260706004617` | 手机管理端验收结果和截图 |
+| `.local-logs/browser-acceptance-20260706023021` | PC 后台 + H5 验收结果和截图 |
+| `.local-logs/mobile-admin-acceptance-20260706023133` | 手机管理端验收结果和截图 |
 | `apps/admin/dist` | PC 后台构建产物 |
 | `apps/mobile/dist/build/h5` | H5 构建产物 |
 | `apps/mobile/dist/build/mp-weixin` | 微信小程序构建产物 |
 
-## 12. 交付注意事项
+## 13. 交付注意事项
 
 - 交付给客户前请修改默认管理员密码。
 - 生产环境必须配置真实短信服务，不能沿用本地开发验证码。

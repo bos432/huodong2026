@@ -467,6 +467,73 @@ function normalizedProductStatus() {
   if (merchantProductAuditRequired(formMerchant.value) && !isPlatformAdmin() && form.status === "published") return "pending_review";
   return form.status || "draft";
 }
+function cleanSkuPayload(sku: any) {
+  const skuCode = String(sku.skuCode || "").trim();
+  return {
+    id: sku.id,
+    name: String(sku.name || "").trim() || "默认规格",
+    skuCode: skuCode || undefined,
+    price: Number(sku.price || 0),
+    originalPrice: sku.originalPrice === null || sku.originalPrice === undefined || sku.originalPrice === "" ? undefined : Number(sku.originalPrice),
+    stock: Number(sku.stock || 0),
+    sortOrder: Number(sku.sortOrder || 0),
+    enabled: sku.enabled !== false
+  };
+}
+function editableProductForm(row: any) {
+  return {
+    id: row.id,
+    tenantId: row.tenant?.id || filters.tenantId || selectedMerchant.value?.tenant?.id,
+    merchantId: row.merchant?.id || filters.merchantId,
+    title: row.title || "",
+    brandName: row.brandName || "",
+    categoryId: row.category?.id || row.categoryId || undefined,
+    coverUrl: row.coverUrl || "",
+    description: row.description || "",
+    status: row.status || "draft",
+    featured: !!row.featured,
+    sortOrder: Number(row.sortOrder || 0),
+    deliveryNote: row.deliveryNote || "默认快递发货，偏远地区请联系客服",
+    afterSaleNote: row.afterSaleNote || "支持未发货退款，已发货请联系运营方处理",
+    skus: (row.skus?.length ? row.skus : [{ name: "默认规格", price: row.price || 0, originalPrice: row.originalPrice || 0, stock: row.stock || 0, enabled: true }]).map(cleanSkuPayload)
+  };
+}
+function productPayload(status: string) {
+  return {
+    tenantId: isPlatformAdmin() ? form.tenantId : undefined,
+    merchantId: form.merchantId,
+    categoryId: form.categoryId || null,
+    title: form.title.trim(),
+    coverUrl: form.coverUrl?.trim() || undefined,
+    description: form.description?.trim() || undefined,
+    brandName: form.brandName?.trim() || undefined,
+    status,
+    featured: !!form.featured,
+    sortOrder: Number(form.sortOrder || 0),
+    deliveryNote: form.deliveryNote?.trim() || undefined,
+    afterSaleNote: form.afterSaleNote?.trim() || undefined,
+    skus: (form.skus || []).map(cleanSkuPayload)
+  };
+}
+function couponPayload(source: any, enabled = source.enabled) {
+  const payload: Record<string, any> = {
+    tenantId: isPlatformAdmin() ? source.tenant?.id || filters.tenantId || selectedMerchant.value?.tenant?.id : undefined,
+    merchantId: source.merchant?.id || filters.merchantId || selectedMerchant.value?.id || undefined,
+    code: String(source.code || "").trim(),
+    name: String(source.name || "").trim(),
+    minAmount: Number(source.minAmount || 0),
+    discountAmount: Number(source.discountAmount || 0),
+    usageLimit: Number(source.usageLimit || 0),
+    enabled,
+    startsAt: source.startsAt || null,
+    endsAt: source.endsAt || null
+  };
+  if (Object.prototype.hasOwnProperty.call(source, "scope")) payload.scope = source.scope || "all";
+  if (Object.prototype.hasOwnProperty.call(source, "scopeCategoryId")) payload.scopeCategoryId = source.scopeCategoryId || null;
+  if (Object.prototype.hasOwnProperty.call(source, "scopeProductId")) payload.scopeProductId = source.scopeProductId || null;
+  if (Object.prototype.hasOwnProperty.call(source, "perUserLimit")) payload.perUserLimit = Number(source.perUserLimit || 0);
+  return payload;
+}
 
 async function loadTenants() {
   tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
@@ -618,7 +685,7 @@ function createProduct() {
 }
 function editProduct(row: any) {
   if (!requireOpenMerchant("编辑商品", rowMerchant(row))) return;
-  Object.assign(form, { ...row, tenantId: row.tenant?.id, merchantId: row.merchant?.id, categoryId: row.category?.id, skus: (row.skus || []).map((sku: any) => ({ ...sku, price: Number(sku.price), originalPrice: Number(sku.originalPrice), stock: Number(sku.stock) })) });
+  Object.assign(form, editableProductForm(row));
   productDialogVisible.value = true;
   loadCategories();
 }
@@ -722,7 +789,7 @@ async function saveCoupon() {
   if (Number(couponForm.discountAmount || 0) <= 0) return ElMessage.error("优惠金额必须大于 0");
   couponSaving.value = true;
   try {
-    const payload = { ...couponForm, code: couponForm.code.trim(), name: couponForm.name.trim(), ...currentMallParams() };
+    const payload = couponPayload(couponForm);
     if (couponForm.id) await api.patch(`/admin/mall/coupons/${couponForm.id}`, payload);
     else await api.post("/admin/mall/coupons", payload);
     ElMessage.success("优惠券已保存");
@@ -737,7 +804,7 @@ async function saveCoupon() {
 async function toggleCoupon(row: any) {
   if (!requireOpenMerchant("运营优惠券", rowMerchant(row))) return;
   try {
-    await api.patch(`/admin/mall/coupons/${row.id}`, { ...row, tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined, merchantId: row.merchant?.id || filters.merchantId || undefined, enabled: !row.enabled });
+    await api.patch(`/admin/mall/coupons/${row.id}`, couponPayload(row, !row.enabled));
     ElMessage.success(row.enabled ? "优惠券已停用" : "优惠券已启用");
     await loadCoupons();
   } catch (error: any) {
@@ -773,7 +840,7 @@ async function saveProduct() {
   saving.value = true;
   try {
     const submitStatus = normalizedProductStatus();
-    const payload = { ...form, status: submitStatus, title: form.title.trim(), brandName: form.brandName?.trim() || undefined, sortOrder: Number(form.sortOrder || 0), tenantId: isPlatformAdmin() ? form.tenantId : undefined, merchantId: form.merchantId, categoryId: form.categoryId || null };
+    const payload = productPayload(submitStatus);
     if (form.id) await api.patch(`/admin/mall/products/${form.id}`, payload);
     else await api.post("/admin/mall/products", payload);
     ElMessage.success(submitStatus === "pending_review" && merchantProductAuditRequired(formMerchant.value) && !isPlatformAdmin() ? "商品已提交平台审核，通过后会在 H5/小程序展示。" : "商品已保存");
