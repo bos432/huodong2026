@@ -112,16 +112,22 @@ http.proxy=http://127.0.0.1:7897
 https.proxy=http://127.0.0.1:7897
 ```
 
-这个代理会导致 GitHub HTTPS 推送报错：
+7897 这个代理端口会导致 GitHub HTTPS 推送报错：
 
 ```text
 schannel: failed to receive handshake, SSL/TLS connection failed
 ```
 
-推送时优先使用临时清空代理的命令：
+如果直连 GitHub 可用，推送时优先使用临时清空代理的命令：
 
 ```powershell
 git -C "E:\2027\活动报名\活动报名" -c http.proxy= -c https.proxy= -c http.version=HTTP/1.1 push origin feature/qiwai-ui-experiment
+```
+
+如果直连报 `Failed to connect to github.com port 443`，改用本机 7890 代理端口。2026-07-06 已验证 7890 可正常访问 GitHub，7897 不可用：
+
+```powershell
+git -C "E:\2027\活动报名\活动报名" -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 -c http.version=HTTP/1.1 push origin feature/qiwai-ui-experiment
 ```
 
 如果要永久取消代理：
@@ -135,7 +141,7 @@ git config --global --unset https.proxy
 
 ```powershell
 git -C "E:\2027\活动报名\活动报名" status -sb
-git -C "E:\2027\活动报名\活动报名" ls-remote origin refs/heads/feature/qiwai-ui-experiment
+git -C "E:\2027\活动报名\活动报名" -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 -c http.version=HTTP/1.1 ls-remote origin refs/heads/feature/qiwai-ui-experiment
 ```
 
 ## 服务器部署

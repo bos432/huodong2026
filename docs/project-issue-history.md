@@ -9,10 +9,10 @@
 - 当前主工作分支：`feature/qiwai-ui-experiment`
 - 线上站点目录：`/www/wwwroot/rd.chaimen666.com`
 - 宝塔 PM2 路径：`/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2`
-- 本地 GitHub 推送优先命令：
+- 本地 GitHub 推送优先命令。直连失败时使用 7890 代理端口；7897 已确认会 TLS 握手失败：
 
 ```powershell
-git -C "E:\2027\活动报名\活动报名" -c http.proxy= -c https.proxy= -c http.version=HTTP/1.1 push origin feature/qiwai-ui-experiment
+git -C "E:\2027\活动报名\活动报名" -c http.proxy=http://127.0.0.1:7890 -c https.proxy=http://127.0.0.1:7890 -c http.version=HTTP/1.1 push origin feature/qiwai-ui-experiment
 ```
 
 ## 重点反复问题
@@ -32,7 +32,7 @@ git -C "E:\2027\活动报名\活动报名" -c http.proxy= -c https.proxy= -c htt
 | 小程序底部菜单偶发不显示 | 装修接口成功但缺少底部导航模块，或底部导航配置项为空时，自定义底部菜单不渲染 | 增加默认底部菜单兜底；后台明确禁用底部导航时仍尊重禁用 | 本次提交 | 改 `apps/mobile` 需重新上传小程序审核 |
 | API 请求体过大 | 活动/装修/图片字段较大时报 payload 错误 | 放宽或修复 API payload size 处理 | `abe32ba2` | 仍要避免把大图 base64 直接进 JSON |
 | 螺丝帽短信未接入 | 后台只能配腾讯云，螺丝帽配置无法发送 | 新增 `luosimao-sms` 适配、配置校验、后台提示和测试 | `988f88f0` | 螺丝帽只需 API Key 和签名，不需要模板 ID/SDK AppID |
-| GitHub 推送反复失败 | `schannel` TLS 握手失败、直连超时 | 发现全局代理 `127.0.0.1:7897` 导致 TLS 问题；推送时临时清空代理 | `b48dd8a5`、`f9229491` | 每次推送优先使用维护笔记里的命令 |
+| GitHub 推送反复失败 | `schannel` TLS 握手失败、直连超时 | 发现全局代理 `127.0.0.1:7897` 导致 TLS 问题；2026-07-06 验证 `127.0.0.1:7890` 可正常推送 | `b48dd8a5`、`f9229491` | 每次推送优先使用维护笔记里的 7890 命令 |
 | 服务器 BUILD_COMMIT 不更新 | health 里的 release commit 仍是旧值 | 部署时写入 `.env` 和 `apps/api/.env`，再 `pm2 restart --update-env` | `6053430d` | 部署后必须 curl health 确认 commit |
 | PM2/宝塔部署断开或 502 | 重启后 API 502，PM2 路径/进程状态混乱 | 固定 PM2 路径，优先 restart；health 检查改为可诊断流程 | `6bbedddd` | 避免 `pm2 delete` 后再 start 导致重复进程 |
 
