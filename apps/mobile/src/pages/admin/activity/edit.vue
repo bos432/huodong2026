@@ -235,6 +235,12 @@ function validateBeforeSave(targetStatus: ActivityStatus) {
   return null;
 }
 
+function finishSaving() {
+  uni.hideLoading();
+  actionBusyLabel.value = "";
+  saving.value = false;
+}
+
 async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
   if (saving.value) return null;
   const validation = validateBeforeSave(targetStatus);
@@ -249,10 +255,9 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
   uni.showLoading({ title: actionBusyLabel.value, mask: true });
   try {
     const isNewActivity = !id.value;
-    const data = payload(targetStatus);
     const saved = id.value
-      ? await mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data })
-      : await mobileAdminRequest<any>("/admin/activities", { method: "POST", data });
+      ? await mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data: payload(targetStatus) })
+      : await mobileAdminRequest<any>("/admin/activities", { method: "POST", data: payload(targetStatus) });
     id.value = saved.id;
     const previousStatus = form.value.status;
     form.value.status = saved.status || targetStatus;
@@ -263,14 +268,12 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
     } else if (!isNewActivity) {
       await loadActivity();
     }
+    finishSaving();
     return saved;
   } catch (err: any) {
     showActionNotice(err.message || "保存失败，请稍后重试。", "error");
+    finishSaving();
     return null;
-  } finally {
-    uni.hideLoading();
-    actionBusyLabel.value = "";
-    saving.value = false;
   }
 }
 
