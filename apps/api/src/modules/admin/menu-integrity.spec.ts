@@ -10,9 +10,9 @@ function readRepoFile(relativePath: string) {
 
 describe("admin and mobile menu integrity", () => {
   it("keeps admin menu items backed by router records", () => {
-    const layout = readRepoFile("apps/admin/src/views/Layout.vue");
+    const adminMenu = readRepoFile("apps/admin/src/navigation/admin-menu.ts");
     const router = readRepoFile("apps/admin/src/router.ts");
-    const menuIndexes = Array.from(layout.matchAll(/\{\s*index:\s*"([^"]+)"/g)).map((match) => match[1]);
+    const menuIndexes = Array.from(adminMenu.matchAll(/\{\s*index:\s*"([^"]+)"/g)).map((match) => match[1]);
     const routePaths = new Set(Array.from(router.matchAll(/path:\s*"([^"]+)"/g)).map((match) => `/${match[1]}`.replace(/\/$/, "")));
     const missing = menuIndexes
       .filter((index) => index.startsWith("/"))
@@ -24,9 +24,9 @@ describe("admin and mobile menu integrity", () => {
   });
 
   it("keeps platform dashboard menu role aligned with the route permission", () => {
-    const layout = readRepoFile("apps/admin/src/views/Layout.vue");
+    const adminMenu = readRepoFile("apps/admin/src/navigation/admin-menu.ts");
 
-    expect(layout).toContain('{ index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.overview');
+    expect(adminMenu).toContain('{ index: "/dashboard", icon: "DataAnalysis", label: "全局数据看板", roles: permissions.overview');
   });
 
   it("keeps mobile pages.json paths backed by Vue files", () => {

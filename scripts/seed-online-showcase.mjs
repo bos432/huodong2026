@@ -136,6 +136,7 @@ async function main() {
   await ensureOperationSettings(showcaseAdmin.token);
   await ensureHomepage(showcaseAdmin.token);
   await ensureMarketingPopup(showcaseAdmin.token, tenant.id);
+  await ensureAdCampaign(showcaseAdmin.token, tenant.id);
   await ensureAnnouncements(showcaseAdmin.token, tenant.id);
   await ensureActivities(showcaseAdmin.token, tenant.id);
   await ensureCourses(showcaseAdmin.token, tenant.id);
@@ -453,6 +454,42 @@ async function ensureMarketingPopup(token, tenantId) {
   if (row) await api(`/admin/marketing-popups/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
   else await api("/admin/marketing-popups", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
   reportStep("H5 首页营销弹窗已配置", title);
+}
+
+async function ensureAdCampaign(token, tenantId) {
+  const name = "浏览器验收首页顶部广告";
+  const existing = pickList(await api(`/admin/ad-campaigns?keyword=${encodeURIComponent(name)}`, { headers: auth(token) }));
+  const payload = {
+    tenantId,
+    name,
+    title: "近期活动报名开放",
+    subtitle: "用于验证 H5 首页广告位、后台广告中心和公开投放接口。",
+    imageUrl: cover(6),
+    imageUrls: [cover(6)],
+    source: "custom",
+    format: "banner",
+    slotKey: "home_top_banner",
+    pageKey: "home",
+    platforms: ["h5", "mp-weixin"],
+    link: "/pages/activity/list",
+    billingModel: "fixed",
+    fixedFee: 1000,
+    cpmPrice: 0,
+    cpcPrice: 0,
+    totalBudget: 1000,
+    dailyBudget: 0,
+    impressionLimit: 0,
+    clickLimit: 0,
+    frequency: "every_visit",
+    priority: 998,
+    enabled: true,
+    startAt: "2026-01-01 00:00:00",
+    endAt: "2027-12-31 23:59:59"
+  };
+  const row = existing.find((item) => item.name === name);
+  if (row) await api(`/admin/ad-campaigns/${row.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify(payload) });
+  else await api("/admin/ad-campaigns", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
+  reportStep("H5 首页广告位已配置", name);
 }
 
 async function ensureAnnouncements(token, tenantId) {

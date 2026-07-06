@@ -42,11 +42,12 @@ async function main() {
   reportStep("H5 首页装修可读取");
 
   const activities = pickList(await api(`/public/activities?tenantCode=${TENANT_CODE}&pageSize=100`, { headers: tenantHeader() }));
-  const freeActivity = activities.find((item) => Number(item.price || 0) <= 0);
-  const paidActivity = activities.find((item) => Number(item.price || 0) > 0);
-  assert(activities.length >= 6, "演示活动不足 6 个");
-  assert(freeActivity && paidActivity, "演示活动必须同时包含免费和收费活动");
-  reportStep("活动列表包含免费和收费活动", `${activities.length} 个`);
+  const openActivities = activities.filter((item) => item.displayStatus === "open");
+  const freeActivity = openActivities.find((item) => Number(item.price || 0) <= 0);
+  const paidActivity = openActivities.find((item) => Number(item.price || 0) > 0);
+  assert(openActivities.length >= 6, "演示可报名活动不足 6 个");
+  assert(freeActivity && paidActivity, "演示可报名活动必须同时包含免费和收费活动");
+  reportStep("可报名活动列表包含免费和收费活动", `${openActivities.length} 个`);
 
   await freeRegistrationFlow(freeActivity, checkin.token);
   const paidFlow = await paidRegistrationFlow(paidActivity);

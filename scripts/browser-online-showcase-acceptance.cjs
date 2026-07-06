@@ -29,6 +29,7 @@ function loadPlaywright() {
 const { chromium } = loadPlaywright();
 
 const WEB_BASE = (process.env.WEB_BASE || "http://127.0.0.1:18080").replace(/\/$/, "");
+const ADMIN_WEB_BASE = (process.env.ADMIN_WEB_BASE || WEB_BASE).replace(/\/$/, "");
 const API_BASE = (process.env.API_BASE || `${WEB_BASE}/api`).replace(/\/$/, "");
 const TENANT_CODE = process.env.TENANT_CODE || "qiwai-showcase";
 const SHOWCASE_PASSWORD = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
@@ -44,7 +45,7 @@ fs.mkdirSync(outputDir, { recursive: true });
 
 const result = {
   runId,
-  target: { webBase: WEB_BASE, apiBase: API_BASE, tenantCode: TENANT_CODE },
+  target: { webBase: WEB_BASE, adminWebBase: ADMIN_WEB_BASE, apiBase: API_BASE, tenantCode: TENANT_CODE },
   startedAt: new Date().toISOString(),
   testData: {},
   checks: [],
@@ -184,7 +185,7 @@ async function dismissH5Overlays(page) {
 async function loginAdminUi(browser, username, password, viewport = { width: 1365, height: 900 }) {
   const context = await browser.newContext({ viewport });
   const page = await context.newPage();
-  await page.goto(`${WEB_BASE}/admin/login`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${ADMIN_WEB_BASE}/admin/login`, { waitUntil: "domcontentloaded" });
   await page.locator('input[placeholder="请输入管理员账号"]').fill(username);
   await page.locator('input[placeholder="请输入密码"]').fill(password);
   await page.getByRole("button", { name: "登录" }).click();
@@ -194,7 +195,7 @@ async function loginAdminUi(browser, username, password, viewport = { width: 136
 }
 
 async function gotoAdmin(page, route) {
-  await page.goto(`${WEB_BASE}/admin${route}`, { waitUntil: "domcontentloaded" });
+  await page.goto(`${ADMIN_WEB_BASE}/admin${route}`, { waitUntil: "domcontentloaded" });
   await page.waitForTimeout(900);
 }
 
@@ -410,7 +411,7 @@ async function runFeaturePages(browser) {
 async function collectVersionInfo() {
   const ready = await api("/health/ready", { tenant: false });
   const h5Version = await fetch(`${WEB_BASE}/version.json`).then((res) => res.json()).catch(() => null);
-  const adminVersion = await fetch(`${WEB_BASE}/admin/version.json`).then((res) => res.json()).catch(() => null);
+  const adminVersion = await fetch(`${ADMIN_WEB_BASE}/admin/version.json`).then((res) => res.json()).catch(() => null);
   result.versions = { api: ready.release, h5: h5Version, admin: adminVersion };
   const commits = [ready.release?.commit, h5Version?.commit, adminVersion?.commit].filter(Boolean);
   record("三端版本信息读取", new Set(commits).size <= 1 ? "passed" : "warning", {
