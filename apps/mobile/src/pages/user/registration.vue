@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { OrderStatus, RegistrationStatus } from "@activity/shared";
 import QRCode from "qrcode";
-import { ensureUser, request, requestRegistrationRefund, withTenantCode } from "../../api";
+import { ensureUser, request, requestCheckInQrImage, requestRegistrationRefund, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { clientError } from "../../error-reporting";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
@@ -196,9 +196,17 @@ function buildCheckInQrMatrix(value: string) {
   return matrix;
 }
 
-async function generateCheckInQr(value: string) {
+async function generateCheckInQr(value: string, registrationId?: number) {
   codeQrUrl.value = "";
   codeQrMatrix.value = [];
+  if (registrationId) {
+    try {
+      codeQrUrl.value = await requestCheckInQrImage(registrationId);
+      if (codeQrUrl.value) return;
+    } catch {
+      codeQrUrl.value = "";
+    }
+  }
   try {
     codeQrMatrix.value = buildCheckInQrMatrix(value);
     if (codeQrMatrix.value.length) return;
@@ -268,7 +276,7 @@ async function showCode(scroll = true) {
   try {
     const data = await request<any>(`/public/me/registrations/${detail.value.registration.id}/check-in-code`);
     code.value = data.code;
-    await generateCheckInQr(code.value);
+    await generateCheckInQr(code.value, Number(detail.value.registration.id));
     if (scroll) scrollToCode();
   } catch (error: any) {
     uni.showToast({ title: reviewSafeText(error.message), icon: "none" });

@@ -4,6 +4,7 @@ import { Response } from "express";
 import { mkdirSync } from "fs";
 import { diskStorage } from "multer";
 import { join } from "path";
+import QRCode from "qrcode";
 import { PublicService, PublicTenantContext } from "./public.service";
 import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto, WechatPhoneDto } from "./dto";
 
@@ -441,6 +442,22 @@ export class PublicController {
   async checkInCodeMe(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.checkInCode(id, user.id, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("me/registrations/:id/check-in-qrcode.png")
+  async checkInQrCodeMe(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Res() res: Response, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const data = await this.service.checkInCode(id, user.id, this.tenantContext(req, tenantCode));
+    const png = await QRCode.toBuffer(data.code, {
+      type: "png",
+      errorCorrectionLevel: "M",
+      margin: 2,
+      width: 360,
+      color: { dark: "#111827", light: "#ffffff" }
+    });
+    res.setHeader("Content-Type", "image/png");
+    res.setHeader("Cache-Control", "private, no-store");
+    res.end(png);
   }
 
   @Get("users/:userId/registrations")

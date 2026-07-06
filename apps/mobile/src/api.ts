@@ -193,6 +193,59 @@ export function request<T>(url: string, options: UniApp.RequestOptions = {}): Pr
   });
 }
 
+function requestPublicArrayBuffer(url: string): Promise<ArrayBuffer> {
+  const tenantCode = getCurrentTenantCode();
+  const requestUrl = appendTenantCode(url, tenantCode);
+  const tenantHeader = tenantCode && isPublicApiUrl(url) ? { "x-tenant-code": tenantCode } : {};
+  const userToken = isPublicApiUrl(url) ? String(uni.getStorageSync(USER_TOKEN_STORAGE_KEY) || "") : "";
+  const authHeader = userToken ? { Authorization: `Bearer ${userToken}` } : {};
+  return new Promise((resolve, reject) => {
+    uni.request({
+      url: `${API_BASE}${requestUrl}`,
+      method: "GET",
+      responseType: "arraybuffer",
+      header: { ...tenantHeader, ...authHeader },
+      success(res) {
+        const data = res.data as unknown;
+        const isArrayBuffer = data instanceof ArrayBuffer || Object.prototype.toString.call(data) === "[object ArrayBuffer]";
+        if (res.statusCode >= 200 && res.statusCode < 300 && isArrayBuffer) resolve(data as ArrayBuffer);
+        else reject(new ApiClientError("二维码图片下载失败", headerValue(res.header, "x-request-id")));
+      },
+      fail(error) {
+        reject(clientError(error, "二维码图片下载失败", { method: "GET", url: requestUrl }));
+      }
+    });
+  });
+}
+
+function writeArrayBufferToLocalImage(data: ArrayBuffer, name: string): Promise<string> {
+  const wxApi = (globalThis as any).wx;
+  const fs = wxApi?.getFileSystemManager?.();
+  const userDataPath = wxApi?.env?.USER_DATA_PATH;
+  if (fs && userDataPath) {
+    return new Promise((resolve, reject) => {
+      const filePath = `${userDataPath}/${name}`;
+      fs.writeFile({
+        filePath,
+        data,
+        success: () => resolve(filePath),
+        fail: (error: unknown) => reject(clientError(error, "二维码图片保存失败", { filePath }))
+      });
+    });
+  }
+  // #ifdef H5
+  if (typeof URL !== "undefined" && typeof Blob !== "undefined") {
+    return Promise.resolve(URL.createObjectURL(new Blob([data], { type: "image/png" })));
+  }
+  // #endif
+  return Promise.reject(new Error("当前环境不支持保存二维码图片"));
+}
+
+export async function requestCheckInQrImage(registrationId: number) {
+  const data = await requestPublicArrayBuffer(`/public/me/registrations/${registrationId}/check-in-qrcode.png`);
+  return writeArrayBufferToLocalImage(data, `check-in-${registrationId}-${Date.now()}.png`);
+}
+
 function isInvalidUserSessionError(error: unknown) {
   const message = error instanceof Error ? error.message : String((error as any)?.message || error || "");
   return message.includes("登录凭证无效") || message.includes("登录已过期") || message.includes("登录已失效");
