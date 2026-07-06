@@ -14,6 +14,7 @@ const saving = ref(false);
 const actionNotice = ref("");
 const actionNoticeTone = ref<"info" | "success" | "error">("info");
 const actionBusyLabel = ref("");
+const lastSavedAt = ref("");
 const bootstrap = ref<any>(null);
 const form = ref<any>(defaultForm());
 const fields = ref<FieldDraft[]>([defaultField()]);
@@ -53,6 +54,12 @@ function showActionNotice(message: string, tone: "info" | "success" | "error" = 
   actionNoticeTone.value = tone;
   if (typeof targetStep === "number") step.value = targetStep;
   uni.showToast({ title: message.length > 28 ? `${message.slice(0, 27)}...` : message, icon: tone === "success" ? "success" : "none" });
+}
+
+function currentClockText() {
+  const now = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`;
 }
 
 function defaultForm() {
@@ -241,6 +248,7 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
   actionNoticeTone.value = "info";
   uni.showLoading({ title: actionBusyLabel.value, mask: true });
   try {
+    const isNewActivity = !id.value;
     const data = payload(targetStatus);
     const saved = id.value
       ? await mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data })
@@ -248,8 +256,13 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
     id.value = saved.id;
     const previousStatus = form.value.status;
     form.value.status = saved.status || targetStatus;
-    showActionNotice(targetStatus === ActivityStatus.Open && previousStatus !== ActivityStatus.Open ? "已发布" : "已保存", "success");
-    if (redirectAfterSave) setTimeout(() => uni.redirectTo({ url: `/pages/admin/activity/edit?id=${saved.id}` }), 350);
+    lastSavedAt.value = currentClockText();
+    showActionNotice(targetStatus === ActivityStatus.Open && previousStatus !== ActivityStatus.Open ? `已发布 ${lastSavedAt.value}` : `已保存 ${lastSavedAt.value}`, "success");
+    if (redirectAfterSave && isNewActivity) {
+      setTimeout(() => uni.redirectTo({ url: `/pages/admin/activity/edit?id=${saved.id}` }), 650);
+    } else if (!isNewActivity) {
+      await loadActivity();
+    }
     return saved;
   } catch (err: any) {
     showActionNotice(err.message || "保存失败，请稍后重试。", "error");
@@ -478,6 +491,7 @@ onMounted(load);
         <view class="review-line"><text>合规检查</text><text :class="compliance.passed ? 'ok' : 'bad'">{{ compliance.passed ? "通过" : "需修改" }}</text></view>
         <view v-for="issue in compliance.issues" :key="issue.field + issue.keyword" class="issue">{{ issue.message }}</view>
         <view class="review-line"><text>发布方式</text><text>{{ canDirectOpen ? "可直接发布" : "需提交平台审核" }}</text></view>
+        <view class="review-line"><text>保存状态</text><text :class="lastSavedAt ? 'ok' : ''">{{ lastSavedAt ? `已保存 ${lastSavedAt}` : "本页修改后请点底部保存" }}</text></view>
         <view v-if="canSelectTenant && !form.tenantId" class="issue">平台超级管理员需要先选择商家。</view>
         <view class="link" @click="copyLink">复制公开链接</view>
       </view>
