@@ -322,6 +322,7 @@ function openActivityEditor(data: any) {
     startTime: data.startTime?.slice(0, 19).replace("T", " "),
     endTime: data.endTime?.slice(0, 19).replace("T", " "),
     registrationDeadline: data.registrationDeadline?.slice(0, 19).replace("T", " "),
+    fields: data.fields?.length ? data.fields.map(normalizeActivityField) : defaultForm().fields,
     hosts: data.hosts?.length ? data.hosts : [{ name: "", title: "", avatarUrl: "", bio: "", sortOrder: 1 }],
     sections: data.sections?.length ? data.sections.map((section: any) => ({ ...section, imageUrl: section.imageUrl || "" })) : defaultForm().sections
   });
@@ -372,17 +373,57 @@ function addField() {
   form.fields.push({ label: "", type: FieldType.Text, required: false, sortOrder: form.fields.length + 1, options: [] });
 }
 
-function removeField(index: number) {
+function isChoiceField(field: any) {
+  return field.type === FieldType.SingleChoice || field.type === FieldType.MultipleChoice;
+}
+
+function normalizeOption(option: any, index: number) {
+  const label = typeof option === "string" ? option : String(option?.label || option?.value || "").trim();
+  return {
+    label,
+    value: String(typeof option === "string" ? option : option?.value || label || `option_${index + 1}`)
+  };
+}
+
+function normalizeActivityField(field: any, index: number) {
+  const options = Array.isArray(field.options) ? field.options.map(normalizeOption).filter((option: any) => option.label) : [];
+  return {
+    ...field,
+    label: field.label || "",
+    type: field.type || FieldType.Text,
+    required: Boolean(field.required),
+    sortOrder: field.sortOrder || index + 1,
+    options
+  };
+}
+
+async function removeField(index: number) {
   if (form.fields.length <= 1) {
     ElMessage.warning("至少保留一个报名字段");
     return;
   }
+  const field = form.fields[index];
+  try {
+    await ElMessageBox.confirm(`确认删除报名字段「${field?.label || `字段 ${index + 1}`}」？保存活动后用户端将不再展示该字段。`, "删除报名字段", { type: "warning" });
+  } catch {
+    return;
+  }
   form.fields.splice(index, 1);
+  ElMessage.success("报名字段已删除，保存活动后生效");
 }
 
 function addOption(field: any) {
   field.options ||= [];
-  field.options.push({ label: "选项", value: `option_${Date.now()}_${field.options.length + 1}` });
+  field.options.push({ label: "", value: `option_${Date.now()}_${field.options.length + 1}` });
+}
+
+function removeOption(field: any, optionIndex: number) {
+  field.options ||= [];
+  if (field.options.length <= 1) {
+    ElMessage.warning("至少保留一个选项；如不需要该字段，请删除报名字段");
+    return;
+  }
+  field.options.splice(optionIndex, 1);
 }
 
 function addHost() {
@@ -517,8 +558,11 @@ function cleanPayload() {
       type: field.type,
       required: Boolean(field.required),
       sortOrder: field.sortOrder || index + 1,
-      options: [FieldType.SingleChoice, FieldType.MultipleChoice].includes(field.type)
-        ? (field.options || []).filter((option: any) => option.label?.trim()).map((option: any, optionIndex: number) => ({ label: option.label.trim(), value: option.value || `option_${optionIndex + 1}` }))
+      options: isChoiceField(field)
+        ? (field.options || [])
+            .map((option: any, optionIndex: number) => normalizeOption(option, optionIndex))
+            .filter((option: any) => option.label)
+            .map((option: any, optionIndex: number) => ({ label: option.label, value: option.value || `option_${index + 1}_${optionIndex + 1}` }))
         : []
     })),
     hosts: form.hosts.filter((host: any) => host.name?.trim()).map((host: any, index: number) => ({
@@ -999,10 +1043,14 @@ onMounted(async () => {
               <el-select v-model="field.type"><el-option v-for="(text, value) in fieldTypeText" :key="value" :label="text" :value="value" /></el-select>
               <el-checkbox v-model="field.required">必填</el-checkbox>
               <el-input-number v-model="field.sortOrder" :min="1" />
-              <el-button :icon="Delete" circle @click="removeField(index)" />
-              <el-button v-if="field.type === FieldType.SingleChoice || field.type === FieldType.MultipleChoice" :icon="Plus" @click="addOption(field)">选项</el-button>
-              <div v-if="field.options?.length && (field.type === FieldType.SingleChoice || field.type === FieldType.MultipleChoice)" class="options">
-                <el-input v-for="(option, optionIndex) in field.options" :key="option.value || optionIndex" v-model="option.label" placeholder="选项名称" />
+              <el-button type="danger" plain :icon="Delete" @click="removeField(index)">删除字段</el-button>
+              <el-button v-if="isChoiceField(field)" :icon="Plus" @click="addOption(field)">增加选项</el-button>
+              <div v-if="isChoiceField(field)" class="options">
+                <div v-for="(option, optionIndex) in field.options" :key="option.value || optionIndex" class="option-row">
+                  <el-input v-model="option.label" placeholder="选项名称，如：亲子 / 国学 / 书法" />
+                  <el-button type="danger" plain :icon="Delete" @click="removeOption(field, optionIndex)">删除选项</el-button>
+                </div>
+                <el-empty v-if="!field.options?.length" class="option-empty" description="请添加至少一个选项" :image-size="48" />
               </div>
             </div>
             <el-button :icon="Plus" @click="addField">增加字段</el-button>
@@ -1075,11 +1123,13 @@ onMounted(async () => {
 .compliance-issues em { color: #475569; font-style: normal; }
 .activity-wizard { margin-bottom: 14px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
-.field-row { display: grid; grid-template-columns: 1fr 150px 80px 120px 40px 90px; gap: 8px; align-items: center; margin-bottom: 10px; }
+.field-row { display: grid; grid-template-columns: minmax(180px, 1fr) 150px 80px 120px 112px 112px; gap: 8px; align-items: center; margin-bottom: 10px; }
 .host-row { display: grid; grid-template-columns: 1fr 1fr 1.5fr 120px 40px; gap: 8px; align-items: center; margin-bottom: 14px; }
 .section-row { display: grid; grid-template-columns: 150px 1fr 120px 108px; gap: 8px; align-items: center; margin-bottom: 14px; }
 .options, .full { grid-column: 1 / -1; }
-.options { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 10px; border-radius: 8px; background: #f8fafc; border: 1px dashed #d7dee8; }
+.option-row { display: grid; grid-template-columns: minmax(0, 1fr) 96px; gap: 8px; align-items: center; }
+.option-empty { grid-column: 1 / -1; padding: 4px 0; }
 .permission-alert { margin-bottom: 4px; }
 .switches { align-items: end; }
 .cover-field, .qr-field { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }

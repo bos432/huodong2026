@@ -95,9 +95,30 @@ function fieldPlaceholder(field: any) {
   return `请填写${field.label}`;
 }
 
-function setMulti(fieldId: number, option: string) {
+function fieldOptions(field: any) {
+  const options = Array.isArray(field?.options) ? field.options : [];
+  return options
+    .map((option: any, index: number) => {
+      const label = typeof option === "string" ? option : String(option?.label || option?.value || "").trim();
+      const value = typeof option === "string" ? option : String(option?.value || label || `option_${index + 1}`).trim();
+      return { label: label || value || `选项 ${index + 1}`, value: value || label || `option_${index + 1}` };
+    })
+    .filter((option: any) => option.label);
+}
+
+function optionKey(option: any, index: number) {
+  return option.value || option.label || `option_${index}`;
+}
+
+function optionAnswerValue(option: any) {
+  return option.label || option.value || "";
+}
+
+function setMulti(fieldId: number, option: any) {
+  const value = optionAnswerValue(option);
+  if (!value) return;
   const current = values[fieldId] || [];
-  values[fieldId] = current.includes(option) ? current.filter((item: string) => item !== option) : [...current, option];
+  values[fieldId] = current.includes(value) ? current.filter((item: string) => item !== value) : [...current, value];
 }
 
 function validate() {
@@ -395,10 +416,16 @@ watch(couponCode, () => {
           <input v-if="field.type === FieldType.Text || field.type === FieldType.Phone || field.type === FieldType.IdCard" v-model="values[field.id]" class="input" :placeholder="fieldPlaceholder(field)" :type="field.type === FieldType.Phone ? 'number' : 'text'" />
           <textarea v-else-if="field.type === FieldType.Remark" v-model="values[field.id]" class="textarea" :placeholder="fieldPlaceholder(field)" />
           <radio-group v-else-if="field.type === FieldType.SingleChoice" @change="values[field.id] = $event.detail.value">
-            <label v-for="opt in field.options" :key="opt.value" class="choice"><radio :value="opt.label" />{{ opt.label }}</label>
+            <label v-for="(opt, optIndex) in fieldOptions(field)" :key="optionKey(opt, optIndex)" class="choice">
+              <radio :value="optionAnswerValue(opt)" />
+              <text class="choice-text">{{ opt.label }}</text>
+            </label>
           </radio-group>
           <view v-else-if="field.type === FieldType.MultipleChoice" class="choices">
-            <label v-for="opt in field.options" :key="opt.value" class="choice"><checkbox :checked="(values[field.id] || []).includes(opt.label)" @click="setMulti(field.id, opt.label)" />{{ opt.label }}</label>
+            <label v-for="(opt, optIndex) in fieldOptions(field)" :key="optionKey(opt, optIndex)" class="choice">
+              <checkbox :checked="(values[field.id] || []).includes(optionAnswerValue(opt))" @click="setMulti(field.id, opt)" />
+              <text class="choice-text">{{ opt.label }}</text>
+            </label>
           </view>
         </view>
       </view>
@@ -573,6 +600,7 @@ watch(couponCode, () => {
 .field-label { display: flex; align-items: center; gap: 8rpx; }
 .optional { color: #98a2b3 !important; font-size: 22rpx; font-weight: 500; }
 .choice { display: flex; align-items: center; gap: 10rpx; margin: 12rpx 0; }
+.choice-text { color: #333333; font-size: 27rpx; line-height: 1.45; }
 .ticket-list { display: grid; gap: 12rpx; }
 .ticket { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 20rpx; border: 1px solid #e8e0d8; border-radius: 18rpx; background: #fffaf4; }
 .ticket.active { border-color: #c43d3d; background: rgba(196, 61, 61, 0.08); }
