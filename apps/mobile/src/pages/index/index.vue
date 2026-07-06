@@ -16,26 +16,6 @@
     <PageDecorationBlocks :sections="contentSections" />
     <AdSlotRenderer slot-key="home_top_banner" page-key="home" />
 
-    <!-- 金刚区 2x4 -->
-    <view class="card" style="padding:16rpx 8rpx;">
-      <view class="grid-2x4">
-        <view v-for="item in jingang" :key="item.label" class="grid-item" @click="goCategory(item)">
-          <view class="grid-icon">{{ item.icon }}</view>
-          <text class="grid-label">{{ item.label }}</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- Banner 轮播 -->
-    <scroll-view class="banner-wrap" scroll-x :show-scrollbar="false">
-      <view v-for="(banner, idx) in banners" :key="idx" class="banner-item" @click="goBanner(banner)">
-        <view class="banner-inner" :style="{ background: banner.bg }">
-          <text class="banner-title">{{ banner.title }}</text>
-          <text class="banner-sub">{{ banner.sub }}</text>
-        </view>
-      </view>
-    </scroll-view>
-
     <!-- 限时体验 -->
     <view class="section-with-title">
       <view class="row">
@@ -80,17 +60,6 @@
     </view>
 
     <AdSlotRenderer slot-key="home_feed_inline" page-key="home" compact />
-
-    <!-- 文化大使入口 -->
-    <view class="ambassador-card" @click="goAmbassador">
-      <view class="ambassador-content">
-        <text style="font-size:32rpx; color:#fff; font-weight:600;">🏮 加入文化大使</text>
-        <text style="font-size:24rpx; color:rgba(255,255,255,0.8); margin-top:8rpx;">{{ pageBrand.slogan }}</text>
-      </view>
-      <view class="ambassador-arrow">
-        <text style="color:#fff; font-size:28rpx;">立即申请 &gt;</text>
-      </view>
-    </view>
 
     <!-- 共修动态 -->
     <view class="section-with-title" style="margin-top:24rpx;">
@@ -157,23 +126,6 @@ onShow(async () => {
   if (changedByLocation && beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
 });
 
-const jingang = [
-  { icon: "🏛", label: "品牌故事", url: "/pages/brand/story" },
-  { icon: "院", label: "院长招募", url: "/pages/recruit/dean" },
-  { icon: "使", label: "大使申请", url: "/pages/apply/ambassador" },
-  { icon: "扶", label: "帮扶申请", url: "/pages/apply/aid" },
-  { icon: "🛍", label: "慢π商城", url: "/pages/mall/index" },
-  { icon: "🌿", label: "健康", category: "健康" },
-  { icon: "⛰", label: "创业", category: "创业" },
-  { icon: "⋯", label: "更多", category: "" }
-];
-
-const banners = [
-  { title: "寻找100位慢π大使", sub: "一起用7把钥匙，打开中国人的精神家园", bg: "#C43D3D", link: "ambassador" },
-  { title: "精选专题：慢π内容", sub: "从体验到进阶，跟随主理人深入了解", bg: "#4A6B8A", link: "course" },
-  { title: "线上共修会报名中", sub: "与百位同修一起精进", bg: "#5B8C5A", link: "community" }
-];
-
 const courses = ref<CourseCard[]>([]);
 const trialCourses = computed(() => {
   const freeCourses = courses.value.filter((course) => Number(course.price) === 0);
@@ -206,18 +158,8 @@ async function loadPosts() {
 }
 
 function goSearch() { uni.navigateTo({ url:"/pages/search/index" }); }
-function goCategory(item: any) {
-  if (item.url) return uni.navigateTo({ url: withTenantCode(item.url) });
-  uni.navigateTo({ url:`/pages/courses/index?category=${item.category}` });
-}
-function goBanner(b: any) {
-  if (b.link === "ambassador") uni.navigateTo({ url:"/pages/ambassador/index" });
-  else if (b.link === "course") uni.navigateTo({ url: withTenantCode("/pages/course/detail?id=1") });
-  else if (b.link === "community") uni.navigateTo({ url:"/pages/community/index" });
-}
 function goCourse(c: any) { uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${c.id}`) }); }
 function goAllCourses() { uni.reLaunch({ url:"/pages/courses/index" }); }
-function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goPost(p: any) { uni.navigateTo({ url:`/pages/community/detail?id=${p.id || 1}` }); }
 async function toggleLike(post: CommunityPost) {
   try {
@@ -286,37 +228,6 @@ async function submitComment(post: CommunityPost, content: string) {
   background: rgba(74,107,138,0.08);
   border-radius: 20rpx;
 }
-.banner-wrap {
-  margin: 16rpx 0;
-  white-space: nowrap;
-  overflow-x: auto;
-}
-.banner-wrap::-webkit-scrollbar { display:none; }
-.banner-item {
-  display: inline-block;
-  width: calc(100vw - 64rpx);
-  margin-right: 24rpx;
-  border-radius: 20rpx;
-  overflow: hidden;
-}
-.banner-inner {
-  height: 360rpx;
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  padding: 40rpx;
-  border-radius: 20rpx;
-}
-.banner-title {
-  font-size: 40rpx; font-weight: 700;
-  color: #fff; text-align: center;
-  font-family: 'STKaiti','KaiTi',serif;
-}
-.banner-sub {
-  font-size: 26rpx; color: rgba(255,255,255,0.85);
-  margin-top: 16rpx; text-align: center;
-}
 .section-with-title { margin-top: 8rpx; }
 .course-card-h {
   display: inline-block;
@@ -340,17 +251,6 @@ async function submitComment(post: CommunityPost, content: string) {
 .course-cover-img { width: 100%; height: 100%; display: block; }
 .course-title { font-size: 28rpx; font-weight: 600; color: #333; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
 .course-teacher { font-size: 24rpx; color: #999; margin-top: 4rpx; display: block; }
-.ambassador-card {
-  margin-top: 24rpx;
-  background: linear-gradient(135deg, #C43D3D, #A52A2A);
-  border-radius: 20rpx;
-  padding: 32rpx 24rpx;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-.ambassador-content { flex:1; }
-.ambassador-arrow { margin-left: 16rpx; }
 .post-card { margin-top: 8rpx; }
 .interact-btn { display: flex; align-items: center; gap: 8rpx; }
 .post-images { display: flex; gap: 8rpx; margin-top: 12rpx; flex-wrap: wrap; }
