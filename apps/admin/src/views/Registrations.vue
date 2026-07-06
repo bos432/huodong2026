@@ -15,6 +15,7 @@ const rows = ref<any[]>([]);
 const activities = ref<any[]>([]);
 const tenants = ref<any[]>([]);
 const loading = ref(false);
+const exporting = ref(false);
 function routeTenantId() {
   const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
   return isPlatformAdmin() && tenantId && Number.isFinite(tenantId) ? tenantId : undefined;
@@ -52,6 +53,14 @@ const readonlyDescription = canViewRegistrationOrders
 const focusedActivityName = computed(() => {
   if (!query.activityId) return "";
   return activities.value.find((activity) => activity.id === query.activityId)?.title || rows.value.find((row) => row.activity?.id === query.activityId)?.activity?.title || `活动 ID ${query.activityId}`;
+});
+const exportScopeText = computed(() => {
+  const parts = [];
+  if (isPlatformAdmin() && query.tenantId) parts.push(`商家：${tenants.value.find((tenant) => tenant.id === query.tenantId)?.name || query.tenantId}`);
+  if (query.activityId) parts.push(`活动：${focusedActivityName.value}`);
+  if (query.status) parts.push(`状态：${registrationStatusText[query.status as RegistrationStatus] || query.status}`);
+  if (query.keyword.trim()) parts.push(`关键词：${query.keyword.trim()}`);
+  return parts.length ? parts.join(" / ") : "全部可见报名";
 });
 
 function queryParams() {
@@ -207,6 +216,7 @@ function checkInOperator(row: any) {
 
 async function exportRows() {
   if (!canOperateRegistrations) return ElMessage.warning("当前账号只能只读查看报名");
+  exporting.value = true;
   try {
     await downloadExport({
       activityId: query.activityId,
@@ -214,8 +224,11 @@ async function exportRows() {
       status: query.status,
       keyword: query.keyword.trim()
     });
+    ElMessage.success("已按当前筛选导出报名数据");
   } catch (error: any) {
     ElMessage.error(error.message);
+  } finally {
+    exporting.value = false;
   }
 }
 
@@ -247,7 +260,7 @@ watch(
   <div class="page">
     <div class="toolbar">
       <h2>{{ pageTitle }}</h2>
-      <el-button v-if="canOperateRegistrations" :icon="Download" @click="exportRows">导出 Excel</el-button>
+      <el-button v-if="canOperateRegistrations" type="primary" plain :icon="Download" :loading="exporting" @click="exportRows">按当前筛选导出 Excel</el-button>
     </div>
 
     <el-alert
@@ -301,6 +314,10 @@ watch(
         <el-button type="primary" :icon="Search" @click="search">筛选</el-button>
         <el-button v-if="query.activityId" @click="clearActivityFilter">查看全部活动报名</el-button>
       </el-form>
+      <div v-if="canOperateRegistrations" class="export-summary">
+        <span>导出范围：{{ exportScopeText }}</span>
+        <strong>当前筛选 {{ total }} 条</strong>
+      </div>
 
       <el-empty v-if="!loading && !rows.length" description="暂无匹配报名记录">
         <el-button type="primary" @click="search">重新筛选</el-button>
@@ -380,6 +397,8 @@ watch(
 .page-hint { margin-bottom: 14px; }
 .activity-alert { margin-bottom: 14px; }
 .filters { margin-bottom: 12px; }
+.export-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid #dbeafe; border-radius: 8px; background: #eff6ff; color: #475569; font-size: 13px; }
+.export-summary strong { color: #0f172a; white-space: nowrap; }
 pre { margin: 0; white-space: pre-wrap; font-family: inherit; line-height: 1.5; }
 small { color: #667085; display: block; line-height: 1.5; }
 .checkin-time { margin-top: 4px; line-height: 1.5; }
@@ -387,4 +406,7 @@ small { color: #667085; display: block; line-height: 1.5; }
 .row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .row-actions .el-button { margin-left: 0; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; }
+@media (max-width: 640px) {
+  .export-summary { align-items: flex-start; flex-direction: column; }
+}
 </style>

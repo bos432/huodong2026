@@ -1,5 +1,6 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
+import http from "node:http";
 import os from "node:os";
 import path from "node:path";
 
@@ -389,25 +390,120 @@ async function runProfileCommands() {
   await runCommandStep(mpWeixinBuildStep());
 
   const acceptanceOutputDir = path.join(outputDir, "acceptance");
-  await runCommandStep({
-    name: "browser online showcase acceptance",
-    command: npmCommand,
-    args: ["run", "browser:online-showcase"],
-    required: true,
-    timeoutMs: 480000,
-    env: { ACCEPTANCE_OUTPUT_DIR: acceptanceOutputDir }
-  });
+  const acceptanceServer = await startAcceptanceStaticServer();
+  const acceptanceEnv = {
+    ACCEPTANCE_OUTPUT_DIR: acceptanceOutputDir,
+    WEB_BASE: acceptanceServer.baseUrl,
+    ADMIN_WEB_BASE: acceptanceServer.baseUrl,
+    API_BASE: `${acceptanceServer.baseUrl}/api`
+  };
+  try {
+    await runCommandStep({
+      name: "browser online showcase acceptance",
+      command: npmCommand,
+      args: ["run", "browser:online-showcase"],
+      required: true,
+      timeoutMs: 480000,
+      env: acceptanceEnv
+    });
 
-  await runCommandStep({
-    name: "browser mobile admin acceptance",
-    command: npmCommand,
-    args: ["run", "browser:mobile-admin"],
-    required: true,
-    timeoutMs: 420000,
-    env: { ACCEPTANCE_OUTPUT_DIR: acceptanceOutputDir }
-  });
+    await runCommandStep({
+      name: "browser mobile admin acceptance",
+      command: npmCommand,
+      args: ["run", "browser:mobile-admin"],
+      required: true,
+      timeoutMs: 420000,
+      env: acceptanceEnv
+    });
+  } finally {
+    await acceptanceServer.close();
+  }
 
   collectAcceptanceArtifacts(acceptanceOutputDir);
+}
+
+function startAcceptanceStaticServer() {
+  const h5Root = path.join(root, "apps", "mobile", "dist", "build", "h5");
+  const adminRoot = path.join(root, "apps", "admin", "dist");
+  const proxyBase = new URL((process.env.ACCEPTANCE_API_PROXY || "http://127.0.0.1:18080").replace(/\/$/, ""));
+  const server = http.createServer((req, res) => {
+    const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
+    if (requestUrl.pathname.startsWith("/api/") || requestUrl.pathname.startsWith("/uploads/")) {
+      proxyAcceptanceRequest(req, res, proxyBase);
+      return;
+    }
+    const isAdmin = requestUrl.pathname === "/admin" || requestUrl.pathname.startsWith("/admin/");
+    const staticRoot = isAdmin ? adminRoot : h5Root;
+    const prefix = isAdmin ? "/admin" : "";
+    const relativePath = isAdmin ? requestUrl.pathname.slice(prefix.length) || "/" : requestUrl.pathname;
+    const filePath = safeStaticPath(staticRoot, relativePath);
+    const fallback = path.join(staticRoot, "index.html");
+    serveStaticFile(filePath, fallback, res);
+  });
+  return new Promise((resolve, reject) => {
+    server.once("error", reject);
+    server.listen(0, "127.0.0.1", () => {
+      server.off("error", reject);
+      const address = server.address();
+      const port = typeof address === "object" && address ? address.port : 0;
+      const baseUrl = `http://127.0.0.1:${port}`;
+      console.log(`[acceptance] serving current build at ${baseUrl}, proxy ${proxyBase.href}`);
+      resolve({
+        baseUrl,
+        close: () => new Promise((done) => server.close(() => done()))
+      });
+    });
+  });
+}
+
+function safeStaticPath(staticRoot, requestPath) {
+  const decoded = decodeURIComponent(requestPath.split("?")[0] || "/");
+  const clean = decoded.replace(/^\/+/, "");
+  const target = path.resolve(staticRoot, clean || "index.html");
+  const rootPath = path.resolve(staticRoot);
+  if (target !== rootPath && !target.startsWith(`${rootPath}${path.sep}`)) return path.join(staticRoot, "index.html");
+  return target;
+}
+
+function serveStaticFile(filePath, fallback, res) {
+  const target = fs.existsSync(filePath) && fs.statSync(filePath).isFile() ? filePath : fallback;
+  const ext = path.extname(target).toLowerCase();
+  const type = ({
+    ".html": "text/html; charset=utf-8",
+    ".js": "application/javascript; charset=utf-8",
+    ".css": "text/css; charset=utf-8",
+    ".json": "application/json; charset=utf-8",
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".svg": "image/svg+xml",
+    ".webp": "image/webp",
+    ".ico": "image/x-icon",
+    ".woff2": "font/woff2"
+  })[ext] || "application/octet-stream";
+  res.writeHead(200, {
+    "Content-Type": type,
+    "Cache-Control": "no-cache, no-store, must-revalidate"
+  });
+  fs.createReadStream(target).pipe(res);
+}
+
+function proxyAcceptanceRequest(req, res, proxyBase) {
+  const target = new URL(req.url || "/", proxyBase);
+  const proxyReq = http.request(target, {
+    method: req.method,
+    headers: { ...req.headers, host: proxyBase.host }
+  }, (proxyRes) => {
+    const headers = { ...proxyRes.headers };
+    delete headers["content-security-policy"];
+    res.writeHead(proxyRes.statusCode || 502, headers);
+    proxyRes.pipe(res);
+  });
+  proxyReq.on("error", (error) => {
+    res.writeHead(502, { "Content-Type": "application/json; charset=utf-8" });
+    res.end(JSON.stringify({ code: 1, message: `Acceptance proxy failed: ${error.message}` }));
+  });
+  req.pipe(proxyReq);
 }
 
 function mpWeixinBuildStep() {

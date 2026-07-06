@@ -605,16 +605,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const monthStart = new Date();
     monthStart.setDate(1);
     monthStart.setHours(0, 0, 0, 0);
+    const today = this.businessDayRange();
 
     const activityCountBuilder = this.activities.createQueryBuilder("activity");
     const pendingActivityCountBuilder = this.activities.createQueryBuilder("activity").where("activity.status = :status", { status: ActivityStatus.PendingApproval });
     const registrationCountBuilder = this.registrations.createQueryBuilder("registration").leftJoin("registration.activity", "activity");
     const pendingRegistrationCountBuilder = this.registrations.createQueryBuilder("registration").leftJoin("registration.activity", "activity").where("registration.status = :status", { status: RegistrationStatus.PendingReview });
     const monthRegistrationCountBuilder = this.registrations.createQueryBuilder("registration").leftJoin("registration.activity", "activity").where("registration.createdAt >= :monthStart", { monthStart });
+    const todayRegistrationCountBuilder = this.registrations.createQueryBuilder("registration").leftJoin("registration.activity", "activity").where("registration.createdAt >= :todayStart", { todayStart: today.start }).andWhere("registration.createdAt < :todayEnd", { todayEnd: today.end });
+    const pendingCheckInCountBuilder = this.registrations.createQueryBuilder("registration").leftJoin("registration.activity", "activity").leftJoin(CheckIn, "linkedCheckIn", "linkedCheckIn.registrationId = registration.id").where("registration.status = :approvedStatus", { approvedStatus: RegistrationStatus.Approved }).andWhere("linkedCheckIn.id IS NULL");
     const orderCountBuilder = this.orders.createQueryBuilder("order").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity");
     const pendingOrderCountBuilder = this.orders.createQueryBuilder("order").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").where("order.status = :status", { status: OrderStatus.PendingPayment });
+    const pendingOfflinePaymentCountBuilder = this.orders.createQueryBuilder("order").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").where("order.status = :pendingOfflineStatus", { pendingOfflineStatus: OrderStatus.PendingPayment }).andWhere("order.paymentMethod = :offlineMethod", { offlineMethod: PaymentMethod.Offline });
+    const todayOrderCountBuilder = this.orders.createQueryBuilder("order").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").where("order.createdAt >= :todayOrderStart", { todayOrderStart: today.start }).andWhere("order.createdAt < :todayOrderEnd", { todayOrderEnd: today.end });
     const paidOrderCountBuilder = this.orders.createQueryBuilder("order").leftJoin("order.registration", "registration").leftJoin("registration.activity", "activity").where("order.status IN (:...statuses)", { statuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] });
     const checkInCountBuilder = this.checkIns.createQueryBuilder("checkIn").leftJoin("checkIn.registration", "registration").leftJoin("registration.activity", "activity");
+    const todayCheckInCountBuilder = this.checkIns.createQueryBuilder("checkIn").leftJoin("checkIn.registration", "registration").leftJoin("registration.activity", "activity").where("checkIn.createdAt >= :todayCheckInStart", { todayCheckInStart: today.start }).andWhere("checkIn.createdAt < :todayCheckInEnd", { todayCheckInEnd: today.end });
     const reviewCountBuilder = this.activityReviews.createQueryBuilder("review").leftJoin("review.activity", "activity");
     const viewCountBuilder = this.activityViewLogs.createQueryBuilder("view").leftJoin("view.activity", "activity");
     const notificationCountBuilder = this.notifications.createQueryBuilder("notification").leftJoin("notification.activity", "activity");
@@ -631,10 +637,15 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       registrationCountBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
       pendingRegistrationCountBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
       monthRegistrationCountBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
+      todayRegistrationCountBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
+      pendingCheckInCountBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
       orderCountBuilder.andWhere("(order.tenantId = :tenantId OR registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
       pendingOrderCountBuilder.andWhere("(order.tenantId = :tenantId OR registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
+      pendingOfflinePaymentCountBuilder.andWhere("(order.tenantId = :tenantId OR registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
+      todayOrderCountBuilder.andWhere("(order.tenantId = :tenantId OR registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
       paidOrderCountBuilder.andWhere("(order.tenantId = :tenantId OR registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
       checkInCountBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
+      todayCheckInCountBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId });
       reviewCountBuilder.andWhere("activity.tenantId = :tenantId", { tenantId });
       viewCountBuilder.andWhere("activity.tenantId = :tenantId", { tenantId });
       notificationCountBuilder.andWhere("activity.tenantId = :tenantId", { tenantId });
@@ -649,7 +660,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const recentActivityBuilder = this.activities.createQueryBuilder("activity").leftJoinAndSelect("activity.tenant", "tenant").orderBy("activity.updatedAt", "DESC").take(8);
     if (isTenant) recentActivityBuilder.andWhere("activity.tenantId = :tenantId", { tenantId });
 
-    const [tenantCount, disabledTenantCount, activityCount, pendingActivityCount, registrationCount, pendingRegistrationCount, monthRegistrationCount, orderCount, pendingOrderCount, paidOrderCount, checkInCount, reviewCount, viewCount, notificationCount, paidAmount, monthPaidAmount, refundAmount, monthRefundAmount, pendingRefundCount, callbackRiskCount, recentActivities] = await Promise.all([
+    const [tenantCount, disabledTenantCount, activityCount, pendingActivityCount, registrationCount, pendingRegistrationCount, monthRegistrationCount, todayRegistrationCount, pendingCheckInCount, orderCount, pendingOrderCount, pendingOfflinePaymentCount, todayOrderCount, paidOrderCount, checkInCount, todayCheckInCount, reviewCount, viewCount, notificationCount, paidAmount, monthPaidAmount, refundAmount, monthRefundAmount, pendingRefundCount, callbackRiskCount, recentActivities] = await Promise.all([
       isTenant ? Promise.resolve(1) : this.tenants.count(),
       isTenant ? Promise.resolve(0) : this.tenants.count({ where: { enabled: false } }),
       activityCountBuilder.getCount(),
@@ -657,10 +668,15 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       registrationCountBuilder.getCount(),
       pendingRegistrationCountBuilder.getCount(),
       monthRegistrationCountBuilder.getCount(),
+      todayRegistrationCountBuilder.getCount(),
+      pendingCheckInCountBuilder.getCount(),
       orderCountBuilder.getCount(),
       pendingOrderCountBuilder.getCount(),
+      pendingOfflinePaymentCountBuilder.getCount(),
+      todayOrderCountBuilder.getCount(),
       paidOrderCountBuilder.getCount(),
       checkInCountBuilder.getCount(),
+      todayCheckInCountBuilder.getCount(),
       reviewCountBuilder.getCount(),
       viewCountBuilder.getCount(),
       notificationCountBuilder.getCount(),
@@ -699,6 +715,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         refundAmount: refundTotal.toFixed(2),
         netAmount: (paidTotal - refundTotal).toFixed(2),
         monthRegistrationCount,
+        todayRegistrationCount,
+        todayOrderCount,
+        todayCheckInCount,
         monthPaidAmount: monthPaidTotal.toFixed(2),
         monthRefundAmount: monthRefundTotal.toFixed(2),
         monthNetAmount: (monthPaidTotal - monthRefundTotal).toFixed(2),
@@ -710,9 +729,17 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         pendingActivityCount,
         pendingRegistrationCount,
         pendingOrderCount,
+        pendingOfflinePaymentCount,
+        pendingCheckInCount,
         pendingRefundCount,
         callbackRiskCount
       },
+      alerts: [
+        ...(pendingOfflinePaymentCount > 0 ? [{ type: "warning", title: "待确认线下收款", count: pendingOfflinePaymentCount, path: `/orders?status=${OrderStatus.PendingPayment}`, message: "线下收款订单需要财务确认后才能完成报名履约。" }] : []),
+        ...(pendingCheckInCount > 0 ? [{ type: "warning", title: "待核销报名", count: pendingCheckInCount, path: "/check-in", message: "报名成功但未签到，现场核销页可继续处理。" }] : []),
+        ...(pendingRefundCount > 0 ? [{ type: "danger", title: "待处理退款", count: pendingRefundCount, path: "/finance", message: "退款待办会影响用户体验和财务闭环。" }] : []),
+        ...(callbackRiskCount > 0 ? [{ type: "danger", title: "支付回调异常", count: callbackRiskCount, path: "/finance", message: "存在验签失败或异常回调，请优先复核。" }] : [])
+      ],
       recentActivities: await Promise.all(recentActivities.map((activity: Activity) => this.dashboardActivityRow(activity)))
     };
   }
@@ -2627,6 +2654,98 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
     const [items, total] = await builder.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
     return { items, total, page, pageSize };
+  }
+
+  async checkInOverview(query: { activityId?: number | string }, admin?: AdminContext) {
+    if (!this.isTenantScoped(admin)) this.assertPlatformAdmin(admin);
+    const activityId = query.activityId ? Number(query.activityId) : undefined;
+    if (activityId && !Number.isFinite(activityId)) throw new BadRequestException("活动 ID 格式错误");
+    const tenantId = admin?.tenantId || 0;
+    const today = this.businessDayRange();
+    const scopeCondition = this.isTenantScoped(admin) ? "(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)" : "1 = 1";
+
+    const activitiesBuilder = this.activities.createQueryBuilder("activity").leftJoinAndSelect("activity.tenant", "tenant").orderBy("activity.startTime", "DESC").take(100);
+    this.applyTenantScope(activitiesBuilder, "activity", admin);
+
+    const baseRegistrationBuilder = () => {
+      const builder = this.registrations
+        .createQueryBuilder("registration")
+        .leftJoin("registration.activity", "activity")
+        .leftJoin(CheckIn, "linkedCheckIn", "linkedCheckIn.registrationId = registration.id")
+        .where(scopeCondition, { tenantId });
+      if (activityId) builder.andWhere("activity.id = :activityId", { activityId });
+      return builder;
+    };
+
+    const baseCheckInBuilder = () => {
+      const builder = this.checkIns
+        .createQueryBuilder("checkIn")
+        .leftJoin("checkIn.registration", "registration")
+        .leftJoin("registration.activity", "activity")
+        .where(scopeCondition, { tenantId });
+      if (activityId) builder.andWhere("activity.id = :activityId", { activityId });
+      return builder;
+    };
+
+    const pendingRowsBuilder = this.registrations
+      .createQueryBuilder("registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("registration.tenant", "tenant")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndMapOne("registration.order", Order, "linkedOrder", "linkedOrder.registrationId = registration.id")
+      .leftJoin(CheckIn, "linkedCheckIn", "linkedCheckIn.registrationId = registration.id")
+      .where(scopeCondition, { tenantId })
+      .andWhere("registration.status = :approvedStatus", { approvedStatus: RegistrationStatus.Approved })
+      .andWhere("linkedCheckIn.id IS NULL")
+      .orderBy("registration.createdAt", "DESC")
+      .take(10);
+    if (activityId) pendingRowsBuilder.andWhere("activity.id = :activityId", { activityId });
+
+    const checkedRowsBuilder = this.checkIns
+      .createQueryBuilder("checkIn")
+      .leftJoinAndSelect("checkIn.registration", "registration")
+      .leftJoinAndSelect("registration.activity", "activity")
+      .leftJoinAndSelect("registration.tenant", "tenant")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndSelect("checkIn.operator", "operator")
+      .leftJoinAndMapOne("registration.order", Order, "linkedOrder", "linkedOrder.registrationId = registration.id")
+      .where(scopeCondition, { tenantId })
+      .orderBy("checkIn.createdAt", "DESC")
+      .take(10);
+    if (activityId) checkedRowsBuilder.andWhere("activity.id = :activityId", { activityId });
+
+    const [activities, approvedTotal, pendingCheckInCount, checkedInCount, todayCheckedInCount, pendingRows, checkedRows] = await Promise.all([
+      activitiesBuilder.getMany(),
+      baseRegistrationBuilder().andWhere("registration.status IN (:...eligibleStatuses)", { eligibleStatuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] }).getCount(),
+      baseRegistrationBuilder().andWhere("registration.status = :approvedStatus", { approvedStatus: RegistrationStatus.Approved }).andWhere("linkedCheckIn.id IS NULL").getCount(),
+      baseCheckInBuilder().getCount(),
+      baseCheckInBuilder().andWhere("checkIn.createdAt >= :todayStart", { todayStart: today.start }).andWhere("checkIn.createdAt < :todayEnd", { todayEnd: today.end }).getCount(),
+      pendingRowsBuilder.getMany(),
+      checkedRowsBuilder.getMany()
+    ]);
+
+    return {
+      filters: { activityId: activityId || null },
+      activities: activities.map((activity) => ({
+        id: activity.id,
+        title: activity.title,
+        status: activity.status,
+        startTime: activity.startTime,
+        endTime: activity.endTime,
+        tenant: activity.tenant ? this.publicTenant(activity.tenant) : null
+      })),
+      stats: {
+        approvedTotal,
+        pendingCheckInCount,
+        checkedInCount,
+        todayCheckedInCount,
+        checkInRate: approvedTotal > 0 ? Math.round((checkedInCount / approvedTotal) * 1000) / 10 : 0
+      },
+      pending: pendingRows,
+      checked: checkedRows
+    };
   }
 
   async approveRegistration(id: number, dto: ReviewDto, admin?: AdminContext) {

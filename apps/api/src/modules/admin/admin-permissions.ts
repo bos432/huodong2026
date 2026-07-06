@@ -261,7 +261,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path === "finance/export") return "finance.export";
   if (path.includes("wallet/adjust")) return "finance.wallet_adjust";
   if (path.startsWith("finance/")) return write ? "finance.manage" : "finance.view";
-  if (path === "check-ins") return "checkin.manage";
+  if (path === "check-ins" || path.startsWith("check-ins/")) return "checkin.manage";
   if (path.startsWith("waitlists")) return "waitlist.manage";
   if (path === "members" && verb === "GET") return "member.view";
   if (path === "members/:userId" && verb === "GET") return "member.view";

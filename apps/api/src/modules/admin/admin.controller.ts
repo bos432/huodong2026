@@ -1247,6 +1247,12 @@ export class AdminController {
   }
 
   @AdminRoles(...CHECK_IN_ROLES)
+  @Get("check-ins/overview")
+  checkInOverview(@Query("activityId") activityId: string | undefined, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.checkInOverview({ activityId }, admin);
+  }
+
+  @AdminRoles(...CHECK_IN_ROLES)
   @Post("check-ins")
   checkIn(@Body() dto: CheckInDto, @CurrentAdmin() admin: { id: number; username: string }) {
     return this.service.checkIn(dto.code, admin.id, dto.remark, admin);

@@ -264,7 +264,7 @@ function save(targetStatus: ActivityStatus, redirectAfterSave = true): Promise<a
   beginSaving(targetStatus);
   const isNewActivity = !id.value;
   const request = id.value
-    ? mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data: payload(targetStatus) })
+    ? mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PATCH", data: payload(targetStatus) })
     : mobileAdminRequest<any>("/admin/activities", { method: "POST", data: payload(targetStatus) });
 
   return request.then((saved) => {

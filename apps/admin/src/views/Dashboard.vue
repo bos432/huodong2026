@@ -48,7 +48,12 @@ const metricCards = computed(() => {
 });
 const operationCards = computed(() => {
   const operations = data.value?.operations || {};
+  const todos = data.value?.todos || {};
   return [
+    { label: "今日报名", value: operations.todayRegistrationCount || 0, sub: `本月报名 ${operations.monthRegistrationCount || 0}` },
+    { label: "今日订单", value: operations.todayOrderCount || 0, sub: `待付款 ${todos.pendingOrderCount || 0}` },
+    { label: "待确认收款", value: todos.pendingOfflinePaymentCount || 0, sub: "线下收款需后台确认" },
+    { label: "待核销", value: todos.pendingCheckInCount || 0, sub: `今日核销 ${operations.todayCheckInCount || 0}` },
     { label: "净收入", value: `¥${operations.netAmount || "0.00"}`, sub: `退款 ¥${operations.refundAmount || "0.00"}` },
     { label: "本月净收入", value: `¥${operations.monthNetAmount || "0.00"}`, sub: `本月报名 ${operations.monthRegistrationCount || 0}` },
     { label: "签到率", value: `${operations.checkInRate || 0}%`, sub: "签到 / 报名" },
@@ -97,9 +102,9 @@ const healthCards = computed(() => {
     },
     {
       label: "待办风险",
-      value: (todos.pendingActivityCount || 0) + (todos.pendingRegistrationCount || 0) + (todos.pendingRefundCount || 0),
-      desc: "待审核活动、报名和退款需要及时处理",
-      tone: (todos.pendingRefundCount || 0) > 0 ? "danger" : "muted"
+      value: (todos.pendingActivityCount || 0) + (todos.pendingRegistrationCount || 0) + (todos.pendingRefundCount || 0) + (todos.pendingOfflinePaymentCount || 0) + (todos.pendingCheckInCount || 0),
+      desc: "待审核、待确认收款、待核销和退款需要及时处理",
+      tone: (todos.pendingRefundCount || 0) > 0 || (todos.pendingOfflinePaymentCount || 0) > 0 ? "danger" : "muted"
     }
   ];
 });
@@ -135,17 +140,21 @@ const todoCards = computed(() => {
   return isPlatformAdmin()
     ? [
         { label: "待审核活动", value: todos.pendingActivityCount || 0, tone: "warning", path: `/activities?status=${ActivityStatus.PendingApproval}` },
+        { label: "待确认收款", value: todos.pendingOfflinePaymentCount || 0, tone: "warning", path: `/orders?status=${OrderStatus.PendingPayment}` },
+        { label: "待核销", value: todos.pendingCheckInCount || 0, tone: "warning", path: "/check-in" },
         { label: "待处理退款", value: todos.pendingRefundCount || 0, tone: "danger", path: "/finance" },
-        { label: "异常回调", value: todos.callbackRiskCount || 0, tone: "danger", path: "/finance" },
-        { label: "待付款订单", value: todos.pendingOrderCount || 0, tone: "muted", path: `/orders?status=${OrderStatus.PendingPayment}` }
+        { label: "异常回调", value: todos.callbackRiskCount || 0, tone: "danger", path: "/finance" }
       ]
     : [
         ...(canViewActivities.value ? [{ label: "待平台审核活动", value: todos.pendingActivityCount || 0, tone: "warning", path: `/activities?status=${ActivityStatus.PendingApproval}` }] : []),
         ...(canViewRegistrations.value ? [{ label: "待审核报名", value: todos.pendingRegistrationCount || 0, tone: "warning", path: `/registrations?status=${RegistrationStatus.PendingReview}` }] : []),
+        ...(canViewOrders.value ? [{ label: "待确认收款", value: todos.pendingOfflinePaymentCount || 0, tone: "warning", path: `/orders?status=${OrderStatus.PendingPayment}` }] : []),
+        ...(canAccess(["checkin.manage"]) ? [{ label: "待核销", value: todos.pendingCheckInCount || 0, tone: "warning", path: "/check-in" }] : []),
         ...(canViewOrders.value ? [{ label: "待付款订单", value: todos.pendingOrderCount || 0, tone: "muted", path: `/orders?status=${OrderStatus.PendingPayment}` }] : []),
         ...(canViewFinance.value ? [{ label: "待处理退款", value: todos.pendingRefundCount || 0, tone: "danger", path: "/finance" }] : [])
       ];
 });
+const alertCards = computed(() => (data.value?.alerts || []).filter((item: any) => item.count > 0));
 const mallTodoCards = computed(() => [
   { label: "待确认收款", value: mallStatusCount(["pending_confirm"]), tone: "warning", path: "/mall-orders", query: { status: "pending_confirm" } },
   { label: "待发货订单", value: mallStatusCount(["paid"]), tone: "warning", path: "/mall-orders", query: { status: "paid" } },
@@ -464,6 +473,16 @@ onMounted(load);
       </div>
     </div>
 
+    <div v-if="!mallWorkbenchMode && alertCards.length" class="alert-grid">
+      <div v-for="item in alertCards" :key="item.title" class="alert-card" :class="item.type" @click="item.path && openTodo(item.path)">
+        <div>
+          <strong>{{ item.title }}</strong>
+          <span>{{ item.message }}</span>
+        </div>
+        <em>{{ item.count }}</em>
+      </div>
+    </div>
+
     <div v-if="!mallWorkbenchMode && permissionCards.length" class="permission-grid">
       <div v-for="item in permissionCards" :key="item.label" class="permission" :class="item.tone">
         <span>{{ item.label }}</span>
@@ -554,6 +573,14 @@ onMounted(load);
 .todo.warning strong { color: #d97706; }
 .todo.danger strong { color: #dc2626; }
 .todo.muted strong { color: #475467; }
+.alert-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
+.alert-card { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 14px 16px; border: 1px solid #fed7aa; background: #fff7ed; border-radius: 8px; cursor: pointer; }
+.alert-card.danger { border-color: #fecaca; background: #fef2f2; }
+.alert-card div { display: grid; gap: 4px; }
+.alert-card strong { color: #111827; font-size: 15px; }
+.alert-card span { color: #667085; font-size: 13px; line-height: 1.45; }
+.alert-card em { min-width: 34px; color: #9a3412; font-style: normal; font-size: 24px; font-weight: 800; text-align: right; }
+.alert-card.danger em { color: #b91c1c; }
 .permission-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 18px; }
 .permission { background: #fff; border: 1px solid #e5e7eb; border-left-width: 4px; border-radius: 8px; padding: 14px 16px; display: grid; gap: 8px; min-height: 82px; }
 .permission span { color: #475467; font-size: 13px; }
@@ -578,6 +605,6 @@ onMounted(load);
 .advice-text { display: block; margin-top: 6px; color: #667085; line-height: 1.45; }
 .mini-table { margin-top: 12px; }
 h3 { margin: 0 0 16px; }
-@media (max-width: 900px) { .operation-grid, .metric-grid, .todo-grid, .permission-grid, .dashboard-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .operation-grid, .metric-grid, .todo-grid, .permission-grid, .dashboard-columns, .mall-merchant-card { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .operation-grid, .metric-grid, .todo-grid, .alert-grid, .permission-grid, .dashboard-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .operation-grid, .metric-grid, .todo-grid, .alert-grid, .permission-grid, .dashboard-columns, .mall-merchant-card { grid-template-columns: 1fr; } }
 </style>

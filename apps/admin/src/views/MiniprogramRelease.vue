@@ -63,6 +63,40 @@ const acceptanceChecklist = [
 ];
 
 const latestQrCode = computed(() => logs.value.find((item) => item.qrCodeUrl)?.qrCodeUrl || "");
+const latestUploadLog = computed(() => latestLog("upload"));
+const latestSubmitAuditLog = computed(() => latestLog("submit_audit"));
+const latestAuditStatusLog = computed(() => latestLog("audit_status"));
+const latestReleaseLog = computed(() => latestLog("release"));
+const releaseStages = computed(() => [
+  {
+    key: "upload",
+    label: "1. 上传体验版",
+    status: latestUploadLog.value?.status || "pending",
+    time: latestUploadLog.value?.createdAt,
+    detail: latestUploadLog.value?.version ? `版本 ${latestUploadLog.value.version}` : "先在服务器构建 mp-weixin，再上传体验版"
+  },
+  {
+    key: "submit_audit",
+    label: "2. 提交审核",
+    status: latestSubmitAuditLog.value?.status || "pending",
+    time: latestSubmitAuditLog.value?.createdAt,
+    detail: latestSubmitAuditLog.value?.auditId ? `审核单 ${latestSubmitAuditLog.value.auditId}` : "确认体验版可用后提交微信审核"
+  },
+  {
+    key: "audit_status",
+    label: "3. 审核状态",
+    status: latestAuditStatusLog.value?.status || latestSubmitAuditLog.value?.status || "pending",
+    time: latestAuditStatusLog.value?.createdAt || latestSubmitAuditLog.value?.createdAt,
+    detail: latestAuditStatusLog.value?.errorMessage || "定期查询微信审核结果"
+  },
+  {
+    key: "release",
+    label: "4. 发布线上版",
+    status: latestReleaseLog.value?.status || "pending",
+    time: latestReleaseLog.value?.createdAt,
+    detail: latestReleaseLog.value?.status === "success" ? "线上版本已发布" : "审核通过后再发布线上版"
+  }
+]);
 
 const actionLabels: Record<string, string> = {
   setting: "保存配置",
@@ -75,8 +109,13 @@ const actionLabels: Record<string, string> = {
 const statusTypes: Record<string, "success" | "danger" | "warning" | "info"> = {
   success: "success",
   failed: "danger",
-  processing: "warning"
+  processing: "warning",
+  pending: "info"
 };
+
+function latestLog(action: string) {
+  return logs.value.find((item) => item.action === action);
+}
 
 function fillForm(row: ReleaseSetting | null) {
   setting.value = row;
@@ -209,6 +248,17 @@ onMounted(load);
       description="需要在微信公众平台下载代码上传密钥，并把服务器出口 IP 加入小程序代码上传 IP 白名单；提审/发布还需要 AppSecret。上传体验版前，请先在服务器构建 mp-weixin。"
     />
 
+    <div class="stage-grid">
+      <div v-for="item in releaseStages" :key="item.key" class="stage-card" :class="item.status">
+        <div>
+          <strong>{{ item.label }}</strong>
+          <span>{{ item.detail }}</span>
+          <small>{{ formatTime(item.time) }}</small>
+        </div>
+        <el-tag :type="statusTypes[item.status] || 'info'" effect="plain">{{ item.status === "pending" ? "待处理" : item.status }}</el-tag>
+      </div>
+    </div>
+
     <div class="readiness">
       <div v-for="item in readiness" :key="item.label" class="ready-card" :class="{ ok: item.ok }">
         <strong>{{ item.label }}</strong>
@@ -242,6 +292,7 @@ onMounted(load);
 
       <div class="card action-card">
         <h3>发布操作</h3>
+        <el-alert class="action-hint" type="info" :closable="false" show-icon title="推荐顺序：保存配置 -> 上传体验版 -> 微信开发者工具/体验码验收 -> 提交审核 -> 查询状态 -> 审核通过后发布。" />
         <div class="action-grid">
           <el-button type="primary" :loading="actionLoading === 'upload'" @click="runAction('upload')">上传体验版</el-button>
           <el-button type="warning" :loading="actionLoading === 'submit-audit'" @click="runAction('submit-audit')">提交微信审核</el-button>
@@ -299,6 +350,15 @@ onMounted(load);
 .subtitle { margin: 6px 0 0; color: #64748b; }
 .actions { display: flex; gap: 10px; }
 .notice { margin-bottom: 16px; }
+.stage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.stage-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 118px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.stage-card.success { border-color: #bbf7d0; background: #f0fdf4; }
+.stage-card.failed { border-color: #fecaca; background: #fef2f2; }
+.stage-card.processing { border-color: #fed7aa; background: #fff7ed; }
+.stage-card div { display: grid; gap: 6px; }
+.stage-card strong { color: #111827; font-size: 15px; }
+.stage-card span { color: #475569; font-size: 13px; line-height: 1.45; }
+.stage-card small { color: #94a3b8; font-size: 12px; }
 .readiness { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .ready-card { display: grid; gap: 8px; align-content: start; padding: 14px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; }
 .ready-card.ok { border-color: #bbf7d0; background: #f0fdf4; }
@@ -307,6 +367,7 @@ onMounted(load);
 .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
 .card h3 { margin: 0 0 16px; }
 .field-hint { margin-top: 6px; color: #64748b; font-size: 12px; line-height: 1.5; }
+.action-hint { margin-bottom: 12px; }
 .action-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .qr-box { min-height: 260px; display: grid; place-items: center; margin-top: 16px; padding: 16px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; }
 .qr-box img { width: 220px; height: 220px; object-fit: contain; background: #fff; border-radius: 8px; }
@@ -318,8 +379,12 @@ onMounted(load);
 .check-item p { margin: 1px 0 0; color: #334155; font-size: 13px; line-height: 1.5; }
 .detail-json { margin: 0; padding: 12px; border-radius: 8px; background: #0f172a; color: #e2e8f0; white-space: pre-wrap; word-break: break-word; }
 @media (max-width: 1200px) {
+  .stage-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .readiness { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .layout { grid-template-columns: 1fr; }
   .checklist-card { grid-column: auto; }
+}
+@media (max-width: 640px) {
+  .stage-grid { grid-template-columns: 1fr; }
 }
 </style>

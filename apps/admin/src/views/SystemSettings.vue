@@ -178,6 +178,9 @@ const deployment = reactive({
   wechatH5AcceptanceStatus: "not_started" as WechatH5AcceptanceStatus,
   wechatH5AcceptanceAt: "",
   wechatH5AcceptanceRemark: "",
+  deliveryMode: "production",
+  reviewSafeMode: false,
+  reviewSafeRemark: "过审模式会隐藏高风险营销、支付或私域导流内容；正式交付前请切回正式运营模式。",
   mysqlDatabase: "activity_registration",
   mysqlUser: "activity",
   mysqlPassword: "",
@@ -1562,6 +1565,24 @@ onMounted(async () => {
             <el-form-item label="暂停提示" :required="!form.registrationEnabled">
               <el-input v-model="form.registrationDisabledMessage" type="textarea" :rows="3" maxlength="300" show-word-limit />
             </el-form-item>
+            <template v-if="canManagePlatformSettings">
+              <el-divider content-position="left">交付 / 过审模式</el-divider>
+              <el-form-item label="当前模式">
+                <div class="delivery-mode-panel">
+                  <el-radio-group v-model="deployment.deliveryMode">
+                    <el-radio-button label="production">正式运营</el-radio-button>
+                    <el-radio-button label="review">微信过审</el-radio-button>
+                  </el-radio-group>
+                  <el-switch v-model="deployment.reviewSafeMode" active-text="启用过审隐藏" inactive-text="展示完整功能" />
+                  <el-tag :type="deployment.reviewSafeMode ? 'warning' : 'success'" effect="plain">
+                    {{ deployment.reviewSafeMode ? "审核版隐藏敏感运营内容" : "正式版恢复完整功能" }}
+                  </el-tag>
+                </div>
+              </el-form-item>
+              <el-form-item label="模式说明">
+                <el-input v-model="deployment.reviewSafeRemark" type="textarea" :rows="2" maxlength="300" show-word-limit />
+              </el-form-item>
+            </template>
             <el-form-item label="线下付款说明" required>
               <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit :disabled="!paymentSettingsEditable" />
             </el-form-item>
@@ -2199,6 +2220,7 @@ onMounted(async () => {
 .payment-readiness-card strong { color: #111827; font-size: 13px; }
 .payment-readiness-card span { color: #64748b; font-size: 12px; line-height: 1.45; }
 .form-tip { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
+.delivery-mode-panel { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .system-tabs { margin-top: 12px; }
 .panel-alert { margin-bottom: 16px; }

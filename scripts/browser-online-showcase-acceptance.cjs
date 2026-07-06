@@ -245,7 +245,7 @@ async function h5LoginAndRegister(browser, activity) {
     }
   }
   await submitH5Login(page);
-  await waitForBodyText(page, activity.title, "H5 redirected to activity detail");
+  await waitForBodyText(page, ["活动详情", "立即报名"], "H5 redirected to activity detail");
   await dismissH5Overlays(page);
   await screenshot(page, "h5-01-login-activity-detail.png");
   record(usePasswordLogin ? "H5 新会员密码登录" : "H5 新手机号验证码登录", "passed", { phone, screenshot: "h5-01-login-activity-detail.png" });

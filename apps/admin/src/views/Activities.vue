@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Check, Clock, Close, CopyDocument, Delete, Edit, Grid, Hide, MoreFilled, Picture, Plus, Upload, UploadFilled, View } from "@element-plus/icons-vue";
+import { ArrowDown, ArrowUp, Check, Clock, Close, CopyDocument, Delete, Edit, Grid, Hide, MoreFilled, Picture, Plus, Upload, UploadFilled, View } from "@element-plus/icons-vue";
 import { ActivityStatus, FieldType, checkActivityContentCompliance } from "@activity/shared";
 import { api } from "../api";
 import ActivityPosterDialog from "../components/ActivityPosterDialog.vue";
@@ -371,6 +371,21 @@ async function loadApprovalLogs(row: any) {
 
 function addField() {
   form.fields.push({ label: "", type: FieldType.Text, required: false, sortOrder: form.fields.length + 1, options: [] });
+  normalizeFieldSortOrders();
+}
+
+function normalizeFieldSortOrders() {
+  form.fields.forEach((field: any, index: number) => {
+    field.sortOrder = index + 1;
+  });
+}
+
+function moveField(index: number, direction: -1 | 1) {
+  const nextIndex = index + direction;
+  if (nextIndex < 0 || nextIndex >= form.fields.length) return;
+  const [field] = form.fields.splice(index, 1);
+  form.fields.splice(nextIndex, 0, field);
+  normalizeFieldSortOrders();
 }
 
 function isChoiceField(field: any) {
@@ -409,6 +424,7 @@ async function removeField(index: number) {
     return;
   }
   form.fields.splice(index, 1);
+  normalizeFieldSortOrders();
   ElMessage.success("报名字段已删除，保存活动后生效");
 }
 
@@ -1039,12 +1055,21 @@ onMounted(async () => {
 
           <el-tab-pane label="报名字段" name="fields">
             <div v-for="(field, index) in form.fields" :key="index" class="field-row">
-              <el-input v-model="field.label" placeholder="字段名称" />
-              <el-select v-model="field.type"><el-option v-for="(text, value) in fieldTypeText" :key="value" :label="text" :value="value" /></el-select>
-              <el-checkbox v-model="field.required">必填</el-checkbox>
-              <el-input-number v-model="field.sortOrder" :min="1" />
-              <el-button type="danger" plain :icon="Delete" @click="removeField(index)">删除字段</el-button>
-              <el-button v-if="isChoiceField(field)" :icon="Plus" @click="addOption(field)">增加选项</el-button>
+              <div class="field-head">
+                <strong>字段 {{ index + 1 }}</strong>
+                <div class="field-actions">
+                  <el-button size="small" :icon="ArrowUp" :disabled="index === 0" @click="moveField(index, -1)">上移</el-button>
+                  <el-button size="small" :icon="ArrowDown" :disabled="index === form.fields.length - 1" @click="moveField(index, 1)">下移</el-button>
+                  <el-button size="small" type="danger" plain :icon="Delete" @click="removeField(index)">删除字段</el-button>
+                </div>
+              </div>
+              <div class="field-main">
+                <el-input v-model="field.label" placeholder="字段名称，如：姓名 / 手机号 / 参与人数" />
+                <el-select v-model="field.type"><el-option v-for="(text, value) in fieldTypeText" :key="value" :label="text" :value="value" /></el-select>
+                <el-checkbox v-model="field.required">必填</el-checkbox>
+                <el-tag type="info" effect="plain">排序 {{ field.sortOrder || index + 1 }}</el-tag>
+                <el-button v-if="isChoiceField(field)" :icon="Plus" @click="addOption(field)">增加选项</el-button>
+              </div>
               <div v-if="isChoiceField(field)" class="options">
                 <div v-for="(option, optionIndex) in field.options" :key="option.value || optionIndex" class="option-row">
                   <el-input v-model="option.label" placeholder="选项名称，如：亲子 / 国学 / 书法" />
@@ -1123,7 +1148,12 @@ onMounted(async () => {
 .compliance-issues em { color: #475569; font-style: normal; }
 .activity-wizard { margin-bottom: 14px; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
-.field-row { display: grid; grid-template-columns: minmax(180px, 1fr) 150px 80px 120px 112px 112px; gap: 8px; align-items: center; margin-bottom: 10px; }
+.field-row { display: grid; gap: 10px; margin-bottom: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
+.field-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.field-head strong { color: #111827; }
+.field-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; }
+.field-actions .el-button { margin-left: 0; }
+.field-main { display: grid; grid-template-columns: minmax(180px, 1fr) 150px 80px 88px auto; gap: 8px; align-items: center; }
 .host-row { display: grid; grid-template-columns: 1fr 1fr 1.5fr 120px 40px; gap: 8px; align-items: center; margin-bottom: 14px; }
 .section-row { display: grid; grid-template-columns: 150px 1fr 120px 108px; gap: 8px; align-items: center; margin-bottom: 14px; }
 .options, .full { grid-column: 1 / -1; }
@@ -1147,7 +1177,9 @@ onMounted(async () => {
 .channel-form .el-button { align-self: end; margin-bottom: 18px; }
 .embedded { margin-top: 16px; }
 @media (max-width: 1100px) {
-  .filter-bar, .form-grid, .field-row, .host-row, .section-row, .section-image-field, .channel-form { grid-template-columns: 1fr; }
+  .filter-bar, .form-grid, .field-main, .host-row, .section-row, .section-image-field, .channel-form { grid-template-columns: 1fr; }
+  .field-head { align-items: flex-start; flex-direction: column; }
+  .field-actions { justify-content: flex-start; }
   .pager-row { align-items: flex-start; flex-direction: column; }
 }
 </style>

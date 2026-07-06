@@ -95,7 +95,10 @@ const launchConfigMetadataKeys = [
   "wechatH5AcceptanceTenantCode",
   "wechatH5AcceptanceStatus",
   "wechatH5AcceptanceAt",
-  "wechatH5AcceptanceRemark"
+  "wechatH5AcceptanceRemark",
+  "deliveryMode",
+  "reviewSafeMode",
+  "reviewSafeRemark"
 ];
 
 const allowedLaunchConfigKeys = new Set([
