@@ -184,7 +184,7 @@ npm --prefix apps/mobile run build:mp-weixin
 apps/mobile/dist/build/mp-weixin
 ```
 
-微信开发者工具导入该目录，上传体验版并提交审核。
+线上优先使用后台“系统安全 -> 小程序发布”上传体验版、提交微信审核和发布线上版。微信开发者工具导入该目录仅作为后台发布失败时的兜底流程。
 
 ## 8. 停止服务
 

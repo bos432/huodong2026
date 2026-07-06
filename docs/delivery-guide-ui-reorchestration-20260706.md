@@ -117,14 +117,15 @@ $env:PATH='C:\Users\Administrator\.cache\codex-runtimes\codex-primary-runtime\de
 npm --prefix apps/mobile run build:mp-weixin
 ```
 
-微信开发者工具操作：
+线上优先使用后台发布管理：
 
-1. 打开微信开发者工具。
-2. 导入目录 `apps/mobile/dist/build/mp-weixin`。
-3. 填写或确认 AppID。
-4. 预览体验版，检查首页、活动报名、我的报名、签到码和手机管理端。
-5. 上传体验版。
-6. 提交微信审核。
+1. 进入后台“系统安全 -> 小程序发布”。
+2. 确认 AppID、AppSecret、CI 私钥、版本号和构建目录已保存。
+3. 点击“上传体验版”，用右侧二维码体验检查首页、活动报名、我的报名、签到码和手机管理端。
+4. 确认无误后点击“提交微信审核”。
+5. 审核通过后点击“发布线上版”。
+
+微信开发者工具导入 `apps/mobile/dist/build/mp-weixin` 仅作为后台上传失败时的兜底流程。
 
 本次改动涉及 `apps/mobile`，必须重新上传并提交审核。
 

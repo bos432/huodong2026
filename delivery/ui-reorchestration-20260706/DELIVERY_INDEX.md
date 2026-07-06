@@ -31,7 +31,7 @@ E:\2027\AI全自动开发1.0\活动报名-重编排工作副本
 | --- | --- |
 | `apps/admin/dist` | PC 后台静态包 |
 | `apps/mobile/dist/build/h5` | H5 静态包 |
-| `apps/mobile/dist/build/mp-weixin` | 微信小程序包，需微信开发者工具上传审核 |
+| `apps/mobile/dist/build/mp-weixin` | 微信小程序包，优先通过后台“小程序发布”上传审核，开发者工具为兜底 |
 | `apps/api/dist` | API 构建产物 |
 | `packages/shared/dist` | shared 包构建产物 |
 
