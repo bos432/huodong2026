@@ -59,7 +59,12 @@ async function submit() {
     ElMessage.warning("请填写用户 ID 和标签名称");
     return;
   }
-  await api.post("/admin/tags", { ...form, name: form.name.trim(), remark: form.remark.trim() || undefined });
+  await api.post("/admin/tags", {
+    userId: form.userId,
+    name: form.name.trim(),
+    color: form.color,
+    remark: form.remark.trim() || undefined
+  });
   ElMessage.success("标签已添加");
   form.remark = "";
   load();

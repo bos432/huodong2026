@@ -1268,7 +1268,16 @@ async function submit() {
   saving.value = true;
   try {
     if (form.type === "bottom_nav") form.config.items = sanitizeNavItems(form.config.items);
-    const payload = { ...form, pageKey: filters.pageKey, title: form.title || null, subtitle: form.subtitle || null };
+    const payload = {
+      pageKey: filters.pageKey,
+      type: form.type,
+      title: form.title || null,
+      subtitle: form.subtitle || null,
+      enabled: form.enabled,
+      sortOrder: Number(form.sortOrder || 0),
+      config: form.config,
+      layout: form.layout
+    };
     rememberBeforeMutation();
     if (editingId.value) await api.patch(`/admin/homepage/sections/${editingId.value}`, payload, homepageScopeParams());
     else await api.post("/admin/homepage/sections", payload, homepageScopeParams());

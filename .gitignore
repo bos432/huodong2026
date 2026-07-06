@@ -18,6 +18,7 @@ uploads
 *.lock
 .local-mysql
 .local-logs
+docs/auto-audit-report-latest.md
 _release
 _attachment_changes.docx
 _attachment_images

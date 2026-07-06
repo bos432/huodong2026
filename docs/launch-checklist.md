@@ -18,7 +18,7 @@
 - 修改 `MYSQL_ROOT_PASSWORD`、`MYSQL_PASSWORD`、`JWT_SECRET`，不要使用示例值。
 - 修改 `CORS_ORIGIN` 为真实 H5 和后台域名。
 - 确认 `H5_AUTH_MODE=sms`，并替换 `H5_AUTH_SECRET` 为至少 32 位强随机值。
-- 确认 `H5_AUTH_MODE=sms` 且 `H5_AUTH_SECRET` 已替换为强随机值；短信服务商凭证优先在后台“系统设置/运营设置”中维护，`.env.production` 中的 `SMS_PROVIDER_ENABLED` 和短信字段只作为初始引导或环境变量兜底。
+- 确认 `H5_AUTH_MODE=sms` 且 `H5_AUTH_SECRET` 已替换为强随机值；短信服务商凭证优先在后台“系统设置/运营设置”中维护，`.env.production` 中的 `SMS_PROVIDER_ENABLED`、`SMS_PROVIDER`、`SMS_ACCESS_KEY_ID`、`SMS_ACCESS_KEY_SECRET`、`SMS_SIGN_NAME`、`SMS_TEMPLATE_ID`、`SMS_SDK_APP_ID` 只作为初始引导或环境变量兜底。
 - 确认 H5 验证码冷却、手机号小时/每日限额和 IP 小时限额已按预计访问量配置，避免短信被恶意刷取。
 - 确认后台登录失败统计窗口、失败上限和限流时长已按团队规模配置，避免后台密码被暴力尝试。
 - 确认 `SECURITY_HEADERS_ENABLED=true`、`SECURITY_HSTS_ENABLED=true`、`VALIDATION_FORBID_NON_WHITELISTED=true`，并按 Nginx/负载均衡部署方式设置 `TRUST_PROXY`。

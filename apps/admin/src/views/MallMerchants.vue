@@ -940,7 +940,23 @@ async function saveMerchant() {
   }
   saving.value = true;
   try {
-    const payload = { ...form, code: form.code.trim() || undefined, agentId: form.ownerType === "agent" ? form.agentId : null };
+    const payload = {
+      tenantId: form.tenantId,
+      agentId: form.ownerType === "agent" ? form.agentId : null,
+      ownerType: form.ownerType,
+      code: form.code.trim() || undefined,
+      name: form.name.trim(),
+      status: form.status,
+      mallEnabled: form.mallEnabled,
+      productAuditRequired: form.productAuditRequired,
+      paymentMode: form.paymentMode,
+      region: form.region.trim() || undefined,
+      contactName: form.contactName.trim() || undefined,
+      contactPhone: form.contactPhone.trim() || undefined,
+      logoUrl: form.logoUrl.trim() || undefined,
+      notice: form.notice.trim() || undefined,
+      remark: form.remark.trim() || undefined
+    };
     if (form.id) await api.patch(`/admin/mall/merchants/${form.id}`, payload);
     else await api.post("/admin/mall/merchants", payload);
     ElMessage.success("商城店铺已保存");

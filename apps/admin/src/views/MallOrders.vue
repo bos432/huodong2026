@@ -2168,7 +2168,15 @@ async function saveLogisticsCompany() {
   if (!logisticsForm.name?.trim()) return ElMessage.error("请输入物流公司名称");
   logisticsSaving.value = true;
   try {
-    const payload = { ...logisticsForm, name: logisticsForm.name.trim(), ...currentMallParams() };
+    const payload = {
+      ...currentMallParams(),
+      name: logisticsForm.name.trim(),
+      code: logisticsForm.code?.trim() || undefined,
+      servicePhone: logisticsForm.servicePhone?.trim() || undefined,
+      trackingUrl: logisticsForm.trackingUrl?.trim() || undefined,
+      sortOrder: Number(logisticsForm.sortOrder || 0),
+      enabled: logisticsForm.enabled
+    };
     if (logisticsForm.id) await api.patch(`/admin/mall/logistics-companies/${logisticsForm.id}`, payload);
     else await api.post("/admin/mall/logistics-companies", payload);
     ElMessage.success("物流公司已保存");
@@ -2224,7 +2232,19 @@ async function saveFlashSale() {
   if (!flashSaleForm.startsAt || !flashSaleForm.endsAt) return ElMessage.error("请设置秒杀时间");
   flashSaleSaving.value = true;
   try {
-    const payload = { ...flashSaleForm, title: flashSaleForm.title.trim(), ...currentMallParams() };
+    const payload = {
+      ...currentMallParams(),
+      productId: flashSaleForm.productId,
+      skuId: flashSaleForm.skuId,
+      title: flashSaleForm.title.trim(),
+      salePrice: Number(flashSaleForm.salePrice || 0),
+      saleStock: Number(flashSaleForm.saleStock || 0),
+      perUserLimit: Number(flashSaleForm.perUserLimit || 0),
+      startsAt: flashSaleForm.startsAt,
+      endsAt: flashSaleForm.endsAt,
+      status: flashSaleForm.status,
+      sortOrder: Number(flashSaleForm.sortOrder || 0)
+    };
     if (flashSaleForm.id) await api.patch(`/admin/mall/flash-sales/${flashSaleForm.id}`, payload);
     else await api.post("/admin/mall/flash-sales", payload);
     ElMessage.success("秒杀活动已保存");
@@ -2246,7 +2266,20 @@ async function saveGroupBuy() {
   if (!groupBuyForm.startsAt || !groupBuyForm.endsAt) return ElMessage.error("请设置拼团时间");
   groupBuySaving.value = true;
   try {
-    const payload = { ...groupBuyForm, title: groupBuyForm.title.trim(), ...currentMallParams() };
+    const payload = {
+      ...currentMallParams(),
+      productId: groupBuyForm.productId,
+      skuId: groupBuyForm.skuId,
+      title: groupBuyForm.title.trim(),
+      groupPrice: Number(groupBuyForm.groupPrice || 0),
+      minPeople: Number(groupBuyForm.minPeople || 0),
+      groupStock: Number(groupBuyForm.groupStock || 0),
+      perUserLimit: Number(groupBuyForm.perUserLimit || 0),
+      startsAt: groupBuyForm.startsAt,
+      endsAt: groupBuyForm.endsAt,
+      status: groupBuyForm.status,
+      sortOrder: Number(groupBuyForm.sortOrder || 0)
+    };
     if (groupBuyForm.id) await api.patch(`/admin/mall/group-buys/${groupBuyForm.id}`, payload);
     else await api.post("/admin/mall/group-buys", payload);
     ElMessage.success("拼团活动已保存");
@@ -2288,7 +2321,16 @@ async function savePromotionCode() {
 async function toggleLogisticsCompany(row: any) {
   if (!requireMerchantSelection("配置物流")) return;
   try {
-    await api.patch(`/admin/mall/logistics-companies/${row.id}`, { ...row, tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined, merchantId: row.merchant?.id || filters.merchantId || undefined, enabled: !row.enabled });
+    await api.patch(`/admin/mall/logistics-companies/${row.id}`, {
+      tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined,
+      merchantId: row.merchant?.id || filters.merchantId || undefined,
+      name: row.name,
+      code: row.code || undefined,
+      servicePhone: row.servicePhone || undefined,
+      trackingUrl: row.trackingUrl || undefined,
+      sortOrder: Number(row.sortOrder || 0),
+      enabled: !row.enabled
+    });
     ElMessage.success(row.enabled ? "物流公司已停用" : "物流公司已启用");
     await loadLogisticsCompanies();
   } catch (error: any) {

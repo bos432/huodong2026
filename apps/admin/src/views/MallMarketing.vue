@@ -1041,7 +1041,19 @@ async function saveFlashSale() {
   if (!validateActivityTimeNotOverlapping(flashSaleForm, flashSales.value, "秒杀")) return;
   flashSaleSaving.value = true;
   try {
-    const payload = { ...flashSaleForm, title: flashSaleForm.title.trim(), ...currentMallParams() };
+    const payload = {
+      ...currentMallParams(),
+      productId: flashSaleForm.productId,
+      skuId: flashSaleForm.skuId,
+      title: flashSaleForm.title.trim(),
+      salePrice: Number(flashSaleForm.salePrice || 0),
+      saleStock: Number(flashSaleForm.saleStock || 0),
+      perUserLimit: Number(flashSaleForm.perUserLimit || 0),
+      startsAt: flashSaleForm.startsAt,
+      endsAt: flashSaleForm.endsAt,
+      status: flashSaleForm.status,
+      sortOrder: Number(flashSaleForm.sortOrder || 0)
+    };
     if (flashSaleForm.id) await api.patch(`/admin/mall/flash-sales/${flashSaleForm.id}`, payload);
     else await api.post("/admin/mall/flash-sales", payload);
     ElMessage.success("秒杀活动已保存");
@@ -1068,7 +1080,20 @@ async function saveGroupBuy() {
   if (!validateActivityTimeNotOverlapping(groupBuyForm, groupBuys.value, "拼团")) return;
   groupBuySaving.value = true;
   try {
-    const payload = { ...groupBuyForm, title: groupBuyForm.title.trim(), ...currentMallParams() };
+    const payload = {
+      ...currentMallParams(),
+      productId: groupBuyForm.productId,
+      skuId: groupBuyForm.skuId,
+      title: groupBuyForm.title.trim(),
+      groupPrice: Number(groupBuyForm.groupPrice || 0),
+      minPeople: Number(groupBuyForm.minPeople || 0),
+      groupStock: Number(groupBuyForm.groupStock || 0),
+      perUserLimit: Number(groupBuyForm.perUserLimit || 0),
+      startsAt: groupBuyForm.startsAt,
+      endsAt: groupBuyForm.endsAt,
+      status: groupBuyForm.status,
+      sortOrder: Number(groupBuyForm.sortOrder || 0)
+    };
     if (groupBuyForm.id) await api.patch(`/admin/mall/group-buys/${groupBuyForm.id}`, payload);
     else await api.post("/admin/mall/group-buys", payload);
     ElMessage.success("拼团活动已保存");

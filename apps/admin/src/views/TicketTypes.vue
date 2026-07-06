@@ -69,7 +69,13 @@ async function submit() {
   }
   saving.value = true;
   try {
-    const payload = { ...form, name: form.name.trim(), price: Number(form.price), capacity: form.capacity || undefined };
+    const payload = {
+      activityId: form.activityId,
+      name: form.name.trim(),
+      price: Number(form.price),
+      capacity: form.capacity || undefined,
+      enabled: form.enabled
+    };
     if (editingId.value) await api.patch(`/admin/ticket-types/${editingId.value}`, payload);
     else await api.post("/admin/ticket-types", payload);
     ElMessage.success("票种已保存");

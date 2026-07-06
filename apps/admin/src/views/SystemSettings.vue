@@ -1371,6 +1371,29 @@ function deploymentPayload() {
   return payload;
 }
 
+function operationPayload() {
+  return {
+    registrationEnabled: form.registrationEnabled,
+    registrationDisabledMessage: form.registrationDisabledMessage,
+    offlinePaymentInstructions: form.offlinePaymentInstructions,
+    paymentMethods: { ...form.paymentMethods },
+    customerServiceName: form.customerServiceName,
+    customerServicePhone: form.customerServicePhone,
+    customerServiceWechat: form.customerServiceWechat,
+    defaultGroupQrCodeUrl: form.defaultGroupQrCodeUrl,
+    pageTheme: { ...form.pageTheme },
+    refundInstructions: form.refundInstructions,
+    invoiceInstructions: form.invoiceInstructions,
+    smsProviderEnabled: form.smsProviderEnabled,
+    smsProvider: form.smsProvider,
+    smsAccessKeyId: form.smsAccessKeyId,
+    smsAccessKeySecret: form.smsAccessKeySecret,
+    smsSignName: form.smsSignName,
+    smsTemplateId: form.smsTemplateId,
+    smsSdkAppId: form.smsSdkAppId
+  };
+}
+
 async function loadOperation() {
   loadingOperation.value = true;
   try {
@@ -1431,7 +1454,7 @@ async function saveOperation() {
   if (paymentSettingsEditable.value && !form.refundInstructions.trim()) return ElMessage.error("请填写退款说明");
   savingOperation.value = true;
   try {
-    const payload = canManagePlatformSettings.value ? { ...form, launchConfig: deploymentPayload() } : form;
+    const payload = canManagePlatformSettings.value ? { ...operationPayload(), launchConfig: deploymentPayload() } : operationPayload();
     await api.post("/admin/settings/operation", payload);
     ElMessage.success("系统设置已保存");
     await loadOperation();
