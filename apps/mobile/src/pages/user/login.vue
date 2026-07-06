@@ -139,7 +139,7 @@ function closeWechatAuthPanel() {
 function chooseWechatLoginAvatar(event: any) {
   const filePath = String(event?.detail?.avatarUrl || "");
   if (!filePath) {
-    uni.showToast({ title: "未选择微信头像", icon: "none" });
+    uni.showToast({ title: "未选择头像", icon: "none" });
     return;
   }
   wechatAuthAvatarPath.value = filePath;
@@ -162,7 +162,7 @@ async function finishWechatLogin(profile: Partial<WechatProfilePayload> = {}, av
           reject(error);
         }
       },
-      fail: (error) => reject(new Error(error.errMsg || "微信登录失败"))
+      fail: (error) => reject(new Error(error.errMsg || "授权登录失败"))
     });
   });
 }
@@ -183,7 +183,7 @@ async function submitWechat() {
     const user = await finishWechatLogin();
     continueAfterWechatLogin(user);
   } catch (error: any) {
-    uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
+    uni.showToast({ title: error.message || "授权登录失败", icon: "none" });
   } finally {
     loggingIn.value = false;
   }
@@ -201,7 +201,7 @@ async function confirmWechatProfileLogin() {
     wechatAuthVisible.value = false;
     continueAfterWechatLogin(user);
   } catch (error: any) {
-    uni.showToast({ title: error.message || "微信登录失败", icon: "none" });
+    uni.showToast({ title: error.message || "授权登录失败", icon: "none" });
   } finally {
     loggingIn.value = false;
   }
@@ -237,7 +237,7 @@ onMounted(loadDecoration);
     <view class="card login-card">
       <view class="card-kicker">欢迎回来</view>
       <!-- #ifndef H5 -->
-      <button class="button wechat-button native-button primary-wechat" :disabled="loggingIn" @tap="submitWechat">{{ loggingIn ? "登录中..." : "微信登录" }}</button>
+      <button class="button wechat-button native-button primary-wechat" :disabled="loggingIn" @tap="submitWechat">{{ loggingIn ? "登录中..." : "快捷登录" }}</button>
       <view class="login-divider"><text>手机号登录</text></view>
       <!-- #endif -->
       <view class="phone-login-section">
@@ -282,12 +282,12 @@ onMounted(loadDecoration);
         <button class="wechat-auth-row avatar-select" open-type="chooseAvatar" @chooseavatar="chooseWechatLoginAvatar">
           <text class="auth-label">头像</text>
           <image v-if="wechatAuthAvatarPath" class="auth-avatar" :src="wechatAuthAvatarPath" mode="aspectFill" />
-          <view v-else class="auth-avatar auth-avatar-empty">微</view>
+          <view v-else class="auth-avatar auth-avatar-empty">头像</view>
           <text class="auth-arrow">›</text>
         </button>
         <view class="wechat-auth-row">
           <text class="auth-label">昵称</text>
-          <input v-model="wechatAuthNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写微信昵称" @input="updateWechatAuthNickname" />
+          <input v-model="wechatAuthNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写昵称" @input="updateWechatAuthNickname" />
         </view>
         <view class="wechat-auth-actions">
           <button class="auth-action reject" :disabled="loggingIn" @tap="closeWechatAuthPanel">拒绝</button>
@@ -299,8 +299,8 @@ onMounted(loadDecoration);
     <WechatPhoneBindSheet
       :visible="phoneBindVisible"
       title="绑定手机号后继续"
-      message="微信登录已完成。报名、下单、余额和会员权益需要手机号，建议现在授权绑定。"
-      close-text="稍后进入"
+      message="登录已完成。报名、下单、余额和会员权益需要手机号，建议现在完成手机号快捷绑定。"
+      close-text="暂不绑定"
       @close="closePhoneBindAfterLogin"
       @bound="handlePhoneBoundAfterLogin"
     />

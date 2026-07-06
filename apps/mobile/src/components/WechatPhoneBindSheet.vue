@@ -6,7 +6,7 @@
       <view class="sheet-message">{{ message }}</view>
       <!-- #ifdef MP-WEIXIN -->
       <button class="bind-button native-button" open-type="getPhoneNumber" :disabled="binding" @getphonenumber="handleGetPhoneNumber">
-        {{ binding ? "绑定中..." : "微信授权绑定手机号" }}
+        {{ binding ? "绑定中..." : "手机号快捷绑定" }}
       </button>
       <!-- #endif -->
       <!-- #ifndef MP-WEIXIN -->
@@ -28,7 +28,7 @@ const props = withDefaults(defineProps<{
   closeText?: string;
 }>(), {
   title: "绑定手机号",
-  message: "报名、下单、余额和会员权益需要手机号，授权后后台会员资料会同步更新。",
+  message: "报名、下单、余额和会员权益需要手机号，绑定后后台会员资料会同步更新。",
   closeText: "稍后再说"
 });
 
@@ -49,7 +49,7 @@ async function handleGetPhoneNumber(event: any) {
   const code = String(event?.detail?.code || "");
   if (!code) {
     const message = String(event?.detail?.errMsg || "");
-    uni.showToast({ title: message.includes("deny") ? "你取消了手机号授权" : "未获取到手机号授权", icon: "none" });
+    uni.showToast({ title: message.includes("deny") ? "你取消了手机号快捷绑定" : "未获取到手机号", icon: "none" });
     return;
   }
   binding.value = true;

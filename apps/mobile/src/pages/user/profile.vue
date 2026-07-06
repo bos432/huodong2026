@@ -55,7 +55,7 @@ async function chooseWechatAvatar(event: any) {
   if (uploadingWechatAvatar.value) return;
   const filePath = String(event?.detail?.avatarUrl || "");
   if (!filePath) {
-    uni.showToast({ title: "未选择微信头像", icon: "none" });
+    uni.showToast({ title: "未选择头像", icon: "none" });
     return;
   }
   uploadingWechatAvatar.value = true;
@@ -64,7 +64,7 @@ async function chooseWechatAvatar(event: any) {
     const uploaded = await uploadMyAvatar(filePath);
     avatarUrl.value = uploaded.url;
     profile.value = await fetchMyProfile();
-    uni.showToast({ title: "微信头像已更新", icon: "success" });
+    uni.showToast({ title: "头像已更新", icon: "success" });
   } catch (error: any) {
     uni.showToast({ title: error.message || "上传失败", icon: "none" });
   } finally {
@@ -130,7 +130,7 @@ onMounted(load);
             <image v-if="avatarUrl" class="small-avatar" :src="avatarUrl" mode="aspectFill" />
             <view v-else class="small-avatar fallback">{{ displayName().slice(0, 1) }}</view>
             <!-- #ifdef MP-WEIXIN -->
-            <button class="mini-button wechat-button" open-type="chooseAvatar" :class="{ disabled: uploadingWechatAvatar }" @chooseavatar="chooseWechatAvatar">{{ uploadingWechatAvatar ? "上传中" : "微信头像" }}</button>
+            <button class="mini-button wechat-button" open-type="chooseAvatar" :class="{ disabled: uploadingWechatAvatar }" @chooseavatar="chooseWechatAvatar">{{ uploadingWechatAvatar ? "上传中" : "选择头像" }}</button>
             <!-- #endif -->
             <view class="mini-button" @click="chooseLocalAvatar">上传头像</view>
           </view>
@@ -157,8 +157,8 @@ onMounted(load);
 
       <view v-if="!profile?.phone" class="card security-entry phone-entry" @click="openPhoneBind">
         <view>
-          <view class="entry-title">微信授权绑定手机号</view>
-          <view class="sub">小程序端可一键绑定微信手机号，用于报名、下单和会员权益。</view>
+          <view class="entry-title">手机号快捷绑定</view>
+          <view class="sub">小程序端可一键绑定手机号，用于报名、下单和会员权益。</view>
         </view>
         <view class="arrow">绑定</view>
       </view>

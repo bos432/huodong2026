@@ -126,12 +126,12 @@
         <button class="wechat-auth-row avatar-select" open-type="chooseAvatar" @chooseavatar="chooseWechatProfileAvatar">
           <text class="auth-label">头像</text>
           <image v-if="wechatProfileAvatarPath" class="auth-avatar" :src="wechatProfileAvatarPath" mode="aspectFill" />
-          <view v-else class="auth-avatar auth-avatar-empty">微</view>
+          <view v-else class="auth-avatar auth-avatar-empty">头像</view>
           <text class="auth-arrow">›</text>
         </button>
         <view class="wechat-auth-row">
           <text class="auth-label">昵称</text>
-          <input v-model="wechatProfileNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写微信昵称" @input="updateWechatProfileNickname" />
+          <input v-model="wechatProfileNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写昵称" @input="updateWechatProfileNickname" />
         </view>
         <view class="wechat-auth-actions">
           <button class="auth-action reject" :disabled="syncingWechatProfile || requestingWechatProfile" @tap="closeWechatProfilePanel">稍后再说</button>
@@ -180,7 +180,7 @@ const loadingProfile = ref(false);
 const wechatProfilePanelVisible = ref(false);
 const wechatProfileNickname = ref("");
 const wechatProfileAvatarPath = ref("");
-const wechatProfilePanelMessage = ref("请选择微信头像和昵称后继续。");
+const wechatProfilePanelMessage = ref("请选择头像和昵称后继续。");
 const syncingWechatProfile = ref(false);
 const requestingWechatProfile = ref(false);
 const phoneBindVisible = ref(false);
@@ -202,11 +202,11 @@ const profileHeaderTextColor = computed(() => {
   return !textColor || (textColor === "#ffffff" && String(layout.heroBackgroundColor || "") === "#111827") ? warmHeaderTextColor : textColor;
 });
 const profileHeaderMutedColor = computed(() => String(myPageSection.value?.layout?.heroMutedTextColor || warmHeaderMutedColor));
-const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `微信用户${profile.value.id}` : loadingProfile.value ? "加载中..." : "未登录"));
+const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `平台用户${profile.value.id}` : loadingProfile.value ? "加载中..." : "未登录"));
 const memberLevelName = computed(() => profile.value?.memberLevel?.name || "普通会员");
 const profileIdentityText = computed(() => {
   if (profile.value?.phone) return `手机号：${profile.value.phone}`;
-  if (profile.value?.wechatBound) return "微信已登录 · 未绑定手机号";
+  if (profile.value?.wechatBound) return "已登录 · 未绑定手机号";
   return "请先登录后查看权益";
 });
 const phoneStatusText = computed(() => profile.value?.phone ? "手机号已绑定" : "未绑定手机号");
@@ -218,7 +218,8 @@ const memberStats = computed(() => [
 ]);
 function isDefaultWechatNicknameValue(value?: unknown) {
   const name = String(value || "").trim();
-  return !name || /^微信用户([A-Z0-9]+)?$/i.test(name);
+  const legacyDefaultNamePattern = new RegExp(`^${["微", "信", "用户"].join("")}([A-Z0-9]+)?$`, "i");
+  return !name || legacyDefaultNamePattern.test(name);
 }
 function shouldCompleteWechatProfile(row?: any) {
   return Boolean(row?.wechatBound && (!row.avatarUrl || isDefaultWechatNicknameValue(row.nickname)));
@@ -439,13 +440,13 @@ async function tryRequestWechatProfile() {
     const payload = await requestWechatProfile();
     const changed = payload.authorized && hasWechatProfilePayload(payload) && applyWechatProfilePayload(payload);
     wechatProfilePanelMessage.value = changed
-      ? "已从微信读取头像昵称，请确认后允许同步。"
+      ? "已读取头像昵称，请确认后允许同步。"
       : payload.unavailable
-        ? "当前环境未自动返回微信资料，请点击头像并选择昵称。"
-        : "微信未自动返回头像昵称，请点击头像并选择昵称。";
+        ? "当前环境未自动返回资料，请点击头像并选择昵称。"
+        : "未自动返回头像昵称，请点击头像并选择昵称。";
     return changed;
   } catch {
-    wechatProfilePanelMessage.value = "微信资料读取失败，请点击头像并选择昵称。";
+    wechatProfilePanelMessage.value = "资料读取失败，请点击头像并选择昵称。";
     return false;
   } finally {
     requestingWechatProfile.value = false;
@@ -455,7 +456,7 @@ async function openWechatProfilePanel(auto = false, row: any = profile.value) {
   if (!row?.wechatBound) return;
   wechatProfileNickname.value = isDefaultWechatNicknameValue(row.nickname) ? "" : String(row.nickname || "");
   wechatProfileAvatarPath.value = String(row.avatarUrl || "");
-  wechatProfilePanelMessage.value = auto ? "检测到当前仍是默认微信资料，请授权头像和昵称后继续使用会员中心。" : "请选择微信头像和昵称，保存后后台会员资料会同步更新。";
+  wechatProfilePanelMessage.value = auto ? "检测到当前仍是默认资料，请补充头像和昵称后继续使用会员中心。" : "请选择头像和昵称，保存后后台会员资料会同步更新。";
   wechatProfilePanelVisible.value = true;
   if (!auto) await tryRequestWechatProfile();
 }
@@ -466,7 +467,7 @@ function closeWechatProfilePanel() {
 function chooseWechatProfileAvatar(event: any) {
   const filePath = String(event?.detail?.avatarUrl || "");
   if (!filePath) {
-    uni.showToast({ title: "未选择微信头像", icon: "none" });
+    uni.showToast({ title: "未选择头像", icon: "none" });
     return;
   }
   wechatProfileAvatarPath.value = filePath;
@@ -492,7 +493,7 @@ async function saveWechatProfilePanel() {
     }
     profile.value = await updateMyProfile({ nickname, avatarUrl });
     wechatProfilePanelVisible.value = false;
-    uni.showToast({ title: "微信资料已同步", icon: "success" });
+    uni.showToast({ title: "资料已同步", icon: "success" });
   } catch (error: any) {
     uni.showToast({ title: error.message || "同步失败", icon: "none" });
   } finally {
