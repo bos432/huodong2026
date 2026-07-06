@@ -11,7 +11,8 @@
       }"
     >
       <view class="member-card-top">
-        <image class="avatar-lg" :src="profile?.avatarUrl || '/static/avatar_default.png'" mode="aspectFill" />
+        <image v-if="profile?.avatarUrl" class="avatar-lg" :src="profile.avatarUrl" mode="aspectFill" />
+        <view v-else class="avatar-lg avatar-fallback">{{ displayName.slice(0, 1) }}</view>
         <view class="member-main">
           <view class="profile-greeting" :style="{ color: profileHeaderTextColor }">{{ myPageGreeting }}</view>
           <text class="profile-nickname">{{ displayName }}</text>
@@ -629,6 +630,16 @@ function logoutUser() {
 .wechat-complete-action { color: #C43D3D; font-size: 25rpx; font-weight: 900; }
 .profile-greeting { font-size: 38rpx; font-weight: 900; margin-bottom: 16rpx; }
 .profile-nickname { font-size: 32rpx; font-weight: 600; color: var(--profile-header-text, #5B2F24); margin-top: 12rpx; }
+.avatar-fallback {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: rgba(255, 250, 242, 0.82);
+  color: #8b4a3e;
+  font-size: 46rpx;
+  font-weight: 950;
+}
 .profile-badge {
   background: rgba(196, 61, 61, 0.94);
   color: #fff;

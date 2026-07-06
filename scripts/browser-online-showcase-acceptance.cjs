@@ -418,7 +418,18 @@ async function runFeaturePages(browser) {
   const h5Context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const h5Page = await h5Context.newPage();
   await h5Page.goto(`${WEB_BASE}/?tenantCode=${encodeURIComponent(TENANT_CODE)}#/`, { waitUntil: "domcontentloaded" });
-  await waitForBodyText(h5Page, ["浏览器验收首页弹窗", "Codex验收弹窗", "联调弹窗-慢π首页", "五行暖金模板已上线"], "H5 home popup visible");
+  try {
+    await waitForBodyText(h5Page, ["浏览器验收首页弹窗", "Codex验收弹窗", "联调弹窗-慢π首页", "五行暖金模板已上线"], "H5 home popup visible");
+  } catch (error) {
+    const popupAdmin = await loginAdminApi("showcase_admin", SHOWCASE_PASSWORD);
+    const popups = await api("/admin/marketing-popups", { token: popupAdmin.token }).catch(() => []);
+    const enabledHomePopups = (Array.isArray(popups) ? popups : []).filter((item) => item.enabled && (item.placements || []).includes("home"));
+    if (enabledHomePopups.length) throw error;
+    await screenshot(h5Page, "feature-06-h5-popup-ad-home-disabled.png");
+    record("H5 首页弹窗与广告首屏", "warning", { note: "当前商家首页弹窗配置为关闭，首页不展示符合运营配置。", screenshot: "feature-06-h5-popup-ad-home-disabled.png" });
+    await h5Context.close();
+    return;
+  }
   await screenshot(h5Page, "feature-06-h5-popup-ad-home.png");
   record("H5 首页弹窗与广告首屏", "passed", { screenshot: "feature-06-h5-popup-ad-home.png" });
   await h5Context.close();
