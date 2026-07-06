@@ -167,8 +167,19 @@ function formatTime(value?: string) {
   return value.replace("T", " ").slice(0, 16);
 }
 
+function activityTime(row: any) {
+  const start = formatTime(row.activity?.startTime);
+  const end = formatTime(row.activity?.endTime);
+  if (start === "-" && end === "-") return "-";
+  return end === "-" ? start : `${start} 至 ${end}`;
+}
+
 function tenantDisplayName(row: any) {
   return row.tenant?.name || row.tenant?.code || row.activity?.tenant?.name || row.activity?.tenant?.code || "平台";
+}
+
+function checkInOperator(row: any) {
+  return row.checkIn?.operator?.name || row.checkIn?.operator?.username || "-";
 }
 
 async function exportRows() {
@@ -274,6 +285,12 @@ watch(
       <el-table v-else v-loading="loading" :data="rows" stripe>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column label="活动" min-width="220" show-overflow-tooltip><template #default="{ row }">{{ row.activity?.title || "-" }}</template></el-table-column>
+        <el-table-column label="活动安排" min-width="210" show-overflow-tooltip>
+          <template #default="{ row }">
+            <div>{{ activityTime(row) }}</div>
+            <small>{{ row.activity?.location || "-" }}</small>
+          </template>
+        </el-table-column>
         <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ tenantDisplayName(row) }}</template>
         </el-table-column>
@@ -284,6 +301,23 @@ watch(
           </template>
         </el-table-column>
         <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag>{{ registrationStatusText[row.status as RegistrationStatus] }}</el-tag></template></el-table-column>
+        <el-table-column label="签到信息" min-width="210">
+          <template #default="{ row }">
+            <template v-if="row.checkIn">
+              <el-tag type="success" size="small">已核销</el-tag>
+              <div class="checkin-time">{{ formatTime(row.checkIn.createdAt) }}</div>
+              <small>核销员：{{ checkInOperator(row) }}</small>
+              <small v-if="row.checkIn.remark">备注：{{ row.checkIn.remark }}</small>
+            </template>
+            <template v-else-if="row.status === RegistrationStatus.CheckedIn">
+              <el-tag type="warning" size="small">已签到</el-tag>
+              <small>缺少核销记录，请复核数据</small>
+            </template>
+            <template v-else>
+              <el-tag type="info" size="small">未签到</el-tag>
+            </template>
+          </template>
+        </el-table-column>
         <el-table-column v-if="canViewRegistrationOrders" label="关联订单" min-width="220" show-overflow-tooltip>
           <template #default="{ row }">
             <div>{{ row.order?.orderNo || "-" }}</div>
@@ -322,5 +356,6 @@ watch(
 .filters { margin-bottom: 12px; }
 pre { margin: 0; white-space: pre-wrap; font-family: inherit; line-height: 1.5; }
 small { color: #667085; display: block; line-height: 1.5; }
+.checkin-time { margin-top: 4px; line-height: 1.5; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; }
 </style>

@@ -98,6 +98,31 @@ function formatTime(value?: string) {
   return value ? value.replace("T", " ").slice(0, 16) : "-";
 }
 
+function activityTime(row: any) {
+  const activity = row?.registration?.activity || row?.activity || {};
+  const start = formatTime(activity.startTime);
+  const end = formatTime(activity.endTime);
+  if (start === "-" && end === "-") return "-";
+  return end === "-" ? start : `${start} 至 ${end}`;
+}
+
+function attendeeName(row: any) {
+  const user = row?.registration?.user || {};
+  const answers = Array.isArray(row?.registration?.answers) ? row.registration.answers : [];
+  const answerName = answers.find((item: any) => String(item.label || item.name || "").includes("姓名"))?.value;
+  return answerName || user.nickname || "-";
+}
+
+function attendeePhone(row: any) {
+  return row?.registration?.user?.phone || "-";
+}
+
+function orderText(row: any) {
+  if (!row?.order) return "-";
+  const amount = Number(row.order.amount || 0).toFixed(2);
+  return `${row.order.orderNo || "-"} / ¥${amount}`;
+}
+
 onBeforeUnmount(stopH5Scan);
 </script>
 
@@ -123,9 +148,24 @@ onBeforeUnmount(stopH5Scan);
     </view>
 
     <view v-if="result" class="card success">
-      <view class="success-title">最近一次核销成功</view>
-      <view class="meta">时间：{{ formatTime(result.createdAt) }}</view>
-      <view class="meta">备注：{{ result.remark || "-" }}</view>
+      <view class="success-head">
+        <view>
+          <view class="success-title">核销成功</view>
+          <view class="success-sub">请核对以下信息后放行入场</view>
+        </view>
+        <view class="success-badge">已签到</view>
+      </view>
+      <view class="info-grid">
+        <view class="info-line full"><text>活动</text><strong>{{ result.registration?.activity?.title || result.activity?.title || "-" }}</strong></view>
+        <view class="info-line full"><text>场次时间</text><strong>{{ activityTime(result) }}</strong></view>
+        <view class="info-line full"><text>地点</text><strong>{{ result.registration?.activity?.location || result.activity?.location || "-" }}</strong></view>
+        <view class="info-line"><text>报名人</text><strong>{{ attendeeName(result) }}</strong></view>
+        <view class="info-line"><text>手机号</text><strong>{{ attendeePhone(result) }}</strong></view>
+        <view class="info-line full"><text>订单</text><strong>{{ orderText(result) }}</strong></view>
+        <view class="info-line"><text>核销时间</text><strong>{{ formatTime(result.createdAt) }}</strong></view>
+        <view class="info-line"><text>核销员</text><strong>{{ result.operator?.name || result.operator?.username || "-" }}</strong></view>
+        <view class="info-line full"><text>备注</text><strong>{{ result.remark || "-" }}</strong></view>
+      </view>
     </view>
     <AdminBottomNav current="checkin" :permissions="{ canCheckIn: true, canViewRegistrations: true, canViewOrders: true }" />
   </view>
@@ -149,6 +189,13 @@ onBeforeUnmount(stopH5Scan);
 .submit { margin-top: 24rpx; }
 .submit.disabled { background: #9ca3af; }
 .success { border: 1px solid #cde8e3; background: #f3faf8; }
-.success-title { color: #0f766e; font-size: 29rpx; font-weight: 900; }
-.meta { margin-top: 10rpx; color: #7a5b52; font-size: 24rpx; }
+.success-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; }
+.success-title { color: #0f766e; font-size: 34rpx; font-weight: 900; }
+.success-sub { margin-top: 6rpx; color: #667085; font-size: 23rpx; }
+.success-badge { flex: 0 0 auto; padding: 8rpx 16rpx; border-radius: 999px; background: #0f766e; color: #fff; font-size: 22rpx; font-weight: 900; }
+.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-top: 20rpx; }
+.info-line { min-width: 0; padding: 14rpx; border-radius: 16rpx; background: rgba(255,255,255,.78); border: 1px solid rgba(15,118,110,.12); }
+.info-line.full { grid-column: 1 / -1; }
+.info-line text { display: block; color: #667085; font-size: 22rpx; }
+.info-line strong { display: block; margin-top: 6rpx; color: #2f211c; font-size: 25rpx; line-height: 1.45; word-break: break-all; }
 </style>

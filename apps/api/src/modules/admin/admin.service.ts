@@ -2611,6 +2611,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .leftJoinAndSelect("activity.tenant", "activityTenant")
       .leftJoinAndSelect("registration.user", "user")
       .leftJoinAndMapOne("registration.order", Order, "linkedOrder", "linkedOrder.registrationId = registration.id")
+      .leftJoinAndMapOne("registration.checkIn", CheckIn, "linkedCheckIn", "linkedCheckIn.registrationId = registration.id")
+      .leftJoinAndSelect("linkedCheckIn.operator", "checkInOperator")
       .orderBy("registration.createdAt", "DESC");
 
     this.applyTenantScope(builder, "registration", admin);
@@ -3907,10 +3909,47 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .values({ registration: { id: registration.id }, operator: { id: admin.id }, remark: remark || null } as any)
       .execute();
     const checkInId = Number(checkInResult.identifiers[0]?.id || checkInResult.raw?.insertId || 0);
+    const [checkIn, order] = await Promise.all([
+      this.checkIns.findOne({ where: { id: checkInId }, relations: { operator: true, registration: { activity: true, user: true, tenant: true } } }),
+      this.orders.findOne({ where: { registration: { id: registration.id } }, relations: { ticketType: true } })
+    ]);
     await this.recordAdminConversionEvent("check_in", { activity: registration.activity, user: registration.user, registration, channel: registration.channel || null, idempotencyKey: `check_in:${checkInId}` });
     await this.awardPoints(registration.user, 20, "check_in", checkInId, "活动签到奖励");
     await this.logOperation(currentAdmin || { id: admin.id, username: admin.username, role: admin.role, tenantId: admin.tenant?.id ?? null }, "check_in.verify", "registration", registration.id, `签到核销：${registration.activity.title}`, { code, remark: remark || null });
-    return { id: checkInId, status: registration.status, registration: { id: registration.id, status: registration.status }, remark: remark || null, activity: { id: registration.activity.id, title: registration.activity.title } };
+    return {
+      id: checkInId,
+      status: registration.status,
+      createdAt: checkIn?.createdAt || new Date(),
+      remark: checkIn?.remark || remark || null,
+      operator: checkIn?.operator ? { id: checkIn.operator.id, username: checkIn.operator.username, name: checkIn.operator.username } : { id: admin.id, username: admin.username, name: admin.username },
+      registration: {
+        id: registration.id,
+        status: registration.status,
+        answers: registration.answers,
+        user: registration.user ? { id: registration.user.id, phone: registration.user.phone, nickname: registration.user.nickname } : null,
+        activity: registration.activity ? {
+          id: registration.activity.id,
+          title: registration.activity.title,
+          startTime: registration.activity.startTime,
+          endTime: registration.activity.endTime,
+          location: registration.activity.location
+        } : null
+      },
+      order: order ? {
+        id: order.id,
+        orderNo: order.orderNo,
+        status: order.status,
+        amount: order.amount,
+        ticketType: order.ticketType ? { id: order.ticketType.id, name: order.ticketType.name } : null
+      } : null,
+      activity: {
+        id: registration.activity.id,
+        title: registration.activity.title,
+        startTime: registration.activity.startTime,
+        endTime: registration.activity.endTime,
+        location: registration.activity.location
+      }
+    };
   }
 
   async listWaitlists(activityId?: number, status?: WaitlistStatus, admin?: AdminContext) {
@@ -4427,13 +4466,32 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     sheet.columns = [
       { header: "报名ID", key: "id", width: 10 },
       { header: "活动", key: "activity", width: 24 },
+      { header: "活动开始", key: "activityStartTime", width: 22 },
+      { header: "活动结束", key: "activityEndTime", width: 22 },
+      { header: "活动地点", key: "activityLocation", width: 28 },
       { header: "用户手机", key: "phone", width: 16 },
       { header: "Status", key: "status", width: 16 },
+      { header: "签到时间", key: "checkInAt", width: 22 },
+      { header: "核销员", key: "checkInOperator", width: 18 },
+      { header: "核销备注", key: "checkInRemark", width: 28 },
       { header: "报名时间", key: "createdAt", width: 22 },
       ...customLabels.map((label) => ({ header: label, key: label, width: 20 }))
     ];
     rows.forEach((row) => {
-      const values: Record<string, unknown> = { id: row.id, activity: row.activity.title, phone: row.user.phone, status: row.status, createdAt: row.createdAt };
+      const checkIn = (row as Registration & { checkIn?: CheckIn }).checkIn;
+      const values: Record<string, unknown> = {
+        id: row.id,
+        activity: row.activity.title,
+        activityStartTime: row.activity.startTime || "",
+        activityEndTime: row.activity.endTime || "",
+        activityLocation: row.activity.location || "",
+        phone: row.user.phone,
+        status: row.status,
+        checkInAt: checkIn?.createdAt || "",
+        checkInOperator: checkIn?.operator?.username || "",
+        checkInRemark: checkIn?.remark || "",
+        createdAt: row.createdAt
+      };
       row.answers.forEach((answer) => { values[answer.label] = Array.isArray(answer.value) ? answer.value.join(",") : answer.value; });
       sheet.addRow(values);
     });

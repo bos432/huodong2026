@@ -47,6 +47,26 @@ function formatTime(value?: string) {
   if (!value) return "-";
   return value.replace("T", " ").slice(0, 16);
 }
+
+function activityTime(row: any) {
+  const activity = row?.registration?.activity || row?.activity || {};
+  const start = formatTime(activity.startTime);
+  const end = formatTime(activity.endTime);
+  if (start === "-" && end === "-") return "-";
+  return end === "-" ? start : `${start} 至 ${end}`;
+}
+
+function attendeeName(row: any) {
+  const user = row?.registration?.user || {};
+  const answers = Array.isArray(row?.registration?.answers) ? row.registration.answers : [];
+  const answerName = answers.find((item: any) => String(item.label || item.name || "").includes("姓名"))?.value;
+  return answerName || user.nickname || "-";
+}
+
+function orderText(row: any) {
+  if (!row?.order) return "-";
+  return `${row.order.orderNo || "-"} / ¥${Number(row.order.amount || 0).toFixed(2)}`;
+}
 </script>
 
 <template>
@@ -71,11 +91,16 @@ function formatTime(value?: string) {
         </div>
       </el-form>
 
-      <el-descriptions v-if="result" class="result" title="最近核销" border :column="1">
-        <el-descriptions-item label="活动">{{ result.registration?.activity?.title || "-" }}</el-descriptions-item>
-        <el-descriptions-item label="用户">{{ result.registration?.user?.nickname || "-" }}</el-descriptions-item>
+      <el-descriptions v-if="result" class="result" title="最近核销成功" border :column="1">
+        <el-descriptions-item label="活动">{{ result.registration?.activity?.title || result.activity?.title || "-" }}</el-descriptions-item>
+        <el-descriptions-item label="场次时间">{{ activityTime(result) }}</el-descriptions-item>
+        <el-descriptions-item label="地点">{{ result.registration?.activity?.location || result.activity?.location || "-" }}</el-descriptions-item>
+        <el-descriptions-item label="报名人">{{ attendeeName(result) }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ result.registration?.user?.phone || "-" }}</el-descriptions-item>
-        <el-descriptions-item label="时间">{{ formatTime(result.createdAt) }}</el-descriptions-item>
+        <el-descriptions-item label="订单">{{ orderText(result) }}</el-descriptions-item>
+        <el-descriptions-item label="核销时间">{{ formatTime(result.createdAt) }}</el-descriptions-item>
+        <el-descriptions-item label="核销员">{{ result.operator?.name || result.operator?.username || "-" }}</el-descriptions-item>
+        <el-descriptions-item label="备注">{{ result.remark || "-" }}</el-descriptions-item>
       </el-descriptions>
     </div>
   </div>
