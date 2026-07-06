@@ -946,6 +946,12 @@ export class AdminController {
     return this.service.cancelRegistration(id, body.reason, admin);
   }
 
+  @AdminRoles(...CHECK_IN_ROLES)
+  @Post("registrations/:id/check-in")
+  checkInRegistration(@Param("id", ParseIntPipe) id: number, @Body() body: { remark?: string }, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.checkInRegistration(id, admin, body.remark);
+  }
+
   @AdminRoles(...OPERATION_ROLES)
   @Get("registrations/export")
   async export(@Query() query: RegistrationQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {

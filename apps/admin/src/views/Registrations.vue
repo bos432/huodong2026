@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { Check, CircleClose, Close, Download, Search } from "@element-plus/icons-vue";
+import { Check, CircleClose, Close, Download, Finished, Search } from "@element-plus/icons-vue";
 import { OrderStatus, RegistrationStatus, orderStatusText, registrationStatusText } from "@activity/shared";
 import { api, downloadExport } from "../api";
 import { canAccess, isPlatformAdmin } from "../permissions";
@@ -37,6 +37,7 @@ const query = reactive({
 });
 const total = ref(0);
 const canOperateRegistrations = canAccess(["registration.manage"]);
+const canCheckInRegistrations = canAccess(["checkin.manage"]);
 const canViewRegistrationOrders = canAccess(["order.view", "finance.view", "finance.manage"]);
 const pageTitle = computed(() => (isPlatformAdmin() ? "全局报名" : "报名管理"));
 const operateHintTitle = computed(() => (isPlatformAdmin() ? "平台报名监管" : "审核提示"));
@@ -120,6 +121,10 @@ function canCancel(row: any) {
   return canOperateRegistrations && ![RegistrationStatus.Cancelled, RegistrationStatus.CheckedIn].includes(row.status);
 }
 
+function canManualCheckIn(row: any) {
+  return canCheckInRegistrations && row.status === RegistrationStatus.Approved && !row.checkIn;
+}
+
 async function approve(row: any) {
   if (!canOperateRegistrations) return ElMessage.warning("当前账号只能只读查看报名");
   try {
@@ -146,6 +151,24 @@ async function cancel(row: any) {
   await api.post(`/admin/registrations/${row.id}/cancel`, { reason: value });
   ElMessage.success("已取消报名");
   load();
+}
+
+async function manualCheckIn(row: any) {
+  if (!canManualCheckIn(row)) return ElMessage.warning("只有报名成功且未签到的记录可以手动核销");
+  try {
+    const { value } = await ElMessageBox.prompt(`确认手动核销 ${userText(row)} 的报名？该操作会把报名状态改为已签到，并记录当前后台账号为核销员。`, "手动核销", {
+      inputValue: "后台报名列表手动核销",
+      confirmButtonText: "确认核销",
+      cancelButtonText: "再核对一下",
+      type: "warning"
+    });
+    await api.post(`/admin/registrations/${row.id}/check-in`, { remark: value || "后台报名列表手动核销" });
+    ElMessage.success("已手动核销");
+    load();
+  } catch (error: any) {
+    if (error === "cancel" || error === "close") return;
+    ElMessage.error(error.message || "手动核销失败");
+  }
 }
 
 function userText(row: any) {
@@ -282,7 +305,7 @@ watch(
       <el-empty v-if="!loading && !rows.length" description="暂无匹配报名记录">
         <el-button type="primary" @click="search">重新筛选</el-button>
       </el-empty>
-      <el-table v-else v-loading="loading" :data="rows" stripe>
+      <el-table v-else v-loading="loading" class="registration-table" :data="rows" stripe>
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column label="活动" min-width="220" show-overflow-tooltip><template #default="{ row }">{{ row.activity?.title || "-" }}</template></el-table-column>
         <el-table-column label="活动安排" min-width="210" show-overflow-tooltip>
@@ -326,11 +349,14 @@ watch(
         </el-table-column>
         <el-table-column label="报名内容" min-width="280"><template #default="{ row }"><pre>{{ answerText(row) }}</pre></template></el-table-column>
         <el-table-column label="报名时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
-        <el-table-column v-if="canOperateRegistrations" label="操作" width="280" fixed="right">
+        <el-table-column v-if="canOperateRegistrations || canCheckInRegistrations" label="操作" width="260">
           <template #default="{ row }">
-            <el-button size="small" type="success" :icon="Check" :disabled="!canApprove(row)" @click="approve(row)">通过</el-button>
-            <el-button size="small" type="danger" :icon="Close" :disabled="!canReject(row)" @click="reject(row)">拒绝</el-button>
-            <el-button size="small" :icon="CircleClose" :disabled="!canCancel(row)" @click="cancel(row)">取消</el-button>
+            <div class="row-actions">
+              <el-button v-if="canCheckInRegistrations" size="small" type="primary" :icon="Finished" :disabled="!canManualCheckIn(row)" @click="manualCheckIn(row)">核销</el-button>
+              <el-button v-if="canOperateRegistrations" size="small" type="success" :icon="Check" :disabled="!canApprove(row)" @click="approve(row)">通过</el-button>
+              <el-button v-if="canOperateRegistrations" size="small" type="danger" :icon="Close" :disabled="!canReject(row)" @click="reject(row)">拒绝</el-button>
+              <el-button v-if="canOperateRegistrations" size="small" :icon="CircleClose" :disabled="!canCancel(row)" @click="cancel(row)">取消</el-button>
+            </div>
           </template>
         </el-table-column>
       </el-table>
@@ -357,5 +383,8 @@ watch(
 pre { margin: 0; white-space: pre-wrap; font-family: inherit; line-height: 1.5; }
 small { color: #667085; display: block; line-height: 1.5; }
 .checkin-time { margin-top: 4px; line-height: 1.5; }
+.registration-table { width: 100%; }
+.row-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.row-actions .el-button { margin-left: 0; }
 .pagination { display: flex; justify-content: flex-end; padding-top: 16px; }
 </style>

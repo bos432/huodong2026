@@ -2673,6 +2673,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
+  async checkInRegistration(id: number, admin: AdminContext & { id: number }, remark?: string) {
+    const registration = await this.getRegistration(id, admin);
+    return this.checkIn(registration.checkInCode, admin.id, remark || "后台报名列表手动核销", admin);
+  }
+
   async listOrders(query: OrderQueryDto | OrderStatus = {}, admin?: AdminContext) {
     const normalizedQuery: OrderQueryDto = typeof query === "string" ? { status: query } : query || {};
     const pageSize = Math.min(Math.max(Number(normalizedQuery.pageSize || 0), 0), 100);

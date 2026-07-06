@@ -249,6 +249,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path.startsWith("activities")) return "activity.manage";
   if (path === "registrations" && verb === "GET") return "registration.view";
   if (path === "registrations/export") return "registration.export";
+  if (path === "registrations/:id/check-in") return "checkin.manage";
   if (path.startsWith("registrations")) return "registration.manage";
   if (path === "orders" && verb === "GET") return "order.view";
   if (path === "orders/export") return "order.export";

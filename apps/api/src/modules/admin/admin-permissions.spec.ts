@@ -12,6 +12,10 @@ describe("admin route permissions", () => {
     expect(resolveAdminRoutePermission("POST", "registrations/:id/reject")).toBe("registration.manage");
   });
 
+  it("maps registration manual check-in to check-in permission", () => {
+    expect(resolveAdminRoutePermission("POST", "registrations/:id/check-in")).toBe("checkin.manage");
+  });
+
   it("keeps activity review routes mapped to activity approval", () => {
     expect(resolveAdminRoutePermission("POST", "activities/:id/approve")).toBe("activity.approve");
     expect(resolveAdminRoutePermission("POST", "activities/:id/reject")).toBe("activity.approve");
