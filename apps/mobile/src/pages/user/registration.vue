@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { OrderStatus, RegistrationStatus } from "@activity/shared";
 import QRCode from "qrcode";
 import { ensureUser, request, requestRegistrationRefund, withTenantCode } from "../../api";
@@ -32,7 +32,7 @@ const orderStatusText: Record<OrderStatus, string> = {
 const detail = ref<any>();
 const code = ref("");
 const codeQrUrl = ref("");
-const qrCanvasVisible = ref(false);
+const codeQrMatrix = ref<number[][]>([]);
 const userId = ref(0);
 const loading = ref(true);
 const loadError = ref("");
@@ -41,7 +41,6 @@ const refunding = ref(false);
 const groupDialogVisible = ref(false);
 const groupQrImageError = ref(false);
 const paymentInstructionsField = "offlinePaymentInstructions";
-const checkInQrCanvasId = "checkin-code-qr-canvas";
 const steps = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("registration_detail", "/pages/user/registration");
 
@@ -160,7 +159,7 @@ async function load() {
     detail.value = reviewSafeData(await request(`/public/me/registrations/${id}`));
     code.value = "";
     codeQrUrl.value = "";
-    qrCanvasVisible.value = false;
+    codeQrMatrix.value = [];
     groupQrImageError.value = false;
     groupDialogVisible.value = Boolean(detail.value?.groupQrCodeUrl);
     if (canShowCheckInCode.value) showCode(false);
@@ -172,42 +171,23 @@ async function load() {
   }
 }
 
-async function renderCheckInQrToCanvas(value: string) {
-  // #ifdef MP-WEIXIN
-  qrCanvasVisible.value = true;
-  await nextTick();
+function buildCheckInQrMatrix(value: string) {
   const qr = (QRCode as any).create(value, { errorCorrectionLevel: "M", margin: 1 });
   const modules = qr.modules;
   const size = Number(modules.size || 0);
   const data = modules.data || [];
   if (!size || !data.length) throw new Error("签到二维码生成失败");
-  const canvasSize = 220;
-  const quiet = 10;
-  const cell = (canvasSize - quiet * 2) / size;
-  const ctx = uni.createCanvasContext(checkInQrCanvasId);
-  ctx.setFillStyle("#ffffff");
-  ctx.fillRect(0, 0, canvasSize, canvasSize);
-  ctx.setFillStyle("#111827");
-  for (let y = 0; y < size; y += 1) {
-    for (let x = 0; x < size; x += 1) {
-      if (!data[y * size + x]) continue;
-      ctx.fillRect(quiet + x * cell, quiet + y * cell, Math.ceil(cell), Math.ceil(cell));
-    }
-  }
-  await new Promise<void>((resolve) => ctx.draw(false, () => resolve()));
-  codeQrUrl.value = "";
-  return true;
-  // #endif
-  return false;
+  return Array.from({ length: size }, (_, y) => Array.from({ length: size }, (_, x) => (data[y * size + x] ? 1 : 0)));
 }
 
 async function generateCheckInQr(value: string) {
   codeQrUrl.value = "";
-  qrCanvasVisible.value = false;
+  codeQrMatrix.value = [];
   try {
-    if (await renderCheckInQrToCanvas(value)) return;
+    codeQrMatrix.value = buildCheckInQrMatrix(value);
+    return;
   } catch (error) {
-    qrCanvasVisible.value = false;
+    codeQrMatrix.value = [];
   }
   try {
     codeQrUrl.value = await QRCode.toDataURL(value, {
@@ -501,7 +481,11 @@ onMounted(() => {
       <view v-if="code" class="card code">
         <view class="subtle">现场签到二维码</view>
         <image v-if="codeQrUrl" class="code-qr" :src="codeQrUrl" mode="widthFix" />
-        <canvas v-else-if="qrCanvasVisible" :canvas-id="checkInQrCanvasId" class="code-qr-canvas" />
+        <view v-else-if="codeQrMatrix.length" class="code-qr-matrix">
+          <view v-for="(row, rowIndex) in codeQrMatrix" :key="rowIndex" class="code-qr-row">
+            <view v-for="(cell, cellIndex) in row" :key="cellIndex" class="code-qr-cell" :class="{ dark: cell }" />
+          </view>
+        </view>
         <view v-else class="notice muted">二维码暂未生成，可先复制下方签到码让工作人员手动核销。</view>
         <view class="code-text">{{ code }}</view>
         <view class="code-tip">现场可出示二维码扫码核销，也可让工作人员手动输入下方签到码。</view>
@@ -677,7 +661,11 @@ onMounted(() => {
 .group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: var(--card-bg, #fff); }
 .code { text-align: center; }
 .code-qr,
-.code-qr-canvas { display: block; width: 360rpx; height: 360rpx; margin: 18rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: #fff; }
+.code-qr-matrix { display: block; width: 360rpx; height: 360rpx; margin: 18rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: #fff; }
+.code-qr-matrix { box-sizing: border-box; padding: 18rpx; overflow: hidden; display: flex; flex-direction: column; }
+.code-qr-row { display: flex; width: 100%; flex: 1 1 0; min-height: 0; }
+.code-qr-cell { flex: 1 1 0; min-width: 0; background: #ffffff; }
+.code-qr-cell.dark { background: #111827; }
 .code-text { margin-top: 16rpx; font-size: 34rpx; word-break: break-all; }
 .code-tip { margin-top: 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.5; }
 .copy-code { display: inline-flex; margin-top: 18rpx; }
