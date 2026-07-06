@@ -49,6 +49,8 @@ const saveActionLabel = computed(() => {
 const showPublishAction = computed(() => form.value.status !== ActivityStatus.Open && form.value.status !== ActivityStatus.PendingApproval);
 const compliance = computed(() => checkActivityContentCompliance({ title: form.value.title, description: form.value.description, notice: form.value.notice, sections: sections.value }));
 
+let saveInFlight = false;
+
 function showActionNotice(message: string, tone: "info" | "success" | "error" = "error", targetStep?: number) {
   actionNotice.value = message;
   actionNoticeTone.value = tone;
@@ -237,27 +239,35 @@ function validateBeforeSave(targetStatus: ActivityStatus) {
 
 function finishSaving() {
   uni.hideLoading();
+  saveInFlight = false;
   actionBusyLabel.value = "";
   saving.value = false;
 }
 
-async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
-  if (saving.value) return null;
-  const validation = validateBeforeSave(targetStatus);
-  if (validation) {
-    showActionNotice(validation.message, "error", validation.step);
-    return null;
-  }
+function beginSaving(targetStatus: ActivityStatus) {
+  saveInFlight = true;
   saving.value = true;
   actionBusyLabel.value = targetStatus === ActivityStatus.Open ? "发布中..." : "保存中...";
   actionNotice.value = actionBusyLabel.value;
   actionNoticeTone.value = "info";
   uni.showLoading({ title: actionBusyLabel.value, mask: true });
-  try {
-    const isNewActivity = !id.value;
-    const saved = id.value
-      ? await mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data: payload(targetStatus) })
-      : await mobileAdminRequest<any>("/admin/activities", { method: "POST", data: payload(targetStatus) });
+}
+
+function save(targetStatus: ActivityStatus, redirectAfterSave = true): Promise<any | null> {
+  if (saveInFlight) return Promise.resolve(null);
+  const validation = validateBeforeSave(targetStatus);
+  if (validation) {
+    showActionNotice(validation.message, "error", validation.step);
+    return Promise.resolve(null);
+  }
+
+  beginSaving(targetStatus);
+  const isNewActivity = !id.value;
+  const request = id.value
+    ? mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PUT", data: payload(targetStatus) })
+    : mobileAdminRequest<any>("/admin/activities", { method: "POST", data: payload(targetStatus) });
+
+  return request.then((saved) => {
     id.value = saved.id;
     const previousStatus = form.value.status;
     form.value.status = saved.status || targetStatus;
@@ -265,16 +275,19 @@ async function save(targetStatus: ActivityStatus, redirectAfterSave = true) {
     showActionNotice(targetStatus === ActivityStatus.Open && previousStatus !== ActivityStatus.Open ? `已发布 ${lastSavedAt.value}` : `已保存 ${lastSavedAt.value}`, "success");
     if (redirectAfterSave && isNewActivity) {
       setTimeout(() => uni.redirectTo({ url: `/pages/admin/activity/edit?id=${saved.id}` }), 650);
-    } else if (!isNewActivity) {
-      await loadActivity();
+      finishSaving();
+      return saved;
     }
-    finishSaving();
-    return saved;
-  } catch (err: any) {
+
+    return loadActivity().then(() => {
+      finishSaving();
+      return saved;
+    });
+  }).catch((err: any) => {
     showActionNotice(err.message || "保存失败，请稍后重试。", "error");
     finishSaving();
     return null;
-  }
+  });
 }
 
 async function submitApproval() {
