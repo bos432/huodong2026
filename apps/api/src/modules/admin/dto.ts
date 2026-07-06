@@ -506,6 +506,16 @@ export class PaymentStatementFetchDto {
   agentId?: number;
 }
 
+export class ActivityFieldOptionDto {
+  @IsString()
+  @IsNotEmpty()
+  label!: string;
+
+  @IsString()
+  @IsNotEmpty()
+  value!: string;
+}
+
 export class ActivityFieldDto {
   @IsString()
   @IsNotEmpty()
@@ -518,7 +528,10 @@ export class ActivityFieldDto {
   required!: boolean;
 
   @IsOptional()
-  options?: { label: string; value: string }[];
+  @IsArray()
+  @ValidateNested({ each: true })
+  @Type(() => ActivityFieldOptionDto)
+  options?: ActivityFieldOptionDto[];
 
   @IsInt()
   sortOrder!: number;
