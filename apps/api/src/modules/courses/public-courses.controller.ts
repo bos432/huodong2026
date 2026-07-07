@@ -26,11 +26,22 @@ import { normalizeTenantCode, normalizeTenantHost } from "../../shared/tenant-sc
 const COMMUNITY_IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
   "image/png": ".png",
-  "image/webp": ".webp"
+  "image/webp": ".webp",
+  "image/heic": ".heic",
+  "image/heif": ".heif",
+  "application/octet-stream": ".jpg"
 };
 const COMMUNITY_POST_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "community-posts");
 mkdirSync(COMMUNITY_POST_UPLOAD_DIR, { recursive: true });
 const APPROVED_COMMUNITY_POST_STATUS = "approved" as CommunityPostStatus;
+
+function communityImageExtension(file: Express.Multer.File) {
+  const mime = String(file?.mimetype || "").toLowerCase();
+  if (COMMUNITY_IMAGE_EXTENSION_BY_MIME[mime]) return COMMUNITY_IMAGE_EXTENSION_BY_MIME[mime];
+  const ext = String(file?.originalname || "").toLowerCase().match(/\.(jpe?g|png|webp|heic|heif)$/)?.[0];
+  if (!ext) return "";
+  return ext === ".jpeg" ? ".jpg" : ext;
+}
 
 @Controller("public")
 export class PublicCoursesController {
@@ -186,13 +197,13 @@ export class PublicCoursesController {
     storage: diskStorage({
       destination: COMMUNITY_POST_UPLOAD_DIR,
       filename: (_req, file, callback) => {
-        const suffix = COMMUNITY_IMAGE_EXTENSION_BY_MIME[file.mimetype] || ".jpg";
+        const suffix = communityImageExtension(file) || ".jpg";
         callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
       }
     }),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
-      callback(null, Boolean(COMMUNITY_IMAGE_EXTENSION_BY_MIME[file.mimetype]));
+      callback(null, Boolean(communityImageExtension(file)));
     }
   }))
   async uploadCommunityPostImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {

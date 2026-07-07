@@ -153,8 +153,11 @@ function chooseImages() {
   const count = Math.max(9 - images.value.length, 0);
   uni.chooseImage({
     count,
+    sizeType: ["compressed"],
+    sourceType: ["album", "camera"],
     success: async (res) => {
       const files = (res.tempFilePaths || []).slice(0, count);
+      if (!files.length) return;
       uploading.value = true;
       try {
         for (const filePath of files) {
@@ -166,6 +169,10 @@ function chooseImages() {
       } finally {
         uploading.value = false;
       }
+    },
+    fail: (error) => {
+      const message = String(error?.errMsg || "");
+      if (!message.includes("cancel")) uni.showToast({ title: "照片选择失败，请重试", icon: "none" });
     }
   });
 }

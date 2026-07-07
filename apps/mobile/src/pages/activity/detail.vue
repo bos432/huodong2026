@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, getUserToken, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
@@ -64,7 +64,12 @@ function register() {
     channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
     source.value ? `source=${encodeURIComponent(source.value)}` : ""
   ].filter(Boolean).join("&");
-  uni.navigateTo({ url: withTenantCode(`/pages/activity/register?${query}`) });
+  const target = withTenantCode(`/pages/activity/register?${query}`);
+  if (!getUserToken()) {
+    uni.navigateTo({ url: withTenantCode(`/pages/user/login?redirect=${encodeURIComponent(target)}`) });
+    return;
+  }
+  uni.navigateTo({ url: target });
 }
 
 function statusText(status: string) {

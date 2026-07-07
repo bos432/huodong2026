@@ -167,7 +167,7 @@ function submit() {
 
 function goLogin() {
   const redirect = encodeURIComponent(getCurrentRouteWithQuery());
-  uni.navigateTo({ url: `/pages/user/login?redirect=${redirect}` });
+  uni.navigateTo({ url: withTenantCode(`/pages/user/login?redirect=${redirect}`) });
 }
 
 async function doSubmit() {
