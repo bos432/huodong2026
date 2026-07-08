@@ -8,7 +8,7 @@
       </view>
       <view class="head-actions">
         <view class="button sm secondary" @click="goMine">我的</view>
-        <view class="button sm" @click="goPublish">发帖</view>
+        <view v-if="canPost" class="button sm" @click="goPublish">发帖</view>
       </view>
     </view>
 
@@ -46,24 +46,29 @@
     <view v-if="!loading && !topics.length" class="empty-card">
       <text class="empty-title">暂无帖子</text>
       <text class="empty-copy">可以先发布一个共修话题，审核通过后会展示在这里。</text>
-      <view class="button sm" @click="goPublish">发布帖子</view>
+      <view v-if="canPost" class="button sm" @click="goPublish">发布帖子</view>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
+import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 
 const categories = ref<any[]>([]);
 const topics = ref<any[]>([]);
 const keyword = ref("");
 const activeCategoryId = ref(0);
 const loading = ref(false);
+const canPost = computed(() => featureGatesState.value.forum !== false && featureGatesState.value.forumPost !== false);
 
-onShow(reload);
+onShow(async () => {
+  await loadFeatureGates(true);
+  reload();
+});
 
 async function reload() {
   await Promise.all([loadCategories(), loadTopics()]);
@@ -98,6 +103,10 @@ function selectCategory(id: number) {
 }
 
 async function goPublish() {
+  if (!canPost.value) {
+    showFeatureDisabledToast("/pages/forum/publish");
+    return;
+  }
   try {
     await ensureUser();
     uni.navigateTo({ url: withTenantCode(activeCategoryId.value ? `/pages/forum/publish?categoryId=${activeCategoryId.value}` : "/pages/forum/publish") });

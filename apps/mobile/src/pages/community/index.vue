@@ -8,18 +8,18 @@
     <AdSlotRenderer slot-key="community_feed_inline" page-key="community_home" compact />
 
     <!-- 文化大使入口 -->
-    <view class="ambassador-card" @click="goAmbassador">
+    <view v-if="featureGates.ambassador" class="ambassador-card" @click="goAmbassador">
       <text style="font-size:30rpx; color:#fff; font-weight:600;">🏮 加入文化大使计划</text>
       <text style="font-size:24rpx; color:rgba(255,255,255,0.8); margin-top:6rpx;">让热爱发光 &gt;</text>
     </view>
-    <view class="publish-card" @click="goPublish">
+    <view v-if="canPublish" class="publish-card" @click="goPublish">
       <view>
         <text class="publish-title">分享活动心得</text>
         <text class="publish-copy">上传照片和感悟，审核后展示给新同学</text>
       </view>
       <view class="button sm">去发布</view>
     </view>
-    <view class="forum-entry-card" @click="goForum">
+    <view v-if="featureGates.forum" class="forum-entry-card" @click="goForum">
       <view>
         <text class="publish-title">共修论坛</text>
         <text class="publish-copy">发起话题、回复同学、收藏精华内容</text>
@@ -101,7 +101,7 @@
     <view v-if="!posts.length" class="empty-post-card">
       <text class="empty-title">{{ activityFilterId ? "还没有活动心得" : "暂无参与者动态" }}</text>
       <text class="empty-copy">{{ activityFilterId ? "完成签到，或活动结束且报名成功/已付款后，可以发布这场活动的心得。" : "参与活动后发布照片和感悟，审核通过后会展示在这里。" }}</text>
-      <view class="button secondary sm" @click="goPublish">{{ activityFilterId ? "发布这场心得" : "去发布心得" }}</view>
+      <view v-if="canPublish" class="button secondary sm" @click="goPublish">{{ activityFilterId ? "发布这场心得" : "去发布心得" }}</view>
     </view>
 
     <view style="height:120rpx;"></view>
@@ -122,8 +122,10 @@ import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
+import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 
-onShow(() => {
+onShow(async () => {
+  await loadFeatureGates(true);
   loadPageTheme();
   loadCheckinTask();
   loadDecoration();
@@ -139,6 +141,8 @@ const checkinCompletedCount = computed(() => Math.max(0, Number(checkinTask.valu
 const checkinProgress = computed(() => checkinTask.value?.checkedToday ? 100 : 0);
 const checkinStatusTitle = computed(() => checkinTask.value?.checkedToday ? "你今天已完成打卡" : "你今天还未打卡");
 const checkinStatusSubtitle = computed(() => checkinTask.value?.checkedToday ? "今天已经点亮，明天继续保持。" : "进入后完成今日阅读、书写或共修记录。");
+const featureGates = featureGatesState;
+const canPublish = computed(() => featureGates.value.community !== false && featureGates.value.communityPublish !== false);
 const { contentSections, loadDecoration } = usePageDecoration("community_home", "/pages/community/index");
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "共修首页") return false;
@@ -266,10 +270,20 @@ function goCheckin() {
 }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goPublish() {
+  if (!canPublish.value) {
+    showFeatureDisabledToast("/pages/community/publish");
+    return;
+  }
   const query = activityFilterId.value ? `?activityId=${activityFilterId.value}` : "";
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish${query}`) });
 }
-function goForum() { uni.navigateTo({ url: withTenantCode("/pages/forum/index") }); }
+function goForum() {
+  if (featureGates.value.forum === false) {
+    showFeatureDisabledToast("/pages/forum/index");
+    return;
+  }
+  uni.navigateTo({ url: withTenantCode("/pages/forum/index") });
+}
 function goPost(post: CommunityPost) { uni.navigateTo({ url: withTenantCode(`/pages/community/detail?id=${post.id}`) }); }
 </script>
 
