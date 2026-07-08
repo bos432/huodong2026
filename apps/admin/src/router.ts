@@ -1,4 +1,5 @@
 import { createRouter, createWebHistory } from "vue-router";
+import { isAdminFeaturePathEnabled } from "./feature-gates";
 import { adminSession, canAccess, canAccessScope, currentTenantSettings, isPlatformAdmin, permissions } from "./permissions";
 
 const Login = () => import("./views/Login.vue");
@@ -160,7 +161,7 @@ function fallbackPath() {
     { path: "/check-in", roles: permissions.checkIn, scope: "tenant" },
     { path: "/admins", roles: ["admin.manage"], scope: "any" }
   ];
-  const match = candidates.find((item) => canAccess(item.roles) && canAccessScope(item.scope as any) && !mallRouteDisabled(item.path));
+  const match = candidates.find((item) => canAccess(item.roles) && canAccessScope(item.scope as any) && !mallRouteDisabled(item.path) && adminFeatureRouteEnabled(item.path));
   if (match) return match.path;
   return "/login";
 }
@@ -169,11 +170,16 @@ function mallRouteDisabled(path: string) {
   return path.startsWith("/mall-") && !isPlatformAdmin() && !currentTenantSettings().mallEnabled;
 }
 
+function adminFeatureRouteEnabled(path: string) {
+  return isAdminFeaturePathEnabled(path, isPlatformAdmin());
+}
+
 router.beforeEach((to) => {
   void adminSession.version;
   if (to.path !== "/login" && !localStorage.getItem("admin_token")) return "/login";
   if (to.path !== "/login" && to.meta.roles && !canAccess(to.meta.roles as string[])) return fallbackPath();
   if (to.path !== "/login" && !canAccessScope(to.meta.scope as any)) return fallbackPath();
   if (to.path !== "/login" && mallRouteDisabled(to.path)) return fallbackPath();
+  if (to.path !== "/login" && !adminFeatureRouteEnabled(to.path)) return fallbackPath();
 });
 

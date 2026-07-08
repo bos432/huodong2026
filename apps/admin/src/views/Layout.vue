@@ -7,6 +7,7 @@ import { api } from "../api";
 import H5QrDialog from "../components/H5QrDialog.vue";
 import { AdminRole, canAccess, canAccessScope, clearStoredAdminSession, currentRole, currentTenantCode, currentTenantName, currentTenantSettings, isPlatformAdmin, roleOptions, setStoredAdminSession } from "../permissions";
 import { copyToClipboard, h5PreviewUrl, openH5Preview } from "../h5-preview";
+import { adminFeatureGateForPath, readStoredFeatureGates, writeStoredFeatureGates } from "../feature-gates";
 import { menuGroups, tenantQuickLinks, tenantScopedRoutePaths } from "../navigation/admin-menu";
 
 const route = useRoute();
@@ -18,6 +19,7 @@ const passwordForm = reactive({ oldPassword: "", newPassword: "", confirmPasswor
 const platformTenants = ref<Array<{ id: number; name?: string; code?: string; enabled?: boolean }>>([]);
 const selectedPlatformTenantId = ref(Number(localStorage.getItem("admin_selected_tenant_id") || 0));
 const shellBrand = ref<{ adminTitle?: string; brandName?: string; brandLogoUrl?: string }>({});
+const featureGates = ref(readStoredFeatureGates());
 const tenantSettings = computed(() => currentTenantSettings());
 const roleLabel = computed(() => roleOptions.find((item) => item.value === currentRole())?.label || "管理员");
 const shellTitle = computed(() => {
@@ -42,7 +44,7 @@ const selectedPlatformTenantCode = computed(() => selectedPlatformTenant.value?.
 const selectedScopeName = computed(() => (selectedPlatformTenant.value ? selectedTenantLabel(selectedPlatformTenant.value) : "平台视角"));
 const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformAdmin() ? selectedPlatformTenantCode.value : currentTenantCode()));
 const currentH5PreviewLabel = computed(() => (isPlatformAdmin() ? (selectedPlatformTenant.value ? "商家H5" : "平台H5") : "商家H5"));
-const visibleTenantQuickLinks = computed(() => tenantQuickLinks.filter((item) => !mallMenuDisabled(item)));
+const visibleTenantQuickLinks = computed(() => tenantQuickLinks.filter((item) => !mallMenuDisabled(item) && !featureMenuDisabled(item)));
 const visibleMenuGroups = computed(() =>
   menuGroups
     .filter((group) => canAccessScope(group.scope as any))
@@ -51,7 +53,7 @@ const visibleMenuGroups = computed(() =>
 );
 
 function canShowMenuItem(item: { roles?: string[]; scope?: string; index?: string; requiresMallEnabled?: boolean }) {
-  return canAccess(item.roles) && canAccessScope(item.scope as any) && !mallMenuDisabled(item);
+  return canAccess(item.roles) && canAccessScope(item.scope as any) && !mallMenuDisabled(item) && !featureMenuDisabled(item);
 }
 
 function mallMenuDisabled(item: { path?: string; index?: string; requiresMallEnabled?: boolean }) {
@@ -59,6 +61,13 @@ function mallMenuDisabled(item: { path?: string; index?: string; requiresMallEna
   const target = item.path || item.index || "";
   const mallScoped = target.startsWith("/mall-") || Boolean(item.requiresMallEnabled);
   return mallScoped && !tenantSettings.value.mallEnabled;
+}
+
+function featureMenuDisabled(item: { path?: string; index?: string }) {
+  if (isPlatformAdmin()) return false;
+  const target = item.path || item.index || "";
+  const gate = adminFeatureGateForPath(target);
+  return Boolean(gate && featureGates.value[gate] === false);
 }
 
 async function refreshCurrentAdminContext() {
@@ -96,6 +105,13 @@ async function loadShellBrand() {
       brandName: String(theme.brandName || ""),
       brandLogoUrl: String(theme.brandLogoUrl || "")
     };
+    if (isPlatformAdmin()) {
+      featureGates.value = writeStoredFeatureGates(setting?.launchConfig?.featureGates);
+    } else {
+      const code = currentTenantCode();
+      const publicSetting = await api.get<any, any>(`/public/settings/operation${code ? `?tenantCode=${encodeURIComponent(code)}` : ""}`).catch(() => null);
+      featureGates.value = writeStoredFeatureGates(publicSetting?.launchConfig?.featureGates);
+    }
   } catch {
     shellBrand.value = {};
   }

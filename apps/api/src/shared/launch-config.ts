@@ -2,6 +2,42 @@ import { ConfigService } from "@nestjs/config";
 
 type LaunchConfig = Record<string, unknown> | null | undefined;
 
+export const featureGateKeys = [
+  "courses",
+  "community",
+  "communityPublish",
+  "forum",
+  "forumPost",
+  "mall",
+  "charity",
+  "volunteer",
+  "certificates",
+  "ambassador",
+  "partner",
+  "adCenter",
+  "agentSettlement"
+] as const;
+
+export type FeatureGateKey = typeof featureGateKeys[number];
+
+export const defaultFeatureGates: Record<FeatureGateKey, boolean> = {
+  courses: true,
+  community: true,
+  communityPublish: true,
+  forum: true,
+  forumPost: true,
+  mall: true,
+  charity: true,
+  volunteer: true,
+  certificates: true,
+  ambassador: true,
+  partner: true,
+  adCenter: true,
+  agentSettlement: true
+};
+
+const allowedFeatureGateKeys = new Set<string>(featureGateKeys);
+
 const launchConfigEnvMap: Array<[string, string]> = [
   ["appVersion", "APP_VERSION"],
   ["buildCommit", "BUILD_COMMIT"],
@@ -98,7 +134,8 @@ const launchConfigMetadataKeys = [
   "wechatH5AcceptanceRemark",
   "deliveryMode",
   "reviewSafeMode",
-  "reviewSafeRemark"
+  "reviewSafeRemark",
+  "featureGates"
 ];
 
 const allowedLaunchConfigKeys = new Set([
@@ -112,9 +149,31 @@ export function normalizeLaunchConfig(value: unknown): Record<string, unknown> {
   for (const [key, raw] of Object.entries(value)) {
     if (!allowedLaunchConfigKeys.has(key)) continue;
     if (raw === undefined || raw === null) continue;
+    if (key === "featureGates") {
+      const gates = normalizeFeatureGates(raw, {});
+      if (Object.keys(gates).length) result.featureGates = gates;
+      continue;
+    }
     if (typeof raw === "string") result[key] = raw.trim();
     else if (typeof raw === "boolean") result[key] = raw;
     else if (typeof raw === "number" && Number.isFinite(raw)) result[key] = raw;
+  }
+  return result;
+}
+
+export function normalizeFeatureGates(value: unknown, defaults: Partial<Record<FeatureGateKey, boolean>> = defaultFeatureGates) {
+  const result: Partial<Record<FeatureGateKey, boolean>> = { ...defaults };
+  if (!value || typeof value !== "object" || Array.isArray(value)) return result;
+  for (const [key, raw] of Object.entries(value)) {
+    if (!allowedFeatureGateKeys.has(key)) continue;
+    if (typeof raw === "boolean") result[key as FeatureGateKey] = raw;
+    else if (typeof raw === "string") {
+      const normalized = raw.trim().toLowerCase();
+      if (["true", "1", "yes", "on"].includes(normalized)) result[key as FeatureGateKey] = true;
+      if (["false", "0", "no", "off"].includes(normalized)) result[key as FeatureGateKey] = false;
+    } else if (typeof raw === "number" && Number.isFinite(raw)) {
+      result[key as FeatureGateKey] = raw !== 0;
+    }
   }
   return result;
 }

@@ -1,11 +1,21 @@
 <script setup lang="ts">
-import { onLaunch } from "@dcloudio/uni-app";
+import { onLaunch, onShow } from "@dcloudio/uni-app";
 import { applyTenantBootstrapDefault } from "./api";
+import { guardCurrentPageFeature, hydrateFeatureGatesFromStorage, loadFeatureGates } from "./feature-gates";
 import { loadPageTheme } from "./theme";
 
 onLaunch(() => {
-  applyTenantBootstrapDefault();
+  hydrateFeatureGatesFromStorage();
+  applyTenantBootstrapDefault()
+    .catch(() => null)
+    .then(() => loadFeatureGates(true))
+    .then(() => guardCurrentPageFeature());
   loadPageTheme();
+});
+
+onShow(() => {
+  hydrateFeatureGatesFromStorage();
+  loadFeatureGates().then(() => guardCurrentPageFeature());
 });
 </script>
 

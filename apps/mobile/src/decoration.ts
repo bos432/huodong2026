@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 import { request, setActivityListIntentFromUrl, withTenantCode } from "./api";
+import { filterDecorationSectionsByFeature, filterNavigationItemsByFeature, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "./feature-gates";
 import { reviewSafeData } from "./review-safe-text";
 import type { HomepagePayload, HomepageSectionView } from "@activity/shared";
 
@@ -84,6 +85,10 @@ export function quickInitial(label?: string, icon?: string) {
 
 export function goDecoratedLink(url?: string, action?: string) {
   if (!url) return;
+  if (!isLinkAllowedByFeature(url)) {
+    showFeatureDisabledToast(url);
+    return;
+  }
   if (normalizeLink(url) === "/pages/activity/list") {
     setActivityListIntentFromUrl(url, { categoryId: "all" });
     uni.reLaunch({ url: withTenantCode("/pages/activity/list") });
@@ -100,7 +105,12 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   const loadFailed = ref(false);
   const decorationLoaded = ref(false);
 
-  const bottomNavSection = computed(() => sections.value.find((item) => item.type === "bottom_nav") || (loadFailed.value || decorationLoaded.value ? defaultBottomNavSection : null));
+  const bottomNavSection = computed(() => {
+    const section = sections.value.find((item) => item.type === "bottom_nav") || (loadFailed.value || decorationLoaded.value ? defaultBottomNavSection : null);
+    if (!section) return null;
+    const items = Array.isArray(section.config?.items) ? filterNavigationItemsByFeature(section.config.items) : [];
+    return { ...section, config: { ...(section.config || {}), items } };
+  });
   const innerPagesSection = computed(() => sections.value.find((item) => item.enabled && item.type === "inner_pages") || defaultInnerPagesSection);
   const innerPageLayout = computed<Record<string, any>>(() => ({ ...defaultInnerPagesSection.layout, ...(innerPagesSection.value.layout || {}) }));
   const innerPageConfig = computed<InnerPageConfig>(() => {
@@ -108,13 +118,14 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
     return (pages.find((item: any) => item?.key === pageKey) as InnerPageConfig | undefined) || (defaultInnerPagesSection.config.pages as InnerPageConfig[]).find((item) => item.key === pageKey) || { key: pageKey, title: "", subtitle: "", showBottomNav: true };
   });
   const showBottomNav = computed(() => innerPageConfig.value.showBottomNav !== false && Boolean(bottomNavSection.value?.enabled));
-  const contentSections = computed(() => sections.value
+  const contentSections = computed(() => filterDecorationSectionsByFeature(sections.value
     .filter((item) => item.enabled && !["bottom_nav", "my_page", "inner_pages"].includes(item.type))
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)));
 
   async function loadDecoration() {
     try {
       loadFailed.value = false;
+      await loadFeatureGates();
       const endpoint = pageKey === "home" ? "/public/homepage" : `/public/page-decoration?pageKey=${encodeURIComponent(pageKey)}`;
       const payload = reviewSafeData(await request<HomepagePayload>(endpoint));
       const pageSections = normalizeDecorationSections(payload.sections || []);

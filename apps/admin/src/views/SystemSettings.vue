@@ -4,6 +4,7 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
+import { conservativeFeatureGates, defaultFeatureGates, featureGateItems, normalizeFeatureGates, writeStoredFeatureGates, type FeatureGateKey } from "../feature-gates";
 import { currentTenantSettings, isPlatformAdmin } from "../permissions";
 
 type CheckStatus = "ok" | "warning" | "error";
@@ -195,6 +196,7 @@ const deployment = reactive({
   deliveryMode: "production",
   reviewSafeMode: false,
   reviewSafeRemark: "过审模式会隐藏高风险营销、支付或私域导流内容；正式交付前请切回正式运营模式。",
+  featureGates: { ...defaultFeatureGates },
   mysqlDatabase: "activity_registration",
   mysqlUser: "activity",
   mysqlPassword: "",
@@ -278,6 +280,18 @@ const deployment = reactive({
   orderCloseWorkerEnabled: true,
   orderCloseWorkerIntervalSeconds: 300
 });
+
+const openFeatureGateCount = computed(() => featureGateItems.filter((item) => deployment.featureGates[item.key]).length);
+
+function applyFeatureGatePreset(mode: "open" | "activity") {
+  const next = mode === "open" ? defaultFeatureGates : conservativeFeatureGates;
+  deployment.featureGates = { ...next };
+  ElMessage.success(mode === "open" ? "已切换为全部功能开放" : "已切换为基础活动 + 心得模式");
+}
+
+function featureGateTagType(key: FeatureGateKey) {
+  return deployment.featureGates[key] ? "success" : "info";
+}
 
 const domainBatch = reactive({
   mode: "single" as DomainBatchMode,
@@ -1373,7 +1387,11 @@ function buildSmsNotificationReadiness(): NotificationReadiness {
 function applyDeploymentConfig(value: unknown) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return;
   const input = value as Record<string, unknown>;
+  if (input.featureGates !== undefined && input.featureGates !== null) {
+    deployment.featureGates = normalizeFeatureGates(input.featureGates);
+  }
   for (const key of Object.keys(deployment) as Array<keyof typeof deployment>) {
+    if (key === "featureGates") continue;
     if (input[key] !== undefined && input[key] !== null) {
       (deployment as Record<string, unknown>)[key] = input[key];
     }
@@ -1383,7 +1401,7 @@ function applyDeploymentConfig(value: unknown) {
 function deploymentPayload() {
   const payload: Record<string, unknown> = {};
   for (const key of Object.keys(deployment) as Array<keyof typeof deployment>) {
-    payload[key] = deployment[key];
+    payload[key] = key === "featureGates" ? { ...deployment.featureGates } : deployment[key];
   }
   return payload;
 }
@@ -1480,6 +1498,7 @@ async function saveOperation() {
   try {
     const payload = canManagePlatformSettings.value ? { ...operationPayload(), launchConfig: deploymentPayload() } : operationPayload();
     await api.post("/admin/settings/operation", payload);
+    if (canManagePlatformSettings.value) writeStoredFeatureGates(deployment.featureGates);
     ElMessage.success("系统设置已保存");
     await loadOperation();
     if (canManagePlatformSettings.value) await loadConfig();
@@ -1612,6 +1631,28 @@ onMounted(async () => {
               </el-form-item>
               <el-form-item label="模式说明">
                 <el-input v-model="deployment.reviewSafeRemark" type="textarea" :rows="2" maxlength="300" show-word-limit />
+              </el-form-item>
+              <el-form-item label="功能开放">
+                <div class="feature-gate-panel">
+                  <div class="feature-gate-actions">
+                    <el-button size="small" @click="applyFeatureGatePreset('activity')">基础活动 + 心得</el-button>
+                    <el-button size="small" @click="applyFeatureGatePreset('open')">全部开放</el-button>
+                    <el-tag type="success" effect="plain">已开放 {{ openFeatureGateCount }} / {{ featureGateItems.length }}</el-tag>
+                    <span class="form-tip">关闭后会隐藏小程序入口、装修链接、我的页面入口和非超管后台菜单。</span>
+                  </div>
+                  <div class="feature-gate-grid">
+                    <div v-for="item in featureGateItems" :key="item.key" class="feature-gate-card">
+                      <div>
+                        <strong>{{ item.label }}</strong>
+                        <span>{{ item.description }}</span>
+                      </div>
+                      <div class="feature-gate-switch">
+                        <el-switch v-model="deployment.featureGates[item.key]" active-text="开放" inactive-text="关闭" />
+                        <el-tag :type="featureGateTagType(item.key)" effect="plain">{{ deployment.featureGates[item.key] ? "用户可见" : "暂不开放" }}</el-tag>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </el-form-item>
             </template>
             <el-form-item label="线下付款说明" required>
@@ -2253,6 +2294,14 @@ onMounted(async () => {
 .payment-readiness-card span { color: #64748b; font-size: 12px; line-height: 1.45; }
 .form-tip { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
 .delivery-mode-panel { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
+.feature-gate-panel { width: 100%; display: grid; gap: 12px; }
+.feature-gate-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.feature-gate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+.feature-gate-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+.feature-gate-card div:first-child { display: grid; gap: 5px; min-width: 0; }
+.feature-gate-card strong { color: #111827; font-size: 13px; }
+.feature-gate-card span { color: #64748b; font-size: 12px; line-height: 1.45; }
+.feature-gate-switch { display: grid; justify-items: end; gap: 8px; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .system-tabs { margin-top: 12px; }
 .panel-alert { margin-bottom: 16px; }
@@ -2370,7 +2419,7 @@ onMounted(async () => {
 .link-card strong { color: #111827; font-size: 16px; }
 .link-card span { color: #64748b; line-height: 1.5; }
 @media (max-width: 1100px) {
-  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .payment-readiness, .static-version-grid, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .sms-test-row, .theme-sliders > div, .domain-batch-grid, .domain-check-grid, .domain-command-grid, .domain-preview-row, .wechat-link-row { grid-template-columns: 1fr; }
+  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .payment-readiness, .feature-gate-grid, .feature-gate-card, .static-version-grid, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .sms-test-row, .theme-sliders > div, .domain-batch-grid, .domain-check-grid, .domain-command-grid, .domain-preview-row, .wechat-link-row { grid-template-columns: 1fr; }
   .env-preview { position: static; }
 }
 </style>

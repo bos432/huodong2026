@@ -52,7 +52,7 @@
     </view>
 
     <!-- 公益基金 -->
-    <view class="card charity-card" @click="goCharity">
+    <view v-if="featureGates.charity" class="card charity-card" @click="goCharity">
       <view class="row">
         <view>
           <text style="font-size:30rpx; font-weight:600; color:#333;">🌱 我的公益贡献</text>
@@ -63,7 +63,7 @@
     </view>
 
     <!-- 文化大使入口 -->
-    <view class="card ambassador-entry" @click="goAmbassador">
+    <view v-if="featureGates.ambassador" class="card ambassador-entry" @click="goAmbassador">
       <view class="row">
         <text style="font-size:30rpx; color:#C43D3D; font-weight:600;">🏮 加入文化大使</text>
         <text style="font-size:26rpx; color:#C43D3D;">立即申请 ›</text>
@@ -72,7 +72,7 @@
     </view>
 
     <!-- 用户心得入口 -->
-    <view class="card community-post-entry" @click="goCommunityPosts">
+    <view v-if="featureGates.community" class="card community-post-entry" @click="goCommunityPosts">
       <view class="row">
         <view>
           <text class="entry-title">我的活动心得</text>
@@ -81,7 +81,7 @@
         <text class="entry-arrow">去查看 ›</text>
       </view>
     </view>
-    <view class="card forum-post-entry" @click="goForumPosts">
+    <view v-if="featureGates.forum" class="card forum-post-entry" @click="goForumPosts">
       <view class="row">
         <view>
           <text class="entry-title">我的论坛</text>
@@ -171,6 +171,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { clearUser, fetchMyProfile, getUserToken, request, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
+import { featureGatesState, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import TabBar from "../../components/TabBar.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
@@ -194,6 +195,7 @@ const wechatProfilePanelMessage = ref("请选择头像和昵称后继续。");
 const syncingWechatProfile = ref(false);
 const requestingWechatProfile = ref(false);
 const phoneBindVisible = ref(false);
+const featureGates = featureGatesState;
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
@@ -252,15 +254,16 @@ async function loadProfile() {
       resetUserState();
       return;
     }
+    const gates = featureGatesState.value;
     const [profileData, walletData, charityData, adminData, courseRows, registrationRows, courseOrderRows, mallOrderRows] = await Promise.all([
       fetchMyProfile(),
       request<any>("/public/me/wallet").catch(() => null),
-      request<any>("/public/me/charity").catch(() => null),
+      gates.charity ? request<any>("/public/me/charity").catch(() => null) : Promise.resolve(null),
       request<any>("/public/me/admin-access").catch(() => ({ canAccess: false })),
-      request<any[]>("/public/me/courses").catch(() => []),
+      gates.courses ? request<any[]>("/public/me/courses").catch(() => []) : Promise.resolve([]),
       request<any[]>("/public/me/registrations").catch(() => []),
-      request<any[]>("/public/me/course-orders").catch(() => []),
-      request<any[]>("/public/me/mall/orders").catch(() => [])
+      gates.courses ? request<any[]>("/public/me/course-orders").catch(() => []) : Promise.resolve([]),
+      gates.mall ? request<any[]>("/public/me/mall/orders").catch(() => []) : Promise.resolve([])
     ]);
     profile.value = profileData;
     wallet.value = walletData;
@@ -286,9 +289,10 @@ async function loadProfile() {
   }
 }
 
-onShow(() => {
+onShow(async () => {
   loadPageTheme();
-  loadDecoration();
+  await loadFeatureGates(true);
+  await loadDecoration();
   loadProfile();
 });
 
@@ -302,24 +306,47 @@ const defaultGridItems = [
   { icon:"💬", label:"联系客服", page:"service" },
   { icon:"⚙", label:"设置", page:"settings" }
 ];
+
+const gridPageUrls: Record<string, string> = {
+  courses: "/pages/user/courses",
+  learning: "/pages/user/learning",
+  favorites: "/pages/user/favorites",
+  mallFavorites: "/pages/mall/favorites",
+  mallHistory: "/pages/mall/history",
+  certificates: "/pages/user/certificates",
+  mallCart: "/pages/mall/cart",
+  mallOrders: "/pages/user/mall-orders",
+  mallAddresses: "/pages/mall/addresses",
+  service: "/pages/service/index",
+  ambassador: "/pages/ambassador/index",
+  settings: "/pages/user/settings"
+};
+
+function gridItemTarget(item: any) {
+  return String(item?.link || gridPageUrls[item?.page] || "");
+}
+
 const gridItems = computed(() => {
   const tools = myPageSection.value?.config?.tools;
-  if (!Array.isArray(tools) || !tools.length) return defaultGridItems;
-  return tools.slice(0, 8).map((item: any) => ({
+  const rows = !Array.isArray(tools) || !tools.length ? defaultGridItems : tools.map((item: any) => ({
     icon: String(item.icon || item.label || "入").slice(0, 2),
     label: String(item.label || "入口"),
     page: item.page || "",
     link: item.link || "",
     action: item.action || ""
   }));
+  return rows.filter((item) => isLinkAllowedByFeature(gridItemTarget(item))).slice(0, 8);
 });
 
-const orderTabs = computed(() => [
-  { icon:"💳", label:"待付款", count: pendingRegistrationCount.value, status:"pending" },
-  { icon:"📚", label:"待观看", count: learningCourseCount.value, status:"learning" },
-  { icon:"✅", label:"已完成", count: completedCourseCount.value, status:"completed" },
-  { icon:"📋", label:"全部", count: registrations.value.length + courses.value.length + mallOrders.value.length, status:"all" }
-]);
+const orderTabs = computed(() => {
+  const rows = [{ icon:"💳", label:"待付款", count: pendingRegistrationCount.value, status:"pending" }];
+  if (featureGatesState.value.courses) {
+    rows.push({ icon:"📚", label:"待观看", count: learningCourseCount.value, status:"learning" });
+    rows.push({ icon:"✅", label:"已完成", count: completedCourseCount.value, status:"completed" });
+  }
+  rows.push({ icon:"📋", label:"全部", count: registrations.value.length + courses.value.length + mallOrders.value.length, status:"all" });
+  return rows;
+});
 
 const protectedGridPages = new Set(["courses", "learning", "favorites", "mallFavorites", "mallHistory", "certificates", "mallCart", "mallOrders", "mallAddresses", "settings"]);
 const protectedPageUrls = new Set([
@@ -351,6 +378,10 @@ function requireLogin(redirect = "/pages/user/my") {
 }
 
 function navigateProtected(url: string) {
+  if (!isLinkAllowedByFeature(url)) {
+    showFeatureDisabledToast(url);
+    return;
+  }
   if (requireLogin(url)) return;
   uni.navigateTo({ url: withTenantCode(url) });
 }
@@ -366,21 +397,7 @@ function goGrid(item: any) {
     return;
   }
   if (!item.page) return;
-  const pages: Record<string, string> = {
-    courses: "/pages/user/courses",
-    learning: "/pages/user/learning",
-    favorites: "/pages/user/favorites",
-    mallFavorites: "/pages/mall/favorites",
-    mallHistory: "/pages/mall/history",
-    certificates: "/pages/user/certificates",
-    mallCart: "/pages/mall/cart",
-    mallOrders: "/pages/user/mall-orders",
-    mallAddresses: "/pages/mall/addresses",
-    service: "/pages/service/index",
-    ambassador: "/pages/ambassador/index",
-    settings: "/pages/user/settings"
-  };
-  const target = pages[item.page];
+  const target = gridPageUrls[item.page];
   if (!target) return;
   if (protectedGridPages.has(item.page) || needsLoginForUrl(target)) navigateProtected(target);
   else uni.navigateTo({ url: withTenantCode(target) });
@@ -388,8 +405,8 @@ function goGrid(item: any) {
 function goEdit() {
   navigateProtected("/pages/user/profile");
 }
-function goCharity() { uni.navigateTo({ url:"/pages/charity/index" }); }
-function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
+function goCharity() { goDecoratedLink("/pages/charity/index"); }
+function goAmbassador() { goDecoratedLink("/pages/ambassador/index"); }
 function goWallet() { navigateProtected("/pages/user/wallet"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
 function goForumPosts() { navigateProtected("/pages/user/forum-posts"); }

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, ref, watch } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getCurrentTenantCode, request, withTenantCode } from "../api";
 import { goDecoratedLink } from "../decoration";
+import { featureGatesState } from "../feature-gates";
 
 type AdCampaignView = {
   id: number;
@@ -110,6 +111,11 @@ function startSplashTimer() {
 
 async function loadAd() {
   if (loading.value) return;
+  if (featureGatesState.value.adCenter === false) {
+    visible.value = false;
+    ad.value = null;
+    return;
+  }
   loading.value = true;
   try {
     const pageKey = currentPageKey();

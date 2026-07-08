@@ -3,6 +3,7 @@ import { computed } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import type { HomepageSectionView } from "@activity/shared";
 import { defaultBottomNavSection, goDecoratedLink, usePageDecoration } from "../decoration";
+import { filterNavigationItemsByFeature } from "../feature-gates";
 
 const props = defineProps<{
   section?: HomepageSectionView | null;
@@ -36,8 +37,8 @@ const items = computed(() => {
         .filter((item: any) => item.enabled && item.label && item.link)
         .slice(0, 5)
     : [];
-  if (configured.length) return configured;
-  return defaultItems.map((item: any) => ({
+  if (configured.length) return filterNavigationItemsByFeature(configured);
+  return filterNavigationItemsByFeature(defaultItems.map((item: any) => ({
     label: String(item?.label || "").trim(),
     link: String(item?.link || "").trim(),
     action: String(item?.action || "mainPage").trim(),
@@ -46,7 +47,7 @@ const items = computed(() => {
     activeIcon: String(item?.activeIcon || "").trim(),
     iconUrl: String(item?.iconUrl || "").trim(),
     enabled: item?.enabled !== false
-  })).filter((item: any) => item.enabled && item.label && item.link);
+  })).filter((item: any) => item.enabled && item.label && item.link));
 });
 
 function isCurrent(url?: string) {

@@ -55,6 +55,7 @@ import { VolunteerTask } from "../../entities/volunteer-task.entity";
 import { Waitlist, WaitlistStatus } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { ActivityStatus, OrderStatus, PaymentMethod, RegistrationAnswer, RegistrationStatus } from "../../shared/domain";
+import { defaultFeatureGates, normalizeFeatureGates, normalizeLaunchConfig } from "../../shared/launch-config";
 import { assertTenantOwnedResourceAccess, normalizeTenantCode, normalizeTenantHost } from "../../shared/tenant-scope";
 import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults";
 import { NotificationProviderService } from "../v1/notification-provider.service";
@@ -641,7 +642,8 @@ export class PublicService {
 
   async operationSetting(context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
-    return this.publicOperationSetting(await this.ensureOperationSetting(tenant));
+    const setting = await this.ensureOperationSetting(tenant);
+    return this.publicOperationSetting(setting, await this.platformOperationSetting(setting));
   }
 
   async marketingPopup(context?: PublicTenantContext, pageKey = "home", platform = "h5") {
@@ -2158,6 +2160,8 @@ export class PublicService {
       customerServiceWechat: "activity_service",
       defaultGroupQrCodeUrl: null,
       pageTheme: {},
+      launchConfig: {},
+      defaultTenantCode: null,
       refundInstructions: "如需取消报名或申请退款，请先联系主办方客服。已签到或活动开始后的退款规则以活动报名须知为准。",
       invoiceInstructions: "如需发票，请在付款后联系客服登记抬头、税号和接收邮箱。",
       smsProviderEnabled: false,
@@ -2444,10 +2448,28 @@ export class PublicService {
     return Boolean(activity.groupQrCodeUrl?.trim() || setting?.defaultGroupQrCodeUrl?.trim());
   }
 
-  private publicOperationSetting(setting: OperationSetting) {
-    const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, smsSdkAppId: _smsSdkAppId, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
+  private publicOperationSetting(setting: OperationSetting, platformSetting?: OperationSetting | null) {
+    const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, smsSdkAppId: _smsSdkAppId, launchConfig: _launchConfig, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
     publicSetting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
+    (publicSetting as Record<string, unknown>).launchConfig = this.publicLaunchConfig(setting.launchConfig, platformSetting?.launchConfig);
     return publicSetting;
+  }
+
+  private async platformOperationSetting(setting?: OperationSetting | null) {
+    if (setting?.id === 1) return setting;
+    return this.operationSettings.findOneBy({ id: 1 });
+  }
+
+  private publicLaunchConfig(tenantLaunchConfig: unknown, platformLaunchConfig?: unknown) {
+    const platformConfig = normalizeLaunchConfig(platformLaunchConfig);
+    const tenantConfig = normalizeLaunchConfig(tenantLaunchConfig);
+    const featureGates = normalizeFeatureGates(tenantConfig.featureGates, normalizeFeatureGates(platformConfig.featureGates, defaultFeatureGates));
+    return {
+      deliveryMode: tenantConfig.deliveryMode ?? platformConfig.deliveryMode ?? "production",
+      reviewSafeMode: Boolean(tenantConfig.reviewSafeMode ?? platformConfig.reviewSafeMode ?? false),
+      reviewSafeRemark: String(tenantConfig.reviewSafeRemark ?? platformConfig.reviewSafeRemark ?? ""),
+      featureGates
+    };
   }
 
   private marketingPopupMatches(value: unknown, target?: string) {
