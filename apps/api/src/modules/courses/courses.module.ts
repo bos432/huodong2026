@@ -26,12 +26,13 @@ import { Order } from "../../entities/order.entity";
 import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { User } from "../../entities/user.entity";
+import { PublicModule } from "../public/public.module";
 import { CoursesController } from "./courses.controller";
 import { PublicCoursesController } from "./public-courses.controller";
 import { CoursesService } from "./courses.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, ForumCategory, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant])],
+  imports: [TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, ForumCategory, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant]), PublicModule],
   controllers: [CoursesController, PublicCoursesController],
   providers: [CoursesService],
   exports: [CoursesService]

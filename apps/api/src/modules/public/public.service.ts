@@ -55,7 +55,7 @@ import { VolunteerTask } from "../../entities/volunteer-task.entity";
 import { Waitlist, WaitlistStatus } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { ActivityStatus, OrderStatus, PaymentMethod, RegistrationAnswer, RegistrationStatus } from "../../shared/domain";
-import { defaultFeatureGates, normalizeFeatureGates, normalizeLaunchConfig } from "../../shared/launch-config";
+import { defaultFeatureGates, type FeatureGateKey, normalizeFeatureGates, normalizeLaunchConfig } from "../../shared/launch-config";
 import { assertTenantOwnedResourceAccess, normalizeTenantCode, normalizeTenantHost } from "../../shared/tenant-scope";
 import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults";
 import { NotificationProviderService } from "../v1/notification-provider.service";
@@ -644,6 +644,17 @@ export class PublicService {
     const tenant = await this.resolveTenantContext(context);
     const setting = await this.ensureOperationSetting(tenant);
     return this.publicOperationSetting(setting, await this.platformOperationSetting(setting));
+  }
+
+  async isFeatureGateEnabled(context: PublicTenantContext | undefined, key: FeatureGateKey) {
+    const tenant = await this.resolveTenantContext(context);
+    const setting = await this.ensureOperationSetting(tenant);
+    const launchConfig = this.publicLaunchConfig(setting.launchConfig, (await this.platformOperationSetting(setting))?.launchConfig);
+    return launchConfig.featureGates[key] !== false;
+  }
+
+  async assertFeatureGateEnabled(context: PublicTenantContext | undefined, key: FeatureGateKey, message = "功能暂未开放") {
+    if (!(await this.isFeatureGateEnabled(context, key))) throw new NotFoundException(message);
   }
 
   async marketingPopup(context?: PublicTenantContext, pageKey = "home", platform = "h5") {

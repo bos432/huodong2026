@@ -1,9 +1,26 @@
-import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req } from "@nestjs/common";
+import { Body, CallHandler, Controller, Delete, ExecutionContext, Get, Injectable, NestInterceptor, Param, ParseIntPipe, Patch, Post, Put, Query, Req, UseInterceptors } from "@nestjs/common";
 import { PublicService, PublicTenantContext } from "../public/public.service";
 import { CreateMallOrderDto, MallAddressDto, MallCartItemDto, MallCartQuantityDto, MallListQueryDto, MallOrderQuoteDto, MallProviderPayDto, MallRefundRequestDto, MallReviewDto } from "./mall.dto";
 import { MallService } from "./mall.service";
 
+@Injectable()
+export class MallFeatureGateInterceptor implements NestInterceptor {
+  constructor(private readonly publicService: PublicService) {}
+
+  async intercept(context: ExecutionContext, next: CallHandler) {
+    const req = context.switchToHttp().getRequest();
+    const headerCode = req.headers?.["x-tenant-code"];
+    const host = req.headers?.["x-forwarded-host"] || req.headers?.host || null;
+    await this.publicService.assertFeatureGateEnabled({
+      tenantCode: req.query?.tenantCode || (typeof headerCode === "string" ? headerCode : Array.isArray(headerCode) ? headerCode[0] : null),
+      host: typeof host === "string" ? host : null
+    }, "mall", "商城暂未开放");
+    return next.handle();
+  }
+}
+
 @Controller("public")
+@UseInterceptors(MallFeatureGateInterceptor)
 export class MallPublicController {
   constructor(private readonly service: MallService, private readonly publicService: PublicService) {}
 

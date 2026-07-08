@@ -29,6 +29,7 @@ import { UserLearning } from "../../entities/user-learning.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { OrderStatus, RegistrationStatus } from "../../shared/domain";
 import { normalizeTenantCode, normalizeTenantHost } from "../../shared/tenant-scope";
+import { PublicService } from "../public/public.service";
 
 const COMMUNITY_IMAGE_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -72,7 +73,8 @@ export class PublicCoursesController {
     @InjectRepository(ForumNotification) private forumNotifications: Repository<ForumNotification>,
     @InjectRepository(Registration) private registrations: Repository<Registration>,
     @InjectRepository(UserLearning) private userLearning: Repository<UserLearning>,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly publicService: PublicService
   ) {}
 
   @Get("courses")
@@ -339,6 +341,7 @@ export class PublicCoursesController {
 
   @Get("forum/categories")
   async listForumCategories(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumEnabled(req, tenantCode);
     const tenant = await this.resolveTenant(req, tenantCode);
     const builder = this.forumCategories
       .createQueryBuilder("category")
@@ -354,6 +357,7 @@ export class PublicCoursesController {
 
   @Get("forum/topics")
   async listForumTopics(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("categoryId") categoryId?: string, @Query("keyword") keyword?: string) {
+    await this.assertForumEnabled(req, tenantCode);
     const userId = this.optionalUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const builder = this.forumTopics
@@ -378,6 +382,7 @@ export class PublicCoursesController {
 
   @Get("forum/topics/:id")
   async getForumTopic(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumEnabled(req, tenantCode);
     const userId = this.optionalUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const topic = await this.findPublicForumTopic(id, tenant);
@@ -395,6 +400,7 @@ export class PublicCoursesController {
 
   @Post("forum/topics")
   async createForumTopic(@Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumPostEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const category = await this.resolvePublicForumCategory(dto.categoryId, tenant);
@@ -422,6 +428,7 @@ export class PublicCoursesController {
 
   @Post("forum/topics/:id/replies")
   async createForumReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumPostEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const topic = await this.findPublicForumTopic(id, tenant);
@@ -431,6 +438,7 @@ export class PublicCoursesController {
 
   @Post("forum/replies/:id/replies")
   async createForumChildReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumPostEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const parent = await this.forumReplies.findOne({ where: { id, status: "approved" }, relations: ["topic", "parent"], loadEagerRelations: false });
@@ -441,6 +449,7 @@ export class PublicCoursesController {
 
   @Post("forum/topics/:id/favorite")
   async toggleForumFavorite(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumPostEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const topic = await this.findPublicForumTopic(id, tenant);
@@ -465,6 +474,7 @@ export class PublicCoursesController {
 
   @Post("forum/topics/:id/report")
   async reportForumTopic(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumPostEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const topic = await this.findPublicForumTopic(id, tenant);
@@ -477,6 +487,7 @@ export class PublicCoursesController {
 
   @Post("forum/replies/:id/report")
   async reportForumReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumPostEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const reply = await this.forumReplies.findOne({ where: { id, status: "approved" }, relations: ["topic"], loadEagerRelations: false });
@@ -491,6 +502,7 @@ export class PublicCoursesController {
 
   @Get("me/forum/topics")
   async listMyForumTopics(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const builder = this.forumTopics.createQueryBuilder("topic").leftJoinAndSelect("topic.category", "category").leftJoinAndSelect("topic.tenant", "tenant").where("topic.userId = :userId", { userId }).orderBy("topic.createdAt", "DESC").take(50);
@@ -500,6 +512,7 @@ export class PublicCoursesController {
 
   @Get("me/forum/replies")
   async listMyForumReplies(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const builder = this.forumReplies.createQueryBuilder("reply").leftJoinAndSelect("reply.topic", "topic").leftJoinAndSelect("reply.tenant", "tenant").where("reply.userId = :userId", { userId }).orderBy("reply.createdAt", "DESC").take(50);
@@ -509,6 +522,7 @@ export class PublicCoursesController {
 
   @Get("me/forum/favorites")
   async listMyForumFavorites(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertForumEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const rows = await this.forumFavorites.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 50 });
@@ -912,6 +926,24 @@ export class PublicCoursesController {
       .andWhere("post.visible = :visible", { visible: true })
       .andWhere("post.status = :status", { status: APPROVED_COMMUNITY_POST_STATUS });
     return this.applyTenantOrGlobalScope(builder, tenant).getOne();
+  }
+
+  private featureGateContext(req: any, tenantCode?: string) {
+    const headerCode = req.headers?.["x-tenant-code"];
+    const host = req.headers?.["x-forwarded-host"] || req.headers?.host || null;
+    return {
+      tenantCode: tenantCode || (typeof headerCode === "string" ? headerCode : Array.isArray(headerCode) ? headerCode[0] : null),
+      host: typeof host === "string" ? host : null
+    };
+  }
+
+  private assertForumEnabled(req: any, tenantCode?: string) {
+    return this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "forum", "论坛暂未开放");
+  }
+
+  private async assertForumPostEnabled(req: any, tenantCode?: string) {
+    await this.assertForumEnabled(req, tenantCode);
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "forumPost", "论坛发帖暂未开放");
   }
 
   private async resolveTenant(req: any, tenantCode?: string): Promise<Tenant | null> {

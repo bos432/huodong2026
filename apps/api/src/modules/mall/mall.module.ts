@@ -44,7 +44,7 @@ import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { RolesGuard } from "../admin/roles.guard";
 import { PublicModule } from "../public/public.module";
 import { MallAdminController } from "./mall-admin.controller";
-import { MallPaymentController, MallPublicController } from "./mall-public.controller";
+import { MallFeatureGateInterceptor, MallPaymentController, MallPublicController } from "./mall-public.controller";
 import { MallService } from "./mall.service";
 
 const mallEntities = [Tenant, User, AdminUser, Agent, AgentPaymentAccount, OperationSetting, AdminOperationLog, AdminMallMerchantAccess, UserWallet, WalletTransaction, MemberLevel, MemberProfile, MemberPointLog, MallMerchant, MallMerchantPaymentAccount, MallCheckoutGroup, MallCategory, MallCoupon, MallCouponClaim, MallCouponUsage, MallCommission, MallPromotionCode, MallFavorite, MallBrowseHistory, MallFlashSale, MallGroupBuy, MallGroupBuyRecord, MallLogisticsCompany, MallProduct, MallSku, MallInventoryLog, MallAddress, MallCartItem, MallOrder, MallOrderItem, MallPaymentCallbackLog, MallPaymentTransaction, MallRefund, MallRefundLog, MallReview, MallSettlement];
@@ -52,7 +52,7 @@ const mallEntities = [Tenant, User, AdminUser, Agent, AgentPaymentAccount, Opera
 @Module({
   imports: [TypeOrmModule.forFeature(mallEntities), PublicModule],
   controllers: [MallAdminController, MallPublicController, MallPaymentController],
-  providers: [MallService, RolesGuard],
+  providers: [MallService, RolesGuard, MallFeatureGateInterceptor],
   exports: [MallService]
 })
 export class MallModule {}
