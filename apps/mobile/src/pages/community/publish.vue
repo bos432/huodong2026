@@ -179,27 +179,42 @@ function chooseUploadImageFiles(count: number): Promise<string[]> {
 }
 
 async function chooseWechatImageFiles(count: number) {
+  const source = await chooseWechatImageSource();
+  if (source === "file") return chooseImageByMessageFile(count);
+  if (source === "camera") return chooseImageByMedia(count, ["camera"]).catch((error) => {
+    if (String(error?.errMsg || "").includes("cancel")) throw error;
+    return chooseImageByUni(count, ["camera"]);
+  });
   try {
-    return await chooseImageByMedia(count);
+    return await chooseImageByMedia(count, ["album"]);
   } catch (error: any) {
     if (String(error?.errMsg || "").includes("cancel")) throw error;
   }
-  try {
-    return await chooseImageByUni(count, ["album"]);
-  } catch (error: any) {
-    if (String(error?.errMsg || "").includes("cancel")) throw error;
-  }
-  return chooseImageByMessageFile(count);
+  return chooseImageByUni(count, ["album"]);
 }
 
-function chooseImageByMedia(count: number): Promise<string[]> {
+function chooseWechatImageSource(): Promise<"file" | "album" | "camera"> {
+  return new Promise((resolve, reject) => {
+    uni.showActionSheet({
+      itemList: ["从文件选择（开发工具推荐）", "从相册选择", "拍照"],
+      success: (res) => {
+        if (res.tapIndex === 1) resolve("album");
+        else if (res.tapIndex === 2) resolve("camera");
+        else resolve("file");
+      },
+      fail: reject
+    });
+  });
+}
+
+function chooseImageByMedia(count: number, sourceType: string[]): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const chooseMedia = (uni as any).chooseMedia;
     if (typeof chooseMedia !== "function") return reject(new Error("chooseMedia unavailable"));
     chooseMedia({
       count,
       mediaType: ["image"],
-      sourceType: ["album"],
+      sourceType,
       success: (res: any) => resolve((res.tempFiles || []).map((item: any) => item.tempFilePath).filter(Boolean)),
       fail: reject
     });
@@ -220,12 +235,12 @@ function chooseImageByUni(count: number, sourceType: string[]): Promise<string[]
 
 function chooseImageByMessageFile(count: number): Promise<string[]> {
   return new Promise((resolve, reject) => {
-    const chooseMessageFile = (uni as any).chooseMessageFile;
+    const chooseMessageFile = (uni as any).chooseMessageFile || (globalThis as any).wx?.chooseMessageFile;
     if (typeof chooseMessageFile !== "function") return reject(new Error("当前环境无法打开图片选择器，请在真机预览中重试"));
     chooseMessageFile({
       count,
       type: "image",
-      success: (res: any) => resolve((res.tempFiles || []).map((item: any) => item.path).filter(Boolean)),
+      success: (res: any) => resolve((res.tempFiles || []).map((item: any) => item.path || item.tempFilePath).filter(Boolean)),
       fail: reject
     });
   });
