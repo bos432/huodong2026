@@ -54,6 +54,7 @@ function normalizeTenantCode(value?: unknown) {
 }
 
 const DEFAULT_TENANT_CODE = normalizeTenantCode(import.meta.env.VITE_DEFAULT_TENANT_CODE);
+const IMAGE_UPLOAD_TIMEOUT_MS = 90000;
 
 function queryTenantCode(search?: string) {
   return normalizeTenantCode(queryParam(search, "tenantCode"));
@@ -446,6 +447,10 @@ export function uploadCommunityPostImage(filePath: string): Promise<{ url: strin
 }
 
 function uploadPublicImage(path: string, filePath: string): Promise<{ url: string; path: string }> {
+  return uploadPublicImageAttempt(path, filePath, 0);
+}
+
+function uploadPublicImageAttempt(path: string, filePath: string, attempt: number): Promise<{ url: string; path: string }> {
   const token = getUserToken();
   const tenantCode = getCurrentTenantCode();
   return new Promise((resolve, reject) => {
@@ -453,6 +458,7 @@ function uploadPublicImage(path: string, filePath: string): Promise<{ url: strin
       url: `${API_BASE}${appendTenantCode(path, tenantCode)}`,
       filePath,
       name: "file",
+      timeout: IMAGE_UPLOAD_TIMEOUT_MS,
       header: { ...(tenantCode ? { "x-tenant-code": tenantCode } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
       success(res) {
         let body: any = res.data;
@@ -467,7 +473,16 @@ function uploadPublicImage(path: string, filePath: string): Promise<{ url: strin
         else reject(new ApiClientError(body?.message || "上传失败", body?.requestId || headerValue(res.header, "x-request-id")));
       },
       fail(error) {
-        reject(clientError(error, "上传失败", { method: "UPLOAD", url: appendTenantCode(path, tenantCode) }));
+        const message = String((error as any)?.errMsg || (error as any)?.message || "");
+        const canRetry = attempt < 1 && /timeout|fail|abort|socket|network/i.test(message);
+        if (canRetry) {
+          setTimeout(() => {
+            uploadPublicImageAttempt(path, filePath, attempt + 1).then(resolve).catch(reject);
+          }, 500);
+          return;
+        }
+        const fallback = /timeout/i.test(message) ? "图片上传超时，请换一张较小图片或检查网络后重试" : "图片上传失败";
+        reject(clientError(error, fallback, { method: "UPLOAD", url: appendTenantCode(path, tenantCode), timeoutMs: IMAGE_UPLOAD_TIMEOUT_MS, attempt: attempt + 1 }));
       }
     });
   });

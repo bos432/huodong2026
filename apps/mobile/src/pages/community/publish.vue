@@ -90,6 +90,7 @@ const city = ref("");
 const tagsText = ref("");
 const myPosts = ref<any[]>([]);
 const routeActivityId = ref(0);
+const MAX_UPLOAD_IMAGE_BYTES = 5 * 1024 * 1024;
 
 const selectedActivity = computed(() => activities.value.find((item) => item.id === selectedActivityId.value));
 const activityOptions = computed(() => activities.value.map((item) => ({
@@ -161,7 +162,8 @@ function chooseImages() {
       uploading.value = true;
       try {
         for (const filePath of files) {
-          const uploaded = await uploadCommunityPostImage(filePath);
+          const uploadPath = await prepareUploadImage(filePath);
+          const uploaded = await uploadCommunityPostImage(uploadPath);
           if (uploaded.url) images.value.push(uploaded.url);
         }
       } catch (error: any) {
@@ -175,6 +177,41 @@ function chooseImages() {
       if (!message.includes("cancel")) uni.showToast({ title: "照片选择失败，请重试", icon: "none" });
     }
   });
+}
+
+function imageFileInfo(filePath: string): Promise<UniApp.GetFileInfoSuccessData | null> {
+  return new Promise((resolve) => {
+    uni.getFileInfo({
+      filePath,
+      success: resolve,
+      fail: () => resolve(null)
+    });
+  });
+}
+
+function compressUploadImage(filePath: string): Promise<string> {
+  return new Promise((resolve) => {
+    // #ifdef MP-WEIXIN
+    uni.compressImage({
+      src: filePath,
+      quality: 60,
+      success: (res) => resolve(res.tempFilePath || filePath),
+      fail: () => resolve(filePath)
+    });
+    // #endif
+    // #ifndef MP-WEIXIN
+    resolve(filePath);
+    // #endif
+  });
+}
+
+async function prepareUploadImage(filePath: string) {
+  const compressedPath = await compressUploadImage(filePath);
+  const info = await imageFileInfo(compressedPath);
+  if (info?.size && info.size > MAX_UPLOAD_IMAGE_BYTES) {
+    throw new Error("单张图片不能超过 5MB，请压缩后再上传");
+  }
+  return compressedPath;
 }
 
 function removeImage(index: number) {

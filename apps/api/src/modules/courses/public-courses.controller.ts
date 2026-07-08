@@ -51,6 +51,13 @@ function communityImageExtension(file: Express.Multer.File) {
   return ext === ".jpeg" ? ".jpg" : ext;
 }
 
+function isCommunityImageFile(file: Express.Multer.File) {
+  if (communityImageExtension(file)) return true;
+  const name = String(file?.originalname || "").toLowerCase();
+  const field = String(file?.fieldname || "").toLowerCase();
+  return Boolean(name.match(/\.(jpe?g|png|webp|heic|heif)$/) || (field === "file" && String(file?.mimetype || "").toLowerCase().startsWith("image/")));
+}
+
 @Controller("public")
 export class PublicCoursesController {
   constructor(
@@ -219,7 +226,7 @@ export class PublicCoursesController {
     }),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
-      callback(null, Boolean(communityImageExtension(file)));
+      callback(null, isCommunityImageFile(file));
     }
   }))
   async uploadCommunityPostImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
