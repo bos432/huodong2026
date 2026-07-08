@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { getCurrentTenantCode, request, setCurrentTenantCode, setCurrentTenantCodeSource } from "../api";
+import { getCurrentTenantCode, request, setCurrentTenantCode, setCurrentTenantCodeSource, type TenantBootstrap } from "../api";
 import type { HomepagePayload, PublicTenantView } from "@activity/shared";
 
 defineOptions({ name: "TenantSwitcher" });
@@ -15,6 +15,7 @@ const emit = defineEmits<{
 }>();
 
 const tenantOptions = ref<PublicTenantView[]>([]);
+const defaultTenantCode = ref("");
 const open = ref(false);
 const loading = ref(false);
 
@@ -29,9 +30,12 @@ function tenantOptionLabel(item: PublicTenantView) {
 async function loadTenantOptions() {
   loading.value = true;
   try {
-    tenantOptions.value = await request<PublicTenantView[]>("/public/tenants");
+    const bootstrap = await request<TenantBootstrap>("/public/tenants/bootstrap");
+    tenantOptions.value = (bootstrap?.tenants || []) as PublicTenantView[];
+    defaultTenantCode.value = bootstrap?.defaultTenant?.code || "";
   } catch {
     tenantOptions.value = [];
+    defaultTenantCode.value = "";
   } finally {
     loading.value = false;
   }
@@ -90,7 +94,7 @@ defineExpose({ show, loadTenantOptions });
         >
           <view>
             <view class="tenant-option-name">{{ tenantOptionLabel(item) }}</view>
-            <view class="tenant-option-code">{{ item.code }}</view>
+            <view class="tenant-option-code">{{ item.code }}<text v-if="item.code === defaultTenantCode"> · 平台默认</text></view>
           </view>
           <view class="tenant-option-status">{{ item.code === currentTenantCode ? "当前" : "切换" }}</view>
         </view>

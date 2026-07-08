@@ -56,6 +56,11 @@ export class PublicController {
     return this.service.publicTenants();
   }
 
+  @Get("tenants/bootstrap")
+  tenantBootstrap() {
+    return this.service.publicTenantBootstrap();
+  }
+
   @Get("tenants/resolve")
   resolveTenant(@Req() req: any, @Query("lat") lat?: string, @Query("lng") lng?: string, @Query("source") source?: string) {
     return this.service.resolveTenantByLocation(lat, lng, {
@@ -271,6 +276,11 @@ export class PublicController {
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
     res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(result.filename)}"`);
     res.end(result.svg);
+  }
+
+  @Get("certificates/:certificateNo/verify")
+  verifyCertificate(@Param("certificateNo") certificateNo: string) {
+    return this.service.verifyCertificate(certificateNo);
   }
 
   @Get("me/favorite-courses")

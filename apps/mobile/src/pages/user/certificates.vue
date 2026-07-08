@@ -14,7 +14,12 @@
       <image v-if="c.imageUrl" class="cert-image" :src="c.imageUrl" mode="aspectFill" />
       <view v-else class="cert-badge">证</view>
       <text class="cert-name">{{ c.name }}</text>
-      <text class="cert-time">{{ formatTime(c.issuedAt) }}</text>
+      <view class="cert-meta-grid">
+        <view><text>编号</text><strong>{{ c.certificateNo || "-" }}</strong></view>
+        <view><text>时长</text><strong>{{ Number(c.serviceHours || 0).toFixed(1) }}h</strong></view>
+        <view><text>状态</text><strong>{{ c.status === "revoked" ? "已撤销" : "有效" }}</strong></view>
+      </view>
+      <text class="cert-time">发证时间：{{ formatTime(c.issuedAt) }}</text>
       <button class="download-btn" @click="downloadCertificate(c)">下载证书</button>
     </view>
     <view v-if="!loading && !certificates.length" class="empty-card">
@@ -194,6 +199,32 @@ onMounted(loadCertificates);
   color: #8f8172;
   font-size: 24rpx;
   line-height: 1.6;
+}
+.cert-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10rpx;
+  margin-top: 18rpx;
+}
+.cert-meta-grid view {
+  min-width: 0;
+  padding: 14rpx 10rpx;
+  border-radius: 14rpx;
+  background: #f8efe2;
+}
+.cert-meta-grid text,
+.cert-meta-grid strong {
+  display: block;
+}
+.cert-meta-grid text {
+  color: #8f8172;
+  font-size: 21rpx;
+}
+.cert-meta-grid strong {
+  margin-top: 5rpx;
+  color: #5b2f24;
+  font-size: 22rpx;
+  overflow-wrap: anywhere;
 }
 
 .download-btn {

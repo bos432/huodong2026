@@ -46,6 +46,9 @@ export class OperationSetting {
   @Column({ type: "json", nullable: true })
   launchConfig!: Record<string, unknown> | null;
 
+  @Column({ type: "varchar", length: 64, nullable: true })
+  defaultTenantCode!: string | null;
+
   @Column({ type: "text" })
   refundInstructions!: string;
 

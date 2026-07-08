@@ -13,6 +13,15 @@
       :closable="false"
       class="page-alert"
     />
+    <div class="overview-grid">
+      <div v-for="item in communityMetricCards" :key="item.label" class="overview-card">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </div>
+    </div>
+    <div v-if="communityAlerts.length || forumAlerts.length" class="alert-stack">
+      <el-alert v-for="item in [...communityAlerts, ...forumAlerts]" :key="item.message" :type="item.level || 'warning'" :title="item.message" show-icon :closable="false" />
+    </div>
     <el-tabs v-model="activeTab">
       <el-tab-pane label="共修活动" name="activities">
         <el-button type="primary" size="small" style="margin-bottom:16px;" @click="showForm = true">新增活动</el-button>
@@ -77,11 +86,12 @@
           <el-table-column prop="likes" label="点赞" width="60" />
           <el-table-column prop="shareCount" label="分享" width="60" />
           <el-table-column prop="createdAt" label="时间" width="160" />
-          <el-table-column label="操作" width="250">
+          <el-table-column label="操作" width="340">
             <template #default="{row}">
               <el-button size="small" type="success" :disabled="row.status === 'approved'" @click="openPostReview(row, 'approved', true)">通过</el-button>
               <el-button size="small" type="warning" :disabled="row.status === 'rejected'" @click="openPostReview(row, 'rejected', false)">拒绝</el-button>
               <el-button size="small" @click="openPostReview(row, row.status || 'pending', !row.visible)">{{ row.visible === false ? '展示' : '下架' }}</el-button>
+              <el-button size="small" @click="convertPostToForum(row)">转帖子</el-button>
               <el-button size="small" type="danger" @click="deletePost(row)">删除</el-button>
             </template>
           </el-table-column>
@@ -106,6 +116,128 @@
             </template>
           </el-table-column>
         </el-table>
+      </el-tab-pane>
+      <el-tab-pane label="论坛管理" name="forum">
+        <div class="overview-grid forum-overview">
+          <div v-for="item in forumMetricCards" :key="item.label" class="overview-card">
+            <span>{{ item.label }}</span>
+            <strong>{{ item.value }}</strong>
+          </div>
+        </div>
+        <el-tabs v-model="forumTab" class="forum-tabs">
+          <el-tab-pane label="版块管理" name="categories">
+            <div class="tab-toolbar">
+              <el-button type="primary" size="small" @click="openForumCategory()">新增版块</el-button>
+              <span>版块可按商家隔离，默认审核制；关闭版块后前台不再展示发帖入口。</span>
+            </div>
+            <el-table :data="forumCategories" stripe style="width:100%;" empty-text="暂无论坛版块">
+              <el-table-column prop="id" label="ID" width="70" />
+              <el-table-column prop="name" label="版块" min-width="150" />
+              <el-table-column prop="description" label="简介" min-width="220" show-overflow-tooltip />
+              <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="160" show-overflow-tooltip><template #default="{row}">{{ tenantDisplayName(row) }}</template></el-table-column>
+              <el-table-column label="发帖权限" width="100"><template #default="{row}">{{ forumPostPermissionText(row.postPermission) }}</template></el-table-column>
+              <el-table-column label="审核模式" width="100"><template #default="{row}">{{ forumAuditModeText(row.auditMode) }}</template></el-table-column>
+              <el-table-column prop="sortOrder" label="排序" width="80" />
+              <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? '启用' : '停用' }}</el-tag></template></el-table-column>
+              <el-table-column label="操作" width="170">
+                <template #default="{row}">
+                  <el-button size="small" @click="openForumCategory(row)">编辑</el-button>
+                  <el-button size="small" type="danger" @click="deleteForumCategory(row)">删除</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+          <el-tab-pane label="帖子审核" name="topics">
+            <div class="tab-toolbar">
+              <el-select v-model="forumFilters.topicStatus" clearable placeholder="帖子状态" size="small" style="width: 130px" @change="load">
+                <el-option label="待审核" value="pending" />
+                <el-option label="已通过" value="approved" />
+                <el-option label="已拒绝" value="rejected" />
+                <el-option label="已隐藏" value="hidden" />
+              </el-select>
+              <el-select v-model="forumFilters.categoryId" clearable placeholder="版块" size="small" style="width: 160px" @change="load">
+                <el-option v-for="item in forumCategories" :key="item.id" :label="item.name" :value="String(item.id)" />
+              </el-select>
+              <el-input v-model="forumFilters.keyword" clearable placeholder="标题/内容" size="small" style="width: 180px" @change="load" @clear="load" @keyup.enter="load" />
+              <el-button size="small" @click="load">查询</el-button>
+            </div>
+            <el-table :data="forumTopics" stripe style="width:100%;" empty-text="暂无论坛帖子">
+              <el-table-column prop="id" label="ID" width="70" />
+              <el-table-column label="帖子" min-width="260" show-overflow-tooltip>
+                <template #default="{row}">
+                  <strong>{{ row.title }}</strong>
+                  <div class="muted-line">{{ row.category?.name || '未分版块' }} · {{ row.user?.nickname || row.user?.phone || ('用户' + (row.userId || '-')) }}</div>
+                </template>
+              </el-table-column>
+              <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="150" show-overflow-tooltip><template #default="{row}">{{ tenantDisplayName(row) }}</template></el-table-column>
+              <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="forumStatusTag(row.status)">{{ forumStatusText(row.status) }}</el-tag></template></el-table-column>
+              <el-table-column label="运营" width="120"><template #default="{row}"><el-tag v-if="row.pinned" type="danger">置顶</el-tag><el-tag v-if="row.featured" type="warning" style="margin-left:4px;">精华</el-tag></template></el-table-column>
+              <el-table-column label="数据" width="150"><template #default="{row}">浏览 {{ row.viewCount || 0 }} / 回复 {{ row.replyCount || 0 }} / 收藏 {{ row.favoriteCount || 0 }}</template></el-table-column>
+              <el-table-column prop="createdAt" label="时间" width="160" />
+              <el-table-column label="操作" width="330">
+                <template #default="{row}">
+                  <el-button size="small" type="success" :disabled="row.status === 'approved'" @click="reviewForumTopic(row, 'approved')">通过</el-button>
+                  <el-button size="small" type="warning" :disabled="row.status === 'rejected'" @click="reviewForumTopic(row, 'rejected')">拒绝</el-button>
+                  <el-button size="small" @click="toggleForumTopicPin(row)">{{ row.pinned ? '取消置顶' : '置顶' }}</el-button>
+                  <el-button size="small" @click="toggleForumTopicFeature(row)">{{ row.featured ? '取消精华' : '精华' }}</el-button>
+                  <el-button size="small" type="danger" @click="reviewForumTopic(row, 'hidden')">隐藏</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+          <el-tab-pane label="回复审核" name="replies">
+            <div class="tab-toolbar">
+              <el-select v-model="forumFilters.replyStatus" clearable placeholder="回复状态" size="small" style="width: 130px" @change="load">
+                <el-option label="待审核" value="pending" />
+                <el-option label="已通过" value="approved" />
+                <el-option label="已拒绝" value="rejected" />
+                <el-option label="已隐藏" value="hidden" />
+              </el-select>
+              <el-input v-model="forumFilters.topicId" clearable placeholder="帖子ID" size="small" style="width: 110px" @change="load" @clear="load" @keyup.enter="load" />
+              <el-button size="small" @click="load">查询</el-button>
+            </div>
+            <el-table :data="forumReplies" stripe style="width:100%;" empty-text="暂无论坛回复">
+              <el-table-column prop="id" label="ID" width="70" />
+              <el-table-column label="帖子" min-width="180" show-overflow-tooltip><template #default="{row}">{{ row.topic?.title || '-' }}</template></el-table-column>
+              <el-table-column prop="content" label="回复内容" min-width="260" show-overflow-tooltip />
+              <el-table-column label="层级" width="90"><template #default="{row}">{{ row.parent ? '楼中楼' : '主回复' }}</template></el-table-column>
+              <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="forumStatusTag(row.status)">{{ forumStatusText(row.status) }}</el-tag></template></el-table-column>
+              <el-table-column prop="createdAt" label="时间" width="160" />
+              <el-table-column label="操作" width="230">
+                <template #default="{row}">
+                  <el-button size="small" type="success" :disabled="row.status === 'approved'" @click="reviewForumReply(row, 'approved')">通过</el-button>
+                  <el-button size="small" type="warning" :disabled="row.status === 'rejected'" @click="reviewForumReply(row, 'rejected')">拒绝</el-button>
+                  <el-button size="small" type="danger" @click="reviewForumReply(row, 'hidden')">隐藏</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+          <el-tab-pane label="举报处理" name="reports">
+            <div class="tab-toolbar">
+              <el-select v-model="forumFilters.reportStatus" clearable placeholder="处理状态" size="small" style="width: 130px" @change="load">
+                <el-option label="待处理" value="pending" />
+                <el-option label="已处理" value="resolved" />
+                <el-option label="已驳回" value="rejected" />
+              </el-select>
+              <el-button size="small" @click="load">查询</el-button>
+            </div>
+            <el-table :data="forumReports" stripe style="width:100%;" empty-text="暂无举报">
+              <el-table-column prop="id" label="ID" width="70" />
+              <el-table-column label="举报对象" min-width="220" show-overflow-tooltip><template #default="{row}">{{ forumReportTarget(row) }}</template></el-table-column>
+              <el-table-column prop="type" label="类型" width="120" />
+              <el-table-column prop="description" label="说明" min-width="220" show-overflow-tooltip />
+              <el-table-column label="状态" width="90"><template #default="{row}"><el-tag :type="forumReportStatusTag(row.status)">{{ forumReportStatusText(row.status) }}</el-tag></template></el-table-column>
+              <el-table-column prop="handleRemark" label="处理备注" min-width="160" show-overflow-tooltip />
+              <el-table-column prop="createdAt" label="时间" width="160" />
+              <el-table-column label="操作" width="200">
+                <template #default="{row}">
+                  <el-button size="small" type="danger" :disabled="row.status === 'resolved'" @click="handleForumReport(row, 'resolved')">处理并隐藏</el-button>
+                  <el-button size="small" :disabled="row.status === 'rejected'" @click="handleForumReport(row, 'rejected')">驳回</el-button>
+                </template>
+              </el-table-column>
+            </el-table>
+          </el-tab-pane>
+        </el-tabs>
       </el-tab-pane>
     </el-tabs>
 
@@ -189,6 +321,37 @@
         <el-button type="primary" :loading="savingPostReview" @click="submitPostReview">保存审核结果</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="showForumCategoryDialog" :title="forumCategoryForm.id ? '编辑论坛版块' : '新增论坛版块'" width="540px">
+      <el-form :model="forumCategoryForm" label-width="92px">
+        <el-form-item v-if="isPlatformAdmin()" label="所属商家">
+          <el-select v-model="forumCategoryForm.tenantId" clearable filterable placeholder="平台版块">
+            <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="版块名称" required><el-input v-model="forumCategoryForm.name" maxlength="80" /></el-form-item>
+        <el-form-item label="简介"><el-input v-model="forumCategoryForm.description" type="textarea" :rows="3" maxlength="255" show-word-limit /></el-form-item>
+        <el-form-item label="排序"><el-input-number v-model="forumCategoryForm.sortOrder" :min="0" :max="9999" /></el-form-item>
+        <el-form-item label="发帖权限">
+          <el-radio-group v-model="forumCategoryForm.postPermission">
+            <el-radio-button label="user">用户可发</el-radio-button>
+            <el-radio-button label="admin">仅运营发</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="审核模式">
+          <el-radio-group v-model="forumCategoryForm.auditMode">
+            <el-radio-button label="pre">先审后发</el-radio-button>
+            <el-radio-button label="post">先发后审</el-radio-button>
+            <el-radio-button label="closed">关闭发帖</el-radio-button>
+          </el-radio-group>
+        </el-form-item>
+        <el-form-item label="状态"><el-switch v-model="forumCategoryForm.enabled" active-text="启用" inactive-text="停用" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="showForumCategoryDialog = false">取消</el-button>
+        <el-button type="primary" :loading="savingForumCategory" @click="saveForumCategory">保存</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -202,11 +365,18 @@ import { isPlatformAdmin } from "../permissions";
 const route = useRoute();
 const router = useRouter();
 const activeTab = ref("activities");
+const forumTab = ref("categories");
 const tenants = ref<any[]>([]);
 const activities = ref<any[]>([]);
 const checkinTasks = ref<any[]>([]);
 const posts = ref<any[]>([]);
 const comments = ref<any[]>([]);
+const communityOverview = ref<any>({ kpis: {}, todos: [], alerts: [] });
+const forumOverview = ref<any>({ kpis: {}, todos: [], alerts: [] });
+const forumCategories = ref<any[]>([]);
+const forumTopics = ref<any[]>([]);
+const forumReplies = ref<any[]>([]);
+const forumReports = ref<any[]>([]);
 const showForm = ref(false);
 const editingActivity = ref(false);
 const activityForm = ref<any>({ title:"", startTime:"", location:"", status:"draft", description:"" });
@@ -222,6 +392,33 @@ const showPostReviewDialog = ref(false);
 const savingPostReview = ref(false);
 const postReviewForm = ref<any>({ id: undefined, status: "pending", visible: true, reviewRemark: "" });
 const postFilters = reactive({ status: "", source: "", activityId: "" });
+const forumFilters = reactive({ topicStatus: "", categoryId: "", keyword: "", replyStatus: "", topicId: "", reportStatus: "pending" });
+const showForumCategoryDialog = ref(false);
+const savingForumCategory = ref(false);
+const forumCategoryForm = ref<any>({ name: "", description: "", sortOrder: 0, enabled: true, postPermission: "user", auditMode: "pre" });
+const communityAlerts = computed(() => Array.isArray(communityOverview.value?.alerts) ? communityOverview.value.alerts : []);
+const forumAlerts = computed(() => Array.isArray(forumOverview.value?.alerts) ? forumOverview.value.alerts : []);
+const communityMetricCards = computed(() => {
+  const kpis = communityOverview.value?.kpis || {};
+  return [
+    { label: "共修活动", value: kpis.activities || 0 },
+    { label: "打卡任务", value: kpis.checkinTasks || 0 },
+    { label: "待审核动态", value: kpis.pendingPosts || 0 },
+    { label: "待审核评论", value: kpis.pendingComments || 0 },
+    { label: "今日互动", value: kpis.todayInteraction || 0 }
+  ];
+});
+const forumMetricCards = computed(() => {
+  const kpis = forumOverview.value?.kpis || {};
+  return [
+    { label: "论坛版块", value: kpis.categories || 0 },
+    { label: "帖子总数", value: kpis.topics || 0 },
+    { label: "待审核帖子", value: kpis.pendingTopics || 0 },
+    { label: "待审核回复", value: kpis.pendingReplies || 0 },
+    { label: "待处理举报", value: kpis.pendingReports || 0 },
+    { label: "今日论坛互动", value: kpis.todayInteraction || 0 }
+  ];
+});
 const duplicateCheckinGroups = computed(() => {
   const groups = new Map<string, any[]>();
   for (const task of checkinTasks.value) {
@@ -260,16 +457,40 @@ async function load() {
     const params = { tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined };
     const activityId = Number(postFilters.activityId || 0) || undefined;
     const postParams = { ...params, status: postFilters.status || undefined, source: postFilters.source || undefined, activityId };
-    const [actRows, chkRows, postRows, commentRows] = await Promise.all([
+    const forumTopicParams = {
+      ...params,
+      status: forumFilters.topicStatus || undefined,
+      categoryId: Number(forumFilters.categoryId || 0) || undefined,
+      keyword: forumFilters.keyword.trim() || undefined
+    };
+    const forumReplyParams = {
+      ...params,
+      status: forumFilters.replyStatus || undefined,
+      topicId: Number(forumFilters.topicId || 0) || undefined
+    };
+    const forumReportParams = { ...params, status: forumFilters.reportStatus || undefined };
+    const [communityOverviewData, forumOverviewData, actRows, chkRows, postRows, commentRows, categoryRows, topicRows, replyRows, reportRows] = await Promise.all([
+      api.get<any, any>("/admin/community/overview", { params }),
+      api.get<any, any>("/admin/forum/overview", { params }),
       api.get<any, any[]>("/admin/community-activities", { params }),
       api.get<any, any[]>("/admin/checkin-tasks", { params }),
       api.get<any, any[]>("/admin/community-posts", { params: postParams }),
-      api.get<any, any[]>("/admin/community-post-comments", { params })
+      api.get<any, any[]>("/admin/community-post-comments", { params }),
+      api.get<any, any[]>("/admin/forum/categories", { params }),
+      api.get<any, any[]>("/admin/forum/topics", { params: forumTopicParams }),
+      api.get<any, any[]>("/admin/forum/replies", { params: forumReplyParams }),
+      api.get<any, any[]>("/admin/forum/reports", { params: forumReportParams })
     ]);
+    communityOverview.value = communityOverviewData || { kpis: {}, todos: [], alerts: [] };
+    forumOverview.value = forumOverviewData || { kpis: {}, todos: [], alerts: [] };
     activities.value = actRows;
     checkinTasks.value = chkRows;
     posts.value = postRows;
     comments.value = commentRows;
+    forumCategories.value = categoryRows;
+    forumTopics.value = topicRows;
+    forumReplies.value = replyRows;
+    forumReports.value = reportRows;
   } catch (error: any) {
     ElMessage.error(error.message || "加载共修数据失败");
   }
@@ -509,6 +730,185 @@ async function submitPostReview() {
   }
 }
 
+function forumStatusText(status: string) {
+  if (status === "approved") return "已通过";
+  if (status === "rejected") return "已拒绝";
+  if (status === "hidden") return "已隐藏";
+  return "待审核";
+}
+
+function forumStatusTag(status: string) {
+  if (status === "approved") return "success";
+  if (status === "rejected") return "danger";
+  if (status === "hidden") return "info";
+  return "warning";
+}
+
+function forumReportStatusText(status: string) {
+  if (status === "resolved") return "已处理";
+  if (status === "rejected") return "已驳回";
+  return "待处理";
+}
+
+function forumReportStatusTag(status: string) {
+  if (status === "resolved") return "success";
+  if (status === "rejected") return "info";
+  return "warning";
+}
+
+function forumAuditModeText(value: string) {
+  if (value === "post") return "先发后审";
+  if (value === "closed") return "关闭发帖";
+  return "先审后发";
+}
+
+function forumPostPermissionText(value: string) {
+  return value === "admin" ? "仅运营" : "用户可发";
+}
+
+function forumReportTarget(row: any) {
+  if (row.reply) return `回复 #${row.reply.id}：${row.reply.content || ""}`;
+  if (row.topic) return `帖子 #${row.topic.id}：${row.topic.title || ""}`;
+  return "-";
+}
+
+function openForumCategory(row?: any) {
+  forumCategoryForm.value = row
+    ? { ...row, tenantId: row.tenant?.id }
+    : { name: "", description: "", sortOrder: 0, enabled: true, postPermission: "user", auditMode: "pre", tenantId: filters.tenantId };
+  showForumCategoryDialog.value = true;
+}
+
+async function saveForumCategory() {
+  if (!forumCategoryForm.value.name?.trim()) return ElMessage.error("请输入版块名称");
+  try {
+    savingForumCategory.value = true;
+    const dto: any = {
+      name: forumCategoryForm.value.name.trim(),
+      description: forumCategoryForm.value.description?.trim() || "",
+      sortOrder: Number(forumCategoryForm.value.sortOrder || 0),
+      enabled: forumCategoryForm.value.enabled !== false,
+      postPermission: forumCategoryForm.value.postPermission || "user",
+      auditMode: forumCategoryForm.value.auditMode || "pre"
+    };
+    if (isPlatformAdmin()) dto.tenantId = forumCategoryForm.value.tenantId || null;
+    if (forumCategoryForm.value.id) await api.patch(`/admin/forum/categories/${forumCategoryForm.value.id}`, dto);
+    else await api.post("/admin/forum/categories", dto);
+    showForumCategoryDialog.value = false;
+    await load();
+    ElMessage.success("论坛版块已保存");
+  } catch (error: any) {
+    ElMessage.error(error.message || "保存论坛版块失败");
+  } finally {
+    savingForumCategory.value = false;
+  }
+}
+
+async function deleteForumCategory(row: any) {
+  try {
+    await ElMessageBox.confirm(`确认删除论坛版块「${row.name}」？已有帖子时建议停用，不建议删除。`, "删除论坛版块", { type: "warning" });
+    await api.delete(`/admin/forum/categories/${row.id}`);
+    await load();
+    ElMessage.success("论坛版块已删除");
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "删除论坛版块失败");
+  }
+}
+
+async function convertPostToForum(row: any) {
+  try {
+    await ElMessageBox.confirm("确认把这条共修动态转成论坛帖子？原动态会保留，论坛会新增一条帖子。", "转为论坛帖子", { type: "info" });
+    await api.post(`/admin/forum/topics/${row.id}/convert-from-community-post`, {});
+    activeTab.value = "forum";
+    forumTab.value = "topics";
+    await load();
+    ElMessage.success("已转为论坛帖子");
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "转为论坛帖子失败");
+  }
+}
+
+async function reviewForumTopic(row: any, status: "approved" | "rejected" | "hidden") {
+  try {
+    let reviewRemark = row.reviewRemark || "";
+    if (status !== "approved") {
+      const result = await ElMessageBox.prompt("可填写审核备注", status === "hidden" ? "隐藏帖子" : "拒绝帖子", {
+        inputValue: reviewRemark,
+        inputType: "textarea",
+        confirmButtonText: "确定",
+        cancelButtonText: "取消"
+      });
+      reviewRemark = String(result.value || "");
+    }
+    await api.patch(`/admin/forum/topics/${row.id}`, { status, reviewRemark });
+    await load();
+    ElMessage.success(status === "approved" ? "帖子已通过" : status === "hidden" ? "帖子已隐藏" : "帖子已拒绝");
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "审核帖子失败");
+  }
+}
+
+async function toggleForumTopicPin(row: any) {
+  try {
+    await api.post(`/admin/forum/topics/${row.id}/pin`, { pinned: !row.pinned });
+    await load();
+    ElMessage.success(row.pinned ? "已取消置顶" : "帖子已置顶");
+  } catch (error: any) {
+    ElMessage.error(error.message || "更新置顶失败");
+  }
+}
+
+async function toggleForumTopicFeature(row: any) {
+  try {
+    await api.post(`/admin/forum/topics/${row.id}/feature`, { featured: !row.featured });
+    await load();
+    ElMessage.success(row.featured ? "已取消精华" : "帖子已设为精华");
+  } catch (error: any) {
+    ElMessage.error(error.message || "更新精华失败");
+  }
+}
+
+async function reviewForumReply(row: any, status: "approved" | "rejected" | "hidden") {
+  try {
+    let reviewRemark = row.reviewRemark || "";
+    if (status !== "approved") {
+      const result = await ElMessageBox.prompt("可填写审核备注", status === "hidden" ? "隐藏回复" : "拒绝回复", {
+        inputValue: reviewRemark,
+        inputType: "textarea",
+        confirmButtonText: "确定",
+        cancelButtonText: "取消"
+      });
+      reviewRemark = String(result.value || "");
+    }
+    await api.patch(`/admin/forum/replies/${row.id}`, { status, reviewRemark });
+    await load();
+    ElMessage.success(status === "approved" ? "回复已通过" : status === "hidden" ? "回复已隐藏" : "回复已拒绝");
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "审核回复失败");
+  }
+}
+
+async function handleForumReport(row: any, status: "resolved" | "rejected") {
+  try {
+    const result = await ElMessageBox.prompt("填写处理备注", status === "resolved" ? "处理举报" : "驳回举报", {
+      inputValue: row.handleRemark || "",
+      inputType: "textarea",
+      confirmButtonText: "确定",
+      cancelButtonText: "取消"
+    });
+    await api.patch(`/admin/forum/reports/${row.id}`, { status, handleRemark: String(result.value || ""), hideTarget: status === "resolved" });
+    await load();
+    ElMessage.success(status === "resolved" ? "举报已处理" : "举报已驳回");
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "处理举报失败");
+  }
+}
+
 function statusText(status: string) {
   if (status === "approved") return "已通过";
   if (status === "rejected") return "已拒绝";
@@ -554,5 +954,18 @@ onMounted(() => {
 .community-page { padding: 24px; }
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; gap: 16px; }
 .page-alert { margin-bottom: 16px; }
+.overview-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.overview-card { min-width: 0; padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; display: grid; gap: 6px; }
+.overview-card span { color: #667085; font-size: 13px; }
+.overview-card strong { color: #111827; font-size: 24px; line-height: 1.2; }
+.forum-overview { grid-template-columns: repeat(6, minmax(0, 1fr)); margin-top: 4px; }
+.alert-stack { display: grid; gap: 8px; margin-bottom: 16px; }
 .tab-toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; color: #64748b; font-size: 13px; }
+.forum-tabs { margin-top: 8px; }
+.muted-line { margin-top: 4px; color: #667085; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 1100px) {
+  .overview-grid,
+  .forum-overview { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .tab-toolbar { flex-wrap: wrap; }
+}
 </style>

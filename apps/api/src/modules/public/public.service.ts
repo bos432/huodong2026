@@ -360,18 +360,30 @@ export class PublicService {
   }
 
   async myCertificates(user: User) {
-    return this.certificates.find({ where: { userId: user.id }, order: { issuedAt: "DESC" } });
+    const rows = await this.certificates.find({ where: { userId: user.id }, order: { issuedAt: "DESC" } });
+    return rows.map((row) => this.publicCertificate(row, false));
+  }
+
+  async verifyCertificate(certificateNo: string) {
+    const no = String(certificateNo || "").trim();
+    if (!no) throw new BadRequestException("请输入证书编号");
+    const certificate = await this.certificates.findOne({ where: { certificateNo: no } });
+    if (!certificate) throw new NotFoundException("证书不存在");
+    return this.publicCertificate(certificate, true);
   }
 
   async myCertificateDownload(user: User, id: number) {
     const certificate = await this.certificates.findOne({ where: { id, userId: user.id } });
     if (!certificate) throw new NotFoundException("证书不存在");
-    const displayName = user.nickname || user.phone || `用户${user.id}`;
+    const displayName = certificate.holderName || user.nickname || user.phone || `用户${user.id}`;
     const issuedAt = certificate.issuedAt ? new Date(certificate.issuedAt) : new Date();
     const issuedDate = Number.isNaN(issuedAt.getTime()) ? "" : issuedAt.toLocaleDateString("zh-CN");
     const safeTitle = this.escapeSvg(certificate.name);
     const safeName = this.escapeSvg(displayName);
     const safeDate = this.escapeSvg(issuedDate);
+    const safeNo = this.escapeSvg(certificate.certificateNo || `MP-CERT-${certificate.id}`);
+    const safeHours = this.escapeSvg(Number(certificate.serviceHours || 0).toFixed(1));
+    const safeStatus = this.escapeSvg(certificate.status === "revoked" ? "已撤销" : "有效");
     const svg = `<?xml version="1.0" encoding="UTF-8"?>
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="840" viewBox="0 0 1200 840">
   <rect width="1200" height="840" fill="#fbf7ef"/>
@@ -383,10 +395,38 @@ export class PublicService {
   <text x="600" y="420" text-anchor="middle" fill="#101828" font-size="52" font-weight="800">${safeName}</text>
   <text x="600" y="506" text-anchor="middle" fill="#475467" font-size="30">感谢你参与公益服务与城市共建</text>
   <text x="600" y="566" text-anchor="middle" fill="#8b4a3e" font-size="34" font-weight="700">${safeTitle}</text>
+  <text x="600" y="612" text-anchor="middle" fill="#475467" font-size="24">服务时长：${safeHours} 小时 · 状态：${safeStatus}</text>
   <line x1="370" y1="646" x2="830" y2="646" stroke="#d8b98c" stroke-width="2"/>
   <text x="600" y="696" text-anchor="middle" fill="#667085" font-size="26">发放日期：${safeDate}</text>
+  <text x="600" y="732" text-anchor="middle" fill="#667085" font-size="22">证书编号：${safeNo}</text>
 </svg>`;
     return { filename: `${certificate.name || "certificate"}.svg`, svg };
+  }
+
+  private publicCertificate(certificate: Certificate, masked: boolean) {
+    return {
+      id: certificate.id,
+      name: certificate.name,
+      certificateNo: certificate.certificateNo,
+      templateKey: certificate.templateKey,
+      holderName: masked ? this.maskName(certificate.holderName || "") : certificate.holderName,
+      serviceHours: Number(certificate.serviceHours || 0),
+      level: certificate.level,
+      imageUrl: certificate.imageUrl,
+      threshold: certificate.threshold,
+      status: certificate.status || "active",
+      issuedAt: certificate.issuedAt,
+      revokedAt: certificate.revokedAt,
+      verify: { valid: certificate.status !== "revoked", checkedAt: new Date().toISOString() }
+    };
+  }
+
+  private maskName(value: string) {
+    const name = String(value || "").trim();
+    if (!name) return "";
+    if (name.length <= 1) return "*";
+    if (name.length === 2) return `${name[0]}*`;
+    return `${name[0]}*${name[name.length - 1]}`;
   }
 
   async myFavoriteCourses(user: User) {
@@ -543,6 +583,21 @@ export class PublicService {
       .addOrderBy("tenant.id", "ASC")
       .getMany();
     return tenants.map((tenant) => this.publicHomepageTenant(tenant));
+  }
+
+  async publicTenantBootstrap() {
+    const tenants = await this.publicTenants();
+    const setting = await this.operationSettings.findOne({ where: { id: 1 } });
+    const configuredCode = String(setting?.defaultTenantCode || "").trim();
+    const defaultTenant = tenants.find((tenant) => tenant?.code === configuredCode) || tenants[0] || null;
+    return {
+      tenants,
+      defaultTenant,
+      policy: {
+        precedence: ["route", "manual", "location", "server_default", "build_default", "first_enabled"],
+        serverDefaultTenantCode: defaultTenant?.code || null
+      }
+    };
   }
 
   async resolveTenantByLocation(latitudeText?: string, longitudeText?: string, tracking: TenantLocationTrackingContext = {}) {

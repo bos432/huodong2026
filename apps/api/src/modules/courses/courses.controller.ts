@@ -7,6 +7,7 @@ import { CoursesService } from "./courses.service";
 const COURSE_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator];
 const COURSE_ORDER_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance];
 const COMMUNITY_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator];
+const FORUM_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator];
 type AdminContext = { id: number; username: string; role?: string; tenantId?: number | null };
 
 @Controller("admin")
@@ -15,6 +16,9 @@ export class CoursesController {
   constructor(private readonly service: CoursesService) {}
 
   // ===== Courses =====
+  @AdminRoles(...COURSE_ROLES)
+  @Get("courses/overview") coursesOverview(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.coursesOverview(q, admin); }
+
   @AdminRoles(...COURSE_ROLES)
   @Get("courses") listCourses(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listCourses(q, admin); }
 
@@ -65,6 +69,9 @@ export class CoursesController {
 
   // ===== Community Activities =====
   @AdminRoles(...COMMUNITY_ROLES)
+  @Get("community/overview") communityOverview(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.communityOverview(q, admin); }
+
+  @AdminRoles(...COMMUNITY_ROLES)
   @Get("community-activities") listActivities(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listCommunityActivities(q, admin); }
 
   @AdminRoles(...COMMUNITY_ROLES)
@@ -107,4 +114,47 @@ export class CoursesController {
 
   @AdminRoles(...COMMUNITY_ROLES)
   @Patch("community-post-comments/:id") reviewPostComment(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.reviewCommunityPostComment(id, dto, admin); }
+
+  // ===== Forum =====
+  @AdminRoles(...FORUM_ROLES)
+  @Get("forum/overview") forumOverview(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.forumOverview(q, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Get("forum/categories") listForumCategories(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listForumCategories(q, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Post("forum/categories") createForumCategory(@Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.saveForumCategory(dto, undefined, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Patch("forum/categories/:id") updateForumCategory(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.saveForumCategory(dto, id, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Delete("forum/categories/:id") deleteForumCategory(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: AdminContext) { return this.service.deleteForumCategory(id, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Get("forum/topics") listForumTopics(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listForumTopics(q, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Patch("forum/topics/:id") updateForumTopic(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.updateForumTopic(id, dto, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Post("forum/topics/:id/pin") pinForumTopic(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.setForumTopicPin(id, dto, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Post("forum/topics/:id/feature") featureForumTopic(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.setForumTopicFeature(id, dto, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Post("forum/topics/:id/convert-from-community-post") convertForumTopic(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.convertCommunityPostToForumTopic(id, dto, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Get("forum/replies") listForumReplies(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listForumReplies(q, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Patch("forum/replies/:id") updateForumReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.updateForumReply(id, dto, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Get("forum/reports") listForumReports(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listForumReports(q, admin); }
+
+  @AdminRoles(...FORUM_ROLES)
+  @Patch("forum/reports/:id") updateForumReport(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.updateForumReport(id, dto, admin); }
 }

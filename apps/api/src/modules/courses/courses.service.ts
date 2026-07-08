@@ -9,6 +9,14 @@ import { CommunityActivity } from "../../entities/community-activity.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityPost, CommunityPostStatus } from "../../entities/community-post.entity";
 import { CommunityPostComment, CommunityPostCommentStatus } from "../../entities/community-post-comment.entity";
+import { CommunityPostLike } from "../../entities/community-post-like.entity";
+import { ForumCategory } from "../../entities/forum-category.entity";
+import { ForumFavorite } from "../../entities/forum-favorite.entity";
+import { ForumNotification } from "../../entities/forum-notification.entity";
+import { ForumReply, ForumReplyStatus } from "../../entities/forum-reply.entity";
+import { ForumReport, ForumReportStatus } from "../../entities/forum-report.entity";
+import { ForumTopic, ForumTopicStatus } from "../../entities/forum-topic.entity";
+import { ForumViewLog } from "../../entities/forum-view-log.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { PaymentMethod } from "../../shared/domain";
@@ -26,7 +34,15 @@ export class CoursesService {
     @InjectRepository(CommunityActivity) private communityActivities: Repository<CommunityActivity>,
     @InjectRepository(CheckInTask) private checkinTasks: Repository<CheckInTask>,
     @InjectRepository(CommunityPost) private communityPosts: Repository<CommunityPost>,
+    @InjectRepository(CommunityPostLike) private communityPostLikes: Repository<CommunityPostLike>,
     @InjectRepository(CommunityPostComment) private communityPostComments: Repository<CommunityPostComment>,
+    @InjectRepository(ForumCategory) private forumCategories: Repository<ForumCategory>,
+    @InjectRepository(ForumTopic) private forumTopics: Repository<ForumTopic>,
+    @InjectRepository(ForumReply) private forumReplies: Repository<ForumReply>,
+    @InjectRepository(ForumReport) private forumReports: Repository<ForumReport>,
+    @InjectRepository(ForumFavorite) private forumFavorites: Repository<ForumFavorite>,
+    @InjectRepository(ForumViewLog) private forumViewLogs: Repository<ForumViewLog>,
+    @InjectRepository(ForumNotification) private forumNotifications: Repository<ForumNotification>,
     @InjectRepository(Tenant) private tenants: Repository<Tenant>,
     @InjectRepository(UserLearning) private userLearning: Repository<UserLearning>
   ) {}
@@ -352,6 +368,413 @@ export class CoursesService {
     if (!post) return;
     post.comments = Math.max(0, Number(post.comments || 0) + delta);
     await this.communityPosts.save(post);
+  }
+
+  async coursesOverview(query: { tenantId?: string | number } = {}, admin?: AdminContext) {
+    const [published, draft, totalOrders, pendingOfflineOrders, paidCourses, freeCourses, recentOrders] = await Promise.all([
+      this.scopedCourseQuery(admin, query.tenantId).andWhere("course.status = :status", { status: "published" }).getCount(),
+      this.scopedCourseQuery(admin, query.tenantId).andWhere("course.status = :status", { status: "draft" }).getCount(),
+      this.scopedCourseOrderQuery(admin, query.tenantId).getCount(),
+      this.scopedCourseOrderQuery(admin, query.tenantId).andWhere("courseOrder.status = :status", { status: CourseOrderStatus.PendingPayment }).getCount(),
+      this.scopedCourseQuery(admin, query.tenantId).andWhere("course.price > 0").getCount(),
+      this.scopedCourseQuery(admin, query.tenantId).andWhere("course.price <= 0").getCount(),
+      this.scopedCourseOrderQuery(admin, query.tenantId).orderBy("courseOrder.createdAt", "DESC").take(8).getMany()
+    ]);
+    return {
+      kpis: { published, draft, totalOrders, pendingOfflineOrders, paidCourses, freeCourses },
+      todos: [
+        { key: "pending_offline_orders", label: "待确认课程收款", count: pendingOfflineOrders },
+        { key: "draft_courses", label: "草稿课程", count: draft }
+      ],
+      alerts: pendingOfflineOrders ? [{ level: "warning", message: "存在待确认收款课程订单，确认后用户学习权限会开通。" }] : [],
+      recentRecords: recentOrders
+    };
+  }
+
+  async communityOverview(query: { tenantId?: string | number } = {}, admin?: AdminContext) {
+    const todayStart = this.startOfToday();
+    const [activities, checkinTasks, pendingPosts, pendingComments, todayPosts, todayLikes, todayComments, duplicateTasks, recentPosts] = await Promise.all([
+      this.scopedCommunityActivityQuery(admin, query.tenantId).getCount(),
+      this.scopedCheckinTaskQuery(admin, query.tenantId).getCount(),
+      this.scopedCommunityPostQuery(admin, query.tenantId).andWhere("post.status = :status", { status: "pending" }).getCount(),
+      this.scopedCommunityCommentQuery(admin, query.tenantId).andWhere("comment.status = :status", { status: "pending" }).getCount(),
+      this.scopedCommunityPostQuery(admin, query.tenantId).andWhere("post.createdAt >= :todayStart", { todayStart }).getCount(),
+      this.scopedCommunityLikeQuery(admin, query.tenantId).andWhere("likeRow.createdAt >= :todayStart", { todayStart }).getCount(),
+      this.scopedCommunityCommentQuery(admin, query.tenantId).andWhere("comment.createdAt >= :todayStart", { todayStart }).getCount(),
+      this.duplicateCheckinTaskSummary(query.tenantId, admin),
+      this.scopedCommunityPostQuery(admin, query.tenantId).orderBy("post.createdAt", "DESC").take(8).getMany()
+    ]);
+    return {
+      kpis: { activities, checkinTasks, pendingPosts, pendingComments, todayInteraction: todayPosts + todayLikes + todayComments },
+      todos: [
+        { key: "pending_posts", label: "待审核动态", count: pendingPosts },
+        { key: "pending_comments", label: "待审核评论", count: pendingComments },
+        { key: "duplicate_checkins", label: "重复打卡任务", count: duplicateTasks.length }
+      ],
+      alerts: duplicateTasks.map((item) => ({ level: "warning", message: `${item.scope} ${item.date} 存在 ${item.count} 个打卡任务，请保留一条。` })),
+      recentRecords: recentPosts
+    };
+  }
+
+  async forumOverview(query: { tenantId?: string | number } = {}, admin?: AdminContext) {
+    const todayStart = this.startOfToday();
+    const [categories, topics, pendingTopics, pendingReplies, pendingReports, todayTopics, todayReplies, recentTopics, recentReports] = await Promise.all([
+      this.scopedForumCategoryQuery(admin, query.tenantId).getCount(),
+      this.scopedForumTopicQuery(admin, query.tenantId).getCount(),
+      this.scopedForumTopicQuery(admin, query.tenantId).andWhere("topic.status = :status", { status: "pending" }).getCount(),
+      this.scopedForumReplyQuery(admin, query.tenantId).andWhere("reply.status = :status", { status: "pending" }).getCount(),
+      this.scopedForumReportQuery(admin, query.tenantId).andWhere("report.status = :status", { status: "pending" }).getCount(),
+      this.scopedForumTopicQuery(admin, query.tenantId).andWhere("topic.createdAt >= :todayStart", { todayStart }).getCount(),
+      this.scopedForumReplyQuery(admin, query.tenantId).andWhere("reply.createdAt >= :todayStart", { todayStart }).getCount(),
+      this.scopedForumTopicQuery(admin, query.tenantId).orderBy("topic.createdAt", "DESC").take(8).getMany(),
+      this.scopedForumReportQuery(admin, query.tenantId).orderBy("report.createdAt", "DESC").take(8).getMany()
+    ]);
+    return {
+      kpis: { categories, topics, pendingTopics, pendingReplies, pendingReports, todayInteraction: todayTopics + todayReplies },
+      todos: [
+        { key: "pending_topics", label: "待审核帖子", count: pendingTopics },
+        { key: "pending_replies", label: "待审核回复", count: pendingReplies },
+        { key: "pending_reports", label: "待处理举报", count: pendingReports }
+      ],
+      alerts: pendingReports ? [{ level: "warning", message: "论坛存在待处理举报，请优先处理。" }] : [],
+      recentRecords: { topics: recentTopics, reports: recentReports }
+    };
+  }
+
+  async listForumCategories(query: { tenantId?: string | number; enabled?: string | boolean } = {}, admin?: AdminContext) {
+    const builder = this.scopedForumCategoryQuery(admin, query.tenantId).orderBy("category.sortOrder", "ASC").addOrderBy("category.id", "ASC");
+    if (query.enabled !== undefined && query.enabled !== "") builder.andWhere("category.enabled = :enabled", { enabled: query.enabled === true || query.enabled === "true" || query.enabled === "1" });
+    return builder.getMany();
+  }
+
+  async saveForumCategory(dto: any, id?: number, admin?: AdminContext) {
+    const category = id ? await this.assertForumCategoryAccess(id, admin) : this.forumCategories.create();
+    const name = String(dto.name || "").trim();
+    if (!name) throw new BadRequestException("请填写版块名称");
+    category.name = name.slice(0, 80);
+    category.description = this.optionalText(dto.description, 255);
+    category.sortOrder = Number.isFinite(Number(dto.sortOrder)) ? Number(dto.sortOrder) : 0;
+    category.enabled = dto.enabled === undefined ? true : Boolean(dto.enabled);
+    category.postPermission = this.normalizeChoice(dto.postPermission, ["user", "admin"], "user") as any;
+    category.auditMode = this.normalizeChoice(dto.auditMode, ["pre", "post", "closed"], "pre") as any;
+    await this.assignTenant(category, dto, admin);
+    return this.forumCategories.save(category);
+  }
+
+  async deleteForumCategory(id: number, admin?: AdminContext) {
+    await this.assertForumCategoryAccess(id, admin);
+    const used = await this.forumTopics.count({ where: { category: { id } } });
+    if (used) throw new BadRequestException("该版块已有帖子，请先停用版块，不建议删除历史内容");
+    await this.forumCategories.delete(id);
+    return { success: true };
+  }
+
+  async listForumTopics(query: any = {}, admin?: AdminContext) {
+    const builder = this.scopedForumTopicQuery(admin, query.tenantId).orderBy("topic.pinned", "DESC").addOrderBy("topic.featured", "DESC").addOrderBy("topic.lastReplyAt", "DESC").addOrderBy("topic.createdAt", "DESC").take(Math.min(Number(query.limit || 50), 100));
+    if (query.status) builder.andWhere("topic.status = :status", { status: query.status });
+    if (query.categoryId) builder.andWhere("topic.categoryId = :categoryId", { categoryId: Number(query.categoryId) });
+    if (query.keyword) builder.andWhere("(topic.title LIKE :keyword OR topic.content LIKE :keyword)", { keyword: `%${String(query.keyword).trim()}%` });
+    return builder.getMany();
+  }
+
+  async updateForumTopic(id: number, dto: any, admin?: AdminContext) {
+    const topic = await this.assertForumTopicAccess(id, admin);
+    if (dto.title !== undefined) {
+      const title = String(dto.title || "").trim();
+      if (!title) throw new BadRequestException("请填写帖子标题");
+      topic.title = title.slice(0, 120);
+    }
+    if (dto.content !== undefined) topic.content = this.requiredText(dto.content, 1, 10000, "请填写帖子内容");
+    if (dto.categoryId !== undefined) topic.category = await this.resolveForumCategoryForTopic(dto.categoryId, topic.tenant, admin);
+    if (dto.images !== undefined) topic.images = this.normalizeStringArray(dto.images, 9);
+    if (dto.tags !== undefined) topic.tags = this.normalizeStringArray(dto.tags, 10);
+    if (dto.pinned !== undefined) topic.pinned = Boolean(dto.pinned);
+    if (dto.featured !== undefined) topic.featured = Boolean(dto.featured);
+    if (dto.status !== undefined) {
+      topic.status = this.normalizeChoice(dto.status, ["pending", "approved", "rejected", "hidden"], topic.status) as ForumTopicStatus;
+      topic.approvedAt = topic.status === "approved" ? topic.approvedAt || new Date() : null;
+    }
+    if (dto.reviewRemark !== undefined) topic.reviewRemark = this.optionalText(dto.reviewRemark, 1000);
+    return this.forumTopics.save(topic);
+  }
+
+  async setForumTopicPin(id: number, dto: { pinned?: boolean }, admin?: AdminContext) {
+    const topic = await this.assertForumTopicAccess(id, admin);
+    topic.pinned = dto.pinned === undefined ? !topic.pinned : Boolean(dto.pinned);
+    return this.forumTopics.save(topic);
+  }
+
+  async setForumTopicFeature(id: number, dto: { featured?: boolean }, admin?: AdminContext) {
+    const topic = await this.assertForumTopicAccess(id, admin);
+    topic.featured = dto.featured === undefined ? !topic.featured : Boolean(dto.featured);
+    return this.forumTopics.save(topic);
+  }
+
+  async convertCommunityPostToForumTopic(id: number, dto: { categoryId?: number }, admin?: AdminContext) {
+    const post = await this.assertCommunityPostAccess(id, admin);
+    const category = dto.categoryId ? await this.resolveForumCategoryForTopic(dto.categoryId, post.tenant || null, admin) : await this.ensureDefaultForumCategory(post.tenant || null, admin);
+    const titleSource = post.activity?.title || String(post.content || "").replace(/\s+/g, " ").slice(0, 40);
+    const topic = this.forumTopics.create({
+      tenant: post.tenant || null,
+      category,
+      userId: post.userId || null,
+      title: titleSource ? `活动心得：${titleSource}`.slice(0, 120) : `共修动态 #${post.id}`,
+      content: post.content,
+      images: post.images || [],
+      tags: post.tags || [],
+      activityId: post.activityId || null,
+      status: post.status === "approved" ? "approved" : "pending",
+      approvedAt: post.status === "approved" ? post.approvedAt || new Date() : null,
+      lastReplyAt: post.createdAt
+    });
+    return this.forumTopics.save(topic);
+  }
+
+  async listForumReplies(query: any = {}, admin?: AdminContext) {
+    const builder = this.scopedForumReplyQuery(admin, query.tenantId).orderBy("reply.createdAt", "DESC").take(Math.min(Number(query.limit || 100), 150));
+    if (query.status) builder.andWhere("reply.status = :status", { status: query.status });
+    if (query.topicId) builder.andWhere("reply.topicId = :topicId", { topicId: Number(query.topicId) });
+    return builder.getMany();
+  }
+
+  async updateForumReply(id: number, dto: any, admin?: AdminContext) {
+    const reply = await this.assertForumReplyAccess(id, admin);
+    const oldStatus = reply.status;
+    if (dto.content !== undefined) reply.content = this.requiredText(dto.content, 1, 5000, "请填写回复内容");
+    if (dto.status !== undefined) {
+      reply.status = this.normalizeChoice(dto.status, ["pending", "approved", "rejected", "hidden"], reply.status) as ForumReplyStatus;
+      reply.approvedAt = reply.status === "approved" ? reply.approvedAt || new Date() : null;
+    }
+    if (dto.reviewRemark !== undefined) reply.reviewRemark = this.optionalText(dto.reviewRemark, 1000);
+    const saved = await this.forumReplies.save(reply);
+    await this.adjustForumTopicReplyCount(reply.topic.id, oldStatus, reply.status, reply.createdAt);
+    return saved;
+  }
+
+  async listForumReports(query: any = {}, admin?: AdminContext) {
+    const builder = this.scopedForumReportQuery(admin, query.tenantId).orderBy("report.createdAt", "DESC").take(Math.min(Number(query.limit || 100), 150));
+    if (query.status) builder.andWhere("report.status = :status", { status: query.status });
+    return builder.getMany();
+  }
+
+  async updateForumReport(id: number, dto: any, admin?: AdminContext) {
+    const report = await this.assertForumReportAccess(id, admin);
+    report.status = this.normalizeChoice(dto.status, ["pending", "resolved", "rejected"], report.status) as ForumReportStatus;
+    report.handleRemark = this.optionalText(dto.handleRemark, 1000);
+    report.handler = admin?.id ? ({ id: admin.id } as any) : null;
+    report.handledAt = report.status === "pending" ? null : new Date();
+    if (dto.hideTarget && report.status === "resolved") {
+      if (report.reply) {
+        report.reply.status = "hidden";
+        await this.forumReplies.save(report.reply);
+      } else if (report.topic) {
+        report.topic.status = "hidden";
+        await this.forumTopics.save(report.topic);
+      }
+    }
+    return this.forumReports.save(report);
+  }
+
+  private scopedCourseQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.courses.createQueryBuilder("course").leftJoinAndSelect("course.tenant", "tenant");
+    applyTenantScopeToQuery(builder, "course", admin);
+    this.applyPlatformTenantFilter(builder, "course", tenantId, admin);
+    return builder;
+  }
+
+  private scopedCourseOrderQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.courseOrders
+      .createQueryBuilder("courseOrder")
+      .leftJoinAndSelect("courseOrder.course", "course")
+      .leftJoinAndSelect("course.tenant", "tenant")
+      .leftJoinAndSelect("courseOrder.user", "user");
+    applyTenantScopeToQuery(builder, "course", admin);
+    this.applyPlatformTenantFilter(builder, "course", tenantId, admin);
+    return builder;
+  }
+
+  private scopedCommunityActivityQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.communityActivities.createQueryBuilder("activity").leftJoinAndSelect("activity.tenant", "tenant");
+    applyTenantScopeToQuery(builder, "activity", admin);
+    this.applyPlatformTenantFilter(builder, "activity", tenantId, admin);
+    return builder;
+  }
+
+  private scopedCheckinTaskQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.checkinTasks.createQueryBuilder("task").leftJoinAndSelect("task.tenant", "tenant");
+    applyTenantScopeToQuery(builder, "task", admin);
+    this.applyPlatformTenantFilter(builder, "task", tenantId, admin);
+    return builder;
+  }
+
+  private scopedCommunityPostQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.communityPosts.createQueryBuilder("post").leftJoinAndSelect("post.tenant", "tenant").leftJoinAndSelect("post.activity", "activity");
+    applyTenantScopeToQuery(builder, "post", admin);
+    this.applyPlatformTenantFilter(builder, "post", tenantId, admin);
+    return builder;
+  }
+
+  private scopedCommunityCommentQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.communityPostComments.createQueryBuilder("comment").innerJoin(CommunityPost, "post", "post.id = comment.postId").leftJoin("post.tenant", "tenant");
+    applyTenantScopeToQuery(builder, "post", admin);
+    this.applyPlatformTenantFilter(builder, "post", tenantId, admin);
+    return builder;
+  }
+
+  private scopedCommunityLikeQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.communityPostLikes.createQueryBuilder("likeRow").innerJoin(CommunityPost, "post", "post.id = likeRow.postId").leftJoin("post.tenant", "tenant");
+    applyTenantScopeToQuery(builder, "post", admin);
+    this.applyPlatformTenantFilter(builder, "post", tenantId, admin);
+    return builder;
+  }
+
+  private scopedForumCategoryQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.forumCategories.createQueryBuilder("category").leftJoinAndSelect("category.tenant", "tenant");
+    applyTenantScopeToQuery(builder, "category", admin);
+    this.applyPlatformTenantFilter(builder, "category", tenantId, admin);
+    return builder;
+  }
+
+  private scopedForumTopicQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.forumTopics
+      .createQueryBuilder("topic")
+      .leftJoinAndSelect("topic.tenant", "tenant")
+      .leftJoinAndSelect("topic.category", "category")
+      .leftJoinAndSelect("topic.user", "user")
+      .leftJoinAndSelect("topic.activity", "activity")
+      .leftJoinAndSelect("topic.course", "course")
+      .leftJoinAndSelect("topic.charityProject", "charityProject");
+    applyTenantScopeToQuery(builder, "topic", admin);
+    this.applyPlatformTenantFilter(builder, "topic", tenantId, admin);
+    return builder;
+  }
+
+  private scopedForumReplyQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.forumReplies
+      .createQueryBuilder("reply")
+      .leftJoinAndSelect("reply.tenant", "tenant")
+      .leftJoinAndSelect("reply.topic", "topic")
+      .leftJoinAndSelect("reply.parent", "parent")
+      .leftJoinAndSelect("reply.user", "user");
+    applyTenantScopeToQuery(builder, "reply", admin);
+    this.applyPlatformTenantFilter(builder, "reply", tenantId, admin);
+    return builder;
+  }
+
+  private scopedForumReportQuery(admin?: AdminContext, tenantId?: string | number) {
+    const builder = this.forumReports
+      .createQueryBuilder("report")
+      .leftJoinAndSelect("report.tenant", "tenant")
+      .leftJoinAndSelect("report.topic", "topic")
+      .leftJoinAndSelect("report.reply", "reply")
+      .leftJoinAndSelect("report.reporter", "reporter")
+      .leftJoinAndSelect("report.handler", "handler");
+    applyTenantScopeToQuery(builder, "report", admin);
+    this.applyPlatformTenantFilter(builder, "report", tenantId, admin);
+    return builder;
+  }
+
+  private async duplicateCheckinTaskSummary(tenantId?: string | number, admin?: AdminContext) {
+    const builder = this.checkinTasks
+      .createQueryBuilder("task")
+      .leftJoin("task.tenant", "tenant")
+      .select("task.date", "date")
+      .addSelect("COALESCE(tenant.name, '平台')", "scope")
+      .addSelect("COUNT(task.id)", "count")
+      .groupBy("task.tenantId")
+      .addGroupBy("task.date")
+      .addGroupBy("tenant.name")
+      .having("COUNT(task.id) > 1");
+    applyTenantScopeToQuery(builder, "task", admin);
+    this.applyPlatformTenantFilter(builder, "task", tenantId, admin);
+    const rows = await builder.getRawMany();
+    return rows.map((row) => ({ date: row.date, scope: row.scope, count: Number(row.count || 0) }));
+  }
+
+  private startOfToday() {
+    const date = new Date();
+    date.setHours(0, 0, 0, 0);
+    return date;
+  }
+
+  private optionalText(value: unknown, maxLength: number) {
+    const text = String(value || "").trim();
+    return text ? text.slice(0, maxLength) : null;
+  }
+
+  private requiredText(value: unknown, minLength: number, maxLength: number, message: string) {
+    const text = String(value || "").trim();
+    if (text.length < minLength) throw new BadRequestException(message);
+    return text.slice(0, maxLength);
+  }
+
+  private normalizeChoice(value: unknown, allowed: string[], fallback: string) {
+    const text = String(value || "").trim();
+    return allowed.includes(text) ? text : fallback;
+  }
+
+  private normalizeStringArray(value: unknown, limit: number) {
+    const rows = Array.isArray(value) ? value : String(value || "").split(/[,，、\s]+/);
+    return rows.map((item) => String(item || "").trim()).filter(Boolean).slice(0, limit);
+  }
+
+  private async assertForumCategoryAccess(id: number, admin?: AdminContext) {
+    const category = await this.forumCategories.findOne({ where: { id } });
+    if (!category) throw new NotFoundException("论坛版块不存在");
+    assertTenantAccessForActor(category, admin, "论坛版块不存在或不属于当前商家");
+    return category;
+  }
+
+  private async assertForumTopicAccess(id: number, admin?: AdminContext) {
+    const topic = await this.forumTopics.findOne({ where: { id } });
+    if (!topic) throw new NotFoundException("论坛帖子不存在");
+    assertTenantAccessForActor(topic, admin, "论坛帖子不存在或不属于当前商家");
+    return topic;
+  }
+
+  private async assertForumReplyAccess(id: number, admin?: AdminContext) {
+    const reply = await this.forumReplies.findOne({ where: { id } });
+    if (!reply) throw new NotFoundException("论坛回复不存在");
+    assertTenantAccessForActor(reply, admin, "论坛回复不存在或不属于当前商家");
+    return reply;
+  }
+
+  private async assertForumReportAccess(id: number, admin?: AdminContext) {
+    const report = await this.forumReports.findOne({ where: { id } });
+    if (!report) throw new NotFoundException("论坛举报不存在");
+    assertTenantAccessForActor(report, admin, "论坛举报不存在或不属于当前商家");
+    return report;
+  }
+
+  private async resolveForumCategoryForTopic(categoryId: unknown, tenant: Tenant | null, admin?: AdminContext) {
+    const category = await this.assertForumCategoryAccess(Number(categoryId || 0), admin);
+    if (!category.enabled) throw new BadRequestException("版块已停用");
+    if ((category.tenant?.id || null) !== (tenant?.id || null)) throw new BadRequestException("版块与帖子所属商家不一致");
+    return category;
+  }
+
+  private async ensureDefaultForumCategory(tenant: Tenant | null, admin?: AdminContext) {
+    const builder = this.forumCategories.createQueryBuilder("category").leftJoinAndSelect("category.tenant", "tenant").where("category.name = :name", { name: "共修交流" });
+    if (tenant) builder.andWhere("category.tenantId = :tenantId", { tenantId: tenant.id });
+    else builder.andWhere("category.tenantId IS NULL");
+    const existing = await builder.getOne();
+    if (existing) return existing;
+    if (admin?.tenantId && tenant?.id !== admin.tenantId) throw new BadRequestException("不能创建其它商家的默认版块");
+    return this.forumCategories.save(this.forumCategories.create({ tenant, name: "共修交流", description: "活动心得、课程共学和公益共建交流", enabled: true, sortOrder: 0, postPermission: "user", auditMode: "pre" }));
+  }
+
+  private async adjustForumTopicReplyCount(topicId: number, oldStatus: ForumReplyStatus, newStatus: ForumReplyStatus, replyCreatedAt?: Date) {
+    if (oldStatus === newStatus) return;
+    const topic = await this.forumTopics.findOne({ where: { id: topicId } });
+    if (!topic) return;
+    if (oldStatus !== "approved" && newStatus === "approved") {
+      topic.replyCount = Number(topic.replyCount || 0) + 1;
+      topic.lastReplyAt = replyCreatedAt || new Date();
+    } else if (oldStatus === "approved" && newStatus !== "approved") {
+      topic.replyCount = Math.max(0, Number(topic.replyCount || 0) - 1);
+    }
+    topic.heat = Number(topic.viewCount || 0) + Number(topic.replyCount || 0) * 5 + Number(topic.favoriteCount || 0) * 3;
+    await this.forumTopics.save(topic);
   }
 
   private async assertCourseAccess(id: number, admin?: AdminContext) {

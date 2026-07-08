@@ -45,6 +45,13 @@ import { CourseOrder } from "./entities/course-order.entity";
 import { H5AuthCodeLog } from "./entities/h5-auth-code-log.entity";
 import { HomepageSection } from "./entities/homepage-section.entity";
 import { InviteCode } from "./entities/invite-code.entity";
+import { ForumCategory } from "./entities/forum-category.entity";
+import { ForumFavorite } from "./entities/forum-favorite.entity";
+import { ForumNotification } from "./entities/forum-notification.entity";
+import { ForumReply } from "./entities/forum-reply.entity";
+import { ForumReport } from "./entities/forum-report.entity";
+import { ForumTopic } from "./entities/forum-topic.entity";
+import { ForumViewLog } from "./entities/forum-view-log.entity";
 import { MemberLevel } from "./entities/member-level.entity";
 import { MemberPointLog } from "./entities/member-point-log.entity";
 import { MemberProfile } from "./entities/member-profile.entity";
@@ -171,6 +178,13 @@ export default new DataSource({
     H5AuthCodeLog,
     HomepageSection,
     MarketingPopup,
+    ForumCategory,
+    ForumTopic,
+    ForumReply,
+    ForumReport,
+    ForumFavorite,
+    ForumViewLog,
+    ForumNotification,
     AdAdvertiser,
     AdContract,
     AdCampaign,

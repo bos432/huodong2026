@@ -347,6 +347,10 @@ export class VolunteerCertificateDto {
   @IsOptional()
   @IsString()
   name?: string;
+
+  @IsOptional()
+  @IsIn(["volunteer_service", "charity_ambassador", "city_builder"])
+  templateKey?: "volunteer_service" | "charity_ambassador" | "city_builder";
 }
 
 export class VolunteerTaskDto {
@@ -1725,6 +1729,10 @@ export class OperationSettingDto {
   @IsOptional()
   @IsObject()
   launchConfig?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsString()
+  defaultTenantCode?: string;
 
   @IsOptional()
   @IsString()

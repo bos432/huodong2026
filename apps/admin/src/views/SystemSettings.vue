@@ -69,6 +69,14 @@ type StaticVersion = {
   buildTime?: string;
 };
 
+type TenantOption = {
+  id: number;
+  code: string;
+  name: string;
+  region?: string | null;
+  enabled: boolean;
+};
+
 type SecurityReadiness = {
   key: string;
   label: string;
@@ -131,6 +139,7 @@ const loadingConfig = ref(false);
 const report = ref<ConfigInspection | null>(null);
 const adminVersion = ref<StaticVersion | null>(null);
 const h5Version = ref<StaticVersion | null>(null);
+const tenantOptions = ref<TenantOption[]>([]);
 const paymentReadiness = computed(() => [
   { key: "free", label: "免费报名", status: "已可用", type: "success", note: "适合免费活动，后端可直接完成报名。" },
   { key: "balance", label: "余额支付", status: "已可用", type: "success", note: "使用用户余额扣款，适合测试和会员账户场景。" },
@@ -138,6 +147,10 @@ const paymentReadiness = computed(() => [
   { key: "wechat", label: "微信支付", status: "需服务商配置", type: "warning", note: "真实 SDK、回调验签、退款和对账未完整配置前不建议开启。" },
   { key: "alipay", label: "支付宝", status: "自动化未完成", type: "warning", note: "保留配置入口，生产使用前需要完成真实支付和退款链路。" }
 ]);
+
+function tenantOptionLabel(item: TenantOption) {
+  return item.region ? `${item.region} · ${item.name}（${item.code}）` : `${item.name}（${item.code}）`;
+}
 
 const form = reactive({
   registrationEnabled: true,
@@ -154,6 +167,7 @@ const form = reactive({
   customerServicePhone: "",
   customerServiceWechat: "",
   defaultGroupQrCodeUrl: "",
+  defaultTenantCode: "",
   pageTheme: { ...defaultPageTheme },
   refundInstructions: "",
   invoiceInstructions: "",
@@ -1375,7 +1389,7 @@ function deploymentPayload() {
 }
 
 function operationPayload() {
-  return {
+  const payload: Record<string, any> = {
     registrationEnabled: form.registrationEnabled,
     registrationDisabledMessage: form.registrationDisabledMessage,
     offlinePaymentInstructions: form.offlinePaymentInstructions,
@@ -1395,12 +1409,18 @@ function operationPayload() {
     smsTemplateId: form.smsTemplateId,
     smsSdkAppId: form.smsSdkAppId
   };
+  if (canManagePlatformSettings.value) payload.defaultTenantCode = form.defaultTenantCode;
+  return payload;
 }
 
 async function loadOperation() {
   loadingOperation.value = true;
   try {
-    const data = await api.get<any, any>("/admin/settings/operation");
+    const [data, tenants] = await Promise.all([
+      api.get<any, any>("/admin/settings/operation"),
+      canManagePlatformSettings.value ? api.get<any, TenantOption[]>("/admin/tenants").catch(() => []) : Promise.resolve([])
+    ]);
+    tenantOptions.value = (tenants || []).filter((tenant) => tenant.enabled && tenant.code !== "platform" && !String(tenant.code || "").startsWith("demo-"));
     Object.assign(form, {
       registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
       registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
@@ -1410,6 +1430,7 @@ async function loadOperation() {
       customerServicePhone: data.customerServicePhone || "",
       customerServiceWechat: data.customerServiceWechat || "",
       defaultGroupQrCodeUrl: data.defaultGroupQrCodeUrl || "",
+      defaultTenantCode: data.defaultTenantCode || "",
       pageTheme: { ...defaultPageTheme, ...(data.pageTheme || {}) },
       refundInstructions: data.refundInstructions || "",
       invoiceInstructions: data.invoiceInstructions || "",
@@ -1566,6 +1587,16 @@ onMounted(async () => {
               <el-input v-model="form.registrationDisabledMessage" type="textarea" :rows="3" maxlength="300" show-word-limit />
             </el-form-item>
             <template v-if="canManagePlatformSettings">
+              <el-divider content-position="left">入口城市</el-divider>
+              <el-form-item label="默认入口城市">
+                <div class="entry-tenant-field">
+                  <el-select v-model="form.defaultTenantCode" clearable filterable placeholder="请选择小程序默认打开的城市/商家" style="width: 360px">
+                    <el-option v-for="tenant in tenantOptions" :key="tenant.code" :label="tenantOptionLabel(tenant)" :value="tenant.code" />
+                  </el-select>
+                  <el-tag v-if="form.defaultTenantCode" type="success" effect="plain">用户首次进入默认展示</el-tag>
+                  <span class="form-tip">用户手动切换、分享链接和定位命中仍然优先。</span>
+                </div>
+              </el-form-item>
               <el-divider content-position="left">交付 / 过审模式</el-divider>
               <el-form-item label="当前模式">
                 <div class="delivery-mode-panel">
@@ -2214,6 +2245,7 @@ onMounted(async () => {
 .toolbar-actions, .switch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .payment-methods-block { display: grid; gap: 6px; }
 .payment-methods { display: flex; align-items: center; gap: 12px 22px; flex-wrap: wrap; }
+.entry-tenant-field { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .payment-readiness { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
 .payment-readiness-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #f8fafc; }
 .payment-readiness-card div { display: grid; gap: 5px; min-width: 0; }

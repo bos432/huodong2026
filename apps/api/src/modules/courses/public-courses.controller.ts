@@ -16,6 +16,13 @@ import { CommunityPostComment } from "../../entities/community-post-comment.enti
 import { CommunityPostLike } from "../../entities/community-post-like.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityCheckIn } from "../../entities/community-checkin.entity";
+import { ForumCategory } from "../../entities/forum-category.entity";
+import { ForumFavorite } from "../../entities/forum-favorite.entity";
+import { ForumNotification } from "../../entities/forum-notification.entity";
+import { ForumReply } from "../../entities/forum-reply.entity";
+import { ForumReport } from "../../entities/forum-report.entity";
+import { ForumTopic } from "../../entities/forum-topic.entity";
+import { ForumViewLog } from "../../entities/forum-view-log.entity";
 import { Order } from "../../entities/order.entity";
 import { Registration } from "../../entities/registration.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
@@ -56,6 +63,13 @@ export class PublicCoursesController {
     @InjectRepository(CommunityPostComment) private communityPostComments: Repository<CommunityPostComment>,
     @InjectRepository(CheckInTask) private checkinTasks: Repository<CheckInTask>,
     @InjectRepository(CommunityCheckIn) private communityCheckins: Repository<CommunityCheckIn>,
+    @InjectRepository(ForumCategory) private forumCategories: Repository<ForumCategory>,
+    @InjectRepository(ForumTopic) private forumTopics: Repository<ForumTopic>,
+    @InjectRepository(ForumReply) private forumReplies: Repository<ForumReply>,
+    @InjectRepository(ForumReport) private forumReports: Repository<ForumReport>,
+    @InjectRepository(ForumFavorite) private forumFavorites: Repository<ForumFavorite>,
+    @InjectRepository(ForumViewLog) private forumViewLogs: Repository<ForumViewLog>,
+    @InjectRepository(ForumNotification) private forumNotifications: Repository<ForumNotification>,
     @InjectRepository(Registration) private registrations: Repository<Registration>,
     @InjectRepository(UserLearning) private userLearning: Repository<UserLearning>,
     private readonly config: ConfigService
@@ -323,6 +337,184 @@ export class PublicCoursesController {
     return { comment, message: "评论已提交，审核通过后展示" };
   }
 
+  @Get("forum/categories")
+  async listForumCategories(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const builder = this.forumCategories
+      .createQueryBuilder("category")
+      .leftJoinAndSelect("category.tenant", "tenant")
+      .where("category.enabled = :enabled", { enabled: true })
+      .orderBy("category.sortOrder", "ASC")
+      .addOrderBy("category.id", "ASC");
+    this.applyTenantOrGlobalAliasScope(builder, "category", tenant);
+    const rows = await builder.getMany();
+    if (rows.length) return rows;
+    return [await this.ensurePublicDefaultForumCategory(tenant)];
+  }
+
+  @Get("forum/topics")
+  async listForumTopics(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("categoryId") categoryId?: string, @Query("keyword") keyword?: string) {
+    const userId = this.optionalUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const builder = this.forumTopics
+      .createQueryBuilder("topic")
+      .leftJoinAndSelect("topic.tenant", "tenant")
+      .leftJoinAndSelect("topic.category", "category")
+      .leftJoinAndSelect("topic.user", "user")
+      .where("topic.status = :status", { status: "approved" })
+      .orderBy("topic.pinned", "DESC")
+      .addOrderBy("topic.featured", "DESC")
+      .addOrderBy("topic.lastReplyAt", "DESC")
+      .addOrderBy("topic.createdAt", "DESC")
+      .take(30);
+    this.applyTenantOrGlobalAliasScope(builder, "topic", tenant);
+    if (categoryId) builder.andWhere("topic.categoryId = :categoryId", { categoryId: Number(categoryId) });
+    const text = String(keyword || "").trim();
+    if (text) builder.andWhere("(topic.title LIKE :keyword OR topic.content LIKE :keyword)", { keyword: `%${text}%` });
+    const rows = await builder.getMany();
+    const favorites = userId && rows.length ? await this.forumFavorites.find({ where: rows.map((topic) => ({ topic: { id: topic.id }, user: { id: userId } })) }) : [];
+    return rows.map((topic) => this.forumTopicView(topic, { favorited: favorites.some((row) => row.topic.id === topic.id) }));
+  }
+
+  @Get("forum/topics/:id")
+  async getForumTopic(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.optionalUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const topic = await this.findPublicForumTopic(id, tenant);
+    if (!topic) return null;
+    topic.viewCount = Number(topic.viewCount || 0) + 1;
+    topic.heat = Number(topic.heat || 0) + 1;
+    await this.forumTopics.save(topic);
+    void this.forumViewLogs.save(this.forumViewLogs.create({ tenant: topic.tenant || null, topic, user: userId ? ({ id: userId } as any) : null, clientIp: this.clientIp(req), userAgent: String(req.headers?.["user-agent"] || "").slice(0, 255) || null })).catch(() => null);
+    const [favorite, replies] = await Promise.all([
+      userId ? this.forumFavorites.findOne({ where: { topic: { id }, user: { id: userId } } }) : Promise.resolve(null),
+      this.forumReplies.find({ where: { topic: { id }, status: "approved" }, order: { createdAt: "ASC" } })
+    ]);
+    return { ...this.forumTopicView(topic, { favorited: Boolean(favorite) }), replies: this.threadedForumReplies(replies) };
+  }
+
+  @Post("forum/topics")
+  async createForumTopic(@Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const category = await this.resolvePublicForumCategory(dto.categoryId, tenant);
+    if (category.postPermission === "admin" || category.auditMode === "closed") throw new BadRequestException("当前版块暂不开放用户发帖");
+    const title = this.requiredText(dto.title, 2, 120, "请填写帖子标题");
+    const content = this.requiredText(dto.content, 2, 10000, "请填写帖子内容");
+    const approved = category.auditMode === "post";
+    const topic = await this.forumTopics.save(this.forumTopics.create({
+      tenant,
+      category,
+      userId,
+      title,
+      content,
+      images: this.normalizeForumImages(dto.images),
+      tags: this.normalizeForumTags(dto.tags),
+      activityId: Number(dto.activityId || 0) || null,
+      courseId: Number(dto.courseId || 0) || null,
+      charityProjectId: Number(dto.charityProjectId || 0) || null,
+      status: approved ? "approved" : "pending",
+      approvedAt: approved ? new Date() : null,
+      lastReplyAt: new Date()
+    }));
+    return { topic: this.forumTopicView(topic, { favorited: false }), message: approved ? "帖子已发布" : "帖子已提交审核，通过后展示" };
+  }
+
+  @Post("forum/topics/:id/replies")
+  async createForumReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const topic = await this.findPublicForumTopic(id, tenant);
+    if (!topic) throw new NotFoundException("帖子不存在或未通过审核");
+    return this.createForumReplyRow(topic, null, userId, dto);
+  }
+
+  @Post("forum/replies/:id/replies")
+  async createForumChildReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const parent = await this.forumReplies.findOne({ where: { id, status: "approved" } });
+    if (!parent || !parent.topic || !(await this.findPublicForumTopic(parent.topic.id, tenant))) throw new NotFoundException("回复不存在或未通过审核");
+    const rootParent = parent.depth >= 2 && parent.parent ? parent.parent : parent;
+    return this.createForumReplyRow(parent.topic, rootParent, userId, dto);
+  }
+
+  @Post("forum/topics/:id/favorite")
+  async toggleForumFavorite(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const topic = await this.findPublicForumTopic(id, tenant);
+    if (!topic) throw new NotFoundException("帖子不存在或未通过审核");
+    const existing = await this.forumFavorites.findOne({ where: { topic: { id }, user: { id: userId } } });
+    if (existing) {
+      await this.forumFavorites.delete(existing.id);
+      topic.favoriteCount = Math.max(0, Number(topic.favoriteCount || 0) - 1);
+      await this.forumTopics.save(topic);
+      return { favorited: false, favoriteCount: topic.favoriteCount };
+    }
+    try {
+      await this.forumFavorites.save(this.forumFavorites.create({ tenant: topic.tenant || null, topic, user: { id: userId } as any }));
+      topic.favoriteCount = Number(topic.favoriteCount || 0) + 1;
+      topic.heat = Number(topic.heat || 0) + 3;
+      await this.forumTopics.save(topic);
+    } catch (error: any) {
+      if (!this.isDuplicateKeyError(error)) throw error;
+    }
+    return { favorited: true, favoriteCount: topic.favoriteCount };
+  }
+
+  @Post("forum/topics/:id/report")
+  async reportForumTopic(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const topic = await this.findPublicForumTopic(id, tenant);
+    if (!topic) throw new NotFoundException("帖子不存在或未通过审核");
+    const report = await this.forumReports.save(this.forumReports.create({ tenant: topic.tenant || null, topic, reply: null, reporterId: userId, type: this.requiredText(dto.type || "other", 1, 40, "请选择举报类型"), description: this.optionalText(dto.description, 1000), status: "pending" }));
+    topic.reportCount = Number(topic.reportCount || 0) + 1;
+    await this.forumTopics.save(topic);
+    return { report, message: "举报已提交，平台会尽快处理" };
+  }
+
+  @Post("forum/replies/:id/report")
+  async reportForumReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const reply = await this.forumReplies.findOne({ where: { id, status: "approved" } });
+    if (!reply?.topic) throw new NotFoundException("回复不存在或未通过审核");
+    const topic = await this.findPublicForumTopic(reply.topic.id, tenant);
+    if (!topic) throw new NotFoundException("回复不存在或未通过审核");
+    const report = await this.forumReports.save(this.forumReports.create({ tenant: topic.tenant || null, topic, reply, reporterId: userId, type: this.requiredText(dto.type || "other", 1, 40, "请选择举报类型"), description: this.optionalText(dto.description, 1000), status: "pending" }));
+    topic.reportCount = Number(topic.reportCount || 0) + 1;
+    await this.forumTopics.save(topic);
+    return { report, message: "举报已提交，平台会尽快处理" };
+  }
+
+  @Get("me/forum/topics")
+  async listMyForumTopics(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const builder = this.forumTopics.createQueryBuilder("topic").leftJoinAndSelect("topic.category", "category").leftJoinAndSelect("topic.tenant", "tenant").where("topic.userId = :userId", { userId }).orderBy("topic.createdAt", "DESC").take(50);
+    this.applyTenantOrGlobalAliasScope(builder, "topic", tenant);
+    return (await builder.getMany()).map((topic) => this.forumTopicView(topic, { favorited: false }));
+  }
+
+  @Get("me/forum/replies")
+  async listMyForumReplies(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const builder = this.forumReplies.createQueryBuilder("reply").leftJoinAndSelect("reply.topic", "topic").leftJoinAndSelect("reply.tenant", "tenant").where("reply.userId = :userId", { userId }).orderBy("reply.createdAt", "DESC").take(50);
+    this.applyTenantOrGlobalAliasScope(builder, "reply", tenant);
+    return builder.getMany();
+  }
+
+  @Get("me/forum/favorites")
+  async listMyForumFavorites(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const rows = await this.forumFavorites.find({ where: { user: { id: userId } }, order: { createdAt: "DESC" }, take: 50 });
+    return rows.filter((row) => !tenant || !row.topic.tenant || row.topic.tenant.id === tenant.id).map((row) => ({ ...row, topic: this.forumTopicView(row.topic, { favorited: true }) }));
+  }
+
   @Get("checkin/today")
   async getTodayCheckin(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const today = this.today();
@@ -370,6 +562,164 @@ export class PublicCoursesController {
       await this.checkinTasks.save(task);
     }
     return { checkedToday: true, checkin: row, task: { ...task, completedCount }, today };
+  }
+
+  private applyTenantOrGlobalAliasScope(builder: any, alias: string, tenant?: Tenant | null) {
+    if (tenant) builder.andWhere(`(${alias}.tenantId = :tenantId OR ${alias}.tenantId IS NULL)`, { tenantId: tenant.id });
+    return builder;
+  }
+
+  private async ensurePublicDefaultForumCategory(tenant?: Tenant | null) {
+    const builder = this.forumCategories.createQueryBuilder("category").leftJoinAndSelect("category.tenant", "tenant").where("category.name = :name", { name: "共修交流" });
+    if (tenant) builder.andWhere("category.tenantId = :tenantId", { tenantId: tenant.id });
+    else builder.andWhere("category.tenantId IS NULL");
+    const existing = await builder.getOne();
+    if (existing) return existing;
+    return this.forumCategories.save(this.forumCategories.create({ tenant: tenant || null, name: "共修交流", description: "活动心得、课程共学和公益共建交流", sortOrder: 0, enabled: true, postPermission: "user", auditMode: "pre" }));
+  }
+
+  private async resolvePublicForumCategory(categoryId: unknown, tenant?: Tenant | null) {
+    const id = Number(categoryId || 0);
+    if (!id) return this.ensurePublicDefaultForumCategory(tenant);
+    const category = await this.forumCategories.findOne({ where: { id } });
+    if (!category || !category.enabled) throw new BadRequestException("论坛版块不存在或已停用");
+    if (category.tenant && tenant && category.tenant.id !== tenant.id) throw new BadRequestException("不能向其它城市版块发帖");
+    if (category.tenant && !tenant) throw new BadRequestException("请先选择当前城市");
+    return category;
+  }
+
+  private async findPublicForumTopic(id: number, tenant?: Tenant | null) {
+    const builder = this.forumTopics
+      .createQueryBuilder("topic")
+      .leftJoinAndSelect("topic.tenant", "tenant")
+      .leftJoinAndSelect("topic.category", "category")
+      .leftJoinAndSelect("topic.user", "user")
+      .leftJoinAndSelect("topic.activity", "activity")
+      .leftJoinAndSelect("topic.course", "course")
+      .leftJoinAndSelect("topic.charityProject", "charityProject")
+      .where("topic.id = :id", { id })
+      .andWhere("topic.status = :status", { status: "approved" });
+    return this.applyTenantOrGlobalAliasScope(builder, "topic", tenant).getOne();
+  }
+
+  private async createForumReplyRow(topic: ForumTopic, parent: ForumReply | null, userId: number, dto: any) {
+    const content = this.requiredText(dto.content, 1, 5000, "请输入回复内容");
+    const approved = topic.category?.auditMode === "post";
+    const reply = await this.forumReplies.save(this.forumReplies.create({
+      tenant: topic.tenant || null,
+      topic,
+      parent,
+      depth: parent ? 2 : 1,
+      userId,
+      content,
+      images: this.normalizeForumImages(dto.images),
+      authorRole: topic.userId === userId ? "author" : "user",
+      status: approved ? "approved" : "pending",
+      approvedAt: approved ? new Date() : null
+    }));
+    if (approved) {
+      topic.replyCount = Number(topic.replyCount || 0) + 1;
+      topic.lastReplyAt = new Date();
+      topic.heat = Number(topic.viewCount || 0) + Number(topic.replyCount || 0) * 5 + Number(topic.favoriteCount || 0) * 3;
+      await this.forumTopics.save(topic);
+      await this.createForumReplyNotifications(topic, reply, parent, userId);
+    }
+    return { reply, message: approved ? "回复已发布" : "回复已提交审核，通过后展示" };
+  }
+
+  private async createForumReplyNotifications(topic: ForumTopic, reply: ForumReply, parent: ForumReply | null, senderId: number) {
+    const targets = new Set<number>();
+    if (topic.userId && topic.userId !== senderId) targets.add(topic.userId);
+    if (parent?.userId && parent.userId !== senderId) targets.add(parent.userId);
+    if (!targets.size) return;
+    await this.forumNotifications.save(Array.from(targets).map((userId) => this.forumNotifications.create({
+      tenant: topic.tenant || null,
+      user: { id: userId } as any,
+      topic,
+      reply,
+      type: "reply",
+      title: "你的帖子有新回复",
+      content: reply.content.slice(0, 120),
+      readAt: null
+    })));
+  }
+
+  private forumTopicView(topic: ForumTopic, extra: { favorited: boolean }) {
+    return {
+      id: topic.id,
+      tenant: topic.tenant ? { id: topic.tenant.id, code: topic.tenant.code, name: topic.tenant.name, region: topic.tenant.region } : null,
+      category: topic.category ? { id: topic.category.id, name: topic.category.name, auditMode: topic.category.auditMode } : null,
+      author: topic.user ? { id: topic.user.id, nickname: topic.user.nickname || topic.user.phone || `用户${topic.user.id}`, avatarUrl: topic.user.avatarUrl } : { id: topic.userId, nickname: topic.userId ? `用户${topic.userId}` : "平台运营", avatarUrl: null },
+      title: topic.title,
+      content: topic.content,
+      images: topic.images || [],
+      tags: topic.tags || [],
+      activity: topic.activity ? { id: topic.activity.id, title: topic.activity.title } : null,
+      course: topic.course ? { id: topic.course.id, title: topic.course.title } : null,
+      charityProject: topic.charityProject ? { id: topic.charityProject.id, title: topic.charityProject.title } : null,
+      pinned: topic.pinned,
+      featured: topic.featured,
+      heat: topic.heat,
+      viewCount: topic.viewCount,
+      replyCount: topic.replyCount,
+      favoriteCount: topic.favoriteCount,
+      reportCount: topic.reportCount,
+      status: topic.status,
+      favorited: extra.favorited,
+      createdAt: topic.createdAt,
+      updatedAt: topic.updatedAt,
+      lastReplyAt: topic.lastReplyAt
+    };
+  }
+
+  private threadedForumReplies(replies: ForumReply[]): any[] {
+    const children = new Map<number, ForumReply[]>();
+    for (const reply of replies) {
+      const parentId = reply.parent?.id || reply.parentId || 0;
+      if (!parentId) continue;
+      children.set(parentId, [...(children.get(parentId) || []), reply]);
+    }
+    return replies
+      .filter((reply) => !reply.parent && !reply.parentId)
+      .map((reply) => this.forumReplyView(reply, children.get(reply.id) || []));
+  }
+
+  private forumReplyView(reply: ForumReply, children: ForumReply[] = []): any {
+    return {
+      id: reply.id,
+      userId: reply.userId,
+      author: reply.user ? { id: reply.user.id, nickname: reply.user.nickname || reply.user.phone || `用户${reply.user.id}`, avatarUrl: reply.user.avatarUrl } : { id: reply.userId, nickname: reply.userId ? `用户${reply.userId}` : "平台运营", avatarUrl: null },
+      content: reply.content,
+      images: reply.images || [],
+      authorRole: reply.authorRole,
+      createdAt: reply.createdAt,
+      children: children.map((child) => this.forumReplyView(child))
+    };
+  }
+
+  private requiredText(value: unknown, minLength: number, maxLength: number, message: string) {
+    const text = String(value || "").trim();
+    if (text.length < minLength) throw new BadRequestException(message);
+    return text.slice(0, maxLength);
+  }
+
+  private normalizeForumImages(value: unknown) {
+    const rows = Array.isArray(value) ? value : [];
+    const normalized = rows.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 9);
+    for (const url of normalized) {
+      if (!/^\/uploads\/community-posts\/|^https?:\/\//i.test(url)) throw new BadRequestException("图片地址不合法");
+    }
+    return normalized;
+  }
+
+  private normalizeForumTags(value: unknown) {
+    const rows = Array.isArray(value) ? value : String(value || "").split(/[,，、\s]+/);
+    return rows.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 10);
+  }
+
+  private clientIp(req: any) {
+    const forwarded = String(req.headers?.["x-forwarded-for"] || "").split(",")[0]?.trim();
+    return forwarded || req.ip || req.socket?.remoteAddress || null;
   }
 
   private findTodayCheckinTask(date: string, tenant?: Tenant | null) {

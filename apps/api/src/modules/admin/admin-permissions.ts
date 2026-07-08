@@ -68,6 +68,8 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "ambassador.manage", label: "文化大使招募", group: "公益招募", platformOnly: true },
   { key: "course.manage", label: "课程管理", group: "慢π运营" },
   { key: "community.manage", label: "共修动态管理", group: "慢π运营" },
+  { key: "forum.manage", label: "论坛管理", group: "慢π运营" },
+  { key: "forum.moderate", label: "论坛审核/举报处理", group: "慢π运营" },
   { key: "upload.image", label: "上传图片", group: "通用能力" },
   { key: "upload.settlement_proof", label: "上传结算凭证", group: "通用能力" }
 ] as const;
@@ -115,6 +117,8 @@ const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
   "charity.manage",
   "course.manage",
   "community.manage",
+  "forum.manage",
+  "forum.moderate",
   "upload.image"
 ];
 
@@ -273,5 +277,6 @@ export function resolveAdminRoutePermission(method: string, routePath?: string) 
   if (path.startsWith("reviews")) return "review.manage";
   if (path.startsWith("courses")) return "course.manage";
   if (path.startsWith("community")) return "community.manage";
+  if (path.startsWith("forum")) return write ? "forum.moderate" : "forum.manage";
   return null;
 }

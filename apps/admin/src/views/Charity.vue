@@ -9,6 +9,7 @@ const loading = ref(false);
 const savingSetting = ref(false);
 const savingProject = ref(false);
 const summary = ref<any>(null);
+const overview = ref<any>({ kpis: {}, todos: [], alerts: [] });
 const setting = ref<any>(null);
 const transactions = ref<any[]>([]);
 const projects = ref<any[]>([]);
@@ -28,6 +29,18 @@ const disbursementForm = reactive({ amount: 100, remark: "公益项目执行拨�
 
 const canOperate = computed(() => canAccess(["charity.manage"]));
 const canFinance = computed(() => canAccess(["charity.finance"]));
+const overviewAlerts = computed(() => Array.isArray(overview.value?.alerts) ? overview.value.alerts : []);
+const charityMetricCards = computed(() => {
+  const kpis = overview.value?.kpis || {};
+  return [
+    { label: "累计公益金", value: `¥${money(kpis.totalAccrued ?? summary.value?.totalAccrued)}` },
+    { label: "当前可用", value: `¥${money(kpis.availableAmount ?? summary.value?.availableAmount)}` },
+    { label: "已拨付", value: `¥${money(kpis.totalDisbursed ?? summary.value?.totalDisbursed)}` },
+    { label: "公开项目", value: kpis.publicProjects ?? projects.value.filter((row) => row.publicVisible !== false).length },
+    { label: "待执行/验收", value: kpis.pendingProjects ?? projects.value.filter((row) => ["pending_execution", "executing", "pending_acceptance"].includes(row.status)).length },
+    { label: "参与用户", value: summary.value?.participantCount || 0 }
+  ];
+});
 
 const statusText: Record<string, string> = {
   fundraising: "筹集中",
@@ -71,12 +84,14 @@ const filteredTransactions = computed(() => {
 async function load() {
   loading.value = true;
   try {
-    const [summaryData, settingData, projectRows] = await Promise.all([
+    const [summaryData, overviewData, settingData, projectRows] = await Promise.all([
       api.get<any, any>("/admin/charity/summary"),
+      api.get<any, any>("/admin/charity/overview"),
       canOperate.value ? api.get<any, any>("/admin/settings/charity") : Promise.resolve(null),
       canOperate.value || canFinance.value ? api.get<any, any[]>("/admin/charity/projects") : Promise.resolve([])
     ]);
     summary.value = summaryData;
+    overview.value = overviewData || { kpis: {}, todos: [], alerts: [] };
     projects.value = projectRows || [];
     if (settingData) {
       setting.value = settingData;
@@ -205,6 +220,16 @@ function openProof(url?: string | null) {
   window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function projectHasDisbursementProof(row: any) {
+  const rows = Array.isArray(row.disbursements) ? row.disbursements : [];
+  if (!rows.length) return true;
+  return rows.every((item: any) => item.proofUrl);
+}
+
+function projectHasUpdates(row: any) {
+  return Array.isArray(row.updates) && row.updates.length > 0;
+}
+
 function uploadHeaders() {
   const token = localStorage.getItem("admin_token");
   return token ? { Authorization: `Bearer ${token}` } : {};
@@ -272,11 +297,10 @@ onMounted(load);
     <el-alert class="page-hint" type="info" :closable="false" show-icon title="公益金说明" description="公益金由平台从订单收入中按配置比例计提，用户无需额外支付。前台统一展示为「公益金 / 公益池 / 我的公益贡献」。" />
 
     <div class="metric-grid" v-loading="loading">
-      <div class="metric"><span>累计公益金</span><strong>¥{{ money(summary?.totalAccrued) }}</strong></div>
-      <div class="metric"><span>当前可用</span><strong>¥{{ money(summary?.availableAmount) }}</strong></div>
-      <div class="metric"><span>已拨付</span><strong>¥{{ money(summary?.totalDisbursed) }}</strong></div>
-      <div class="metric"><span>退款冲回</span><strong>¥{{ money(summary?.totalReversed) }}</strong></div>
-      <div class="metric"><span>参与用户</span><strong>{{ summary?.participantCount || 0 }}</strong></div>
+      <div v-for="item in charityMetricCards" :key="item.label" class="metric"><span>{{ item.label }}</span><strong>{{ item.value }}</strong></div>
+    </div>
+    <div v-if="overviewAlerts.length" class="alert-stack">
+      <el-alert v-for="item in overviewAlerts" :key="item.message" :type="item.level || 'warning'" :title="item.message" show-icon :closable="false" />
     </div>
 
     <div v-if="canOperate" class="table-card setting-card">
@@ -309,6 +333,13 @@ onMounted(load);
         <el-table-column label="目标金额" width="120"><template #default="{ row }">¥{{ money(row.targetAmount) }}</template></el-table-column>
         <el-table-column label="已拨付" width="120"><template #default="{ row }">¥{{ money(row.disbursedAmount) }}</template></el-table-column>
         <el-table-column label="进度" width="180"><template #default="{ row }"><el-progress :percentage="row.progressPercent || 0" /></template></el-table-column>
+        <el-table-column label="透明度" width="230">
+          <template #default="{ row }">
+            <el-tag :type="row.description ? 'success' : 'warning'">说明</el-tag>
+            <el-tag :type="projectHasUpdates(row) ? 'success' : 'warning'" style="margin-left:4px;">动态</el-tag>
+            <el-tag :type="projectHasDisbursementProof(row) ? 'success' : 'danger'" style="margin-left:4px;">凭证</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column label="公开" width="90"><template #default="{ row }"><el-tag :type="row.publicVisible ? 'success' : 'info'">{{ row.publicVisible ? "展示" : "隐藏" }}</el-tag></template></el-table-column>
         <el-table-column label="更新时间" width="170"><template #default="{ row }">{{ formatTime(row.updatedAt) }}</template></el-table-column>
         <el-table-column v-if="canOperate || canFinance" label="操作" width="240" fixed="right">
@@ -454,10 +485,11 @@ onMounted(load);
 <style scoped>
 .toolbar-actions { display: flex; align-items: center; gap: 10px; }
 .page-hint { margin-bottom: 16px; }
-.metric-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
+.metric-grid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .metric { min-height: 104px; display: grid; gap: 8px; padding: 18px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .metric span { color: #667085; font-size: 13px; }
 .metric strong { color: #111827; font-size: 26px; }
+.alert-stack { display: grid; gap: 8px; margin-bottom: 18px; }
 .setting-card { margin-bottom: 18px; }
 .unit { margin-left: 8px; color: #667085; }
 .form-tip { margin-left: 10px; color: #667085; font-size: 13px; }

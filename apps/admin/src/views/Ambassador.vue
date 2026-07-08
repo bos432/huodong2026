@@ -13,6 +13,7 @@ const applications = ref<any[]>([]);
 const volunteerTasks = ref<any[]>([]);
 const volunteerApplications = ref<any[]>([]);
 const followups = ref<any[]>([]);
+const overview = ref<any>({ kpis: {}, todos: [], alerts: [] });
 const applicationFilter = reactive({ keyword: "", status: "", priority: "", source: "" });
 const caseDialogVisible = ref(false);
 const taskDialogVisible = ref(false);
@@ -125,6 +126,18 @@ const settingForm = reactive<any>({
 });
 
 const landingUrl = computed(() => `${window.location.origin}/#/pages/ambassador/index`);
+const overviewAlerts = computed(() => Array.isArray(overview.value?.alerts) ? overview.value.alerts : []);
+const overviewCards = computed(() => {
+  const kpis = overview.value?.kpis || {};
+  return [
+    { label: "线索总数", value: kpis.total || 0 },
+    { label: "待跟进", value: kpis.waitFollow || 0 },
+    { label: "高意向", value: kpis.highIntent || 0 },
+    { label: "待面谈", value: kpis.interview || 0 },
+    { label: "已激活", value: kpis.activated || 0 },
+    { label: "超期未跟进", value: kpis.overdue || 0 }
+  ];
+});
 const applicationStats = computed(() => {
   const rows = applications.value || [];
   const toFollow = rows.filter((row) => ["pending", "contacted", "screened", "interview"].includes(String(row.status || ""))).length;
@@ -145,7 +158,8 @@ const sourceStats = computed(() => sourceOptions.filter((item) => item.value).ma
 async function load() {
   loading.value = true;
   try {
-    const [setting, caseRows, applicationRows, tasks, taskApplications] = await Promise.all([api.get<any, any>("/admin/ambassador/settings"), api.get<any, any[]>("/admin/ambassador/cases"), api.get<any, any[]>("/admin/ambassador/applications"), api.get<any, any[]>("/admin/volunteer/tasks"), api.get<any, any[]>("/admin/volunteer/task-applications")]);
+    const [overviewData, setting, caseRows, applicationRows, tasks, taskApplications] = await Promise.all([api.get<any, any>("/admin/ambassador/overview"), api.get<any, any>("/admin/ambassador/settings"), api.get<any, any[]>("/admin/ambassador/cases"), api.get<any, any[]>("/admin/ambassador/applications"), api.get<any, any[]>("/admin/volunteer/tasks"), api.get<any, any[]>("/admin/volunteer/task-applications")]);
+    overview.value = overviewData || { kpis: {}, todos: [], alerts: [] };
     applySetting(setting);
     cases.value = caseRows || [];
     applications.value = applicationRows || [];
@@ -432,6 +446,16 @@ onMounted(load);
     <el-alert class="page-hint" type="info" :closable="false" show-icon>
       <template #title>公开链接：{{ landingUrl }}</template>
     </el-alert>
+
+    <div class="overview-grid">
+      <div v-for="item in overviewCards" :key="item.label" class="overview-card">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </div>
+    </div>
+    <div v-if="overviewAlerts.length" class="alert-stack">
+      <el-alert v-for="item in overviewAlerts" :key="item.message" :type="item.level || 'warning'" :title="item.message" show-icon :closable="false" />
+    </div>
 
     <el-tabs v-model="activeTab" class="tabs">
       <el-tab-pane label="落地页配置" name="settings">
@@ -821,6 +845,32 @@ onMounted(load);
 .page-hint {
   border-radius: 8px;
 }
+.overview-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 12px;
+}
+.overview-card {
+  min-width: 0;
+  padding: 14px 16px;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  background: #fff;
+  display: grid;
+  gap: 6px;
+}
+.overview-card span {
+  color: #667085;
+  font-size: 13px;
+}
+.overview-card strong {
+  color: #101828;
+  font-size: 24px;
+}
+.alert-stack {
+  display: grid;
+  gap: 8px;
+}
 .table-card {
   padding: 16px;
   border: 1px solid #e5e7eb;
@@ -957,6 +1007,7 @@ onMounted(load);
     flex-direction: column;
   }
   .grid-two,
+  .overview-grid,
   .funnel-dashboard,
   .funnel-bars,
   .repeat-row,

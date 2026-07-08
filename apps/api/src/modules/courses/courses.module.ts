@@ -13,6 +13,13 @@ import { CommunityPostLike } from "../../entities/community-post-like.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { UserFavorite } from "../../entities/user-favorite.entity";
 import { Certificate } from "../../entities/certificate.entity";
+import { ForumCategory } from "../../entities/forum-category.entity";
+import { ForumFavorite } from "../../entities/forum-favorite.entity";
+import { ForumNotification } from "../../entities/forum-notification.entity";
+import { ForumReply } from "../../entities/forum-reply.entity";
+import { ForumReport } from "../../entities/forum-report.entity";
+import { ForumTopic } from "../../entities/forum-topic.entity";
+import { ForumViewLog } from "../../entities/forum-view-log.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
 import { Activity } from "../../entities/activity.entity";
 import { Order } from "../../entities/order.entity";
@@ -24,7 +31,7 @@ import { PublicCoursesController } from "./public-courses.controller";
 import { CoursesService } from "./courses.service";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant])],
+  imports: [TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, ForumCategory, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant])],
   controllers: [CoursesController, PublicCoursesController],
   providers: [CoursesService],
   exports: [CoursesService]

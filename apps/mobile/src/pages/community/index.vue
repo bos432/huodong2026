@@ -19,6 +19,13 @@
       </view>
       <view class="button sm">去发布</view>
     </view>
+    <view class="forum-entry-card" @click="goForum">
+      <view>
+        <text class="publish-title">共修论坛</text>
+        <text class="publish-copy">发起话题、回复同学、收藏精华内容</text>
+      </view>
+      <view class="button sm secondary">进入</view>
+    </view>
 
     <!-- 近期活动 -->
     <view class="section-title"><text class="title-md">📅 近期活动</text></view>
@@ -262,6 +269,7 @@ function goPublish() {
   const query = activityFilterId.value ? `?activityId=${activityFilterId.value}` : "";
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish${query}`) });
 }
+function goForum() { uni.navigateTo({ url: withTenantCode("/pages/forum/index") }); }
 function goPost(post: CommunityPost) { uni.navigateTo({ url: withTenantCode(`/pages/community/detail?id=${post.id}`) }); }
 </script>
 
@@ -312,6 +320,7 @@ function goPost(post: CommunityPost) { uni.navigateTo({ url: withTenantCode(`/pa
 .post-card { margin-bottom: 16rpx; }
 .interact-btn { display: flex; align-items: center; gap: 8rpx; }
 .publish-card { display:flex; align-items:center; justify-content:space-between; gap:18rpx; margin-bottom:24rpx; padding:24rpx; border-radius:20rpx; background:#fff7ec; box-shadow:0 4rpx 20rpx rgba(0,0,0,0.04); }
+.forum-entry-card { display:flex; align-items:center; justify-content:space-between; gap:18rpx; margin-bottom:24rpx; padding:24rpx; border-radius:20rpx; background:#eef8f6; box-shadow:0 4rpx 20rpx rgba(0,0,0,0.04); }
 .publish-title { display:block; color:#5b2f24; font-size:30rpx; font-weight:900; }
 .publish-copy { display:block; margin-top:6rpx; color:#8a6b58; font-size:24rpx; }
 .post-images { display:flex; gap:10rpx; margin-top:12rpx; }

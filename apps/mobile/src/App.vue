@@ -1,8 +1,10 @@
 <script setup lang="ts">
 import { onLaunch } from "@dcloudio/uni-app";
+import { applyTenantBootstrapDefault } from "./api";
 import { loadPageTheme } from "./theme";
 
 onLaunch(() => {
+  applyTenantBootstrapDefault();
   loadPageTheme();
 });
 </script>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api, downloadFile } from "../api";
 
@@ -9,8 +9,12 @@ const activeTab = ref("profiles");
 const profiles = ref<any[]>([]);
 const records = ref<any[]>([]);
 const taskApplications = ref<any[]>([]);
+const overview = ref<any>({ kpis: {}, todos: [], alerts: [] });
 const serviceDialogVisible = ref(false);
 const serviceTarget = ref<any | null>(null);
+const certificateDialogVisible = ref(false);
+const certificateTarget = ref<any | null>(null);
+const profileCertificates = ref<any[]>([]);
 const profileFilter = reactive({ keyword: "", status: "", level: "", city: "" });
 const recordFilter = reactive({ keyword: "", city: "", startDate: "", endDate: "" });
 const applicationFilter = reactive({ status: "" });
@@ -21,25 +25,33 @@ const levelText: Record<string, string> = { participant: "公益参与者", volu
 const applicationStatusText: Record<string, string> = { pending: "待审核", approved: "已通过", rejected: "已拒绝", completed: "已完成", cancelled: "已取消" };
 const taskTypeText: Record<string, string> = { activity_support: "活动协助", checkin: "签到接待", course_assistant: "课程助教", charity_execution: "公益执行", content_spread: "内容传播", aid_followup: "帮扶回访" };
 
+const overviewAlerts = computed(() => Array.isArray(overview.value?.alerts) ? overview.value.alerts : []);
 const profileStats = computed(() => {
-  const totalHours = profiles.value.reduce((sum, row) => sum + Number(row.serviceHours || 0), 0);
+  const kpis = overview.value?.kpis || {};
+  const totalHours = kpis.totalServiceHours ?? profiles.value.reduce((sum, row) => sum + Number(row.serviceHours || 0), 0);
   return [
-    { label: "志愿者档案", value: profiles.value.length },
-    { label: "已通过", value: profiles.value.filter((row) => row.status === "approved").length },
-    { label: "待审核", value: profiles.value.filter((row) => row.status === "pending").length },
-    { label: "服务时长", value: totalHours.toFixed(1) }
+    { label: "志愿者档案", value: kpis.totalProfiles ?? profiles.value.length },
+    { label: "已通过", value: kpis.approvedProfiles ?? profiles.value.filter((row) => row.status === "approved").length },
+    { label: "待审核", value: kpis.pendingProfiles ?? profiles.value.filter((row) => row.status === "pending").length },
+    { label: "服务时长", value: Number(totalHours || 0).toFixed(1) },
+    { label: "已发证书", value: kpis.issuedCertificates || 0 },
+    { label: "待发证书", value: kpis.pendingCertificates || 0 }
   ];
 });
 
 async function loadAll() {
   loading.value = true;
   try {
-    await Promise.all([loadProfiles(), loadRecords(), loadTaskApplications()]);
+    await Promise.all([loadOverview(), loadProfiles(), loadRecords(), loadTaskApplications()]);
   } catch (error: any) {
     ElMessage.error(error.message || "加载志愿者数据失败");
   } finally {
     loading.value = false;
   }
+}
+
+async function loadOverview() {
+  overview.value = await api.get<any, any>("/admin/volunteer/overview");
 }
 
 function buildQuery(filters: Record<string, unknown>) {
@@ -80,10 +92,33 @@ async function issueCertificate(row: any) {
   if (!row.user?.id) return ElMessage.warning("该志愿者档案尚未绑定用户账号，需用户登录后申请或报名志愿任务");
   try {
     await api.post(`/admin/volunteer/profiles/${row.id}/certificates`, {});
-    await loadProfiles();
+    await Promise.all([loadOverview(), loadProfiles()]);
     ElMessage.success("志愿服务证书已发放");
   } catch (error: any) {
     ElMessage.error(error.message || "发证失败");
+  }
+}
+
+async function openCertificates(row: any) {
+  certificateTarget.value = row;
+  profileCertificates.value = await api.get<any, any[]>(`/admin/volunteer/profiles/${row.id}/certificates`);
+  certificateDialogVisible.value = true;
+}
+
+async function revokeCertificate(row: any) {
+  try {
+    const result = await ElMessageBox.prompt("请输入撤销原因", "撤销证书", {
+      inputType: "textarea",
+      confirmButtonText: "确认撤销",
+      cancelButtonText: "取消"
+    });
+    await api.patch(`/admin/volunteer/certificates/${row.id}/revoke`, { reason: String(result.value || "").trim() });
+    if (certificateTarget.value) await openCertificates(certificateTarget.value);
+    await Promise.all([loadOverview(), loadProfiles()]);
+    ElMessage.success("证书已撤销");
+  } catch (error: any) {
+    if (error === "cancel") return;
+    ElMessage.error(error.message || "撤销证书失败");
   }
 }
 
@@ -116,7 +151,7 @@ async function saveServiceRecord() {
     await api.post("/admin/volunteer/service-records", { ...serviceForm, hours: Number(serviceForm.hours) });
     ElMessage.success("服务记录已登记");
     serviceDialogVisible.value = false;
-    await Promise.all([loadProfiles(), loadRecords(), loadTaskApplications()]);
+    await Promise.all([loadOverview(), loadProfiles(), loadRecords(), loadTaskApplications()]);
   } catch (error: any) {
     ElMessage.error(error.message || "登记失败");
   }
@@ -190,6 +225,9 @@ onMounted(loadAll);
         <strong>{{ item.value }}</strong>
       </div>
     </div>
+    <div v-if="overviewAlerts.length" class="alert-stack">
+      <el-alert v-for="item in overviewAlerts" :key="item.message" :type="item.level || 'info'" :title="item.message" show-icon :closable="false" />
+    </div>
 
     <el-tabs v-model="activeTab" class="tabs">
       <el-tab-pane label="志愿者档案" name="profiles">
@@ -240,9 +278,10 @@ onMounted(loadAll);
             <el-table-column label="证书" width="120">
               <template #default="{ row }">
                 <el-tooltip v-if="row.latestCertificate?.name" :content="row.latestCertificate.name" placement="top">
-                  <el-tag type="warning">{{ row.certificateCount || 0 }} 张</el-tag>
+                  <el-tag :type="row.latestCertificate.status === 'revoked' ? 'info' : 'warning'">{{ row.certificateCount || 0 }} 张</el-tag>
                 </el-tooltip>
                 <el-tag v-else type="info">0 张</el-tag>
+                <div v-if="row.latestCertificate?.certificateNo" class="mini-code">{{ row.latestCertificate.certificateNo }}</div>
               </template>
             </el-table-column>
             <el-table-column label="来源" width="120"><template #default="{ row }">{{ row.application?.source || "-" }}</template></el-table-column>
@@ -250,9 +289,10 @@ onMounted(loadAll);
               <template #default="{ row }"><el-input v-model="row.remark" size="small" placeholder="内部备注" @change="updateProfile(row)" /></template>
             </el-table-column>
             <el-table-column label="更新时间" width="170"><template #default="{ row }">{{ formatTime(row.updatedAt) }}</template></el-table-column>
-            <el-table-column label="操作" width="120" fixed="right">
+            <el-table-column label="操作" width="190" fixed="right">
               <template #default="{ row }">
                 <el-button size="small" type="primary" :disabled="!row.user?.id" @click="issueCertificate(row)">发证</el-button>
+                <el-button size="small" @click="openCertificates(row)">证书</el-button>
               </template>
             </el-table-column>
           </el-table>
@@ -352,6 +392,25 @@ onMounted(loadAll);
         <el-button type="primary" @click="saveServiceRecord">登记完成</el-button>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="certificateDialogVisible" :title="certificateTarget ? `证书：${certificateTarget.name}` : '证书'" width="760px" destroy-on-close>
+      <el-table :data="profileCertificates" stripe empty-text="暂无证书">
+        <el-table-column prop="name" label="证书名称" min-width="180" show-overflow-tooltip />
+        <el-table-column prop="certificateNo" label="证书编号" width="170" />
+        <el-table-column label="等级/时长" width="140"><template #default="{ row }">{{ levelText[row.level] || row.level || "-" }} · {{ Number(row.serviceHours || 0).toFixed(1) }}h</template></el-table-column>
+        <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status === 'revoked' ? 'info' : 'success'">{{ row.status === 'revoked' ? '已撤销' : '有效' }}</el-tag></template></el-table-column>
+        <el-table-column label="发证时间" width="170"><template #default="{ row }">{{ formatTime(row.issuedAt) }}</template></el-table-column>
+        <el-table-column prop="revokeReason" label="撤销原因" min-width="160" show-overflow-tooltip />
+        <el-table-column label="操作" width="100" fixed="right">
+          <template #default="{ row }">
+            <el-button size="small" type="danger" :disabled="row.status === 'revoked'" @click="revokeCertificate(row)">撤销</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer>
+        <el-button @click="certificateDialogVisible = false">关闭</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -382,7 +441,7 @@ onMounted(loadAll);
 }
 .stats-grid {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(6, minmax(0, 1fr));
   gap: 12px;
 }
 .stat-card,
@@ -406,6 +465,16 @@ onMounted(loadAll);
   margin-top: 8px;
   color: #101828;
   font-size: 24px;
+}
+.alert-stack {
+  display: grid;
+  gap: 8px;
+}
+.mini-code {
+  margin-top: 4px;
+  color: #667085;
+  font-size: 12px;
+  line-height: 1.4;
 }
 .table-card {
   padding: 16px;

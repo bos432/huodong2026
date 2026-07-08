@@ -258,6 +258,12 @@ export class AdminController {
     return this.service.charitySummary(admin);
   }
 
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get("charity/overview")
+  charityOverview(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.charityOverview(admin);
+  }
+
   @AdminRoles(...FINANCE_ROLES)
   @Get("charity/transactions")
   charityTransactions(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
@@ -316,6 +322,12 @@ export class AdminController {
   @Post("settings/charity")
   saveCharitySetting(@Body() dto: CharitySettingDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.saveCharitySetting(dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("ambassador/overview")
+  ambassadorOverview(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.ambassadorOverview(admin);
   }
 
   @AdminRoles(...SUPER_ADMIN)
@@ -382,6 +394,12 @@ export class AdminController {
   }
 
   @AdminRoles(...SUPER_ADMIN)
+  @Get("volunteer/overview")
+  volunteerOverview(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.volunteerOverview(admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
   @Get("volunteer/tasks")
   volunteerTasks(@Query() query: VolunteerTaskQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.volunteerTasks(query, admin);
@@ -418,6 +436,12 @@ export class AdminController {
   @Post("volunteer/profiles/:id/certificates")
   issueVolunteerCertificate(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerCertificateDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.issueVolunteerCertificate(id, dto, admin);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Patch("volunteer/certificates/:id/revoke")
+  revokeVolunteerCertificate(@Param("id", ParseIntPipe) id: number, @Body() dto: { reason?: string }, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.revokeVolunteerCertificate(id, dto, admin);
   }
 
   @AdminRoles(...SUPER_ADMIN)

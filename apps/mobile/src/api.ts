@@ -14,6 +14,7 @@ const PROTECTED_PAGE_URLS = new Set([
   "/pages/activity/register",
   "/pages/community/checkin",
   "/pages/community/publish",
+  "/pages/forum/publish",
   "/pages/course/player",
   "/pages/mall/addresses",
   "/pages/mall/cart",
@@ -121,6 +122,32 @@ export function setCurrentTenantCodeSource(value: "route" | "manual" | "location
 
 export function getCurrentTenantCodeSource() {
   return String(uni.getStorageSync(TENANT_CODE_SOURCE_STORAGE_KEY) || "");
+}
+
+export type TenantBootstrap = {
+  tenants: Array<{ id: number; code: string; name: string; region?: string | null }>;
+  defaultTenant: { id: number; code: string; name: string; region?: string | null } | null;
+  policy?: { precedence?: string[]; serverDefaultTenantCode?: string | null };
+};
+
+export async function applyTenantBootstrapDefault() {
+  if (hasExplicitTenantCodeInRoute()) return null;
+  const current = getCurrentTenantCode();
+  const source = getCurrentTenantCodeSource();
+  if (current && ["route", "manual", "location"].includes(source)) return null;
+  try {
+    const bootstrap = await request<TenantBootstrap>("/public/tenants/bootstrap");
+    const serverDefault = normalizeTenantCode(bootstrap?.defaultTenant?.code);
+    const firstEnabled = normalizeTenantCode(bootstrap?.tenants?.[0]?.code);
+    const nextCode = serverDefault || current || DEFAULT_TENANT_CODE || firstEnabled;
+    if (nextCode && nextCode !== current) {
+      setCurrentTenantCode(nextCode);
+      setCurrentTenantCodeSource("default");
+    }
+    return bootstrap;
+  } catch {
+    return null;
+  }
 }
 
 function isPublicApiUrl(url: string) {

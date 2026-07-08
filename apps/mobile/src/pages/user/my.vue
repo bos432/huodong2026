@@ -81,6 +81,15 @@
         <text class="entry-arrow">去查看 ›</text>
       </view>
     </view>
+    <view class="card forum-post-entry" @click="goForumPosts">
+      <view class="row">
+        <view>
+          <text class="entry-title">我的论坛</text>
+          <text class="entry-copy">查看帖子、回复和收藏，继续参与共修讨论。</text>
+        </view>
+        <text class="entry-arrow">去查看 ›</text>
+      </view>
+    </view>
 
     <!-- 订单记录 -->
     <view class="card order-card">
@@ -383,6 +392,7 @@ function goCharity() { uni.navigateTo({ url:"/pages/charity/index" }); }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goWallet() { navigateProtected("/pages/user/wallet"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
+function goForumPosts() { navigateProtected("/pages/user/forum-posts"); }
 function goOrders(tab: any) {
   const status = tab?.status || "all";
   navigateProtected(`/pages/user/orders?status=${status}`);
@@ -671,7 +681,7 @@ function logoutUser() {
   margin-bottom: 16rpx;
   border: 2rpx solid rgba(196,61,61,0.2);
 }
-.community-post-entry { margin-bottom: 16rpx; }
+.community-post-entry, .forum-post-entry { margin-bottom: 16rpx; }
 .entry-title {
   display: block;
   color: #263d3c;

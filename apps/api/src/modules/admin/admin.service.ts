@@ -809,9 +809,67 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return this.charityFund.saveSetting(dto, admin);
   }
 
+  async charityOverview(admin?: AdminContext) {
+    const [summary, projects, transactions] = await Promise.all([
+      this.charityFund.adminSummary(admin),
+      this.charityFund.adminProjects(admin),
+      this.charityFund.adminTransactions(admin, 20)
+    ]);
+    const pendingProjects = projects.filter((project: any) => ["pending_execution", "executing", "pending_acceptance"].includes(project.status));
+    const missingProof = projects.filter((project: any) => (project.disbursements || []).some((item: any) => !item.proofUrl));
+    const missingUpdates = projects.filter((project: any) => project.publicVisible !== false && !(project.updates || []).length);
+    const pendingAcceptance = projects.filter((project: any) => project.status === "pending_acceptance");
+    return {
+      kpis: {
+        availableAmount: summary.availableAmount,
+        totalAccrued: summary.totalAccrued,
+        totalDisbursed: summary.totalDisbursed,
+        publicProjects: projects.filter((project: any) => project.publicVisible !== false).length,
+        pendingProjects: pendingProjects.length
+      },
+      todos: [
+        { key: "missing_proof", label: "有拨付无凭证", count: missingProof.length },
+        { key: "missing_updates", label: "有项目无动态", count: missingUpdates.length },
+        { key: "pending_acceptance", label: "已执行未验收", count: pendingAcceptance.length }
+      ],
+      alerts: [
+        ...missingProof.slice(0, 5).map((project: any) => ({ level: "warning", message: `公益项目「${project.title}」存在拨付无凭证` })),
+        ...missingUpdates.slice(0, 5).map((project: any) => ({ level: "info", message: `公益项目「${project.title}」暂无执行动态` })),
+        ...pendingAcceptance.slice(0, 5).map((project: any) => ({ level: "warning", message: `公益项目「${project.title}」待验收` }))
+      ],
+      recentRecords: { projects: projects.slice(0, 8), transactions: transactions.slice(0, 8) }
+    };
+  }
+
   async ambassadorSetting(admin?: AdminContext) {
     this.assertPlatformAdmin(admin);
     return this.publicAmbassadorSetting(await this.ensureAmbassadorSetting());
+  }
+
+  async ambassadorOverview(admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const now = new Date();
+    const [applications, followups] = await Promise.all([
+      this.ambassadorApplications.find({ order: { updatedAt: "DESC" }, take: 500 }),
+      this.ambassadorFollowups.find({ order: { createdAt: "DESC" }, take: 20 })
+    ]);
+    const scoreOf = (row: AmbassadorApplication) => Number(row.cityResourceScore || 0) + Number(row.communityScore || 0) + Number(row.contentScore || 0) + Number(row.charityScore || 0) + Number(row.deliveryScore || 0);
+    const waitFollow = applications.filter((row) => ["pending", "contacted", "screened"].includes(row.status));
+    const highIntent = applications.filter((row) => row.priority === "high" || scoreOf(row) >= 18);
+    const interview = applications.filter((row) => row.status === "interview");
+    const activated = applications.filter((row) => row.status === "activated");
+    const overdue = applications.filter((row) => row.nextFollowAt && row.nextFollowAt.getTime() < now.getTime() && !["activated", "rejected"].includes(row.status));
+    return {
+      kpis: { total: applications.length, waitFollow: waitFollow.length, highIntent: highIntent.length, interview: interview.length, activated: activated.length, overdue: overdue.length },
+      todos: [
+        { key: "wait_follow", label: "待跟进", count: waitFollow.length },
+        { key: "high_intent", label: "高意向", count: highIntent.length },
+        { key: "interview", label: "待面谈", count: interview.length },
+        { key: "overdue", label: "超期未跟进", count: overdue.length }
+      ],
+      alerts: overdue.slice(0, 8).map((row) => ({ level: "warning", message: `文化大使线索「${row.name}」已超期未跟进` })),
+      recentRecords: { applications: applications.slice(0, 8), followups }
+    };
   }
 
   async saveAmbassadorSetting(dto: AmbassadorSettingDto, admin?: AdminContext) {
@@ -977,6 +1035,38 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return builder.take(500).getMany();
   }
 
+  async volunteerOverview(admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const [profiles, applications, serviceRows, certificates, tasks] = await Promise.all([
+      this.volunteerProfiles.find({ order: { updatedAt: "DESC" }, take: 500 }),
+      this.volunteerTaskApplicationsRepo.find({ order: { createdAt: "DESC" }, take: 500 }),
+      this.volunteerServiceRecords.find({ order: { createdAt: "DESC" }, take: 50 }),
+      this.certificates.find({ order: { issuedAt: "DESC" }, take: 500 }),
+      this.volunteerTasksRepo.find({ order: { startAt: "ASC" }, take: 50 })
+    ]);
+    const totalHours = profiles.reduce((sum, row) => sum + Number(row.serviceHours || 0), 0);
+    const issuedUserIds = new Set(certificates.filter((item) => item.status !== "revoked").map((item) => item.userId));
+    const pendingCertificates = profiles.filter((row) => row.status === "approved" && row.user?.id && Number(row.serviceHours || 0) > 0 && !issuedUserIds.has(row.user.id));
+    const pendingApplications = applications.filter((row) => row.status === "pending");
+    return {
+      kpis: {
+        totalProfiles: profiles.length,
+        approvedProfiles: profiles.filter((row) => row.status === "approved").length,
+        pendingProfiles: profiles.filter((row) => row.status === "pending").length,
+        totalServiceHours: Number(totalHours.toFixed(2)),
+        issuedCertificates: certificates.filter((item) => item.status !== "revoked").length,
+        pendingCertificates: pendingCertificates.length
+      },
+      todos: [
+        { key: "pending_profiles", label: "待审核档案", count: profiles.filter((row) => row.status === "pending").length },
+        { key: "pending_task_applications", label: "待审核任务报名", count: pendingApplications.length },
+        { key: "pending_certificates", label: "待发证书", count: pendingCertificates.length }
+      ],
+      alerts: pendingCertificates.slice(0, 8).map((row) => ({ level: "info", message: `志愿者「${row.name}」已有服务时长，待发证书` })),
+      recentRecords: { profiles: profiles.slice(0, 8), applications: applications.slice(0, 8), serviceRecords: serviceRows.slice(0, 8), tasks: tasks.slice(0, 8) }
+    };
+  }
+
   async volunteerProfilesList(query: VolunteerProfileQueryDto = {}, admin?: AdminContext) {
     this.assertPlatformAdmin(admin);
     const builder = this.volunteerProfiles
@@ -1030,9 +1120,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const profile = await this.volunteerProfiles.findOne({ where: { id } });
     if (!profile) throw new NotFoundException("志愿者档案不存在");
     if (!profile.user) throw new BadRequestException("志愿者档案尚未绑定用户账号，需用户登录后申请或报名志愿任务后再发放证书");
-    const certificate = await this.ensureVolunteerCertificate(profile, admin, dto.name);
+    const certificate = await this.ensureVolunteerCertificate(profile, admin, dto.name, dto.templateKey as any);
     if (!certificate) throw new BadRequestException("志愿者档案尚未绑定用户账号，无法发放证书");
     return certificate;
+  }
+
+  async revokeVolunteerCertificate(id: number, dto: { reason?: string }, admin?: AdminContext) {
+    this.assertPlatformAdmin(admin);
+    const certificate = await this.certificates.findOne({ where: { id } });
+    if (!certificate) throw new NotFoundException("证书不存在");
+    certificate.status = "revoked";
+    certificate.revokedAt = new Date();
+    certificate.revokedBy = admin?.username || `admin:${admin?.id || ""}`;
+    certificate.revokeReason = this.nullableText(dto.reason);
+    const saved = await this.certificates.save(certificate);
+    await this.logOperation(admin, "volunteer.certificate.revoke", "certificate", saved.id, `撤销证书：${saved.name}`, { certificateNo: saved.certificateNo, reason: saved.revokeReason || null });
+    return saved;
   }
 
   async exportVolunteerProfiles(query: VolunteerProfileQueryDto = {}, admin?: AdminContext) {
@@ -1245,19 +1348,59 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return "participant";
   }
 
-  private async ensureVolunteerCertificate(profile: VolunteerProfile, admin?: AdminContext, customName?: string) {
+  private async ensureVolunteerCertificate(profile: VolunteerProfile, admin?: AdminContext, customName?: string, customTemplate?: string) {
     if (!profile.user) return null;
     const name = this.cleanText(customName, 120) || this.volunteerCertificateName(profile);
-    const existing = await this.certificates.findOne({ where: { userId: profile.user.id, name } });
-    if (existing) return existing;
+    const templateKey = this.volunteerCertificateTemplate(profile, customTemplate);
+    const latestRecord = await this.volunteerServiceRecords.findOne({ where: { profile: { id: profile.id } }, order: { createdAt: "DESC" } });
+    const existing = await this.certificates.findOne({ where: { userId: profile.user.id, name, status: "active" } });
+    if (existing) {
+      existing.certificateNo = existing.certificateNo || await this.nextCertificateNo(templateKey);
+      existing.templateKey = existing.templateKey || templateKey;
+      existing.holderName = existing.holderName || profile.name;
+      existing.serviceHours = Number(profile.serviceHours || 0).toFixed(2);
+      existing.level = profile.level || null;
+      existing.serviceRecord = existing.serviceRecord || latestRecord || null;
+      existing.issuer = existing.issuer || (admin?.id ? ({ id: admin.id } as any) : null);
+      return this.certificates.save(existing);
+    }
     const certificate = await this.certificates.save(this.certificates.create({
       userId: profile.user.id,
       name,
+      certificateNo: await this.nextCertificateNo(templateKey),
+      templateKey,
+      holderName: profile.name,
+      serviceHours: Number(profile.serviceHours || 0).toFixed(2),
+      level: profile.level || null,
       imageUrl: null,
-      threshold: Math.floor(Number(profile.serviceHours || 0))
+      threshold: Math.floor(Number(profile.serviceHours || 0)),
+      serviceRecord: latestRecord || null,
+      issuer: admin?.id ? ({ id: admin.id } as any) : null,
+      status: "active",
+      revokedAt: null,
+      revokedBy: null,
+      revokeReason: null
     }));
     await this.logOperation(admin, "volunteer.certificate.issue", "certificate", certificate.id, `发放志愿证书：${profile.name}`, { userId: profile.user.id, profileId: profile.id, name });
     return certificate;
+  }
+
+  private volunteerCertificateTemplate(profile: VolunteerProfile, customTemplate?: string) {
+    if (["volunteer_service", "charity_ambassador", "city_builder"].includes(String(customTemplate || ""))) return customTemplate as any;
+    if (profile.level === "city_builder") return "city_builder";
+    if (profile.level === "ambassador") return "charity_ambassador";
+    return "volunteer_service";
+  }
+
+  private async nextCertificateNo(templateKey: string) {
+    const prefixMap: Record<string, string> = { volunteer_service: "MPVS", charity_ambassador: "MPCA", city_builder: "MPCB" };
+    const prefix = prefixMap[templateKey] || "MPC";
+    for (let index = 0; index < 5; index++) {
+      const no = `${prefix}${new Date().toISOString().slice(0, 10).replace(/-/g, "")}${String(Date.now()).slice(-6)}${index ? String(index) : ""}`;
+      const exists = await this.certificates.findOne({ where: { certificateNo: no } });
+      if (!exists) return no;
+    }
+    return `${prefix}${Date.now()}`;
   }
 
   private volunteerCertificateName(profile: VolunteerProfile) {
@@ -3837,8 +3980,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined) {
       setting.launchConfig = normalizeLaunchConfig(dto.launchConfig);
     }
+    if (!this.isTenantScoped(admin) && dto.defaultTenantCode !== undefined) {
+      setting.defaultTenantCode = await this.normalizeDefaultTenantCode(dto.defaultTenantCode);
+    }
     const saved = await this.operationSettings.save(setting);
-    await this.logOperation(admin, "settings.operation.update", "operation_setting", saved.id, "更新运营设置", { registrationEnabled: saved.registrationEnabled, customerServicePhone: saved.customerServicePhone, customerServiceWechat: saved.customerServiceWechat, smsProviderEnabled: saved.smsProviderEnabled, launchConfigSaved: !this.isTenantScoped(admin) && dto.launchConfig !== undefined });
+    await this.logOperation(admin, "settings.operation.update", "operation_setting", saved.id, "更新运营设置", { registrationEnabled: saved.registrationEnabled, customerServicePhone: saved.customerServicePhone, customerServiceWechat: saved.customerServiceWechat, smsProviderEnabled: saved.smsProviderEnabled, defaultTenantCode: saved.defaultTenantCode || null, launchConfigSaved: !this.isTenantScoped(admin) && dto.launchConfig !== undefined });
     return saved;
   }
 
@@ -5701,6 +5847,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       defaultGroupQrCodeUrl: null,
       pageTheme: {},
       launchConfig: {},
+      defaultTenantCode: null,
       refundInstructions: "如需取消报名或申请退款，请先联系主办方客服。已签到或活动开始后的退款规则以活动报名须知为准",
       invoiceInstructions: "如需发票，请在付款后联系客服登记抬头、税号和接收邮箱",
       smsProviderEnabled: false,
@@ -5716,6 +5863,21 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private isPlainObject(value: unknown): value is Record<string, unknown> {
     return Boolean(value && typeof value === "object" && !Array.isArray(value));
+  }
+
+  private async normalizeDefaultTenantCode(value: unknown) {
+    const code = String(value || "").trim();
+    if (!code) return null;
+    const tenant = await this.tenants
+      .createQueryBuilder("tenant")
+      .where("tenant.code = :code", { code })
+      .andWhere("tenant.enabled = :enabled", { enabled: true })
+      .andWhere("tenant.code <> :platformCode", { platformCode: "platform" })
+      .andWhere("tenant.code NOT LIKE :demoCode", { demoCode: "demo-%" })
+      .andWhere("(tenant.region IS NOT NULL OR tenant.contactName IS NOT NULL OR tenant.contactPhone IS NOT NULL)")
+      .getOne();
+    if (!tenant) throw new BadRequestException("默认入口城市必须选择一个已启用且可展示的商家");
+    return tenant.code;
   }
 
   private defaultPaymentMethods() {

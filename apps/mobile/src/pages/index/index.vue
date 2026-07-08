@@ -48,7 +48,7 @@
 <script setup lang="ts">
 import { ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { getCurrentTenantCode, request, withTenantCode } from "../../api";
+import { applyTenantBootstrapDefault, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { resolveTenantByCurrentLocation } from "../../tenant-location";
 import TabBar from "../../components/TabBar.vue";
@@ -63,6 +63,7 @@ const featuredActivities = ref<any[]>([]);
 onShow(async () => {
   loadPageTheme();
   const beforeTenantCode = getCurrentTenantCode();
+  await applyTenantBootstrapDefault();
   await resolveTenantByCurrentLocation({ silent: true });
   const changedByLocation = getCurrentTenantCode() !== beforeTenantCode || getCurrentTenantCode() !== lastLoadedTenantCode.value;
   await Promise.all([loadDecoration(), loadActivities()]);

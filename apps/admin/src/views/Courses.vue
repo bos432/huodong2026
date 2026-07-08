@@ -10,10 +10,20 @@
       </div>
     </div>
 
+    <div class="overview-grid">
+      <div v-for="item in overviewCards" :key="item.label" class="overview-card">
+        <span>{{ item.label }}</span>
+        <strong>{{ item.value }}</strong>
+      </div>
+    </div>
+
     <el-table :data="courses" stripe style="width:100%;" empty-text="暂无课程">
       <el-table-column prop="id" label="ID" width="60" />
       <el-table-column label="封面" width="80">
-        <template #default><div style="width:48px;height:48px;background:#f0ebe3;border-radius:8px;display:flex;align-items:center;justify-content:center;">📚</div></template>
+        <template #default="{row}">
+          <img v-if="row.coverUrl" :src="row.coverUrl" class="course-cover" alt="" />
+          <div v-else class="course-cover placeholder">课</div>
+        </template>
       </el-table-column>
       <el-table-column prop="title" label="课程名称" min-width="160" />
       <el-table-column prop="teacherName" label="讲师" width="120" />
@@ -43,6 +53,18 @@
           </el-select>
         </el-form-item>
         <el-form-item label="讲师名称"><el-input v-model="form.teacherName" /></el-form-item>
+        <el-form-item label="讲师头像"><el-input v-model="form.teacherAvatar" maxlength="500" /></el-form-item>
+        <el-form-item label="封面地址"><el-input v-model="form.coverUrl" maxlength="500" /></el-form-item>
+        <el-form-item label="分类ID"><el-input-number v-model="form.categoryId" :min="0" /></el-form-item>
+        <el-form-item label="标签"><el-input v-model="form.tagsText" placeholder="用逗号分隔，例如：茶道,入门,共修" /></el-form-item>
+        <el-form-item label="排序"><el-input-number v-model="form.sortOrder" :min="0" :max="9999" /></el-form-item>
+        <el-form-item label="评分/热度">
+          <div class="inline-fields">
+            <el-input-number v-model="form.rating" :min="0" :max="5" :precision="1" />
+            <el-input-number v-model="form.reviewCount" :min="0" placeholder="评价数" />
+            <el-input-number v-model="form.hotCount" :min="0" placeholder="热度" />
+          </div>
+        </el-form-item>
         <el-form-item label="价格"><el-input-number v-model="form.price" :min="0" /></el-form-item>
         <el-form-item label="原价"><el-input-number v-model="form.originalPrice" :min="0" /></el-form-item>
         <el-form-item label="状态"><el-select v-model="form.status"><el-option label="草稿" value="draft" /><el-option label="已发布" value="published" /></el-select></el-form-item>
@@ -55,11 +77,25 @@
       <el-button type="primary" size="small" style="margin-bottom:16px;" @click="addChapter">新增章节</el-button>
       <div v-for="(ch, ci) in chapters" :key="ci" style="border:1px solid #eee;border-radius:8px;padding:12px;margin-bottom:8px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <el-input v-model="ch.title" style="width:300px;" placeholder="章节名称" />
-          <div><el-button size="small" @click="addLesson(ch)">+课时</el-button><el-button size="small" type="danger" @click="deleteChapter(ci)">删除</el-button></div>
+          <div class="chapter-title-row">
+            <el-input-number v-model="ch.sortOrder" :min="0" size="small" />
+            <el-input v-model="ch.title" style="width:300px;" placeholder="章节名称" />
+          </div>
+          <div>
+            <el-button size="small" @click="moveChapter(ci, -1)">上移</el-button>
+            <el-button size="small" @click="moveChapter(ci, 1)">下移</el-button>
+            <el-button size="small" @click="addLesson(ch)">+课时</el-button>
+            <el-button size="small" type="danger" @click="deleteChapter(ci)">删除</el-button>
+          </div>
         </div>
         <div v-for="(ls, li) in ch.lessons" :key="li" style="display:flex;align-items:center;gap:8px;margin-left:24px;padding:4px 0;">
-          <el-input v-model="ls.title" style="flex:1;" placeholder="课时名称" /><el-input v-model="ls.duration" style="width:80px;" placeholder="时长" /><el-switch v-model="ls.isFree" active-text="免费" /><el-button size="small" type="danger" @click="ch.lessons.splice(li,1)">×</el-button>
+          <el-input-number v-model="ls.sortOrder" :min="0" size="small" style="width:90px;" />
+          <el-input v-model="ls.title" style="flex:1;" placeholder="课时名称" />
+          <el-input v-model="ls.duration" style="width:80px;" placeholder="时长" />
+          <el-switch v-model="ls.isFree" active-text="试看" />
+          <el-button size="small" @click="moveLesson(ch, li, -1)">上移</el-button>
+          <el-button size="small" @click="moveLesson(ch, li, 1)">下移</el-button>
+          <el-button size="small" type="danger" @click="ch.lessons.splice(li,1)">×</el-button>
         </div>
       </div>
       <template #footer><el-button @click="showChapters = false">关闭</el-button><el-button type="primary" @click="saveChapters">保存章节</el-button></template>
@@ -118,7 +154,7 @@
 </template>
 
 <script setup lang="ts">
-import { reactive, ref, onMounted, watch } from "vue";
+import { computed, reactive, ref, onMounted, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
@@ -128,9 +164,11 @@ const route = useRoute();
 const router = useRouter();
 const courses = ref<any[]>([]);
 const tenants = ref<any[]>([]);
+const overview = ref<any>({ kpis: {}, todos: [], alerts: [] });
 const showForm = ref(false);
 const editing = ref(false);
-const form = ref<any>({ title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"" });
+const emptyCourseForm = () => ({ title:"", teacherName:"", teacherAvatar:"", coverUrl:"", categoryId: undefined, tagsText:"", sortOrder:0, rating:0, reviewCount:0, hotCount:0, price:0, originalPrice:0, status:"draft", description:"" });
+const form = ref<any>(emptyCourseForm());
 const saving = ref(false);
 const showChapters = ref(false);
 const currentCourse = ref<any>(null);
@@ -144,6 +182,17 @@ const routeTenantId = () => {
 };
 const filters = reactive({ tenantId: routeTenantId() as number | undefined });
 const orderFilters = reactive({ status: "pending_payment", keyword: "", tenantId: routeTenantId() as number | undefined, page: 1, pageSize: 20 });
+const overviewCards = computed(() => {
+  const kpis = overview.value?.kpis || {};
+  return [
+    { label: "已发布", value: kpis.published || 0 },
+    { label: "草稿", value: kpis.draft || 0 },
+    { label: "课程订单", value: kpis.totalOrders || 0 },
+    { label: "待确认收款", value: kpis.pendingOfflineOrders || 0 },
+    { label: "付费课程", value: kpis.paidCourses || 0 },
+    { label: "免费课程", value: kpis.freeCourses || 0 }
+  ];
+});
 
 function formatDateTime(value?: string | Date | null) {
   if (!value) return "-";
@@ -154,7 +203,13 @@ function formatDateTime(value?: string | Date | null) {
 
 async function load() {
   try {
-    courses.value = await api.get<any, any[]>("/admin/courses", { params: { tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined } });
+    const params = { tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined };
+    const [overviewData, courseRows] = await Promise.all([
+      api.get<any, any>("/admin/courses/overview", { params }),
+      api.get<any, any[]>("/admin/courses", { params })
+    ]);
+    overview.value = overviewData || { kpis: {}, todos: [], alerts: [] };
+    courses.value = courseRows || [];
   } catch (error: any) {
     ElMessage.error(error.message || "加载课程失败");
   }
@@ -184,8 +239,13 @@ function changeTenant() {
 
 function createCourse() {
   editing.value = false;
-  form.value = { title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"", tenantId: filters.tenantId };
+  form.value = { ...emptyCourseForm(), tenantId: filters.tenantId };
   showForm.value = true;
+}
+
+function parseTags(value: unknown) {
+  if (Array.isArray(value)) return value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 10);
+  return String(value || "").split(/[,，、\s]+/).map((item) => item.trim()).filter(Boolean).slice(0, 10);
 }
 
 function money(value: string | number | undefined) {
@@ -253,6 +313,14 @@ async function saveCourse() {
       ...form.value,
       title: form.value.title.trim(),
       teacherName: form.value.teacherName?.trim() || null,
+      teacherAvatar: form.value.teacherAvatar?.trim() || null,
+      coverUrl: form.value.coverUrl?.trim() || null,
+      categoryId: Number(form.value.categoryId || 0) || null,
+      tags: parseTags(form.value.tagsText ?? form.value.tags),
+      sortOrder: Number(form.value.sortOrder || 0),
+      rating: Number(form.value.rating || 0),
+      reviewCount: Number(form.value.reviewCount || 0),
+      hotCount: Number(form.value.hotCount || 0),
       description: form.value.description?.trim() || null,
       price: Number(form.value.price || 0),
       originalPrice: Number(form.value.originalPrice || 0)
@@ -265,7 +333,7 @@ async function saveCourse() {
     }
     showForm.value = false;
     editing.value = false;
-    form.value = { title:"", teacherName:"", price:0, originalPrice:0, status:"draft", description:"" };
+    form.value = emptyCourseForm();
     await load();
     ElMessage.success("课程已保存");
   } catch (error: any) {
@@ -276,7 +344,7 @@ async function saveCourse() {
 }
 
 function editCourse(row: any) {
-  form.value = { ...row, tenantId: row.tenant?.id };
+  form.value = { ...row, tagsText: Array.isArray(row.tags) ? row.tags.join(",") : "", tenantId: row.tenant?.id };
   editing.value = true;
   showForm.value = true;
 }
@@ -308,11 +376,32 @@ async function manageChapters(row: any) {
 }
 
 function addChapter() {
-  chapters.value.push({ courseId: currentCourse.value?.id, title: "", sortOrder: chapters.value.length, lessons: [] });
+  chapters.value.push({ courseId: currentCourse.value?.id, title: "", sortOrder: chapters.value.length + 1, lessons: [] });
 }
 
 function addLesson(ch: any) {
-  ch.lessons.push({ chapterId: ch.id, title: "", duration: "", isFree: false });
+  ch.lessons.push({ chapterId: ch.id, title: "", duration: "", isFree: false, sortOrder: ch.lessons.length + 1 });
+}
+
+function reorderRows(rows: any[]) {
+  rows.forEach((row, index) => row.sortOrder = index + 1);
+}
+
+function moveChapter(index: number, delta: number) {
+  const next = index + delta;
+  if (next < 0 || next >= chapters.value.length) return;
+  const [row] = chapters.value.splice(index, 1);
+  chapters.value.splice(next, 0, row);
+  reorderRows(chapters.value);
+}
+
+function moveLesson(ch: any, index: number, delta: number) {
+  const rows = ch.lessons || [];
+  const next = index + delta;
+  if (next < 0 || next >= rows.length) return;
+  const [row] = rows.splice(index, 1);
+  rows.splice(next, 0, row);
+  reorderRows(rows);
 }
 
 async function deleteChapter(ci: number) {
@@ -328,17 +417,21 @@ async function deleteChapter(ci: number) {
 async function saveChapters() {
   try {
     for (const ch of chapters.value) {
+      if (!String(ch.title || "").trim()) return ElMessage.error("章节标题不能为空");
+      for (const ls of ch.lessons || []) {
+        if (!String(ls.title || "").trim()) return ElMessage.error("课时标题不能为空");
+      }
       if (ch.id) {
-        await api.patch("/admin/course-chapters/" + ch.id, { title: ch.title, sortOrder: ch.sortOrder });
+        await api.patch("/admin/course-chapters/" + ch.id, { title: ch.title.trim(), sortOrder: Number(ch.sortOrder || 0) });
       } else {
-        const savedChapter = await api.post<any, any>("/admin/course-chapters", { courseId: currentCourse.value?.id, title: ch.title, sortOrder: ch.sortOrder });
+        const savedChapter = await api.post<any, any>("/admin/course-chapters", { courseId: currentCourse.value?.id, title: ch.title.trim(), sortOrder: Number(ch.sortOrder || 0) });
         ch.id = savedChapter?.id;
       }
       for (const ls of ch.lessons) {
         if (ls.id) {
-          await api.patch("/admin/course-lessons/" + ls.id, { title: ls.title, duration: ls.duration, isFree: ls.isFree });
-        } else if (ls.title) {
-          await api.post("/admin/course-lessons", { chapterId: ch.id, title: ls.title, duration: ls.duration, isFree: ls.isFree });
+          await api.patch("/admin/course-lessons/" + ls.id, { title: ls.title.trim(), duration: ls.duration, isFree: ls.isFree, sortOrder: Number(ls.sortOrder || 0) });
+        } else {
+          await api.post("/admin/course-lessons", { chapterId: ch.id, title: ls.title.trim(), duration: ls.duration, isFree: ls.isFree, sortOrder: Number(ls.sortOrder || 0) });
         }
       }
     }
@@ -369,8 +462,19 @@ watch(() => route.query.tenantId, () => {
 .courses-page { padding: 24px; }
 .page-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; }
 .header-actions { display:flex; gap:12px; align-items:center; }
+.overview-grid { display:grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.overview-card { padding: 14px 16px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; display: grid; gap: 6px; }
+.overview-card span { color: #667085; font-size: 13px; }
+.overview-card strong { color: #111827; font-size: 24px; }
+.course-cover { width:48px; height:48px; object-fit:cover; border-radius:8px; background:#f0ebe3; display:flex; align-items:center; justify-content:center; color:#7c2d12; font-weight:900; }
+.inline-fields { display:flex; gap:10px; align-items:center; flex-wrap:wrap; }
+.chapter-title-row { display:flex; align-items:center; gap:8px; }
 .order-header { margin-top: 12px; }
 .order-filters { display:flex; gap:12px; align-items:center; }
 .pagination { display:flex; justify-content:flex-end; padding-top:16px; }
 small { color:#667085; display:block; line-height:1.5; }
+@media (max-width: 1100px) {
+  .overview-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .page-header, .header-actions, .order-filters { align-items: stretch; flex-direction: column; }
+}
 </style>
