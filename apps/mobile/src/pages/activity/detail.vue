@@ -6,6 +6,7 @@ import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
+import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -16,6 +17,8 @@ const inviteCode = ref("");
 const channelCode = ref("");
 const source = ref("h5");
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
+const featureGates = featureGatesState;
+const canPublishActivityPost = computed(() => featureGates.value.community !== false && featureGates.value.communityPublish !== false);
 const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;
@@ -160,6 +163,10 @@ function goCommunity() {
 }
 
 function goPublish() {
+  if (!canPublishActivityPost.value) {
+    showFeatureDisabledToast("/pages/community/publish");
+    return;
+  }
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activity.value?.id || ""}`) });
 }
 
@@ -217,6 +224,9 @@ async function load() {
 }
 
 onMounted(load);
+onMounted(() => {
+  void loadFeatureGates(true);
+});
 onMounted(loadDecoration);
 </script>
 
@@ -334,7 +344,7 @@ onMounted(loadDecoration);
           <text>票</text>
           <view>我的报名</view>
         </view>
-        <view class="action-item" @click="goPublish">
+        <view v-if="canPublishActivityPost" class="action-item" @click="goPublish">
           <text>记</text>
           <view>分享心得</view>
         </view>

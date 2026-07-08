@@ -158,7 +158,9 @@ function tags() {
 async function chooseImages() {
   if (uploading.value) return;
   const count = Math.max(9 - images.value.length, 0);
+  if (!count) return;
   try {
+    await beforeChooseImageFiles();
     const files = (await chooseUploadImageFiles(count)).slice(0, count);
     if (!files.length) return;
     uploading.value = true;
@@ -175,11 +177,23 @@ async function chooseImages() {
       }
     }
   } catch (error: any) {
-    const message = String(error?.errMsg || error?.message || "");
-    if (!message.includes("cancel")) uni.showToast({ title: error.message || "照片选择失败，请重试", icon: "none" });
+    if (!isCancelError(error)) uni.showToast({ title: imageChooseFailText(error), icon: "none" });
   } finally {
     uploading.value = false;
   }
+}
+
+function delay(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function beforeChooseImageFiles() {
+  try {
+    uni.hideKeyboard();
+  } catch {
+    // Some environments do not expose keyboard control.
+  }
+  await delay(180);
 }
 
 function chooseUploadImageFiles(count: number): Promise<string[]> {
@@ -193,42 +207,29 @@ function chooseUploadImageFiles(count: number): Promise<string[]> {
 
 async function chooseWechatImageFiles(count: number) {
   const source = await chooseWechatImageSource();
-  if (source === "file") return chooseImageByMessageFile(count);
-  if (source === "camera") return chooseImageByMedia(count, ["camera"]).catch((error) => {
-    if (String(error?.errMsg || "").includes("cancel")) throw error;
-    return chooseImageByUni(count, ["camera"]);
-  });
   try {
-    return await chooseImageByMedia(count, ["album"]);
+    return await chooseImageByUni(count, source === "camera" ? ["camera"] : ["album"]);
   } catch (error: any) {
-    if (String(error?.errMsg || "").includes("cancel")) throw error;
+    if (isCancelError(error)) throw error;
+    if (source === "album") {
+      try {
+        return await chooseImageByMessageFile(count);
+      } catch {
+        throw error;
+      }
+    }
+    throw error;
   }
-  return chooseImageByUni(count, ["album"]);
 }
 
-function chooseWechatImageSource(): Promise<"file" | "album" | "camera"> {
+function chooseWechatImageSource(): Promise<"album" | "camera"> {
   return new Promise((resolve, reject) => {
     uni.showActionSheet({
-      itemList: ["从文件选择（开发工具推荐）", "从相册选择", "拍照"],
+      itemList: ["从相册/电脑文件选择", "拍照"],
       success: (res) => {
-        if (res.tapIndex === 1) resolve("album");
-        else if (res.tapIndex === 2) resolve("camera");
-        else resolve("file");
+        if (res.tapIndex === 1) resolve("camera");
+        else resolve("album");
       },
-      fail: reject
-    });
-  });
-}
-
-function chooseImageByMedia(count: number, sourceType: string[]): Promise<string[]> {
-  return new Promise((resolve, reject) => {
-    const chooseMedia = (uni as any).chooseMedia;
-    if (typeof chooseMedia !== "function") return reject(new Error("chooseMedia unavailable"));
-    chooseMedia({
-      count,
-      mediaType: ["image"],
-      sourceType,
-      success: (res: any) => resolve((res.tempFiles || []).map((item: any) => item.tempFilePath).filter(Boolean)),
       fail: reject
     });
   });
@@ -252,11 +253,23 @@ function chooseImageByMessageFile(count: number): Promise<string[]> {
     if (typeof chooseMessageFile !== "function") return reject(new Error("当前环境无法打开图片选择器，请在真机预览中重试"));
     chooseMessageFile({
       count,
-      type: "image",
+      type: "file",
+      extension: ["jpg", "jpeg", "png", "webp", "heic", "heif"],
       success: (res: any) => resolve((res.tempFiles || []).map((item: any) => item.path || item.tempFilePath).filter(Boolean)),
       fail: reject
     });
   });
+}
+
+function isCancelError(error: any) {
+  return String(error?.errMsg || error?.message || "").toLowerCase().includes("cancel");
+}
+
+function imageChooseFailText(error: any) {
+  const message = String(error?.errMsg || error?.message || "");
+  if (/timeout/i.test(message)) return "图片选择超时，请重试；开发者工具可重启后再选电脑图片";
+  if (/auth|authorize|permission/i.test(message)) return "相册权限未开启，请允许后重试";
+  return error?.message || "照片选择失败，请重试";
 }
 
 function imageFileInfo(filePath: string): Promise<UniApp.GetFileInfoSuccessData | null> {

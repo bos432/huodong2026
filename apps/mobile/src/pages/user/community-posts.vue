@@ -46,10 +46,10 @@
       <view class="empty-icon">心</view>
       <view class="empty-title">{{ currentStatus === "all" ? "还没有心得" : "暂无对应状态" }}</view>
       <view class="empty-desc">参加活动并完成签到后，就可以上传照片和心得，审核通过后展示在共修动态里。</view>
-      <view class="primary-action" @click="goPublish">发布心得</view>
+      <view v-if="canPublish" class="primary-action" @click="goPublish">发布心得</view>
     </view>
 
-    <view v-if="posts.length" class="primary-action fixed-action" @click="goPublish">继续发布心得</view>
+    <view v-if="posts.length && canPublish" class="primary-action fixed-action" @click="goPublish">继续发布心得</view>
     <TabBar current="user" />
   </view>
 </template>
@@ -59,10 +59,13 @@ import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
+import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 
 const loading = ref(false);
 const posts = ref<any[]>([]);
 const currentStatus = ref("all");
+const featureGates = featureGatesState;
+const canPublish = computed(() => featureGates.value.community !== false && featureGates.value.communityPublish !== false);
 const statusTabs = [
   { label: "全部", value: "all" },
   { label: "待审核", value: "pending" },
@@ -119,6 +122,10 @@ function openPost(post: any) {
 }
 
 function goPublish() {
+  if (!canPublish.value) {
+    showFeatureDisabledToast("/pages/community/publish");
+    return;
+  }
   uni.navigateTo({ url: withTenantCode("/pages/community/publish") });
 }
 
@@ -126,7 +133,10 @@ function goBack() {
   uni.navigateBack();
 }
 
-onShow(loadPosts);
+onShow(() => {
+  void loadFeatureGates(true);
+  void loadPosts();
+});
 </script>
 
 <style scoped>

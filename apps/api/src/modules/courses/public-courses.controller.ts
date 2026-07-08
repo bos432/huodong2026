@@ -2,7 +2,7 @@ import { BadRequestException, Body, Controller, Get, NotFoundException, Param, P
 import { ConfigService } from "@nestjs/config";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { InjectRepository } from "@nestjs/typeorm";
-import { mkdirSync } from "fs";
+import { mkdirSync, unlinkSync } from "fs";
 import { diskStorage } from "multer";
 import { join } from "path";
 import { In, Repository } from "typeorm";
@@ -194,6 +194,7 @@ export class PublicCoursesController {
 
   @Get("me/community/postable-activities")
   async listPostableActivities(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     return this.postableActivities(userId, tenant);
@@ -229,8 +230,14 @@ export class PublicCoursesController {
       callback(null, isCommunityImageFile(file));
     }
   }))
-  async uploadCommunityPostImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+  async uploadCommunityPostImage(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     this.requireUserId(req.headers?.authorization);
+    try {
+      await this.assertCommunityPublishEnabled(req, tenantCode);
+    } catch (error) {
+      this.removeUploadedFile(file);
+      throw error;
+    }
     if (!file) throw new BadRequestException("请上传 JPG、PNG 或 WebP 图片");
     const path = `/uploads/community-posts/${file.filename}`;
     return { url: path, path };
@@ -238,6 +245,7 @@ export class PublicCoursesController {
 
   @Post("community/posts")
   async createParticipantPost(@Body() dto: { activityId?: number; content?: string; images?: string[]; city?: string; tags?: string[]; posterConfig?: Record<string, unknown> }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const activityId = Number(dto.activityId || 0);
@@ -538,6 +546,7 @@ export class PublicCoursesController {
 
   @Get("checkin/today")
   async getTodayCheckin(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     const today = this.today();
     const tenant = await this.resolveTenant(req, tenantCode);
     const task = await this.findTodayCheckinTask(today, tenant);
@@ -561,6 +570,7 @@ export class PublicCoursesController {
 
   @Post("checkin/today/complete")
   async completeTodayCheckin(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const today = this.today();
     const tenant = await this.resolveTenant(req, tenantCode);
@@ -951,6 +961,24 @@ export class PublicCoursesController {
   private async assertForumPostEnabled(req: any, tenantCode?: string) {
     await this.assertForumEnabled(req, tenantCode);
     await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "forumPost", "论坛发帖暂未开放");
+  }
+
+  private assertCommunityEnabled(req: any, tenantCode?: string) {
+    return this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "community", "共修动态暂未开放");
+  }
+
+  private async assertCommunityPublishEnabled(req: any, tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "communityPublish", "发布心得/打卡暂未开放");
+  }
+
+  private removeUploadedFile(file?: Express.Multer.File) {
+    if (!file?.path) return;
+    try {
+      unlinkSync(file.path);
+    } catch {
+      // Best effort cleanup for uploads rejected by feature gates.
+    }
   }
 
   private async resolveTenant(req: any, tenantCode?: string): Promise<Tenant | null> {

@@ -10,6 +10,7 @@ import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryEntries } from "../../query";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
+import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 
 const registrationStatusText: Record<RegistrationStatus, string> = {
   [RegistrationStatus.PendingPayment]: "待付款",
@@ -43,13 +44,15 @@ const groupQrImageError = ref(false);
 const paymentInstructionsField = "offlinePaymentInstructions";
 const steps = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("registration_detail", "/pages/user/registration");
+const featureGates = featureGatesState;
+const canPublishCommunityPost = computed(() => featureGates.value.community !== false && featureGates.value.communityPublish !== false);
 
 const groupQrCodeUrl = computed(() => detail.value?.groupQrCodeUrl || "");
 const registrationStatus = computed(() => detail.value?.registration?.status as RegistrationStatus | undefined);
 const orderStatus = computed(() => detail.value?.order?.status as OrderStatus | undefined);
 const primaryAction = computed(() => actionForStatus(registrationStatus.value));
 const charityRefund = computed(() => detail.value?.charityRefund || null);
-const canShareActivityPost = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
+const canShareActivityPost = computed(() => canPublishCommunityPost.value && (registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn));
 const canShowCheckInCode = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
 
 function currentStepIndex(status: RegistrationStatus) {
@@ -379,11 +382,16 @@ function goReview() {
 }
 
 function goPublish() {
+  if (!canPublishCommunityPost.value) {
+    showFeatureDisabledToast("/pages/community/publish");
+    return;
+  }
   const activityId = detail.value?.registration?.activity?.id || "";
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activityId}`) });
 }
 
 onMounted(() => {
+  void loadFeatureGates(true);
   load();
   loadDecoration();
 });

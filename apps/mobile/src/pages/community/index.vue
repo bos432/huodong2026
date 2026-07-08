@@ -47,7 +47,7 @@
     <EmptyState v-if="!activities.length" icon="📅" text="暂无近期活动" />
 
     <!-- 今日打卡 -->
-    <view class="card checkin-card">
+    <view v-if="canPublish" class="card checkin-card">
       <text class="title-md">📝 今日打卡</text>
       <text class="body-text" style="margin-top:12rpx;">{{ checkinTask ? `今日任务：${checkinTask.title}` : "暂无今日打卡任务" }}</text>
       <text v-if="!checkinTask" class="subtle" style="margin-top:8rpx;">请在后台新增今天日期的打卡任务，发布后这里会自动显示。</text>
@@ -127,7 +127,8 @@ import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from ".
 onShow(async () => {
   await loadFeatureGates(true);
   loadPageTheme();
-  loadCheckinTask();
+  if (canPublish.value) loadCheckinTask();
+  else checkinTask.value = null;
   loadDecoration();
 });
 
@@ -266,6 +267,10 @@ function goActivity(act: any) {
   if (act?.id) uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${act.id}`) });
 }
 function goCheckin() {
+  if (!canPublish.value) {
+    showFeatureDisabledToast("/pages/community/checkin");
+    return;
+  }
   uni.navigateTo({ url:"/pages/community/checkin" });
 }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
