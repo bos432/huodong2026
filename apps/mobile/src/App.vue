@@ -15,7 +15,7 @@ onLaunch(() => {
 
 onShow(() => {
   hydrateFeatureGatesFromStorage();
-  loadFeatureGates().then(() => guardCurrentPageFeature());
+  loadFeatureGates(true).then(() => guardCurrentPageFeature());
 });
 </script>
 

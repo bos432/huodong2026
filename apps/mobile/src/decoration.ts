@@ -125,7 +125,7 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   async function loadDecoration() {
     try {
       loadFailed.value = false;
-      await loadFeatureGates();
+      await loadFeatureGates(true);
       const endpoint = pageKey === "home" ? "/public/homepage" : `/public/page-decoration?pageKey=${encodeURIComponent(pageKey)}`;
       const payload = reviewSafeData(await request<HomepagePayload>(endpoint));
       const pageSections = normalizeDecorationSections(payload.sections || []);
