@@ -149,33 +149,85 @@ function tags() {
   return tagsText.value.split(/[,，、\s]+/).map((item) => item.trim()).filter(Boolean).slice(0, 6);
 }
 
-function chooseImages() {
+async function chooseImages() {
   if (uploading.value) return;
   const count = Math.max(9 - images.value.length, 0);
-  uni.chooseImage({
-    count,
-    sizeType: ["compressed"],
-    sourceType: ["album", "camera"],
-    success: async (res) => {
-      const files = (res.tempFilePaths || []).slice(0, count);
-      if (!files.length) return;
-      uploading.value = true;
-      try {
-        for (const filePath of files) {
-          const uploadPath = await prepareUploadImage(filePath);
-          const uploaded = await uploadCommunityPostImage(uploadPath);
-          if (uploaded.url) images.value.push(uploaded.url);
-        }
-      } catch (error: any) {
-        uni.showToast({ title: error.message || "图片上传失败", icon: "none" });
-      } finally {
-        uploading.value = false;
-      }
-    },
-    fail: (error) => {
-      const message = String(error?.errMsg || "");
-      if (!message.includes("cancel")) uni.showToast({ title: "照片选择失败，请重试", icon: "none" });
+  try {
+    const files = (await chooseUploadImageFiles(count)).slice(0, count);
+    if (!files.length) return;
+    uploading.value = true;
+    for (const filePath of files) {
+      const uploadPath = await prepareUploadImage(filePath);
+      const uploaded = await uploadCommunityPostImage(uploadPath);
+      if (uploaded.url) images.value.push(uploaded.url);
     }
+  } catch (error: any) {
+    const message = String(error?.errMsg || error?.message || "");
+    if (!message.includes("cancel")) uni.showToast({ title: error.message || "照片选择失败，请重试", icon: "none" });
+  } finally {
+    uploading.value = false;
+  }
+}
+
+function chooseUploadImageFiles(count: number): Promise<string[]> {
+  // #ifdef MP-WEIXIN
+  return chooseWechatImageFiles(count);
+  // #endif
+  // #ifndef MP-WEIXIN
+  return chooseImageByUni(count, ["album", "camera"]);
+  // #endif
+}
+
+async function chooseWechatImageFiles(count: number) {
+  try {
+    return await chooseImageByMedia(count);
+  } catch (error: any) {
+    if (String(error?.errMsg || "").includes("cancel")) throw error;
+  }
+  try {
+    return await chooseImageByUni(count, ["album"]);
+  } catch (error: any) {
+    if (String(error?.errMsg || "").includes("cancel")) throw error;
+  }
+  return chooseImageByMessageFile(count);
+}
+
+function chooseImageByMedia(count: number): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const chooseMedia = (uni as any).chooseMedia;
+    if (typeof chooseMedia !== "function") return reject(new Error("chooseMedia unavailable"));
+    chooseMedia({
+      count,
+      mediaType: ["image"],
+      sourceType: ["album"],
+      success: (res: any) => resolve((res.tempFiles || []).map((item: any) => item.tempFilePath).filter(Boolean)),
+      fail: reject
+    });
+  });
+}
+
+function chooseImageByUni(count: number, sourceType: string[]): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    uni.chooseImage({
+      count,
+      sizeType: ["compressed"],
+      sourceType,
+      success: (res) => resolve(res.tempFilePaths || []),
+      fail: reject
+    });
+  });
+}
+
+function chooseImageByMessageFile(count: number): Promise<string[]> {
+  return new Promise((resolve, reject) => {
+    const chooseMessageFile = (uni as any).chooseMessageFile;
+    if (typeof chooseMessageFile !== "function") return reject(new Error("当前环境无法打开图片选择器，请在真机预览中重试"));
+    chooseMessageFile({
+      count,
+      type: "image",
+      success: (res: any) => resolve((res.tempFiles || []).map((item: any) => item.path).filter(Boolean)),
+      fail: reject
+    });
   });
 }
 
