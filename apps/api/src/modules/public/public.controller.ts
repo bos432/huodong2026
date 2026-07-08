@@ -1,12 +1,13 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
-import { mkdirSync } from "fs";
+import { mkdirSync, unlinkSync } from "fs";
 import { diskStorage } from "multer";
 import { join } from "path";
 import QRCode from "qrcode";
 import { PublicService, PublicTenantContext } from "./public.service";
 import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto, WechatPhoneDto } from "./dto";
+import { FeatureGateKey } from "../../shared/launch-config";
 
 const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -96,7 +97,8 @@ export class PublicController {
   }
 
   @Get("ad-slots")
-  adSlot(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("pageKey") pageKey?: string, @Query("slotKey") slotKey?: string, @Query("platform") platform?: string) {
+  async adSlot(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("pageKey") pageKey?: string, @Query("slotKey") slotKey?: string, @Query("platform") platform?: string) {
+    await this.assertFeatureGate(req, tenantCode, "adCenter", "广告位暂未开放");
     return this.service.adSlot(this.tenantContext(req, tenantCode), pageKey || "home", slotKey || "home_top_banner", platform || "h5");
   }
 
@@ -106,43 +108,52 @@ export class PublicController {
   }
 
   @Get("charity/summary")
-  charitySummary() {
+  async charitySummary(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "charity", "公益池暂未开放");
     return this.service.charitySummary();
   }
 
   @Get("charity/projects")
-  charityProjects() {
+  async charityProjects(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "charity", "公益池暂未开放");
     return this.service.charityProjects();
   }
 
   @Get("charity/projects/:id/updates")
-  charityProjectUpdates(@Param("id", ParseIntPipe) id: number) {
+  async charityProjectUpdates(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "charity", "公益池暂未开放");
     return this.service.charityProjectUpdates(id);
   }
 
   @Get("ambassador/landing")
-  ambassadorLanding() {
+  async ambassadorLanding(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "ambassador", "文化大使暂未开放");
     return this.service.ambassadorLanding();
   }
 
   @Post("ambassador/applications")
-  submitAmbassadorApplication(@Body() dto: AmbassadorApplicationDto) {
+  async submitAmbassadorApplication(@Body() dto: AmbassadorApplicationDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const gate: FeatureGateKey = String(dto?.source || "") === "dean_recruit" ? "partner" : "ambassador";
+    await this.assertFeatureGate(req, tenantCode, gate, gate === "partner" ? "城市合伙人暂未开放" : "文化大使暂未开放");
     return this.service.submitAmbassadorApplication(dto);
   }
 
   @Get("volunteer/tasks")
-  volunteerTasks(@Query("city") city?: string) {
+  async volunteerTasks(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("city") city?: string) {
+    await this.assertFeatureGate(req, tenantCode, "volunteer", "志愿服务暂未开放");
     return this.service.volunteerTasks(city);
   }
 
   @Post("volunteer/apply")
-  async applyVolunteer(@Body() dto: VolunteerApplyDto, @Req() req: any) {
+  async applyVolunteer(@Body() dto: VolunteerApplyDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "volunteer", "志愿服务暂未开放");
     const user = this.service.optionalUserFromAuthorization(req.headers?.authorization);
     return this.service.applyVolunteer(dto, await user);
   }
 
   @Post("volunteer/tasks/:id/apply")
-  async applyVolunteerTask(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskApplyDto, @Req() req: any) {
+  async applyVolunteerTask(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskApplyDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "volunteer", "志愿服务暂未开放");
     const user = this.service.optionalUserFromAuthorization(req.headers?.authorization);
     return this.service.applyVolunteerTask(id, dto, await user);
   }
@@ -172,6 +183,19 @@ export class PublicController {
       tenantCode: tenantCode || (typeof headerCode === "string" ? headerCode : Array.isArray(headerCode) ? headerCode[0] : null),
       host: typeof host === "string" ? host : null
     };
+  }
+
+  private assertFeatureGate(req: any, tenantCode: string | undefined, key: FeatureGateKey, message: string) {
+    return this.service.assertFeatureGateEnabled(this.tenantContext(req, tenantCode), key, message);
+  }
+
+  private removeUploadedFile(file?: Express.Multer.File) {
+    if (!file?.path) return;
+    try {
+      unlinkSync(file.path);
+    } catch {
+      // Best effort cleanup for uploads rejected by feature gates.
+    }
   }
 
   @Get("activities/:id")
@@ -223,18 +247,21 @@ export class PublicController {
 
   @Post("courses/:id/orders")
   async createCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: CreateCourseOrderDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.createCourseOrder(id, dto, user, this.tenantContext(req, tenantCode));
   }
 
   @Get("course-orders/:id")
   async courseOrderDetail(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.courseOrderDetail(id, user, this.tenantContext(req, tenantCode));
   }
 
   @Post("course-orders/:id/pay/mock")
   async mockPayCourseOrder(@Param("id", ParseIntPipe) id: number, @Body() dto: MockPayDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.mockPayCourseOrder(id, dto, user, this.tenantContext(req, tenantCode));
   }
@@ -253,24 +280,28 @@ export class PublicController {
 
   @Get("me/courses")
   async myCourses(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myCourses(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/course-orders")
   async myCourseOrders(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myCourseOrders(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/certificates")
-  async myCertificates(@Req() req: any) {
+  async myCertificates(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "certificates", "证书暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myCertificates(user);
   }
 
   @Get("me/certificates/:id/download")
-  async downloadMyCertificate(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Res() res: Response) {
+  async downloadMyCertificate(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Res() res: Response, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "certificates", "证书暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     const result = await this.service.myCertificateDownload(user, id);
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
@@ -279,24 +310,28 @@ export class PublicController {
   }
 
   @Get("certificates/:certificateNo/verify")
-  verifyCertificate(@Param("certificateNo") certificateNo: string) {
+  async verifyCertificate(@Param("certificateNo") certificateNo: string, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "certificates", "证书暂未开放");
     return this.service.verifyCertificate(certificateNo);
   }
 
   @Get("me/favorite-courses")
-  async myFavoriteCourses(@Req() req: any) {
+  async myFavoriteCourses(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myFavoriteCourses(user);
   }
 
   @Get("me/course-favorites/:id")
-  async favoriteCourseState(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async favoriteCourseState(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.favoriteCourseState(id, user);
   }
 
   @Post("me/course-favorites/:id")
-  async toggleFavoriteCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async toggleFavoriteCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "courses", "专题/课程暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.toggleFavoriteCourse(id, user);
   }
@@ -370,9 +405,15 @@ export class PublicController {
       callback(null, Boolean(REVIEW_IMAGE_EXTENSION_BY_MIME[file.mimetype]));
     }
   }))
-  async uploadMallReviewImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
-    await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.uploadMallReviewImage(file);
+  async uploadMallReviewImage(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    try {
+      await this.assertFeatureGate(req, tenantCode, "mall", "商城暂未开放");
+      await this.service.requireUserFromAuthorization(req.headers?.authorization);
+      return this.service.uploadMallReviewImage(file);
+    } catch (error) {
+      this.removeUploadedFile(file);
+      throw error;
+    }
   }
 
   @Post("me/mall/refund-images")
@@ -389,9 +430,15 @@ export class PublicController {
       callback(null, Boolean(REFUND_IMAGE_EXTENSION_BY_MIME[file.mimetype]));
     }
   }))
-  async uploadMallRefundImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
-    await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.uploadMallRefundImage(file);
+  async uploadMallRefundImage(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    try {
+      await this.assertFeatureGate(req, tenantCode, "mall", "商城暂未开放");
+      await this.service.requireUserFromAuthorization(req.headers?.authorization);
+      return this.service.uploadMallRefundImage(file);
+    } catch (error) {
+      this.removeUploadedFile(file);
+      throw error;
+    }
   }
 
   @Get("me/wallet/transactions")
@@ -407,19 +454,22 @@ export class PublicController {
   }
 
   @Get("me/charity")
-  async myCharity(@Req() req: any) {
+  async myCharity(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "charity", "公益池暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myCharity(user);
   }
 
   @Get("me/charity/transactions")
-  async myCharityTransactions(@Req() req: any, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
+  async myCharityTransactions(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string) {
+    await this.assertFeatureGate(req, tenantCode, "charity", "公益池暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myCharityTransactions(user, page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
   }
 
   @Get("me/volunteer")
-  async myVolunteer(@Req() req: any) {
+  async myVolunteer(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertFeatureGate(req, tenantCode, "volunteer", "志愿服务暂未开放");
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myVolunteer(user);
   }

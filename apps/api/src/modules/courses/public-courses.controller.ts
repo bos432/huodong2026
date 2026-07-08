@@ -86,6 +86,7 @@ export class PublicCoursesController {
 
   @Get("courses")
   async listCourses(@Query() q: { category?: string; sort?: string; tenantCode?: string }, @Req() req: any) {
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, q.tenantCode), "courses", "专题/课程暂未开放");
     const tenant = await this.resolveTenant(req, q.tenantCode);
     const where: any = { status: "published" };
     if (tenant) where.tenant = { id: tenant.id };
@@ -100,6 +101,7 @@ export class PublicCoursesController {
 
   @Get("courses/:id")
   async getCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "courses", "专题/课程暂未开放");
     const tenant = await this.resolveTenant(req, tenantCode);
     const course = await this.courses.findOne({ where: this.tenantWhere({ id, status: "published" }, tenant) });
     if (!course) return null;
@@ -111,6 +113,7 @@ export class PublicCoursesController {
 
   @Get("courses/:id/player")
   async getCoursePlayer(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "courses", "专题/课程暂未开放");
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const course = await this.courses.findOne({ where: this.tenantWhere({ id, status: "published" }, tenant) });
@@ -141,6 +144,7 @@ export class PublicCoursesController {
 
   @Post("courses/:id/progress")
   async updateCourseProgress(@Param("id", ParseIntPipe) id: number, @Body() dto: { lessonId?: number; progress?: number }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "courses", "专题/课程暂未开放");
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const course = await this.courses.findOne({ where: this.tenantWhere({ id, status: "published" }, tenant) });
@@ -173,6 +177,7 @@ export class PublicCoursesController {
 
   @Get("community/activities")
   async listActivities(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const tenant = await this.resolveTenant(req, tenantCode);
     const items = await this.communityActivities.find({ where: this.tenantWhere({ status: "published" }, tenant), order: { startTime: "ASC" }, take: 10 });
     return items;
@@ -180,6 +185,7 @@ export class PublicCoursesController {
 
   @Get("community/posts")
   async listPosts(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("activityId") activityId?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.optionalUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const where: any = this.tenantWhere({ visible: true, status: "approved" }, tenant);
@@ -202,6 +208,7 @@ export class PublicCoursesController {
 
   @Get("me/community/posts")
   async listMyPosts(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const builder = this.communityPosts
@@ -277,6 +284,7 @@ export class PublicCoursesController {
 
   @Post("community/posts/:id/share")
   async recordPostShare(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
     if (!post) throw new NotFoundException("动态不存在或已下架");
@@ -302,6 +310,7 @@ export class PublicCoursesController {
 
   @Get("community/posts/:id")
   async getPost(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.optionalUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
@@ -312,6 +321,7 @@ export class PublicCoursesController {
 
   @Post("community/posts/:id/like")
   async togglePostLike(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
@@ -335,6 +345,7 @@ export class PublicCoursesController {
 
   @Get("community/posts/:id/comments")
   async listPostComments(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
     if (!post) throw new NotFoundException("动态不存在或已下架");
@@ -343,6 +354,7 @@ export class PublicCoursesController {
 
   @Post("community/posts/:id/comments")
   async createPostComment(@Param("id", ParseIntPipe) id: number, @Body() dto: { content?: string }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);

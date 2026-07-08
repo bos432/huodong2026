@@ -70,6 +70,12 @@ function featureMenuDisabled(item: { path?: string; index?: string }) {
   return Boolean(gate && featureGates.value[gate] === false);
 }
 
+function redirectIfCurrentFeatureDisabled() {
+  if (isPlatformAdmin() || !featureMenuDisabled({ index: route.path })) return;
+  const fallback = visibleMenuGroups.value[0]?.items[0]?.index || "/login";
+  if (fallback !== route.fullPath) router.replace(fallback);
+}
+
 async function refreshCurrentAdminContext() {
   try {
     const admin = await api.get<any, any>("/admin/auth/me");
@@ -112,6 +118,7 @@ async function loadShellBrand() {
       const publicSetting = await api.get<any, any>(`/public/settings/operation${code ? `?tenantCode=${encodeURIComponent(code)}` : ""}`).catch(() => null);
       featureGates.value = writeStoredFeatureGates(publicSetting?.launchConfig?.featureGates);
     }
+    redirectIfCurrentFeatureDisabled();
   } catch {
     shellBrand.value = {};
   }

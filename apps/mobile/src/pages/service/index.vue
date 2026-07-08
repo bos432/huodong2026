@@ -1,9 +1,10 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { getCurrentTenantCode, request, withTenantCode } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { getCurrentTenantCode, request } from "../../api";
+import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
+import { featureGatesState } from "../../feature-gates";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -14,6 +15,7 @@ const mounted = ref(false);
 const lastLoadedTenantCode = ref("");
 const paymentInstructionsField = "offlinePaymentInstructions";
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("service_center", "/pages/service/index");
+const showPartnerEntry = computed(() => featureGatesState.value.partner !== false);
 
 async function load() {
   loading.value = true;
@@ -30,7 +32,7 @@ function copy(text?: string) {
 }
 
 function goPartner() {
-  uni.navigateTo({ url: withTenantCode("/pages/partner/index") });
+  goDecoratedLink("/pages/partner/index");
 }
 
 function paymentInstructions() {
@@ -85,7 +87,7 @@ onShow(() => {
         <view v-if="setting.customerServiceWechat" class="line" @click="copy(setting.customerServiceWechat)"><text>微信</text><text>{{ setting.customerServiceWechat }}</text></view>
       </view>
 
-      <view class="card">
+      <view v-if="showPartnerEntry" class="card">
         <view class="card-kicker">合作入口</view>
         <view class="card-title">城市合伙人</view>
         <view class="content">面向文化空间、书院、书法教室、读书会主理人和本地社群开放合作。你可以拥有自己的活动后台、收款方式、会员和报名数据。</view>

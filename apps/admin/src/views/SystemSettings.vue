@@ -281,7 +281,12 @@ const deployment = reactive({
   orderCloseWorkerIntervalSeconds: 300
 });
 
-const openFeatureGateCount = computed(() => featureGateItems.filter((item) => deployment.featureGates[item.key]).length);
+const featureGateParentMap: Partial<Record<FeatureGateKey, FeatureGateKey>> = {
+  communityPublish: "community",
+  forumPost: "forum"
+};
+
+const openFeatureGateCount = computed(() => featureGateItems.filter((item) => isFeatureGateEffectivelyOpen(item.key)).length);
 
 function applyFeatureGatePreset(mode: "open" | "activity") {
   const next = mode === "open" ? defaultFeatureGates : conservativeFeatureGates;
@@ -290,7 +295,18 @@ function applyFeatureGatePreset(mode: "open" | "activity") {
 }
 
 function featureGateTagType(key: FeatureGateKey) {
-  return deployment.featureGates[key] ? "success" : "info";
+  if (isFeatureGateEffectivelyOpen(key)) return "success";
+  return deployment.featureGates[key] ? "warning" : "info";
+}
+
+function isFeatureGateEffectivelyOpen(key: FeatureGateKey) {
+  const parent = featureGateParentMap[key];
+  return deployment.featureGates[key] !== false && (!parent || deployment.featureGates[parent] !== false);
+}
+
+function featureGateTagText(key: FeatureGateKey) {
+  if (isFeatureGateEffectivelyOpen(key)) return "用户可见";
+  return deployment.featureGates[key] ? "上级关闭" : "暂不开放";
 }
 
 const domainBatch = reactive({
@@ -1637,7 +1653,7 @@ onMounted(async () => {
                   <div class="feature-gate-actions">
                     <el-button size="small" @click="applyFeatureGatePreset('activity')">基础活动 + 心得</el-button>
                     <el-button size="small" @click="applyFeatureGatePreset('open')">全部开放</el-button>
-                    <el-tag type="success" effect="plain">已开放 {{ openFeatureGateCount }} / {{ featureGateItems.length }}</el-tag>
+                    <el-tag type="success" effect="plain">实际开放 {{ openFeatureGateCount }} / {{ featureGateItems.length }}</el-tag>
                     <span class="form-tip">关闭后会隐藏小程序入口、装修链接、我的页面入口和非超管后台菜单。</span>
                   </div>
                   <div class="feature-gate-grid">
@@ -1648,7 +1664,7 @@ onMounted(async () => {
                       </div>
                       <div class="feature-gate-switch">
                         <el-switch v-model="deployment.featureGates[item.key]" />
-                        <el-tag :type="featureGateTagType(item.key)" effect="plain">{{ deployment.featureGates[item.key] ? "用户可见" : "暂不开放" }}</el-tag>
+                        <el-tag :type="featureGateTagType(item.key)" effect="plain">{{ featureGateTagText(item.key) }}</el-tag>
                       </div>
                     </div>
                   </div>

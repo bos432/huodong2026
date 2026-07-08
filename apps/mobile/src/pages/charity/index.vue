@@ -1,7 +1,8 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { fetchMyCharityTransactions, getCurrentRouteWithQuery, getUserToken, request } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { goDecoratedLink, usePageDecoration } from "../../decoration";
+import { featureGatesState } from "../../feature-gates";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
@@ -20,6 +21,7 @@ const pool = computed(() => detail.value?.pool || detail.value || {});
 const setting = computed(() => detail.value?.setting || {});
 const hasMore = computed(() => transactions.value.length < total.value);
 const hasMyCharity = computed(() => Boolean(myDetail.value));
+const showVolunteerEntry = computed(() => featureGatesState.value.volunteer !== false);
 const { bottomNavSection, contentSections, loadDecoration } = usePageDecoration("charity_page", "/pages/charity/index");
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "公益页") return false;
@@ -113,7 +115,7 @@ function statusText(status?: string) {
 }
 
 function goVolunteer() {
-  uni.navigateTo({ url: "/pages/volunteer/index" });
+  goDecoratedLink("/pages/volunteer/index");
 }
 
 function goLogin() {
@@ -172,7 +174,7 @@ onMounted(() => {
         <view><text>参与用户</text><strong>{{ pool.participantCount || 0 }}</strong></view>
       </view>
 
-      <view class="ambassador-card volunteer-entry">
+      <view v-if="showVolunteerEntry" class="ambassador-card volunteer-entry">
         <view>
           <view class="ambassador-label">公益参与</view>
           <view class="ambassador-title">报名志愿任务，沉淀服务记录</view>

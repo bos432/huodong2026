@@ -4,9 +4,9 @@
       <text class="eyebrow">{{ config.eyebrow }}</text>
       <text class="title">{{ config.title }}</text>
       <text class="copy">{{ config.copy }}</text>
-      <view class="actions">
-        <button class="primary" @click="goDean">{{ config.primaryActionText }}</button>
-        <button class="ghost" @click="goAid">{{ config.secondaryActionText }}</button>
+      <view v-if="showPartnerEntry || showCharityEntry" class="actions">
+        <button v-if="showPartnerEntry" class="primary" @click="goDean">{{ config.primaryActionText }}</button>
+        <button v-if="showCharityEntry" class="ghost" @click="goAid">{{ config.secondaryActionText }}</button>
       </view>
     </view>
 
@@ -27,12 +27,12 @@
       </view>
     </view>
 
-    <view class="section">
+    <view v-if="showJoinSection" class="section">
       <text class="section-title">{{ config.joinTitle }}</text>
       <view class="join-grid">
-        <view class="join-card" @click="goDean">院长招募</view>
-        <view class="join-card" @click="goAmbassador">大使申请</view>
-        <view class="join-card" @click="goAid">帮扶申请</view>
+        <view v-if="showPartnerEntry" class="join-card" @click="goDean">院长招募</view>
+        <view v-if="showAmbassadorEntry" class="join-card" @click="goAmbassador">大使申请</view>
+        <view v-if="showCharityEntry" class="join-card" @click="goAid">帮扶申请</view>
       </view>
     </view>
 
@@ -43,10 +43,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { getCurrentTenantCode, withTenantCode } from "../../api";
+import { getCurrentTenantCode } from "../../api";
 import { useEntryPageConfig } from "../../entry-pages";
-import { usePageDecoration } from "../../decoration";
+import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
+import { featureGatesState } from "../../feature-gates";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
@@ -54,6 +55,10 @@ const { config, load } = useEntryPageConfig("brandStory");
 const { bottomNavSection, contentSections, showBottomNav, loadDecoration } = usePageDecoration("brand_story", "/pages/brand/story");
 const mounted = ref(false);
 const lastLoadedTenantCode = ref("");
+const showPartnerEntry = computed(() => featureGatesState.value.partner !== false);
+const showAmbassadorEntry = computed(() => featureGatesState.value.ambassador !== false);
+const showCharityEntry = computed(() => featureGatesState.value.charity !== false);
+const showJoinSection = computed(() => showPartnerEntry.value || showAmbassadorEntry.value || showCharityEntry.value);
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "品牌故事") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;
@@ -65,9 +70,9 @@ const parsedBeliefs = computed(() => config.items.map((item) => {
   return { title: title || item, copy: copy.join("：") || item };
 }));
 
-function goDean() { uni.navigateTo({ url: withTenantCode("/pages/recruit/dean") }); }
-function goAmbassador() { uni.navigateTo({ url: withTenantCode("/pages/apply/ambassador") }); }
-function goAid() { uni.navigateTo({ url: withTenantCode("/pages/apply/aid") }); }
+function goDean() { goDecoratedLink("/pages/recruit/dean"); }
+function goAmbassador() { goDecoratedLink("/pages/apply/ambassador"); }
+function goAid() { goDecoratedLink("/pages/apply/aid"); }
 
 async function refreshTenantScopedPage() {
   lastLoadedTenantCode.value = getCurrentTenantCode();
@@ -97,7 +102,7 @@ onShow(() => {
 .eyebrow { font-size: 24rpx; color: #f7d58f; font-weight: 900; }
 .title { display: block; margin-top: 18rpx; font-size: 46rpx; line-height: 1.22; font-weight: 950; }
 .copy { display: block; margin-top: 18rpx; color: rgba(255,248,232,0.86); font-size: 28rpx; line-height: 1.6; }
-.actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; margin-top: 30rpx; }
+.actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(220rpx, 1fr)); gap: 16rpx; margin-top: 30rpx; }
 .primary, .ghost { height: 78rpx; border-radius: 999px; font-size: 26rpx; font-weight: 900; }
 .primary { background: #fff8e8; color: #5b2f24; }
 .ghost { background: rgba(255,255,255,0.14); color: #fff8e8; border: 1px solid rgba(255,255,255,0.24); }
