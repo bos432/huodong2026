@@ -81,6 +81,8 @@ const permissions = [
   "tenant_profile.manage",
   "course.manage",
   "community.manage",
+  "forum.manage",
+  "forum.moderate",
   "checkin.manage",
   "logs.view",
   "system.manage",
@@ -128,6 +130,7 @@ async function main() {
   console.log(`线上演示商家 seed target: ${API_BASE}`);
   const platform = await loginPlatformAdmin();
   const tenant = await ensureTenant(platform.token);
+  await ensurePlatformDefaultTenant(platform.token);
   await ensureTenantRegion(platform.token, tenant.id);
   await ensureAccounts(platform.token, tenant.id);
   const defaultMerchant = await ensureMallDefaultStore(platform.token, tenant.id);
@@ -181,6 +184,30 @@ async function ensureTenant(token) {
   });
   reportStep("演示商家已创建/更新", `${tenant.name}(${tenant.code})`);
   return tenant;
+}
+
+async function ensurePlatformDefaultTenant(token) {
+  const current = await api("/admin/settings/operation", { headers: auth(token) });
+  await api("/admin/settings/operation", {
+    method: "POST",
+    headers: auth(token),
+    body: JSON.stringify({
+      registrationEnabled: current.registrationEnabled !== false,
+      registrationDisabledMessage: current.registrationDisabledMessage || "",
+      offlinePaymentInstructions: current.offlinePaymentInstructions || "请按活动页面提示完成支付，线下支付以后台确认为准。",
+      paymentMethods: current.paymentMethods || { free: true, balance: true, offline: true, wechat: false, alipay: false },
+      customerServiceName: current.customerServiceName || "慢π客服",
+      customerServicePhone: current.customerServicePhone || "",
+      customerServiceWechat: current.customerServiceWechat || "",
+      defaultGroupQrCodeUrl: current.defaultGroupQrCodeUrl || "",
+      refundInstructions: current.refundInstructions || "退款按平台规则处理。",
+      invoiceInstructions: current.invoiceInstructions || "",
+      pageTheme: current.pageTheme || {},
+      launchConfig: current.launchConfig || {},
+      defaultTenantCode: TENANT_CODE
+    })
+  });
+  reportStep("平台默认入口商家已配置", TENANT_CODE);
 }
 
 async function ensureTenantRegion(token, tenantId) {
@@ -764,8 +791,8 @@ async function ensureMall(token, tenantId, merchantId) {
       salePrice: 69,
       saleStock: Number(existingFlashSale?.soldStock || 0) + Number(existingFlashSale?.lockedStock || 0) + flashSaleRemaining,
       perUserLimit: 1,
-      startsAt: "2026-01-01 00:00:00",
-      endsAt: "2027-12-31 23:59:59",
+      startsAt: "2020-01-01 00:00:00",
+      endsAt: "2099-12-31 23:59:59",
       status: "active",
       sortOrder: 1
     };
@@ -788,8 +815,8 @@ async function ensureMall(token, tenantId, merchantId) {
       minPeople: 2,
       groupStock: Number(existingGroupBuy?.soldStock || 0) + Number(existingGroupBuy?.lockedStock || 0) + groupBuyRemaining,
       perUserLimit: 1,
-      startsAt: "2026-01-01 00:00:00",
-      endsAt: "2027-12-31 23:59:59",
+      startsAt: "2020-01-01 00:00:00",
+      endsAt: "2099-12-31 23:59:59",
       status: "active",
       sortOrder: 2
     };

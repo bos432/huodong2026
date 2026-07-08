@@ -119,7 +119,7 @@ export function defaultPermissionsForRole(role?: string | null, tenantScoped = f
     "registration.view", "registration.manage", "registration.export", "waitlist.manage", "checkin.manage", "member.view",
     "member.manage", "member.password", "member_level.manage", "tag.manage", "notification.manage", "review.manage",
     "mall.merchant.view", "mall.product.manage", "mall.review.manage", "mall.logistics.manage", "mall.order.view", "mall.order.manage", "homepage.manage", "marketing_popup.manage", "ad_center.manage", "announcement.manage", "operation_settings.manage", "tenant_profile.manage", "charity.view", "charity.manage",
-    "course.manage", "community.manage", "upload.image"
+    "course.manage", "community.manage", "forum.manage", "forum.moderate", "upload.image"
   ];
   if (normalized === AdminRole.Finance) return [
     "dashboard.view", "analytics.view", "support.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export",

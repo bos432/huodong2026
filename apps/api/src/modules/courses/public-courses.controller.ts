@@ -433,7 +433,7 @@ export class PublicCoursesController {
   async createForumChildReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
-    const parent = await this.forumReplies.findOne({ where: { id, status: "approved" } });
+    const parent = await this.forumReplies.findOne({ where: { id, status: "approved" }, relations: ["topic", "parent"], loadEagerRelations: false });
     if (!parent || !parent.topic || !(await this.findPublicForumTopic(parent.topic.id, tenant))) throw new NotFoundException("回复不存在或未通过审核");
     const rootParent = parent.depth >= 2 && parent.parent ? parent.parent : parent;
     return this.createForumReplyRow(parent.topic, rootParent, userId, dto);
@@ -479,7 +479,7 @@ export class PublicCoursesController {
   async reportForumReply(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
-    const reply = await this.forumReplies.findOne({ where: { id, status: "approved" } });
+    const reply = await this.forumReplies.findOne({ where: { id, status: "approved" }, relations: ["topic"], loadEagerRelations: false });
     if (!reply?.topic) throw new NotFoundException("回复不存在或未通过审核");
     const topic = await this.findPublicForumTopic(reply.topic.id, tenant);
     if (!topic) throw new NotFoundException("回复不存在或未通过审核");

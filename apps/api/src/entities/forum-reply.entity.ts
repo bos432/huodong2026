@@ -20,7 +20,7 @@ export class ForumReply {
   @Column({ type: "int", nullable: true })
   parentId!: number | null;
 
-  @ManyToOne(() => ForumReply, { eager: true, nullable: true, onDelete: "CASCADE" })
+  @ManyToOne(() => ForumReply, { nullable: true, onDelete: "CASCADE" })
   @JoinColumn({ name: "parentId" })
   parent!: ForumReply | null;
 

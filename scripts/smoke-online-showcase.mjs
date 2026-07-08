@@ -386,12 +386,12 @@ async function mallFlow(financeToken, opsToken) {
   assert(joinedTeamRecords.length >= 2 && joinedTeamRecords.every((item) => item.teamStatus === "success" && Number(item.paidPeople || 0) >= 2), "商城拼团达到人数后应标记整团成团");
   const publicGroupBuyTeamsAfterSuccess = pickList(await api(`/public/mall/group-buys/${groupBuy.id}/teams?tenantCode=${TENANT_CODE}${merchantQuery}`, { headers: tenantHeader() }));
   assert(!publicGroupBuyTeamsAfterSuccess.some((team) => team.teamNo === joinableTeam.teamNo), "已成团队伍不应继续出现在商品详情可参团列表");
-  const expiredGroupBuyStart = formatLocalDateTime(new Date(Date.now() - 2 * 60 * 1000));
-  const expiredGroupBuyActiveEnd = formatLocalDateTime(new Date(Date.now() + 10 * 60 * 1000));
-  const expiredGroupBuyPastEnd = formatLocalDateTime(new Date(Date.now() - 60 * 1000));
-  const offlineGroupBuyStart = formatLocalDateTime(new Date(Date.now() - 30 * 1000));
-  const offlineGroupBuyActiveEnd = formatLocalDateTime(new Date(Date.now() + 20 * 60 * 1000));
-  const offlineGroupBuyPastEnd = formatLocalDateTime(new Date(Date.now() - 10 * 1000));
+  const expiredGroupBuyStart = "2020-01-01 00:00:00";
+  const expiredGroupBuyActiveEnd = "2099-12-31 23:59:59";
+  const expiredGroupBuyPastEnd = "2020-01-02 00:00:00";
+  const offlineGroupBuyStart = "2020-01-03 00:00:00";
+  const offlineGroupBuyActiveEnd = "2099-12-31 23:59:59";
+  const offlineGroupBuyPastEnd = "2020-01-04 00:00:00";
   const oldSmokeGroupBuys = pickList(await api(`/admin/mall/group-buys?keyword=${encodeURIComponent("【smoke】")}${merchantQuery}`, { headers: auth(opsToken) }));
   for (const oldSmokeGroupBuy of oldSmokeGroupBuys.filter((item) => item.status === "active")) {
     await api(`/admin/mall/group-buys/${oldSmokeGroupBuy.id}`, {
