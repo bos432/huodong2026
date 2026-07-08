@@ -39,8 +39,8 @@
           <text class="hint">{{ images.length }}/9</text>
         </view>
         <view class="image-grid">
-          <view v-for="(image, index) in images" :key="image" class="image-tile">
-            <image :src="image" mode="aspectFill" @click="previewImage(image)" />
+          <view v-for="(image, index) in images" :key="image.localUrl || image.remoteUrl" class="image-tile">
+            <image :src="image.localUrl" mode="aspectFill" @click="previewImage(image.localUrl)" />
             <text class="remove" @click.stop="removeImage(index)">×</text>
           </view>
           <view v-if="images.length < 9" class="add-image" @click="chooseImages">{{ uploading ? "上传中..." : "+ 添加照片" }}</view>
@@ -85,12 +85,18 @@ const submitting = ref(false);
 const activities = ref<any[]>([]);
 const selectedActivityId = ref(0);
 const content = ref("");
-const images = ref<string[]>([]);
 const city = ref("");
 const tagsText = ref("");
 const myPosts = ref<any[]>([]);
 const routeActivityId = ref(0);
 const MAX_UPLOAD_IMAGE_BYTES = 5 * 1024 * 1024;
+
+type UploadImageDraft = {
+  localUrl: string;
+  remoteUrl: string;
+};
+
+const images = ref<UploadImageDraft[]>([]);
 
 const selectedActivity = computed(() => activities.value.find((item) => item.id === selectedActivityId.value));
 const activityOptions = computed(() => activities.value.map((item) => ({
@@ -156,10 +162,17 @@ async function chooseImages() {
     const files = (await chooseUploadImageFiles(count)).slice(0, count);
     if (!files.length) return;
     uploading.value = true;
-    for (const filePath of files) {
-      const uploadPath = await prepareUploadImage(filePath);
-      const uploaded = await uploadCommunityPostImage(uploadPath);
-      if (uploaded.url) images.value.push(uploaded.url);
+    for (let index = 0; index < files.length; index += 1) {
+      const filePath = files[index];
+      try {
+        const uploadPath = await prepareUploadImage(filePath);
+        const uploaded = await uploadCommunityPostImage(uploadPath);
+        if (!uploaded.url) throw new Error("服务器未返回图片地址");
+        images.value.push({ localUrl: uploadPath, remoteUrl: uploaded.url });
+      } catch (error: any) {
+        console.error("[community-upload]", error);
+        throw new Error(error?.message || `第 ${index + 1} 张照片上传失败，请重试`);
+      }
     }
   } catch (error: any) {
     const message = String(error?.errMsg || error?.message || "");
@@ -286,7 +299,7 @@ function removeImage(index: number) {
 }
 
 function previewImage(current: string) {
-  uni.previewImage({ urls: images.value, current });
+  uni.previewImage({ urls: images.value.map((item) => item.localUrl), current });
 }
 
 async function submit() {
@@ -302,7 +315,7 @@ async function submit() {
       data: {
         activityId: selectedActivityId.value,
         content: content.value.trim(),
-        images: images.value,
+        images: images.value.map((item) => item.remoteUrl),
         city: city.value.trim(),
         tags: tags(),
         posterConfig: { theme: "classic" }
