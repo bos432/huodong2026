@@ -1647,7 +1647,7 @@ onMounted(async () => {
                         <span>{{ item.description }}</span>
                       </div>
                       <div class="feature-gate-switch">
-                        <el-switch v-model="deployment.featureGates[item.key]" active-text="开放" inactive-text="关闭" />
+                        <el-switch v-model="deployment.featureGates[item.key]" />
                         <el-tag :type="featureGateTagType(item.key)" effect="plain">{{ deployment.featureGates[item.key] ? "用户可见" : "暂不开放" }}</el-tag>
                       </div>
                     </div>
@@ -2297,11 +2297,11 @@ onMounted(async () => {
 .feature-gate-panel { width: 100%; display: grid; gap: 12px; }
 .feature-gate-actions { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .feature-gate-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
-.feature-gate-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 12px; align-items: center; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+.feature-gate-card { display: grid; grid-template-columns: minmax(0, 1fr) 92px; gap: 16px; align-items: center; min-height: 66px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
 .feature-gate-card div:first-child { display: grid; gap: 5px; min-width: 0; }
 .feature-gate-card strong { color: #111827; font-size: 13px; }
 .feature-gate-card span { color: #64748b; font-size: 12px; line-height: 1.45; }
-.feature-gate-switch { display: grid; justify-items: end; gap: 8px; }
+.feature-gate-switch { display: grid; justify-items: center; gap: 8px; min-width: 92px; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .system-tabs { margin-top: 12px; }
 .panel-alert { margin-bottom: 16px; }
