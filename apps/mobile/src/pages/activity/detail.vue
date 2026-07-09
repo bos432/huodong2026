@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getUserToken, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
@@ -7,6 +8,7 @@ import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -19,6 +21,14 @@ const source = ref("h5");
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const featureGates = featureGatesState;
 const canPublishActivityPost = computed(() => featureGates.value.community !== false && featureGates.value.communityPublish !== false);
+const shareOptions = {
+  title: () => activity.value?.title || "慢π活动详情",
+  path: () => activity.value?.id ? `/pages/activity/detail?id=${activity.value.id}` : "/pages/activity/list",
+  imageUrl: () => activity.value?.coverUrl || activity.value?.posterUrl || ""
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;

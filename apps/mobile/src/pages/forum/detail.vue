@@ -54,13 +54,22 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request } from "../../api";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const id = ref(0);
 const topic = ref<any>(null);
 const loading = ref(false);
 const replies = computed(() => Array.isArray(topic.value?.replies) ? topic.value.replies : []);
+const shareOptions = {
+  title: () => topic.value?.title || "慢π共修论坛",
+  path: () => topic.value?.id ? `/pages/forum/detail?id=${topic.value.id}` : "/pages/forum/index",
+  imageUrl: () => topic.value?.images?.[0] || ""
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 
 onLoad((options: any) => {
   id.value = Number(options?.id || 0);

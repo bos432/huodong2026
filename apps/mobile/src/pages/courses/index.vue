@@ -62,11 +62,12 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText } from "../../course-data";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -94,6 +95,13 @@ const loading = ref(true);
 const error = ref("");
 const allCourses = ref<any[]>([]);
 const { contentSections, loadDecoration } = usePageDecoration("course_home", "/pages/courses/index");
+const shareOptions = {
+  title: "慢π专题内容",
+  path: "/pages/courses/index"
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "专题内容") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;

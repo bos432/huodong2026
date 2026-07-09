@@ -112,7 +112,7 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { onMounted } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
@@ -123,6 +123,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 onShow(async () => {
   await loadFeatureGates(true);
@@ -145,6 +146,13 @@ const checkinStatusSubtitle = computed(() => checkinTask.value?.checkedToday ? "
 const featureGates = featureGatesState;
 const canPublish = computed(() => featureGates.value.community !== false && featureGates.value.communityPublish !== false);
 const { contentSections, loadDecoration } = usePageDecoration("community_home", "/pages/community/index");
+const shareOptions = {
+  title: "慢π共修动态",
+  path: () => activityFilterId.value ? `/pages/community/index?activityId=${activityFilterId.value}` : "/pages/community/index"
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "共修首页") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;

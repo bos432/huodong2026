@@ -106,6 +106,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
 import { priceText } from "../../course-data";
 import { reviewSafeText } from "../../review-safe-text";
@@ -113,6 +114,7 @@ import EmptyState from "../../components/EmptyState.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const activeTab = ref("detail");
 const isFav = ref(false);
@@ -157,6 +159,14 @@ const chapters = computed(() => (rawCourse.value?.chapters || []).map((chapter: 
   title: reviewSafeText(chapter.title || ""),
   lessons: (chapter.lessons || []).map((lesson: any) => ({ ...lesson, title: reviewSafeText(lesson.title || "") }))
 })));
+const shareOptions = {
+  title: () => course.value?.title || "慢π专题内容",
+  path: () => course.value?.id ? `/pages/course/detail?id=${course.value.id}` : "/pages/courses/index",
+  imageUrl: () => course.value?.coverUrl || ""
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 
 const reviews = [
   { avatar: "/static/avatar1.png", nickname: "学而时习", rating: 5, content: "内容扎实，适合系统了解。", time: "3天前" },

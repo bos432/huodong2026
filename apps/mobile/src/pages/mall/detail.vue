@@ -109,10 +109,11 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
+import { onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const product = ref<any>({});
 const skuId = ref(0);
@@ -127,6 +128,14 @@ const currentStock = computed(() => currentSku.value ? availableStock(currentSku
 const currentFlashSale = computed(() => flashSales.value.find((item) => (item.sku?.id || item.skuId) === skuId.value && item.runtimeStatus === "active"));
 const currentGroupBuy = computed(() => groupBuys.value.find((item) => (item.sku?.id || item.skuId) === skuId.value && item.runtimeStatus === "active"));
 const canBuy = computed(() => currentStock.value > 0);
+const shareOptions = {
+  title: () => product.value?.title || "慢π严选好物",
+  path: () => product.value?.id ? `/pages/mall/detail?id=${product.value.id}` : "/pages/mall/index",
+  imageUrl: () => product.value?.coverUrl || ""
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 function money(value: any) { return Number(value || 0).toFixed(2); }
 function dateText(value: any) { return value ? String(value).slice(0, 10) : "-"; }
 function maskUser(value: any) {

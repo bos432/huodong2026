@@ -118,9 +118,10 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const merchantId = ref(0);
 const merchant = ref<any>({});
@@ -137,6 +138,14 @@ const sortTabs = [
   { label: "新品", value: "newest" as const },
   { label: "热销", value: "hot" as const }
 ];
+const shareOptions = {
+  title: () => merchant.value?.name ? `${merchant.value.name}｜慢π商城` : "慢π商城店铺",
+  path: () => merchantId.value ? `/pages/mall/merchant?id=${merchantId.value}` : "/pages/mall/index",
+  imageUrl: () => merchant.value?.logoUrl || ""
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 
 function money(value: any) { return Number(value || 0).toFixed(2); }
 function availableProductStock(item: any) { return Math.max(Number(item.stock || 0), 0); }
