@@ -144,6 +144,15 @@ describe("migration contracts", () => {
     expect(migration).toContain("Cannot revert member level tenant governance while tenant-defined levels exist");
   });
 
+  it("normalizes refund number collations during member point ledger backfills", () => {
+    const migration = readFileSync(join(migrationDirectory, "1783880000000-MemberPointLedgerGovernance.ts"), "utf8");
+    const normalizedRefundComparisons = migration.match(
+      /CONVERT\((?:r|refund|candidate)\.refundNo USING utf8mb4\) COLLATE utf8mb4_unicode_ci = CONVERT\((?:p|claw)\.sourceId USING utf8mb4\) COLLATE utf8mb4_unicode_ci/g
+    );
+    expect(normalizedRefundComparisons).toHaveLength(6);
+    expect(migration).not.toMatch(/(?:r|refund|candidate)\.refundNo = (?:p|claw)\.sourceId/);
+  });
+
   it("governs member tag scopes, idempotent snapshots, and immutable snapshot history", () => {
     const migration = readFileSync(join(migrationDirectory, "1783890000000-MemberSegmentGovernance.ts"), "utf8");
     for (const token of [
