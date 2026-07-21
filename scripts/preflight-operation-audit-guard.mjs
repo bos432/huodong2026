@@ -49,8 +49,8 @@ checkSourceIncludesAll(operationLogEntity, [
 
 checkSourceIncludesAll(adminController, [
   '@Get("operation-logs")',
-  'operationLogs(@Query("tenantId") tenantId?: string',
-  "return this.service.listOperationLogs(admin, tenantId ? Number(tenantId) : undefined)",
+  "operationLogs(@Query() query: OperationLogQueryDto",
+  "return this.service.listOperationLogs(query, admin)",
   '@Post("orders/:id/confirm-offline-payment")',
   '@Post("orders/:id/refund")',
   '@Post("refunds/:id/approve")',
@@ -62,10 +62,11 @@ checkSourceIncludesAll(adminController, [
 ], "admin controller");
 
 checkSourceIncludesAll(adminService, [
-  "listOperationLogs(admin?: AdminContext, tenantId?: number)",
+  "listOperationLogs(query: OperationLogQueryDto = {}, admin?: AdminContext)",
   'this.operationLogs.createQueryBuilder("log")',
   'builder.andWhere("log.tenantId = :tenantId"',
-  "take: 300",
+  "getManyAndCount()",
+  "sanitizeAuditValue(row.detail)",
   "private logOperation",
   "this.operationLogs.save",
   "adminId: admin?.id",
@@ -123,7 +124,7 @@ checkSourceIncludesAll(operationLogsView, [
 
 checkSourceIncludesAll(layoutView + adminMenu, [
   'index: "/operation-logs"',
-  "permissions.superAdmin"
+  'roles: ["logs.view"]'
 ], "admin layout");
 
 checkSourceIncludesAll(smoke, [

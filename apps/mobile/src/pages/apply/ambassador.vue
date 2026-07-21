@@ -21,18 +21,23 @@
       <input v-model="form.wechat" class="input" placeholder="微信号" />
       <input v-model="form.expertise" class="input" placeholder="擅长领域，例如书法/亲子沟通/国学/健康" />
       <textarea v-model="form.experience" class="textarea" placeholder="请介绍你的经验、活动方向或可提供的服务" />
+      <view v-if="submitError" class="submit-error">{{ submitError }}</view>
       <button class="submit" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.submitText }}</button>
     </view>
   </view>
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from "vue";
+import { reactive, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { request } from "../../api";
 import { useEntryPageConfig } from "../../entry-pages";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 
 const submitting = ref(false);
 const submitted = ref(false);
+const submitError = ref("");
+const submitBusinessKey = ref("");
 const form = reactive({ name: "", phone: "", city: "", wechat: "", expertise: "", experience: "" });
 const { config, load } = useEntryPageConfig("ambassadorApply");
 
@@ -47,21 +52,29 @@ function validate() {
 }
 
 async function submit() {
+  if (submitting.value || submitted.value) return;
   const message = validate();
   if (message) return uni.showToast({ title: message, icon: "none" });
   submitting.value = true;
+  submitError.value = "";
   try {
-    await request("/public/ambassador/applications", { method: "POST", data: { ...form, source: "ambassador_apply" } });
+    if (!submitBusinessKey.value) submitBusinessKey.value = `ecosystem:ambassador:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+    await request("/public/ambassador/applications", { method: "POST", data: { ...form, kind: "ambassador", source: "ambassador_apply", businessKey: submitBusinessKey.value } });
     submitted.value = true;
     uni.showModal({ title: "已提交", content: config.successMessage || "大使申请已进入后台，我们会尽快联系你。", showCancel: false });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "提交失败", icon: "none" });
+    submitError.value = error.message || "提交失败";
+    uni.showToast({ title: submitError.value, icon: "none" });
   } finally {
     submitting.value = false;
   }
 }
 
-onMounted(load);
+onShow(async () => {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
+  await load();
+});
 </script>
 
 <style scoped>
@@ -77,5 +90,6 @@ onMounted(load);
 .card { min-height: 98rpx; display: flex; align-items: center; justify-content: center; border-radius: 16rpx; background: #fff3ed; color: #a83c31; font-size: 25rpx; font-weight: 900; }
 .input, .textarea { width: 100%; box-sizing: border-box; margin-top: 16rpx; padding: 22rpx; border-radius: 16rpx; background: #f9f3eb; color: #2d241c; font-size: 26rpx; }
 .textarea { min-height: 170rpx; }
+.submit-error { margin-top:18rpx; padding:16rpx; border-radius:8px; background:#fff1f0; color:#b42318; font-size:24rpx; line-height:1.5; }
 .submit { margin-top: 22rpx; height: 86rpx; border-radius: 999px; background: #c43d3d; color: #fff; font-size: 28rpx; font-weight: 950; }
 </style>

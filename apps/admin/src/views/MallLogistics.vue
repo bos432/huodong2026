@@ -6,20 +6,39 @@
         <p>按店铺维护快递公司、客服电话和物流查询链接；平台可全局监管，商家/代理只操作已授权店铺。</p>
       </div>
       <div class="header-actions">
-        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" @change="handleTenantChange">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" :disabled="writeLocked" @change="handleTenantChange">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
         </el-select>
-        <el-select v-model="filters.merchantId" clearable filterable placeholder="查看全部店铺；操作前请选择店铺" style="width:280px" @change="handleMerchantChange">
+        <el-select v-model="filters.merchantId" clearable filterable placeholder="查看全部店铺；操作前请选择店铺" style="width:280px" :disabled="writeLocked" @change="handleMerchantChange">
           <el-option v-for="merchant in merchants" :key="merchant.id" :label="merchantLabel(merchant)" :value="merchant.id" />
         </el-select>
-        <el-input v-model="filters.keyword" clearable placeholder="物流公司/编码/电话" style="width:220px" @keyup.enter="loadLogisticsCompanies" @clear="loadLogisticsCompanies" />
-        <el-select v-model="filters.enabled" clearable placeholder="全部状态" style="width:120px" @change="loadLogisticsCompanies">
+        <el-input v-model="filters.keyword" clearable placeholder="物流公司/编码/电话" style="width:220px" :disabled="writeLocked" @keyup.enter="loadLogisticsCompanies" @clear="loadLogisticsCompanies" />
+        <el-select v-model="filters.enabled" clearable placeholder="全部状态" style="width:120px" :disabled="writeLocked" @change="loadLogisticsCompanies">
           <el-option label="启用" value="true" />
           <el-option label="停用" value="false" />
         </el-select>
-        <el-button :loading="loadingAny" @click="reload">刷新</el-button>
+        <el-button :loading="loadingAny" :disabled="writeLocked" @click="reload">刷新</el-button>
       </div>
     </div>
+
+    <el-alert v-if="tenantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="tenantErrorMessage">
+      <template #default><el-button size="small" @click="retryScopeLoading">重试商家列表</el-button></template>
+    </el-alert>
+    <el-alert v-if="merchantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="merchantErrorMessage">
+      <template #default><el-button size="small" @click="retryScopeLoading">重试店铺列表</el-button></template>
+    </el-alert>
+    <el-alert v-if="dataErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="dataErrorMessage">
+      <template #default><el-button size="small" @click="loadLogisticsCompanies">重试物流列表</el-button></template>
+    </el-alert>
+    <el-alert
+      v-if="!canManageLogistics"
+      class="scope-alert"
+      type="info"
+      show-icon
+      :closable="false"
+      title="当前为物流只读模式"
+      description="订单履约人员可以查看可选快递公司；新增、编辑和启停物流配置需要商城物流设置权限。"
+    />
 
     <el-alert
       v-if="deepLinkWarning"
@@ -79,11 +98,11 @@
     />
 
     <div class="content-grid">
-      <el-card shadow="never" class="form-card">
+      <el-card v-if="canManageLogistics" shadow="never" class="form-card">
         <template #header>
           <div class="section-header">
             <span>{{ form.id ? "编辑物流公司" : "新增物流公司" }}</span>
-            <el-button v-if="form.id" size="small" @click="resetForm">取消编辑</el-button>
+            <el-button v-if="form.id" size="small" :disabled="writeLocked" @click="resetForm">取消编辑</el-button>
           </div>
         </template>
         <el-form label-width="96px">
@@ -144,10 +163,10 @@
           <el-table-column label="状态" width="90">
             <template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? "启用" : "停用" }}</el-tag></template>
           </el-table-column>
-          <el-table-column label="操作" width="160" fixed="right">
+          <el-table-column v-if="canManageLogistics" label="操作" width="160" fixed="right">
             <template #default="{ row }">
-              <el-button size="small" @click="editLogisticsCompany(row)">编辑</el-button>
-              <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain @click="toggleLogisticsCompany(row)">
+              <el-button size="small" :disabled="writeLocked || loading" @click="editLogisticsCompany(row)">编辑</el-button>
+              <el-button size="small" :type="row.enabled ? 'warning' : 'success'" plain :loading="actionKey === `toggle:${row.id}`" :disabled="Boolean(actionKey) || saving" @click="toggleLogisticsCompany(row)">
                 {{ row.enabled ? "停用" : "启用" }}
               </el-button>
             </template>
@@ -161,10 +180,10 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
-import { isPlatformAdmin } from "../permissions";
+import { hasPermission, isPlatformAdmin } from "../permissions";
 
 type Merchant = {
   id: number;
@@ -186,16 +205,27 @@ const logisticsCompanies = ref<any[]>([]);
 const loading = ref(false);
 const merchantLoading = ref(false);
 const saving = ref(false);
+const actionKey = ref("");
+const tenantErrorMessage = ref("");
+const merchantErrorMessage = ref("");
+const dataErrorMessage = ref("");
 const deepLinkWarning = ref("");
 const filters = reactive({ tenantId: routeTenantId(), merchantId: routeMerchantId(), keyword: "", enabled: "" });
 const form = reactive<any>({ id: null, name: "", code: "", servicePhone: "", trackingUrl: "", sortOrder: 0, enabled: true });
+type LogisticsTarget = { id: number | null; tenantId?: number; merchantId: number; scopeKey: string; listSequence: number };
+const formTarget = ref<LogisticsTarget | null>(null);
+let tenantLoadSequence = 0;
+let merchantLoadSequence = 0;
+let logisticsLoadSequence = 0;
+const canManageLogistics = computed(() => hasPermission("mall.logistics.manage"));
 
 const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
 const selectedMerchantOpen = computed(() => merchantOperational(selectedMerchant.value));
 const selectedMerchantDisabledReason = computed(() => merchantDisabledReason(selectedMerchant.value));
 const selectedMerchantName = computed(() => selectedMerchant.value ? `${selectedMerchant.value.name || selectedMerchant.value.code}（${merchantOwnerText(selectedMerchant.value)}）` : "请先在页面顶部选择店铺");
-const canOperateSelectedMerchant = computed(() => !deepLinkWarning.value && !!filters.merchantId && selectedMerchantOpen.value);
+const canOperateSelectedMerchant = computed(() => canManageLogistics.value && !deepLinkWarning.value && !!filters.merchantId && selectedMerchantOpen.value);
 const loadingAny = computed(() => loading.value || merchantLoading.value || saving.value);
+const writeLocked = computed(() => saving.value || Boolean(actionKey.value));
 const enabledCount = computed(() => logisticsCompanies.value.filter((item) => item.enabled).length);
 
 function routeTenantId() {
@@ -248,12 +278,48 @@ function currentMallParams(extra: Record<string, any> = {}) {
   };
 }
 
+function logisticsScopeKey() {
+  return JSON.stringify({
+    tenantId: filters.tenantId || selectedMerchant.value?.tenant?.id || null,
+    merchantId: filters.merchantId || null,
+    keyword: filters.keyword.trim(),
+    enabled: filters.enabled || ""
+  });
+}
+
+function captureLogisticsTarget(row?: any): LogisticsTarget {
+  const merchantId = Number(row?.merchant?.id || filters.merchantId || 0);
+  if (!merchantId) throw new Error("当前未选择物流店铺，请刷新后重新操作");
+  return {
+    id: row?.id ? Number(row.id) : null,
+    tenantId: Number(row?.tenant?.id || selectedMerchant.value?.tenant?.id || filters.tenantId || 0) || undefined,
+    merchantId,
+    scopeKey: logisticsScopeKey(),
+    listSequence: logisticsLoadSequence
+  };
+}
+
+function assertLogisticsTarget(target: LogisticsTarget) {
+  if (target.scopeKey !== logisticsScopeKey() || target.listSequence !== logisticsLoadSequence || target.merchantId !== filters.merchantId) {
+    throw new Error("物流列表或店铺范围已变化，请刷新后重新操作");
+  }
+  if (target.id === null) return undefined;
+  const current = logisticsCompanies.value.find((item) => Number(item.id) === target.id);
+  if (!current || Number(current.merchant?.id || 0) !== target.merchantId) {
+    throw new Error("目标物流公司已不在当前列表，请刷新后重新操作");
+  }
+  return current;
+}
+
 function requireMerchantSelection(action: string, row?: any) {
   if (deepLinkWarning.value) {
     ElMessage.error("当前商城物流店铺链接不可用，请先确认店铺授权后再操作。");
     return false;
   }
-  if (row?.merchant?.id && row.merchant.id !== filters.merchantId) filters.merchantId = row.merchant.id;
+  if (row?.merchant?.id && row.merchant.id !== filters.merchantId) {
+    ElMessage.error("目标物流公司不属于当前店铺，请刷新后重新操作。");
+    return false;
+  }
   if (filters.merchantId && selectedMerchantOpen.value) return true;
   if (filters.merchantId) {
     ElMessage.error(selectedMerchantDisabledReason.value);
@@ -271,17 +337,41 @@ async function syncRouteQuery() {
 }
 
 function clearRows() {
+  logisticsLoadSequence += 1;
   logisticsCompanies.value = [];
+  loading.value = false;
+  dataErrorMessage.value = "";
 }
 
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  const sequence = ++tenantLoadSequence;
+  tenantErrorMessage.value = "";
+  tenants.value = [];
+  try {
+    const rows = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = Array.isArray(rows) ? rows : [];
+    return true;
+  } catch (error: any) {
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = [];
+    tenantErrorMessage.value = error.message || "商家列表加载失败";
+    return false;
+  }
 }
 
 async function loadMerchants() {
+  const sequence = ++merchantLoadSequence;
+  const tenantId = filters.tenantId;
   merchantLoading.value = true;
+  merchantErrorMessage.value = "";
+  merchants.value = [];
+  clearRows();
+  resetForm();
   try {
-    merchants.value = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: "true" } });
+    const rows = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? tenantId : undefined, enabled: "true" } });
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = Array.isArray(rows) ? rows : [];
     const requestedMerchantId = routeMerchantId();
     deepLinkWarning.value = "";
     if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) filters.merchantId = requestedMerchantId;
@@ -294,11 +384,21 @@ async function loadMerchants() {
     if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
     return true;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载可运营店铺失败");
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = [];
+    filters.merchantId = undefined;
+    clearRows();
+    merchantErrorMessage.value = error.message || "加载可运营店铺失败";
     return false;
   } finally {
-    merchantLoading.value = false;
+    if (sequence === merchantLoadSequence) merchantLoading.value = false;
   }
+}
+
+async function retryScopeLoading() {
+  await loadTenants();
+  const ok = await loadMerchants();
+  if (ok) await loadLogisticsCompanies();
 }
 
 async function loadLogisticsCompanies() {
@@ -307,18 +407,26 @@ async function loadLogisticsCompanies() {
     clearRows();
     return;
   }
+  const sequence = ++logisticsLoadSequence;
+  const scopeKey = logisticsScopeKey();
   loading.value = true;
+  dataErrorMessage.value = "";
+  logisticsCompanies.value = [];
   try {
-    logisticsCompanies.value = await api.get<any, any[]>("/admin/mall/logistics-companies", {
+    const rows = await api.get<any, any[]>("/admin/mall/logistics-companies", {
       params: currentMallParams({
         enabled: filters.enabled || undefined,
         keyword: filters.keyword.trim() || undefined
       })
     });
+    if (sequence !== logisticsLoadSequence || scopeKey !== logisticsScopeKey()) return;
+    logisticsCompanies.value = Array.isArray(rows) ? rows : [];
   } catch (error: any) {
-    ElMessage.error(error.message || "加载物流公司失败");
+    if (sequence !== logisticsLoadSequence || scopeKey !== logisticsScopeKey()) return;
+    logisticsCompanies.value = [];
+    dataErrorMessage.value = error.message || "加载物流公司失败";
   } finally {
-    loading.value = false;
+    if (sequence === logisticsLoadSequence) loading.value = false;
   }
 }
 
@@ -343,44 +451,64 @@ async function handleMerchantChange() {
 
 async function selectRowMerchant(row: any) {
   if (row?.merchant?.id && row.merchant.id !== filters.merchantId) {
+    if (isPlatformAdmin() && row.tenant?.id) filters.tenantId = row.tenant.id;
     filters.merchantId = row.merchant.id;
+    resetForm();
     await syncRouteQuery();
+    await loadLogisticsCompanies();
   }
+  return logisticsCompanies.value.find((item) => Number(item.id) === Number(row?.id));
 }
 
 function resetForm() {
   Object.assign(form, { id: null, name: "", code: "", servicePhone: "", trackingUrl: "", sortOrder: 0, enabled: true });
+  formTarget.value = null;
 }
 
 async function editLogisticsCompany(row: any) {
-  await selectRowMerchant(row);
-  if (!requireMerchantSelection("编辑物流公司", row)) return;
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流设置权限");
+  const current = await selectRowMerchant(row);
+  if (!current || !requireMerchantSelection("编辑物流公司", current)) return ElMessage.error("目标物流公司已不在当前列表，请刷新后重新操作");
   Object.assign(form, {
-    id: row.id,
-    name: row.name || "",
-    code: row.code || "",
-    servicePhone: row.servicePhone || "",
-    trackingUrl: row.trackingUrl || "",
-    sortOrder: Number(row.sortOrder || 0),
-    enabled: row.enabled !== false
+    id: current.id,
+    name: current.name || "",
+    code: current.code || "",
+    servicePhone: current.servicePhone || "",
+    trackingUrl: current.trackingUrl || "",
+    sortOrder: Number(current.sortOrder || 0),
+    enabled: current.enabled !== false
   });
+  formTarget.value = captureLogisticsTarget(current);
 }
 
 async function saveLogisticsCompany() {
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流设置权限");
+  if (saving.value || actionKey.value) return;
   if (!requireMerchantSelection("配置物流")) return;
   if (!form.name?.trim()) return ElMessage.error("请输入物流公司名称");
+  const trackingUrl = String(form.trackingUrl || "").trim();
+  if (trackingUrl && !/^https?:\/\//i.test(trackingUrl)) return ElMessage.error("物流查询链接只允许 HTTP(S) 地址");
+  let target: LogisticsTarget;
+  try {
+    target = formTarget.value || captureLogisticsTarget();
+    assertLogisticsTarget(target);
+  } catch (error: any) {
+    return ElMessage.error(error.message || "物流列表或店铺范围已变化，请刷新后重新操作");
+  }
   saving.value = true;
   try {
     const payload = {
       name: form.name.trim(),
       code: form.code?.trim() || undefined,
       servicePhone: form.servicePhone?.trim() || undefined,
-      trackingUrl: form.trackingUrl?.trim() || undefined,
+      trackingUrl: trackingUrl || undefined,
       sortOrder: Number(form.sortOrder || 0),
       enabled: form.enabled,
-      ...currentMallParams()
+      tenantId: isPlatformAdmin() ? target.tenantId : undefined,
+      merchantId: target.merchantId
     };
-    if (form.id) await api.patch(`/admin/mall/logistics-companies/${form.id}`, payload);
+    assertLogisticsTarget(target);
+    if (target.id) await api.patch(`/admin/mall/logistics-companies/${target.id}`, payload);
     else await api.post("/admin/mall/logistics-companies", payload);
     ElMessage.success("物流公司已保存");
     resetForm();
@@ -393,10 +521,38 @@ async function saveLogisticsCompany() {
 }
 
 async function toggleLogisticsCompany(row: any) {
-  await editLogisticsCompany(row);
-  if (!requireMerchantSelection("启停物流公司", row)) return;
-  form.enabled = !row.enabled;
-  await saveLogisticsCompany();
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流设置权限");
+  if (actionKey.value || saving.value) return;
+  const selected = await selectRowMerchant(row);
+  if (!selected || !requireMerchantSelection("启停物流公司", selected)) return ElMessage.error("目标物流公司已不在当前列表，请刷新后重新操作");
+  const target = captureLogisticsTarget(selected);
+  actionKey.value = `toggle:${selected.id}`;
+  try {
+    await ElMessageBox.confirm(
+      `确认${selected.enabled ? "停用" : "启用"}物流公司「${selected.name}」？${selected.enabled ? "停用后新发货单将不能选择该公司，历史物流记录不受影响。" : "启用后该店铺发货时可以选择此物流公司。"}`,
+      selected.enabled ? "停用物流公司" : "启用物流公司",
+      { type: selected.enabled ? "warning" : "info", confirmButtonText: selected.enabled ? "确认停用" : "确认启用", cancelButtonText: "取消" }
+    );
+    const current = assertLogisticsTarget(target);
+    const trackingUrl = String(current.trackingUrl || "").trim();
+    if (trackingUrl && !/^https?:\/\//i.test(trackingUrl)) throw new Error("现有物流查询链接不是 HTTP(S) 地址，请先编辑修正后再启停");
+    await api.patch(`/admin/mall/logistics-companies/${target.id}`, {
+      name: String(current.name || "").trim(),
+      code: String(current.code || "").trim() || undefined,
+      servicePhone: String(current.servicePhone || "").trim() || undefined,
+      trackingUrl: trackingUrl || undefined,
+      sortOrder: Number(current.sortOrder || 0),
+      enabled: !current.enabled,
+      tenantId: isPlatformAdmin() ? target.tenantId : undefined,
+      merchantId: target.merchantId
+    });
+    ElMessage.success(current.enabled ? "物流公司已停用" : "物流公司已启用");
+    await loadLogisticsCompanies();
+  } catch (error: any) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "更新物流公司状态失败");
+  } finally {
+    actionKey.value = "";
+  }
 }
 
 function merchantWorkbenchUrl() {

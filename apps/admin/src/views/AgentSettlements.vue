@@ -3,8 +3,10 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Check, Close, Download, Plus, Refresh, Search, UploadFilled, Wallet } from "@element-plus/icons-vue";
 import { api, downloadFile } from "../api";
+import { canAccess, isPlatformAdmin } from "../permissions";
 
-type Agent = { id: number; name: string; region?: string | null; settlementConfig?: Record<string, unknown> | null };
+type TenantOption = { id: number; code: string; name: string; enabled: boolean };
+type Agent = { id: number; name: string; region?: string | null; enabled?: boolean; tenant?: TenantOption | null };
 type AgentSettlement = {
   id: number;
   settlementNo: string;
@@ -24,8 +26,12 @@ type AgentSettlement = {
   paidReference?: string | null;
   paidProofUrl?: string | null;
   paidRemark?: string | null;
+  sensitiveMasked?: boolean;
   createdAt: string;
 };
+
+type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number; summary?: { total: number; pending: number; paid: number; payableAmount: string } };
+type SettlementOptions = { tenants: TenantOption[]; agents: Agent[]; statuses: Array<{ value: string; label: string }> };
 
 type SettlementDetails = {
   settlement: AgentSettlement;
@@ -104,62 +110,135 @@ const statusType: Record<string, string> = { draft: "info", pending_review: "war
 
 const rows = ref<AgentSettlement[]>([]);
 const agents = ref<Agent[]>([]);
+const tenants = ref<TenantOption[]>([]);
 const loading = ref(false);
+const errorMessage = ref("");
+const agentsErrorMessage = ref("");
+const exporting = ref(false);
 const generating = ref(false);
 const actionId = ref<number | null>(null);
 const dialogVisible = ref(false);
 const detailVisible = ref(false);
 const detailLoading = ref(false);
+const detailError = ref("");
+const detailTargetId = ref<number | null>(null);
 const details = ref<SettlementDetails | null>(null);
 const transferCapability = ref<TransferCapability | null>(null);
 const transferLoading = ref(false);
+const transferErrorMessage = ref("");
 const paidDialogVisible = ref(false);
 const paidTarget = ref<AgentSettlement | null>(null);
-const filters = reactive({ agentId: undefined as number | undefined, status: "" });
+const filters = reactive({ tenantId: undefined as number | undefined, agentId: undefined as number | undefined, keyword: "", status: "" });
 const form = reactive({ agentId: undefined as number | undefined, periodStart: "", periodEnd: "", commissionRate: undefined as number | undefined, remark: "" });
 const paidForm = reactive({ paidReference: "", paidProofUrl: "", remark: "" });
+const page = ref(1);
+const pageSize = ref(20);
+const total = ref(0);
+const serverSummary = ref({ total: 0, pending: 0, paid: 0, payableAmount: "0.00" });
+const optionsRequestId = ref(0);
+const listRequestId = ref(0);
+const capabilityRequestId = ref(0);
+const detailRequestId = ref(0);
+const generateTarget = ref<{ agentId: number; scope: string; generation: number } | null>(null);
+const paidTargetContext = ref<{ id: number; status: string; scope: string; generation: number } | null>(null);
 
-const totals = computed(() =>
-  rows.value.reduce(
-    (acc, row) => {
-      acc.payable += Number(row.payableAmount || 0);
-      if (row.status === "pending_review") acc.pending += 1;
-      if (row.status === "paid") acc.paid += 1;
-      return acc;
-    },
-    { payable: 0, pending: 0, paid: 0 }
-  )
-);
+const canManage = computed(() => canAccess(["agent_settlement.manage"]));
+const canPay = computed(() => canAccess(["agent_settlement.pay"]));
+const canTransfer = computed(() => canAccess(["agent_settlement.transfer"]));
+const canViewSensitive = computed(() => canAccess(["agent_settlement.sensitive"]));
+const canExport = computed(() => canAccess(["agent_settlement.export"]));
+const canUploadProof = computed(() => canPay.value && canAccess(["upload.settlement_proof"]));
+const hasWriteActions = computed(() => canManage.value || canPay.value || canTransfer.value);
+const operationLocked = computed(() => dialogVisible.value || paidDialogVisible.value || detailVisible.value || generating.value || actionId.value !== null || exporting.value || transferLoading.value);
+const scopeLocked = computed(() => operationLocked.value || loading.value);
 
-async function loadAgents() {
-  agents.value = await api.get<any, Agent[]>("/admin/agents");
+const totals = computed(() => ({ payable: Number(serverSummary.value.payableAmount || 0), pending: serverSummary.value.pending, paid: serverSummary.value.paid }));
+
+function scopeSnapshot() {
+  return JSON.stringify({ tenantId: filters.tenantId || null, agentId: filters.agentId || null, keyword: filters.keyword.trim(), status: filters.status, page: page.value, pageSize: pageSize.value });
+}
+
+function currentRow(id: number, status?: string) {
+  return rows.value.find((row) => row.id === id && (!status || row.status === status)) || null;
+}
+
+async function loadOptions() {
+  const requestId = ++optionsRequestId.value;
+  const tenantId = filters.tenantId;
+  agentsErrorMessage.value = "";
+  agents.value = [];
+  tenants.value = [];
+  try {
+    const result = await api.get<any, SettlementOptions>("/admin/agent-settlements/options");
+    if (requestId !== optionsRequestId.value || tenantId !== filters.tenantId) return;
+    if (!result || !Array.isArray(result.agents) || !Array.isArray(result.tenants)) throw new Error("结算选项响应格式无效");
+    agents.value = result.agents;
+    tenants.value = result.tenants;
+  } catch (error: any) {
+    if (requestId !== optionsRequestId.value || tenantId !== filters.tenantId) return;
+    agents.value = [];
+    tenants.value = [];
+    agentsErrorMessage.value = error.message || "结算选项加载失败";
+    ElMessage.error(agentsErrorMessage.value);
+  }
 }
 
 async function load() {
+  const requestId = ++listRequestId.value;
+  const snapshot = scopeSnapshot();
   loading.value = true;
+  errorMessage.value = "";
+  rows.value = [];
+  total.value = 0;
+  serverSummary.value = { total: 0, pending: 0, paid: 0, payableAmount: "0.00" };
   try {
-    rows.value = await api.get<any, AgentSettlement[]>("/admin/agent-settlements", { params: { agentId: filters.agentId || undefined, status: filters.status || undefined } });
+    const result = await api.get<any, PageResult<AgentSettlement>>("/admin/agent-settlements", { params: { tenantId: filters.tenantId || undefined, agentId: filters.agentId || undefined, keyword: filters.keyword.trim() || undefined, status: filters.status || undefined, page: page.value, pageSize: pageSize.value } });
+    if (requestId !== listRequestId.value || snapshot !== scopeSnapshot()) return;
+    if (!result || !Array.isArray(result.items) || !Number.isFinite(Number(result.total))) throw new Error("代理结算列表响应格式无效");
+    rows.value = result.items;
+    total.value = Number(result.total || 0);
+    serverSummary.value = result.summary || { total: total.value, pending: 0, paid: 0, payableAmount: "0.00" };
   } catch (error: any) {
-    ElMessage.error(error.message || "加载代理结算失败");
+    if (requestId !== listRequestId.value || snapshot !== scopeSnapshot()) return;
+    rows.value = [];
+    total.value = 0;
+    serverSummary.value = { total: 0, pending: 0, paid: 0, payableAmount: "0.00" };
+    errorMessage.value = error.message || "加载代理结算失败";
+    ElMessage.error(errorMessage.value);
   } finally {
-    loading.value = false;
+    if (requestId === listRequestId.value) loading.value = false;
   }
 }
 
 async function loadTransferCapability() {
+  if (transferLoading.value) return;
+  const requestId = ++capabilityRequestId.value;
   transferLoading.value = true;
+  transferErrorMessage.value = "";
+  transferCapability.value = null;
   try {
-    transferCapability.value = await api.get<any, TransferCapability>("/admin/agent-settlements/transfer-capability");
+    const result = await api.get<any, TransferCapability>("/admin/agent-settlements/transfer-capability");
+    if (requestId !== capabilityRequestId.value) return;
+    if (!result || !result.summary || !Array.isArray(result.accounts)) throw new Error("自动打款能力响应格式无效");
+    transferCapability.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载自动打款能力评估失败");
+    if (requestId !== capabilityRequestId.value) return;
+    transferCapability.value = null;
+    transferErrorMessage.value = error.message || "加载自动打款能力评估失败";
+    ElMessage.error(transferErrorMessage.value);
   } finally {
-    transferLoading.value = false;
+    if (requestId === capabilityRequestId.value) transferLoading.value = false;
   }
 }
 
 async function scanTransfers() {
+  if (!canTransfer.value) return ElMessage.warning("当前账号无回执扫描权限");
+  if (transferLoading.value) return;
+  const scope = scopeSnapshot();
+  const generation = listRequestId.value;
   transferLoading.value = true;
   try {
+    if (scope !== scopeSnapshot() || generation !== listRequestId.value) throw new Error("结算筛选范围已变化，请重新操作");
     const result = await api.post<any, { checkedCount: number }>("/admin/agent-settlement-transfers/scan", {});
     ElMessage.success(`已扫描 ${result.checkedCount || 0} 条打款回执`);
     await load();
@@ -176,6 +255,7 @@ async function scanTransfers() {
 
 
 function openGenerate() {
+  if (!canManage.value) return ElMessage.warning("当前账号无生成结算权限");
   const now = new Date();
   Object.assign(form, {
     agentId: filters.agentId || agents.value[0]?.id,
@@ -184,14 +264,21 @@ function openGenerate() {
     commissionRate: undefined,
     remark: ""
   });
+  if (!form.agentId) return ElMessage.warning("当前范围暂无可结算代理");
+  generateTarget.value = { agentId: form.agentId, scope: scopeSnapshot(), generation: listRequestId.value };
   dialogVisible.value = true;
 }
 
 async function generateSettlement() {
+  if (!canManage.value) return ElMessage.warning("当前账号无生成结算权限");
+  if (generating.value) return;
   if (!form.agentId) return ElMessage.warning("请选择代理");
   if (!form.periodStart || !form.periodEnd) return ElMessage.warning("请选择结算周期");
+  const target = generateTarget.value;
+  if (!target || target.scope !== scopeSnapshot() || target.generation !== listRequestId.value || target.agentId !== form.agentId || !filteredAgents.value.some((agent) => agent.id === target.agentId)) return ElMessage.error("代理或筛选范围已变化，请刷新后重新操作");
   generating.value = true;
   try {
+    if (target.scope !== scopeSnapshot() || target.generation !== listRequestId.value || target.agentId !== form.agentId) throw new Error("代理或筛选范围已变化，请重新操作");
     await api.post("/admin/agent-settlements/generate", { agentId: form.agentId, periodStart: form.periodStart, periodEnd: form.periodEnd, commissionRate: form.commissionRate, remark: form.remark.trim() || undefined });
     dialogVisible.value = false;
     ElMessage.success("结算草稿已生成");
@@ -204,85 +291,151 @@ async function generateSettlement() {
 }
 
 async function submitSettlement(row: AgentSettlement) {
-  await ElMessageBox.confirm(`提交结算单 ${row.settlementNo} 审核？`, "提交审核", { type: "info", confirmButtonText: "提交", cancelButtonText: "取消" });
-  await runAction(row.id, () => api.post(`/admin/agent-settlements/${row.id}/submit`, {}), "已提交审核");
+  if (!canManage.value) return ElMessage.warning("当前账号无结算审核权限");
+  await runAction(row, "draft", async (target) => {
+    await ElMessageBox.confirm(`提交结算单 ${target.settlementNo} 审核？`, "提交审核", { type: "info", confirmButtonText: "提交", cancelButtonText: "取消" });
+    await api.post(`/admin/agent-settlements/${target.id}/submit`, {});
+  }, "已提交审核");
 }
 
+function applyFilters() {
+  page.value = 1;
+  void load();
+}
+
+function changePage(value: number) {
+  page.value = value;
+  void load();
+}
+
+function changeTenant() {
+  filters.agentId = undefined;
+  applyFilters();
+}
+
+const filteredAgents = computed(() => filters.tenantId ? agents.value.filter((agent) => agent.tenant?.id === filters.tenantId) : agents.value);
+
 async function approveSettlement(row: AgentSettlement) {
-  const { value } = await ElMessageBox.prompt(`通过结算单 ${row.settlementNo}？应打款 ￥${money(row.payableAmount)}`, "审核通过", { inputValue: "结算金额已核对", confirmButtonText: "通过", cancelButtonText: "取消", type: "warning" });
-  await runAction(row.id, () => api.post(`/admin/agent-settlements/${row.id}/approve`, { remark: value }), "结算单已通过");
+  if (!canManage.value) return ElMessage.warning("当前账号无结算审核权限");
+  await runAction(row, "pending_review", async (target) => {
+    const { value } = await ElMessageBox.prompt(`通过结算单 ${target.settlementNo}？应打款 ￥${money(target.payableAmount)}`, "审核通过", { inputValue: "结算金额已核对", confirmButtonText: "通过", cancelButtonText: "取消", type: "warning", inputValidator: (text) => Boolean(String(text || "").trim()) || "请填写审核意见" });
+    await api.post(`/admin/agent-settlements/${target.id}/approve`, { remark: String(value || "").trim() });
+  }, "结算单已通过");
 }
 
 async function rejectSettlement(row: AgentSettlement) {
-  const { value } = await ElMessageBox.prompt(`拒绝结算单 ${row.settlementNo}？`, "拒绝结算", { inputValue: "结算数据需重新核对", confirmButtonText: "拒绝", cancelButtonText: "取消" });
-  await runAction(row.id, () => api.post(`/admin/agent-settlements/${row.id}/reject`, { remark: value }), "结算单已拒绝");
+  if (!canManage.value) return ElMessage.warning("当前账号无结算审核权限");
+  await runAction(row, "pending_review", async (target) => {
+    const { value } = await ElMessageBox.prompt(`拒绝结算单 ${target.settlementNo}？`, "拒绝结算", { inputValue: "结算数据需重新核对", confirmButtonText: "拒绝", cancelButtonText: "取消", inputValidator: (text) => Boolean(String(text || "").trim()) || "请填写拒绝原因" });
+    await api.post(`/admin/agent-settlements/${target.id}/reject`, { remark: String(value || "").trim() });
+  }, "结算单已拒绝");
 }
 
 async function markPaid(row: AgentSettlement) {
+  if (!canPay.value) return ElMessage.warning("当前账号无打款登记权限");
   paidTarget.value = row;
+  paidTargetContext.value = { id: row.id, status: row.status, scope: scopeSnapshot(), generation: listRequestId.value };
   Object.assign(paidForm, { paidReference: row.paidReference || "", paidProofUrl: row.paidProofUrl || "", remark: row.paidRemark || "线下打款已完成" });
   paidDialogVisible.value = true;
 }
 
 async function submitPaid() {
+  if (!canPay.value) return ElMessage.warning("当前账号无打款登记权限");
   if (!paidTarget.value) return;
   if (!paidForm.paidReference.trim() && !paidForm.paidProofUrl.trim()) return ElMessage.warning("请填写转账流水号或上传打款凭证");
   const row = paidTarget.value;
-  await runAction(
-    row.id,
-    () => api.post(`/admin/agent-settlements/${row.id}/mark-paid`, { paidReference: paidForm.paidReference.trim() || undefined, paidProofUrl: paidForm.paidProofUrl.trim() || undefined, remark: paidForm.remark.trim() || undefined }),
+  const target = paidTargetContext.value;
+  if (!target || target.id !== row.id || target.status !== "approved" || target.scope !== scopeSnapshot() || target.generation !== listRequestId.value || !currentRow(target.id, target.status)) return ElMessage.error("结算单或筛选范围已变化，请刷新后重新操作");
+  const succeeded = await runAction(
+    row,
+    "approved",
+    (current) => api.post(`/admin/agent-settlements/${current.id}/mark-paid`, { paidReference: paidForm.paidReference.trim() || undefined, paidProofUrl: paidForm.paidProofUrl.trim() || undefined, remark: paidForm.remark.trim() || undefined }),
     "已标记打款"
   );
-  paidDialogVisible.value = false;
-  paidTarget.value = null;
+  if (succeeded) {
+    paidDialogVisible.value = false;
+    paidTarget.value = null;
+  }
 }
 
 async function sandboxTransfer(row: AgentSettlement, simulateStatus: "success" | "failed" = "success") {
+  if (!canTransfer.value) return ElMessage.warning("当前账号无自动转账权限");
   const title = simulateStatus === "failed" ? "模拟沙箱打款失败" : "沙箱自动打款";
   const message = simulateStatus === "failed" ? `模拟结算单 ${row.settlementNo} 打款失败？结算单会保持已审核状态。` : `对结算单 ${row.settlementNo} 发起沙箱自动打款？成功后会标记为已打款。`;
-  await ElMessageBox.confirm(message, title, { type: simulateStatus === "failed" ? "warning" : "info", confirmButtonText: "确认", cancelButtonText: "取消" });
-  await runAction(
-    row.id,
-    async () => {
+  const succeeded = await runAction(
+    row,
+    "approved",
+    async (target) => {
+      await ElMessageBox.confirm(message, title, { type: simulateStatus === "failed" ? "warning" : "info", confirmButtonText: "确认", cancelButtonText: "取消" });
       await api.post<any, SandboxTransferResult>(`/admin/agent-settlements/${row.id}/sandbox-transfer`, { simulateStatus, failureReason: simulateStatus === "failed" ? "财务沙箱演练：模拟余额不足或收款账户异常" : undefined });
     },
     simulateStatus === "failed" ? "沙箱失败回执已记录" : "沙箱打款成功，已标记打款"
   );
-  await loadTransferCapability();
+  if (succeeded) await loadTransferCapability();
 }
 
 async function openDetails(row: AgentSettlement) {
+  const requestId = ++detailRequestId.value;
+  const scope = scopeSnapshot();
+  detailTargetId.value = row.id;
   detailVisible.value = true;
   detailLoading.value = true;
+  detailError.value = "";
   details.value = null;
   try {
-    details.value = await api.get<any, SettlementDetails>(`/admin/agent-settlements/${row.id}/details`);
+    const result = await api.get<any, SettlementDetails>(`/admin/agent-settlements/${row.id}/details`);
+    if (requestId !== detailRequestId.value || detailTargetId.value !== row.id || scope !== scopeSnapshot()) return;
+    details.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载结算核对失败");
+    if (requestId !== detailRequestId.value || detailTargetId.value !== row.id || scope !== scopeSnapshot()) return;
+    detailError.value = error.message || "加载结算核对失败";
+    ElMessage.error(detailError.value);
   } finally {
-    detailLoading.value = false;
+    if (requestId === detailRequestId.value) detailLoading.value = false;
   }
 }
 
-async function runAction(id: number, action: () => Promise<unknown>, message: string) {
-  actionId.value = id;
+async function runAction(row: AgentSettlement, expectedStatus: string, action: (target: AgentSettlement) => Promise<unknown>, message: string) {
+  if (actionId.value !== null) return false;
+  const scope = scopeSnapshot();
+  const generation = listRequestId.value;
+  const target = currentRow(row.id, expectedStatus);
+  if (!target) return ElMessage.error("结算单状态已变化，请刷新后重新操作"), false;
+  actionId.value = row.id;
   try {
-    await action();
+    await action(target);
+    if (scope !== scopeSnapshot() || generation !== listRequestId.value || !currentRow(row.id, expectedStatus)) throw new Error("结算单或筛选范围已变化，请重新操作");
     ElMessage.success(message);
     await load();
+    return true;
   } catch (error: any) {
-    ElMessage.error(error.message || "操作失败");
+    if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "操作失败");
+    return false;
   } finally {
     actionId.value = null;
   }
 }
 
 async function exportRows() {
+  if (!canExport.value) return ElMessage.warning("当前账号无结算导出权限");
+  if (exporting.value) return;
+  const scope = scopeSnapshot();
   const params = new URLSearchParams();
+  if (filters.tenantId) params.set("tenantId", String(filters.tenantId));
   if (filters.agentId) params.set("agentId", String(filters.agentId));
+  if (filters.keyword.trim()) params.set("keyword", filters.keyword.trim());
   if (filters.status) params.set("status", filters.status);
   const query = params.toString();
-  await downloadFile(`/admin/agent-settlements/export${query ? `?${query}` : ""}`, "代理结算.xlsx");
+  exporting.value = true;
+  try {
+    if (scope !== scopeSnapshot()) throw new Error("结算筛选范围已变化，请重新导出");
+    await downloadFile(`/admin/agent-settlements/export${query ? `?${query}` : ""}`, "代理结算.xlsx");
+    ElMessage.success("代理结算已导出");
+  } catch (error: any) {
+    ElMessage.error(error.message || "代理结算导出失败");
+  } finally {
+    exporting.value = false;
+  }
 }
 
 function uploadHeaders() {
@@ -291,6 +444,10 @@ function uploadHeaders() {
 }
 
 function beforeProofUpload(file: File) {
+  if (!canUploadProof.value) {
+    ElMessage.error("当前账号无结算凭证上传权限");
+    return false;
+  }
   const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"];
   if (!allowed.includes(file.type)) {
     ElMessage.error("仅支持图片或 PDF 凭证");
@@ -311,6 +468,32 @@ function handleProofSuccess(response: any) {
 
 function handleProofError(error: any) {
   ElMessage.error(error?.message || "凭证上传失败");
+}
+
+async function openProof(value?: string | null) {
+  if (!value) return;
+  if (!canViewSensitive.value) return ElMessage.warning("当前账号无结算敏感资料权限");
+  const privateMatch = value.match(/^\/api\/admin\/private-settlement-proofs\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/download$/);
+  if (privateMatch) {
+    try {
+      await downloadFile(`/admin/private-settlement-proofs/${privateMatch[1]}/download`, paidForm.paidReference.trim() || "打款凭证");
+    } catch (error: any) {
+      ElMessage.error(error?.message || "打款凭证下载失败");
+    }
+    return;
+  }
+  try {
+    const url = new URL(value, window.location.origin);
+    if (!["http:", "https:"].includes(url.protocol)) throw new Error("unsupported protocol");
+    window.open(url.href, "_blank", "noopener,noreferrer");
+  } catch {
+    ElMessage.error("打款凭证地址无效，无法打开");
+  }
+}
+
+async function retryDetails() {
+  if (detailTargetId.value === null) return;
+  await openDetails({ id: detailTargetId.value } as AgentSettlement);
 }
 
 function toInputDateTime(value: Date) {
@@ -363,7 +546,7 @@ function isSnapshotRefund(id: number) {
 }
 
 onMounted(async () => {
-  await Promise.all([loadAgents(), loadTransferCapability()]);
+  await Promise.all([loadOptions(), loadTransferCapability()]);
   await load();
 });
 </script>
@@ -376,16 +559,20 @@ onMounted(async () => {
         <p class="page-subtitle">按代理和周期生成结算单，审核通过后再进行线下打款登记。</p>
       </div>
       <div class="toolbar-actions">
-        <el-button :icon="Refresh" @click="load">刷新</el-button>
-        <el-button :icon="Wallet" :loading="transferLoading" @click="loadTransferCapability">评估自动打款</el-button>
-        <el-button :icon="Search" :loading="transferLoading" @click="scanTransfers">扫描回执</el-button>
-        <el-button :icon="Download" @click="exportRows">导出 Excel</el-button>
-        <el-button type="primary" :icon="Plus" :disabled="!agents.length" @click="openGenerate">生成结算</el-button>
+        <el-button :icon="Refresh" :loading="loading" :disabled="scopeLocked" @click="load">刷新</el-button>
+        <el-button :icon="Wallet" :loading="transferLoading" :disabled="operationLocked" @click="loadTransferCapability">评估自动打款</el-button>
+        <el-button v-if="canTransfer" :icon="Search" :loading="transferLoading" :disabled="operationLocked" @click="scanTransfers">扫描回执</el-button>
+        <el-button v-if="canExport" :icon="Download" :loading="exporting" :disabled="operationLocked" @click="exportRows">导出 Excel</el-button>
+        <el-button v-if="canManage" type="primary" :icon="Plus" :disabled="scopeLocked || !agents.length" @click="openGenerate">生成结算</el-button>
       </div>
     </div>
 
+    <el-alert v-if="!canViewSensitive" class="permission-alert" type="info" show-icon :closable="false" title="打款流水号、凭证附件、失败原因和收款标识已脱敏；需要结算敏感权限才可查看完整资料。" />
+    <el-alert v-if="agentsErrorMessage" type="error" show-icon :closable="false" :title="agentsErrorMessage"><template #default><el-button size="small" :disabled="operationLocked" @click="loadOptions">重试结算选项</el-button></template></el-alert>
+    <el-alert v-if="errorMessage" type="error" show-icon :closable="false" :title="errorMessage"><template #default><el-button size="small" :loading="loading" :disabled="operationLocked" @click="load">重试结算列表</el-button></template></el-alert>
+
     <div class="summary-grid">
-      <div class="summary-item"><span>结算单</span><strong>{{ rows.length }}</strong></div>
+      <div class="summary-item"><span>结算单</span><strong>{{ serverSummary.total }}</strong></div>
       <div class="summary-item"><span>待审核</span><strong>{{ totals.pending }}</strong></div>
       <div class="summary-item"><span>已打款</span><strong>{{ totals.paid }}</strong></div>
       <div class="summary-item"><span>应打款</span><strong>￥{{ money(totals.payable) }}</strong></div>
@@ -401,6 +588,7 @@ onMounted(async () => {
           {{ capabilityText(transferCapability.status) }}
         </el-tag>
       </div>
+      <el-alert v-if="transferErrorMessage" type="error" show-icon :closable="false" :title="transferErrorMessage"><template #default><el-button size="small" :disabled="operationLocked" @click="loadTransferCapability">重试评估</el-button></template></el-alert>
       <template v-if="transferCapability">
         <div class="capability-metrics">
           <div><span>启用代理</span><strong>{{ transferCapability.summary.enabledAgentCount }}</strong></div>
@@ -432,17 +620,24 @@ onMounted(async () => {
     </div>
 
     <div class="table-card filter-card">
-      <el-form inline>
-        <el-form-item label="代理">
-          <el-select v-model="filters.agentId" clearable filterable placeholder="全部代理" style="width: 220px" @change="load">
-            <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id" />
+      <el-form inline @submit.prevent="applyFilters">
+        <el-form-item v-if="isPlatformAdmin()" label="商家">
+          <el-select v-model="filters.tenantId" clearable filterable :disabled="scopeLocked" placeholder="全部商家" style="width: 220px" @change="changeTenant">
+            <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenant.name" :value="tenant.id" />
           </el-select>
         </el-form-item>
+        <el-form-item label="代理">
+          <el-select v-model="filters.agentId" clearable filterable :disabled="scopeLocked" placeholder="全部代理" style="width: 220px" @change="applyFilters">
+            <el-option v-for="agent in filteredAgents" :key="agent.id" :label="agent.name" :value="agent.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="关键词"><el-input v-model="filters.keyword" clearable :disabled="scopeLocked" maxlength="120" placeholder="结算单号/代理/地区/凭证号" @keyup.enter="applyFilters" /></el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="filters.status" style="width: 150px" @change="load">
+          <el-select v-model="filters.status" :disabled="scopeLocked" style="width: 150px" @change="applyFilters">
             <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
           </el-select>
         </el-form-item>
+        <el-form-item><el-button type="primary" :loading="loading" :disabled="scopeLocked" @click="applyFilters">查询</el-button></el-form-item>
       </el-form>
     </div>
 
@@ -460,31 +655,32 @@ onMounted(async () => {
         <el-table-column label="应打款" width="120"><template #default="{ row }"><strong>￥{{ money(row.payableAmount) }}</strong></template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType[row.status] || 'info'">{{ statusText[row.status] || row.status }}</el-tag></template></el-table-column>
         <el-table-column prop="reviewRemark" label="审核备注" min-width="150" show-overflow-tooltip />
-        <el-table-column prop="paidReference" label="打款凭证" min-width="150" show-overflow-tooltip />
-        <el-table-column label="附件" width="90"><template #default="{ row }"><el-link v-if="row.paidProofUrl" :href="row.paidProofUrl" target="_blank" type="primary">查看</el-link><span v-else>-</span></template></el-table-column>
+        <el-table-column v-if="canViewSensitive" prop="paidReference" label="打款凭证" min-width="150" show-overflow-tooltip />
+        <el-table-column v-if="canViewSensitive" label="附件" width="90"><template #default="{ row }"><el-button v-if="row.paidProofUrl" link type="primary" @click="openProof(row.paidProofUrl)">查看</el-button><span v-else>-</span></template></el-table-column>
         <el-table-column label="创建时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
-        <el-table-column label="操作" width="400" fixed="right">
+        <el-table-column label="操作" :width="hasWriteActions ? 400 : 100" fixed="right">
           <template #default="{ row }">
             <div class="table-actions">
-              <el-button size="small" :icon="Search" @click="openDetails(row)">核对</el-button>
-              <el-button size="small" :icon="UploadFilled" :disabled="row.status !== 'draft'" :loading="actionId === row.id" @click="submitSettlement(row)">提交</el-button>
-              <el-button size="small" type="success" :icon="Check" :disabled="row.status !== 'pending_review'" :loading="actionId === row.id" @click="approveSettlement(row)">通过</el-button>
-              <el-button size="small" type="danger" :icon="Close" :disabled="row.status !== 'pending_review'" :loading="actionId === row.id" @click="rejectSettlement(row)">拒绝</el-button>
-              <el-button size="small" type="warning" :icon="Wallet" :disabled="row.status !== 'approved'" :loading="actionId === row.id" @click="sandboxTransfer(row)">沙箱打款</el-button>
-              <el-button size="small" :disabled="row.status !== 'approved'" :loading="actionId === row.id" @click="sandboxTransfer(row, 'failed')">模拟失败</el-button>
-              <el-button size="small" type="primary" :icon="Wallet" :disabled="row.status !== 'approved'" :loading="actionId === row.id" @click="markPaid(row)">打款</el-button>
+              <el-button size="small" :icon="Search" :loading="detailLoading && detailTargetId === row.id" :disabled="operationLocked" @click="openDetails(row)">核对</el-button>
+              <el-button v-if="canManage" size="small" :icon="UploadFilled" :disabled="row.status !== 'draft' || actionId !== null" :loading="actionId === row.id" @click="submitSettlement(row)">提交</el-button>
+              <el-button v-if="canManage" size="small" type="success" :icon="Check" :disabled="row.status !== 'pending_review' || actionId !== null" :loading="actionId === row.id" @click="approveSettlement(row)">通过</el-button>
+              <el-button v-if="canManage" size="small" type="danger" :icon="Close" :disabled="row.status !== 'pending_review' || actionId !== null" :loading="actionId === row.id" @click="rejectSettlement(row)">拒绝</el-button>
+              <el-button v-if="canTransfer" size="small" type="warning" :icon="Wallet" :disabled="row.status !== 'approved' || actionId !== null" :loading="actionId === row.id" @click="sandboxTransfer(row)">沙箱打款</el-button>
+              <el-button v-if="canTransfer" size="small" :disabled="row.status !== 'approved' || actionId !== null" :loading="actionId === row.id" @click="sandboxTransfer(row, 'failed')">模拟失败</el-button>
+              <el-button v-if="canPay" size="small" type="primary" :icon="Wallet" :disabled="row.status !== 'approved' || actionId !== null" :loading="actionId === row.id" @click="markPaid(row)">打款</el-button>
             </div>
           </template>
         </el-table-column>
       </el-table>
+        <el-pagination v-if="total > pageSize" class="pagination" background layout="prev, pager, next" :disabled="scopeLocked" :current-page="page" :page-size="pageSize" :total="total" @current-change="changePage" />
     </div>
 
-    <el-dialog v-model="dialogVisible" width="620px" title="生成代理结算" destroy-on-close>
+    <el-dialog v-model="dialogVisible" width="min(620px, 100vw)" title="生成代理结算" :close-on-click-modal="false" :close-on-press-escape="!generating" :show-close="!generating" destroy-on-close>
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="代理" required>
             <el-select v-model="form.agentId" filterable style="width: 100%">
-              <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id" />
+              <el-option v-for="agent in filteredAgents" :key="agent.id" :label="agent.name" :value="agent.id" />
             </el-select>
           </el-form-item>
           <el-form-item label="佣金率（%）">
@@ -496,12 +692,12 @@ onMounted(async () => {
         </div>
       </el-form>
       <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
+        <el-button :disabled="generating" @click="dialogVisible = false">取消</el-button>
         <el-button type="primary" :loading="generating" @click="generateSettlement">生成草稿</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="paidDialogVisible" width="620px" title="登记打款凭证" destroy-on-close>
+    <el-dialog v-model="paidDialogVisible" width="min(620px, 100vw)" title="登记打款凭证" :close-on-click-modal="false" :close-on-press-escape="actionId === null" :show-close="actionId === null" destroy-on-close>
       <el-form label-position="top">
         <el-form-item label="结算单">
           <el-input :model-value="paidTarget?.settlementNo || '-'" disabled />
@@ -511,10 +707,10 @@ onMounted(async () => {
         </el-form-item>
         <el-form-item label="凭证附件">
           <div class="proof-upload">
-            <el-upload action="/api/admin/uploads/settlement-proofs" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeProofUpload" :on-success="handleProofSuccess" :on-error="handleProofError">
+            <el-upload v-if="canUploadProof" action="/api/admin/uploads/private-settlement-proofs" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeProofUpload" :on-success="handleProofSuccess" :on-error="handleProofError">
               <el-button :icon="UploadFilled">上传图片 / PDF</el-button>
             </el-upload>
-            <el-link v-if="paidForm.paidProofUrl" :href="paidForm.paidProofUrl" target="_blank" type="primary">查看已上传凭证</el-link>
+            <el-button v-if="paidForm.paidProofUrl" link type="primary" @click="openProof(paidForm.paidProofUrl)">查看已上传凭证</el-button>
           </div>
         </el-form-item>
         <el-form-item label="打款备注">
@@ -522,13 +718,14 @@ onMounted(async () => {
         </el-form-item>
       </el-form>
       <template #footer>
-        <el-button @click="paidDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="actionId === paidTarget?.id" @click="submitPaid">确认已打款</el-button>
+        <el-button :disabled="actionId !== null" @click="paidDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="actionId === paidTarget?.id" :disabled="actionId !== null" @click="submitPaid">确认已打款</el-button>
       </template>
     </el-dialog>
 
-    <el-drawer v-model="detailVisible" size="72%" title="结算核对" destroy-on-close>
+    <el-drawer v-model="detailVisible" size="min(960px, 100vw)" title="结算核对" destroy-on-close>
       <div v-loading="detailLoading">
+        <el-alert v-if="detailError" type="error" show-icon :closable="false" :title="detailError"><template #default><el-button size="small" :loading="detailLoading" @click="retryDetails">重试</el-button></template></el-alert>
         <template v-if="details">
           <div class="detail-summary">
             <div><span>结算单</span><strong>{{ details.settlement.settlementNo }}</strong></div>
@@ -552,12 +749,13 @@ onMounted(async () => {
 
           <div class="detail-section">
             <h3>打款凭证</h3>
-            <div class="proof-info">
+            <div v-if="canViewSensitive" class="proof-info">
               <span>凭证号：{{ details.settlement.paidReference || "-" }}</span>
               <span>备注：{{ details.settlement.paidRemark || "-" }}</span>
-              <el-link v-if="details.settlement.paidProofUrl" :href="details.settlement.paidProofUrl" target="_blank" type="primary">查看附件</el-link>
+              <el-button v-if="details.settlement.paidProofUrl" link type="primary" @click="openProof(details.settlement.paidProofUrl)">查看附件</el-button>
               <span v-else>附件：-</span>
             </div>
+            <el-alert v-else type="info" show-icon :closable="false" title="打款凭证和备注已隐藏，需要结算敏感权限查看。" />
           </div>
 
           <div class="detail-section">
@@ -568,8 +766,8 @@ onMounted(async () => {
               <el-table-column prop="mode" label="模式" width="90" />
               <el-table-column label="金额" width="110"><template #default="{ row }">￥{{ money(row.amount) }}</template></el-table-column>
               <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="transferStatusType(row.status)">{{ transferStatusText(row.status) }}</el-tag></template></el-table-column>
-              <el-table-column prop="providerTransferNo" label="服务商回执" min-width="180" show-overflow-tooltip />
-              <el-table-column prop="failureReason" label="失败原因" min-width="220" show-overflow-tooltip />
+              <el-table-column v-if="canViewSensitive" prop="providerTransferNo" label="服务商回执" min-width="180" show-overflow-tooltip />
+              <el-table-column v-if="canViewSensitive" prop="failureReason" label="失败原因" min-width="220" show-overflow-tooltip />
               <el-table-column label="同步时间" width="170"><template #default="{ row }">{{ formatTime(row.syncedAt || row.updatedAt) }}</template></el-table-column>
             </el-table>
           </div>
@@ -629,6 +827,8 @@ onMounted(async () => {
 <style scoped>
 .toolbar-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; }
 .page-subtitle { margin: 6px 0 0; color: #6b7280; }
+.permission-alert { margin-bottom: 12px; }
+.pagination { margin-top: 16px; justify-content: flex-end; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .summary-item { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px 16px; display: flex; align-items: center; justify-content: space-between; }
 .summary-item span { color: #6b7280; }
@@ -665,5 +865,6 @@ onMounted(async () => {
   .capability-head { flex-direction: column; }
   .toolbar { align-items: flex-start; flex-direction: column; }
   .toolbar-actions { justify-content: flex-start; }
+  .pagination { justify-content: center; overflow-x: auto; }
 }
 </style>

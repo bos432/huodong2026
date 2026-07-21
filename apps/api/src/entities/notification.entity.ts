@@ -1,6 +1,7 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
 import { Activity } from "./activity.entity";
 import { User } from "./user.entity";
+import { Tenant } from "./tenant.entity";
 
 @Entity("notifications")
 export class Notification {
@@ -9,6 +10,9 @@ export class Notification {
 
   @Column({ type: "varchar", length: 40, default: "site" })
   channel!: string;
+
+  @ManyToOne(() => Tenant, { nullable: true, eager: true, onDelete: "SET NULL" }) tenant!: Tenant | null;
+  @Column({ type: "varchar", length: 32, default: "platform" }) tenantScopeKey!: string;
 
   @Column({ type: "varchar", length: 160 })
   title!: string;
@@ -27,6 +31,9 @@ export class Notification {
 
   @Column({ type: "varchar", length: 500, nullable: true })
   errorMessage!: string | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true }) suppressedReason!: string | null;
+  @Column({ type: "json", nullable: true }) variablesSnapshot!: Record<string, string> | null;
 
   @Column({ type: "int", default: 0 })
   retryCount!: number;

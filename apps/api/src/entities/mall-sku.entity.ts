@@ -24,6 +24,15 @@ export class MallSku {
   @Column({ type: "varchar", length: 80, nullable: true })
   skuCode!: string | null;
 
+  @Column({ type: "varchar", length: 80, nullable: true })
+  barcode!: string | null;
+
+  @Column({ type: "json", nullable: true })
+  attributes!: Record<string, string> | null;
+
+  @Column({ type: "int", default: 0 })
+  weightGrams!: number;
+
   @Column({ type: "decimal", precision: 10, scale: 2 })
   price!: string;
 

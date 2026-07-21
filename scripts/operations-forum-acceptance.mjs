@@ -22,11 +22,14 @@ async function main() {
   const platform = await loginPlatformAdmin();
   const tenantAdmin = await loginShowcaseAdmin("showcase_admin");
   const user = await loginAcceptanceUser();
+  const tenants = await api("/admin/tenants", { headers: auth(platform.token) });
+  const acceptanceTenant = tenants.find((row) => row.code === TENANT_CODE);
+  assert(acceptanceTenant?.id, `未找到验收租户 ${TENANT_CODE}`);
 
   await assertDefaultTenant(platform.token);
   await assertOverviewApis(platform.token, tenantAdmin.token);
   await forumFlow(tenantAdmin.token, user.userAccessToken);
-  await volunteerCertificateFlow(platform.token, user.userAccessToken);
+  await volunteerCertificateFlow(platform.token, user.userAccessToken, acceptanceTenant.id);
 
   console.log("\n运营成熟化 + 默认城市 + 论坛专项验收通过。");
   console.log(`测试用户：${testPhone} / ${showcasePassword}`);
@@ -152,7 +155,8 @@ async function forumFlow(adminToken, userToken) {
   reportStep("完整论坛 v1", "版块 -> 发帖待审 -> 审核 -> 置顶/精华 -> 收藏 -> 回复 -> 楼中楼 -> 举报处理");
 }
 
-async function volunteerCertificateFlow(platformToken, userToken) {
+async function volunteerCertificateFlow(platformToken, userToken, tenantId) {
+  const volunteerName = `验收志愿者${runId.slice(-4)}`;
   const task = await api("/admin/volunteer/tasks", {
     method: "POST",
     headers: auth(platformToken),
@@ -164,6 +168,7 @@ async function volunteerCertificateFlow(platformToken, userToken) {
       startAt: "2099-01-01 09:00:00",
       endAt: "2099-01-01 12:00:00",
       quota: 20,
+      tenantId,
       status: "open",
       requirement: "专项验收任务，保留测试数据。",
       description: "用于验证志愿者报名、审核、服务记录、证书、公开核验和撤销。"
@@ -175,7 +180,7 @@ async function volunteerCertificateFlow(platformToken, userToken) {
     method: "POST",
     headers: userAuth(userToken),
     body: JSON.stringify({
-      name: `验收志愿者${runId.slice(-4)}`,
+      name: volunteerName,
       phone: testPhone,
       city: "演示城市",
       message: "专项验收报名"
@@ -200,10 +205,20 @@ async function volunteerCertificateFlow(platformToken, userToken) {
     })
   });
   assert(record.id, "服务记录创建失败");
+  await api(`/public/me/volunteer/service-records/${record.id}/confirm`, {
+    method: "POST",
+    headers: userAuth(userToken),
+    body: JSON.stringify({ businessKey: `operations-forum:volunteer-confirm:${runId}` })
+  });
+  await api(`/admin/volunteer/service-records/${record.id}/action`, {
+    method: "PATCH",
+    headers: auth(platformToken),
+    body: JSON.stringify({ action: "confirm", businessKey: `operations-forum:supervisor-confirm:${runId}` })
+  });
 
   const profiles = pickList(await api(`/admin/volunteer/profiles?keyword=${encodeURIComponent(testPhone)}`, { headers: auth(platformToken) }));
-  const profile = profiles.find((item) => item.phone === testPhone);
-  assert(profile?.id && Number(profile.serviceHours || 0) >= 3.5 && profile.status === "approved", "志愿者档案未累计时长或未通过");
+  const profile = profiles.find((item) => item.name === volunteerName);
+  assert(profile?.id && String(profile.phone || "").includes("****") && Number(profile.serviceHours || 0) >= 3.5 && profile.status === "approved", "志愿者档案未脱敏、未累计时长或未通过");
   const issued = await api(`/admin/volunteer/profiles/${profile.id}/certificates`, {
     method: "POST",
     headers: auth(platformToken),

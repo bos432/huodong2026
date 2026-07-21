@@ -23,7 +23,10 @@ function readEnv(file) {
 
 async function commandVersion(command, args = ["--version"]) {
   try {
-    const { stdout, stderr } = await execFileAsync(command, args, { timeout: 8000, windowsHide: true, shell: process.platform === "win32" });
+    const windowsNpm = process.platform === "win32" && command === "npm";
+    const executable = windowsNpm ? "cmd.exe" : command;
+    const executableArgs = windowsNpm ? ["/d", "/s", "/c", "npm", ...args] : args;
+    const { stdout, stderr } = await execFileAsync(executable, executableArgs, { timeout: 8000, windowsHide: true });
     return { ok: true, value: (stdout || stderr).trim().split(/\r?\n/)[0] };
   } catch (error) {
     if (process.platform === "win32" && !command.endsWith(".cmd") && !command.endsWith(".exe")) {
@@ -103,10 +106,17 @@ function configChecks(env) {
   rows.push(numberCheck("OFFLINE_PAYMENT_EXPIRE_MINUTES", Number(env.OFFLINE_PAYMENT_EXPIRE_MINUTES || 1440), 5, 43200, "minutes"));
   if (env.ORDER_CLOSE_WORKER_ENABLED === "true") rows.push(numberCheck("ORDER_CLOSE_WORKER_INTERVAL_SECONDS", Number(env.ORDER_CLOSE_WORKER_INTERVAL_SECONDS || 300), 30, 3600, "seconds"));
   else rows.push(["ORDER_CLOSE_WORKER_ENABLED", { ok: true, level: "WARN", value: "disabled; pending orders will not auto-close" }]);
+  rows.push(numberCheck("MALL_PENDING_PAYMENT_EXPIRE_MINUTES", Number(env.MALL_PENDING_PAYMENT_EXPIRE_MINUTES || 30), 1, 43200, "minutes"));
+  rows.push(numberCheck("MALL_PENDING_CONFIRM_EXPIRE_MINUTES", Number(env.MALL_PENDING_CONFIRM_EXPIRE_MINUTES || 1440), 1, 43200, "minutes"));
+  rows.push(numberCheck("MALL_PENDING_ORDER_WORKER_INTERVAL_MINUTES", Number(env.MALL_PENDING_ORDER_WORKER_INTERVAL_MINUTES || 5), 1, 1440, "minutes"));
+  rows.push(numberCheck("MALL_PENDING_ORDER_BATCH_SIZE", Number(env.MALL_PENDING_ORDER_BATCH_SIZE || 50), 1, 200, "orders"));
+  rows.push(numberCheck("MALL_PENDING_ORDER_MAX_BATCHES", Number(env.MALL_PENDING_ORDER_MAX_BATCHES || 20), 1, 100, "batches"));
   rows.push(backupDirCheck(env.BACKUP_DIR || "", production));
+  rows.push(backupDirCheck(env.PRIVATE_DATA_BACKUP_DIR || "", production, "PRIVATE_DATA_BACKUP_DIR"));
   rows.push(numberCheck("BACKUP_RETENTION_DAYS", Number(env.BACKUP_RETENTION_DAYS || 0), 7, 3650, "days"));
   rows.push(["BACKUP_USE_DOCKER", { ok: true, level: "OK", value: env.BACKUP_USE_DOCKER || "false" }]);
   rows.push(["MYSQL_CONTAINER", { ok: true, level: env.BACKUP_USE_DOCKER === "true" && !env.MYSQL_CONTAINER ? "WARN" : "OK", value: env.MYSQL_CONTAINER || "default activity-mysql" }]);
+  rows.push(["API_CONTAINER", { ok: true, level: env.BACKUP_USE_DOCKER === "true" && !env.API_CONTAINER ? "WARN" : "OK", value: env.API_CONTAINER || "default activity-api" }]);
   return rows;
 }
 
@@ -241,9 +251,9 @@ function numberCheck(name, value, min, max, unit) {
   return [name, { ok, level: ok ? "OK" : "WARN", value: ok ? `${value} ${unit}` : `expected ${min}-${max} ${unit}` }];
 }
 
-function backupDirCheck(value, production) {
+function backupDirCheck(value, production, name = "BACKUP_DIR") {
   const configured = Boolean(value);
-  return ["BACKUP_DIR", { ok: !production || configured, level: configured ? "OK" : production ? "ERR" : "WARN", value: configured ? value : "missing" }];
+  return [name, { ok: !production || configured, level: configured ? "OK" : production ? "ERR" : "WARN", value: configured ? value : "missing" }];
 }
 
 async function main() {

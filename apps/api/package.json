@@ -10,24 +10,28 @@
     "migration:run": "npm run build && typeorm -d dist/data-source.js migration:run",
     "migration:revert": "npm run build && typeorm -d dist/data-source.js migration:revert",
     "migration:generate": "typeorm-ts-node-commonjs -d src/data-source.ts migration:generate src/migrations/AutoMigration",
-    "test": "vitest run"
+    "test": "vitest run",
+    "acceptance:member-points": "node ../../scripts/member-point-governance-acceptance.mjs",
+    "acceptance:volunteer-governance": "node ../../scripts/volunteer-governance-acceptance.mjs",
+    "preflight:volunteer-credentials": "node ../../scripts/preflight-volunteer-credentials-guard.mjs"
   },
   "dependencies": {
-    "@nestjs/common": "^10.4.15",
-    "@nestjs/config": "^3.3.0",
-    "@nestjs/core": "^10.4.15",
-    "@nestjs/jwt": "^10.2.0",
-    "@nestjs/passport": "^10.0.3",
-    "@nestjs/platform-express": "^10.4.15",
-    "@nestjs/typeorm": "^10.0.2",
+    "@aws-sdk/client-s3": "^3.1085.0",
+    "@nestjs/common": "^11.1.28",
+    "@nestjs/config": "^4.0.4",
+    "@nestjs/core": "^11.1.28",
+    "@nestjs/jwt": "^11.0.2",
+    "@nestjs/passport": "^11.0.5",
+    "@nestjs/platform-express": "^11.1.28",
+    "@nestjs/typeorm": "^11.0.3",
     "@types/qrcode": "^1.5.6",
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "dotenv": "16.4.5",
     "exceljs": "^4.4.0",
-    "miniprogram-ci": "^2.1.31",
     "mysql2": "^3.11.5",
+    "nodemailer": "^9.0.3",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "qrcode": "^1.5.4",
@@ -35,17 +39,27 @@
     "rxjs": "^7.8.1",
     "tencentcloud-sdk-nodejs": "^4.1.260",
     "typeorm": "^0.3.20",
-    "uuid": "^11.0.3"
+    "uuid": "^11.1.1"
   },
   "devDependencies": {
-    "@nestjs/cli": "^10.4.8",
-    "@nestjs/schematics": "^10.2.3",
-    "@nestjs/testing": "^10.4.15",
+    "@nestjs/cli": "^11.0.24",
+    "@nestjs/schematics": "^11.0.9",
+    "@nestjs/testing": "^11.1.28",
     "@types/bcryptjs": "^2.4.6",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
+    "@types/nodemailer": "^8.0.1",
     "@types/passport-jwt": "^4.0.1",
+    "miniprogram-ci": "^2.1.31",
     "typescript": "^5.6.3",
     "vitest": "^2.1.8"
+  },
+  "overrides": {
+    "exceljs": {
+      "uuid": "11.1.1"
+    },
+    "tencentcloud-sdk-nodejs": {
+      "uuid": "11.1.1"
+    }
   }
 }

@@ -12,6 +12,9 @@
         :key="idx"
         class="category-tab"
         :class="{ active: activeCategory === cat.key }"
+        role="button"
+        tabindex="0"
+        :aria-label="`按${cat.label}分类筛选`"
         @click="activeCategory = cat.key"
       >{{ cat.label }}</view>
     </scroll-view>
@@ -24,19 +27,22 @@
           :key="opt.key"
           class="sort-option"
           :class="{ active: activeSort === opt.key }"
+          role="button"
+          tabindex="0"
+          :aria-label="`按${opt.label}排序`"
           @click="activeSort = opt.key"
         >{{ opt.label }}</text>
       </view>
     </view>
 
-    <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="error" class="card state-card">
+    <view v-if="loading" class="card subtle" aria-live="polite">加载中...</view>
+    <view v-else-if="error" class="card state-card error-state" role="alert" aria-live="assertive">
       <view>{{ error }}</view>
-      <view class="button secondary retry-button" @click="loadCourses">重试</view>
+      <button class="button secondary retry-button" :disabled="loading" aria-label="重新加载专题内容" @click="loadCourses">重试</button>
     </view>
 
     <view v-else-if="filteredCourses.length" class="course-grid">
-      <view v-for="course in filteredCourses" :key="course.id" class="course-card" @click="goDetail(course)">
+      <view v-for="course in filteredCourses" :key="course.id" class="course-card" role="button" tabindex="0" :aria-label="`查看专题内容${course.title}`" @click="goDetail(course)">
         <view class="course-cover" :style="{ background: course.color }">
           <image v-if="course.coverUrl" class="course-cover-img" :src="course.coverUrl" mode="aspectFill" />
           <text v-else style="font-size:64rpx;">{{ course.icon }}</text>
@@ -61,10 +67,13 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { withTenantCode } from "../../api";
+import { getCurrentTenantCode, withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText } from "../../course-data";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { reviewSafeText } from "../../review-safe-text";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
@@ -93,6 +102,8 @@ const activeSort = ref("newest");
 const loading = ref(true);
 const error = ref("");
 const allCourses = ref<any[]>([]);
+const loadedTenantCode = ref("");
+const loadGuard = createTenantLoadGuard();
 const { contentSections, loadDecoration } = usePageDecoration("course_home", "/pages/courses/index");
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "专题内容") return false;
@@ -101,14 +112,19 @@ const decorationSections = computed(() => contentSections.value.filter((section)
 }));
 
 async function loadCourses() {
+  const token = loadGuard.begin();
+  const tenantCode = getCurrentTenantCode();
+  if (loadedTenantCode.value !== tenantCode) allCourses.value = [];
+  loadedTenantCode.value = tenantCode;
   loading.value = true;
   error.value = "";
   try {
-    allCourses.value = await fetchPublishedCourses();
+    const result = await fetchPublishedCourses();
+    if (loadGuard.isCurrent(token)) allCourses.value = result;
   } catch (err: any) {
-    error.value = err.message || "内容加载失败";
+    if (loadGuard.isCurrent(token)) error.value = reviewSafeText(err.message || "专题内容加载失败");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
@@ -128,14 +144,11 @@ function goDetail(course: any) {
   uni.navigateTo({ url: withTenantCode(`/pages/course/detail?id=${course.id}`) });
 }
 
-onMounted(() => {
-  loadCourses();
-  loadDecoration();
-});
-
-onShow(() => {
-  loadPageTheme();
-  loadDecoration();
+onShow(async () => {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
+  await loadPageTheme();
+  await Promise.allSettled([loadCourses(), loadDecoration()]);
 });
 </script>
 
@@ -169,6 +182,7 @@ onShow(() => {
 .sort-option { font-size: 24rpx; color: #999; }
 .sort-option.active { color: #C43D3D; }
 .state-card { text-align: center; }
+.error-state { border:1rpx solid #f0b8b0; background:#fff4f2; color:#b42318; }
 .retry-button { display: inline-flex; margin-top: 20rpx; min-width: 160rpx; }
 .course-grid {
   display: grid;
@@ -202,4 +216,6 @@ onShow(() => {
 .course-title { font-size: 28rpx; font-weight: 600; color: #333; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .course-teacher { font-size: 24rpx; color: #999; display: block; margin: 4rpx 0; }
 .course-rating { font-size: 22rpx; color: #FF9F00; }
+.container { min-height:100vh; box-sizing:border-box; padding-bottom:calc(120rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
+@media (min-width: 900px) { .container { max-width:760px; margin:0 auto; } }
 </style>

@@ -1,5 +1,11 @@
 <template>
   <view class="merchant-page has-custom-nav">
+    <view v-if="loading" class="page-state">店铺加载中...</view>
+    <view v-else-if="loadError" class="page-state error-state">
+      <text>{{ loadError }}</text>
+      <view class="state-retry" @click="load">重新加载</view>
+    </view>
+    <template v-else-if="merchant">
     <view class="merchant-hero">
       <image v-if="merchant.logoUrl" class="merchant-logo" :src="merchant.logoUrl" mode="aspectFill" />
       <view v-else class="merchant-logo placeholder">店</view>
@@ -84,6 +90,11 @@
       <view class="search-btn" @click="load">搜索</view>
     </view>
 
+    <view v-if="loadWarning" class="page-state warning-state">
+      <text>{{ loadWarning }}</text>
+      <view class="state-retry" @click="load">重新同步</view>
+    </view>
+
     <scroll-view class="category-row" scroll-x :show-scrollbar="false">
       <view class="category-chip" :class="{ active: !categoryId }" @click="selectCategory(0)">全部</view>
       <view v-for="item in categories" :key="item.id" class="category-chip" :class="{ active: categoryId === item.id }" @click="selectCategory(item.id)">{{ item.name }}</view>
@@ -111,8 +122,9 @@
       </view>
     </view>
 
-    <EmptyState v-if="!products.length && !loading" icon="店" text="本店暂无上架商品" />
+    <EmptyState v-if="!products.length" icon="店" text="本店暂无上架商品" />
     <view style="height:80rpx;"></view>
+    </template>
   </view>
 </template>
 
@@ -121,9 +133,10 @@ import { ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const merchantId = ref(0);
-const merchant = ref<any>({});
+const merchant = ref<any | null>(null);
 const categories = ref<any[]>([]);
 const products = ref<any[]>([]);
 const flashSales = ref<any[]>([]);
@@ -131,6 +144,9 @@ const groupBuys = ref<any[]>([]);
 const categoryId = ref(0);
 const keyword = ref("");
 const loading = ref(false);
+const loadError = ref("");
+const loadWarning = ref("");
+const loadGuard = createTenantLoadGuard();
 const sort = ref<"featured" | "newest" | "hot">("featured");
 const sortTabs = [
   { label: "推荐", value: "featured" as const },
@@ -143,38 +159,54 @@ function availableProductStock(item: any) { return Math.max(Number(item.stock ||
 function ownerText(value: string) { return value === "agent" ? "代理授权店铺" : "商家直营网店"; }
 
 async function load() {
+  const token = loadGuard.begin();
   if (!merchantId.value) {
-    uni.showToast({ title: "缺少店铺信息", icon: "none" });
+    merchant.value = null;
+    loadError.value = "缺少店铺信息";
+    loading.value = false;
     return;
   }
   loading.value = true;
+  loadError.value = "";
+  loadWarning.value = "";
+  merchant.value = null;
+  products.value = [];
+  categories.value = [];
+  flashSales.value = [];
+  groupBuys.value = [];
   try {
-    const [detail, categoryRows] = await Promise.all([
-      request<any>(`/public/mall/merchants/${merchantId.value}`),
-      request<any[]>(`/public/mall/categories?merchantId=${merchantId.value}`).catch(() => [])
-    ]);
-    merchant.value = detail || {};
-    categories.value = Array.isArray(categoryRows) ? categoryRows : [];
-    const activityScope = `?merchantId=${merchantId.value}`;
-    const [flashRows, groupRows] = await Promise.all([
-      request<any[]>(`/public/mall/flash-sales${activityScope}`).catch(() => []),
-      request<any[]>(`/public/mall/group-buys${activityScope}`).catch(() => [])
-    ]);
-    flashSales.value = Array.isArray(flashRows) ? flashRows : [];
-    groupBuys.value = Array.isArray(groupRows) ? groupRows : [];
     const params = [`merchantId=${merchantId.value}`, "pageSize=50", `sort=${sort.value}`];
     if (categoryId.value) params.push(`categoryId=${categoryId.value}`);
     const searchText = keyword.value.trim();
     if (searchText) params.push(`keyword=${encodeURIComponent(searchText)}`);
-    const result = await request<any>(`/public/mall/products?${params.join("&")}`);
-    products.value = result.items || [];
+    const activityScope = `?merchantId=${merchantId.value}`;
+    const [detailResult, categoryResult, flashResult, groupResult, productsResult] = await Promise.allSettled([
+      request<any>(`/public/mall/merchants/${merchantId.value}`),
+      request<any[]>(`/public/mall/categories?merchantId=${merchantId.value}`),
+      request<any[]>(`/public/mall/flash-sales${activityScope}`),
+      request<any[]>(`/public/mall/group-buys${activityScope}`),
+      request<any>(`/public/mall/products?${params.join("&")}`)
+    ]);
+    if (!loadGuard.isCurrent(token)) return;
+    if (detailResult.status === "rejected") throw detailResult.reason;
+    if (productsResult.status === "rejected") throw productsResult.reason;
+    merchant.value = detailResult.value || null;
+    if (!merchant.value) throw new Error("店铺不存在或已停用");
+    categories.value = categoryResult.status === "fulfilled" && Array.isArray(categoryResult.value) ? categoryResult.value : [];
+    flashSales.value = flashResult.status === "fulfilled" && Array.isArray(flashResult.value) ? flashResult.value : [];
+    groupBuys.value = groupResult.status === "fulfilled" && Array.isArray(groupResult.value) ? groupResult.value : [];
+    products.value = productsResult.value?.items || [];
+    const failedAuxiliary = [categoryResult, flashResult, groupResult].filter((result) => result.status === "rejected").length;
+    loadWarning.value = failedAuxiliary ? "部分分类或优惠活动暂未同步，商品列表仍可继续浏览。" : "";
   } catch (error: any) {
+    if (!loadGuard.isCurrent(token)) return;
+    merchant.value = null;
     flashSales.value = [];
     groupBuys.value = [];
     products.value = [];
-    uni.showToast({ title: error.message || "加载店铺失败", icon: "none" });
+    loadError.value = error.message || "加载店铺失败，请稍后重试。";
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
@@ -208,6 +240,10 @@ onShow(load);
 
 <style scoped>
 .merchant-page { min-height:100vh; padding:24rpx 28rpx; background:linear-gradient(180deg,#fff7ed 0%,#f8fafc 52%,#fff 100%); }
+.page-state { display:grid; gap:14rpx; margin-bottom:20rpx; padding:24rpx; border-radius:8px; background:#fff; color:#64748b; font-size:25rpx; line-height:1.6; }
+.page-state.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.page-state.warning-state { border:1rpx solid #fed7aa; background:#fffaf0; color:#9a3412; }
+.state-retry { width:max-content; color:#9a3412; font-weight:900; }
 .merchant-hero { display:flex; align-items:center; gap:22rpx; padding:30rpx; border-radius:34rpx; background:linear-gradient(135deg,#0f172a,#7c2d12 62%,#ea580c); color:#fff; box-shadow:0 18rpx 42rpx rgba(124,45,18,.16); }
 .merchant-logo { width:124rpx; height:124rpx; border-radius:28rpx; background:#fed7aa; color:#9a3412; display:flex; align-items:center; justify-content:center; font-size:46rpx; font-weight:900; flex:0 0 auto; }
 .merchant-logo.placeholder { background:rgba(255,247,237,.95); }

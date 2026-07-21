@@ -1,35 +1,41 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
-import { CopyDocument, Grid, Key, SwitchButton, View } from "@element-plus/icons-vue";
+import { Close, CopyDocument, Grid, Key, Menu as MenuIcon, SwitchButton, View } from "@element-plus/icons-vue";
 import { api } from "../api";
 import H5QrDialog from "../components/H5QrDialog.vue";
-import { AdminRole, canAccess, canAccessScope, clearStoredAdminSession, currentRole, currentTenantCode, currentTenantName, currentTenantSettings, isPlatformAdmin, roleOptions, setStoredAdminSession } from "../permissions";
+import { AdminRole, canAccess, canAccessScope, clearStoredAdminSession, currentRole, currentTenantCode, currentTenantName, currentTenantSettings, isPlatformAdmin, isPlatformScopedAdmin, roleOptions, setStoredAdminSession } from "../permissions";
 import { copyToClipboard, h5PreviewUrl, openH5Preview } from "../h5-preview";
 import { adminFeatureGateForPath, readStoredFeatureGates, writeStoredFeatureGates } from "../feature-gates";
 import { menuGroups, tenantQuickLinks, tenantScopedRoutePaths } from "../navigation/admin-menu";
+import { observeAdminTables } from "../accessibility";
 
 const route = useRoute();
 const router = useRouter();
 const passwordDialogVisible = ref(false);
 const h5QrDialogVisible = ref(false);
+const mobileMenuVisible = ref(false);
+const mainContent = ref<HTMLElement | { $el?: HTMLElement } | null>(null);
 const changingPassword = ref(false);
 const passwordForm = reactive({ oldPassword: "", newPassword: "", confirmPassword: "" });
 const platformTenants = ref<Array<{ id: number; name?: string; code?: string; enabled?: boolean }>>([]);
 const selectedPlatformTenantId = ref(Number(localStorage.getItem("admin_selected_tenant_id") || 0));
 const shellBrand = ref<{ adminTitle?: string; brandName?: string; brandLogoUrl?: string }>({});
 const featureGates = ref(readStoredFeatureGates());
+let stopTableObserver: (() => void) | null = null;
 const tenantSettings = computed(() => currentTenantSettings());
 const roleLabel = computed(() => roleOptions.find((item) => item.value === currentRole())?.label || "管理员");
 const shellTitle = computed(() => {
   if (shellBrand.value.adminTitle) return shellBrand.value.adminTitle;
   if (isPlatformAdmin()) return "平台超级管理后台";
+  if (isPlatformScopedAdmin()) return "平台运营后台";
   return `${currentTenantName() || shellBrand.value.brandName || "商家"}管理后台`;
 });
 const roleCapabilityText = computed(() => {
   const role = currentRole();
   if (isPlatformAdmin()) return "平台超管：可管理全平台商家、活动、订单、公益池、系统安全，并拥有会员余额调整权限。";
+  if (isPlatformScopedAdmin()) return "平台运营账号：当前仅显示已授权的平台功能，数据范围不下沉到任何商家。";
   if (role === AdminRole.Operator) {
     if (canAccess(["activity.manage", "registration.manage", "homepage.manage", "member.manage"])) return "运营账号：可管理活动、报名、会员和装修营销；不处理余额调整等平台资产操作。";
     if (canAccess(["mall.product.manage", "mall.order.view", "mall.finance.view"])) return "商城运营账号：可管理授权店铺的商品、订单、售后和商城经营数据。";
@@ -42,8 +48,8 @@ const roleCapabilityText = computed(() => {
 const selectedPlatformTenant = computed(() => platformTenants.value.find((tenant) => tenant.id === selectedPlatformTenantId.value));
 const selectedPlatformTenantCode = computed(() => selectedPlatformTenant.value?.code || "");
 const selectedScopeName = computed(() => (selectedPlatformTenant.value ? selectedTenantLabel(selectedPlatformTenant.value) : "平台视角"));
-const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformAdmin() ? selectedPlatformTenantCode.value : currentTenantCode()));
-const currentH5PreviewLabel = computed(() => (isPlatformAdmin() ? (selectedPlatformTenant.value ? "商家H5" : "平台H5") : "商家H5"));
+const currentH5PreviewUrl = computed(() => h5PreviewUrl(isPlatformScopedAdmin() ? selectedPlatformTenantCode.value : currentTenantCode()));
+const currentH5PreviewLabel = computed(() => (isPlatformScopedAdmin() ? (selectedPlatformTenant.value ? "商家H5" : "平台H5") : "商家H5"));
 const visibleTenantQuickLinks = computed(() => tenantQuickLinks.filter((item) => !mallMenuDisabled(item) && !featureMenuDisabled(item)));
 const visibleMenuGroups = computed(() =>
   menuGroups
@@ -51,6 +57,8 @@ const visibleMenuGroups = computed(() =>
     .map((group) => ({ ...group, items: group.items.filter((item) => canShowMenuItem(item)) }))
     .filter((group) => group.items.length)
 );
+const currentPageLabel = computed(() => menuGroups.flatMap((group) => group.items).find((item) => item.index === route.path)?.label || "后台页面");
+const pageAnnouncement = computed(() => `已进入${currentPageLabel.value}`);
 
 function canShowMenuItem(item: { roles?: string[]; scope?: string; index?: string; requiresMallEnabled?: boolean }) {
   return canAccess(item.roles) && canAccessScope(item.scope as any) && !mallMenuDisabled(item) && !featureMenuDisabled(item);
@@ -64,7 +72,7 @@ function mallMenuDisabled(item: { path?: string; index?: string; requiresMallEna
 }
 
 function featureMenuDisabled(item: { path?: string; index?: string }) {
-  if (isPlatformAdmin()) return false;
+  if (isPlatformScopedAdmin()) return false;
   const target = item.path || item.index || "";
   const gate = adminFeatureGateForPath(target);
   return Boolean(gate && featureGates.value[gate] === false);
@@ -98,8 +106,10 @@ async function loadPlatformTenants() {
 
 async function loadShellBrand() {
   try {
-    const setting = await api.get<any, any>("/admin/settings/operation");
-    const theme = setting?.pageTheme || {};
+    const setting = canAccess(["operation_settings.view"]) ? await api.get<any, any>("/admin/settings/operation") : null;
+    const code = currentTenantCode();
+    const publicSetting = isPlatformAdmin() ? null : await api.get<any, any>(`/public/settings/operation${code ? `?tenantCode=${encodeURIComponent(code)}` : ""}`).catch(() => null);
+    const theme = (setting || publicSetting)?.pageTheme || {};
     shellBrand.value = {
       adminTitle: String(theme.adminTitle || ""),
       brandName: String(theme.brandName || ""),
@@ -108,8 +118,6 @@ async function loadShellBrand() {
     if (isPlatformAdmin()) {
       featureGates.value = writeStoredFeatureGates(setting?.launchConfig?.featureGates);
     } else {
-      const code = currentTenantCode();
-      const publicSetting = await api.get<any, any>(`/public/settings/operation${code ? `?tenantCode=${encodeURIComponent(code)}` : ""}`).catch(() => null);
       featureGates.value = writeStoredFeatureGates(publicSetting?.launchConfig?.featureGates);
     }
   } catch {
@@ -167,7 +175,7 @@ function openPasswordDialog() {
 }
 
 function openCurrentH5Preview() {
-  openH5Preview(isPlatformAdmin() ? selectedPlatformTenantCode.value : currentTenantCode());
+  openH5Preview(isPlatformScopedAdmin() ? selectedPlatformTenantCode.value : currentTenantCode());
 }
 
 async function copyCurrentH5PreviewUrl() {
@@ -205,27 +213,48 @@ function logout() {
   router.push("/login");
 }
 
+function focusMainContent() {
+  const target = mainContent.value instanceof HTMLElement ? mainContent.value : mainContent.value?.$el;
+  target?.focus({ preventScroll: true });
+}
+
 onMounted(() => {
   refreshCurrentAdminContext();
   loadShellBrand();
   loadPlatformTenants();
   syncSelectedTenantToRoute();
+  stopTableObserver = observeAdminTables();
 });
+
+onBeforeUnmount(() => stopTableObserver?.());
 
 watch(
   () => route.path,
-  () => syncSelectedTenantToRoute()
+  async () => {
+    mobileMenuVisible.value = false;
+    syncSelectedTenantToRoute();
+    await nextTick();
+    focusMainContent();
+  }
 );
 </script>
 
 <template>
+  <p class="sr-only" role="status" aria-live="polite" aria-atomic="true">{{ pageAnnouncement }}</p>
   <el-container class="shell">
+    <div class="mobile-nav">
+      <div class="mobile-brand">
+        <img v-if="shellBrand.brandLogoUrl" class="brand-logo" :src="shellBrand.brandLogoUrl" alt="Logo" />
+        <span>{{ shellTitle }}</span>
+      </div>
+      <el-button class="mobile-menu-button" :icon="MenuIcon" circle title="打开主导航" aria-label="打开主导航" @click="mobileMenuVisible = true" />
+    </div>
     <el-aside width="248px" class="aside">
       <div class="brand">
         <img v-if="shellBrand.brandLogoUrl" class="brand-logo" :src="shellBrand.brandLogoUrl" alt="Logo" />
         <span>{{ shellTitle }}</span>
       </div>
-      <el-menu router :default-active="route.fullPath" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened>
+      <el-menu router :default-active="route.path" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened>
         <el-sub-menu v-for="group in visibleMenuGroups" :key="group.index" :index="group.index">
           <template #title>
             <el-icon><component :is="group.icon" /></el-icon>
@@ -267,9 +296,31 @@ watch(
           <el-button :icon="SwitchButton" @click="logout">退出</el-button>
         </div>
       </el-header>
-      <el-main :class="{ 'homepage-builder-main': route.path === '/homepage-builder' }"><router-view /></el-main>
+      <el-main ref="mainContent" tabindex="-1" :aria-label="pageAnnouncement" :class="{ 'homepage-builder-main': route.path === '/homepage-builder' }"><router-view /></el-main>
     </el-container>
   </el-container>
+
+  <el-drawer v-model="mobileMenuVisible" direction="ltr" size="min(320px, 86vw)" :with-header="false" class="mobile-menu-drawer">
+    <div class="drawer-head">
+      <div class="mobile-brand">
+        <img v-if="shellBrand.brandLogoUrl" class="brand-logo" :src="shellBrand.brandLogoUrl" alt="Logo" />
+        <span>{{ shellTitle }}</span>
+      </div>
+      <el-button :icon="Close" circle title="关闭主导航" aria-label="关闭主导航" @click="mobileMenuVisible = false" />
+    </div>
+    <el-menu router :default-active="route.path" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened @select="mobileMenuVisible = false">
+      <el-sub-menu v-for="group in visibleMenuGroups" :key="`mobile-${group.index}`" :index="`mobile-${group.index}`">
+        <template #title>
+          <el-icon><component :is="group.icon" /></el-icon>
+          <span>{{ group.label }}</span>
+        </template>
+        <el-menu-item v-for="item in group.items" :key="`mobile-${item.index}`" :index="item.index">
+          <el-icon><component :is="item.icon" /></el-icon>
+          <span>{{ menuItemLabel(item) }}</span>
+        </el-menu-item>
+      </el-sub-menu>
+    </el-menu>
+  </el-drawer>
 
   <H5QrDialog
     v-model="h5QrDialogVisible"
@@ -299,6 +350,8 @@ watch(
 
 <style scoped>
 .shell { min-height: 100vh; }
+.sr-only { position: fixed; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
+.mobile-nav { display: none; }
 .aside { background: #162033; overflow-x: hidden; }
 .brand { height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 20px; color: #fff; font-size: 20px; font-weight: 700; }
 .brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -316,15 +369,18 @@ watch(
 :deep(.el-sub-menu__title:hover), :deep(.el-menu-item:hover) { background-color: #1e2b43; }
 :deep(.el-menu-item) { height: 42px; padding-left: 44px !important; }
 :deep(.el-menu-item.is-active) { background: #243653; font-weight: 700; }
+.drawer-head { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; color: #fff; background: #162033; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.mobile-brand { min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; }
+.mobile-brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+:global(.mobile-menu-drawer .el-drawer__body) { padding: 0; background: #162033; overflow-y: auto; }
+:global(.mobile-menu-drawer .el-menu) { border-right: 0; }
 
 @media (max-width: 768px) {
   .shell { display: block; }
-  .aside { width: 100% !important; overflow-x: auto; }
-  .brand { height: 52px; padding: 0 14px; font-size: 17px; }
-  .el-menu { display: flex; min-width: max-content; }
-  :deep(.el-sub-menu) { flex: 0 0 auto; }
-  :deep(.el-sub-menu__title), :deep(.el-menu-item) { height: 40px; padding: 0 14px !important; }
-  :deep(.el-sub-menu .el-menu) { position: static; display: block; min-width: 180px; }
+  .mobile-nav { height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px 0 14px; color: #fff; background: #162033; }
+  .mobile-nav .mobile-brand { flex: 1; }
+  .mobile-menu-button { flex: 0 0 auto; }
+  .aside { display: none; }
   .header { height: auto; min-height: 56px; padding: 10px 12px; align-items: flex-start; flex-wrap: wrap; }
   .header-title { width: 100%; }
   .header-actions { width: 100%; justify-content: flex-start; gap: 8px; }

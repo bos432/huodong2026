@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Tenant } from "./tenant.entity";
+import { ContentAudience } from "../shared/content-audience";
 
 export type MarketingPopupButton = {
   text: string;
@@ -38,6 +39,9 @@ export class MarketingPopup {
 
   @Column({ type: "json", nullable: true })
   placements!: string[] | null;
+
+  @Column({ type: "json", nullable: true })
+  audience!: ContentAudience | null;
 
   @Column({ type: "json", nullable: true })
   buttons!: MarketingPopupButton[] | null;

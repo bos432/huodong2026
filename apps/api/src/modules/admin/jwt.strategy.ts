@@ -16,11 +16,11 @@ export class JwtStrategy extends PassportStrategy(Strategy) {
     });
   }
 
-  async validate(payload: { sub: number; username: string; role: string; tenantId?: number | null }) {
+  async validate(payload: { sub: number; username: string; role: string; tenantId?: number | null; sessionVersion?: number }) {
     if (payload.tenantId) {
       const tenant = await this.tenants.findOne({ where: { id: payload.tenantId, enabled: true } });
       if (!tenant) throw new UnauthorizedException("Current tenant not found or disabled");
     }
-    return { id: payload.sub, username: payload.username, role: payload.role, tenantId: payload.tenantId ?? null };
+    return { id: payload.sub, username: payload.username, role: payload.role, tenantId: payload.tenantId ?? null, sessionVersion: payload.sessionVersion };
   }
 }

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, watch } from "vue";
+import { computed, nextTick, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ArrowDown, ArrowUp, Check, Clock, Close, CopyDocument, Delete, Edit, Grid, Hide, MoreFilled, Picture, Plus, Upload, UploadFilled, View } from "@element-plus/icons-vue";
@@ -16,6 +16,7 @@ const activityStatusText: Record<ActivityStatus, string> = {
   [ActivityStatus.Rejected]: "已驳回",
   [ActivityStatus.Open]: "报名中",
   [ActivityStatus.Closed]: "已下架",
+  [ActivityStatus.Cancelled]: "已取消",
   [ActivityStatus.Ended]: "已结束"
 };
 
@@ -27,11 +28,22 @@ const agents = ref<any[]>([]);
 const tenants = ref<any[]>([]);
 const memberLevels = ref<any[]>([]);
 const loading = ref(false);
+const errorMessage = ref("");
+const metaErrorMessage = ref("");
 const drawer = ref(false);
+const activityEditorReturnFocus = ref<HTMLElement | null>(null);
 const saving = ref(false);
+const activityActionKey = ref("");
 const editingId = ref<number | null>(null);
+const versionsDrawer = ref(false);
+const versionsLoading = ref(false);
+const versionsErrorMessage = ref("");
+const activityVersions = ref<any[]>([]);
+const versionsActivity = ref<any | null>(null);
+let draftTimer: ReturnType<typeof setTimeout> | null = null;
 const approvalDrawer = ref(false);
 const approvalLoading = ref(false);
+const approvalErrorMessage = ref("");
 const approvalLogs = ref<any[]>([]);
 const approvalActivity = ref<any | null>(null);
 const h5QrDialogVisible = ref(false);
@@ -42,6 +54,7 @@ const channelDrawer = ref(false);
 const channelActivity = ref<any | null>(null);
 const channelLoading = ref(false);
 const channelSaving = ref(false);
+const channelErrorMessage = ref("");
 const channels = ref<any[]>([]);
 const channelReport = ref<any[]>([]);
 const channelForm = reactive({ name: "", code: "", source: "", remark: "" });
@@ -50,7 +63,8 @@ const activityFormSteps = [
   { name: "base", label: "基础信息" },
   { name: "fields", label: "报名字段" },
   { name: "hosts", label: "主理人" },
-  { name: "sections", label: "详情模块" }
+  { name: "sections", label: "详情模块" },
+  { name: "rules", label: "报名规则" }
 ];
 const activeActivityStep = ref(activityFormSteps[0].name);
 const activeActivityStepIndex = computed(() => Math.max(activityFormSteps.findIndex((item) => item.name === activeActivityStep.value), 0));
@@ -92,6 +106,19 @@ const registrationReviewDisabledReason = computed(() =>
   registrationReviewEnabled.value ? "" : "平台未开通本商家的报名审核权限，活动报名将自动通过或进入付款流程。"
 );
 const canOperateActivities = computed(() => canAccess(["activity.manage"]));
+const formTenantId = computed(() => Number(form.tenantId || form.tenant?.id || 0));
+const formMemberLevels = computed(() => {
+  if (!isPlatformAdmin()) return memberLevels.value;
+  const tenantId = formTenantId.value;
+  return memberLevels.value.filter((level) => tenantId ? Number(level.tenantId || 0) === tenantId : !level.tenantId);
+});
+watch(formTenantId, () => {
+  const allowed = new Set(formMemberLevels.value.map((level) => Number(level.id)));
+  if (form.minMemberLevelId && !allowed.has(Number(form.minMemberLevelId))) form.minMemberLevelId = undefined;
+  if (form.priorityMemberLevelId && !allowed.has(Number(form.priorityMemberLevelId))) form.priorityMemberLevelId = undefined;
+});
+const formCategories = computed(() => !isPlatformAdmin() ? categories.value : categories.value.filter((item) => Number(item.tenant?.id || 0) === formTenantId.value));
+const formAgents = computed(() => !isPlatformAdmin() ? agents.value : agents.value.filter((item) => Number(item.tenant?.id || 0) === formTenantId.value));
 const h5QrUrl = computed(() => (h5QrActivity.value ? activityPreviewUrl(h5QrActivity.value) : ""));
 const h5QrScopeName = computed(() => (h5QrActivity.value ? `活动：${h5QrActivity.value.title || h5QrActivity.value.id}` : "活动 H5"));
 const posterUrl = computed(() => (posterActivity.value ? activityPreviewUrl(posterActivity.value) : ""));
@@ -122,7 +149,14 @@ const fieldTypeText: Record<FieldType, string> = {
   [FieldType.MultipleChoice]: "多选",
   [FieldType.Phone]: "手机号",
   [FieldType.IdCard]: "身份证号",
-  [FieldType.Remark]: "备注"
+  [FieldType.Remark]: "多行文本",
+  [FieldType.Email]: "邮箱",
+  [FieldType.Number]: "数字",
+  [FieldType.Date]: "日期",
+  [FieldType.DateTime]: "日期时间",
+  [FieldType.Region]: "省市区",
+  [FieldType.Address]: "详细地址",
+  [FieldType.Attachment]: "附件"
 };
 
 const sectionTypeOptions = [
@@ -166,9 +200,15 @@ function defaultForm() {
   return {
     title: "",
     coverUrl: "",
+    shareTitle: "",
+    shareDescription: "",
+    shareImageUrl: "",
     description: "",
     notice: "",
     location: "",
+    locationProvince: "",
+    locationCity: "",
+    locationDistrict: "",
     locationLatitude: undefined,
     locationLongitude: undefined,
     locationMapUrl: "",
@@ -199,7 +239,8 @@ function defaultForm() {
       { type: "audience", title: "适合人群", content: "", imageUrl: "", sortOrder: 2 },
       { type: "agenda", title: "活动流程", content: "", imageUrl: "", sortOrder: 3 },
       { type: "faq", title: "常见问题", content: "", imageUrl: "", sortOrder: 4 }
-    ]
+    ],
+    eligibilityRules: { minAge: undefined, maxAge: undefined, allowedRegionsText: "", maxRegistrationsPerUser: 1, requirePrivacyConsent: true, allowCompanions: false, maxCompanions: 0, blacklistPhonesText: "" }
   };
 }
 
@@ -214,6 +255,7 @@ function activityQueryParams() {
 
 async function loadActivities() {
   loading.value = true;
+  errorMessage.value = "";
   try {
     const data = await api.get<any, any>("/admin/activities", { params: activityQueryParams() });
     rows.value = Array.isArray(data) ? data : data.items || [];
@@ -224,7 +266,8 @@ async function loadActivities() {
       pagination.pageSize = Number(data.pageSize || pagination.pageSize);
     }
   } catch (error: any) {
-    ElMessage.error(error.message || "加载活动失败");
+    errorMessage.value = error.message || "加载活动失败";
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }
@@ -238,16 +281,16 @@ async function loadMeta() {
     memberLevels.value = [];
     return;
   }
-  const [categoryRows, agentRows, levels, tenantRows] = await Promise.all([
-    api.get<any, any[]>("/admin/categories"),
-    api.get<any, any[]>("/admin/agents"),
-    api.get<any, any[]>("/admin/member-levels"),
-    isPlatformAdmin() ? api.get<any, any[]>("/admin/tenants") : Promise.resolve([])
-  ]);
-  categories.value = categoryRows;
-  agents.value = agentRows;
-  tenants.value = tenantRows;
-  memberLevels.value = levels.filter((item) => item.enabled);
+  metaErrorMessage.value = "";
+  try {
+    const options = await api.get<any, { categories: any[]; agents: any[]; memberLevels: any[]; tenants: any[] }>("/admin/activities/options");
+    categories.value = options.categories || [];
+    agents.value = options.agents || [];
+    tenants.value = options.tenants || [];
+    memberLevels.value = (options.memberLevels || []).filter((item) => item.enabled);
+  } catch (error: any) {
+    metaErrorMessage.value = error.message || "活动编辑选项加载失败";
+  }
 }
 
 async function load() {
@@ -288,8 +331,14 @@ function changePageSize(pageSize: number) {
   loadActivities();
 }
 
-function create() {
+function rememberActivityEditorTrigger(event?: Event) {
+  const target = event?.currentTarget || document.activeElement;
+  if (target instanceof HTMLElement) activityEditorReturnFocus.value = target;
+}
+
+function create(event?: Event) {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
+  rememberActivityEditorTrigger(event);
   editingId.value = null;
   activeActivityStep.value = activityFormSteps[0].name;
   Object.assign(form, {
@@ -297,12 +346,21 @@ function create() {
     requireReview: registrationReviewEnabled.value
   });
   drawer.value = true;
+  void offerDraftRestore();
 }
 
 async function edit(row: any) {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
-  const data = await api.get<any, any>(`/admin/activities/${row.id}`);
-  openActivityEditor(data);
+  if (activityActionKey.value || saving.value) return;
+  activityActionKey.value = `edit:${row.id}`;
+  try {
+    const data = await api.get<any, any>(`/admin/activities/${row.id}`);
+    openActivityEditor(data);
+  } catch (error: any) {
+    ElMessage.error(error.message || "加载活动详情失败");
+  } finally {
+    activityActionKey.value = "";
+  }
 }
 
 function openActivityEditor(data: any) {
@@ -315,8 +373,14 @@ function openActivityEditor(data: any) {
     priorityMemberLevelId: data.priorityMemberLevel?.id,
     locationLatitude: data.locationLatitude === null || data.locationLatitude === undefined ? undefined : Number(data.locationLatitude),
     locationLongitude: data.locationLongitude === null || data.locationLongitude === undefined ? undefined : Number(data.locationLongitude),
+    locationProvince: data.locationProvince || "",
+    locationCity: data.locationCity || "",
+    locationDistrict: data.locationDistrict || "",
     locationMapUrl: data.locationMapUrl || "",
     groupQrCodeUrl: data.groupQrCodeUrl || "",
+    shareTitle: data.shareTitle || "",
+    shareDescription: data.shareDescription || "",
+    shareImageUrl: data.shareImageUrl || "",
     priorityRegistrationEndsAt: data.priorityRegistrationEndsAt?.slice(0, 19).replace("T", " ") || "",
     price: Number(data.price),
     startTime: data.startTime?.slice(0, 19).replace("T", " "),
@@ -325,10 +389,113 @@ function openActivityEditor(data: any) {
     fields: data.fields?.length ? data.fields.map(normalizeActivityField) : defaultForm().fields,
     hosts: data.hosts?.length ? data.hosts : [{ name: "", title: "", avatarUrl: "", bio: "", sortOrder: 1 }],
     sections: data.sections?.length ? data.sections.map((section: any) => ({ ...section, imageUrl: section.imageUrl || "" })) : defaultForm().sections
+    , eligibilityRules: { ...defaultForm().eligibilityRules, ...(data.eligibilityRules || {}), allowedRegionsText: (data.eligibilityRules?.allowedRegions || []).join("、"), blacklistPhonesText: (data.eligibilityRules?.blacklistPhones || []).join("\n") }
   });
   if (!registrationReviewEnabled.value) form.requireReview = false;
   activeActivityStep.value = activityFormSteps[0].name;
   drawer.value = true;
+  void offerDraftRestore();
+}
+
+function activityDraftKey() {
+  const tenantId = Number(form.tenantId || form.tenant?.id || filters.tenantId || 0);
+  return `activity-editor-draft:${tenantId}:${editingId.value || "new"}`;
+}
+
+async function offerDraftRestore() {
+  const raw = localStorage.getItem(activityDraftKey());
+  if (!raw) {
+    await nextTick();
+    focusActivityEditorPanel();
+    return;
+  }
+  try {
+    const draft = JSON.parse(raw);
+    await ElMessageBox.confirm(`发现 ${formatTime(draft.savedAt)} 自动保存的未提交草稿，是否恢复？`, "恢复活动草稿", { confirmButtonText: "恢复", cancelButtonText: "忽略" });
+    Object.assign(form, draft.form || {});
+    activeActivityStep.value = draft.step || activityFormSteps[0].name;
+    ElMessage.success("已恢复自动保存草稿");
+  } catch (error: any) {
+    if (error !== "cancel" && error !== "close") localStorage.removeItem(activityDraftKey());
+  } finally {
+    focusActivityEditorAfterMessageBox();
+  }
+}
+
+function visibleActivityEditorPanel() {
+  return [...document.querySelectorAll<HTMLElement>(".activity-editor-drawer")].find((element) => element.getBoundingClientRect().width > 0);
+}
+
+function focusActivityEditorPanel() {
+  const panel = visibleActivityEditorPanel();
+  if (!panel) return;
+  (panel.querySelector<HTMLElement>(".el-drawer__close-btn") || panel).focus({ preventScroll: true });
+}
+
+function focusActivityEditorAfterMessageBox() {
+  const messageBoxVisible = () => [...document.querySelectorAll<HTMLElement>(".el-overlay-message-box")].some((element) => element.getBoundingClientRect().width > 0);
+  if (!messageBoxVisible()) {
+    void nextTick(focusActivityEditorPanel);
+    return;
+  }
+  const observer = new MutationObserver(() => {
+    if (messageBoxVisible()) return;
+    observer.disconnect();
+    window.clearTimeout(timeoutId);
+    void nextTick(focusActivityEditorPanel);
+  });
+  observer.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ["class", "style"] });
+  const timeoutId = window.setTimeout(() => {
+    observer.disconnect();
+    focusActivityEditorPanel();
+  }, 1200);
+}
+
+function restoreActivityEditorFocus() {
+  const target = activityEditorReturnFocus.value;
+  activityEditorReturnFocus.value = null;
+  void nextTick(() => {
+    if (target?.isConnected) target.focus({ preventScroll: true });
+    else document.querySelector<HTMLElement>("main.el-main")?.focus({ preventScroll: true });
+  });
+}
+
+function clearActivityDraft() {
+  localStorage.removeItem(activityDraftKey());
+}
+
+async function copyActivity(row: any) {
+  await runActivityRowAction(row, "copy", async () => {
+    await ElMessageBox.confirm(`确认复制活动「${row.title}」为新草稿？`, "复制活动", { type: "info", confirmButtonText: "确认复制", cancelButtonText: "取消" });
+    const copied = await api.post<any, any>(`/admin/activities/${row.id}/copy`);
+    openActivityEditor(copied);
+  }, "活动副本已创建", "复制活动失败");
+}
+
+async function loadActivityVersions(row: any) {
+  versionsActivity.value = row;
+  versionsDrawer.value = true;
+  versionsLoading.value = true;
+  versionsErrorMessage.value = "";
+  activityVersions.value = [];
+  try {
+    activityVersions.value = await api.get<any, any[]>(`/admin/activities/${row.id}/versions`);
+  } catch (error: any) {
+    versionsErrorMessage.value = error.message || "加载活动版本失败";
+  } finally {
+    versionsLoading.value = false;
+  }
+}
+
+async function restoreActivityVersion(version: any) {
+  if (!versionsActivity.value) return;
+  const activity = versionsActivity.value;
+  await runActivityRowAction(activity, `restore-version-${version.id}`, async () => {
+    await ElMessageBox.confirm(`确认恢复 V${version.versionNo}？活动将回到草稿状态并生成一个新版本。`, "恢复历史版本", { type: "warning", confirmButtonText: "确认恢复", cancelButtonText: "取消" });
+    const restored = await api.post<any, any>(`/admin/activities/${activity.id}/versions/${version.id}/restore`);
+    versionsDrawer.value = false;
+    openActivityEditor(restored);
+  }, `已恢复 V${version.versionNo}`, "恢复活动版本失败");
 }
 
 function previousActivityStep() {
@@ -360,10 +527,12 @@ async function loadApprovalLogs(row: any) {
   approvalActivity.value = row;
   approvalDrawer.value = true;
   approvalLoading.value = true;
+  approvalErrorMessage.value = "";
+  approvalLogs.value = [];
   try {
     approvalLogs.value = await api.get<any, any[]>(`/admin/activities/${row.id}/approval-logs`);
   } catch (error: any) {
-    ElMessage.error(error.message || "加载审核记录失败");
+    approvalErrorMessage.value = error.message || "加载审核记录失败";
   } finally {
     approvalLoading.value = false;
   }
@@ -534,6 +703,7 @@ function validateForm() {
   if (!form.priorityMemberLevelId && form.priorityRegistrationEndsAt) return "请先选择优先报名会员等级";
   if (form.priorityRegistrationEndsAt && new Date(form.priorityRegistrationEndsAt) >= new Date(form.registrationDeadline)) return "优先报名截止时间必须早于报名截止时间";
   if (form.sections.some((section: any) => !section.title.trim() || !section.content.trim())) return "详情模块标题和内容不能为空";
+  if (form.eligibilityRules?.minAge && form.eligibilityRules?.maxAge && Number(form.eligibilityRules.minAge) > Number(form.eligibilityRules.maxAge)) return "最低年龄不能大于最高年龄";
   return "";
 }
 
@@ -548,9 +718,15 @@ function cleanPayload() {
     tenantId,
     title: form.title.trim(),
     coverUrl: form.coverUrl?.trim() || undefined,
+    shareTitle: form.shareTitle?.trim() || undefined,
+    shareDescription: form.shareDescription?.trim() || undefined,
+    shareImageUrl: form.shareImageUrl?.trim() || undefined,
     description: form.description.trim(),
     notice: form.notice?.trim() || undefined,
     location: form.location.trim(),
+    locationProvince: form.locationProvince?.trim() || undefined,
+    locationCity: form.locationCity?.trim() || undefined,
+    locationDistrict: form.locationDistrict?.trim() || undefined,
     requireReview: registrationReviewEnabled.value ? form.requireReview : false,
     featured: Boolean(form.featured),
     allowCancel: Boolean(form.allowCancel),
@@ -597,12 +773,23 @@ function cleanPayload() {
         content: section.content.trim(),
         imageUrl: section.imageUrl?.trim() || undefined,
         sortOrder: index + 1
-      }))
+      })),
+    eligibilityRules: {
+      minAge: optionalNumber(form.eligibilityRules?.minAge),
+      maxAge: optionalNumber(form.eligibilityRules?.maxAge),
+      allowedRegions: String(form.eligibilityRules?.allowedRegionsText || "").split(/[、,，\n]/).map((item) => item.trim()).filter(Boolean),
+      maxRegistrationsPerUser: optionalNumber(form.eligibilityRules?.maxRegistrationsPerUser),
+      requirePrivacyConsent: Boolean(form.eligibilityRules?.requirePrivacyConsent),
+      allowCompanions: Boolean(form.eligibilityRules?.allowCompanions),
+      maxCompanions: form.eligibilityRules?.allowCompanions ? Number(form.eligibilityRules?.maxCompanions || 1) : 0,
+      blacklistPhones: String(form.eligibilityRules?.blacklistPhonesText || "").split(/[、,，\n]/).map((item) => item.trim()).filter(Boolean)
+    }
   };
 }
 
 async function submit() {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
+  if (saving.value || activityActionKey.value) return;
   const error = validateForm();
   if (error) {
     ElMessage.warning(error);
@@ -613,11 +800,12 @@ async function submit() {
     const payload = cleanPayload();
     if (editingId.value) await api.patch(`/admin/activities/${editingId.value}`, payload);
     else await api.post("/admin/activities", payload);
+    clearActivityDraft();
     ElMessage.success("活动已保存");
     drawer.value = false;
-    loadActivities();
+    await loadActivities();
   } catch (error: any) {
-    ElMessage.error(error.message);
+    ElMessage.error(error.message || "保存活动失败");
   } finally {
     saving.value = false;
   }
@@ -625,33 +813,101 @@ async function submit() {
 
 async function closeActivity(row: any) {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
-  await ElMessageBox.confirm(`确认下架活动「${row.title}」？下架后用户端将不再展示。`, "下架活动", { type: "warning" });
-  await api.post(`/admin/activities/${row.id}/close`);
-  ElMessage.success("活动已下架");
-  loadActivities();
+  await runActivityRowAction(row, "close", async () => {
+    await ElMessageBox.confirm(`确认下架活动「${row.title}」？下架后用户端将不再展示。`, "下架活动", { type: "warning", confirmButtonText: "确认下架", cancelButtonText: "取消" });
+    await api.post(`/admin/activities/${row.id}/close`);
+  }, "活动已下架", "下架活动失败");
 }
 
 async function submitApproval(row: any) {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
-  await api.post(`/admin/activities/${row.id}/submit-approval`);
-  ElMessage.success("活动已提交平台审核");
-  loadActivities();
+  await runActivityRowAction(row, "submit-approval", async () => {
+    await ElMessageBox.confirm(`确认提交活动「${row.title}」审核？提交后需撤回或等待平台处理才能继续修改。`, "提交活动审核", { type: "info", confirmButtonText: "确认提交", cancelButtonText: "取消" });
+    await api.post(`/admin/activities/${row.id}/submit-approval`);
+  }, "活动已提交平台审核", "提交活动审核失败");
 }
 
 async function approveActivity(row: any) {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
-  await ElMessageBox.confirm(`确认通过活动「${row.title}」？通过后用户端可公开报名。`, "通过活动审核", { type: "warning", confirmButtonText: "通过", cancelButtonText: "取消" });
-  await api.post(`/admin/activities/${row.id}/approve`, {});
-  ElMessage.success("活动已通过审核");
-  loadActivities();
+  await runActivityRowAction(row, "approve", async () => {
+    await ElMessageBox.confirm(`确认通过活动「${row.title}」？通过后用户端可公开报名。`, "通过活动审核", { type: "warning", confirmButtonText: "通过", cancelButtonText: "取消" });
+    await api.post(`/admin/activities/${row.id}/approve`, {});
+  }, "活动已通过审核", "活动审核失败");
 }
 
 async function rejectActivity(row: any) {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
-  const { value } = await ElMessageBox.prompt(`请输入驳回「${row.title}」的原因`, "驳回活动", { inputType: "textarea", confirmButtonText: "确认驳回", cancelButtonText: "取消" });
-  await api.post(`/admin/activities/${row.id}/reject`, { remark: value || "" });
-  ElMessage.success("活动已驳回");
-  loadActivities();
+  await runActivityRowAction(row, "reject", async () => {
+    const { value } = await ElMessageBox.prompt(`请输入驳回「${row.title}」的原因`, "驳回活动", { inputType: "textarea", confirmButtonText: "确认驳回", cancelButtonText: "取消", inputValidator: (input) => Boolean(String(input || "").trim()) || "请填写驳回原因" });
+    await api.post(`/admin/activities/${row.id}/reject`, { remark: String(value || "").trim() });
+  }, "活动已驳回", "驳回活动失败");
+}
+
+async function withdrawApproval(row: any) {
+  await runActivityRowAction(row, "withdraw", async () => {
+    await ElMessageBox.confirm(`确认撤回「${row.title}」的审核申请？`, "撤回审核", { type: "warning", confirmButtonText: "确认撤回", cancelButtonText: "取消" });
+    await api.post(`/admin/activities/${row.id}/withdraw-approval`);
+  }, "审核申请已撤回", "撤回审核失败");
+}
+
+async function reopenActivity(row: any) {
+  await runActivityRowAction(row, "reopen", async () => {
+    await ElMessageBox.confirm(`确认重新上架「${row.title}」？`, "重新上架", { type: "warning", confirmButtonText: "确认上架", cancelButtonText: "取消" });
+    await api.post(`/admin/activities/${row.id}/reopen`);
+  }, "活动已重新上架", "重新上架失败");
+}
+
+async function cancelActivity(row: any) {
+  await runActivityRowAction(row, "cancel", async () => {
+    const { value } = await ElMessageBox.prompt(`请输入取消「${row.title}」的原因。系统会取消未履约报名、关闭待支付订单，并为已支付订单创建退款申请。`, "取消活动", { inputType: "textarea", confirmButtonText: "确认取消活动", cancelButtonText: "返回", inputValidator: (input) => Boolean(String(input || "").trim()) || "请填写取消原因" });
+    const result = await api.post<any, any>(`/admin/activities/${row.id}/cancel`, { reason: String(value || "").trim() });
+    const summary = result?.cancellationSummary;
+    if (summary) ElMessage.success(`活动已取消：取消报名 ${summary.cancelledRegistrations || 0} 条，关闭订单 ${summary.closedOrders || 0} 条，退款申请 ${summary.refundRequests || 0} 条`);
+  }, "活动已取消", "取消活动失败", true);
+}
+
+async function endActivity(row: any) {
+  await runActivityRowAction(row, "end", async () => {
+    await ElMessageBox.confirm(`确认立即结束「${row.title}」？结束后不能继续报名。`, "结束活动", { type: "warning", confirmButtonText: "确认结束", cancelButtonText: "取消" });
+    await api.post(`/admin/activities/${row.id}/end`);
+  }, "活动已结束", "结束活动失败");
+}
+
+async function schedulePublish(row: any) {
+  await runActivityRowAction(row, "schedule", async () => {
+    const { value } = await ElMessageBox.prompt("请输入定时发布时间，例如 2026-07-20 09:00:00", "定时发布", { inputPlaceholder: "YYYY-MM-DD HH:mm:ss", confirmButtonText: "确认设置", cancelButtonText: "取消", inputValidator: (input) => validateScheduledPublishAt(String(input || ""), row) });
+    await api.post(`/admin/activities/${row.id}/schedule-publish`, { publishAt: value });
+  }, "定时发布已设置", "设置定时发布失败");
+}
+
+async function runActivityRowAction(row: any, action: string, operation: () => Promise<void>, successMessage: string, errorText: string, successHandled = false) {
+  if (activityActionKey.value || saving.value) return;
+  activityActionKey.value = `${action}:${row.id}`;
+  try {
+    await operation();
+    if (!successHandled) ElMessage.success(successMessage);
+    await loadActivities();
+  } catch (error: any) {
+    if (!isDialogCancel(error)) ElMessage.error(error.message || errorText);
+  } finally {
+    activityActionKey.value = "";
+  }
+}
+
+function isDialogCancel(error: any) {
+  return error === "cancel" || error === "close" || error?.message === "cancel" || error?.message === "close";
+}
+
+function validateScheduledPublishAt(input: string, row: any) {
+  const at = new Date(input);
+  if (!input || Number.isNaN(at.getTime())) return "请输入有效时间";
+  if (at.getTime() <= Date.now()) return "定时发布时间必须晚于当前时间";
+  if (row.endTime && at.getTime() >= new Date(row.endTime).getTime()) return "定时发布时间必须早于活动结束时间";
+  return true;
+}
+
+function isRowBusy(row: any) {
+  return activityActionKey.value.endsWith(`:${row.id}`);
 }
 
 function canSubmitApproval(row: any) {
@@ -666,6 +922,13 @@ function primaryAction(row: any) {
   if (canApprove(row)) return { label: "审核通过", type: "success", icon: Check, handler: () => approveActivity(row) };
   if (canOperateActivities.value) return { label: row.status === ActivityStatus.PendingApproval && isPlatformAdmin() ? "审核/编辑" : "编辑", type: "primary", icon: Edit, handler: () => edit(row) };
   return null;
+}
+
+function runPrimaryAction(row: any, event: Event) {
+  const action = primaryAction(row);
+  if (!action) return;
+  if (action.label.includes("编辑")) rememberActivityEditorTrigger(event);
+  action.handler();
 }
 
 function tenantDisplayName(row: any) {
@@ -709,6 +972,7 @@ async function showActivityChannels(row: any) {
 async function loadActivityChannels() {
   if (!channelActivity.value) return;
   channelLoading.value = true;
+  channelErrorMessage.value = "";
   try {
     const [channelRows, report] = await Promise.all([
       api.get<any, any[]>(`/admin/activities/${channelActivity.value.id}/channels`),
@@ -716,6 +980,10 @@ async function loadActivityChannels() {
     ]);
     channels.value = channelRows;
     channelReport.value = report.channels || [];
+  } catch (error: any) {
+    channels.value = [];
+    channelReport.value = [];
+    channelErrorMessage.value = error.message || "加载活动渠道失败";
   } finally {
     channelLoading.value = false;
   }
@@ -723,6 +991,7 @@ async function loadActivityChannels() {
 
 async function createChannel() {
   if (!channelActivity.value) return;
+  if (channelSaving.value) return;
   if (!channelForm.name.trim()) return ElMessage.warning("请输入渠道名称");
   channelSaving.value = true;
   try {
@@ -735,6 +1004,8 @@ async function createChannel() {
     ElMessage.success("渠道已创建");
     Object.assign(channelForm, { name: "", code: "", source: "", remark: "" });
     await loadActivityChannels();
+  } catch (error: any) {
+    ElMessage.error(error.message || "创建活动渠道失败");
   } finally {
     channelSaving.value = false;
   }
@@ -786,6 +1057,20 @@ watch(
   }
 );
 
+watch(formTenantId, () => {
+  if (!isPlatformAdmin()) return;
+  if (form.categoryId && !formCategories.value.some((item) => item.id === form.categoryId)) form.categoryId = undefined;
+  if (form.agentId && !formAgents.value.some((item) => item.id === form.agentId)) form.agentId = undefined;
+});
+
+watch([form, drawer, activeActivityStep], () => {
+  if (!drawer.value) return;
+  if (draftTimer) clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    localStorage.setItem(activityDraftKey(), JSON.stringify({ savedAt: new Date().toISOString(), step: activeActivityStep.value, form: JSON.parse(JSON.stringify(form)) }));
+  }, 800);
+}, { deep: true });
+
 onMounted(async () => {
   await load();
   await focusRouteActivity();
@@ -797,8 +1082,8 @@ onMounted(async () => {
     <div class="toolbar">
       <h2>{{ pageTitle }}</h2>
       <div class="toolbar-actions">
-        <el-button v-if="isPlatformAdmin()" :icon="Check" @click="showPendingApproval">待审核活动</el-button>
-        <el-button v-if="canOperateActivities && !isPlatformAdmin()" type="primary" :icon="Plus" @click="create">新建活动</el-button>
+        <el-button v-if="isPlatformAdmin()" :icon="Check" :disabled="Boolean(activityActionKey) || saving" @click="showPendingApproval">待审核活动</el-button>
+        <el-button v-if="canOperateActivities && !isPlatformAdmin()" type="primary" :icon="Plus" :disabled="Boolean(activityActionKey) || saving" @click="create($event)">新建活动</el-button>
       </div>
     </div>
 
@@ -820,19 +1105,25 @@ onMounted(async () => {
         :closable="false"
         title="当前账号只能只读查看活动列表，用于现场签到核对。"
       />
+      <el-alert v-if="errorMessage" class="permission-alert" type="error" show-icon :closable="false" :title="errorMessage">
+        <template #default><el-button size="small" @click="loadActivities">重试</el-button></template>
+      </el-alert>
+      <el-alert v-if="metaErrorMessage" class="permission-alert" type="error" show-icon :closable="false" :title="metaErrorMessage">
+        <template #default><el-button size="small" @click="loadMeta">重试活动选项</el-button></template>
+      </el-alert>
       <div class="filter-bar">
-        <el-input v-model="filters.keyword" clearable placeholder="搜索活动标题或地点" @keyup.enter="search" />
-        <el-select v-if="canOperateActivities" v-model="filters.categoryId" clearable placeholder="全部分类" @change="search">
+        <el-input v-model="filters.keyword" clearable :disabled="Boolean(activityActionKey)" placeholder="搜索活动标题或地点" @keyup.enter="search" />
+        <el-select v-if="canOperateActivities" v-model="filters.categoryId" clearable :disabled="Boolean(activityActionKey)" placeholder="全部分类" @change="search">
           <el-option v-for="category in categories" :key="category.id" :label="category.name" :value="category.id" />
         </el-select>
-        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" @change="search">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable :disabled="Boolean(activityActionKey)" placeholder="全部商家" @change="search">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenant.name" :value="tenant.id" />
         </el-select>
-        <el-select v-model="filters.status" clearable placeholder="全部状态" @change="search">
+        <el-select v-model="filters.status" clearable :disabled="Boolean(activityActionKey)" placeholder="全部状态" @change="search">
           <el-option v-for="item in statusOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-button type="primary" @click="search">查询</el-button>
-        <el-button @click="resetFilters">重置</el-button>
+        <el-button type="primary" :loading="loading" :disabled="Boolean(activityActionKey)" @click="search">查询</el-button>
+        <el-button :disabled="Boolean(activityActionKey)" @click="resetFilters">重置</el-button>
       </div>
 
       <div class="status-summary">
@@ -851,11 +1142,15 @@ onMounted(async () => {
           :type="item.active ? 'primary' : 'info'"
           effect="light"
           class="status-summary-item"
+          role="button"
+          tabindex="0"
           @click="setStatusFilter(item.value)"
+          @keydown.enter.prevent="setStatusFilter(item.value)"
+          @keydown.space.prevent="setStatusFilter(item.value)"
         >
           {{ item.label }}：{{ item.count }}
         </el-tag>
-        <el-tag v-if="activeStatusFilter" class="status-summary-item" effect="plain" @click="setStatusFilter('')">清除状态</el-tag>
+        <el-tag v-if="activeStatusFilter" class="status-summary-item" effect="plain" role="button" tabindex="0" @click="setStatusFilter('')" @keydown.enter.prevent="setStatusFilter('')" @keydown.space.prevent="setStatusFilter('')">清除状态</el-tag>
       </div>
       <el-table :data="rows" stripe empty-text="暂无活动" v-loading="loading">
         <el-table-column prop="title" label="活动" min-width="260" show-overflow-tooltip />
@@ -873,10 +1168,10 @@ onMounted(async () => {
         <el-table-column label="开始时间" width="170"><template #default="{ row }">{{ formatTime(row.startTime) }}</template></el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" :icon="View" @click="openActivityH5(row)">预览H5</el-button>
-            <el-button v-if="primaryAction(row)" size="small" :type="primaryAction(row)?.type as any" :icon="primaryAction(row)?.icon" @click="primaryAction(row)?.handler()">{{ primaryAction(row)?.label }}</el-button>
+            <el-button size="small" :icon="View" :disabled="Boolean(activityActionKey)" @click="openActivityH5(row)">预览H5</el-button>
+            <el-button v-if="primaryAction(row)" size="small" :type="primaryAction(row)?.type as any" :icon="primaryAction(row)?.icon" :loading="isRowBusy(row)" :disabled="Boolean(activityActionKey) || saving" @click="runPrimaryAction(row, $event)">{{ primaryAction(row)?.label }}</el-button>
             <el-dropdown trigger="click">
-              <el-button size="small" :icon="MoreFilled">更多</el-button>
+              <el-button size="small" :icon="MoreFilled" :disabled="Boolean(activityActionKey) || saving">更多</el-button>
               <template #dropdown>
                 <el-dropdown-menu>
                   <el-dropdown-item :icon="CopyDocument" @click="copyActivityH5Url(row)">复制链接</el-dropdown-item>
@@ -884,9 +1179,16 @@ onMounted(async () => {
                   <el-dropdown-item :icon="Picture" @click="showActivityPoster(row)">海报</el-dropdown-item>
                   <el-dropdown-item :icon="Grid" @click="showActivityChannels(row)">渠道</el-dropdown-item>
                   <el-dropdown-item :icon="Clock" @click="loadApprovalLogs(row)">审核记录</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities" :icon="CopyDocument" @click="copyActivity(row)">复制活动</el-dropdown-item>
+                  <el-dropdown-item :icon="Clock" @click="loadActivityVersions(row)">版本记录</el-dropdown-item>
                   <el-dropdown-item v-if="canSubmitApproval(row)" :icon="Upload" @click="submitApproval(row)">提交审核</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities && row.status === ActivityStatus.PendingApproval && !isPlatformAdmin()" :icon="ArrowDown" @click="withdrawApproval(row)">撤回审核</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities && row.status === ActivityStatus.Closed" :icon="View" @click="reopenActivity(row)">重新上架</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities && [ActivityStatus.Open, ActivityStatus.Closed].includes(row.status)" :icon="Clock" @click="schedulePublish(row)">定时发布</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities && row.status === ActivityStatus.Open" :icon="Check" @click="endActivity(row)">结束活动</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities && [ActivityStatus.Open, ActivityStatus.Closed].includes(row.status)" :icon="Close" divided @click="cancelActivity(row)">取消活动</el-dropdown-item>
                   <el-dropdown-item v-if="canApprove(row)" :icon="Close" divided @click="rejectActivity(row)">驳回</el-dropdown-item>
-                  <el-dropdown-item v-if="canOperateActivities" :icon="Hide" divided :disabled="row.status === ActivityStatus.Closed" @click="closeActivity(row)">下架</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities && row.status === ActivityStatus.Open" :icon="Hide" divided @click="closeActivity(row)">下架</el-dropdown-item>
                 </el-dropdown-menu>
               </template>
             </el-dropdown>
@@ -915,6 +1217,9 @@ onMounted(async () => {
         <el-tag v-if="approvalActivity?.status">{{ activityStatusText[approvalActivity.status as ActivityStatus] }}</el-tag>
       </div>
       <el-skeleton v-if="approvalLoading" :rows="4" animated />
+      <el-alert v-else-if="approvalErrorMessage" type="error" show-icon :closable="false" :title="approvalErrorMessage">
+        <template #default><el-button v-if="approvalActivity" size="small" @click="loadApprovalLogs(approvalActivity)">重新加载</el-button></template>
+      </el-alert>
       <el-empty v-else-if="!approvalLogs.length" description="暂无审核记录" />
       <el-timeline v-else class="approval-timeline">
         <el-timeline-item v-for="log in approvalLogs" :key="log.id" :timestamp="formatTime(log.createdAt)">
@@ -930,11 +1235,33 @@ onMounted(async () => {
       </el-timeline>
     </el-drawer>
 
+    <el-drawer v-model="versionsDrawer" size="620px" title="活动版本记录">
+      <div class="approval-header">
+        <strong>{{ versionsActivity?.title || "-" }}</strong>
+        <span>每次保存都会生成版本</span>
+      </div>
+      <el-skeleton v-if="versionsLoading" :rows="5" animated />
+      <el-alert v-else-if="versionsErrorMessage" type="error" show-icon :closable="false" :title="versionsErrorMessage">
+        <template #default><el-button v-if="versionsActivity" size="small" @click="loadActivityVersions(versionsActivity)">重新加载</el-button></template>
+      </el-alert>
+      <el-empty v-else-if="!activityVersions.length" description="暂无版本记录" />
+      <el-table v-else :data="activityVersions" stripe>
+        <el-table-column label="版本" width="90"><template #default="{ row }">V{{ row.versionNo }}</template></el-table-column>
+        <el-table-column prop="source" label="来源" width="120" />
+        <el-table-column prop="createdBy" label="操作人" width="130" />
+        <el-table-column label="保存时间" min-width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
+        <el-table-column label="操作" width="100"><template #default="{ row }"><el-button v-if="canOperateActivities" size="small" :loading="activityActionKey === `restore-version-${row.id}:${versionsActivity?.id}`" :disabled="Boolean(activityActionKey) || saving" @click="restoreActivityVersion(row)">恢复</el-button></template></el-table-column>
+      </el-table>
+    </el-drawer>
+
     <el-drawer v-model="channelDrawer" size="860px" title="渠道推广与转化">
       <div class="approval-header">
         <strong>{{ channelActivity?.title || "-" }}</strong>
-        <el-button size="small" @click="loadActivityChannels">刷新</el-button>
+        <el-button size="small" :loading="channelLoading" @click="loadActivityChannels">刷新</el-button>
       </div>
+      <el-alert v-if="channelErrorMessage" type="error" show-icon :closable="false" :title="channelErrorMessage">
+        <template #default><el-button size="small" :loading="channelLoading" @click="loadActivityChannels">重新加载渠道</el-button></template>
+      </el-alert>
       <el-form v-if="canOperateActivities" class="channel-form" label-position="top">
         <el-form-item label="渠道名称">
           <el-input v-model="channelForm.name" placeholder="例如：朋友圈、社群、公众号、线下海报" />
@@ -980,7 +1307,7 @@ onMounted(async () => {
       </div>
     </el-drawer>
 
-    <el-drawer v-model="drawer" size="900px" :title="editingId ? '编辑活动' : '新建活动'">
+    <el-drawer v-model="drawer" class="activity-editor-drawer" size="900px" :title="editingId ? '编辑活动' : '新建活动'" @closed="restoreActivityEditorFocus">
       <el-form label-position="top">
         <el-alert
           class="compliance-alert"
@@ -1007,10 +1334,10 @@ onMounted(async () => {
           <el-tab-pane label="基础信息" name="base">
             <div class="form-grid">
               <el-form-item label="标题" required><el-input v-model="form.title" maxlength="100" show-word-limit /></el-form-item>
-              <el-form-item label="分类"><el-select v-model="form.categoryId" clearable><el-option v-for="category in categories" :key="category.id" :label="category.name" :value="category.id" /></el-select></el-form-item>
-              <el-form-item label="所属代理"><el-select v-model="form.agentId" clearable filterable placeholder="平台自营"><el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id" /></el-select></el-form-item>
-              <el-form-item label="会员门槛"><el-select v-model="form.minMemberLevelId" clearable><el-option v-for="level in memberLevels" :key="level.id" :label="level.name" :value="level.id" /></el-select></el-form-item>
-              <el-form-item label="优先报名会员"><el-select v-model="form.priorityMemberLevelId" clearable><el-option v-for="level in memberLevels" :key="level.id" :label="level.name" :value="level.id" /></el-select></el-form-item>
+              <el-form-item label="分类"><el-select v-model="form.categoryId" clearable><el-option v-for="category in formCategories" :key="category.id" :label="category.name" :value="category.id" /></el-select></el-form-item>
+              <el-form-item label="所属代理"><el-select v-model="form.agentId" clearable filterable placeholder="平台自营"><el-option v-for="agent in formAgents" :key="agent.id" :label="agent.name" :value="agent.id" /></el-select></el-form-item>
+              <el-form-item label="会员门槛"><el-select v-model="form.minMemberLevelId" clearable><el-option v-for="level in formMemberLevels" :key="level.id" :label="level.name" :value="level.id" /></el-select></el-form-item>
+              <el-form-item label="优先报名会员"><el-select v-model="form.priorityMemberLevelId" clearable><el-option v-for="level in formMemberLevels" :key="level.id" :label="level.name" :value="level.id" /></el-select></el-form-item>
               <el-form-item label="优先报名截止"><el-date-picker v-model="form.priorityRegistrationEndsAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" clearable /></el-form-item>
               <el-form-item class="full" label="封面地址">
                 <div class="cover-field">
@@ -1021,7 +1348,13 @@ onMounted(async () => {
                   <img v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" alt="活动封面预览" />
                 </div>
               </el-form-item>
+              <el-form-item class="full" label="分享标题"><el-input v-model="form.shareTitle" maxlength="200" show-word-limit placeholder="不填则使用活动标题" /></el-form-item>
+              <el-form-item class="full" label="分享摘要"><el-input v-model="form.shareDescription" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="用于微信分享卡片和转发说明" /></el-form-item>
+              <el-form-item class="full" label="分享图片"><el-input v-model="form.shareImageUrl" placeholder="不填则使用活动封面" /></el-form-item>
               <el-form-item label="地点" required><el-input v-model="form.location" placeholder="例如：城市书房 2 楼活动室" /></el-form-item>
+              <el-form-item label="省/自治区"><el-input v-model="form.locationProvince" maxlength="80" placeholder="例如：浙江省" /></el-form-item>
+              <el-form-item label="城市"><el-input v-model="form.locationCity" maxlength="80" placeholder="用于活动漏斗城市归因，例如：杭州市" /></el-form-item>
+              <el-form-item label="区县"><el-input v-model="form.locationDistrict" maxlength="80" placeholder="例如：西湖区" /></el-form-item>
               <el-form-item label="地图纬度"><el-input-number v-model="form.locationLatitude" :min="-90" :max="90" :precision="6" controls-position="right" placeholder="例如：31.230416" /></el-form-item>
               <el-form-item label="地图经度"><el-input-number v-model="form.locationLongitude" :min="-180" :max="180" :precision="6" controls-position="right" placeholder="例如：121.473701" /></el-form-item>
               <el-form-item class="full" label="地图链接">
@@ -1041,7 +1374,7 @@ onMounted(async () => {
               <el-form-item label="报名截止" required><el-date-picker v-model="form.registrationDeadline" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
               <el-form-item label="名额" required><el-input-number v-model="form.capacity" :min="1" /></el-form-item>
               <el-form-item label="费用"><el-input-number v-model="form.price" :min="0" :precision="2" /></el-form-item>
-              <el-form-item label="状态"><el-select v-model="form.status"><el-option v-for="(text, key) in activityStatusText" :key="key" :label="text" :value="key" /></el-select></el-form-item>
+              <el-form-item label="状态"><el-select v-model="form.status" disabled><el-option v-for="(text, key) in activityStatusText" :key="key" :label="text" :value="key" /></el-select></el-form-item>
               <el-alert v-if="registrationReviewDisabledReason" class="permission-alert full" type="warning" show-icon :closable="false" :title="registrationReviewDisabledReason" />
               <el-form-item class="switches">
                 <el-checkbox v-model="form.featured">首页推荐</el-checkbox>
@@ -1087,7 +1420,7 @@ onMounted(async () => {
               <el-input v-model="host.title" placeholder="身份/头衔" />
               <el-input v-model="host.avatarUrl" placeholder="头像 URL" />
               <el-input-number v-model="host.sortOrder" :min="1" />
-              <el-button :icon="Delete" circle @click="form.hosts.splice(index, 1)" />
+              <el-button :icon="Delete" circle :aria-label="`删除主理人：${host.name || index + 1}`" title="删除主理人" @click="form.hosts.splice(index, 1)" />
               <el-input v-model="host.bio" class="full" type="textarea" :rows="2" placeholder="简介" />
             </div>
             <el-button :icon="Plus" @click="addHost">增加主理人</el-button>
@@ -1110,13 +1443,26 @@ onMounted(async () => {
             </div>
             <el-button :icon="Plus" @click="addSection">增加模块</el-button>
           </el-tab-pane>
+
+          <el-tab-pane label="报名规则" name="rules">
+            <div class="form-grid">
+              <el-form-item label="最低年龄"><el-input-number v-model="form.eligibilityRules.minAge" :min="1" :max="120" placeholder="不限" /></el-form-item>
+              <el-form-item label="最高年龄"><el-input-number v-model="form.eligibilityRules.maxAge" :min="1" :max="120" placeholder="不限" /></el-form-item>
+              <el-form-item label="每人报名次数"><el-input-number v-model="form.eligibilityRules.maxRegistrationsPerUser" :min="1" :precision="0" /></el-form-item>
+              <el-form-item class="full" label="允许地区"><el-input v-model="form.eligibilityRules.allowedRegionsText" placeholder="多个地区用逗号分隔；留空表示不限" /></el-form-item>
+              <el-form-item class="full" label="手机号黑名单"><el-input v-model="form.eligibilityRules.blacklistPhonesText" type="textarea" :rows="3" placeholder="每行一个手机号" /></el-form-item>
+              <el-form-item class="full"><el-checkbox v-model="form.eligibilityRules.requirePrivacyConsent">报名时必须同意隐私授权</el-checkbox></el-form-item>
+              <el-form-item class="full"><el-checkbox v-model="form.eligibilityRules.allowCompanions">允许添加同行人</el-checkbox></el-form-item>
+              <el-form-item v-if="form.eligibilityRules.allowCompanions" label="同行人数上限"><el-input-number v-model="form.eligibilityRules.maxCompanions" :min="1" :max="20" :precision="0" /></el-form-item>
+            </div>
+          </el-tab-pane>
         </el-tabs>
       </el-form>
       <template #footer>
         <el-button :disabled="activeActivityStepIndex === 0" @click="previousActivityStep">上一步</el-button>
         <el-button :disabled="activeActivityStepIndex === activityFormSteps.length - 1" @click="nextActivityStep">下一步</el-button>
-        <el-button @click="drawer=false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保存</el-button>
+        <el-button :disabled="saving" @click="drawer=false">取消</el-button>
+        <el-button type="primary" :loading="saving" :disabled="Boolean(activityActionKey)" @click="submit">保存</el-button>
       </template>
     </el-drawer>
 
@@ -1182,4 +1528,24 @@ onMounted(async () => {
   .field-actions { justify-content: flex-start; }
   .pager-row { align-items: flex-start; flex-direction: column; }
 }
+
+@media (max-width: 1024px) {
+  .activity-wizard {
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+  }
+  .activity-wizard :deep(.el-step) {
+    min-width: 112px;
+    flex: 0 0 112px !important;
+    scroll-snap-align: start;
+  }
+  .activity-wizard :deep(.el-step__main) { min-width: 0; }
+  .activity-wizard :deep(.el-step__title) {
+    white-space: nowrap;
+    font-size: 13px;
+  }
+  .activity-wizard :deep(.el-step__arrow) { flex: 0 0 12px; }
+}
+
 </style>

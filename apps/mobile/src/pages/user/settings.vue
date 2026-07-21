@@ -1,7 +1,7 @@
 <template>
   <view class="container user-subpage has-custom-nav">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">‹ 返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
       <text class="nav-title">设置</text>
       <view class="nav-placeholder"></view>
     </view>
@@ -11,44 +11,56 @@
       <view class="hero-desc">账号安全、会员权益和应用信息集中在这里。</view>
     </view>
     <view class="settings-card">
-      <view class="settings-item" @click="goSecurity"><text>账号与安全</text><text class="item-arrow">›</text></view>
-      <view class="settings-item" @click="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
-      <view class="settings-item"><text>会员中心</text><text class="item-arrow">›</text></view>
-      <view class="settings-item"><text>消息通知</text><text class="item-arrow">›</text></view>
-      <view class="settings-item"><text>关于慢π</text><text class="item-arrow">v0.1.0 ›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="账号与安全" @click="goSecurity" @keyup.enter="goSecurity" @keyup.space.prevent="goSecurity"><text>账号与安全</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="会员中心" @click="goMemberCenter" @keyup.enter="goMemberCenter" @keyup.space.prevent="goMemberCenter"><text>会员中心</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="消息通知" @click="goNotifications" @keyup.enter="goNotifications" @keyup.space.prevent="goNotifications"><text>消息通知</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="关于慢π" @click="showAbout" @keyup.enter="showAbout" @keyup.space.prevent="showAbout"><text>关于慢π</text><text class="item-arrow">v0.1.0 ›</text></view>
     </view>
-    <view class="logout-button" @click="logout">退出登录</view>
+    <view class="logout-button" :class="{ disabled: activeAction }" role="button" tabindex="0" :aria-busy="activeAction === 'logout'" :aria-label="activeAction === 'logout' ? '正在确认退出登录' : '退出登录'" @click="logout" @keyup.enter="logout" @keyup.space.prevent="logout">{{ activeAction === "logout" ? "确认中..." : "退出登录" }}</view>
     <TabBar current="user" />
   </view>
 </template>
 <script setup lang="ts">
-import { onMounted } from "vue";
-import { clearUser, ensureUser } from "../../api";
+import { ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { clearUser, ensureUser, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
 
-onMounted(() => {
-  ensureUser().catch(() => {});
-});
+const activeAction = ref("");
 
 function goBack() { uni.navigateBack(); }
-function goSecurity() { uni.navigateTo({ url:"/pages/user/security" }); }
-function goCommunityPosts() { uni.navigateTo({ url:"/pages/user/community-posts" }); }
+function goSecurity() { uni.navigateTo({ url:withTenantCode("/pages/user/security") }); }
+function goCommunityPosts() { uni.navigateTo({ url:withTenantCode("/pages/user/community-posts") }); }
+function goMemberCenter() { uni.navigateTo({ url:withTenantCode("/pages/user/profile") }); }
+function goNotifications() { uni.navigateTo({ url:withTenantCode("/pages/user/community-social?tab=notifications") }); }
+function showAbout() {
+  if (activeAction.value) return;
+  activeAction.value = "about";
+  uni.showModal({ title:"关于慢π", content:"慢π活动、课程、社区与公益服务平台。当前客户端版本 v0.1.0。", showCancel:false, complete:() => { activeAction.value = ""; } });
+}
 function logout() {
+  if (activeAction.value) return;
+  activeAction.value = "logout";
   uni.showModal({
     title:"确认退出",
     content:"确定要退出登录吗？",
-    success(r){
-      if (!r.confirm) return;
+    success(r) {
+      if (!r.confirm) { activeAction.value = ""; return; }
       clearUser();
-      uni.reLaunch({ url:"/pages/user/my" });
-    }
+      uni.reLaunch({ url:withTenantCode("/pages/user/my") });
+    },
+    fail() { activeAction.value = ""; }
   });
 }
+
+onShow(() => { void ensureUser(); });
 </script>
 <style scoped>
 .user-subpage {
   min-height: 100vh;
-  padding-bottom: 160rpx;
+  box-sizing:border-box;
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
   background:
     linear-gradient(180deg, #f7efe3 0%, #fbf7ef 40%, #f4eadc 100%);
 }
@@ -151,5 +163,9 @@ function logout() {
   color: #b84435;
   font-size: 28rpx;
   font-weight: 900;
+}
+.logout-button.disabled { opacity:.6; pointer-events:none; }
+@media (min-width: 900px) {
+  .user-subpage { max-width:760px; margin:0 auto; }
 }
 </style>

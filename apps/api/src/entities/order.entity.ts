@@ -1,5 +1,6 @@
 import { OrderStatus, PaymentMethod } from "../shared/domain";
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { yuanToFen } from "../shared/money";
 import { Registration } from "./registration.entity";
 import { Agent } from "./agent.entity";
 import { Coupon } from "./coupon.entity";
@@ -26,6 +27,12 @@ export class Order {
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
   amount!: string;
+
+  @Column({ type: "bigint", default: 0 })
+  amountFen!: number;
+
+  @Column({ type: "json", nullable: true })
+  businessSnapshot!: Record<string, unknown> | null;
 
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   originalAmount!: string;
@@ -89,4 +96,10 @@ export class Order {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @BeforeInsert()
+  freezeBusinessMoney() {
+    this.amountFen = yuanToFen(this.amount);
+    this.businessSnapshot ||= { amount: this.amount, originalAmount: this.originalAmount, discountAmount: this.discountAmount, memberDiscountAmount: this.memberDiscountAmount, pointsDiscountAmount: this.pointsDiscountAmount, pointsUsed: this.pointsUsed, paymentMethod: this.paymentMethod, ticketTypeId: this.ticketType?.id || null, couponId: this.coupon?.id || null };
+  }
 }

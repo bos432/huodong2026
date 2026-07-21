@@ -1,15 +1,21 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
+import { computed, reactive, ref } from "vue";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { request } from "../../api";
-import { reviewSafeData } from "../../review-safe-text";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 type Faq = { question: string; answer: string };
 type CaseItem = { id: number; name: string; field?: string; avatarUrl?: string; metrics?: string; quote?: string };
 
 const loading = ref(false);
+const loadError = ref("");
 const submitting = ref(false);
 const submitted = ref(false);
+const submitError = ref("");
+const submitBusinessKey = ref("");
+const loadGuard = createTenantLoadGuard();
 const cases = ref<CaseItem[]>([]);
 const config = reactive<any>({
   heroTitle: "",
@@ -59,14 +65,24 @@ function normalizeFaqs(value: unknown) {
 }
 
 async function load() {
+  const token = loadGuard.begin();
   loading.value = true;
+  loadError.value = "";
   try {
-    assignLanding(reviewSafeData(await request<any>("/public/ambassador/landing")));
+    const landing = reviewSafeData(await request<any>("/public/ambassador/landing"));
+    if (!loadGuard.isCurrent(token)) return;
+    assignLanding(landing);
   } catch (error: any) {
-    uni.showToast({ title: error.message || "页面加载失败", icon: "none" });
+    if (loadGuard.isCurrent(token)) loadError.value = reviewSafeText(error?.message || "页面加载失败");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
+}
+
+async function refreshPage() {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
+  await load();
 }
 
 function scrollToForm() {
@@ -84,21 +100,25 @@ function validate() {
 }
 
 async function submit() {
+  if (submitting.value || submitted.value) return;
   const message = validate();
   if (message) return uni.showToast({ title: message, icon: "none" });
   submitting.value = true;
+  submitError.value = "";
   try {
-    await request("/public/ambassador/applications", { method: "POST", data: { ...form } });
+    if (!submitBusinessKey.value) submitBusinessKey.value = `ecosystem:ambassador:${Date.now()}:${Math.random().toString(16).slice(2)}`;
+    await request("/public/ambassador/applications", { method: "POST", data: { ...form, kind: "ambassador", businessKey: submitBusinessKey.value } });
     submitted.value = true;
     uni.showModal({ title: "申请已提交", content: "我们会尽快与你联系，沟通文化大使入驻细节。", showCancel: false });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "提交失败", icon: "none" });
+    submitError.value = reviewSafeText(error?.message || "提交失败");
+    uni.showToast({ title: submitError.value, icon: "none" });
   } finally {
     submitting.value = false;
   }
 }
 
-onMounted(load);
+onShow(refreshPage);
 onLoad((options: any) => {
   form.source = String(options?.source || "").trim();
   form.channelCode = String(options?.channelCode || options?.channel || "").trim();
@@ -107,7 +127,13 @@ onLoad((options: any) => {
 
 <template>
   <view class="ambassador-page">
-    <view class="hero" :style="heroStyle">
+    <view v-if="loading" class="state-card" aria-live="polite">页面加载中...</view>
+    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive">
+      <text>{{ loadError }}</text>
+      <button class="state-retry" :disabled="loading" @click="refreshPage">重新加载</button>
+    </view>
+    <template v-else>
+      <view class="hero" :style="heroStyle">
       <view class="hero-inner">
         <text class="seal">慢π · 英雄帖</text>
         <text class="hero-title">{{ config.heroTitle }}</text>
@@ -193,7 +219,7 @@ onLoad((options: any) => {
       </view>
     </view>
 
-    <view class="section application-form">
+      <view class="section application-form">
       <text class="section-kicker">提交申请</text>
       <text class="section-title">锁定你的早鸟名额</text>
       <view class="form-card">
@@ -203,10 +229,12 @@ onLoad((options: any) => {
         <input v-model="form.expertise" class="input" placeholder="擅长领域，例如书法 / 亲子沟通 / 传统文化" :disabled="submitted" />
         <textarea v-model="form.experience" class="textarea" placeholder="简单介绍你的经验、资源或想做的活动方向" :disabled="submitted" />
         <input v-model="form.wechat" class="input" placeholder="微信号" :disabled="submitted" />
+        <text v-if="submitError" class="submit-error" role="alert" aria-live="assertive">{{ submitError }}</text>
         <button class="cta wide" :loading="submitting" :disabled="submitting || submitted" @click="submit">{{ submitted ? "已提交，等待联系" : config.ctaText }}</button>
         <text v-if="config.customerWechat || config.customerPhone" class="contact">客服：{{ config.customerWechat || config.customerPhone }}</text>
       </view>
-    </view>
+      </view>
+    </template>
   </view>
 </template>
 
@@ -217,6 +245,10 @@ onLoad((options: any) => {
   color: #28251f;
   padding-bottom: env(safe-area-inset-bottom);
 }
+.state-card { margin: 28rpx; padding: 32rpx; border-radius: 8rpx; background: #fff; color: #5f5549; font-size: 28rpx; line-height: 1.6; }
+.error-state { display: grid; gap: 20rpx; color: #b42318; background: #fff1f0; }
+.state-retry { width: 100%; height: 78rpx; border-radius: 6rpx; background: #8b221d; color: #fff; font-size: 27rpx; }
+.submit-error { display: block; margin: 0 0 18rpx; padding: 16rpx; border-radius: 8rpx; background: #fff1f0; color: #b42318; font-size: 24rpx; line-height: 1.5; }
 .hero {
   min-height: 92vh;
   display: flex;

@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { PaymentMethod } from "../shared/domain";
+import { yuanToFen } from "../shared/money";
 import { Tenant } from "./tenant.entity";
 import { User } from "./user.entity";
 
@@ -23,12 +24,20 @@ export class MallCheckoutGroup {
 
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   amount!: string;
+  @Column({ type: "bigint", default: 0 }) amountFen!: number;
+  @Column({ type: "json", nullable: true }) businessSnapshot!: Record<string, unknown> | null;
 
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   goodsAmount!: string;
 
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   discountAmount!: string;
+
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  freightAmount!: string;
+
+  @Column({ type: "json", nullable: true })
+  allocationSnapshot!: Record<string, unknown> | null;
 
   @Column({ type: "varchar", length: 24, nullable: true })
   paymentMethod!: PaymentMethod | null;
@@ -47,4 +56,10 @@ export class MallCheckoutGroup {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @BeforeInsert()
+  freezeBusinessMoney() {
+    this.amountFen = yuanToFen(this.amount);
+    this.businessSnapshot ||= { amount: this.amount, goodsAmount: this.goodsAmount, discountAmount: this.discountAmount, freightAmount: this.freightAmount, paymentMethod: this.paymentMethod, paymentTasks: this.paymentTasks, allocationSnapshot: this.allocationSnapshot };
+  }
 }

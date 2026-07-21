@@ -93,7 +93,7 @@ async function loadPopup() {
 async function reportEvent(event: "impression" | "click" | "close") {
   if (!popup.value?.id) return;
   try {
-    await request(`/public/marketing-popups/${popup.value.id}/events`, { method: "POST", data: { event } });
+    await request(`/public/marketing-popups/${popup.value.id}/events`, { method: "POST", data: { event, pageKey: currentPageKey(), platform } });
   } catch {
     // 统计失败不影响用户浏览。
   }

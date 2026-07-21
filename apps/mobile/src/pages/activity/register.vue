@@ -1,22 +1,26 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { FieldType } from "@activity/shared";
-import { ensureUser, fetchMyProfile, request, getCurrentRouteWithQuery, withTenantCode } from "../../api";
+import { ensureUser, fetchMyProfile, getCurrentTenantCode, request, getCurrentRouteWithQuery, uploadRegistrationAttachment, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const activity = ref<any>();
 const operationSetting = ref<any>();
 const loading = ref(true);
 const loadError = ref("");
 const submitting = ref(false);
+const confirming = ref(false);
 const quoting = ref(false);
 const quoteError = ref("");
 const selectedTicketTypeId = ref<number | undefined>();
 const couponCode = ref("");
+const availableCoupons = ref<any[]>([]);
+const couponLoadingId = ref<number>();
 const pointsToUse = ref(0);
 const quote = ref<any>();
 const userId = ref<number>();
@@ -30,6 +34,12 @@ const missingFieldId = ref<number>();
 const phoneBindVisible = ref(false);
 const pendingPhoneAction = ref<"" | "submit">("");
 const values = reactive<Record<number, any>>({});
+const privacyAccepted = ref(false);
+const companions = ref<Array<{ name: string; phone: string; idCard: string }>>([]);
+const uploadingFieldId = ref<number>();
+const pageLoadGuard = createTenantLoadGuard();
+const quoteLoadGuard = createTenantLoadGuard();
+const couponLoadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_register", "/pages/activity/register");
 
 const ticketOptions = computed(() => activity.value?.ticketTypes || []);
@@ -92,6 +102,9 @@ function fieldPlaceholder(field: any) {
   if (field.type === FieldType.Phone) return "用于接收报名通知";
   if (field.type === FieldType.IdCard) return "请填写证件号码";
   if (field.type === FieldType.Remark) return "如有特殊需求，可在这里说明";
+  if (field.type === FieldType.Email) return "name@example.com";
+  if (field.type === FieldType.Number) return "请输入数字";
+  if (field.type === FieldType.Address) return "请输入详细地址";
   return `请填写${field.label}`;
 }
 
@@ -130,11 +143,45 @@ function validate() {
       return `请填写${field.label}`;
     }
   }
+  if (activity.value?.eligibilityRules?.requirePrivacyConsent && !privacyAccepted.value) return "请阅读并同意隐私授权";
+  if (companions.value.some((item) => !item.name.trim())) return "请填写同行人姓名";
   return "";
 }
 
+function addCompanion() {
+  const max = Number(activity.value?.eligibilityRules?.maxCompanions || 0);
+  if (companions.value.length >= max) return uni.showToast({ title: `最多添加 ${max} 位同行人`, icon: "none" });
+  companions.value.push({ name: "", phone: "", idCard: "" });
+}
+
+function removeCompanion(index: number) { companions.value.splice(index, 1); }
+
+function chooseAttachment(field: any) {
+  if (uploadingFieldId.value || submitting.value) return;
+  uploadingFieldId.value = field.id;
+  uni.chooseMessageFile({
+    count: 1,
+    type: "file",
+    extension: ["jpg", "jpeg", "png", "webp", "pdf"],
+    success: async (result: any) => {
+      const file = result.tempFiles?.[0];
+      if (!file) return;
+      try {
+        const uploaded = await uploadRegistrationAttachment(file.path);
+        values[field.id] = uploaded.url;
+        uni.showToast({ title: "附件已上传", icon: "success" });
+      } catch (error: any) {
+        uni.showToast({ title: error.message || "附件上传失败", icon: "none" });
+      } finally {
+        uploadingFieldId.value = undefined;
+      }
+    },
+    fail: () => { if (uploadingFieldId.value === field.id) uploadingFieldId.value = undefined; }
+  });
+}
+
 function submit() {
-  if (submitting.value) return;
+  if (submitting.value || confirming.value) return;
   attemptedSubmit.value = true;
   if (registrationPaused.value) {
     uni.showToast({ title: registrationPausedMessage.value, icon: "none" });
@@ -155,13 +202,16 @@ function submit() {
     return;
   }
   const content = `${selectedTicketName.value}，应付 ${payableText.value}。${paymentHint.value}`;
+  confirming.value = true;
   uni.showModal({
     title: activity.value.remainingSeats <= 0 ? "确认加入候补" : "确认提交报名",
     content,
     confirmText: activity.value.remainingSeats <= 0 ? "加入候补" : "确认提交",
     success: (res) => {
-      if (res.confirm) doSubmit();
-    }
+      confirming.value = false;
+      if (res.confirm) void doSubmit();
+    },
+    fail: () => { confirming.value = false; }
   });
 }
 
@@ -171,6 +221,9 @@ function goLogin() {
 }
 
 async function doSubmit() {
+  if (submitting.value) return;
+  const tenantCode = getCurrentTenantCode();
+  const activityId = Number(activity.value?.id || 0);
   submitting.value = true;
   try {
     if (!(await requirePhoneBound("submit"))) return;
@@ -185,8 +238,12 @@ async function doSubmit() {
         paymentMethod: payableNumber.value > 0 ? paymentMethod.value : undefined,
         channelCode: channelCode.value || undefined,
         source: source.value || undefined
+        , inviteCode: inviteCode.value || undefined
+        , privacyAccepted: privacyAccepted.value,
+        companions: companions.value.map((item) => ({ name: item.name.trim(), phone: item.phone.trim() || undefined, idCard: item.idCard.trim() || undefined }))
       }
     });
+    if (getCurrentTenantCode() !== tenantCode || Number(activity.value?.id || 0) !== activityId) return;
     if (result.waitlisted) {
       uni.showModal({ title: "已进入候补", content: "当前活动名额已满，你已进入候补名单。若有名额释放，主办方可在后台为你补位。", showCancel: false, success: () => uni.navigateBack() });
       return;
@@ -196,7 +253,7 @@ async function doSubmit() {
   } catch (error: any) {
     uni.showModal({ title: "提交失败", content: reviewSafeText(error.message || "请稍后再试，或联系主办方协助处理。"), showCancel: false, confirmText: "知道了" });
   } finally {
-    submitting.value = false;
+    if (getCurrentTenantCode() === tenantCode) submitting.value = false;
   }
 }
 
@@ -223,17 +280,22 @@ function handlePhoneBound() {
 
 async function refreshQuote(showError = false) {
   if (!activity.value) return;
+  const token = quoteLoadGuard.begin();
+  const activityId = Number(activity.value.id);
   quoting.value = true;
   quoteError.value = "";
   try {
     userId.value ||= await ensureUser();
-    quote.value = reviewSafeData(await request(`/public/activities/${activity.value.id}/quote`, { method: "POST", data: { ticketTypeId: selectedTicketTypeId.value, couponCode: couponCode.value.trim() || undefined, pointsToUse: pointsToUse.value || undefined } }));
+    const result = await request(`/public/activities/${activityId}/quote`, { method: "POST", data: { ticketTypeId: selectedTicketTypeId.value, couponCode: couponCode.value.trim() || undefined, pointsToUse: pointsToUse.value || undefined } });
+    if (!quoteLoadGuard.isCurrent(token) || Number(activity.value?.id) !== activityId) return;
+    quote.value = reviewSafeData(result);
   } catch (error: any) {
+    if (!quoteLoadGuard.isCurrent(token)) return;
     quoteError.value = reviewSafeText(error.message || "优惠码不可用");
     quote.value = undefined;
     if (showError) uni.showToast({ title: quoteError.value, icon: "none" });
   } finally {
-    quoting.value = false;
+    if (quoteLoadGuard.isCurrent(token)) quoting.value = false;
   }
 }
 
@@ -246,13 +308,42 @@ function applyCoupon() {
   refreshQuote(true);
 }
 
+async function loadAvailableCoupons() {
+  if (!activity.value?.id) return;
+  const token = couponLoadGuard.begin();
+  const activityId = Number(activity.value.id);
+  try {
+    const rows = reviewSafeData(await request(`/public/coupons/available?activityId=${activityId}`)) as any[];
+    if (couponLoadGuard.isCurrent(token) && Number(activity.value?.id) === activityId) availableCoupons.value = rows;
+  }
+  catch { if (couponLoadGuard.isCurrent(token)) availableCoupons.value = []; }
+}
+
+async function selectOrClaimCoupon(item: any) {
+  if (couponLoadingId.value) return;
+  couponLoadingId.value = item.id;
+  try {
+    if (Number(item.remainingUses || 0) <= 0) {
+      await request(`/public/coupons/${item.id}/claim`, { method: "POST" });
+      await loadAvailableCoupons();
+    }
+    couponCode.value = item.code;
+    await refreshQuote(true);
+    uni.showToast({ title: "已领取并应用", icon: "success" });
+  } catch (error: any) {
+    uni.showToast({ title: reviewSafeText(error.message || "优惠券操作失败"), icon: "none" });
+  } finally { couponLoadingId.value = undefined; }
+}
+
 function applyPoints() {
   const available = Number(quote.value?.availablePoints || 0);
   pointsToUse.value = Math.max(Math.min(Number(pointsToUse.value || 0), available), 0);
   refreshQuote(true);
 }
 
-onMounted(async () => {
+async function loadPage() {
+  const token = pageLoadGuard.begin();
+  loading.value = true;
   loadError.value = "";
   try {
     const pages = getCurrentPages();
@@ -271,19 +362,25 @@ onMounted(async () => {
       request(`/public/activities/${id}${query ? `?${query}` : ""}`),
       request("/public/settings/operation")
     ]);
+    if (!pageLoadGuard.isCurrent(token)) return;
     activity.value = reviewSafeData(detail);
     operationSetting.value = reviewSafeData(setting);
     if (payableNumber.value > 0 && !paymentMethods.value[paymentMethod.value]) {
       paymentMethod.value = availablePaymentMethods.value[0]?.value || "offline";
     }
     selectedTicketTypeId.value = activity.value.ticketTypes?.[0]?.id;
-    await refreshQuote();
+    await Promise.all([refreshQuote(), loadAvailableCoupons()]);
   } catch (error: any) {
+    if (!pageLoadGuard.isCurrent(token)) return;
     loadError.value = reviewSafeText(error?.message || "报名页面加载失败，请重新进入活动后再试。");
     uni.showToast({ title: loadError.value, icon: "none" });
   } finally {
-    loading.value = false;
+    if (pageLoadGuard.isCurrent(token)) loading.value = false;
   }
+}
+
+onMounted(() => {
+  loadPage();
   loadDecoration();
 });
 
@@ -295,12 +392,13 @@ watch(couponCode, () => {
 <template>
   <view class="container register">
     <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="loadError" class="card">
-      <view class="title">报名页面加载失败</view>
-      <view class="subtle">{{ loadError }}</view>
-      <view class="error-actions">
-        <view class="button secondary" @click="goLogin">去登录</view>
-      </view>
+      <view v-else-if="loadError" class="card" role="alert" aria-live="assertive">
+        <view class="title">报名页面加载失败</view>
+        <view class="subtle">{{ loadError }}</view>
+        <view class="error-actions">
+          <view class="button secondary" role="button" tabindex="0" aria-label="重新加载报名页面" @click="loadPage" @keyup.enter="loadPage" @keyup.space.prevent="loadPage">重新加载</view>
+          <view class="button secondary" role="button" tabindex="0" aria-label="去登录" @click="goLogin" @keyup.enter="goLogin" @keyup.space.prevent="goLogin">去登录</view>
+        </view>
     </view>
     <template v-else-if="activity">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
@@ -357,7 +455,7 @@ watch(couponCode, () => {
           </view>
         </view>
         <view v-if="hasTicketTypes" class="ticket-list">
-          <view v-for="ticket in ticketOptions" :key="ticket.id" class="ticket" :class="{ active: selectedTicketTypeId === ticket.id }" @click="chooseTicket(ticket.id)">
+          <view v-for="ticket in ticketOptions" :key="ticket.id" class="ticket" role="radio" tabindex="0" :aria-checked="selectedTicketTypeId === ticket.id" :aria-label="`选择${ticket.name}票`" :class="{ active: selectedTicketTypeId === ticket.id }" @click="chooseTicket(ticket.id)" @keyup.enter="chooseTicket(ticket.id)" @keyup.space.prevent="chooseTicket(ticket.id)">
             <view>
               <view class="ticket-name">{{ ticket.name }}</view>
               <view class="subtle">{{ ticket.capacity ? `限 ${ticket.capacity} 人` : "不限容量" }}</view>
@@ -372,15 +470,15 @@ watch(couponCode, () => {
 
         <view class="discount-title">优惠抵扣</view>
         <view class="coupon-row">
-          <input v-model="couponCode" class="input coupon-input" placeholder="输入优惠码" />
-          <view class="mini-button" :class="{ disabled: quoting }" @click="!quoting && applyCoupon()">{{ quoting ? "计算中" : "使用" }}</view>
+          <input v-model="couponCode" class="input coupon-input" maxlength="64" cursor-spacing="24" confirm-type="done" aria-label="优惠码" placeholder="输入优惠码" @confirm="applyCoupon" />
+          <view class="mini-button" role="button" tabindex="0" :aria-disabled="quoting" :class="{ disabled: quoting }" @click="!quoting && applyCoupon()" @keyup.enter="!quoting && applyCoupon()" @keyup.space.prevent="!quoting && applyCoupon()">{{ quoting ? "计算中" : "使用" }}</view>
         </view>
         <view v-if="quoteError" class="error">{{ quoteError }}</view>
         <view class="points-row">
           <view class="subtle">可用积分：{{ quote?.availablePoints || 0 }}，100 积分抵 1 元</view>
           <view class="coupon-row">
-            <input v-model.number="pointsToUse" class="input coupon-input" type="number" placeholder="输入抵扣积分" />
-            <view class="mini-button" :class="{ disabled: quoting }" @click="!quoting && applyPoints()">{{ quoting ? "计算中" : "抵扣" }}</view>
+            <input v-model.number="pointsToUse" class="input coupon-input" type="number" maxlength="9" cursor-spacing="24" confirm-type="done" aria-label="抵扣积分" placeholder="输入抵扣积分" @confirm="applyPoints" />
+            <view class="mini-button" role="button" tabindex="0" :aria-disabled="quoting" :class="{ disabled: quoting }" @click="!quoting && applyPoints()" @keyup.enter="!quoting && applyPoints()" @keyup.space.prevent="!quoting && applyPoints()">{{ quoting ? "计算中" : "抵扣" }}</view>
           </view>
         </view>
         <view class="summary">
@@ -394,7 +492,7 @@ watch(couponCode, () => {
         <view v-if="payableNumber > 0" class="payment-methods">
           <view class="discount-title">支付方式</view>
           <view class="method-grid">
-            <view v-for="method in availablePaymentMethods" :key="method.value" class="method" :class="{ active: paymentMethod === method.value }" @click="paymentMethod = method.value">
+            <view v-for="method in availablePaymentMethods" :key="method.value" class="method" role="radio" tabindex="0" :aria-checked="paymentMethod === method.value" :aria-label="`选择${method.name}支付`" :class="{ active: paymentMethod === method.value }" @click="paymentMethod = method.value" @keyup.enter="paymentMethod = method.value" @keyup.space.prevent="paymentMethod = method.value">
               <view class="method-name">{{ method.name }}</view>
               <view class="subtle">{{ method.desc }}</view>
             </view>
@@ -413,8 +511,15 @@ watch(couponCode, () => {
         </view>
         <view v-for="field in activity.fields" :key="field.id" class="field" :class="[`field-${field.id}`, { missing: attemptedSubmit && missingFieldId === field.id }]">
           <view class="label field-label">{{ field.label }}<text v-if="field.required"> *</text><text v-else class="optional">选填</text></view>
-          <input v-if="field.type === FieldType.Text || field.type === FieldType.Phone || field.type === FieldType.IdCard" v-model="values[field.id]" class="input" :placeholder="fieldPlaceholder(field)" :type="field.type === FieldType.Phone ? 'number' : 'text'" />
-          <textarea v-else-if="field.type === FieldType.Remark" v-model="values[field.id]" class="textarea" :placeholder="fieldPlaceholder(field)" />
+          <input v-if="[FieldType.Text, FieldType.Phone, FieldType.IdCard, FieldType.Email, FieldType.Number, FieldType.Address].includes(field.type)" v-model="values[field.id]" class="input" maxlength="200" cursor-spacing="24" :aria-label="field.label" :placeholder="fieldPlaceholder(field)" :type="[FieldType.Phone, FieldType.Number].includes(field.type) ? 'number' : 'text'" />
+          <textarea v-else-if="field.type === FieldType.Remark" v-model="values[field.id]" class="textarea" maxlength="2000" cursor-spacing="24" :aria-label="field.label" :placeholder="fieldPlaceholder(field)" />
+          <picker v-else-if="field.type === FieldType.Date" mode="date" @change="values[field.id] = $event.detail.value"><view class="input picker-value">{{ values[field.id] || '请选择日期' }}</view></picker>
+          <view v-else-if="field.type === FieldType.DateTime" class="datetime-row">
+            <picker mode="date" @change="values[field.id] = `${$event.detail.value} ${(values[field.id] || '').split(' ')[1] || '09:00'}`"><view class="input picker-value">{{ (values[field.id] || '').split(' ')[0] || '选择日期' }}</view></picker>
+            <picker mode="time" @change="values[field.id] = `${(values[field.id] || '').split(' ')[0] || new Date().toISOString().slice(0, 10)} ${$event.detail.value}`"><view class="input picker-value">{{ (values[field.id] || '').split(' ')[1] || '选择时间' }}</view></picker>
+          </view>
+          <picker v-else-if="field.type === FieldType.Region" mode="region" @change="values[field.id] = $event.detail.value.join('/')"><view class="input picker-value">{{ values[field.id] || '请选择省市区' }}</view></picker>
+          <view v-else-if="field.type === FieldType.Attachment" class="attachment-row"><view class="mini-button" role="button" tabindex="0" :aria-label="values[field.id] ? '重新上传附件' : '选择附件'" @click="chooseAttachment(field)" @keyup.enter="chooseAttachment(field)" @keyup.space.prevent="chooseAttachment(field)">{{ uploadingFieldId === field.id ? '上传中...' : (values[field.id] ? '重新上传' : '选择附件') }}</view><text v-if="values[field.id]" class="attachment-done">已上传</text></view>
           <radio-group v-else-if="field.type === FieldType.SingleChoice" @change="values[field.id] = $event.detail.value">
             <label v-for="(opt, optIndex) in fieldOptions(field)" :key="optionKey(opt, optIndex)" class="choice">
               <radio :value="optionAnswerValue(opt)" />
@@ -428,13 +533,32 @@ watch(couponCode, () => {
             </label>
           </view>
         </view>
+        <view v-if="availableCoupons.length" class="available-coupons">
+          <view v-for="item in availableCoupons" :key="item.id" class="available-coupon" :class="{ selected: couponCode === item.code }" @click="selectOrClaimCoupon(item)">
+            <view><view class="coupon-name">{{ item.name }}</view><view class="subtle">满 ￥{{ Number(item.minAmount || 0).toFixed(2) }} {{ item.discountType === 'percent' ? `${Number(item.discountValue)} 折` : `减 ￥${Number(item.discountValue).toFixed(2)}` }}</view></view>
+            <view class="coupon-action">{{ couponLoadingId === item.id ? "处理中" : Number(item.remainingUses || 0) > 0 ? `可用 ${item.remainingUses} 次` : "领取" }}</view>
+          </view>
+        </view>
+        <view v-if="activity.eligibilityRules?.allowCompanions" class="companions-block">
+          <view class="section-heading"><view><view class="label">同行人</view><view class="subtle">最多 {{ activity.eligibilityRules.maxCompanions || 0 }} 人</view></view><view class="mini-button" @click="addCompanion">添加</view></view>
+          <view v-for="(companion, index) in companions" :key="index" class="companion-row">
+            <input v-model="companion.name" class="input" placeholder="姓名（必填）" />
+            <input v-model="companion.phone" class="input" type="number" placeholder="手机号" />
+            <input v-model="companion.idCard" class="input" placeholder="证件号" />
+            <view class="remove-link" @click="removeCompanion(index)">删除</view>
+          </view>
+        </view>
+        <label v-if="activity.eligibilityRules?.requirePrivacyConsent" class="privacy-row">
+          <checkbox :checked="privacyAccepted" @change="privacyAccepted = !privacyAccepted" />
+          <text>我已阅读并同意隐私政策，授权主办方仅用于本次报名与活动服务。</text>
+        </label>
       </view>
       <view class="submit-bar" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || 'var(--card-bg, #fff)') }">
         <view class="submit-summary">
           <text>{{ formProgressText }}</text>
           <text>{{ payableText }}</text>
         </view>
-        <view class="button" :class="{ secondary: submitting || memberBlocked || registrationPaused }" @click="submit">{{ submitButtonText }}</view>
+        <view class="button" role="button" tabindex="0" :aria-disabled="submitting || confirming || memberBlocked || registrationPaused" :aria-busy="submitting || confirming" :aria-label="submitButtonText" :class="{ secondary: submitting || confirming || memberBlocked || registrationPaused }" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">{{ confirming ? "等待确认..." : submitButtonText }}</view>
       </view>
     </template>
     <WechatPhoneBindSheet
@@ -449,7 +573,14 @@ watch(couponCode, () => {
 </template>
 
 <style scoped>
-.register { padding-bottom: 168rpx; }
+.register { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(24rpx + env(safe-area-inset-top)) 24rpx calc(168rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
+.companions-block { margin-top: 24rpx; padding-top: 22rpx; border-top: 1px solid var(--border-color, #eee); }
+.companion-row { display: grid; grid-template-columns: 1fr; gap: 12rpx; padding: 18rpx 0; border-bottom: 1px dashed var(--border-color, #eee); }
+.remove-link { color: #b42318; font-size: 24rpx; }
+.privacy-row { display: flex; gap: 12rpx; align-items: flex-start; margin-top: 24rpx; font-size: 24rpx; line-height: 1.6; color: var(--muted-color, #667085); }
+.datetime-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }
+.attachment-row { display: flex; align-items: center; gap: 16rpx; min-height: 72rpx; }
+.attachment-done { color: #067647; font-size: 24rpx; }
 .error-actions { margin-top: 18rpx; }
 .register-hero {
   position: relative;
@@ -607,6 +738,11 @@ watch(couponCode, () => {
 .ticket-name { font-size: 28rpx; font-weight: 650; margin-bottom: 6rpx; }
 .ticket-price { flex: 0 0 auto; color: #c43d3d; font-weight: 800; }
 .coupon-row { display: grid; grid-template-columns: 1fr 150rpx; gap: 12rpx; align-items: center; }
+.available-coupons { display: grid; gap: 12rpx; margin-top: 16rpx; }
+.available-coupon { display: flex; justify-content: space-between; gap: 16rpx; align-items: center; padding: 18rpx; border: 1rpx solid #ead8c5; border-radius: 12rpx; background: #fffaf3; }
+.available-coupon.selected { border-color: #c43d3d; background: #fff3ed; }
+.coupon-name { color: #3e2f2a; font-weight: 700; }
+.coupon-action { flex: 0 0 auto; color: #c43d3d; font-size: 24rpx; font-weight: 700; }
 .coupon-input { min-width: 0; }
 .mini-button { height: 78rpx; border-radius: 16rpx; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 700; }
 .mini-button.disabled { background: #9ca3af; }

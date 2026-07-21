@@ -5,6 +5,7 @@ import { Tenant } from "./tenant.entity";
 export type MallMerchantOwnerType = "tenant" | "agent";
 export type MallMerchantPaymentMode = "platform_collect" | "merchant_direct";
 export type MallMerchantStatus = "active" | "disabled";
+export type MallMerchantOnboardingStatus = "legacy_approved" | "pending" | "approved" | "rejected" | "suspended" | "expired";
 
 @Entity("mall_merchants")
 @Index("IDX_mall_merchants_tenant_status", ["tenant", "status"])
@@ -30,6 +31,27 @@ export class MallMerchant {
 
   @Column({ type: "varchar", length: 32, default: "active" })
   status!: MallMerchantStatus;
+
+  @Column({ type: "varchar", length: 32, default: "legacy_approved" })
+  onboardingStatus!: MallMerchantOnboardingStatus;
+
+  @Column({ type: "boolean", default: false })
+  contractRequired!: boolean;
+
+  @Column({ type: "int", default: 0 })
+  platformCommissionBps!: number;
+
+  @Column({ type: "int", default: 0 })
+  serviceFeeBps!: number;
+
+  @Column({ type: "int", default: 30 })
+  settlementCycleDays!: number;
+
+  @Column({ type: "datetime", nullable: true })
+  suspendedAt!: Date | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  suspensionReason!: string | null;
 
   @Column({ type: "boolean", default: true })
   mallEnabled!: boolean;
@@ -57,6 +79,9 @@ export class MallMerchant {
 
   @Column({ type: "json", nullable: true })
   settlementConfig!: Record<string, unknown> | null;
+
+  @Column({ type: "json", nullable: true })
+  freightConfig!: { enabled?: boolean; baseFreightFen?: number; freeThresholdFen?: number } | null;
 
   @Column({ type: "text", nullable: true })
   remark!: string | null;

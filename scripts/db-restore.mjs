@@ -2,6 +2,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { createGunzip } from "node:zlib";
+import { createSqlDefinerSanitizer } from "./lib/sql-definer-sanitizer.mjs";
 
 const root = process.cwd();
 
@@ -24,7 +25,11 @@ function restore(env, backupFile) {
   const password = env.DB_PASSWORD || "activitypass";
   const command = useDocker ? "docker" : (process.platform === "win32" ? "mysql.exe" : "mysql");
   const args = useDocker
-    ? ["exec", "-i", "-e", `MYSQL_PWD=${password}`, env.MYSQL_CONTAINER || "activity-mysql", "mysql", "--default-character-set=utf8mb4", "-u", username, database]
+    ? [
+        "exec", "-i", "-e", `BACKUP_DATABASE=${database}`,
+        env.MYSQL_CONTAINER || "activity-mysql", "sh", "-lc",
+        'export MYSQL_PWD="${MYSQL_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; exec mysql --default-character-set=utf8mb4 -u "${MYSQL_USER:-root}" "${BACKUP_DATABASE:-${MYSQL_DATABASE:-activity_registration}}"'
+      ]
     : ["-h", env.DB_HOST || "127.0.0.1", "-P", String(env.DB_PORT || 3306), "--default-character-set=utf8mb4", "-u", username, database];
 
   return new Promise((resolve, reject) => {
@@ -35,7 +40,7 @@ function restore(env, backupFile) {
     });
     const input = fs.createReadStream(backupFile);
     const source = backupFile.endsWith(".gz") ? input.pipe(createGunzip()) : input;
-    source.pipe(child.stdin);
+    source.pipe(createSqlDefinerSanitizer()).pipe(child.stdin);
     child.on("error", reject);
     child.on("close", (code) => {
       if (code === 0) resolve();

@@ -1,13 +1,17 @@
 <script setup lang="ts">
-import { ref } from "vue";
-import { ElMessage } from "element-plus";
-import { CopyDocument } from "@element-plus/icons-vue";
+import { computed, ref, watch } from "vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { CopyDocument, Search } from "@element-plus/icons-vue";
+import { canAccess, currentTenantId } from "../permissions";
+import { generatedDatabaseTables } from "../generated/database-table-catalog";
+import { copyToClipboard } from "../h5-preview";
 
 type GuideBlock = {
   title: string;
   description: string;
   commands: string[];
   notes?: string[];
+  risk?: "high";
 };
 
 type GuideSection = {
@@ -25,9 +29,14 @@ type DatabaseTable = {
   caution: string;
 };
 
-const activeSection = ref("quick");
+const guideStateKey = `operation-guide:${currentTenantId() || "platform"}:${localStorage.getItem("admin_username") || "anonymous"}:section`;
+const activeSection = ref(localStorage.getItem(guideStateKey) || "quick");
+const canCopyCommands = computed(() => canAccess(["system.manage"]));
+const copyingTitle = ref("");
+const databaseKeyword = ref("");
+const databaseGroup = ref("");
 
-const databaseTables: DatabaseTable[] = [
+const databaseTableOverrides: DatabaseTable[] = [
   { group: "平台与权限", name: "tenants", meaning: "商家/书院/机构资料。", business: "平台商家管理、多商家隔离、H5 tenantCode。", caution: "停用或改 code 会影响商家后台和前台入口。" },
   { group: "平台与权限", name: "tenant_regions", meaning: "商家/代理经营区域保护。", business: "用户定位后自动匹配当前区域商家，支持半径、排他、优先级。", caution: "配置错误会导致用户进入错商家，修改前要确认经纬度和服务半径。" },
   { group: "平台与权限", name: "admin_users", meaning: "后台管理员账号、角色、权限列表和所属商家。", business: "超管、商家管理员、运营、财务、签到人员登录。", caution: "不要随意改 role、tenantId、permissions，容易造成越权或看不到菜单。" },
@@ -102,6 +111,18 @@ const databaseTables: DatabaseTable[] = [
   { group: "装修通知公益小程序", name: "miniprogram_release_logs", meaning: "小程序发布日志。", business: "上传、提审、查询、发布、失败原因。", caution: "排查发布失败和追踪操作人要看这里。" }
 ];
 
+const databaseTableOverrideMap = new Map(databaseTableOverrides.map((row) => [row.name, row]));
+const databaseTables: DatabaseTable[] = generatedDatabaseTables.map((row) => databaseTableOverrideMap.get(row.name) || row);
+const databaseGroups = computed(() => Array.from(new Set(databaseTables.map((row) => row.group))).sort((a, b) => a.localeCompare(b, "zh-CN")));
+const filteredDatabaseTables = computed(() => {
+  const keyword = databaseKeyword.value.trim().toLowerCase();
+  return databaseTables.filter((row) => {
+    if (databaseGroup.value && row.group !== databaseGroup.value) return false;
+    if (!keyword) return true;
+    return [row.group, row.name, row.meaning, row.business, row.caution].some((value) => value.toLowerCase().includes(keyword));
+  });
+});
+
 const sections: GuideSection[] = [
   {
     key: "quick",
@@ -135,7 +156,7 @@ const sections: GuideSection[] = [
       {
         title: "重启服务与重载 Nginx",
         description: "后端 API 构建后必须重启 PM2；前端静态包更新后建议检查并重载 Nginx。",
-        commands: ["cd /www/wwwroot/rd.chaimen666.com", "/www/server/nodejs/v22.22.3/bin/pm2 restart activity-api --update-env", "nginx -t", "nginx -s reload"],
+        commands: ["cd /www/wwwroot/rd.chaimen666.com", "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 restart activity-api --update-env", "nginx -t", "nginx -s reload"],
         notes: ["nginx -t 通过后再 reload。", "PM2 online 不等于业务正常，还要访问 health 接口。"]
       }
     ]
@@ -160,6 +181,7 @@ const sections: GuideSection[] = [
       {
         title: "完整构建和迁移",
         description: "适合功能升级后执行，覆盖 H5、后台、小程序构建、API 构建和数据库迁移。",
+        risk: "high",
         commands: [
           "cd /www/wwwroot/rd.chaimen666.com",
           "npm --prefix apps/admin install",
@@ -170,7 +192,7 @@ const sections: GuideSection[] = [
           "npm --prefix apps/api install",
           "npm --prefix apps/api run build",
           "npm --prefix apps/api run migration:run",
-          "/www/server/nodejs/v22.22.3/bin/pm2 restart activity-api --update-env",
+          "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 restart activity-api --update-env",
           "nginx -t",
           "nginx -s reload"
         ],
@@ -183,7 +205,7 @@ const sections: GuideSection[] = [
           "curl -i https://rd.chaimen666.com/api/health/ready",
           "curl -I https://rd.chaimen666.com/admin/",
           "curl -I https://rd.chaimen666.com/",
-          "/www/server/nodejs/v22.22.3/bin/pm2 status",
+          "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 status",
           "grep -R \"小程序发布\" apps/admin/dist/assets/*.js"
         ],
         notes: ["grep 可以换成你本次功能的关键字。", "浏览器需要 Ctrl + F5 强刷后台。"]
@@ -236,6 +258,7 @@ const sections: GuideSection[] = [
       {
         title: "执行迁移",
         description: "后端表结构或历史数据修复上线时执行。",
+        risk: "high",
         commands: ["cd /www/wwwroot/rd.chaimen666.com", "npm --prefix apps/api run migration:run"],
         notes: ["显示 No migrations are pending 表示没有待执行迁移。", "如果功能依赖新表但迁移没执行，接口通常会报表不存在。"]
       },
@@ -248,6 +271,7 @@ const sections: GuideSection[] = [
       {
         title: "数据库恢复",
         description: "只在明确需要回滚数据时使用，执行前必须确认目标库和备份文件。",
+        risk: "high",
         commands: ["cd /www/wwwroot/rd.chaimen666.com", "npm run db:restore"],
         notes: ["恢复会影响线上数据，必须先暂停写入或确认低峰期。", "恢复前后都要记录操作人、时间和原因。"]
       },
@@ -291,8 +315,8 @@ const sections: GuideSection[] = [
         description: "看服务状态、健康检查和 PM2 日志。",
         commands: [
           "curl -i https://rd.chaimen666.com/api/health/ready",
-          "/www/server/nodejs/v22.22.3/bin/pm2 status",
-          "/www/server/nodejs/v22.22.3/bin/pm2 logs activity-api --lines 100"
+          "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 status",
+          "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 logs activity-api --lines 100"
         ]
       },
       {
@@ -317,18 +341,19 @@ const sections: GuideSection[] = [
       {
         title: "保留现场",
         description: "回滚前先记录当前版本、日志和错误，方便事后定位。",
-        commands: ["cd /www/wwwroot/rd.chaimen666.com", "git rev-parse HEAD", "git log --oneline -5", "/www/server/nodejs/v22.22.3/bin/pm2 logs activity-api --lines 200", "tail -n 200 /www/wwwlogs/rd.chaimen666.com.error.log"]
+        commands: ["cd /www/wwwroot/rd.chaimen666.com", "git rev-parse HEAD", "git log --oneline -5", "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 logs activity-api --lines 200", "tail -n 200 /www/wwwlogs/rd.chaimen666.com.error.log"]
       },
       {
         title: "代码回滚建议",
         description: "优先用 git revert 或切回确认稳定提交。不要直接 reset --hard，除非明确知道会丢什么。",
-        commands: ["cd /www/wwwroot/rd.chaimen666.com", "git log --oneline -10", "git revert <问题提交ID>", "npm --prefix apps/admin run build", "npm --prefix apps/mobile run build:h5", "npm --prefix apps/api run build", "/www/server/nodejs/v22.22.3/bin/pm2 restart activity-api --update-env", "nginx -t && nginx -s reload"],
+        risk: "high",
+        commands: ["cd /www/wwwroot/rd.chaimen666.com", "git log --oneline -10", "git revert <问题提交ID>", "npm --prefix apps/admin run build", "npm --prefix apps/mobile run build:h5", "npm --prefix apps/api run build", "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 restart activity-api --update-env", "nginx -t && nginx -s reload"],
         notes: ["如果只回滚前端，不一定需要数据库操作。", "如果 migration 已改变生产数据，先找开发者确认，不要盲目 migration:revert。"]
       },
       {
         title: "恢复后验证",
         description: "确认核心入口恢复，而不是只看服务 online。",
-        commands: ["curl -i https://rd.chaimen666.com/api/health/ready", "curl -I https://rd.chaimen666.com/admin/", "curl -I https://rd.chaimen666.com/", "/www/server/nodejs/v22.22.3/bin/pm2 status"]
+        commands: ["curl -i https://rd.chaimen666.com/api/health/ready", "curl -I https://rd.chaimen666.com/admin/", "curl -I https://rd.chaimen666.com/", "/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2 status"]
       }
     ]
   },
@@ -369,34 +394,52 @@ const sections: GuideSection[] = [
   }
 ];
 
+if (!sections.some((section) => section.key === activeSection.value)) activeSection.value = "quick";
+watch(activeSection, (value) => {
+  try {
+    localStorage.setItem(guideStateKey, value);
+  } catch {
+    ElMessage.error("保存教程位置失败，请检查浏览器存储空间");
+  }
+});
+
 function commandText(block: GuideBlock) {
   return block.commands.join("\n");
 }
 
-async function copy(text: string) {
+async function copy(block: GuideBlock) {
+  if (!canCopyCommands.value || copyingTitle.value) return;
+  if (block.risk === "high") {
+    const confirmed = await ElMessageBox.confirm(
+      `“${block.title}”包含迁移、恢复或回滚等高风险命令。确认仅复制命令，并在执行前再次核对目标环境和备份？`,
+      "复制高风险命令",
+      { type: "warning", confirmButtonText: "确认复制" }
+    ).then(() => true).catch(() => false);
+    if (!confirmed) return;
+  }
+  copyingTitle.value = block.title;
   try {
-    await navigator.clipboard.writeText(text);
+    await copyToClipboard(commandText(block));
     ElMessage.success("命令已复制");
   } catch {
     ElMessage.error("复制失败，请手动选中复制");
+  } finally {
+    copyingTitle.value = "";
   }
 }
 </script>
 
 <template>
   <div class="page">
-    <div class="hero">
+    <div class="page-header">
       <div>
-        <span class="eyebrow">SUPER ADMIN RUNBOOK</span>
-        <h2>超级管理员运维教程</h2>
-        <p>覆盖 H5、小程序、后台、后端、数据库、部署、排查、回滚和上线验收。每次升级先看这里，别让服务器变成“薛定谔的新版本”。</p>
+        <h2>平台运维教程</h2>
+        <p>覆盖 H5、小程序、后台、API、数据库、部署、排查、回滚和上线验收。</p>
       </div>
-      <div class="hero-card">
-        <strong>核心原则</strong>
-        <span>先查 Git 版本，再构建正确端，再执行迁移，最后验证线上结果。</span>
-      </div>
+      <el-tag effect="plain">先确认版本和备份，再执行生产操作</el-tag>
     </div>
 
+    <el-alert v-if="!canCopyCommands" type="info" show-icon :closable="false" class="notice" title="当前账号为只读模式，可查看完整教程和数据库目录，复制生产命令需要 system.manage 权限。" />
     <el-alert type="warning" show-icon :closable="false" class="notice" title="生产操作提醒" description="涉及数据库、回滚、权限和支付的操作要先备份、保留日志，并确认当前分支和提交。不要在生产服务器随意 reset --hard。" />
 
     <el-tabs v-model="activeSection" class="guide-tabs">
@@ -410,7 +453,7 @@ async function copy(text: string) {
           <div class="database-summary">
             <div>
               <strong>{{ databaseTables.length }}</strong>
-              <span>业务数据表</span>
+              <span>API 实体数据表</span>
             </div>
             <div>
               <strong>先备份</strong>
@@ -430,7 +473,7 @@ async function copy(text: string) {
                   <strong>{{ block.title }}</strong>
                   <p>{{ block.description }}</p>
                 </div>
-                <el-button :icon="CopyDocument" text type="primary" @click="copy(commandText(block))">复制</el-button>
+                <el-button v-if="canCopyCommands" :icon="CopyDocument" text type="primary" :loading="copyingTitle === block.title" :disabled="Boolean(copyingTitle)" @click="copy(block)">复制</el-button>
               </div>
             </template>
             <pre><code>{{ commandText(block) }}</code></pre>
@@ -443,10 +486,17 @@ async function copy(text: string) {
           <div class="database-map-head">
             <div>
               <h3>数据库表说明</h3>
-              <p>按业务分类说明每张表存什么、用在哪里、操作时要注意什么。</p>
+              <p>目录由当前 API 实体自动生成，并叠加人工业务说明，避免新增表遗漏。</p>
+            </div>
+            <div class="database-filters">
+              <el-input v-model="databaseKeyword" :prefix-icon="Search" clearable placeholder="搜索表名、业务或注意事项" />
+              <el-select v-model="databaseGroup" clearable placeholder="全部分类">
+                <el-option v-for="group in databaseGroups" :key="group" :label="group" :value="group" />
+              </el-select>
             </div>
           </div>
-          <el-table :data="databaseTables" border stripe class="database-table">
+          <div class="database-result">当前显示 {{ filteredDatabaseTables.length }}/{{ databaseTables.length }} 张表</div>
+          <el-table :data="filteredDatabaseTables" border stripe class="database-table" empty-text="没有匹配的数据表">
             <el-table-column prop="group" label="分类" width="160" />
             <el-table-column prop="name" label="表名" width="230">
               <template #default="{ row }"><code class="table-name">{{ row.name }}</code></template>
@@ -462,42 +512,55 @@ async function copy(text: string) {
 </template>
 
 <style scoped>
-.page { display: grid; gap: 18px; }
-.hero { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 18px; padding: 24px; border-radius: 18px; background: linear-gradient(135deg, #102338, #1d4d58 52%, #d18b3c); color: #fff; box-shadow: 0 18px 45px rgba(15, 35, 56, 0.18); }
-.hero h2 { margin: 6px 0 10px; font-size: 28px; }
-.hero p { margin: 0; max-width: 780px; color: rgba(255,255,255,0.86); line-height: 1.7; }
-.eyebrow { font-size: 12px; letter-spacing: 0.14em; color: rgba(255,255,255,0.68); }
-.hero-card { align-self: stretch; display: grid; align-content: center; gap: 8px; padding: 18px; border: 1px solid rgba(255,255,255,0.2); border-radius: 16px; background: rgba(255,255,255,0.12); backdrop-filter: blur(10px); }
-.hero-card strong { font-size: 18px; }
-.hero-card span { color: rgba(255,255,255,0.82); line-height: 1.6; }
-.notice { border-radius: 12px; }
-.guide-tabs { padding: 18px; border-radius: 16px; background: #fff; border: 1px solid #e5e7eb; }
+.page { display: grid; gap: 18px; min-width: 0; }
+.page > * { min-width: 0; }
+.page-header { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; min-width: 0; }
+.page-header h2 { margin: 0 0 6px; color: #0f172a; font-size: 24px; }
+.page-header p { margin: 0; color: #64748b; line-height: 1.6; }
+.notice { border-radius: 8px; }
+.guide-tabs { padding-top: 2px; min-width: 0; }
+:deep(.guide-tabs .el-tabs__content), :deep(.guide-tabs .el-tab-pane) { min-width: 0; }
 .section-head { margin-bottom: 14px; }
 .section-head h3 { margin: 0 0 6px; color: #0f172a; }
 .section-head p { margin: 0; color: #64748b; line-height: 1.6; }
 .guide-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
-.guide-card { border-radius: 14px; border-color: #e2e8f0; overflow: hidden; }
-.card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.guide-card { border-radius: 8px; border-color: #e2e8f0; overflow: hidden; }
+.card-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; min-width: 0; }
+.card-head > div { flex: 1; min-width: 0; }
 .card-head strong { display: block; color: #0f172a; font-size: 15px; margin-bottom: 5px; }
 .card-head p { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
-pre { margin: 0; padding: 14px; overflow: auto; border-radius: 12px; background: #0f172a; color: #e2e8f0; line-height: 1.65; font-size: 12px; }
+pre { margin: 0; padding: 14px; overflow: auto; border-radius: 6px; background: #0f172a; color: #e2e8f0; line-height: 1.65; font-size: 12px; }
 code { font-family: "Cascadia Mono", Consolas, monospace; }
 .notes { margin: 12px 0 0; padding-left: 18px; color: #475569; line-height: 1.7; font-size: 13px; }
 .notes li { margin: 3px 0; }
-.database-alert { margin-bottom: 14px; border-radius: 12px; }
+.database-alert { margin-bottom: 14px; border-radius: 8px; }
 .database-summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
-.database-summary > div { display: grid; gap: 4px; padding: 14px; border-radius: 14px; background: #f8fafc; border: 1px solid #e2e8f0; }
+.database-summary > div { display: grid; gap: 4px; padding: 14px; border-radius: 8px; background: #f8fafc; border: 1px solid #e2e8f0; }
 .database-summary strong { color: #0f172a; font-size: 18px; }
 .database-summary span { color: #64748b; font-size: 12px; }
-.database-map { margin-top: 18px; display: grid; gap: 12px; }
+.database-map { margin-top: 18px; display: grid; gap: 12px; min-width: 0; }
 .database-map-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-end; }
 .database-map h3 { margin: 0 0 6px; color: #0f172a; }
 .database-map p { margin: 0; color: #64748b; line-height: 1.6; }
-.database-table { border-radius: 12px; overflow: hidden; }
+.database-filters { display: grid; grid-template-columns: minmax(240px, 1fr) 220px; gap: 10px; width: min(560px, 100%); }
+.database-result { color: #64748b; font-size: 13px; }
+.database-table { width: 100%; border-radius: 8px; overflow: hidden; }
 .table-name { padding: 2px 6px; border-radius: 6px; background: #eef2ff; color: #1e3a8a; }
 @media (max-width: 1100px) {
-  .hero { grid-template-columns: 1fr; }
   .guide-grid { grid-template-columns: 1fr; }
   .database-summary { grid-template-columns: 1fr; }
+  .database-map-head { align-items: stretch; flex-direction: column; }
+  .database-filters { width: 100%; }
+}
+@media (max-width: 640px) {
+  .page-header { flex-direction: column; align-items: stretch; }
+  .page-header .el-tag { align-self: flex-start; width: auto; max-width: 100%; height: auto; white-space: normal; line-height: 1.5; padding: 5px 9px; }
+  .database-filters { grid-template-columns: minmax(0, 1fr); }
+  .card-head { flex-wrap: wrap; }
+}
+@media (max-width: 640px) {
+  .page-header { align-items: stretch; flex-direction: column; }
+  .database-filters { grid-template-columns: 1fr; }
+  .card-head { flex-direction: column; }
 }
 </style>

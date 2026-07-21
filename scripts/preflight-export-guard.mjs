@@ -31,6 +31,7 @@ function checkExportService(source, methodName, label) {
 const packageJson = JSON.parse(read("package.json"));
 const adminController = read("apps/api/src/modules/admin/admin.controller.ts");
 const adminService = read("apps/api/src/modules/admin/admin.service.ts");
+const mallAdminController = read("apps/api/src/modules/mall/mall-admin.controller.ts");
 const v1AdminController = read("apps/api/src/modules/v1/v1-admin.controller.ts");
 const v1Service = read("apps/api/src/modules/v1/v1.service.ts");
 const adminApi = read("apps/admin/src/api.ts");
@@ -66,6 +67,13 @@ checkSourceIncludesAll(adminController, [
   "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
   "Content-Disposition"
 ], "admin export controller");
+
+const mallOrderExportRoute = mallAdminController.indexOf('@Get("orders/export")');
+const mallOrderDetailRoute = mallAdminController.indexOf('@Get("orders/:id")');
+check(
+  mallOrderExportRoute >= 0 && mallOrderDetailRoute >= 0 && mallOrderExportRoute < mallOrderDetailRoute,
+  "mall order export static route must be registered before the dynamic order detail route."
+);
 
 checkExportService(adminService, "exportRegistrations", "registration export service");
 checkExportService(adminService, "exportOrders", "orders export service");

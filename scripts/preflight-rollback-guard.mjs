@@ -30,6 +30,9 @@ const launchChecklist = read("docs/launch-checklist.md");
 const runbook = read("docs/production-runbook.md");
 const localAcceptance = read("docs/local-acceptance-test-plan.md");
 const progress = read("docs/project-progress.md");
+const rollbackDrill = read("scripts/docker-api-rollback-drill.mjs");
+const staticRollbackDrill = read("scripts/static-artifact-rollback-drill.mjs");
+const gitignore = read(".gitignore");
 
 checkSourceIncludes(packageJson.scripts?.["test:preflight-guards"] || "", "node scripts/preflight-rollback-guard.mjs", "package preflight guards script");
 
@@ -39,6 +42,9 @@ check(Boolean(packageJson.scripts?.smoke), "package.json must expose smoke.");
 check(Boolean(packageJson.scripts?.["smoke:flow"]), "package.json must expose smoke:flow.");
 check(Boolean(packageJson.scripts?.["db:backup"]), "package.json must expose db:backup.");
 check(Boolean(packageJson.scripts?.["db:restore"]), "package.json must expose db:restore.");
+check(packageJson.scripts?.["drill:rollback:api"] === "node scripts/docker-api-rollback-drill.mjs", "package.json must expose the API rollback drill.");
+check(packageJson.scripts?.["drill:rollback:static"] === "node scripts/static-artifact-rollback-drill.mjs", "package.json must expose the static rollback drill.");
+checkSourceIncludes(gitignore, "deploy/static-rollback-drill-result.json", "rollback result ignore rules");
 checkSourceIncludes(apiPackage.scripts?.["migration:show"] || "", "npm run build", "API migration:show script");
 checkSourceIncludes(apiPackage.scripts?.["migration:run"] || "", "npm run build", "API migration:run script");
 
@@ -101,6 +107,8 @@ checkSourceIncludesAll(runbook, [
   "执行 `npm run smoke`",
   "恢复流量，并记录回滚结果"
 ], "production runbook rollback flow");
+checkSourceIncludes(runbook, "npm run drill:rollback:static", "production runbook static rollback drill");
+checkSourceIncludes(launchChecklist, "npm run drill:rollback:static", "launch checklist static rollback drill");
 
 checkSourceIncludesAll(localAcceptance, [
   "npm run db:backup",
@@ -110,6 +118,27 @@ checkSourceIncludesAll(localAcceptance, [
 ], "local acceptance release rehearsal");
 
 checkSourceIncludes(progress, "发布回滚静态 guard", "project progress rollback entry");
+checkSourceIncludesAll(rollbackDrill, [
+  "rollback-baseline-",
+  "rollback-candidate-",
+  'CMD ["sh","-c","sleep 600"]',
+  "failureDetected",
+  "restoreBaseline",
+  "waitForReady",
+  "rollback-drill-result.json"
+], "API rollback drill");
+
+checkSourceIncludesAll(staticRollbackDrill, [
+  "STATIC_ROLLBACK_DRILL_CANDIDATE_",
+  "probeHealthyRelease",
+  "nginxConfigTest",
+  "restoreBaseline",
+  "baselineHashes",
+  "restoredHashes",
+  "failureDetected",
+  "databaseTouched: false",
+  "static-rollback-drill-result.json"
+], "static rollback drill");
 
 if (failures.length) {
   for (const failure of failures) console.error(`ERR  ${failure}`);

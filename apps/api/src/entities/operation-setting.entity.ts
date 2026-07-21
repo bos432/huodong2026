@@ -55,6 +55,15 @@ export class OperationSetting {
   @Column({ type: "text", nullable: true })
   invoiceInstructions!: string | null;
 
+  @Column({ type: "text", nullable: true })
+  userAgreementUrl!: string | null;
+
+  @Column({ type: "text", nullable: true })
+  privacyPolicyUrl!: string | null;
+
+  @Column({ type: "text", nullable: true })
+  merchantAgreementUrl!: string | null;
+
   @Column({
     type: "tinyint",
     default: 0,
@@ -71,7 +80,7 @@ export class OperationSetting {
   @Column({ type: "varchar", length: 120, nullable: true })
   smsAccessKeyId!: string | null;
 
-  @Column({ type: "varchar", length: 200, nullable: true })
+  @Column({ type: "text", nullable: true })
   smsAccessKeySecret!: string | null;
 
   @Column({ type: "varchar", length: 100, nullable: true })

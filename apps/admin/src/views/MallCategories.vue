@@ -6,20 +6,30 @@
         <p>按店铺维护商城货架分类，商品发布时可直接选择；平台可全局查看，新增和保存必须落到具体商家/代理店铺。</p>
       </div>
       <div class="header-actions">
-        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" @change="handleTenantChange">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" :disabled="writeLocked" @change="handleTenantChange">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
         </el-select>
-        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部授权店铺；新增前请选择" style="width:280px" @change="handleMerchantChange">
+        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部授权店铺；新增前请选择" style="width:280px" :disabled="writeLocked" @change="handleMerchantChange">
           <el-option v-for="merchant in merchants" :key="merchant.id" :label="merchantLabel(merchant)" :value="merchant.id" />
         </el-select>
-        <el-select v-model="filters.enabled" clearable placeholder="全部状态" style="width:130px" @change="loadCategories">
+        <el-select v-model="filters.enabled" clearable placeholder="全部状态" style="width:130px" :disabled="writeLocked" @change="loadCategories">
           <el-option label="启用" value="true" />
           <el-option label="停用" value="false" />
         </el-select>
-        <el-input v-model="filters.keyword" clearable placeholder="分类名称/店铺/商家" style="width:240px" @keyup.enter="loadCategories" @clear="loadCategories" />
-        <el-button :loading="loading || merchantLoading" @click="loadCategories">刷新分类</el-button>
+        <el-input v-model="filters.keyword" clearable placeholder="分类名称/店铺/商家" style="width:240px" :disabled="writeLocked" @keyup.enter="loadCategories" @clear="loadCategories" />
+        <el-button :loading="loading || merchantLoading" :disabled="writeLocked" @click="loadCategories">刷新分类</el-button>
       </div>
     </div>
+
+    <el-alert v-if="tenantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="tenantErrorMessage">
+      <template #default><el-button size="small" @click="retryScopeLoading">重试商家列表</el-button></template>
+    </el-alert>
+    <el-alert v-if="merchantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="merchantErrorMessage">
+      <template #default><el-button size="small" @click="retryScopeLoading">重试店铺列表</el-button></template>
+    </el-alert>
+    <el-alert v-if="dataErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="dataErrorMessage">
+      <template #default><el-button size="small" @click="loadCategories">重试分类列表</el-button></template>
+    </el-alert>
 
     <el-alert
       v-if="deepLinkWarning"
@@ -96,7 +106,7 @@
         <el-input v-model="categoryForm.iconUrl" placeholder="图标 URL，可选" />
         <el-input-number v-model="categoryForm.sortOrder" :precision="0" placeholder="排序" />
         <el-switch v-model="categoryForm.enabled" active-text="启用" inactive-text="停用" />
-        <el-button type="primary" :loading="saving" :disabled="!canWriteCategories" @click="saveCategory">新增分类</el-button>
+        <el-button type="primary" :loading="saving" :disabled="!canWriteCategories || writeLocked" @click="saveCategory">新增分类</el-button>
       </div>
       <el-alert
         v-if="!canWriteCategories"
@@ -118,12 +128,12 @@
       <el-table v-loading="loading" :data="filteredCategories" stripe empty-text="暂无商城分类">
         <el-table-column label="分类名称" min-width="180">
           <template #default="{ row }">
-            <el-input v-model="row.name" :disabled="!canEditCategoryRow(row)" placeholder="请输入分类名称" />
+            <el-input v-model="row.name" :disabled="!canEditCategoryRow(row) || Boolean(actionId)" placeholder="请输入分类名称" />
           </template>
         </el-table-column>
         <el-table-column label="图标 URL" min-width="260">
           <template #default="{ row }">
-            <el-input v-model="row.iconUrl" :disabled="!canEditCategoryRow(row)" placeholder="可选" />
+            <el-input v-model="row.iconUrl" :disabled="!canEditCategoryRow(row) || Boolean(actionId)" placeholder="可选" />
           </template>
         </el-table-column>
         <el-table-column label="商家/店铺" min-width="190">
@@ -134,12 +144,12 @@
         </el-table-column>
         <el-table-column label="排序" width="120">
           <template #default="{ row }">
-            <el-input-number v-model="row.sortOrder" :disabled="!canEditCategoryRow(row)" :precision="0" />
+            <el-input-number v-model="row.sortOrder" :disabled="!canEditCategoryRow(row) || Boolean(actionId)" :precision="0" />
           </template>
         </el-table-column>
         <el-table-column label="启用" width="100">
           <template #default="{ row }">
-            <el-switch v-model="row.enabled" :disabled="!canEditCategoryRow(row)" />
+            <el-switch v-model="row.enabled" :disabled="!canEditCategoryRow(row) || Boolean(actionId)" />
           </template>
         </el-table-column>
         <el-table-column label="更新时间" width="170">
@@ -147,8 +157,8 @@
         </el-table-column>
         <el-table-column label="操作" width="210" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="primary" :disabled="!canEditCategoryRow(row)" @click="updateCategory(row)">保存</el-button>
-            <el-button size="small" text type="primary" @click="goCategoryProducts(row)">看商品</el-button>
+            <el-button size="small" type="primary" :loading="actionId === row.id" :disabled="!canEditCategoryRow(row) || Boolean(actionId) || saving" @click="updateCategory(row)">保存</el-button>
+            <el-button size="small" text type="primary" :disabled="Boolean(actionId) || saving" @click="goCategoryProducts(row)">看商品</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -184,6 +194,10 @@ const categories = ref<any[]>([]);
 const loading = ref(false);
 const saving = ref(false);
 const merchantLoading = ref(false);
+const actionId = ref<number | null>(null);
+const tenantErrorMessage = ref("");
+const merchantErrorMessage = ref("");
+const dataErrorMessage = ref("");
 const deepLinkWarning = ref("");
 const filters = reactive({
   tenantId: routeTenantId(),
@@ -192,11 +206,16 @@ const filters = reactive({
   keyword: routeKeyword()
 });
 const categoryForm = reactive({ name: "", iconUrl: "", sortOrder: 0, enabled: true });
+type CategoryTarget = { id: number | null; tenantId?: number; merchantId: number; scopeKey: string; listSequence: number };
+let tenantLoadSequence = 0;
+let merchantLoadSequence = 0;
+let categoryLoadSequence = 0;
 
 const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
 const selectedMerchantOpen = computed(() => merchantOperational(selectedMerchant.value));
 const canManageCategories = computed(() => hasPermission("mall.product.manage"));
 const canWriteCategories = computed(() => canManageCategories.value && selectedMerchantOpen.value && !deepLinkWarning.value);
+const writeLocked = computed(() => saving.value || actionId.value !== null);
 const filteredCategories = computed(() => {
   const keyword = filters.keyword.trim().toLowerCase();
   return categories.value.filter((row) => {
@@ -279,6 +298,39 @@ function currentMallParams(extra: Record<string, any> = {}) {
   };
 }
 
+function categoryScopeKey() {
+  return JSON.stringify({
+    tenantId: filters.tenantId || selectedMerchant.value?.tenant?.id || null,
+    merchantId: filters.merchantId || null,
+    enabled: filters.enabled || "",
+    keyword: filters.keyword.trim()
+  });
+}
+
+function captureCategoryTarget(row?: any): CategoryTarget {
+  const merchantId = Number(row?.merchant?.id || filters.merchantId || 0);
+  if (!merchantId) throw new Error("当前未选择分类店铺，请刷新后重新操作");
+  return {
+    id: row?.id ? Number(row.id) : null,
+    tenantId: Number(row?.tenant?.id || selectedMerchant.value?.tenant?.id || filters.tenantId || 0) || undefined,
+    merchantId,
+    scopeKey: categoryScopeKey(),
+    listSequence: categoryLoadSequence
+  };
+}
+
+function assertCategoryTarget(target: CategoryTarget) {
+  if (target.scopeKey !== categoryScopeKey() || target.listSequence !== categoryLoadSequence || target.merchantId !== filters.merchantId) {
+    throw new Error("分类列表或店铺范围已变化，请刷新后重新操作");
+  }
+  if (target.id === null) return undefined;
+  const current = categories.value.find((item) => Number(item.id) === target.id);
+  if (!current || Number(current.merchant?.id || 0) !== target.merchantId) {
+    throw new Error("目标分类已不在当前列表，请刷新后重新操作");
+  }
+  return current;
+}
+
 async function syncRouteQuery() {
   const query: Record<string, string> = {};
   if (filters.tenantId) query.tenantId = String(filters.tenantId);
@@ -289,7 +341,14 @@ async function syncRouteQuery() {
 }
 
 function clearCategories() {
+  categoryLoadSequence += 1;
   categories.value = [];
+  loading.value = false;
+  dataErrorMessage.value = "";
+}
+
+function resetCategoryForm() {
+  Object.assign(categoryForm, { name: "", iconUrl: "", sortOrder: 0, enabled: true });
 }
 
 function requireCategoryOperation(action: string, merchant = selectedMerchant.value) {
@@ -317,13 +376,34 @@ function canEditCategoryRow(row: any) {
 }
 
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  const sequence = ++tenantLoadSequence;
+  tenantErrorMessage.value = "";
+  tenants.value = [];
+  try {
+    const rows = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = Array.isArray(rows) ? rows : [];
+    return true;
+  } catch (error: any) {
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = [];
+    tenantErrorMessage.value = error.message || "商家列表加载失败";
+    return false;
+  }
 }
 
 async function loadMerchants() {
+  const sequence = ++merchantLoadSequence;
+  const tenantId = filters.tenantId;
   merchantLoading.value = true;
+  merchantErrorMessage.value = "";
+  merchants.value = [];
+  clearCategories();
+  resetCategoryForm();
   try {
-    merchants.value = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: "true" } });
+    const rows = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? tenantId : undefined, enabled: "true" } });
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = Array.isArray(rows) ? rows : [];
     const requestedMerchantId = routeMerchantId();
     deepLinkWarning.value = "";
     if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) filters.merchantId = requestedMerchantId;
@@ -336,11 +416,21 @@ async function loadMerchants() {
     if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
     return true;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载可管理分类的店铺失败");
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = [];
+    filters.merchantId = undefined;
+    merchantErrorMessage.value = error.message || "加载可管理分类的店铺失败";
+    clearCategories();
     return false;
   } finally {
-    merchantLoading.value = false;
+    if (sequence === merchantLoadSequence) merchantLoading.value = false;
   }
+}
+
+async function retryScopeLoading() {
+  await loadTenants();
+  const ok = await loadMerchants();
+  if (ok) await loadCategories();
 }
 
 async function loadCategories() {
@@ -350,20 +440,28 @@ async function loadCategories() {
     await syncRouteQuery();
     return;
   }
+  const sequence = ++categoryLoadSequence;
+  const scopeKey = categoryScopeKey();
   loading.value = true;
+  dataErrorMessage.value = "";
+  categories.value = [];
   try {
-    categories.value = await api.get<any, any[]>("/admin/mall/categories", { params: currentMallParams() });
+    const rows = await api.get<any, any[]>("/admin/mall/categories", { params: currentMallParams() });
+    if (sequence !== categoryLoadSequence || scopeKey !== categoryScopeKey()) return;
+    categories.value = Array.isArray(rows) ? rows : [];
     await syncRouteQuery();
   } catch (error: any) {
-    clearCategories();
-    ElMessage.error(error.message || "加载商城分类失败");
+    if (sequence !== categoryLoadSequence || scopeKey !== categoryScopeKey()) return;
+    categories.value = [];
+    dataErrorMessage.value = error.message || "加载商城分类失败";
   } finally {
-    loading.value = false;
+    if (sequence === categoryLoadSequence) loading.value = false;
   }
 }
 
 async function handleTenantChange() {
   filters.merchantId = undefined;
+  resetCategoryForm();
   await syncRouteQuery();
   const ok = await loadMerchants();
   if (ok) await loadCategories();
@@ -371,23 +469,35 @@ async function handleTenantChange() {
 
 async function handleMerchantChange() {
   deepLinkWarning.value = "";
+  resetCategoryForm();
   await syncRouteQuery();
   await loadCategories();
 }
 
 async function saveCategory() {
+  if (saving.value || actionId.value !== null) return;
   if (!requireCategoryOperation("新增分类")) return;
   if (!categoryForm.name.trim()) return ElMessage.error("请输入分类名称");
+  let target: CategoryTarget;
+  try {
+    target = captureCategoryTarget();
+    assertCategoryTarget(target);
+  } catch (error: any) {
+    return ElMessage.error(error.message || "分类列表或店铺范围已变化，请刷新后重新操作");
+  }
+  const payload = {
+    name: categoryForm.name.trim(),
+    iconUrl: categoryForm.iconUrl.trim() || undefined,
+    sortOrder: Number(categoryForm.sortOrder || 0),
+    enabled: categoryForm.enabled,
+    tenantId: isPlatformAdmin() ? target.tenantId : undefined,
+    merchantId: target.merchantId
+  };
   saving.value = true;
   try {
-    await api.post("/admin/mall/categories", {
-      name: categoryForm.name.trim(),
-      iconUrl: categoryForm.iconUrl.trim() || undefined,
-      sortOrder: Number(categoryForm.sortOrder || 0),
-      enabled: categoryForm.enabled,
-      ...currentMallParams()
-    });
-    Object.assign(categoryForm, { name: "", iconUrl: "", sortOrder: 0, enabled: true });
+    assertCategoryTarget(target);
+    await api.post("/admin/mall/categories", payload);
+    resetCategoryForm();
     ElMessage.success("店铺分类已新增，商品发布时可以选择该分类。");
     await loadCategories();
   } catch (error: any) {
@@ -398,22 +508,35 @@ async function saveCategory() {
 }
 
 async function updateCategory(row: any) {
+  if (actionId.value !== null || saving.value) return;
   if (!requireCategoryOperation("保存分类")) return;
   if (row?.merchant?.id !== selectedMerchant.value?.id) return ElMessage.error("请先切换到该分类所属店铺后再保存，避免误改其它店铺分类。");
   if (!row.name?.trim()) return ElMessage.error("请输入分类名称");
+  let target: CategoryTarget;
   try {
-    await api.patch(`/admin/mall/categories/${row.id}`, {
-      name: row.name.trim(),
-      iconUrl: row.iconUrl || undefined,
-      sortOrder: Number(row.sortOrder || 0),
-      enabled: row.enabled,
-      tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined,
-      merchantId: row.merchant?.id || filters.merchantId
-    });
+    target = captureCategoryTarget(row);
+    assertCategoryTarget(target);
+  } catch (error: any) {
+    return ElMessage.error(error.message || "分类列表或店铺范围已变化，请刷新后重新操作");
+  }
+  const payload = {
+    name: row.name.trim(),
+    iconUrl: row.iconUrl || undefined,
+    sortOrder: Number(row.sortOrder || 0),
+    enabled: row.enabled,
+    tenantId: isPlatformAdmin() ? target.tenantId : undefined,
+    merchantId: target.merchantId
+  };
+  actionId.value = target.id;
+  try {
+    assertCategoryTarget(target);
+    await api.patch(`/admin/mall/categories/${row.id}`, payload);
     ElMessage.success("店铺分类已保存");
     await loadCategories();
   } catch (error: any) {
     ElMessage.error(error.message || "保存分类失败");
+  } finally {
+    actionId.value = null;
   }
 }
 

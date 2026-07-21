@@ -37,6 +37,8 @@ type ConfigInspection = {
 
 const loading = ref(false);
 const report = ref<ConfigInspection | null>(null);
+const loadError = ref("");
+const loadGeneration = ref(0);
 
 const statusText: Record<CheckStatus, string> = {
   ok: "正常",
@@ -80,13 +82,22 @@ const overallText = computed(() => {
 });
 
 async function load() {
+  const generation = ++loadGeneration.value;
   loading.value = true;
+  loadError.value = "";
+  report.value = null;
   try {
-    report.value = await api.get<any, ConfigInspection>("/admin/system/config-check");
+    const result = await api.get<any, ConfigInspection>("/admin/system/config-check");
+    if (generation !== loadGeneration.value) return;
+    if (!result || !["ok", "warning", "error"].includes(result.status) || !result.summary || !Array.isArray(result.checks)) throw new Error("上线体检响应格式异常");
+    report.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载上线体检失败");
+    if (generation !== loadGeneration.value) return;
+    report.value = null;
+    loadError.value = error.message || "加载上线体检失败";
+    ElMessage.error(loadError.value);
   } finally {
-    loading.value = false;
+    if (generation === loadGeneration.value) loading.value = false;
   }
 }
 
@@ -162,9 +173,13 @@ onMounted(load);
         <h2>上线体检</h2>
         <p class="subtitle">检查生产域名、密钥、支付、通知和自动任务配置。</p>
       </div>
-      <el-button type="primary" :loading="loading" @click="load">重新检查</el-button>
+      <el-button type="primary" :loading="loading" :disabled="loading" @click="load">重新检查</el-button>
     </div>
 
+    <div v-if="loadError" class="error-recovery">
+      <el-alert type="error" :title="loadError" show-icon :closable="false" />
+      <el-button :loading="loading" :disabled="loading" @click="load">重试体检</el-button>
+    </div>
     <el-alert v-if="report" :type="tagType[report.status]" :title="overallText" show-icon :closable="false" class="summary-alert" />
     <el-alert class="page-hint" type="info" :closable="false" show-icon title="上线前建议" description="每次修改生产环境变量、支付/通知配置或发布新版本后，都建议重新检查。存在“需修复”项时不要正式接流量。" />
 
@@ -212,8 +227,8 @@ onMounted(load);
     </div>
 
     <div class="table-card">
-      <el-empty v-if="!loading && !(report?.checks || []).length" description="暂无体检结果">
-        <el-button type="primary" @click="load">开始检查</el-button>
+      <el-empty v-if="!loading && !loadError && !(report?.checks || []).length" description="暂无体检结果">
+        <el-button type="primary" :disabled="loading" @click="load">开始检查</el-button>
       </el-empty>
       <el-table v-else :data="report?.checks || []" stripe v-loading="loading">
         <el-table-column label="状态" width="110">
@@ -239,6 +254,8 @@ onMounted(load);
 .toolbar { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 16px; gap: 16px; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .summary-alert { margin-bottom: 16px; }
+.error-recovery { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.error-recovery .el-alert { flex: 1; min-width: 0; }
 .page-hint { margin-bottom: 16px; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .summary-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; display: flex; flex-direction: column; gap: 8px; }
@@ -251,5 +268,11 @@ onMounted(load);
 .action-text { color: #475569; line-height: 1.5; }
 @media (max-width: 1100px) {
   .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 640px) {
+  .toolbar { flex-direction: column; }
+  .toolbar > div, .toolbar .el-button { width: 100%; }
+  .error-recovery { align-items: stretch; flex-direction: column; }
+  .summary-grid { grid-template-columns: 1fr; }
 }
 </style>

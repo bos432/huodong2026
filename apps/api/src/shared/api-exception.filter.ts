@@ -1,4 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException, HttpStatus } from "@nestjs/common";
+import { isDuplicateEntryError } from "./database-errors";
 
 type ErrorResponseBody = {
   code: number;
@@ -38,6 +39,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
 
   private httpStatus(exception: unknown) {
     if (exception instanceof HttpException) return exception.getStatus();
+    if (isDuplicateEntryError(exception)) return HttpStatus.CONFLICT;
     const record = exception && typeof exception === "object" ? (exception as Record<string, unknown>) : {};
     if (record.type === "entity.too.large") return HttpStatus.PAYLOAD_TOO_LARGE;
     const statusCode = Number(record.statusCode || record.status || 0);
@@ -69,6 +71,7 @@ export class ApiExceptionFilter implements ExceptionFilter {
     const message = exception instanceof Error ? exception.message : String(record.message || "");
     const code = String(driverError.code || record.code || "");
     const errno = Number(driverError.errno || record.errno || 0);
+    if (isDuplicateEntryError(exception)) return "数据已存在或编码重复，请刷新后调整再提交。";
     if (code === "ER_BAD_FIELD_ERROR" || errno === 1054 || /Unknown column/i.test(message)) {
       const field = message.match(/Unknown column '([^']+)'/i)?.[1]?.split(".").pop();
       const scope = field === "clientOrderKey" ? "商城订单" : "系统";

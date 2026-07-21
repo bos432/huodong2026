@@ -65,6 +65,21 @@ export class ForumTopic {
   @Column({ type: "tinyint", default: 0 })
   featured!: boolean;
 
+  @Column({ type: "tinyint", default: 0 })
+  locked!: boolean;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  lockReason!: string | null;
+
+  @Column({ type: "datetime", nullable: true })
+  lockedAt!: Date | null;
+
+  @Column({ type: "int", nullable: true })
+  lockedByAdminId!: number | null;
+
+  @Column({ type: "int", default: 1 })
+  nextFloorNo!: number;
+
   @Column({ default: 0 })
   heat!: number;
 

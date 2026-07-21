@@ -1,17 +1,17 @@
 <template>
   <view class="container community-detail-page">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
       <view class="nav-title">共修动态</view>
-      <view class="nav-action" @click="reload">刷新</view>
+      <view class="nav-action" role="button" tabindex="0" aria-label="刷新共修动态" @click="reload" @keyup.enter="reload" @keyup.space.prevent="reload">刷新</view>
     </view>
 
     <PageDecorationBlocks :sections="decorationSections" />
 
     <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="error" class="card state-card">
+    <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
       <view>{{ error }}</view>
-      <view class="button secondary retry-button" @click="loadPost">重试</view>
+      <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载共修动态" @click="loadPost" @keyup.enter="loadPost" @keyup.space.prevent="loadPost">重试</view>
     </view>
 
     <template v-else-if="post">
@@ -29,14 +29,17 @@
           <image v-for="(img, index) in post.images" :key="index" class="post-image" :src="img" mode="aspectFill" />
         </view>
         <view class="row interact-row">
-          <view class="interact-btn" @click="toggleLike">
-            <text>{{ post.liked ? "❤️" : "🤍" }}</text>
+          <view class="interact-btn" role="button" tabindex="0" aria-label="点赞动态" :class="{ disabled: activeAction === 'like' }" @click="toggleLike" @keyup.enter="toggleLike" @keyup.space.prevent="toggleLike">
+            <text>{{ activeAction === "like" ? "处理中" : (post.liked ? "❤️" : "🤍") }}</text>
             <text class="subtle">{{ post.likes }}</text>
           </view>
-          <view class="interact-btn" @click="openComment">
+          <view class="interact-btn" role="button" tabindex="0" aria-label="打开评论" @click="openComment" @keyup.enter="openComment" @keyup.space.prevent="openComment">
             <text>💬</text>
             <text class="subtle">{{ post.comments }}</text>
           </view>
+          <view class="interact-btn" role="button" tabindex="0" aria-label="收藏动态" :class="{ disabled: activeAction === 'favorite' }" @click="toggleFavorite" @keyup.enter="toggleFavorite" @keyup.space.prevent="toggleFavorite"><text>{{ activeAction === "favorite" ? "处理中" : (post.favorited ? "★" : "☆") }}</text><text class="subtle">{{ post.favoriteCount || 0 }}</text></view>
+          <view v-if="post.userId" class="interact-btn" role="button" tabindex="0" aria-label="关注作者" :class="{ disabled: activeAction === 'follow' }" @click="toggleFollow" @keyup.enter="toggleFollow" @keyup.space.prevent="toggleFollow"><text>{{ activeAction === "follow" ? "处理中" : (post.following ? "已关注" : "关注") }}</text></view>
+          <view class="interact-btn" role="button" tabindex="0" aria-label="举报动态" :class="{ disabled: activeAction.startsWith('report') }" @click="reportContent(`/public/community/posts/${post.id}/report`)" @keyup.enter="reportContent(`/public/community/posts/${post.id}/report`)" @keyup.space.prevent="reportContent(`/public/community/posts/${post.id}/report`)"><text>举报</text></view>
         </view>
       </view>
 
@@ -45,8 +48,12 @@
           <text class="title-md">评论区</text>
           <text class="subtle">{{ comments.length }} 条已展示</text>
         </view>
-        <view v-if="comments.length">
-          <view v-for="item in comments" :key="item.id" class="comment-item">
+        <view v-if="commentsError" class="comments-error">
+          <text>{{ commentsError }}</text>
+          <text class="retry-text" role="button" tabindex="0" aria-label="重新加载评论" @click="loadComments" @keyup.enter="loadComments" @keyup.space.prevent="loadComments">重新加载评论</text>
+        </view>
+        <view v-else-if="comments.length">
+          <view v-for="item in comments" :key="item.id" class="comment-item" @click="openComment(item)">
             <view class="row comment-author">
               <image class="avatar-sm" :src="item.avatar" mode="aspectFill" />
               <view>
@@ -55,15 +62,16 @@
               </view>
             </view>
             <text class="comment-content">{{ item.content }}</text>
+            <text class="comment-report" @click.stop="reportContent(`/public/community/comments/${item.id}/report`)">举报</text>
           </view>
         </view>
         <view v-else class="subtle" style="margin-top:12rpx;">暂无已通过审核的评论，发表后需后台审核展示。</view>
       </view>
 
       <view class="bottom-actions">
-        <view class="button secondary button-lg" @click="copyShareLink">复制链接</view>
-        <view class="button secondary button-lg" @click="generatePoster">生成海报</view>
-        <view class="button block button-lg" :class="{ disabled: submitting }" @click="openComment">
+        <view class="button secondary button-lg" role="button" tabindex="0" aria-label="复制动态链接" @click="copyShareLink" @keyup.enter="copyShareLink" @keyup.space.prevent="copyShareLink">复制链接</view>
+        <view class="button secondary button-lg" role="button" tabindex="0" aria-label="生成动态海报" @click="generatePoster" @keyup.enter="generatePoster" @keyup.space.prevent="generatePoster">生成海报</view>
+        <view class="button block button-lg" role="button" tabindex="0" :aria-disabled="submitting" :aria-busy="submitting" :class="{ disabled: submitting }" @click="openComment" @keyup.enter="openComment" @keyup.space.prevent="openComment">
           {{ submitting ? "提交中..." : "写评论" }}
         </view>
       </view>
@@ -85,13 +93,13 @@
 <script setup lang="ts">
 import QRCode from "qrcode";
 import { computed, nextTick, ref } from "vue";
-import { onMounted } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 type CommunityComment = {
   id: number;
@@ -99,14 +107,19 @@ type CommunityComment = {
   avatar: string;
   content: string;
   time: string;
+  userId: number;
 };
 
 const loading = ref(true);
 const submitting = ref(false);
 const error = ref("");
+const commentsError = ref("");
+const activeAction = ref("");
 const rawPost = ref<any>(null);
 const rawComments = ref<any[]>([]);
 const posterUrl = ref("");
+const postLoadGuard = createTenantLoadGuard();
+const commentsLoadGuard = createTenantLoadGuard();
 const { contentSections, loadDecoration } = usePageDecoration("community_detail", "/pages/community/detail");
 
 const post = computed<CommunityPost | null>(() => normalizeCommunityPosts(rawPost.value ? [rawPost.value] : [])[0] || null);
@@ -139,7 +152,8 @@ const comments = computed<CommunityComment[]>(() =>
     nickname: item.nickname || item.user?.nickname || "慢π同学",
     avatar: item.avatar || item.user?.avatarUrl || `/static/avatar${(index % 3) + 1}.png`,
     content: item.content || "",
-    time: formatTime(item.createdAt)
+    time: formatTime(item.createdAt),
+    userId: Number(item.userId || 0)
   }))
 );
 
@@ -174,29 +188,54 @@ function formatTime(value?: string) {
 }
 
 async function loadPost() {
+  const postToken = postLoadGuard.begin();
+  const commentsToken = commentsLoadGuard.begin();
   loading.value = true;
   error.value = "";
+  commentsError.value = "";
   try {
     const id = currentPostId();
     if (!id) throw new Error("缺少动态ID");
-    const [postData, commentData] = await Promise.all([
+    const [postResult, commentResult] = await Promise.allSettled([
       request<any>(`/public/community/posts/${id}`),
       request<any>(`/public/community/posts/${id}/comments`)
     ]);
+    if (postResult.status === "rejected") throw postResult.reason;
+    const postData = postResult.value;
     if (!postData) throw new Error("动态不存在或已下架");
+    if (!postLoadGuard.isCurrent(postToken)) return;
     rawPost.value = postData;
-    rawComments.value = Array.isArray(commentData) ? commentData : [];
+    if (commentsLoadGuard.isCurrent(commentsToken) && commentResult.status === "fulfilled") rawComments.value = Array.isArray(commentResult.value) ? commentResult.value : [];
+    else if (commentsLoadGuard.isCurrent(commentsToken)) {
+      rawComments.value = [];
+      commentsError.value = (commentResult.reason as any)?.message || "评论加载失败，请稍后重试。";
+    }
   } catch (err: any) {
+    if (!postLoadGuard.isCurrent(postToken)) return;
     rawPost.value = null;
     rawComments.value = [];
     error.value = err.message || "动态加载失败";
   } finally {
-    loading.value = false;
+    if (postLoadGuard.isCurrent(postToken)) loading.value = false;
+  }
+}
+
+async function loadComments() {
+  const token = commentsLoadGuard.begin();
+  const id = currentPostId();
+  if (!id) return;
+  commentsError.value = "";
+  try {
+    const rows = await request<any[]>(`/public/community/posts/${id}/comments`);
+    if (commentsLoadGuard.isCurrent(token)) rawComments.value = Array.isArray(rows) ? rows : [];
+  } catch (error: any) {
+    if (commentsLoadGuard.isCurrent(token)) commentsError.value = error?.message || "评论加载失败，请稍后重试。";
   }
 }
 
 async function toggleLike() {
-  if (!post.value) return;
+  if (!post.value || activeAction.value) return;
+  activeAction.value = "like";
   try {
     await ensureUser();
     const result = await request<any>(`/public/community/posts/${post.value.id}/like`, { method: "POST" });
@@ -204,34 +243,76 @@ async function toggleLike() {
     uni.showToast({ title: result?.liked ? "已点赞" : "已取消点赞", icon: "none" });
   } catch (err: any) {
     uni.showToast({ title: err.message || "操作失败", icon: "none" });
+  } finally {
+    activeAction.value = "";
   }
 }
 
-function openComment() {
+async function toggleFavorite(){if(!post.value||activeAction.value)return;activeAction.value="favorite";try{await ensureUser();const result=await request<any>(`/public/community/posts/${post.value.id}/favorite`,{method:"POST"});rawPost.value={...rawPost.value,favorited:Boolean(result.favorited),favoriteCount:Number(result.favoriteCount||0)};}catch(err:any){uni.showToast({title:err.message||"收藏失败",icon:"none"});}finally{activeAction.value="";}}
+async function toggleFollow(){if(!post.value?.userId||activeAction.value)return;activeAction.value="follow";try{await ensureUser();const result=await request<any>(`/public/community/users/${post.value.userId}/follow`,{method:"POST"});rawPost.value={...rawPost.value,following:Boolean(result.following)};}catch(err:any){uni.showToast({title:err.message||"关注失败",icon:"none"});}finally{activeAction.value="";}}
+
+async function reportContent(path: string) {
+  if (activeAction.value) return;
+  activeAction.value = "report-prompt";
+  try {
+    await ensureUser();
+    uni.showModal({
+      title: "举报内容",
+      editable: true,
+      placeholderText: "请说明举报原因",
+      success: async (result: any) => {
+        if (!result.confirm) {
+          activeAction.value = "";
+          return;
+        }
+        activeAction.value = "report-submit";
+        try {
+          await request(path, { method: "POST", data: { type: "other", description: String(result.content || "").trim() } });
+          uni.showToast({ title: "举报已提交", icon: "success" });
+        } catch (error: any) {
+          uni.showToast({ title: error.message || "举报失败", icon: "none" });
+        } finally {
+          activeAction.value = "";
+        }
+      },
+      fail: () => { activeAction.value = ""; }
+    });
+  } catch (error: any) {
+    activeAction.value = "";
+    uni.showToast({ title: error.message || "请先登录", icon: "none" });
+  }
+}
+
+function openComment(parent?:CommunityComment) {
   if (!post.value || submitting.value) return;
+  submitting.value = true;
   uni.showModal({
     title: "评论动态",
     editable: true,
     placeholderText: "写下你的想法",
     confirmText: "提交",
     success: (res: any) => {
-      if (!res.confirm) return;
+      if (!res.confirm) {
+        submitting.value = false;
+        return;
+      }
       const content = String(res.content || "").trim();
       if (!content) {
+        submitting.value = false;
         uni.showToast({ title: "请输入评论内容", icon: "none" });
         return;
       }
-      void submitComment(content);
-    }
+      void submitComment(content,parent);
+    },
+    fail: () => { submitting.value = false; }
   });
 }
 
-async function submitComment(content: string) {
+async function submitComment(content: string,parent?:CommunityComment) {
   if (!post.value) return;
-  submitting.value = true;
   try {
     await ensureUser();
-    const result = await request<any>(`/public/community/posts/${post.value.id}/comments`, { method: "POST", data: { content } });
+    const result = await request<any>(`/public/community/posts/${post.value.id}/comments`, { method: "POST", data: { content,parentId:parent?.id,mentionUserIds:parent?.userId?[parent.userId]:[] } });
     uni.showToast({ title: result?.message || "评论已提交审核", icon: "none" });
     await loadPost();
   } catch (err: any) {
@@ -584,13 +665,9 @@ function reload() {
   void loadDecoration();
 }
 
-onMounted(() => {
-  loadPost();
-  loadDecoration();
-});
-
 onShow(() => {
-  loadDecoration();
+  void loadPost();
+  void loadDecoration();
 });
 </script>
 
@@ -637,6 +714,10 @@ onShow(() => {
   border-bottom: 1rpx solid #e8e0d8;
 }
 .comment-item:last-child { border-bottom: 0; }
+.comment-report { display:block; margin-top:10rpx; color:#98a2b3; font-size:22rpx; text-align:right; }
+.interact-btn.disabled { opacity:.6; pointer-events:none; }
+.comments-error { display:grid; gap:8rpx; margin-top:12rpx; padding:16rpx; border-radius:8px; border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; font-size:24rpx; }
+.retry-text { color:#C43D3D; font-weight:900; }
 .bottom-actions {
   position: fixed;
   bottom: 0;

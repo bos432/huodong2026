@@ -29,6 +29,7 @@ const ADMIN_WEB_BASE = (process.env.ADMIN_WEB_BASE || WEB_BASE).replace(/\/$/, "
 const API_BASE = (process.env.API_BASE || `${WEB_BASE}/api`).replace(/\/$/, "");
 const TENANT_CODE = process.env.TENANT_CODE || "qiwai-showcase";
 const SHOWCASE_PASSWORD = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
+const SHOWCASE_ADMIN_PASSWORD = process.env.SHOWCASE_ADMIN_PASSWORD || "Showcase123456Aa";
 const PLATFORM_ADMIN_PASSWORD = process.env.PLATFORM_ADMIN_PASSWORD || process.env.SHOWCASE_ADMIN_PASSWORD || "Admin123456";
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
 const outputRoot = path.resolve(process.env.ACCEPTANCE_OUTPUT_DIR || path.join(repoRoot, ".local-logs"));
@@ -142,7 +143,7 @@ async function loginAdminUi(page, username, password) {
 
 async function main() {
   const platform = await loginAdminApi("admin", PLATFORM_ADMIN_PASSWORD);
-  const tenantAdmin = await loginAdminApi("showcase_admin", SHOWCASE_PASSWORD);
+  const tenantAdmin = await loginAdminApi("showcase_admin", SHOWCASE_ADMIN_PASSWORD);
   const phone = `13993${runId.slice(-6)}`;
   const user = await api("/public/auth/password-login", {
     method: "POST",
@@ -183,7 +184,7 @@ async function main() {
 
     const adminContext = await browser.newContext({ viewport: { width: 1365, height: 900 } });
     const admin = await adminContext.newPage();
-    await loginAdminUi(admin, "showcase_admin", SHOWCASE_PASSWORD);
+    await loginAdminUi(admin, "showcase_admin", SHOWCASE_ADMIN_PASSWORD);
     await admin.goto(`${ADMIN_WEB_BASE}/admin/community`, { waitUntil: "domcontentloaded" });
     await waitForText(admin, "论坛管理", "后台共修论坛管理");
     await admin.getByText("论坛管理", { exact: true }).click().catch(() => {});

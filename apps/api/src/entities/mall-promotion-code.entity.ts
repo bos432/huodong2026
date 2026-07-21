@@ -34,6 +34,12 @@ export class MallPromotionCode {
   @Column({ type: "boolean", default: true })
   enabled!: boolean;
 
+  @Column({ type: "datetime", nullable: true })
+  startsAt!: Date | null;
+
+  @Column({ type: "datetime", nullable: true })
+  endsAt!: Date | null;
+
   @Column({ type: "int", default: 0 })
   orderCount!: number;
 

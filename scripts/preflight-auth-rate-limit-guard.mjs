@@ -30,6 +30,7 @@ const productionExample = read("deploy/.env.production.example");
 const compose = read("docker-compose.yml");
 const launchChecklist = read("docs/launch-checklist.md");
 const progress = read("docs/project-progress.md");
+const publicService = read("apps/api/src/modules/public/public.service.ts");
 
 for (const key of [...authKeys, ...h5RateLimitKeys, ...adminRateLimitKeys]) {
   checkSourceIncludes(preflight, key, "preflight");
@@ -67,6 +68,9 @@ checkSourceIncludes(launchChecklist, "H5 验证码冷却", "launch checklist");
 checkSourceIncludes(launchChecklist, "后台登录失败统计窗口", "launch checklist");
 checkSourceIncludes(launchChecklist, "h5_auth_code_logs", "launch checklist");
 checkSourceIncludes(progress, "短信模板凭证挡板", "project progress");
+checkSourceIncludes(publicService, "dataSource.query", "H5 cooldown database guard");
+checkSourceIncludes(publicService, "createdAt > NOW() - INTERVAL", "H5 cooldown database guard");
+checkSourceIncludes(publicService, "status = ?", "H5 cooldown database guard");
 
 if (failures.length) {
   for (const failure of failures) console.error(`ERR  ${failure}`);

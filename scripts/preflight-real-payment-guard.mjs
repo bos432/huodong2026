@@ -89,6 +89,10 @@ function checkSourceIncludes(source, needle, label) {
   check(source.includes(needle), `${label} must include ${needle}.`);
 }
 
+function checkSourceExcludes(source, needle, label) {
+  check(!source.includes(needle), `${label} must not include ${needle}.`);
+}
+
 function checkSourceIncludesAny(source, needles, label) {
   check(needles.some((needle) => source.includes(needle)), `${label} must include one of: ${needles.join(", ")}.`);
 }
@@ -138,7 +142,8 @@ checkSourceIncludes(mallService, "商户直收订单不能走平台微信回调�
 checkSourceIncludes(mallService, "回调店铺与订单店铺不一致", "mall service");
 checkSourceIncludes(mallService, "商户直收退款通知必须走店铺专属退款回调地址", "mall service");
 checkSourceIncludes(mallService, "退款通知店铺与商城订单店铺不一致", "mall service");
-checkSourceIncludes(mallService, "mallMerchantScope", "mall service");
+checkSourceIncludes(mallService, "publicMallWechatPayParams", "mall service public payment response allowlist");
+checkSourceExcludes(mallService, "mallMerchantScope:", "mall service public payment response routing metadata");
 checkSourceIncludes(mallService, "merchantPaymentAccounts", "mall service");
 checkSourceIncludes(mallService, "accountUnreadableFiles", "mall service");
 checkSourceIncludes(mallMerchantPaymentAccountEntity, '@Entity("mall_merchant_payment_accounts")', "mall merchant payment account entity");

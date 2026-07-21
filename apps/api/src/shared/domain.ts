@@ -4,6 +4,7 @@ export enum ActivityStatus {
   Rejected = "rejected",
   Open = "open",
   Closed = "closed",
+  Cancelled = "cancelled",
   Ended = "ended"
 }
 
@@ -39,7 +40,14 @@ export enum FieldType {
   MultipleChoice = "multiple_choice",
   Phone = "phone",
   IdCard = "id_card",
-  Remark = "remark"
+  Remark = "remark",
+  Email = "email",
+  Number = "number",
+  Date = "date",
+  DateTime = "date_time",
+  Region = "region",
+  Address = "address",
+  Attachment = "attachment"
 }
 
 export interface ActivityFieldOption {

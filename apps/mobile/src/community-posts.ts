@@ -9,6 +9,10 @@ export type CommunityPost = {
   likes: number;
   comments: number;
   liked: boolean;
+  favorited?: boolean;
+  favoriteCount?: number;
+  following?: boolean;
+  userId?: number;
   images?: string[];
   source?: string;
   status?: string;
@@ -53,6 +57,10 @@ export function normalizeCommunityPosts(payload: any) {
     likes: Number(item.likes || 0),
     comments: Number(item.comments || 0),
     liked: Boolean(item.liked),
+    favorited: Boolean(item.favorited),
+    favoriteCount: Number(item.favoriteCount || 0),
+    following: Boolean(item.following),
+    userId: Number(item.userId || 0),
     images: Array.isArray(item.images) ? item.images : [],
     source: item.source || "official",
     status: item.status || "approved",

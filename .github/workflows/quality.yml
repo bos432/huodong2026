@@ -1,0 +1,61 @@
+name: Quality Gate
+
+on:
+  push:
+    branches:
+      - main
+      - feature/qiwai-ui-experiment
+  pull_request:
+
+concurrency:
+  group: quality-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    env:
+      VITE_API_BASE: https://example.invalid/api
+      VITE_DEFAULT_TENANT_CODE: qiwai-showcase
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            packages/shared/package-lock.json
+            apps/api/package-lock.json
+            apps/admin/package-lock.json
+            apps/mobile/package-lock.json
+
+      - name: Pin npm
+        run: npm install --global npm@11.6.2
+
+      - name: Install locked dependencies
+        run: npm run ci:install
+
+      - name: Verify runtime dependency security
+        run: npm run audit:runtime
+
+      - name: Scan source for committed secrets
+        run: npm run security:secrets
+
+      - name: Run API unit tests
+        run: npm test
+
+      - name: Run release guards
+        run: npm run test:preflight-guards
+
+      - name: Build shared, API, admin and H5
+        run: npm run build
+
+      - name: Build WeChat mini program
+        run: npm run build:mobile:mp-weixin

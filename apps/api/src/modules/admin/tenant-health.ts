@@ -22,7 +22,8 @@ export function tenantOperationHealth(input: TenantOperationHealthInput) {
   const actions: string[] = [];
 
   if (!input.enabled) risks.push("商家已停用");
-  if (input.subscriptionStatus?.status === "expired") risks.push("商家套餐已到期");
+  if (["read_only", "suspended"].includes(String(input.subscriptionStatus?.status || ""))) risks.push(input.subscriptionStatus?.status === "read_only" ? "商家套餐处于只读期" : "商家套餐已暂停");
+  else if (input.subscriptionStatus?.status === "grace_period") warnings.push("商家套餐处于宽限期，请尽快续费");
   if (Number(input.enabledAdminCount || 0) <= 0) risks.push("缺少可登录商家管理员");
   if (Number(input.enabledPaymentAccountCount || 0) <= 0) risks.push("缺少启用的收款账户");
   if (Number(input.totalActivityCount || 0) <= 0) risks.push("尚未创建活动");

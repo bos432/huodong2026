@@ -1,0 +1,21 @@
+import { MigrationInterface, QueryRunner, TableColumn } from "typeorm";
+
+export class MallSplitShipments1783600000000 implements MigrationInterface {
+  name = "MallSplitShipments1783600000000";
+
+  async up(queryRunner: QueryRunner): Promise<void> {
+    const add = async (column: TableColumn) => { if (!(await queryRunner.hasColumn("mall_orders", column.name))) await queryRunner.addColumn("mall_orders", column); };
+    await add(new TableColumn({ name: "fulfillmentStatus", type: "varchar", length: "24", default: "'unshipped'" }));
+    await add(new TableColumn({ name: "totalQuantity", type: "int", default: 0 }));
+    await add(new TableColumn({ name: "shippedQuantity", type: "int", default: 0 }));
+    if (!(await queryRunner.hasTable("mall_shipments"))) await queryRunner.query("CREATE TABLE `mall_shipments` (`id` int NOT NULL AUTO_INCREMENT, `tenantId` int NOT NULL, `merchantId` int NULL, `orderId` int NOT NULL, `shipmentNo` varchar(64) NOT NULL, `businessKey` varchar(80) NULL, `expressCompany` varchar(80) NULL, `expressNo` varchar(100) NOT NULL, `status` varchar(24) NOT NULL DEFAULT 'shipped', `createdBy` varchar(80) NULL, `remark` varchar(255) NULL, `shippedAt` datetime NOT NULL, `deliveredAt` datetime NULL, `createdAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `updatedAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), UNIQUE INDEX `UQ_mall_shipments_shipment_no` (`shipmentNo`), UNIQUE INDEX `UQ_mall_shipments_order_business_key` (`orderId`,`businessKey`), INDEX `IDX_mall_shipments_order_status_time` (`orderId`,`status`,`shippedAt`), PRIMARY KEY (`id`), CONSTRAINT `FK_mall_shipments_tenant` FOREIGN KEY (`tenantId`) REFERENCES `tenants`(`id`) ON DELETE CASCADE, CONSTRAINT `FK_mall_shipments_merchant` FOREIGN KEY (`merchantId`) REFERENCES `mall_merchants`(`id`) ON DELETE SET NULL, CONSTRAINT `FK_mall_shipments_order` FOREIGN KEY (`orderId`) REFERENCES `mall_orders`(`id`) ON DELETE CASCADE) ENGINE=InnoDB");
+    if (!(await queryRunner.hasTable("mall_shipment_items"))) await queryRunner.query("CREATE TABLE `mall_shipment_items` (`id` int NOT NULL AUTO_INCREMENT, `tenantId` int NOT NULL, `merchantId` int NULL, `orderId` int NOT NULL, `shipmentId` int NOT NULL, `orderItemId` int NOT NULL, `quantity` int NOT NULL, `itemSnapshot` json NOT NULL, UNIQUE INDEX `UQ_mall_shipment_items_package_item` (`shipmentId`,`orderItemId`), INDEX `IDX_mall_shipment_items_order_item` (`orderId`,`orderItemId`), PRIMARY KEY (`id`), CONSTRAINT `FK_mall_shipment_items_tenant` FOREIGN KEY (`tenantId`) REFERENCES `tenants`(`id`) ON DELETE CASCADE, CONSTRAINT `FK_mall_shipment_items_merchant` FOREIGN KEY (`merchantId`) REFERENCES `mall_merchants`(`id`) ON DELETE SET NULL, CONSTRAINT `FK_mall_shipment_items_order` FOREIGN KEY (`orderId`) REFERENCES `mall_orders`(`id`) ON DELETE CASCADE, CONSTRAINT `FK_mall_shipment_items_shipment` FOREIGN KEY (`shipmentId`) REFERENCES `mall_shipments`(`id`) ON DELETE CASCADE, CONSTRAINT `FK_mall_shipment_items_order_item` FOREIGN KEY (`orderItemId`) REFERENCES `mall_order_items`(`id`) ON DELETE CASCADE, CONSTRAINT `CHK_mall_shipment_items_quantity` CHECK (`quantity` > 0)) ENGINE=InnoDB");
+    await queryRunner.query("UPDATE `mall_orders` o SET o.`totalQuantity` = COALESCE((SELECT SUM(i.`quantity`) FROM `mall_order_items` i WHERE i.`orderId` = o.`id`), 0), o.`shippedQuantity` = CASE WHEN o.`status` IN ('shipped','completed') THEN COALESCE((SELECT SUM(i.`quantity`) FROM `mall_order_items` i WHERE i.`orderId` = o.`id`), 0) ELSE 0 END, o.`fulfillmentStatus` = CASE WHEN o.`status` = 'completed' THEN 'received' WHEN o.`status` = 'shipped' THEN 'shipped' WHEN o.`status` IN ('closed','refunded') THEN 'cancelled' ELSE 'unshipped' END");
+  }
+
+  async down(queryRunner: QueryRunner): Promise<void> {
+    if (await queryRunner.hasTable("mall_shipment_items")) await queryRunner.query("DROP TABLE `mall_shipment_items`");
+    if (await queryRunner.hasTable("mall_shipments")) await queryRunner.query("DROP TABLE `mall_shipments`");
+    for (const name of ["shippedQuantity", "totalQuantity", "fulfillmentStatus"]) if (await queryRunner.hasColumn("mall_orders", name)) await queryRunner.dropColumn("mall_orders", name);
+  }
+}

@@ -45,7 +45,10 @@ export class MiniprogramReleaseService {
   }
 
   async logsList(limit = 30) {
-    return this.logs.find({ order: { createdAt: "DESC" }, take: Math.min(Math.max(Number(limit || 30), 1), 100) });
+    const parsedLimit = Number(limit);
+    const take = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 30;
+    const rows = await this.logs.find({ order: { createdAt: "DESC" }, take });
+    return rows.map((row) => this.publicLog(row));
   }
 
   async uploadTrial(dto: MiniprogramReleaseVersionDto, admin?: AdminContext) {
@@ -148,6 +151,39 @@ export class MiniprogramReleaseService {
       createdAt: setting.createdAt,
       updatedAt: setting.updatedAt
     };
+  }
+
+  private publicLog(row: MiniprogramReleaseLog) {
+    return {
+      id: row.id,
+      action: row.action,
+      status: row.status,
+      appId: row.appId,
+      version: row.version,
+      description: row.description,
+      qrCodeUrl: row.qrCodeUrl,
+      auditId: row.auditId,
+      errorMessage: row.errorMessage,
+      adminId: row.adminId,
+      adminUsername: row.adminUsername,
+      createdAt: row.createdAt,
+      detail: this.sanitizeLogValue(row.detail)
+    };
+  }
+
+  private sanitizeLogValue(value: unknown): unknown {
+    if (Array.isArray(value)) return value.map((item) => this.sanitizeLogValue(item));
+    if (!value || typeof value !== "object") return value;
+    const result: Record<string, unknown> = {};
+    for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+      if (key.toLowerCase() === "stack") continue;
+      if (/(secret|token|private.?key|password|authorization|cookie)/i.test(key)) {
+        result[key] = "********";
+        continue;
+      }
+      result[key] = this.sanitizeLogValue(item);
+    }
+    return result;
   }
 
   private async loadMiniprogramCi() {

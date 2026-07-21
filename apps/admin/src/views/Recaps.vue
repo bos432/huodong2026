@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute } from "vue-router";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api, downloadFile } from "../api";
+import { maskPhone } from "../privacy";
+import { hasPermission } from "../permissions";
 
 const route = useRoute();
 const router = useRouter();
@@ -11,6 +13,14 @@ const activities = ref<any[]>([]);
 const selectedId = ref<number>();
 const data = ref<any>();
 const loading = ref(false);
+const errorMessage = ref("");
+const exporting = ref(false);
+const versions = ref<any[]>([]);
+const selectedVersion = ref<string | number>("live");
+const creatingVersion = ref(false);
+const versionForm = reactive({ summary: "", problems: "", actionItems: "", images: "" });
+const canManageRecap = computed(() => hasPermission("analytics.manage"));
+const canExportRecap = computed(() => hasPermission("analytics.export"));
 
 function routeActivityId() {
   const activityId = typeof route.query.activityId === "string" ? Number(route.query.activityId) : undefined;
@@ -110,28 +120,70 @@ function openAction(item: { path: string; query?: Record<string, number | string
 }
 
 async function loadActivities() {
-  const result = await api.get<any, any>("/admin/activities", { params: { page: 1, pageSize: 100 } });
-  activities.value = Array.isArray(result) ? result : result.items || [];
-  selectedId.value = routeActivityId() || selectedId.value || activities.value[0]?.id;
-  if (selectedId.value) await loadRecap();
+  try {
+    errorMessage.value = "";
+    activities.value = await api.get<any, any>("/admin/analytics/activity-options");
+    selectedId.value = routeActivityId() || selectedId.value || activities.value[0]?.id;
+    if (selectedId.value) await changeActivity();
+  } catch (error: any) {
+    errorMessage.value = error.message || "活动列表加载失败";
+    ElMessage.error(errorMessage.value);
+  }
 }
 
 async function loadRecap() {
-  if (!selectedId.value) return;
+  if (!selectedId.value || loading.value) return;
   loading.value = true;
   try {
-    data.value = await api.get(`/admin/activities/${selectedId.value}/recap`);
+    errorMessage.value = "";
+    const version = selectedVersion.value === "live" ? undefined : Number(selectedVersion.value);
+    data.value = await api.get(`/admin/activities/${selectedId.value}/recap`, { params: version ? { version } : {} });
+  } catch (error: any) {
+    errorMessage.value = error.message || "活动复盘加载失败";
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }
 }
 
-async function exportRecap() {
+async function loadVersions() {
   if (!selectedId.value) return;
+  versions.value = await api.get(`/admin/activities/${selectedId.value}/recap/versions`);
+}
+
+async function changeActivity() {
+  selectedVersion.value = "live";
+  await Promise.all([loadVersions(), loadRecap()]);
+}
+
+function splitLines(value: string) { return value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean); }
+
+async function createVersion() {
+  if (!canManageRecap.value) return ElMessage.error("当前账号无统计管理权限");
+  if (!selectedId.value || creatingVersion.value) return;
+  creatingVersion.value = true;
   try {
-    await downloadFile(`/admin/activities/${selectedId.value}/recap/export`, `活动复盘-${selectedId.value}.xlsx`);
+    const saved: any = await api.post(`/admin/activities/${selectedId.value}/recap/versions`, { summary: versionForm.summary.trim(), problems: splitLines(versionForm.problems), actionItems: splitLines(versionForm.actionItems), images: splitLines(versionForm.images) });
+    selectedVersion.value = saved.versionNo;
+    Object.assign(versionForm, { summary: "", problems: "", actionItems: "", images: "" });
+    await Promise.all([loadVersions(), loadRecap()]);
+    ElMessage.success(`复盘 v${saved.versionNo} 已保存，历史版本不可修改`);
+  } catch (error: any) { ElMessage.error(error.message || "复盘版本保存失败"); }
+  finally { creatingVersion.value = false; }
+}
+
+async function exportRecap() {
+  if (!canExportRecap.value) return ElMessage.error("当前账号无分析数据导出权限");
+  if (!selectedId.value || exporting.value) return;
+  exporting.value = true;
+  try {
+    const version = selectedVersion.value === "live" ? "" : `?version=${selectedVersion.value}`;
+    await downloadFile(`/admin/activities/${selectedId.value}/recap/export${version}`, `活动复盘-${selectedId.value}-${selectedVersion.value}.xlsx`);
+    ElMessage.success("活动复盘已导出");
   } catch (error: any) {
     ElMessage.error(error.message || "导出失败");
+  } finally {
+    exporting.value = false;
   }
 }
 
@@ -143,7 +195,7 @@ watch(
     const nextActivityId = routeActivityId();
     if (nextActivityId && selectedId.value !== nextActivityId) {
       selectedId.value = nextActivityId;
-      await loadRecap();
+      await changeActivity();
     }
   }
 );
@@ -154,16 +206,19 @@ watch(
     <div class="toolbar">
       <h2>活动复盘</h2>
       <div class="toolbar-actions">
-        <el-select v-model="selectedId" filterable placeholder="选择活动" style="width: 360px" @change="loadRecap">
+        <el-select v-model="selectedId" filterable placeholder="选择活动" style="width: 320px" @change="changeActivity">
           <el-option v-for="item in activities" :key="item.id" :label="item.title" :value="item.id" />
         </el-select>
-        <el-button @click="loadRecap">刷新</el-button>
-        <el-button type="primary" @click="exportRecap">导出 Excel</el-button>
+        <el-select v-model="selectedVersion" style="width: 180px" @change="loadRecap"><el-option label="实时数据" value="live" /><el-option v-for="item in versions" :key="item.id" :label="`历史 v${item.versionNo}`" :value="item.versionNo" /></el-select>
+        <el-button :loading="loading" @click="loadRecap">刷新</el-button>
+        <el-button v-if="canExportRecap" type="primary" :loading="exporting" :disabled="loading" @click="exportRecap">导出 Excel</el-button>
       </div>
     </div>
+    <el-alert v-if="errorMessage" class="page-error" type="error" show-icon :closable="false" :title="errorMessage"><template #default><el-button size="small" @click="selectedId ? loadRecap() : loadActivities()">重试</el-button></template></el-alert>
 
     <el-empty v-if="!selectedId" description="暂无活动" />
     <template v-else-if="data">
+      <el-alert v-if="data.isHistorical" class="history-alert" type="info" show-icon :closable="false" :title="`正在查看不可变历史版本 v${data.version.versionNo}，生成于 ${data.version.createdAt}`" />
       <div class="summary" v-loading="loading">
         <div class="hero-card">
           <span>活动</span>
@@ -186,6 +241,9 @@ watch(
           <div class="funnel-row"><span>报名成功</span><strong>{{ data.funnel.approvedCount }}</strong></div>
           <div class="funnel-row"><span>签到</span><strong>{{ data.funnel.checkInCount }}</strong></div>
           <div class="funnel-row"><span>评价</span><strong>{{ data.funnel.reviewCount }}</strong></div>
+          <div class="funnel-row"><span>取消</span><strong>{{ data.funnel.cancelCount }}</strong></div>
+          <div class="funnel-row"><span>退款</span><strong>{{ data.funnel.refundCount }}</strong></div>
+          <div class="funnel-row"><span>净收入</span><strong>¥{{ (Number(data.funnel.netAmountFen || 0) / 100).toFixed(2) }}</strong></div>
         </div>
 
         <div class="table-card">
@@ -224,11 +282,33 @@ watch(
         </div>
       </div>
 
+      <div v-if="data.version" class="table-card version-content">
+        <h3>历史版本内容 v{{ data.version.versionNo }}</h3>
+        <p class="version-summary">{{ data.version.summary || "未填写总结" }}</p>
+        <div class="version-columns"><div><strong>问题</strong><ul><li v-for="item in data.version.problems" :key="item">{{ item }}</li></ul></div><div><strong>行动项</strong><ul><li v-for="item in data.version.actionItems" :key="item">{{ item }}</li></ul></div></div>
+        <div v-if="data.version.images?.length" class="version-images"><a v-for="item in data.version.images" :key="item" :href="item" target="_blank" rel="noopener noreferrer">{{ item }}</a></div>
+      </div>
+
+      <div class="version-grid">
+        <div v-if="canManageRecap" class="table-card version-editor">
+          <h3>生成新复盘版本</h3>
+          <el-input v-model="versionForm.summary" type="textarea" :rows="5" maxlength="10000" show-word-limit placeholder="填写本次活动总结" />
+          <el-input v-model="versionForm.problems" type="textarea" :rows="4" placeholder="每行一个问题，最多 20 条" />
+          <el-input v-model="versionForm.actionItems" type="textarea" :rows="4" placeholder="每行一个行动项，最多 20 条" />
+          <el-input v-model="versionForm.images" type="textarea" :rows="3" placeholder="每行一个 HTTPS 或 /uploads/ 图片地址，最多 9 张" />
+          <el-button type="primary" :loading="creatingVersion" @click="createVersion">保存不可变版本</el-button>
+        </div>
+        <div class="table-card version-history">
+          <h3>历史版本</h3>
+          <el-table :data="versions" stripe empty-text="暂无历史版本"><el-table-column prop="versionNo" label="版本" width="76"><template #default="{ row }">v{{ row.versionNo }}</template></el-table-column><el-table-column prop="summaryPreview" label="总结" min-width="220" show-overflow-tooltip /><el-table-column prop="problemCount" label="问题" width="70" /><el-table-column prop="actionCount" label="行动" width="70" /><el-table-column prop="imageCount" label="图片" width="70" /><el-table-column prop="createdAt" label="生成时间" width="180" /><el-table-column label="操作" width="90"><template #default="{ row }"><el-button link type="primary" @click="selectedVersion = row.versionNo; loadRecap()">查看</el-button></template></el-table-column></el-table>
+        </div>
+      </div>
+
       <div class="table-card records">
         <h3>最近评价</h3>
         <el-table :data="data.reviewSummary.latestReviews" stripe empty-text="暂无评价">
           <el-table-column label="用户" width="150">
-            <template #default="{ row }">{{ row.user?.nickname || row.user?.phone || "-" }}</template>
+            <template #default="{ row }">{{ row.user?.nickname || maskPhone(row.user?.phone) }}</template>
           </el-table-column>
           <el-table-column prop="rating" label="评分" width="90" />
           <el-table-column prop="content" label="评价内容" min-width="280" show-overflow-tooltip />
@@ -249,6 +329,15 @@ watch(
 .hero-card small, .insight small { color: #667085; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .records { margin-top: 16px; }
+.history-alert { margin-bottom: 16px; }
+.version-content, .version-grid { margin-top: 16px; }
+.version-grid { display: grid; grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr); gap: 16px; }
+.version-editor { display: grid; gap: 12px; align-content: start; }
+.version-history { min-width: 0; }
+.version-summary { white-space: pre-wrap; line-height: 1.7; color: #344054; }
+.version-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 24px; }
+.version-columns ul { margin: 10px 0 0; padding-left: 20px; color: #475467; line-height: 1.7; }
+.version-images { display: grid; gap: 6px; margin-top: 12px; overflow-wrap: anywhere; }
 h3 { margin: 0 0 16px; }
 .funnel-row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #edf0f5; }
 .funnel-row:last-child { border-bottom: 0; }
@@ -272,5 +361,13 @@ h3 { margin: 0 0 16px; }
   .summary { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .hero-card { grid-column: 1 / -1; }
   .two-col { grid-template-columns: 1fr; }
+  .version-grid, .version-columns { grid-template-columns: 1fr; }
+}
+@media (max-width: 640px) {
+  .toolbar { align-items: stretch; }
+  .toolbar h2 { width: 100%; margin: 0; }
+  .toolbar-actions { width: 100%; flex-wrap: wrap; }
+  .toolbar-actions :deep(.el-select) { width: 100% !important; }
+  .toolbar-actions .el-button { flex: 1 1 120px; margin-left: 0; }
 }
 </style>

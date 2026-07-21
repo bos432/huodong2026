@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, Unique } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, Unique } from "typeorm";
+import { yuanToFen } from "../shared/money";
 import { MallMerchant } from "./mall-merchant.entity";
 import { MallOrder } from "./mall-order.entity";
 import { Tenant } from "./tenant.entity";
@@ -29,6 +30,10 @@ export class MallPaymentTransaction {
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
   amount!: string;
+  @Column({ type: "bigint", default: 0 }) amountFen!: number;
+  @Column({ type: "varchar", length: 40, default: "mall" }) businessType!: string;
+  @Column({ type: "varchar", length: 80, nullable: true }) businessOrderNo!: string | null;
+  @Column({ type: "json", nullable: true }) businessSnapshot!: Record<string, unknown> | null;
 
   @Column({ type: "varchar", length: 24, default: "success" })
   status!: string;
@@ -44,4 +49,11 @@ export class MallPaymentTransaction {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @BeforeInsert()
+  freezeBusinessMoney() {
+    this.amountFen = yuanToFen(this.amount);
+    this.businessOrderNo ||= this.order?.orderNo || null;
+    this.businessSnapshot ||= { transactionNo: this.transactionNo, provider: this.provider, paymentMethod: this.paymentMethod, amount: this.amount, orderNo: this.businessOrderNo, merchantId: this.merchant?.id || null };
+  }
 }

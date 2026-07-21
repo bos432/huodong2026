@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
+import { ElMessage } from "element-plus";
 import { useRoute } from "vue-router";
-import { api } from "../api";
+import { api, downloadFile } from "../api";
+import { hasPermission } from "../permissions";
 
 type LoginLog = {
   id: number;
@@ -26,7 +28,16 @@ const tenants = ref<any[]>([]);
 const summary = ref<Record<string, number>>({});
 const total = ref(0);
 const loading = ref(false);
+const errorMessage = ref("");
+const tenantsLoading = ref(false);
+const tenantsErrorMessage = ref("");
+const exporting = ref(false);
+const loadGeneration = ref(0);
+const tenantGeneration = ref(0);
 const route = useRoute();
+const canViewSensitive = computed(() => hasPermission("security_log.sensitive"));
+const canExport = computed(() => hasPermission("security_log.export"));
+const interactionLocked = computed(() => loading.value || tenantsLoading.value || exporting.value);
 const query = reactive({ username: "", status: "", tenantId: undefined as number | undefined });
 const tenantMap = computed(() => new Map(tenants.value.map((tenant) => [tenant.id, tenant])));
 
@@ -38,19 +49,48 @@ const summaryCards = computed(() => [
 ]);
 
 async function load() {
+  const generation = ++loadGeneration.value;
+  const snapshot = { username: query.username.trim(), status: query.status, tenantId: query.tenantId };
   loading.value = true;
+  errorMessage.value = "";
+  rows.value = [];
+  summary.value = {};
+  total.value = 0;
   try {
-    const data = await api.get<any, LoginLogResult>("/admin/auth/login-logs", { params: { ...query } });
+    const data = await api.get<any, LoginLogResult>("/admin/auth/login-logs", { params: snapshot });
+    if (generation !== loadGeneration.value || snapshot.username !== query.username.trim() || snapshot.status !== query.status || snapshot.tenantId !== query.tenantId) return;
+    if (!data || !Array.isArray(data.items) || !Number.isFinite(data.total) || !data.summary || typeof data.summary !== "object") throw new Error("登录日志响应格式异常");
     rows.value = data.items;
-    summary.value = data.summary || {};
-    total.value = data.total || 0;
+    summary.value = data.summary;
+    total.value = Math.max(0, data.total);
+  } catch (error: any) {
+    if (generation !== loadGeneration.value || snapshot.username !== query.username.trim() || snapshot.status !== query.status || snapshot.tenantId !== query.tenantId) return;
+    rows.value = [];
+    summary.value = {};
+    total.value = 0;
+    errorMessage.value = error.message || "登录日志加载失败";
   } finally {
-    loading.value = false;
+    if (generation === loadGeneration.value) loading.value = false;
   }
 }
 
 async function loadTenants() {
-  tenants.value = await api.get<any, any[]>("/admin/tenants");
+  const generation = ++tenantGeneration.value;
+  tenantsLoading.value = true;
+  tenantsErrorMessage.value = "";
+  tenants.value = [];
+  try {
+    const result = await api.get<any, { tenants: any[] }>("/admin/auth/log-options");
+    if (generation !== tenantGeneration.value) return;
+    if (!result || !Array.isArray(result.tenants)) throw new Error("商家选项响应格式异常");
+    tenants.value = result.tenants;
+  } catch (error: any) {
+    if (generation !== tenantGeneration.value) return;
+    tenants.value = [];
+    tenantsErrorMessage.value = error.message || "商家选项加载失败";
+  } finally {
+    if (generation === tenantGeneration.value) tenantsLoading.value = false;
+  }
 }
 
 function reset() {
@@ -58,6 +98,24 @@ function reset() {
   query.status = "";
   query.tenantId = undefined;
   load();
+}
+
+async function exportLogs() {
+  if (!canExport.value || exporting.value) return;
+  const snapshot = { username: query.username.trim(), status: query.status, tenantId: query.tenantId };
+  exporting.value = true;
+  try {
+    const params = new URLSearchParams();
+    if (snapshot.username) params.set("username", snapshot.username);
+    if (snapshot.status) params.set("status", snapshot.status);
+    if (snapshot.tenantId) params.set("tenantId", String(snapshot.tenantId));
+    await downloadFile(`/admin/auth/login-logs/export?${params.toString()}`, "admin-login-logs.xlsx");
+    ElMessage.success("后台登录日志已导出");
+  } catch (error: any) {
+    ElMessage.error(error.message || "后台登录日志导出失败");
+  } finally {
+    exporting.value = false;
+  }
 }
 
 function formatTime(value?: string | null) {
@@ -110,8 +168,11 @@ onMounted(async () => {
   <div class="page">
     <div class="toolbar">
       <h2>后台登录日志</h2>
-      <el-button @click="load">刷新</el-button>
+      <div class="toolbar-actions"><el-button v-if="canExport" :loading="exporting" :disabled="loading || tenantsLoading" @click="exportLogs">导出</el-button><el-button :loading="loading" :disabled="tenantsLoading || exporting" @click="load">刷新</el-button></div>
     </div>
+
+    <el-alert v-if="tenantsErrorMessage" class="page-error" type="error" show-icon :closable="false"><template #title><span>{{ tenantsErrorMessage }}</span></template><template #default><el-button size="small" :loading="tenantsLoading" :disabled="exporting" @click="loadTenants">重试商家选项</el-button></template></el-alert>
+    <el-alert v-if="!canViewSensitive" class="page-error" type="info" show-icon :closable="false" title="终端信息已脱敏" description="IP 仅显示网段，浏览器信息已隐藏；导出遵循相同字段范围。" />
 
     <div class="metric-row">
       <div v-for="item in summaryCards" :key="item.label" class="metric">
@@ -121,25 +182,26 @@ onMounted(async () => {
     </div>
 
     <div class="table-card">
+      <el-alert v-if="errorMessage" type="error" show-icon :closable="false"><template #title><span>{{ errorMessage }}</span></template><template #default><el-button size="small" :disabled="interactionLocked" @click="load">重试</el-button></template></el-alert>
       <el-form :inline="true" :model="query" class="filters">
         <el-form-item label="账号">
-          <el-input v-model="query.username" clearable placeholder="管理员账号" />
+          <el-input v-model="query.username" clearable placeholder="管理员账号" :disabled="interactionLocked" />
         </el-form-item>
         <el-form-item label="状态">
-          <el-select v-model="query.status" clearable placeholder="全部状态" style="width: 140px">
+          <el-select v-model="query.status" clearable placeholder="全部状态" style="width: 140px" :disabled="interactionLocked">
             <el-option label="登录成功" value="success" />
             <el-option label="登录失败" value="failed" />
             <el-option label="触发限流" value="rate_limited" />
           </el-select>
         </el-form-item>
         <el-form-item label="商家">
-          <el-select v-model="query.tenantId" clearable filterable placeholder="全部商家" style="width: 220px">
+          <el-select v-model="query.tenantId" clearable filterable placeholder="全部商家" style="width: 220px" :disabled="interactionLocked">
             <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name || tenant.code}（${tenant.code}）`" :value="tenant.id" />
           </el-select>
         </el-form-item>
         <el-form-item>
-          <el-button type="primary" @click="load">查询</el-button>
-          <el-button @click="reset">重置</el-button>
+          <el-button type="primary" :loading="loading" :disabled="exporting || tenantsLoading" @click="load">查询</el-button>
+          <el-button :disabled="interactionLocked" @click="reset">重置</el-button>
         </el-form-item>
       </el-form>
 
@@ -151,7 +213,7 @@ onMounted(async () => {
         <el-table-column prop="clientIp" label="IP" width="150" />
         <el-table-column label="状态" width="120"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="原因" width="160"><template #default="{ row }">{{ reasonText(row.failureReason) }}</template></el-table-column>
-        <el-table-column prop="userAgent" label="浏览器" min-width="260" show-overflow-tooltip />
+        <el-table-column v-if="canViewSensitive" prop="userAgent" label="浏览器" min-width="260" show-overflow-tooltip />
       </el-table>
     </div>
   </div>
@@ -166,4 +228,11 @@ onMounted(async () => {
 .metric strong.warning { color: #d97706; }
 .metric strong.danger { color: #dc2626; }
 .filters { margin-bottom: 8px; }
+.toolbar-actions { display: flex; gap: 8px; }
+@media (max-width: 640px) {
+  .page, .toolbar, .toolbar-actions, .table-card { min-width: 0; }
+  .toolbar { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .metric-row { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .filters :deep(.el-form-item), .filters :deep(.el-input), .filters :deep(.el-select) { width: 100% !important; }
+}
 </style>

@@ -2,11 +2,12 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
-import { CopyDocument, Delete, Plus, QuestionFilled, Refresh, Upload, View } from "@element-plus/icons-vue";
+import { Collection, CopyDocument, Delete, MagicStick, Monitor, MoreFilled, Plus, QuestionFilled, Refresh, Upload, View } from "@element-plus/icons-vue";
 import { api } from "../api";
-import { currentTenantCode, isPlatformAdmin } from "../permissions";
+import { currentTenantCode, hasPermission, isPlatformAdmin } from "../permissions";
 import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
 import type { HomepageSectionView, HomepageSectionType } from "@activity/shared";
+import HomepageLivePreview from "../components/HomepageLivePreview.vue";
 
 type SectionForm = {
   type: HomepageSectionType | string;
@@ -401,6 +402,11 @@ const tenants = ref<any[]>([]);
 const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
+const loadError = ref("");
+const tenantLoadError = ref("");
+const actionError = ref("");
+const toolbarAction = ref("");
+const sectionActionKey = ref("");
 const saving = ref(false);
 const drawer = ref(false);
 const editorOpen = ref(false);
@@ -423,18 +429,27 @@ const healthIssues = ref<HealthIssue[]>([]);
 const linkPickerVisible = ref(false);
 const crossCopyDialogVisible = ref(false);
 const uiKitDialogVisible = ref(false);
+const moduleLibraryVisible = ref(false);
+const copyPageDialogVisible = ref(false);
+const moduleSearch = ref("");
+const moduleCategory = ref("all");
+const previewDevice = ref<"standard" | "large">("standard");
 const uiKitPreviewKey = ref(uiTemplateKits[0]?.key || "activity_ops");
 const uiKitApplyingKey = ref("");
 const crossCopySubmitting = ref(false);
 const crossCopyResult = ref("");
 const versionDialogVisible = ref(false);
 const versionLoading = ref(false);
+const versionError = ref("");
 const versionSaving = ref(false);
 const versionRestoringId = ref<number | null>(null);
 const versionDeletingId = ref<number | null>(null);
 const versions = ref<DecorationVersion[]>([]);
+const publicationStatus = ref<any>(null);
+const publishing = ref(false);
 const templateDialogVisible = ref(false);
 const templateLoading = ref(false);
+const templateError = ref("");
 const templateSaving = ref(false);
 const templateApplyingId = ref<number | null>(null);
 const templateDeletingId = ref<number | null>(null);
@@ -499,7 +514,8 @@ const toolbarHelpItems = [
 ];
 
 const orderedRows = computed(() => [...rows.value].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
-const canEdit = computed(() => true);
+const canEdit = computed(() => hasPermission("homepage.manage"));
+const toolbarBusy = computed(() => Boolean(toolbarAction.value || publishing.value || versionSaving.value || uiKitApplyingKey.value));
 const currentPageOption = computed(() => pageOptions.find((item) => item.key === filters.pageKey) || pageOptions[0]);
 const scopeTitle = computed(() => `${currentPageOption.value.label} · ${isPlatformAdmin() && filters.tenantId ? "商家独立装修" : isPlatformAdmin() ? "平台全局默认装修" : "当前商家装修"}`);
 const scopeTip = computed(() => {
@@ -507,7 +523,7 @@ const scopeTip = computed(() => {
   return filters.tenantId ? "当前正在编辑选中商家的独立 H5 装修；清空商家筛选后可编辑平台全局默认装修。" : "当前正在编辑平台全局默认装修；未单独装修的商家会自动继承这套配置。";
 });
 const pageTitle = computed(() => (isPlatformAdmin() ? "前台全局装修" : "前台装修"));
-const pageDescription = computed(() => (isPlatformAdmin() ? "配置平台默认或指定商家的 H5/小程序首页、底部菜单、我的页面和内页布局。" : "配置本商家 H5/小程序前台装修，保存后刷新前台立即生效。"));
+const pageDescription = computed(() => (isPlatformAdmin() ? "配置平台默认或指定商家的 H5/小程序首页、底部菜单、我的页面和内页布局。" : "配置本商家 H5/小程序前台装修；保存进入草稿，发布后更新前台。"));
 const selectedTenant = computed(() => tenants.value.find((tenant) => tenant.id === filters.tenantId));
 const saveScopeName = computed(() => (isPlatformAdmin() && filters.tenantId ? selectedTenant.value?.name || selectedTenant.value?.code || "选中商家" : isPlatformAdmin() ? "平台全局默认装修" : "当前商家装修"));
 const templateDefaultName = computed(() => `${saveScopeName.value} · ${currentPageOption.value.label}`);
@@ -553,6 +569,18 @@ const previewRows = computed(() => {
   }
   return list.filter((item) => item.enabled).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
 });
+const moduleCategories = [
+  { key: "all", label: "全部" },
+  { key: "basic", label: "基础" },
+  { key: "content", label: "内容" },
+  { key: "business", label: "业务" },
+  { key: "layout", label: "页面" }
+];
+const filteredModuleTypes = computed(() => moduleTypes.filter((item) => {
+  const keyword = moduleSearch.value.trim().toLowerCase();
+  const categoryMatched = moduleCategory.value === "all" || moduleCategoryForType(item.type) === moduleCategory.value;
+  return categoryMatched && (!keyword || `${item.label} ${item.description} ${item.type}`.toLowerCase().includes(keyword));
+}));
 const hasDefaultPreviewFallback = computed(() => !orderedRows.value.length);
 const healthSummary = computed(() => {
   const errors = healthIssues.value.filter((item) => item.level === "error").length;
@@ -575,6 +603,47 @@ const linkPickerPreviewValue = computed(() => {
 
 function typeLabel(type: string) {
   return moduleTypes.find((item) => item.type === type)?.label || type;
+}
+
+function moduleCategoryForType(type: string) {
+  if (["search_bar", "hero", "announcement_bar", "quick_nav", "image_banner", "rich_text"].includes(type)) return "basic";
+  if (["category_grid", "featured_activities", "activity_tabs", "activity_feed", "testimonial_feed", "featured_testimonials", "activity_testimonials"].includes(type)) return "content";
+  if (["charity_summary", "course_recommendations", "mall_showcase", "brand_story_entry"].includes(type)) return "business";
+  return "layout";
+}
+
+function openModuleLibrary() {
+  moduleSearch.value = "";
+  moduleCategory.value = "all";
+  moduleLibraryVisible.value = true;
+}
+
+function chooseModule(type: HomepageSectionType) {
+  moduleLibraryVisible.value = false;
+  addSection(type);
+}
+
+async function handleMoreCommand(command: string) {
+  if (command === "ui-templates") return openUiKitDialog();
+  if (command === "saved-templates") return openTemplateLibrary();
+  if (command === "save-template") return saveCurrentAsTemplate();
+  if (command === "history") return openVersionHistory();
+  if (command === "copy-page") {
+    copyFromPageKey.value = pageOptions.find((item) => item.key !== filters.pageKey)?.key || "home";
+    copyPageDialogVisible.value = true;
+    return;
+  }
+  if (command === "cross-copy") return openCrossTenantCopy();
+  if (command === "restore-published") return restoreLastPublished();
+  if (command === "reset-default") return resetDefault();
+  if (command === "help") helpDialogVisible.value = true;
+}
+
+async function handleRowCommand(command: string, row: HomepageSectionView, index: number) {
+  if (command === "up") return move(row, -1);
+  if (command === "down") return move(row, 1);
+  if (command === "copy") return copy(row);
+  if (command === "remove") return remove(row);
 }
 
 function normalizePagePath(value: unknown) {
@@ -1092,6 +1161,52 @@ function validTenantId(value: unknown) {
   return Number.isFinite(id) && id > 0 ? id : undefined;
 }
 
+function errorMessage(error: any, fallback: string) {
+  return String(error?.response?.data?.message || error?.message || fallback);
+}
+
+function isDialogCancelled(error: any) {
+  return error === "cancel" || error === "close" || error?.action === "cancel" || error?.action === "close";
+}
+
+async function confirmAction(message: string, title: string, options: Record<string, unknown> = {}) {
+  try {
+    await ElMessageBox.confirm(message, title, options);
+    return true;
+  } catch (error: any) {
+    if (isDialogCancelled(error)) return false;
+    throw error;
+  }
+}
+
+async function runToolbarAction(key: string, task: () => Promise<void>) {
+  if (toolbarBusy.value) return;
+  toolbarAction.value = key;
+  actionError.value = "";
+  try {
+    await task();
+  } catch (error: any) {
+    actionError.value = errorMessage(error, "装修操作失败，请重试");
+    ElMessage.error(actionError.value);
+  } finally {
+    toolbarAction.value = "";
+  }
+}
+
+async function runSectionAction(key: string, task: () => Promise<void>) {
+  if (sectionActionKey.value) return;
+  sectionActionKey.value = key;
+  actionError.value = "";
+  try {
+    await task();
+  } catch (error: any) {
+    actionError.value = errorMessage(error, "模块操作失败，请重试");
+    ElMessage.error(actionError.value);
+  } finally {
+    sectionActionKey.value = "";
+  }
+}
+
 function applyRouteFilters() {
   filters.pageKey = validPageKey(route.query.pageKey);
   filters.tenantId = isPlatformAdmin() ? validTenantId(route.query.tenantId) : undefined;
@@ -1110,22 +1225,48 @@ function syncRouteFilters() {
 }
 
 async function load(options: { updateSnapshot?: boolean } = {}) {
+  if (loading.value) return;
   loading.value = true;
+  loadError.value = "";
   try {
-    rows.value = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", homepageScopeParams());
+    const [draftRows, status] = await Promise.all([api.get<any, HomepageSectionView[]>("/admin/homepage/sections", homepageScopeParams()), api.get<any, any>("/admin/homepage/publication", homepageScopeParams())]);
+    rows.value = draftRows;
+    publicationStatus.value = status;
     if (options.updateSnapshot !== false) {
       const cached = readRestoreSnapshot();
       lastPublishedRows.value = cloneJson(cached?.rows || rows.value);
       lastPublishedLoaded.value = true;
       restoreSnapshotSavedAt.value = cached?.savedAt || "";
     }
+  } catch (error: any) {
+    loadError.value = errorMessage(error, "首页装修加载失败，请重试");
   } finally {
     loading.value = false;
   }
 }
 
+async function publishCurrent() {
+  await runToolbarAction("publish", async () => {
+    const confirmed = await confirmAction(`确认发布「${currentPageOption.value.label}」当前草稿？发布后 H5 和小程序将读取本次快照。`, "发布装修", { type: "warning", confirmButtonText: "确认发布", cancelButtonText: "继续编辑" });
+    if (!confirmed) return;
+    publishing.value = true;
+    try {
+      await api.post("/admin/homepage/publish", { name: `${currentPageOption.value.label}发布`, note: "后台手工发布" }, homepageScopeParams());
+      ElMessage.success("装修已正式发布");
+      await load({ updateSnapshot: true });
+    } finally {
+      publishing.value = false;
+    }
+  });
+}
+
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  tenantLoadError.value = "";
+  try {
+    tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  } catch (error: any) {
+    tenantLoadError.value = errorMessage(error, "商家列表加载失败，请重试");
+  }
 }
 
 async function handleScopeChanged() {
@@ -1181,46 +1322,53 @@ function selectPreviewRow(row: HomepageSectionView) {
 
 async function copy(row: HomepageSectionView) {
   if (!canEdit.value) return;
-  const payload = {
-    pageKey: filters.pageKey,
-    type: row.type,
-    title: `${row.title || typeLabel(row.type)} 副本`,
-    subtitle: row.subtitle || "",
-    enabled: row.enabled,
-    sortOrder: orderedRows.value.length ? Math.max(...orderedRows.value.map((item) => item.sortOrder)) + 10 : 10,
-    config: row.config || {},
-    layout: row.layout || {}
-  };
-  rememberBeforeMutation();
-  await api.post("/admin/homepage/sections", payload, homepageScopeParams());
-  ElMessage.success("模块已复制");
-  load({ updateSnapshot: false });
+  await runSectionAction(`copy:${row.id}`, async () => {
+    const payload = {
+      pageKey: filters.pageKey,
+      type: row.type,
+      title: `${row.title || typeLabel(row.type)} 副本`,
+      subtitle: row.subtitle || "",
+      enabled: row.enabled,
+      sortOrder: orderedRows.value.length ? Math.max(...orderedRows.value.map((item) => item.sortOrder)) + 10 : 10,
+      config: row.config || {},
+      layout: row.layout || {}
+    };
+    rememberBeforeMutation();
+    await api.post("/admin/homepage/sections", payload, homepageScopeParams());
+    ElMessage.success("模块已复制");
+    await load({ updateSnapshot: false });
+  });
 }
 
 async function remove(row: HomepageSectionView) {
   if (!canEdit.value) return;
-  await ElMessageBox.confirm(`确认删除「${row.title || typeLabel(row.type)}」？删除后 H5 将不再显示该模块。`, "删除模块", { type: "warning" });
-  rememberBeforeMutation();
-  await api.delete(`/admin/homepage/sections/${row.id}`, homepageScopeParams());
-  ElMessage.success("模块已删除");
-  load({ updateSnapshot: false });
+  await runSectionAction(`remove:${row.id}`, async () => {
+    const confirmed = await confirmAction(`确认删除「${row.title || typeLabel(row.type)}」？删除后 H5 将不再显示该模块。`, "删除模块", { type: "warning" });
+    if (!confirmed) return;
+    rememberBeforeMutation();
+    await api.delete(`/admin/homepage/sections/${row.id}`, homepageScopeParams());
+    ElMessage.success("模块已删除");
+    await load({ updateSnapshot: false });
+  });
 }
 
 async function toggle(row: HomepageSectionView) {
   if (!canEdit.value) return;
-  rememberBeforeMutation();
-  await api.patch(`/admin/homepage/sections/${row.id}`, {
-    pageKey: filters.pageKey,
-    type: row.type,
-    title: row.title || "",
-    subtitle: row.subtitle || "",
-    sortOrder: row.sortOrder,
-    config: row.config || {},
-    layout: row.layout || {},
-    enabled: !row.enabled
-  }, homepageScopeParams());
-  ElMessage.success(!row.enabled ? "模块已启用" : "模块已停用");
-  load({ updateSnapshot: false });
+  await runSectionAction(`toggle:${row.id}`, async () => {
+    rememberBeforeMutation();
+    await api.patch(`/admin/homepage/sections/${row.id}`, {
+      pageKey: filters.pageKey,
+      type: row.type,
+      title: row.title || "",
+      subtitle: row.subtitle || "",
+      sortOrder: row.sortOrder,
+      config: row.config || {},
+      layout: row.layout || {},
+      enabled: !row.enabled
+    }, homepageScopeParams());
+    ElMessage.success(!row.enabled ? "模块已启用" : "模块已停用");
+    await load({ updateSnapshot: false });
+  });
 }
 
 function parseJson(text: string, label: string) {
@@ -1281,7 +1429,7 @@ async function submit() {
     rememberBeforeMutation();
     if (editingId.value) await api.patch(`/admin/homepage/sections/${editingId.value}`, payload, homepageScopeParams());
     else await api.post("/admin/homepage/sections", payload, homepageScopeParams());
-    ElMessage.success(`已保存到「${saveScopeName.value}」，刷新前台预览即可查看最新效果`);
+    ElMessage.warning(`已保存到「${saveScopeName.value}」草稿，尚未更新线上 H5；请点击“发布当前草稿”完成发布`);
     captureFormSnapshot();
     editorOpen.value = false;
     drawer.value = false;
@@ -1319,10 +1467,12 @@ async function closeDrawer(done?: () => void) {
 
 async function saveOrder(nextRows: HomepageSectionView[]) {
   if (!canEdit.value) return;
-  rememberBeforeMutation();
-  const items = nextRows.map((item, index) => ({ id: item.id, sortOrder: (index + 1) * 10 }));
-  rows.value = await api.put<any, HomepageSectionView[]>("/admin/homepage/sections/reorder", { items }, homepageScopeParams());
-  ElMessage.success("排序已保存");
+  await runSectionAction("reorder", async () => {
+    rememberBeforeMutation();
+    const items = nextRows.map((item, index) => ({ id: item.id, sortOrder: (index + 1) * 10 }));
+    rows.value = await api.put<any, HomepageSectionView[]>("/admin/homepage/sections/reorder", { items }, homepageScopeParams());
+    ElMessage.success("排序已保存");
+  });
 }
 
 function move(row: HomepageSectionView, offset: number) {
@@ -1357,10 +1507,13 @@ function onDrop(target: HomepageSectionView) {
 
 async function resetDefault() {
   if (!canEdit.value) return;
-  await ElMessageBox.confirm(`恢复默认装修会替换「${currentPageOption.value.label}」当前范围的全部模块配置，确认继续？`, "恢复默认装修", { type: "warning" });
-  rememberBeforeMutation();
-  rows.value = await api.post<any, HomepageSectionView[]>("/admin/homepage/sections/reset-default", {}, homepageScopeParams());
-  ElMessage.success("已恢复默认装修");
+  await runToolbarAction("reset-default", async () => {
+    const confirmed = await confirmAction(`恢复默认装修会替换「${currentPageOption.value.label}」当前范围的全部模块配置，确认继续？`, "恢复默认装修", { type: "warning" });
+    if (!confirmed) return;
+    rememberBeforeMutation();
+    rows.value = await api.post<any, HomepageSectionView[]>("/admin/homepage/sections/reset-default", {}, homepageScopeParams());
+    ElMessage.success("已恢复默认装修");
+  });
 }
 
 function templatePayload(row: TemplateRow, index: number) {
@@ -1388,12 +1541,9 @@ function withHomeGlobalRows(nextRows: TemplateRow[]) {
 async function replaceCurrentSections(nextRows: TemplateRow[] | HomepageSectionView[], message: string, options: { updateSnapshot?: boolean; skipBeforeSnapshot?: boolean } = {}) {
   if (!canEdit.value) return;
   if (!options.skipBeforeSnapshot) rememberBeforeMutation();
-  for (const row of orderedRows.value) await api.delete(`/admin/homepage/sections/${row.id}`, homepageScopeParams());
-  const saved: HomepageSectionView[] = [];
-  for (const [index, row] of nextRows.entries()) {
-    const payload = "id" in row
+  const payloadRows = nextRows.map((row, index) => {
+    return "id" in row
       ? {
-          pageKey: filters.pageKey,
           type: row.type,
           title: row.title,
           subtitle: row.subtitle || "",
@@ -1403,8 +1553,8 @@ async function replaceCurrentSections(nextRows: TemplateRow[] | HomepageSectionV
           layout: cloneJson(row.layout || {})
         }
       : templatePayload(row, index);
-    saved.push(await api.post<any, HomepageSectionView>("/admin/homepage/sections", payload, homepageScopeParams()));
-  }
+  });
+  const saved = await api.post<any, HomepageSectionView[]>("/admin/homepage/sections/replace", { rows: payloadRows }, homepageScopeParams());
   rows.value = saved;
   if (options.updateSnapshot) {
     lastPublishedRows.value = cloneJson(saved);
@@ -1415,8 +1565,11 @@ async function replaceCurrentSections(nextRows: TemplateRow[] | HomepageSectionV
 
 async function applyTemplate() {
   const template = decorationTemplates.find((item) => item.key === selectedTemplateKey.value) || decorationTemplates[0];
-  await ElMessageBox.confirm(`应用「${template.label}」会替换当前页面模块，确认继续？`, "应用装修模板", { type: "warning" });
-  await replaceCurrentSections(withHomeGlobalRows(template.rows), `已应用「${template.label}」`);
+  await runToolbarAction("apply-template", async () => {
+    const confirmed = await confirmAction(`应用「${template.label}」会替换当前页面模块，确认继续？`, "应用装修模板", { type: "warning" });
+    if (!confirmed) return;
+    await replaceCurrentSections(withHomeGlobalRows(template.rows), `已应用「${template.label}」`);
+  });
 }
 
 async function saveVersionWithNote(note: string) {
@@ -1432,14 +1585,17 @@ async function saveVersionWithNote(note: string) {
 async function applyLaunchSimpleTemplate() {
   const template = decorationTemplates.find((item) => item.key === "launch_simple");
   if (!template) return;
-  await ElMessageBox.confirm("应用上线简洁版模板前会自动保存当前装修版本，随后替换当前页面模块。确认继续？", "应用上线简洁版模板", {
-    type: "warning",
-    confirmButtonText: "保存并应用",
-    cancelButtonText: "取消"
+  await runToolbarAction("launch-template", async () => {
+    const confirmed = await confirmAction("应用上线简洁版模板前会自动保存当前装修版本，随后替换当前页面模块。确认继续？", "应用上线简洁版模板", {
+      type: "warning",
+      confirmButtonText: "保存并应用",
+      cancelButtonText: "取消"
+    });
+    if (!confirmed) return;
+    await saveVersionWithNote(`应用上线简洁版前自动备份 ${formatSnapshotTime(new Date().toISOString())}`);
+    await replaceCurrentSections(withHomeGlobalRows(template.rows), "已应用上线简洁版模板");
+    selectedTemplateKey.value = template.key;
   });
-  await saveVersionWithNote(`应用上线简洁版前自动备份 ${formatSnapshotTime(new Date().toISOString())}`);
-  await replaceCurrentSections(withHomeGlobalRows(template.rows), "已应用上线简洁版模板");
-  selectedTemplateKey.value = template.key;
 }
 
 function uiKitStyle(kit: UiTemplateKit) {
@@ -1471,7 +1627,8 @@ function previewUiTemplateKit(kit: UiTemplateKit) {
 }
 
 async function applyUiTemplateKit(kit: UiTemplateKit) {
-  await ElMessageBox.confirm(`应用「${kit.label}」会替换当前页面模块。建议先点“保存版本”保留当前装修，确认继续？`, "应用 UI 模板套装", { type: "warning" });
+  const confirmed = await confirmAction(`应用「${kit.label}」会替换当前页面模块。建议先点“保存版本”保留当前装修，确认继续？`, "应用 UI 模板套装", { type: "warning" });
+  if (!confirmed) return;
   uiKitApplyingKey.value = kit.key;
   try {
     await replaceCurrentSections(withHomeGlobalRows(kit.rows), `已应用「${kit.label}」`);
@@ -1483,13 +1640,13 @@ async function applyUiTemplateKit(kit: UiTemplateKit) {
 
 async function applyUiTemplateStyle(kit: UiTemplateKit) {
   if (!orderedRows.value.length) return ElMessage.warning("当前页面没有模块，无法只套用视觉风格");
-  await ElMessageBox.confirm(`只套用「${kit.label}」的颜色、卡片和按钮风格，不改变模块内容和顺序，确认继续？`, "套用视觉风格", { type: "info" });
+  const confirmed = await confirmAction(`只套用「${kit.label}」的颜色、卡片和按钮风格，不改变模块内容和顺序，确认继续？`, "套用视觉风格", { type: "info" });
+  if (!confirmed) return;
   rememberBeforeMutation();
   uiKitApplyingKey.value = `${kit.key}:style`;
   try {
     const style = uiKitStyle(kit);
-    const saved: HomepageSectionView[] = [];
-    for (const row of orderedRows.value) {
+    const nextRows = orderedRows.value.map((row) => {
       const layout = { ...(row.layout || {}), ...style };
       if (row.type === "bottom_nav") {
         layout.activeColor = style.primaryColor || row.layout?.activeColor;
@@ -1499,8 +1656,7 @@ async function applyUiTemplateStyle(kit: UiTemplateKit) {
       if (row.type === "hero") {
         layout.backgroundColor = row.layout?.backgroundColor || style.backgroundColor;
       }
-      saved.push(await api.patch<any, HomepageSectionView>(`/admin/homepage/sections/${row.id}`, {
-        pageKey: filters.pageKey,
+      return {
         type: row.type,
         title: row.title,
         subtitle: row.subtitle || "",
@@ -1508,9 +1664,9 @@ async function applyUiTemplateStyle(kit: UiTemplateKit) {
         sortOrder: row.sortOrder,
         config: cloneJson(row.config || {}),
         layout
-      }, homepageScopeParams()));
-    }
-    rows.value = saved.sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+      };
+    });
+    rows.value = await api.post<any, HomepageSectionView[]>("/admin/homepage/sections/replace", { rows: nextRows }, homepageScopeParams());
     ElMessage.success(`已套用「${kit.label}」视觉风格`);
   } finally {
     uiKitApplyingKey.value = "";
@@ -1519,11 +1675,14 @@ async function applyUiTemplateStyle(kit: UiTemplateKit) {
 
 async function restoreLastPublished() {
   if (!lastPublishedLoaded.value) return ElMessage.warning("当前没有可恢复的发布快照，请先刷新页面");
-  await ElMessageBox.confirm("恢复后会撤销本次刷新后的模块调整，确认继续？", "恢复上次发布版本", { type: "warning" });
-  await replaceCurrentSections(lastPublishedRows.value, "已恢复到上次发布版本", { updateSnapshot: true, skipBeforeSnapshot: true });
-  clearRestoreSnapshot();
-  lastPublishedRows.value = cloneJson(rows.value);
-  lastPublishedLoaded.value = true;
+  await runToolbarAction("restore-published", async () => {
+    const confirmed = await confirmAction("恢复后会撤销本次刷新后的模块调整，确认继续？", "恢复上次发布版本", { type: "warning" });
+    if (!confirmed) return;
+    await replaceCurrentSections(lastPublishedRows.value, "已恢复到上次发布版本", { updateSnapshot: true, skipBeforeSnapshot: true });
+    clearRestoreSnapshot();
+    lastPublishedRows.value = cloneJson(rows.value);
+    lastPublishedLoaded.value = true;
+  });
 }
 
 function acceptServerRows(nextRows: HomepageSectionView[], options: { clearRestore?: boolean; updateSnapshot?: boolean } = {}) {
@@ -1537,8 +1696,11 @@ function acceptServerRows(nextRows: HomepageSectionView[], options: { clearResto
 
 async function loadVersions() {
   versionLoading.value = true;
+  versionError.value = "";
   try {
     versions.value = await api.get<any, DecorationVersion[]>("/admin/homepage/versions", homepageScopeParams());
+  } catch (error: any) {
+    versionError.value = errorMessage(error, "装修版本加载失败，请重试");
   } finally {
     versionLoading.value = false;
   }
@@ -1568,11 +1730,12 @@ async function saveVersion() {
 }
 
 async function restoreVersion(version: DecorationVersion) {
-  await ElMessageBox.confirm(`确认恢复「${version.note || version.name || `版本 ${version.id}`}」？当前页面模块会被这个版本替换。`, "恢复装修版本", {
+  const confirmed = await confirmAction(`确认恢复「${version.note || version.name || `版本 ${version.id}`}」？当前页面模块会被这个版本替换。`, "恢复装修版本", {
     type: "warning",
     confirmButtonText: "确认恢复",
     cancelButtonText: "取消"
   });
+  if (!confirmed) return;
   versionRestoringId.value = version.id;
   try {
     const nextRows = await api.post<any, HomepageSectionView[]>(`/admin/homepage/versions/${version.id}/restore`, {}, homepageScopeParams());
@@ -1585,7 +1748,8 @@ async function restoreVersion(version: DecorationVersion) {
 }
 
 async function deleteVersion(version: DecorationVersion) {
-  await ElMessageBox.confirm("删除后不能从版本历史中找回，确认删除？", "删除装修版本", { type: "warning" });
+  const confirmed = await confirmAction("删除后不能从版本历史中找回，确认删除？", "删除装修版本", { type: "warning" });
+  if (!confirmed) return;
   versionDeletingId.value = version.id;
   try {
     await api.delete(`/admin/homepage/versions/${version.id}`, homepageScopeParams());
@@ -1603,8 +1767,11 @@ function seedTemplateForm() {
 
 async function loadSavedTemplates() {
   templateLoading.value = true;
+  templateError.value = "";
   try {
     savedTemplates.value = await api.get<any, DecorationTemplate[]>("/admin/homepage/templates", homepageScopeParams());
+  } catch (error: any) {
+    templateError.value = errorMessage(error, "装修模板加载失败，请重试");
   } finally {
     templateLoading.value = false;
   }
@@ -1644,11 +1811,12 @@ async function saveTemplate() {
 }
 
 async function applySavedTemplate(template: DecorationTemplate) {
-  await ElMessageBox.confirm(`应用「${template.name}」会替换当前页面模块，确认继续？`, "应用模板库模板", {
+  const confirmed = await confirmAction(`应用「${template.name}」会替换当前页面模块，确认继续？`, "应用模板库模板", {
     type: "warning",
     confirmButtonText: "确认应用",
     cancelButtonText: "取消"
   });
+  if (!confirmed) return;
   templateApplyingId.value = template.id;
   try {
     rememberBeforeMutation();
@@ -1665,7 +1833,8 @@ function canDeleteSavedTemplate(template: DecorationTemplate) {
 }
 
 async function deleteSavedTemplate(template: DecorationTemplate) {
-  await ElMessageBox.confirm(`确认删除模板「${template.name}」？`, "删除装修模板", { type: "warning" });
+  const confirmed = await confirmAction(`确认删除模板「${template.name}」？`, "删除装修模板", { type: "warning" });
+  if (!confirmed) return;
   templateDeletingId.value = template.id;
   try {
     await api.delete(`/admin/homepage/templates/${template.id}`, homepageScopeParams());
@@ -1683,12 +1852,18 @@ function templateScopeLabel(template: DecorationTemplate) {
 
 async function copyFromPage() {
   if (!copyFromPageKey.value || copyFromPageKey.value === filters.pageKey) return ElMessage.warning("请选择另一个页面作为复制来源");
-  const source = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", {
-    params: { ...homepageScopeParams().params, pageKey: copyFromPageKey.value }
+  await runToolbarAction("copy-page", async () => {
+    const source = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", {
+      params: { ...homepageScopeParams().params, pageKey: copyFromPageKey.value }
+    });
+    if (!source.length) {
+      ElMessage.warning("来源页面暂无模块");
+      return;
+    }
+    const confirmed = await confirmAction(`将「${pageOptions.find((item) => item.key === copyFromPageKey.value)?.label || copyFromPageKey.value}」复制到当前页面，确认替换？`, "复制页面配置", { type: "warning" });
+    if (!confirmed) return;
+    await replaceCurrentSections(source, "页面配置已复制");
   });
-  if (!source.length) return ElMessage.warning("来源页面暂无模块");
-  await ElMessageBox.confirm(`将「${pageOptions.find((item) => item.key === copyFromPageKey.value)?.label || copyFromPageKey.value}」复制到当前页面，确认替换？`, "复制页面配置", { type: "warning" });
-  await replaceCurrentSections(source, "页面配置已复制");
 }
 
 function openCrossTenantCopy() {
@@ -1716,11 +1891,8 @@ function validateCrossTenantCopy() {
 
 async function replaceSectionsForTenant(tenantId: number, pageKey: string, sourceRows: HomepageSectionView[]) {
   const params = homepageParamsFor(tenantId, pageKey);
-  const currentRows = await api.get<any, HomepageSectionView[]>("/admin/homepage/sections", params);
-  for (const row of currentRows) await api.delete(`/admin/homepage/sections/${row.id}`, params);
-  for (const [index, row] of sourceRows.entries()) {
-    await api.post("/admin/homepage/sections", sectionCopyPayload(row, pageKey, index), params);
-  }
+  const rows = sourceRows.map((row, index) => sectionCopyPayload(row, pageKey, index));
+  await api.post("/admin/homepage/sections/replace", { rows }, params);
 }
 
 async function executeCrossTenantCopy() {
@@ -1738,11 +1910,12 @@ async function executeCrossTenantCopy() {
   const confirmMessage = crossCopyForm.mode === "all_pages"
     ? `确认将「${crossCopySourceTenantName.value}」已有装修模块的页面复制到「${crossCopyTargetTenantName.value}」？目标商家的对应页面会被替换。`
     : `确认执行跨商家复制？${crossCopyPlanText.value}目标页面当前模块会被替换。`;
-  await ElMessageBox.confirm(confirmMessage, "跨商家复制", {
+  const confirmed = await confirmAction(confirmMessage, "跨商家复制", {
     type: "warning",
     confirmButtonText: "确认复制",
     cancelButtonText: "取消"
   });
+  if (!confirmed) return;
   crossCopySubmitting.value = true;
   crossCopyResult.value = "";
   try {
@@ -1972,60 +2145,85 @@ onMounted(async () => {
 
 <template>
   <div class="builder-page">
-    <div class="builder-toolbar">
+    <header class="builder-heading">
       <div>
         <h2>{{ pageTitle }}</h2>
-        <p>{{ pageDescription }}</p>
+        <div class="heading-meta"><span>{{ currentPageOption.label }}</span><i></i><span>{{ saveScopeName }}</span><i></i><span>{{ orderedRows.length }} 个模块</span></div>
       </div>
-      <div class="toolbar-actions">
-        <el-select v-model="filters.pageKey" filterable placeholder="选择页面" style="width: 180px" @change="handleScopeChanged">
+      <el-tag :type="publicationStatus?.hasUnpublishedChanges ? 'warning' : 'success'" effect="plain">
+        {{ publicationStatus?.hasUnpublishedChanges ? "草稿待发布" : "线上已同步" }}
+      </el-tag>
+    </header>
+
+    <div class="builder-toolbar">
+      <div class="scope-controls">
+        <el-select v-model="filters.pageKey" filterable placeholder="选择页面" class="page-select" :disabled="loading || toolbarBusy" @change="handleScopeChanged">
           <el-option v-for="page in pageOptions" :key="page.key" :label="page.label" :value="page.key" />
         </el-select>
-        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width: 220px" @change="handleScopeChanged">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="平台默认装修" class="tenant-select" :disabled="loading || toolbarBusy" @change="handleScopeChanged">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
         </el-select>
-        <el-button :icon="View" @click="openCurrentPreview">发布前预览</el-button>
-        <el-button :icon="CopyDocument" @click="copyH5PreviewUrl">复制链接</el-button>
-        <el-button type="warning" plain @click="runHealthCheck">生效检测</el-button>
-        <el-select v-if="canEdit" v-model="selectedTemplateKey" placeholder="装修模板" style="width: 150px">
-          <el-option v-for="item in decorationTemplates" :key="item.key" :label="item.label" :value="item.key" />
-        </el-select>
-        <el-button v-if="canEdit" type="success" @click="applyTemplate">应用模板</el-button>
-        <el-button v-if="canEdit" type="success" plain :loading="versionSaving" @click="applyLaunchSimpleTemplate">应用上线简洁版模板</el-button>
-        <el-button v-if="canEdit" type="warning" plain @click="openUiKitDialog">UI 模板套装</el-button>
-        <el-button v-if="canEdit" type="primary" plain :loading="versionSaving" @click="saveVersion">保存版本</el-button>
-        <el-button v-if="canEdit" @click="openVersionHistory">版本历史</el-button>
-        <el-button v-if="canEdit" type="success" plain @click="saveCurrentAsTemplate">保存为模板</el-button>
-        <el-button v-if="canEdit" @click="openTemplateLibrary">模板库</el-button>
-        <el-select v-if="canEdit" v-model="copyFromPageKey" placeholder="复制来源" style="width: 150px">
-          <el-option v-for="page in pageOptions" :key="page.key" :label="page.label" :value="page.key" />
-        </el-select>
-        <el-button v-if="canEdit" @click="copyFromPage">复制页面配置</el-button>
-        <el-button v-if="isPlatformAdmin()" :icon="CopyDocument" @click="openCrossTenantCopy">跨商家复制</el-button>
-        <el-button v-if="canEdit" @click="restoreLastPublished">恢复上次发布版本</el-button>
-        <el-button v-if="canEdit" :icon="Refresh" @click="resetDefault">恢复默认装修</el-button>
-        <el-button :icon="QuestionFilled" @click="helpDialogVisible = true">装修教程</el-button>
-        <el-button type="primary" @click="load">刷新</el-button>
+      </div>
+      <div class="toolbar-actions">
+        <el-button :icon="View" @click="openCurrentPreview">线上 H5</el-button>
+        <el-button :icon="Monitor" @click="runHealthCheck">生效检测</el-button>
+        <el-button v-if="canEdit" :icon="Collection" :loading="versionSaving" @click="saveVersion">保存版本</el-button>
+        <el-button v-if="canEdit" type="primary" :loading="toolbarAction === 'publish' || publishing" :disabled="!publicationStatus?.hasUnpublishedChanges || (toolbarBusy && toolbarAction !== 'publish')" @click="publishCurrent">
+          {{ publicationStatus?.hasUnpublishedChanges ? "发布草稿" : "已发布" }}
+        </el-button>
+        <el-dropdown trigger="click" @command="handleMoreCommand">
+          <el-button :icon="MoreFilled" aria-label="更多装修操作" title="更多装修操作" />
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="ui-templates" :icon="MagicStick">模板中心</el-dropdown-item>
+              <el-dropdown-item command="saved-templates">我的模板</el-dropdown-item>
+              <el-dropdown-item command="save-template">保存为模板</el-dropdown-item>
+              <el-dropdown-item command="history" divided>版本历史</el-dropdown-item>
+              <el-dropdown-item command="copy-page">复制页面</el-dropdown-item>
+              <el-dropdown-item v-if="isPlatformAdmin()" command="cross-copy">跨商家复制</el-dropdown-item>
+              <el-dropdown-item command="restore-published" divided>恢复线上版本</el-dropdown-item>
+              <el-dropdown-item command="reset-default">恢复默认装修</el-dropdown-item>
+              <el-dropdown-item command="help" divided>装修教程</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
       </div>
     </div>
 
-    <div class="preview-link">
-      <strong>{{ previewScopeName }}</strong>
-      <span>{{ previewUrl }}</span>
-      <small>模块保存后前台生效；未保存内容可先查看右侧手机预览或抽屉实时预览。{{ restoreSnapshotHint }}</small>
+    <el-alert v-if="loadError" type="error" show-icon :closable="false" :title="loadError">
+      <template #default><el-button link type="primary" :loading="loading" @click="load">重新加载装修</el-button></template>
+    </el-alert>
+    <el-alert v-if="tenantLoadError" type="warning" show-icon :closable="false" :title="tenantLoadError">
+      <template #default><el-button link type="primary" @click="loadTenants">重试商家列表</el-button></template>
+    </el-alert>
+    <el-alert v-if="actionError" type="error" show-icon closable :title="actionError" @close="actionError = ''" />
+    <el-alert v-if="publicationStatus?.hasUnpublishedChanges" class="publication-warning" type="warning" show-icon :closable="false" title="当前有未发布的装修修改，线上 H5 仍显示上次发布版本。">
+      <template #default><el-button v-if="canEdit" type="warning" size="small" :loading="toolbarAction === 'publish' || publishing" @click="publishCurrent">立即发布到 H5</el-button></template>
+    </el-alert>
+
+    <div class="builder-statusbar">
+      <span><b>预览范围</b>{{ previewScopeName }}</span>
+      <span><b>最近发布</b>{{ publicationStatus?.publication?.publishedAt ? String(publicationStatus.publication.publishedAt).replace('T', ' ').slice(0, 16) : "尚未发布" }}</span>
+      <span class="status-url">{{ previewUrl }}</span>
+      <el-button link :icon="CopyDocument" @click="copyH5PreviewUrl">复制链接</el-button>
+      <el-button link :icon="Refresh" :loading="loading" :disabled="toolbarBusy" @click="load">刷新数据</el-button>
     </div>
 
-    <div v-if="scopeTip" class="scope-tip" :class="{ muted: isPlatformAdmin() && filters.tenantId }">{{ scopeTip }}</div>
+    <div v-if="scopeTip" class="scope-tip compact" :class="{ muted: isPlatformAdmin() && filters.tenantId }">{{ scopeTip }}</div>
 
     <el-dialog v-model="uiKitDialogVisible" title="UI 模板套装" width="1180px" destroy-on-close>
       <div class="ui-kit-dialog-body">
         <div class="ui-kit-grid">
-          <article
-            v-for="kit in uiTemplateKits"
-            :key="kit.key"
-            class="ui-kit-card"
-            :class="{ featured: kit.key === 'wuxing_gold_business', active: selectedUiTemplateKit?.key === kit.key }"
-            @click="previewUiTemplateKit(kit)"
+      <article
+        v-for="kit in uiTemplateKits"
+        :key="kit.key"
+        class="ui-kit-card"
+        :class="{ featured: kit.key === 'wuxing_gold_business', active: selectedUiTemplateKit?.key === kit.key }"
+        role="button"
+        tabindex="0"
+        @click="previewUiTemplateKit(kit)"
+        @keydown.enter.prevent="previewUiTemplateKit(kit)"
+        @keydown.space.prevent="previewUiTemplateKit(kit)"
           >
             <div class="ui-kit-preview" :style="{ background: `linear-gradient(135deg, ${kit.palette[0]} 0%, ${kit.palette[1] || kit.palette[0]} 100%)` }">
               <div class="ui-kit-phone-card" :style="{ background: kit.palette[2] || '#fff', color: kit.palette[4] || kit.palette[0] }">
@@ -2186,7 +2384,10 @@ onMounted(async () => {
           :closable="false"
           :title="`${templateDefaultName} · 当前最多展示最近 30 个版本`"
         />
-        <div v-if="!versions.length" class="version-empty">
+        <el-alert v-if="versionError" type="error" show-icon :closable="false" :title="versionError">
+          <template #default><el-button link type="primary" :loading="versionLoading" @click="loadVersions">重新加载版本</el-button></template>
+        </el-alert>
+        <div v-if="!versionError && !versions.length" class="version-empty">
           当前页面还没有保存过数据库版本。点击“保存版本”后，后续可以在这里一键恢复。
         </div>
         <div v-else class="version-list">
@@ -2242,7 +2443,10 @@ onMounted(async () => {
             <strong>可用模板</strong>
             <el-button size="small" @click="loadSavedTemplates">刷新</el-button>
           </div>
-          <div v-if="!savedTemplates.length" class="version-empty">
+          <el-alert v-if="templateError" type="error" show-icon :closable="false" :title="templateError">
+            <template #default><el-button link type="primary" :loading="templateLoading" @click="loadSavedTemplates">重新加载模板</el-button></template>
+          </el-alert>
+          <div v-if="!templateError && !savedTemplates.length" class="version-empty">
             暂无保存过的模板。可以先把当前页面保存为模板，后续复制到其他页面或商家时直接复用。
           </div>
           <div v-else class="template-list">
@@ -2364,19 +2568,43 @@ onMounted(async () => {
       </template>
     </el-dialog>
 
-    <div class="builder-layout">
-      <aside v-if="canEdit" class="module-palette">
-        <h3>添加模块</h3>
-        <button v-for="item in moduleTypes" :key="item.type" class="module-option" @click="addSection(item.type)">
-          <span>{{ item.label }}</span>
-          <small>{{ item.description }}</small>
+    <el-dialog v-model="moduleLibraryVisible" title="添加模块" width="760px" destroy-on-close>
+      <div class="module-library-tools">
+        <el-input v-model="moduleSearch" clearable placeholder="搜索模块名称" />
+        <el-radio-group v-model="moduleCategory" size="small">
+          <el-radio-button v-for="category in moduleCategories" :key="category.key" :value="category.key">{{ category.label }}</el-radio-button>
+        </el-radio-group>
+      </div>
+      <div class="module-library-grid">
+        <button v-for="item in filteredModuleTypes" :key="item.type" type="button" @click="chooseModule(item.type)">
+          <b>{{ item.label.slice(0, 1) }}</b>
+          <span><strong>{{ item.label }}</strong><small>{{ item.description }}</small></span>
+          <i>＋</i>
         </button>
-      </aside>
+      </div>
+      <el-empty v-if="!filteredModuleTypes.length" description="没有匹配的模块" />
+    </el-dialog>
 
+    <el-dialog v-model="copyPageDialogVisible" title="复制页面配置" width="520px">
+      <el-form label-position="top">
+        <el-form-item label="复制来源页面">
+          <el-select v-model="copyFromPageKey" filterable style="width:100%">
+            <el-option v-for="page in pageOptions.filter((item) => item.key !== filters.pageKey)" :key="page.key" :label="page.label" :value="page.key" />
+          </el-select>
+        </el-form-item>
+        <el-alert type="warning" :closable="false" show-icon :title="`将用“${pageOptions.find((item) => item.key === copyFromPageKey)?.label || ''}”覆盖当前“${currentPageOption.label}”草稿。`" />
+      </el-form>
+      <template #footer>
+        <el-button @click="copyPageDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="toolbarAction === 'copy-page'" @click="copyPageDialogVisible = false; copyFromPage()">确认复制</el-button>
+      </template>
+    </el-dialog>
+
+    <div class="builder-layout">
       <main class="section-list" v-loading="loading">
         <div class="list-head">
-          <h3>{{ scopeTitle }}</h3>
-          <span>{{ orderedRows.length }} 个模块</span>
+          <div><h3>页面结构</h3><span>{{ orderedRows.length }} 个模块</span></div>
+          <el-button v-if="canEdit" type="primary" plain :icon="Plus" @click="openModuleLibrary">添加模块</el-button>
         </div>
         <div v-if="!orderedRows.length" class="empty">暂无模块，点击左侧添加或恢复默认装修。</div>
         <div
@@ -2390,21 +2618,26 @@ onMounted(async () => {
           @drop="onDrop(row)"
         >
           <div v-if="canEdit" class="drag-handle">::</div>
-          <div class="section-main" @click="edit(row)">
+          <div class="section-main" role="button" tabindex="0" @click="edit(row)" @keydown.enter.prevent="edit(row)" @keydown.space.prevent="edit(row)">
             <div class="section-title">
               <strong>{{ row.title || typeLabel(row.type) }}</strong>
-              <el-tag size="small">{{ typeLabel(row.type) }}</el-tag>
-              <el-tag size="small" :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? "显示" : "隐藏" }}</el-tag>
-              <el-tag v-if="isPlatformAdmin()" size="small" type="info">{{ tenantDisplayName(row) }}</el-tag>
+              <small>{{ typeLabel(row.type) }}</small>
             </div>
             <p>{{ row.subtitle || "未设置副标题" }}</p>
           </div>
           <div v-if="canEdit" class="row-actions">
-            <el-button size="small" @click="move(row, -1)" :disabled="index === 0">上移</el-button>
-            <el-button size="small" @click="move(row, 1)" :disabled="index === orderedRows.length - 1">下移</el-button>
-            <el-button size="small" @click="toggle(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
-            <el-button size="small" :icon="CopyDocument" @click="copy(row)" />
-            <el-button size="small" type="danger" :icon="Delete" @click="remove(row)" />
+            <el-switch :model-value="row.enabled" :loading="sectionActionKey === `toggle:${row.id}`" :aria-label="`${row.enabled ? '隐藏' : '显示'}模块：${row.title || typeLabel(row.type)}`" @change="toggle(row)" />
+            <el-dropdown trigger="click" @command="(command: string) => handleRowCommand(command, row, index)">
+              <el-button :icon="MoreFilled" text :aria-label="`模块操作：${row.title || typeLabel(row.type)}`" :title="`模块操作：${row.title || typeLabel(row.type)}`" />
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item command="up" :disabled="index === 0">上移</el-dropdown-item>
+                  <el-dropdown-item command="down" :disabled="index === orderedRows.length - 1">下移</el-dropdown-item>
+                  <el-dropdown-item command="copy" divided>复制模块</el-dropdown-item>
+                  <el-dropdown-item command="remove" divided>删除模块</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </div>
         </div>
       </main>
@@ -2412,60 +2645,25 @@ onMounted(async () => {
       <aside class="phone-preview">
         <div class="preview-panel-head">
           <div>
-            <strong>实时预览</strong>
-            <span>编辑时同步更新，往下滚动也能一直看到当前布局。</span>
+            <strong>实时前端预览</strong>
+            <span>{{ currentPageOption.label }} · 草稿内容</span>
           </div>
           <div class="preview-panel-actions">
-            <el-button size="small" type="warning" plain @click="runHealthCheck">生效检测</el-button>
-            <el-button size="small" :icon="View" @click="openCurrentPreview">已保存H5</el-button>
+            <el-radio-group v-model="previewDevice" size="small" aria-label="预览设备宽度">
+              <el-radio-button value="standard">375</el-radio-button>
+              <el-radio-button value="large">430</el-radio-button>
+            </el-radio-group>
           </div>
         </div>
         <div v-if="hasDefaultPreviewFallback" class="preview-fallback-tip">当前页面还没有保存模块，下面展示默认装修效果。</div>
-        <div class="phone-frame">
-          <div class="phone-status"></div>
-          <div class="preview-scroll">
-            <div v-for="row in previewRows" :key="row.id" class="preview-row-shell" :class="{ focused: isFocusedPreviewRow(row), fallback: hasDefaultPreviewFallback }" @click="selectPreviewRow(row)">
-              <div v-if="row.type === 'search_bar'" class="preview-search">
-                <span>{{ (row.config as any).cityLabel || "本地" }}</span>
-                <b>{{ (row.config as any).placeholder || "搜索活动" }}</b>
-              </div>
-              <div v-else-if="row.type === 'hero'" class="preview-hero" :style="previewHeroStyle(row)">
-                <small :style="{ opacity: clampPercent((row.config as any).textOpacity, 100) / 100 }">{{ (row.config as any).eyebrow || "慢π活动运营" }}</small>
-                <h4 :style="{ opacity: clampPercent((row.config as any).titleOpacity, 100) / 100 }">{{ row.title }}</h4>
-                <p :style="{ opacity: clampPercent((row.config as any).subtitleOpacity, 86) / 100 }">{{ row.subtitle }}</p>
-                <div v-if="(row.config as any).primaryButtonText" class="preview-hero-button" :style="{ background: rgba('#ffffff', (row.config as any).buttonOpacity, 18) }">{{ (row.config as any).primaryButtonText }}</div>
-                <div v-if="(row.config as any).showStats !== false" class="preview-hero-stats">
-                  <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">9<br />报名中</span>
-                  <span :style="{ background: rgba('#ffffff', (row.config as any).statsOpacity, 14) }">10<br />全部活动</span>
-                </div>
-              </div>
-              <div v-else-if="row.type === 'quick_nav'" class="preview-grid">
-                <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-              </div>
-              <div v-else-if="row.type === 'image_banner'" class="preview-banner">
-                <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
-                <span v-else>图片 Banner</span>
-              </div>
-              <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav" :style="{ '--preview-nav-count': previewNavCount(row) }">
-                <span v-for="item in enabledNavItems(row)" :key="item.label">
-                  <b>{{ item.icon || item.label?.slice(0, 1) }}</b>{{ item.label }}
-                </span>
-              </div>
-              <div v-else-if="row.type === 'my_page'" class="preview-my" :style="{ background: String((row.layout as any).heroBackgroundColor || '#111827'), color: String((row.layout as any).heroTextColor || '#ffffff') }">
-                <strong>{{ (row.config as any).greeting || row.title || "我的活动" }}</strong>
-                <span v-for="item in ((row.config as any).tools || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
-              </div>
-              <div v-else-if="row.type === 'inner_pages'" class="preview-inner-pages">
-                <strong>{{ row.title || "内页布局" }}</strong>
-                <span v-for="item in ((row.config as any).pages || []).slice(0, 4)" :key="item.key">{{ item.title }}</span>
-              </div>
-              <div v-else class="preview-section" :style="previewSectionStyle(row)">
-                <strong>{{ row.title || typeLabel(row.type) }}</strong>
-                <span>{{ typeLabel(row.type) }}</span>
-              </div>
-            </div>
-          </div>
-        </div>
+        <HomepageLivePreview
+          :rows="previewRows"
+          :focused-id="editorOpen ? editingId : null"
+          :fallback="hasDefaultPreviewFallback"
+          :device="previewDevice"
+          :page-label="currentPageOption.label"
+          @select="selectPreviewRow"
+        />
       </aside>
 
       <aside class="builder-inspector">
@@ -2511,7 +2709,7 @@ onMounted(async () => {
                       <el-input :model-value="item.label" placeholder="名称" @input="(value: string) => updateQuickLabel(index, value)" />
                       <el-button @click="openArrayLinkPicker('items', index, 'link', `${item.label || '入口'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
                       <el-color-picker :model-value="item.color" @change="(value: string | null) => updateQuickColor(index, value)" />
-                      <el-button type="danger" :icon="Delete" @click="removeQuickItem(index)" />
+                      <el-button type="danger" :icon="Delete" :aria-label="`删除快捷入口：${item.label || index + 1}`" title="删除快捷入口" @click="removeQuickItem(index)" />
                     </div>
                     <el-button :icon="Plus" @click="addQuickItem">新增入口</el-button>
                   </div>
@@ -2572,14 +2770,14 @@ onMounted(async () => {
 
                 <template v-if="form.type === 'bottom_nav'">
                   <el-divider>底部导航</el-divider>
-                  <el-alert class="editor-tip" type="info" show-icon :closable="false" title="底部导航最多 5 项。H5 保存后刷新生效，小程序需要重新构建并上传最新版。" />
+                  <el-alert class="editor-tip" type="info" show-icon :closable="false" title="底部导航最多 5 项。保存只进入草稿；发布当前草稿后 H5 才会更新，小程序还需重新构建并上传。" />
                   <div class="compact-editor">
                     <div v-for="(item, index) in (form.config.items || [])" :key="index" class="compact-row nav-compact-row">
                       <el-input :model-value="item.label" placeholder="名称" @input="(value: string) => updateConfigArrayItem('items', index, 'label', value)" />
                       <el-input :model-value="item.icon" placeholder="图标" @input="(value: string) => updateConfigArrayItem('items', index, 'icon', value)" />
                       <el-button @click="openArrayLinkPicker('items', index, 'link', `${item.label || '菜单'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
                       <el-switch :model-value="item.enabled !== false" @change="(value: string | number | boolean) => updateConfigArrayItemBoolean('items', index, 'enabled', Boolean(value))" />
-                      <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('items', index)" />
+                      <el-button type="danger" :icon="Delete" :aria-label="`删除底部菜单：${item.label || index + 1}`" title="删除底部菜单" @click="removeConfigArrayItem('items', index)" />
                     </div>
                     <el-button :icon="Plus" :disabled="Array.isArray(form.config.items) && form.config.items.length >= 5" @click="addNavItem">新增菜单</el-button>
                   </div>
@@ -2593,7 +2791,7 @@ onMounted(async () => {
                       <el-input :model-value="item.label" placeholder="名称" @input="(value: string) => updateConfigArrayItem('tools', index, 'label', value)" />
                       <el-button @click="openArrayLinkPicker('tools', index, 'link', `${item.label || '入口'}跳转`)">{{ linkDisplayName(item.link) }}</el-button>
                       <el-color-picker :model-value="item.color" @change="(value: string | null) => updateConfigArrayItem('tools', index, 'color', String(value || '#0f766e'))" />
-                      <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('tools', index)" />
+                      <el-button type="danger" :icon="Delete" :aria-label="`删除我的页入口：${item.label || index + 1}`" title="删除我的页入口" @click="removeConfigArrayItem('tools', index)" />
                     </div>
                     <el-button :icon="Plus" @click="addMyTool">新增我的页入口</el-button>
                   </div>
@@ -2606,7 +2804,7 @@ onMounted(async () => {
                       <el-input :model-value="item.key" placeholder="页面 key" @input="(value: string) => updateInnerPage(index, 'key', value)" />
                       <el-input :model-value="item.title" placeholder="标题" @input="(value: string) => updateInnerPage(index, 'title', value)" />
                       <el-checkbox :model-value="item.showBottomNav !== false" @change="(value: string | number | boolean) => updateInnerPage(index, 'showBottomNav', Boolean(value))">底栏</el-checkbox>
-                      <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('pages', index)" />
+                      <el-button type="danger" :icon="Delete" :aria-label="`删除内页配置：${item.title || item.key || index + 1}`" title="删除内页配置" @click="removeConfigArrayItem('pages', index)" />
                     </div>
                     <el-button :icon="Plus" @click="addInnerPage">新增内页配置</el-button>
                   </div>
@@ -2702,8 +2900,8 @@ onMounted(async () => {
           </el-tabs>
           <div class="inspector-actions">
             <el-button @click="closeDrawer()">取消</el-button>
-            <el-button :icon="View" @click="openCurrentPreview">打开已保存H5</el-button>
-            <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
+            <el-button :icon="View" @click="openCurrentPreview">打开当前线上H5</el-button>
+            <el-button type="primary" :loading="saving" @click="submit">保存草稿</el-button>
           </div>
         </template>
       </aside>
@@ -2718,8 +2916,8 @@ onMounted(async () => {
         <el-tag v-if="hasUnsavedChanges" type="warning" effect="plain">未保存修改</el-tag>
         <div class="drawer-save-actions">
           <el-button @click="closeDrawer()">取消</el-button>
-          <el-button :icon="View" @click="openCurrentPreview">打开已保存H5</el-button>
-          <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
+          <el-button :icon="View" @click="openCurrentPreview">打开当前线上H5</el-button>
+          <el-button type="primary" :loading="saving" @click="submit">保存草稿</el-button>
         </div>
       </div>
       <el-form label-position="top">
@@ -2774,7 +2972,7 @@ onMounted(async () => {
               <el-input :model-value="item.label" placeholder="名称" @input="(value: string) => updateQuickLabel(index, value)" />
               <el-input :model-value="item.link" placeholder="跳转路径" @input="(value: string) => updateQuickLink(index, value)" />
               <el-color-picker :model-value="item.color" @change="(value: string | null) => updateQuickColor(index, value)" />
-              <el-button type="danger" :icon="Delete" @click="removeQuickItem(index)" />
+              <el-button type="danger" :icon="Delete" :aria-label="`删除快捷入口：${item.label || index + 1}`" title="删除快捷入口" @click="removeQuickItem(index)" />
             </div>
             <el-button :icon="Plus" @click="addQuickItem">新增入口</el-button>
           </div>
@@ -2884,7 +3082,7 @@ onMounted(async () => {
               </div>
               <el-color-picker :model-value="item.color" @change="(value: string | null) => updateConfigArrayItem('items', index, 'color', String(value || '#0f766e'))" />
               <el-switch :model-value="item.enabled !== false" @change="(value: string | number | boolean) => updateConfigArrayItemBoolean('items', index, 'enabled', Boolean(value))" />
-              <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('items', index)" />
+              <el-button type="danger" :icon="Delete" :aria-label="`删除底部菜单：${item.label || index + 1}`" title="删除底部菜单" @click="removeConfigArrayItem('items', index)" />
             </div>
             <el-button :icon="Plus" :disabled="Array.isArray(form.config.items) && form.config.items.length >= 5" @click="addNavItem">新增菜单</el-button>
           </div>
@@ -2905,7 +3103,7 @@ onMounted(async () => {
               <el-input :model-value="item.link" placeholder="跳转路径" @input="(value: string) => updateConfigArrayItem('tools', index, 'link', value)" />
               <el-input :model-value="item.action" placeholder="action，如 refresh/mainPage" @input="(value: string) => updateConfigArrayItem('tools', index, 'action', value)" />
               <el-color-picker :model-value="item.color" @change="(value: string | null) => updateConfigArrayItem('tools', index, 'color', String(value || '#0f766e'))" />
-              <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('tools', index)" />
+              <el-button type="danger" :icon="Delete" :aria-label="`删除我的页入口：${item.label || index + 1}`" title="删除我的页入口" @click="removeConfigArrayItem('tools', index)" />
             </div>
             <el-button :icon="Plus" @click="addMyTool">新增我的页入口</el-button>
           </div>
@@ -2918,7 +3116,7 @@ onMounted(async () => {
               <el-input :model-value="item.title" placeholder="标题" @input="(value: string) => updateInnerPage(index, 'title', value)" />
               <el-input :model-value="item.subtitle" placeholder="副标题" @input="(value: string) => updateInnerPage(index, 'subtitle', value)" />
               <el-checkbox :model-value="item.showBottomNav !== false" @change="(value: string | number | boolean) => updateInnerPage(index, 'showBottomNav', Boolean(value))">显示底部菜单</el-checkbox>
-              <el-button type="danger" :icon="Delete" @click="removeConfigArrayItem('pages', index)" />
+              <el-button type="danger" :icon="Delete" :aria-label="`删除内页配置：${item.title || item.key || index + 1}`" title="删除内页配置" @click="removeConfigArrayItem('pages', index)" />
             </div>
             <el-button :icon="Plus" @click="addInnerPage">新增内页配置</el-button>
           </div>
@@ -3017,7 +3215,7 @@ onMounted(async () => {
       </el-form>
       <template #footer>
         <el-button @click="closeDrawer()">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保存模块</el-button>
+        <el-button type="primary" :loading="saving" @click="submit">保存草稿</el-button>
       </template>
     </el-drawer>
 
@@ -3075,16 +3273,26 @@ onMounted(async () => {
 
 <style scoped>
 .builder-page { padding: 20px; }
-.builder-toolbar { position: sticky; top: 0; z-index: 30; display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin: 0 -20px 16px; padding: 16px 20px 14px; border-bottom: 1px solid #e5e7eb; background: rgba(245, 247, 251, 0.96); backdrop-filter: blur(10px); }
-.builder-toolbar h2 { margin: 0; font-size: 22px; }
-.builder-toolbar p { margin: 6px 0 0; color: #667085; }
+.builder-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; }
+.builder-heading h2 { margin: 0; color: #111827; font-size: 22px; }
+.heading-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 7px; margin-top: 6px; color: #667085; font-size: 13px; }
+.heading-meta i { width: 3px; height: 3px; border-radius: 50%; background: #98a2b3; }
+.builder-toolbar { position: sticky; top: 0; z-index: 30; display: flex; justify-content: space-between; align-items: center; gap: 14px; margin: 0 -20px 12px; padding: 10px 20px; border-block: 1px solid #e5e7eb; background: rgba(245, 247, 251, 0.96); backdrop-filter: blur(10px); }
+.scope-controls { min-width: 0; display: flex; gap: 8px; }
+.page-select { width: 188px; }
+.tenant-select { width: min(280px, 24vw); }
 .toolbar-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 10px; }
+.builder-statusbar { display: grid; grid-template-columns: auto auto minmax(120px, 1fr) auto auto; gap: 12px; align-items: center; margin-bottom: 10px; padding: 9px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #667085; font-size: 12px; }
+.builder-statusbar span { min-width: 0; }
+.builder-statusbar b { margin-right: 6px; color: #344054; }
+.status-url { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: ui-monospace, SFMono-Regular, Consolas, monospace; }
 .preview-link { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 10px; margin: 0 0 12px; padding: 10px 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #475467; }
 .preview-link strong { color: #111827; white-space: nowrap; }
 .preview-link span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .preview-link small { flex-basis: 100%; color: #667085; font-weight: 700; }
 .scope-tip { margin: 0 0 16px; padding: 12px 14px; border: 1px solid #b7e4d7; border-radius: 8px; background: #ecfdf5; color: #047857; font-weight: 700; }
 .scope-tip.muted { border-color: #e5e7eb; background: #f8fafc; color: #667085; }
+.scope-tip.compact { margin-bottom: 12px; padding: 9px 12px; font-size: 12px; line-height: 1.5; }
 .builder-help { display: grid; gap: 18px; color: #334155; line-height: 1.72; }
 .builder-help h3 { margin: 0 0 8px; color: #0f172a; font-size: 16px; }
 .builder-help p { margin: 0; }
@@ -3128,26 +3336,41 @@ onMounted(async () => {
 .cross-copy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .cross-copy-plan { display: grid; gap: 6px; padding: 12px; border: 1px solid #bfdbfe; border-radius: 8px; background: #eff6ff; color: #1d4ed8; }
 .cross-copy-plan strong { color: #1e3a8a; }
-.builder-layout { display: grid; grid-template-columns: 220px minmax(360px, 0.9fr) 340px minmax(360px, 0.9fr); gap: 16px; align-items: start; }
-.module-palette, .section-list, .phone-preview, .builder-inspector { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
-.module-palette h3, .list-head h3 { margin: 0 0 12px; }
+.module-library-tools { display: grid; gap: 12px; margin-bottom: 16px; }
+.module-library-tools .el-radio-group { display: flex; flex-wrap: wrap; }
+.module-library-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; max-height: min(58vh, 600px); overflow-y: auto; padding-right: 4px; }
+.module-library-grid button { min-width: 0; display: grid; grid-template-columns: 38px minmax(0, 1fr) auto; gap: 10px; align-items: center; padding: 11px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; color: #344054; text-align: left; cursor: pointer; }
+.module-library-grid button:hover { border-color: #0f766e; background: #f0fdfa; }
+.module-library-grid button > b { width: 38px; height: 38px; display: grid; place-items: center; border-radius: 8px; background: #e8f3f1; color: #0f766e; }
+.module-library-grid button span { min-width: 0; }
+.module-library-grid button strong, .module-library-grid button small { display: block; }
+.module-library-grid button strong { color: #111827; }
+.module-library-grid button small { margin-top: 4px; overflow: hidden; color: #667085; line-height: 1.4; text-overflow: ellipsis; white-space: nowrap; }
+.module-library-grid button > i { color: #0f766e; font-size: 18px; font-style: normal; }
+.builder-layout { display: grid; grid-template-columns: minmax(250px, 0.72fr) minmax(375px, 450px) minmax(360px, 1fr); gap: 14px; align-items: start; }
+.section-list, .phone-preview, .builder-inspector { min-width: 0; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; }
+.list-head h3 { margin: 0; color: #111827; }
+.list-head span { display: block; margin-top: 4px; font-size: 12px; }
 .module-option { width: 100%; display: grid; gap: 4px; text-align: left; border: 1px solid #e5e7eb; background: #fff; border-radius: 8px; padding: 12px; margin-bottom: 10px; cursor: pointer; }
 .module-option:hover { border-color: #0f766e; background: #f0fdfa; }
 .module-option span { font-weight: 800; color: #111827; }
 .module-option small { color: #667085; }
-.list-head { display: flex; justify-content: space-between; align-items: center; color: #667085; }
-.section-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fff; }
+.list-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 12px; color: #667085; }
+.section-row { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 8px 10px; align-items: start; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; margin-bottom: 10px; background: #fff; }
 .section-row.disabled { opacity: 0.62; }
 .section-row.active { border-color: #f97316; background: #fff7ed; box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.12); }
 .drag-handle { color: #98a2b3; font-weight: 900; cursor: grab; }
 .section-main { cursor: pointer; min-width: 0; }
-.section-title { display: flex; align-items: center; gap: 8px; }
+.section-title { min-width: 0; display: grid; gap: 3px; }
+.section-title strong { overflow-wrap: anywhere; line-height: 1.4; }
+.section-title small { color: #98a2b3; font-size: 11px; line-height: 1.3; }
 .section-main p { margin: 6px 0 0; color: #667085; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row-actions { display: flex; gap: 6px; align-items: center; }
+.row-actions { grid-column: 2; display: flex; justify-content: flex-end; gap: 6px; align-items: center; margin-top: -2px; }
 .empty { padding: 40px 0; color: #98a2b3; text-align: center; }
-.phone-preview, .builder-inspector { position: sticky; top: 112px; }
-.phone-preview { display: grid; gap: 12px; max-height: calc(100vh - 128px); overflow: auto; }
+.section-list, .phone-preview, .builder-inspector { position: sticky; top: 72px; max-height: calc(100vh - 88px); overflow: auto; }
+.phone-preview { display: grid; justify-items: center; gap: 12px; }
 .preview-panel-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding: 4px 2px 0; }
+.preview-panel-head { width: 100%; }
 .preview-panel-head strong { display: block; color: #111827; font-size: 15px; }
 .preview-panel-head span { display: block; margin-top: 4px; color: #667085; font-size: 12px; line-height: 1.5; }
 .preview-panel-actions { display: flex; flex-wrap: wrap; gap: 8px; justify-content: flex-end; }
@@ -3260,26 +3483,41 @@ onMounted(async () => {
 .quick-row.my-tool-row { grid-template-columns: 70px 110px 1fr 130px 42px 34px; }
 .inner-page-row { display: grid; grid-template-columns: 110px 130px 1fr 120px 34px; gap: 8px; align-items: center; }
 @media (max-width: 1280px) {
-  .builder-layout { grid-template-columns: 180px minmax(300px, 1fr) 240px; }
-  .module-palette { grid-column: 1; grid-row: 1 / span 2; }
-  .section-list { grid-column: 2; grid-row: 1 / span 2; }
-  .phone-preview { grid-column: 3; grid-row: 1; }
-  .builder-inspector { grid-column: 3; grid-row: 2; }
-  .phone-preview, .builder-inspector { top: 248px; max-height: calc(100vh - 264px); }
-  .phone-preview { display: grid; padding: 12px; }
-  .preview-panel-head { display: grid; gap: 8px; }
-  .preview-panel-head span { font-size: 11px; }
-  .preview-panel-actions { justify-content: flex-start; }
-  .phone-preview .phone-frame { width: 220px; height: clamp(320px, calc(100vh - 450px), 420px); border-width: 8px; border-radius: 24px; }
-  .phone-preview .phone-status { height: 22px; }
-  .phone-preview .preview-scroll { padding: 10px; }
+  .builder-toolbar { align-items: flex-start; }
+  .scope-controls { flex-wrap: wrap; }
+  .tenant-select { width: 230px; }
+  .builder-layout { grid-template-columns: minmax(260px, 1fr) minmax(375px, 450px); }
+  .section-list { grid-column: 1; grid-row: 1; }
+  .phone-preview { grid-column: 2; grid-row: 1; }
+  .builder-inspector { position: static; grid-column: 1 / -1; grid-row: 2; max-height: none; }
   .drawer-live-preview { display: none; }
 }
 @media (max-width: 1024px) {
+  .builder-heading { align-items: flex-start; }
+  .builder-toolbar { position: static; display: grid; margin-inline: 0; padding-inline: 0; border-top: 0; background: transparent; }
+  .scope-controls, .toolbar-actions { width: 100%; }
+  .page-select, .tenant-select { width: min(100%, 280px); }
+  .toolbar-actions { justify-content: flex-start; }
+  .builder-statusbar { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .status-url { grid-column: 1 / -1; }
   .builder-layout { grid-template-columns: 1fr; }
-  .module-palette, .section-list, .phone-preview, .builder-inspector { grid-column: auto; grid-row: auto; }
-  .module-palette, .section-list, .phone-preview, .builder-inspector { position: static; max-height: none; }
-  .phone-preview .phone-frame { width: min(292px, 100%); height: 520px; }
+  .section-list, .phone-preview, .builder-inspector { position: static; grid-column: auto; grid-row: auto; max-height: none; }
+}
+@media (max-width: 640px) {
+  .builder-page { padding: 12px; }
+  .builder-heading { gap: 8px; }
+  .builder-heading h2 { font-size: 19px; }
+  .builder-toolbar { gap: 10px; }
+  .scope-controls { display: grid; }
+  .page-select, .tenant-select { width: 100%; }
+  .toolbar-actions { gap: 6px; }
+  .builder-statusbar { grid-template-columns: 1fr; }
+  .status-url { grid-column: auto; }
+  .module-library-grid { grid-template-columns: 1fr; }
+  .section-list, .phone-preview, .builder-inspector { padding: 12px; }
+  .section-row { gap: 8px; padding: 10px; }
+  .inspector-head { top: -12px; margin: -12px -12px 12px; padding: 12px; }
+  .inspector-actions { bottom: -12px; margin: 12px -12px -12px; padding: 12px; }
 }
 </style>
 

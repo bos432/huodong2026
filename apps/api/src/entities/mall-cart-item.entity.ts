@@ -7,6 +7,7 @@ import { User } from "./user.entity";
 
 @Entity("mall_cart_items")
 @Index("IDX_mall_cart_unique_user_sku", ["tenant", "user", "sku"], { unique: true })
+@Index("IDX_mall_cart_user_updated", ["tenant", "user", "updatedAt"])
 export class MallCartItem {
   @PrimaryGeneratedColumn()
   id!: number;

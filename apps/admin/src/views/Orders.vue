@@ -5,7 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { ChatLineSquare, Clock, Download, EditPen, Money, RefreshLeft, Search } from "@element-plus/icons-vue";
 import { OrderStatus, orderStatusText } from "@activity/shared";
 import { api, downloadFile } from "../api";
-import { isPlatformAdmin } from "../permissions";
+import { hasPermission, isPlatformAdmin } from "../permissions";
 
 type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
 
@@ -15,6 +15,11 @@ const rows = ref<any[]>([]);
 const agents = ref<any[]>([]);
 const tenants = ref<any[]>([]);
 const loading = ref(false);
+const errorMessage = ref("");
+const tenantErrorMessage = ref("");
+const agentErrorMessage = ref("");
+const confirmingId = ref<number | null>(null);
+const exporting = ref(false);
 const refundDialog = ref(false);
 const refunding = ref(false);
 const closingExpired = ref(false);
@@ -42,9 +47,18 @@ function routeTenantId() {
   const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
   return isPlatformAdmin() && tenantId && Number.isFinite(tenantId) ? tenantId : undefined;
 }
+function routeUserId() {
+  const userId = typeof route.query.userId === "string" ? Number(route.query.userId) : undefined;
+  return userId && Number.isInteger(userId) && userId > 0 ? userId : undefined;
+}
 
-const filters = reactive({ status: routeOrderStatus(), keyword: "", activityId: routeActivityId() as number | undefined, agentId: undefined as number | undefined, tenantId: routeTenantId() as number | undefined, page: 1, pageSize: 20 });
+const filters = reactive({ status: routeOrderStatus(), keyword: "", activityId: routeActivityId() as number | undefined, userId: routeUserId() as number | undefined, agentId: undefined as number | undefined, tenantId: routeTenantId() as number | undefined, page: 1, pageSize: 20 });
 const total = ref(0);
+const canManageOrders = computed(() => hasPermission("order.manage"));
+const canRefundOrders = computed(() => hasPermission("order.refund"));
+const canExportOrders = computed(() => hasPermission("order.export"));
+const canViewAgents = computed(() => hasPermission("agent_settlement.view"));
+const writeLocked = computed(() => confirmingId.value !== null || exporting.value || refunding.value || closingExpired.value || remarkSaving.value);
 
 const maxRefundAmount = computed(() => Number(refundTarget.value?.amount || 0));
 const focusedActivityName = computed(() => {
@@ -57,7 +71,8 @@ function queryParams() {
     status: filters.status || undefined,
     keyword: filters.keyword.trim() || undefined,
     activityId: filters.activityId || undefined,
-    agentId: filters.agentId || undefined,
+    userId: filters.userId || undefined,
+    agentId: canViewAgents.value ? filters.agentId || undefined : undefined,
     tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined,
     page: filters.page,
     pageSize: filters.pageSize
@@ -66,25 +81,74 @@ function queryParams() {
 
 async function load() {
   loading.value = true;
+  errorMessage.value = "";
   try {
     const result = await api.get<any, PageResult<any>>("/admin/orders", { params: queryParams() });
     rows.value = result.items || [];
     total.value = result.total || 0;
+  } catch (error: any) {
+    errorMessage.value = error.message || "订单列表加载失败";
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }
 }
 
 async function loadAgents() {
-  agents.value = await api.get<any, any[]>("/admin/agents", { params: { tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined } });
+  if (!canViewAgents.value) {
+    agents.value = [];
+    filters.agentId = undefined;
+    agentErrorMessage.value = "";
+    return;
+  }
+  agentErrorMessage.value = "";
+  try {
+    agents.value = await api.get<any, any[]>("/admin/agents", { params: { tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined } });
+  } catch (error: any) {
+    agents.value = [];
+    agentErrorMessage.value = error.message || "代理筛选项加载失败";
+  }
 }
 
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  if (!isPlatformAdmin()) {
+    tenants.value = [];
+    return;
+  }
+  tenantErrorMessage.value = "";
+  try {
+    tenants.value = await api.get<any, any[]>("/admin/tenants");
+  } catch (error: any) {
+    tenants.value = [];
+    tenantErrorMessage.value = error.message || "商家筛选项加载失败";
+  }
+}
+
+async function retryScopeFilters() {
+  await loadTenants();
+  if (canViewAgents.value) await loadAgents();
 }
 
 function search() {
+  if (filters.keyword.trim() && filters.userId) {
+    filters.userId = undefined;
+    void router.replace({ path: "/orders", query: { tenantId: isPlatformAdmin() && filters.tenantId ? filters.tenantId : undefined, status: filters.status || undefined, activityId: filters.activityId || undefined } });
+  }
   filters.page = 1;
+  load();
+}
+
+function clearUserFilter() {
+  filters.userId = undefined;
+  filters.page = 1;
+  router.replace({
+    path: "/orders",
+    query: {
+      tenantId: isPlatformAdmin() && filters.tenantId ? filters.tenantId : undefined,
+      status: filters.status || undefined,
+      activityId: filters.activityId || undefined
+    }
+  });
   load();
 }
 
@@ -95,7 +159,8 @@ function clearActivityFilter() {
     path: "/orders",
     query: {
       tenantId: isPlatformAdmin() && filters.tenantId ? filters.tenantId : undefined,
-      status: filters.status || undefined
+      status: filters.status || undefined,
+      userId: filters.userId || undefined
     }
   });
   load();
@@ -108,10 +173,18 @@ function changeTenant() {
 }
 
 async function confirm(row: any) {
-  const { value } = await ElMessageBox.prompt(`确认订单 ${row.orderNo} 已完成线下收款？确认后报名状态会继续流转，用户端也会看到付款成功。`, "确认线下收款", { inputValue: "线下已收款", confirmButtonText: "确认收款", cancelButtonText: "再核对一下", type: "warning" });
-  await api.post(`/admin/orders/${row.id}/confirm-offline-payment`, { remark: value });
-  ElMessage.success("已确认收款");
-  load();
+  if (writeLocked.value || !canManageOrders.value) return;
+  confirmingId.value = row.id;
+  try {
+    const { value } = await ElMessageBox.prompt(`确认订单 ${row.orderNo} 已完成线下收款？确认后报名状态会继续流转，用户端也会看到付款成功。`, "确认线下收款", { inputValue: "线下已收款", confirmButtonText: "确认收款", cancelButtonText: "再核对一下", type: "warning" });
+    await api.post(`/admin/orders/${row.id}/confirm-offline-payment`, { remark: String(value || "").trim() || "线下已收款" });
+    ElMessage.success("已确认收款");
+    await load();
+  } catch (error: any) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "确认收款失败");
+  } finally {
+    confirmingId.value = null;
+  }
 }
 
 function canRefund(row: any) {
@@ -127,27 +200,29 @@ function isExpired(row: any) {
 }
 
 function openRefund(row: any) {
+  if (writeLocked.value || !canRefundOrders.value) return;
   refundTarget.value = row;
   Object.assign(refundForm, { amount: Number(row.amount), reason: "运营后台退款", refundNo: "" });
   refundDialog.value = true;
 }
 
 function openRemark(row: any) {
+  if (writeLocked.value || !canManageOrders.value) return;
   remarkOrder.value = row;
   remarkText.value = row.remark || "";
   remarkDialog.value = true;
 }
 
 async function saveRemark() {
-  if (!remarkOrder.value) return;
+  if (!remarkOrder.value || writeLocked.value) return;
   remarkSaving.value = true;
   try {
     await api.patch(`/admin/orders/${remarkOrder.value.id}/remark`, { remark: remarkText.value.trim() });
     ElMessage.success("备注已保存");
     remarkDialog.value = false;
-    load();
+    await load();
   } catch (err: any) {
-    ElMessage.error(err.message);
+    ElMessage.error(err.message || "备注保存失败");
   } finally {
     remarkSaving.value = false;
   }
@@ -167,7 +242,7 @@ async function openTimeline(row: any) {
 }
 
 async function refund() {
-  if (!refundTarget.value) return;
+  if (!refundTarget.value || writeLocked.value || !canRefundOrders.value) return;
   if (refundForm.amount <= 0) {
     ElMessage.warning("退款金额必须大于 0");
     return;
@@ -176,46 +251,59 @@ async function refund() {
     ElMessage.warning("退款金额不能超过订单实付金额");
     return;
   }
+  if (!refundForm.reason.trim()) return ElMessage.warning("请填写退款原因");
   refunding.value = true;
   try {
-    await api.post(`/admin/orders/${refundTarget.value.id}/refund`, { amount: refundForm.amount, reason: refundForm.reason, refundNo: refundForm.refundNo || undefined });
+    await api.post(`/admin/orders/${refundTarget.value.id}/refund`, { amount: refundForm.amount, reason: refundForm.reason.trim(), refundNo: refundForm.refundNo.trim() || undefined });
     ElMessage.success("退款申请已提交，等待财务审核");
     refundDialog.value = false;
-    load();
+    await load();
   } catch (error: any) {
-    ElMessage.error(error.message);
+    ElMessage.error(error.message || "退款申请提交失败");
   } finally {
     refunding.value = false;
   }
 }
 
 async function exportOrders() {
+  if (writeLocked.value || !canExportOrders.value) return;
+  exporting.value = true;
   try {
     const params = new URLSearchParams();
     if (filters.status) params.set("status", filters.status);
     if (filters.keyword.trim()) params.set("keyword", filters.keyword.trim());
     if (filters.activityId) params.set("activityId", String(filters.activityId));
-    if (filters.agentId) params.set("agentId", String(filters.agentId));
+    if (filters.userId) params.set("userId", String(filters.userId));
+    if (canViewAgents.value && filters.agentId) params.set("agentId", String(filters.agentId));
     if (isPlatformAdmin() && filters.tenantId) params.set("tenantId", String(filters.tenantId));
     const query = params.toString();
     await downloadFile(`/admin/orders/export${query ? `?${query}` : ""}`, "订单记录.xlsx");
+    ElMessage.success("订单记录已导出");
   } catch (error: any) {
     ElMessage.error(error.message || "导出失败");
+  } finally {
+    exporting.value = false;
   }
 }
 
 async function closeExpiredOrders() {
-  await ElMessageBox.confirm("系统会关闭所有已超过付款截止时间的待付款订单，并取消对应报名、释放名额。这个动作适合在核对完线下收款后执行。", "关闭过期订单", { type: "warning", confirmButtonText: "确认关闭", cancelButtonText: "暂不处理" });
+  if (writeLocked.value || !canManageOrders.value) return;
   closingExpired.value = true;
   try {
+    await ElMessageBox.confirm("系统会关闭所有已超过付款截止时间的待付款订单，并取消对应报名、释放名额。这个动作适合在核对完线下收款后执行。", "关闭过期订单", { type: "warning", confirmButtonText: "确认关闭", cancelButtonText: "暂不处理" });
     const result = await api.post<any, { closedCount: number }>("/admin/orders/close-expired", {});
     ElMessage.success(`已关闭 ${result.closedCount} 个过期待付款订单`);
-    load();
+    await load();
   } catch (error: any) {
-    ElMessage.error(error.message || "关闭失败");
+    if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "关闭失败");
   } finally {
     closingExpired.value = false;
   }
+}
+
+function maskedPhone(value?: string | null) {
+  const phone = String(value || "");
+  return /^1\d{10}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone || "-";
 }
 
 function formatTime(value?: string) {
@@ -254,15 +342,17 @@ onMounted(() => {
 });
 
 watch(
-  () => [route.query.status, route.query.activityId, route.query.tenantId],
+  () => [route.query.status, route.query.activityId, route.query.tenantId, route.query.userId],
   () => {
     const nextStatus = routeOrderStatus();
     const nextActivityId = routeActivityId();
     const nextTenantId = routeTenantId();
-    if (filters.status !== nextStatus || filters.activityId !== nextActivityId || filters.tenantId !== nextTenantId) {
+    const nextUserId = routeUserId();
+    if (filters.status !== nextStatus || filters.activityId !== nextActivityId || filters.tenantId !== nextTenantId || filters.userId !== nextUserId) {
       filters.status = nextStatus;
       filters.activityId = nextActivityId;
       filters.tenantId = nextTenantId;
+      filters.userId = nextUserId;
       filters.page = 1;
       loadAgents();
       load();
@@ -273,11 +363,12 @@ watch(
 
 <template>
   <div class="page">
+    <el-alert v-if="filters.userId" class="page-hint" type="info" show-icon :closable="false" :title="`已按客服用户 ID ${filters.userId} 精确筛选订单`"><template #default><el-button size="small" @click="clearUserFilter">清除用户筛选</el-button></template></el-alert>
     <div class="toolbar">
       <h2>{{ isPlatformAdmin() ? "全局订单" : "订单管理" }}</h2>
       <div class="toolbar-actions">
-        <el-button :icon="Clock" :loading="closingExpired" @click="closeExpiredOrders">关闭过期订单</el-button>
-        <el-button :icon="Download" @click="exportOrders">导出 Excel</el-button>
+        <el-button v-if="canManageOrders" :icon="Clock" :loading="closingExpired" :disabled="writeLocked" @click="closeExpiredOrders">关闭过期订单</el-button>
+        <el-button v-if="canExportOrders" :icon="Download" :loading="exporting" :disabled="writeLocked" @click="exportOrders">导出 Excel</el-button>
       </div>
     </div>
 
@@ -289,6 +380,10 @@ watch(
       :title="isPlatformAdmin() ? '平台财务监管' : '运营提示'"
       :description="isPlatformAdmin() ? '可按商家查看订单、支付状态和退款状态；执行收款或退款前请确认该商家的支付记录。' : '确认收款仅用于历史线下订单；退款申请提交后会进入财务审核，不会立即改为已退款。'"
     />
+
+    <el-alert v-if="errorMessage" class="page-error" type="error" show-icon :closable="false" :title="errorMessage"><template #default><el-button size="small" :disabled="writeLocked" @click="load">重试</el-button></template></el-alert>
+    <el-alert v-if="tenantErrorMessage" class="page-error" type="error" show-icon :closable="false" :title="tenantErrorMessage"><template #default><el-button size="small" :disabled="writeLocked" @click="retryScopeFilters">重试筛选范围</el-button></template></el-alert>
+    <el-alert v-if="agentErrorMessage" class="page-error" type="error" show-icon :closable="false" :title="agentErrorMessage"><template #default><el-button size="small" :disabled="writeLocked" @click="retryScopeFilters">重试筛选范围</el-button></template></el-alert>
 
     <div class="table-card">
       <el-alert
@@ -302,28 +397,28 @@ watch(
       />
       <el-form class="filters" inline>
         <el-form-item label="状态">
-          <el-select v-model="filters.status" clearable style="width: 160px" @change="search">
+          <el-select v-model="filters.status" clearable style="width: 160px" :disabled="writeLocked" @change="search">
             <el-option v-for="(text, key) in orderStatusText" :key="key" :label="text" :value="key" />
           </el-select>
         </el-form-item>
         <el-form-item v-if="isPlatformAdmin()" label="商家">
-          <el-select v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width: 180px" @change="changeTenant">
+          <el-select v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width: 180px" :disabled="writeLocked" @change="changeTenant">
             <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenant.name" :value="tenant.id" />
           </el-select>
         </el-form-item>
-        <el-form-item label="代理">
-          <el-select v-model="filters.agentId" clearable filterable placeholder="全部代理" style="width: 180px" @change="search">
+        <el-form-item v-if="canViewAgents" label="代理">
+          <el-select v-model="filters.agentId" clearable filterable placeholder="全部代理" style="width: 180px" :disabled="writeLocked" @change="search">
             <el-option v-for="agent in agents" :key="agent.id" :label="agent.name" :value="agent.id" />
           </el-select>
         </el-form-item>
         <el-form-item label="关键词">
-          <el-input v-model="filters.keyword" clearable placeholder="搜索订单号、活动、手机号" style="width: 260px" @keyup.enter="search" @clear="search" />
+          <el-input v-model="filters.keyword" clearable placeholder="搜索订单号、活动、手机号" style="width: 260px" :disabled="writeLocked" @keyup.enter="search" @clear="search" />
         </el-form-item>
-        <el-button type="primary" :icon="Search" @click="search">筛选</el-button>
-        <el-button v-if="filters.activityId" @click="clearActivityFilter">查看全部活动订单</el-button>
+        <el-button type="primary" :icon="Search" :disabled="writeLocked" @click="search">筛选</el-button>
+        <el-button v-if="filters.activityId" :disabled="writeLocked" @click="clearActivityFilter">查看全部活动订单</el-button>
       </el-form>
 
-      <el-empty v-if="!loading && !rows.length" description="暂无匹配订单">
+      <el-empty v-if="!loading && !errorMessage && !rows.length" description="暂无匹配订单">
         <el-button type="primary" @click="search">重新筛选</el-button>
       </el-empty>
       <el-table v-else v-loading="loading" :data="rows" stripe>
@@ -335,7 +430,7 @@ watch(
         <el-table-column label="代理" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ row.agent?.name || "平台自营" }}</template></el-table-column>
         <el-table-column label="用户" min-width="150">
           <template #default="{ row }">
-            <div>{{ row.registration?.user?.phone || "-" }}</div>
+            <div>{{ maskedPhone(row.registration?.user?.phone) }}</div>
             <small>{{ row.registration?.user?.nickname || "本地 H5 用户" }}</small>
           </template>
         </el-table-column>
@@ -363,7 +458,7 @@ watch(
         <el-table-column prop="paidByAdmin" label="确认人" width="120" />
         <el-table-column label="备注" min-width="180">
           <template #default="{ row }">
-            <div class="remark-cell" @click="openRemark(row)">
+            <div class="remark-cell" :class="{ disabled: writeLocked || !canManageOrders }" :role="!writeLocked && canManageOrders ? 'button' : undefined" :tabindex="!writeLocked && canManageOrders ? 0 : undefined" @click="openRemark(row)" @keydown.enter.prevent="openRemark(row)" @keydown.space.prevent="openRemark(row)">
               <div v-if="row.remark" class="remark-text">{{ row.remark }}</div>
               <div v-else class="remark-placeholder">点击添加内部备注</div>
             </div>
@@ -373,10 +468,10 @@ watch(
         </el-table-column>
         <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" :icon="ChatLineSquare" @click="openRemark(row)">备注</el-button>
-            <el-button size="small" :icon="Clock" @click="openTimeline(row)">时间线</el-button>
-            <el-button size="small" type="success" :icon="Money" :disabled="!canConfirm(row)" @click="confirm(row)">收款</el-button>
-            <el-button size="small" type="warning" :icon="RefreshLeft" :disabled="!canRefund(row)" @click="openRefund(row)">申请退款</el-button>
+            <el-button v-if="canManageOrders" size="small" :icon="ChatLineSquare" :disabled="writeLocked" @click="openRemark(row)">备注</el-button>
+            <el-button size="small" :icon="Clock" :disabled="writeLocked" @click="openTimeline(row)">时间线</el-button>
+            <el-button v-if="canManageOrders" size="small" type="success" :icon="Money" :loading="confirmingId === row.id" :disabled="writeLocked || !canConfirm(row)" @click="confirm(row)">收款</el-button>
+            <el-button v-if="canRefundOrders" size="small" type="warning" :icon="RefreshLeft" :disabled="writeLocked || !canRefund(row)" @click="openRefund(row)">申请退款</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -388,13 +483,14 @@ watch(
           :page-sizes="[10, 20, 50, 100]"
           layout="total, sizes, prev, pager, next, jumper"
           :total="total"
+          :disabled="writeLocked"
           @size-change="search"
           @current-change="load"
         />
       </div>
     </div>
 
-    <el-dialog v-model="refundDialog" width="520px" title="申请订单退款">
+    <el-dialog v-model="refundDialog" width="520px" title="申请订单退款" :close-on-click-modal="!refunding" :close-on-press-escape="!refunding" :show-close="!refunding">
       <el-form label-position="top">
         <el-form-item label="订单号"><el-input :model-value="refundTarget?.orderNo" disabled /></el-form-item>
         <el-form-item label="实付金额"><el-input :model-value="`¥${money(refundTarget?.amount)}`" disabled /></el-form-item>
@@ -403,16 +499,16 @@ watch(
         <el-form-item label="退款号"><el-input v-model="refundForm.refundNo" placeholder="不填则系统自动生成" /></el-form-item>
         <el-alert type="warning" :closable="false" show-icon title="退款会先进入财务审核" description="审核通过后才会更新订单、报名和积分状态。请确认退款金额、原因和线下沟通记录。" />
       </el-form>
-      <template #footer><el-button @click="refundDialog=false">取消</el-button><el-button type="primary" :loading="refunding" @click="refund">提交申请</el-button></template>
+      <template #footer><el-button :disabled="refunding" @click="refundDialog=false">取消</el-button><el-button type="primary" :loading="refunding" :disabled="refunding" @click="refund">提交申请</el-button></template>
     </el-dialog>
 
 
-    <el-dialog v-model="remarkDialog" width="520px" title="编辑备注">
+    <el-dialog v-model="remarkDialog" width="520px" title="编辑备注" :close-on-click-modal="!remarkSaving" :close-on-press-escape="!remarkSaving" :show-close="!remarkSaving">
       <el-form label-position="top">
         <el-form-item label="订单号"><el-input :model-value="remarkOrder?.orderNo" disabled /></el-form-item>
         <el-form-item label="备注内容"><el-input v-model="remarkText" type="textarea" :rows="4" placeholder="添加内部备注，仅后台可见" /></el-form-item>
       </el-form>
-      <template #footer><el-button @click="remarkDialog=false">取消</el-button><el-button type="primary" :loading="remarkSaving" @click="saveRemark">保存备注</el-button></template>
+      <template #footer><el-button :disabled="remarkSaving" @click="remarkDialog=false">取消</el-button><el-button type="primary" :loading="remarkSaving" :disabled="remarkSaving" @click="saveRemark">保存备注</el-button></template>
     </el-dialog>
 
     <el-drawer v-model="timelineDrawer" size="560px" title="订单时间线">
@@ -438,6 +534,7 @@ watch(
 small { color: #667085; display: block; line-height: 1.5; }
 .remark-cell { cursor: pointer; min-height: 22px; }
 .remark-cell:hover { color: #0f766e; }
+.remark-cell.disabled { cursor: not-allowed; opacity: 0.55; }
 .remark-text { color: #334155; font-size: 13px; line-height: 1.5; white-space: pre-wrap; }
 .remark-placeholder { color: #98a2b3; font-size: 12px; }
 .danger { color: #dc2626; }

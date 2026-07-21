@@ -30,6 +30,7 @@ const doctor = read("scripts/doctor.mjs");
 const launchChecklist = read("docs/launch-checklist.md");
 const runbook = read("docs/production-runbook.md");
 const progress = read("docs/project-progress.md");
+const monitor = read("scripts/monitor-health.mjs");
 
 checkSourceIncludes(packageJson.scripts?.["test:preflight-guards"] || "", "node scripts/preflight-monitoring-guard.mjs", "package preflight guards script");
 
@@ -114,6 +115,23 @@ checkSourceIncludesAll(runbook, [
 ], "production runbook monitoring and troubleshooting");
 
 checkSourceIncludes(progress, "监控与日志", "project progress monitoring entry");
+checkSourceIncludes(packageJson.scripts?.["monitor:health"] || "", "scripts/monitor-health.mjs", "health monitor package script");
+checkSourceIncludesAll(healthController, [
+  "activity_operational_metrics_up",
+  "activity_business_jobs_dead_letter",
+  "activity_payment_callback_failures_15m",
+  "activity_refund_provider_failures",
+  "activity_inventory_anomalies_open",
+  "activity_fund_risk_alerts_open"
+], "health operational metrics");
+checkSourceIncludesAll(monitor, [
+  "MONITOR_ALERT_WEBHOOK_URL",
+  "monitor-health-result.json",
+  "dead_letter_jobs",
+  "refund_provider_failures",
+  "payment_callback_failures",
+  'event: recovered ? "recovered" : "alert"'
+], "health monitor script");
 
 if (failures.length) {
   for (const failure of failures) console.error(`ERR  ${failure}`);

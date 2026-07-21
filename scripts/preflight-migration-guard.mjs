@@ -21,10 +21,12 @@ const doctor = read("scripts/doctor.mjs");
 const runtimeValidation = read("apps/api/src/shared/config-validation.ts");
 const runtimeValidationSpec = read("apps/api/src/shared/config-validation.spec.ts");
 const productionExample = read("deploy/.env.production.example");
+const localDockerExample = read("deploy/.env.local-docker.example");
 const compose = read("docker-compose.yml");
 const systemSettings = read("apps/admin/src/views/SystemSettings.vue");
 const launchChecklist = read("docs/launch-checklist.md");
 const progress = read("docs/project-progress.md");
+const activityFieldTypesMigration = read("apps/api/src/migrations/1783810000000-ActivityFieldTypes.ts");
 
 check(rootPackage.scripts?.preflight?.includes("node scripts/preflight.mjs"), "package.json preflight must run scripts/preflight.mjs.");
 
@@ -50,7 +52,9 @@ checkSourceIncludes(runtimeValidationSpec, "keeps database synchronize disabled 
 checkSourceIncludes(runtimeValidationSpec, "marks database synchronize as an error when enabled in production", "runtime config validation spec");
 
 checkSourceIncludes(productionExample, "DB_SYNCHRONIZE=false", "production env example");
+checkSourceIncludes(localDockerExample, "DB_SYNCHRONIZE=false", "local Docker env example");
 checkSourceIncludes(compose, "DB_SYNCHRONIZE", "docker compose");
+checkSourceIncludes(compose, "--log-bin-trust-function-creators=1", "docker compose");
 
 checkSourceIncludes(systemSettings, "dbSynchronize", "admin deployment settings");
 checkSourceIncludes(systemSettings, "envLine(\"DB_SYNCHRONIZE\", boolValue(deployment.dbSynchronize))", "admin deployment settings");
@@ -61,7 +65,14 @@ checkSourceIncludes(launchChecklist, "DB_SYNCHRONIZE=false", "launch checklist")
 checkSourceIncludes(launchChecklist, "migration:show", "launch checklist");
 checkSourceIncludes(launchChecklist, "migration:run", "launch checklist");
 checkSourceIncludes(launchChecklist, "生产数据库备份后", "launch checklist");
+checkSourceIncludes(launchChecklist, "log_bin_trust_function_creators=1", "launch checklist");
 checkSourceIncludes(progress, "本地 MySQL 预检未连通", "project progress");
+
+for (const fieldType of ["text", "single_choice", "multiple_choice", "phone", "id_card", "remark", "email", "number", "date", "date_time", "region", "address", "attachment"]) {
+  checkSourceIncludes(activityFieldTypesMigration, `"${fieldType}"`, "activity field type migration");
+}
+checkSourceIncludes(activityFieldTypesMigration, "ALTER TABLE \\`activity_fields\\` MODIFY \\`type\\` enum", "activity field type migration");
+checkSourceIncludes(activityFieldTypesMigration, "Cannot restore the legacy activity field enum while newer field types are in use", "activity field type migration rollback guard");
 
 if (failures.length) {
   for (const failure of failures) console.error(`ERR  ${failure}`);

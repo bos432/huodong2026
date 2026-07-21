@@ -1,13 +1,14 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Activity } from "./activity.entity";
 import { Tenant } from "./tenant.entity";
 
 @Entity("coupons")
+@Index("UQ_coupons_tenant_code", ["tenant", "code"], { unique: true })
 export class Coupon {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Column({ type: "varchar", length: 64, unique: true })
+  @Column({ type: "varchar", length: 64 })
   code!: string;
 
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
@@ -30,6 +31,10 @@ export class Coupon {
 
   @Column({ type: "int", default: 0 })
   usedCount!: number;
+
+  @Column({ type: "varchar", length: 24, default: "code" }) claimMode!: "code" | "claim";
+  @Column({ type: "int", default: 1 }) perUserLimit!: number;
+  @Column({ type: "int", default: 0 }) claimedCount!: number;
 
   @ManyToOne(() => Activity, { eager: true, nullable: true, onDelete: "CASCADE" })
   activity!: Activity | null;

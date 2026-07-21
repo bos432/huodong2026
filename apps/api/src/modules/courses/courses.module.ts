@@ -4,16 +4,38 @@ import { Course } from "../../entities/course.entity";
 import { CourseChapter } from "../../entities/course-chapter.entity";
 import { CourseLesson } from "../../entities/course-lesson.entity";
 import { CourseOrder } from "../../entities/course-order.entity";
+import { CourseTeacher } from "../../entities/course-teacher.entity";
+import { CourseResourceAccessLog } from "../../entities/course-resource-access-log.entity";
+import { MemberLevel } from "../../entities/member-level.entity";
+import { CourseAssessment } from "../../entities/course-assessment.entity";
+import { CourseQuestion } from "../../entities/course-question.entity";
+import { CourseAssessmentAttempt } from "../../entities/course-assessment-attempt.entity";
+import { CourseAssessmentAnswer } from "../../entities/course-assessment-answer.entity";
+import { CourseAssessmentGrant } from "../../entities/course-assessment-grant.entity";
+import { CourseReview } from "../../entities/course-review.entity";
+import { CourseQa } from "../../entities/course-qa.entity";
+import { CourseAnnouncement } from "../../entities/course-announcement.entity";
+import { CourseCertificateTemplate } from "../../entities/course-certificate-template.entity";
+import { CourseRefund } from "../../entities/course-refund.entity";
 import { CommunityActivity } from "../../entities/community-activity.entity";
+import { CommunityActivityMember } from "../../entities/community-activity-member.entity";
 import { CommunityCheckIn } from "../../entities/community-checkin.entity";
 import { CheckInTask } from "../../entities/checkin-task.entity";
 import { CommunityPost } from "../../entities/community-post.entity";
 import { CommunityPostComment } from "../../entities/community-post-comment.entity";
 import { CommunityPostLike } from "../../entities/community-post-like.entity";
+import { CommunityPostFavorite } from "../../entities/community-post-favorite.entity";
+import { CommunityUserFollow } from "../../entities/community-user-follow.entity";
+import { CommunityNotification } from "../../entities/community-notification.entity";
+import { CommunityContentReport } from "../../entities/community-content-report.entity";
+import { ContentAppeal } from "../../entities/content-appeal.entity";
+import { ContentKeywordRule } from "../../entities/content-keyword-rule.entity";
+import { ContentUserSanction } from "../../entities/content-user-sanction.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { UserFavorite } from "../../entities/user-favorite.entity";
 import { Certificate } from "../../entities/certificate.entity";
 import { ForumCategory } from "../../entities/forum-category.entity";
+import { ForumCategoryModerator } from "../../entities/forum-category-moderator.entity";
 import { ForumFavorite } from "../../entities/forum-favorite.entity";
 import { ForumNotification } from "../../entities/forum-notification.entity";
 import { ForumReply } from "../../entities/forum-reply.entity";
@@ -27,12 +49,15 @@ import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { User } from "../../entities/user.entity";
 import { PublicModule } from "../public/public.module";
+import { V1Module } from "../v1/v1.module";
 import { CoursesController } from "./courses.controller";
 import { PublicCoursesController } from "./public-courses.controller";
 import { CoursesService } from "./courses.service";
+import { ReliabilityModule } from "../reliability/reliability.module";
+import { CredentialTemplateModule } from "../credential-templates/credential-template.module";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, ForumCategory, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant]), PublicModule],
+  imports: [CredentialTemplateModule, TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CourseTeacher, CourseResourceAccessLog, MemberLevel, CourseAssessment, CourseQuestion, CourseAssessmentAttempt, CourseAssessmentAnswer, CourseAssessmentGrant, CourseReview, CourseQa, CourseAnnouncement, CourseCertificateTemplate, CourseRefund, CommunityActivity, CommunityActivityMember, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostFavorite, CommunityUserFollow, CommunityNotification, CommunityContentReport, CommunityPostComment, CommunityCheckIn, ContentKeywordRule, ContentUserSanction, ContentAppeal, ForumCategory, ForumCategoryModerator, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant]), PublicModule, ReliabilityModule, V1Module],
   controllers: [CoursesController, PublicCoursesController],
   providers: [CoursesService],
   exports: [CoursesService]

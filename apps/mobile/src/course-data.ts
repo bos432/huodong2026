@@ -38,7 +38,7 @@ export function normalizeCourse(row: any, index = 0): CourseCard {
     coverUrl: row?.coverUrl || "",
     icon: icons[(id || index) % icons.length],
     color: palette[(id || index) % palette.length],
-    category: reviewSafeText(row?.categoryName || "全部"),
+    category: reviewSafeText(row?.categoryName || tags[0] || "全部"),
     rating: Number(row?.rating || 0).toFixed(1),
     reviewCount: Number(row?.reviewCount || 0),
     tag: reviewSafeText(tags[0] || (price === 0 ? "限时免费" : "")),

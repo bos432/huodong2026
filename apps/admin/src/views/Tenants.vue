@@ -1,11 +1,12 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { ElMessage } from "element-plus";
-import { ArrowDown, ArrowRight, CopyDocument, Edit, Grid, Money, Plus, Refresh, UserFilled, View } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { ArrowDown, ArrowRight, CopyDocument, Download, Edit, Grid, Money, Plus, Refresh, UserFilled, View } from "@element-plus/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import { api, downloadFile } from "../api";
 import H5QrDialog from "../components/H5QrDialog.vue";
 import { copyToClipboard, h5PreviewUrl, openH5Preview } from "../h5-preview";
+import { canAccess } from "../permissions";
 
 type TenantRow = {
   id: number;
@@ -15,6 +16,7 @@ type TenantRow = {
   contactName?: string | null;
   contactPhone?: string | null;
   enabled: boolean;
+  sensitiveMasked?: boolean;
   createdAt?: string;
   adminCount?: number;
   enabledAdminCount?: number;
@@ -53,7 +55,7 @@ type TenantRow = {
     plan: string;
     planLabel: string;
     expiresAt: string | null;
-    status: "no_expiry" | "active" | "expiring_soon" | "expired";
+    status: "no_expiry" | "active" | "expiring_soon" | "grace_period" | "read_only" | "suspended";
     label: string;
     daysRemaining: number | null;
     renewalRequired: boolean;
@@ -75,14 +77,23 @@ type TenantRow = {
     mallEnabled: boolean;
     packagePlan?: string;
     packageExpiresAt?: string | null;
+    entitlements?: Record<string, unknown>;
   };
 };
 
 const rows = ref<TenantRow[]>([]);
 const selectedRows = ref<TenantRow[]>([]);
 const loading = ref(false);
+const errorMessage = ref("");
+const batchUpdating = ref(false);
+const exporting = ref(false);
 const saving = ref(false);
 const dialog = ref(false);
+const subscriptionDialog = ref(false);
+const subscriptionEvents = ref<any[]>([]);
+const subscriptionLoading = ref(false);
+const subscriptionError = ref("");
+const permissionUpdatingId = ref(0);
 const drawer = ref(false);
 const h5QrDialogVisible = ref(false);
 const editingId = ref<number | null>(null);
@@ -107,6 +118,11 @@ const form = reactive({
   packageExpiresAt: "",
   remark: ""
 });
+const subscriptionForm = reactive({ action: "renew", packagePlan: "standard", packageExpiresAt: "", remark: "" });
+const subscriptionActions = [
+  { label: "续费", value: "renew" }, { label: "升级", value: "upgrade" }, { label: "降级", value: "downgrade" },
+  { label: "延期", value: "extend" }, { label: "暂停", value: "suspend" }, { label: "恢复", value: "restore" }
+];
 
 const readinessOptions = [
   { label: "全部状态", value: "" },
@@ -214,10 +230,32 @@ const tenantFilterSummaryText = computed(() =>
 const permissionMode = computed(() => route.query.mode === "permissions");
 const tenantQrUrl = computed(() => (qrTenant.value ? h5PreviewUrl(qrTenant.value.code) : ""));
 const tenantQrScopeName = computed(() => qrTenant.value ? `${qrTenant.value.name || qrTenant.value.code} H5` : "商家 H5");
+const canManageTenant = computed(() => canAccess(["tenant.manage"]));
+const canManageTenantPermissions = computed(() => canAccess(["tenant.permissions.manage"]));
+const canManageTenantSubscription = computed(() => canAccess(["tenant.subscription.manage"]));
+const canExportTenants = computed(() => canAccess(["tenant.export"]));
+const canManageAdminAccounts = computed(() => canAccess(["admin.manage"]));
+const canManagePaymentAccounts = computed(() => canAccess(["payment_account.manage"]));
+const canViewPaymentAccounts = computed(() => canAccess(["payment_account.view", "payment_account.manage"]));
+const canApproveActivities = computed(() => canAccess(["activity.approve"]));
+const canViewActivities = computed(() => canAccess(["activity.view", "activity.approve"]));
+const canViewRegistrations = computed(() => canAccess(["registration.view"]));
+const canViewFinance = computed(() => canAccess(["finance.view"]));
+const canViewLogs = computed(() => canAccess(["logs.view"]));
+
+function maskedPhone(value?: string | null) {
+  const phone = String(value || "");
+  if (!phone) return "";
+  return phone.length >= 7 ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone;
+}
 
 function handleSelectionChange(val: TenantRow[]) { selectedRows.value = val; }
 
 async function batchUpdate(action: string, value?: boolean) {
+  if (batchUpdating.value) return;
+  const statusAction = action === "enable" || action === "disable";
+  if (statusAction && !canManageTenant.value) return ElMessage.error("当前账号没有批量启停商家的权限");
+  if (!statusAction && !canManageTenantPermissions.value) return ElMessage.error("当前账号没有批量维护商家权益的权限");
   var ids = selectedRows.value.map(function(r) { return r.id; });
   if (!ids.length) return;
   var msg = "";
@@ -233,11 +271,24 @@ async function batchUpdate(action: string, value?: boolean) {
     case "mall_enabled": msg = "给选中的 " + ids.length + " 个商家开通商城运营？"; break;
     case "mall_disabled": msg = "关闭选中的 " + ids.length + " 个商家的商城运营？关闭后商家端商城菜单和前台商城会不可用。"; break;
   }
-  if (!confirm(msg)) return;
+  batchUpdating.value = true;
+  let processed = 0;
   try {
+    await ElMessageBox.confirm(msg, "批量操作确认", { type: "warning", confirmButtonText: "确认执行", cancelButtonText: "取消" });
     if (action === "enable" || action === "disable") {
       for (var i = 0; i < ids.length; i++) {
-        await api.patch("/admin/tenants/" + ids[i], { enabled: action === "enable" });
+        const row = selectedRows.value.find((item) => item.id === ids[i]);
+        if (!row) continue;
+        await api.patch("/admin/tenants/" + ids[i], {
+          code: row.code,
+          name: row.name,
+          region: row.region || undefined,
+          contactName: row.contactName || undefined,
+          contactPhone: row.contactPhone || undefined,
+          remark: row.remark || undefined,
+          enabled: action === "enable"
+        });
+        processed += 1;
       }
     } else {
       var pSettings: Record<string, boolean> = {};
@@ -253,31 +304,42 @@ async function batchUpdate(action: string, value?: boolean) {
       }
       for (var i = 0; i < ids.length; i++) {
         await api.post("/admin/tenants/" + ids[i] + "/permissions", pSettings);
+        processed += 1;
       }
     }
     ElMessage.success("批量操作完成，共处理 " + ids.length + " 个商家");
     selectedRows.value = [];
     await load();
   } catch (error: any) {
-    ElMessage.error(error.message || "批量操作失败");
+    if (error !== "cancel" && error !== "close") ElMessage.error(processed ? `批量操作中断，已处理 ${processed}/${ids.length} 个商家：${error.message || "操作失败"}` : error.message || "批量操作失败");
+  } finally {
+    batchUpdating.value = false;
   }
 }
 
 async function exportTenants() {
+  if (!canExportTenants.value) return ElMessage.error("当前账号没有导出商家数据的权限");
+  if (exporting.value) return;
+  exporting.value = true;
   try {
     await downloadFile("/admin/tenants/export", "商家列表.xlsx");
+    ElMessage.success("商家列表已导出");
   } catch (error: any) {
     ElMessage.error(error.message || "导出商家列表失败");
+  } finally {
+    exporting.value = false;
   }
 }
 
 async function load() {
   loading.value = true;
+  errorMessage.value = "";
   try {
     rows.value = await api.get<any, TenantRow[]>("/admin/tenants");
     syncDrawerTenantRow();
   } catch (error: any) {
-    ElMessage.error(error.message || "加载商家失败");
+    errorMessage.value = error.message || "加载商家失败";
+    ElMessage.error(errorMessage.value);
   } finally {
     loading.value = false;
   }
@@ -322,12 +384,14 @@ function resetTenantFilters() {
 }
 
 function openCreate() {
+  if (!canManageTenant.value) return ElMessage.error("当前账号没有新建商家的权限");
   editingId.value = null;
   Object.assign(form, { code: "", name: "", region: "", contactName: "", contactPhone: "", enabled: true, activityPublishReviewRequired: true, registrationReviewEnabled: false, paymentAccountEditable: true, mallEnabled: true, packagePlan: "standard", packageExpiresAt: "", remark: "" });
   dialog.value = true;
 }
 
 function openEdit(row: TenantRow) {
+  if (!canManageTenant.value) return ElMessage.error("当前账号没有维护商家资料的权限");
   editingId.value = row.id;
   Object.assign(form, {
     code: row.code,
@@ -352,31 +416,80 @@ function openDetail(row: TenantRow) {
   drawer.value = true;
 }
 
+async function openSubscription(row: TenantRow, action = "renew") {
+  if (subscriptionLoading.value) return;
+  drawerRow.value = row;
+  Object.assign(subscriptionForm, { action, packagePlan: row.subscriptionStatus?.plan || "standard", packageExpiresAt: row.subscriptionStatus?.expiresAt || "", remark: "" });
+  subscriptionDialog.value = true;
+  subscriptionLoading.value = true;
+  subscriptionError.value = "";
+  try {
+    subscriptionEvents.value = await api.get<any, any[]>(`/admin/tenants/${row.id}/subscription-events`);
+  } catch (error: any) {
+    subscriptionError.value = error.message || "加载套餐变更记录失败";
+  } finally {
+    subscriptionLoading.value = false;
+  }
+}
+
+async function submitSubscriptionChange() {
+  if (!canManageTenantSubscription.value) return ElMessage.error("当前账号没有维护商家套餐的权限");
+  const row = drawerRow.value;
+  if (!row) return;
+  if (["renew", "extend"].includes(subscriptionForm.action) && !subscriptionForm.packageExpiresAt) return ElMessage.warning("请选择新的套餐到期日");
+  saving.value = true;
+  try {
+    const result = await api.post<any, any>(`/admin/tenants/${row.id}/subscription-change`, {
+      action: subscriptionForm.action,
+      packagePlan: ["upgrade", "downgrade"].includes(subscriptionForm.action) ? subscriptionForm.packagePlan : undefined,
+      packageExpiresAt: subscriptionForm.action === "suspend" ? undefined : subscriptionForm.packageExpiresAt || undefined,
+      remark: subscriptionForm.remark.trim() || undefined
+    });
+    ElMessage.success("套餐变更已生效");
+    subscriptionEvents.value = await api.get<any, any[]>(`/admin/tenants/${row.id}/subscription-events`);
+    await load();
+    const refreshed = rows.value.find((item) => item.id === row.id);
+    if (refreshed) drawerRow.value = refreshed;
+    Object.assign(subscriptionForm, { packagePlan: result.tenant.subscriptionStatus?.plan || subscriptionForm.packagePlan, packageExpiresAt: result.tenant.subscriptionStatus?.expiresAt || "", remark: "" });
+  } catch (error: any) { ElMessage.error(error.message || "套餐变更失败"); }
+  finally { saving.value = false; }
+}
+
+function subscriptionActionText(action: string) {
+  return subscriptionActions.find((item) => item.value === action)?.label || action;
+}
+
 function goCreateTenantAdmin(row: TenantRow) {
   goTenantAdminAccounts(row);
 }
 
 function goTenantAdminAccounts(row: TenantRow) {
+  if (!canManageAdminAccounts.value) return ElMessage.error("当前账号没有管理商家后台账号的权限");
   router.push({ path: "/admins", query: { tenantId: row.id } });
 }
 
 function goConfigurePayment(row: TenantRow) {
+  if (!canViewPaymentAccounts.value) return ElMessage.error("当前账号没有查看商家收款账户的权限");
   router.push({ path: "/agents", query: { tenantId: row.id } });
 }
 
 function goTenantPendingActivities(row: TenantRow) {
+  if (!canApproveActivities.value) return ElMessage.error("当前账号没有处理待审核活动的权限");
   router.push({ path: "/activities", query: { tenantId: row.id, status: "pending_approval" } });
 }
 
 function goTenantPendingRegistrations(row: TenantRow) {
+  if (!canViewRegistrations.value) return ElMessage.error("当前账号没有查看报名的权限");
   router.push({ path: "/registrations", query: { tenantId: row.id, status: "pending_review" } });
 }
 
 function goTenantFinanceRisk(row: TenantRow) {
+  if (!canViewFinance.value) return ElMessage.error("当前账号没有查看财务风险的权限");
   router.push({ path: "/finance", query: { tenantId: row.id } });
 }
 
 function goTenantOperations(row: TenantRow) {
+  if (!canViewActivities.value) return ElMessage.error("当前账号没有查看商家活动的权限");
   router.push({ path: "/activities", query: { tenantId: row.id } });
 }
 
@@ -395,14 +508,29 @@ function showTenantH5Qr(row: TenantRow) {
 }
 
 function goTenantOperationLogs(row: TenantRow) {
+  if (!canViewLogs.value) return ElMessage.error("当前账号没有查看操作日志的权限");
   router.push({ path: "/operation-logs", query: { tenantId: row.id } });
 }
 
 function goTenantLoginLogs(row: TenantRow) {
+  if (!canViewLogs.value) return ElMessage.error("当前账号没有查看登录日志的权限");
   router.push({ path: "/admin-login-logs", query: { tenantId: row.id } });
 }
 
+function canHandleTenantNextAction(row: TenantRow) {
+  const status = tenantReadinessKey(row);
+  if (status === "disabled") return canManageTenant.value;
+  if (status === "need_admin") return canManageAdminAccounts.value;
+  if (status === "mall_closed") return canManageTenantPermissions.value;
+  if (status === "need_payment" || status === "payment_closed") return canViewPaymentAccounts.value;
+  if (tenantHasFinanceRisk(row)) return canViewFinance.value;
+  if (Number(row.pendingActivityCount || 0) > 0) return canApproveActivities.value;
+  if (Number(row.pendingRegistrationCount || 0) > 0) return canViewRegistrations.value;
+  return canViewActivities.value;
+}
+
 function goTenantNextAction(row: TenantRow) {
+  if (!canHandleTenantNextAction(row)) return ElMessage.error("当前账号没有处理该商家下一步事项的权限");
   const status = tenantReadinessKey(row);
   if (status === "disabled") return openEdit(row);
   if (status === "need_admin") return goCreateTenantAdmin(row);
@@ -435,7 +563,7 @@ function tenantHasOperationHealthRisk(row: TenantRow) {
 }
 
 function tenantHasSubscriptionRisk(row: TenantRow) {
-  return row.subscriptionStatus?.status === "expired" || row.subscriptionStatus?.status === "expiring_soon";
+  return ["expiring_soon", "grace_period", "read_only", "suspended"].includes(row.subscriptionStatus?.status || "");
 }
 
 function tenantNeedsAttention(row: TenantRow) {
@@ -457,7 +585,7 @@ function tenantAttentionScore(row: TenantRow) {
   };
   return (
     readinessWeight[tenantReadinessKey(row)] +
-    (row.subscriptionStatus?.status === "expired" ? 500 : row.subscriptionStatus?.status === "expiring_soon" ? 120 : 0) +
+    (row.subscriptionStatus?.status === "suspended" ? 500 : row.subscriptionStatus?.status === "read_only" ? 420 : row.subscriptionStatus?.status === "grace_period" ? 220 : row.subscriptionStatus?.status === "expiring_soon" ? 120 : 0) +
     (row.operationHealth?.status === "risk" ? 260 : row.operationHealth?.status === "watch" ? 90 : 0) +
     Number(row.callbackRiskCount || 0) * 20 +
     Number(row.pendingReconciliationCount || 0) * 18 +
@@ -474,7 +602,9 @@ function tenantAttentionStatus(row: TenantRow) {
   if (status === "mall_closed") return { label: "开通商城", type: "warning" as const };
   if (status === "need_payment") return { label: "先配收款", type: "warning" as const };
   if (status === "payment_closed") return { label: "确认收款权限", type: "info" as const };
-  if (row.subscriptionStatus?.status === "expired") return { label: "套餐已到期", type: "danger" as const };
+  if (row.subscriptionStatus?.status === "suspended") return { label: "套餐已暂停", type: "danger" as const };
+  if (row.subscriptionStatus?.status === "read_only") return { label: "套餐只读", type: "danger" as const };
+  if (row.subscriptionStatus?.status === "grace_period") return { label: "套餐宽限期", type: "warning" as const };
   if (row.subscriptionStatus?.status === "expiring_soon") return { label: "续费提醒", type: "warning" as const };
   if (tenantHasFinanceRisk(row)) return { label: "财务优先", type: "danger" as const };
   if (row.operationHealth?.status === "risk") return { label: "经营风险", type: "danger" as const };
@@ -588,7 +718,9 @@ function tenantNextAction(row: TenantRow) {
   if (status === "mall_closed") return "平台先开通商城授权，商家端才会显示商品、订单、营销和收款配置";
   if (status === "need_payment") return "配置并启用收款主体和收款账户";
   if (status === "payment_closed") return "平台已关闭收款配置权限，需确认是否由平台代配置";
-  if (row.subscriptionStatus?.status === "expired") return "商家套餐已到期，先续费或延长到期日";
+  if (row.subscriptionStatus?.status === "suspended") return "商家套餐已暂停，先续费或恢复";
+  if (row.subscriptionStatus?.status === "read_only") return "商家套餐处于只读期，续费后恢复写入";
+  if (row.subscriptionStatus?.status === "grace_period") return "商家套餐处于宽限期，请尽快续费";
   if (row.subscriptionStatus?.status === "expiring_soon") return row.subscriptionStatus.action || "商家套餐即将到期，请联系续费";
   if (tenantHasFinanceRisk(row)) return "先处理待审退款或异常支付回调，再继续运营";
   if (row.operationHealth?.actions?.length) return row.operationHealth.actions[0];
@@ -619,7 +751,8 @@ function tenantFinanceRiskStatus(row: TenantRow) {
 
 function tenantSubscriptionTag(row: TenantRow) {
   const status = row.subscriptionStatus?.status;
-  if (status === "expired") return "danger";
+  if (status === "suspended" || status === "read_only") return "danger";
+  if (status === "grace_period") return "warning";
   if (status === "expiring_soon") return "warning";
   if (status === "active") return "success";
   return "info";
@@ -640,10 +773,22 @@ function applyPackagePermissionTemplate() {
 }
 
 async function submit() {
+  if (!canManageTenant.value) return ElMessage.error("当前账号没有维护商家资料的权限");
   if (!form.code.trim()) return ElMessage.warning("请填写商家编码");
   if (!form.name.trim()) return ElMessage.warning("请填写商家名称");
   saving.value = true;
   try {
+    const settings: Record<string, unknown> = {};
+    if (canManageTenantPermissions.value) Object.assign(settings, {
+      activityPublishReviewRequired: form.activityPublishReviewRequired,
+      registrationReviewEnabled: form.registrationReviewEnabled,
+      paymentAccountEditable: form.paymentAccountEditable,
+      mallEnabled: form.mallEnabled
+    });
+    if (canManageTenantSubscription.value) Object.assign(settings, {
+      packagePlan: form.packagePlan,
+      packageExpiresAt: form.packageExpiresAt || null
+    });
     const payload = {
       code: form.code.trim(),
       name: form.name.trim(),
@@ -652,14 +797,7 @@ async function submit() {
       contactPhone: form.contactPhone.trim() || undefined,
       remark: form.remark?.trim() || undefined,
       enabled: form.enabled,
-      settings: {
-        activityPublishReviewRequired: form.activityPublishReviewRequired,
-        registrationReviewEnabled: form.registrationReviewEnabled,
-        paymentAccountEditable: form.paymentAccountEditable,
-        mallEnabled: form.mallEnabled,
-        packagePlan: form.packagePlan,
-        packageExpiresAt: form.packageExpiresAt || null
-      }
+      ...(Object.keys(settings).length ? { settings } : {})
     };
     if (editingId.value) await api.patch(`/admin/tenants/${editingId.value}`, payload);
     else await api.post("/admin/tenants", payload);
@@ -674,13 +812,24 @@ async function submit() {
 }
 
 async function updatePermissions(row: TenantRow) {
+  if (!canManageTenantPermissions.value) return ElMessage.error("当前账号没有维护商家权益的权限");
+  if (permissionUpdatingId.value) return;
+  permissionUpdatingId.value = row.id;
   try {
-    await api.post(`/admin/tenants/${row.id}/permissions`, row.settings);
+    await api.post(`/admin/tenants/${row.id}/permissions`, {
+      activityPublishReviewRequired: row.settings.activityPublishReviewRequired,
+      registrationReviewEnabled: row.settings.registrationReviewEnabled,
+      paymentAccountEditable: row.settings.paymentAccountEditable,
+      mallEnabled: row.settings.mallEnabled,
+      entitlements: row.settings.entitlements
+    });
     ElMessage.success("权限已更新");
     await load();
   } catch (error: any) {
     ElMessage.error(error.message || "更新权限失败");
     await load();
+  } finally {
+    permissionUpdatingId.value = 0;
   }
 }
 
@@ -696,16 +845,25 @@ onMounted(() => {
   <div class="page">
     <div class="toolbar">
       <div>
-        <h2>{{ permissionMode ? "商家权限配置" : "商家/代理管理" }}</h2>
+        <h2>{{ permissionMode ? "商家权益配置" : canManageTenant ? "商家/代理管理" : "商家/代理列表" }}</h2>
         <p class="subtitle">
-          {{ permissionMode ? "超级管理员可按商家单独控制活动发布、报名审核和收款配置权限。" : "商家/代理作为租户独立运营，活动、订单、报名、收款账户按租户隔离。" }}
+          {{ permissionMode ? "平台可按授权分别维护活动发布、报名审核、收款配置和商城权益。" : "商家/代理作为租户独立运营，活动、订单、报名、收款账户按租户隔离。" }}
         </p>
       </div>
       <div class="toolbar-actions">
-        <el-button :icon="Refresh" @click="load">刷新</el-button>
-        <el-button type="primary" :icon="Plus" @click="openCreate">新建商家</el-button>
+        <el-button :icon="Refresh" :loading="loading" @click="load">刷新</el-button>
+        <el-button v-if="canExportTenants" :icon="Download" :loading="exporting" @click="exportTenants">导出 Excel</el-button>
+        <el-button v-if="canManageTenant" type="primary" :icon="Plus" @click="openCreate">新建商家</el-button>
       </div>
     </div>
+    <el-alert
+      v-if="!canManageTenant || !canManageTenantPermissions || !canManageTenantSubscription"
+      type="info"
+      show-icon
+      :closable="false"
+      title="当前页面已按资料维护、商家权益、套餐生命周期和导出权限分别控制；未授权操作不会显示。"
+    />
+    <el-alert v-if="errorMessage" class="page-error" type="error" show-icon :closable="false" :title="errorMessage"><template #default><el-button size="small" @click="load">重试</el-button></template></el-alert>
 
     <div class="table-card">
       <el-alert
@@ -714,7 +872,7 @@ onMounted(() => {
         type="info"
         show-icon
         :closable="false"
-        title="权限配置视图"
+        :title="canManageTenantPermissions ? '权限配置视图' : '商家权益只读视图'"
         description="活动发布审核决定商家活动是否必须提交平台审核；报名审核权限决定商家是否可开启用户报名审核；收款配置权限决定商家是否可维护收款账户、支付方式和付款说明。"
       />
       <div class="readiness-summary">
@@ -789,13 +947,13 @@ onMounted(() => {
           <el-tag v-for="item in activeTenantFilterLabels" v-else :key="item" type="primary" effect="plain">{{ item }}</el-tag>
         </div>
       </div>
-      <div class="batch-bar" style="margin: 8px 0; display: flex; align-items: center; gap: 8px; min-height: 36px;">
+      <div v-if="canManageTenant || canManageTenantPermissions" class="batch-bar" style="margin: 8px 0; display: flex; align-items: center; gap: 8px; min-height: 36px;">
         <template v-if="selectedRows.length">
           <span>已选 {{ selectedRows.length }} 个商家</span>
-          <el-button size="small" type="success" @click="batchUpdate('enable')">批量启用</el-button>
-          <el-button size="small" type="info" @click="batchUpdate('disable')">批量停用</el-button>
-          <el-dropdown trigger="click" @command="batchUpdate">
-            <el-button size="small">批量设置权限<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+          <el-button v-if="canManageTenant" size="small" type="success" :loading="batchUpdating" :disabled="batchUpdating" @click="batchUpdate('enable')">批量启用</el-button>
+          <el-button v-if="canManageTenant" size="small" type="info" :disabled="batchUpdating" @click="batchUpdate('disable')">批量停用</el-button>
+          <el-dropdown v-if="canManageTenantPermissions" trigger="click" :disabled="batchUpdating" @command="batchUpdate">
+            <el-button size="small" :disabled="batchUpdating">批量设置权限<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
             <template #dropdown>
               <el-dropdown-menu>
                 <el-dropdown-item command="review_required">活动发布需要审核</el-dropdown-item>
@@ -809,11 +967,11 @@ onMounted(() => {
               </el-dropdown-menu>
             </template>
           </el-dropdown>
-          <el-button size="small" @click="selectedRows = [];">取消选择</el-button>
+          <el-button size="small" :disabled="batchUpdating" @click="selectedRows = [];">取消选择</el-button>
         </template>
       </div>
       <el-table ref="tableRef" :data="filteredRows" stripe v-loading="loading" empty-text="暂无商家" @selection-change="handleSelectionChange">
-        <el-table-column type="selection" width="40" />
+        <el-table-column v-if="canManageTenant || canManageTenantPermissions" type="selection" width="40" />
         <el-table-column prop="id" label="ID" width="70" />
         <el-table-column label="商家" min-width="220">
           <template #default="{ row }">
@@ -825,7 +983,7 @@ onMounted(() => {
         <el-table-column label="联系人" min-width="160">
           <template #default="{ row }">
             <div>{{ row.contactName || "-" }}</div>
-            <small>{{ row.contactPhone || "" }}</small>
+            <small>{{ maskedPhone(row.contactPhone) }}</small>
           </template>
         </el-table-column>
         <el-table-column label="状态" width="100">
@@ -885,8 +1043,8 @@ onMounted(() => {
           <template #default="{ row }">
             <el-tag v-if="!row.pendingActivityCount && !row.pendingRegistrationCount" :type="tenantPendingReviewStatus(row).type">{{ tenantPendingReviewStatus(row).label }}</el-tag>
             <div v-else class="todo-actions">
-              <el-button link type="warning" @click="goTenantPendingActivities(row)">活动 {{ Number(row.pendingActivityCount || 0) }}</el-button>
-              <el-button link type="primary" @click="goTenantPendingRegistrations(row)">报名 {{ Number(row.pendingRegistrationCount || 0) }}</el-button>
+              <el-button v-if="canApproveActivities" link type="warning" @click="goTenantPendingActivities(row)">活动 {{ Number(row.pendingActivityCount || 0) }}</el-button>
+              <el-button v-if="canViewRegistrations" link type="primary" @click="goTenantPendingRegistrations(row)">报名 {{ Number(row.pendingRegistrationCount || 0) }}</el-button>
             </div>
           </template>
         </el-table-column>
@@ -894,9 +1052,9 @@ onMounted(() => {
           <template #default="{ row }">
             <el-tag v-if="!row.pendingRefundCount && !row.callbackRiskCount" :type="tenantFinanceRiskStatus(row).type">{{ tenantFinanceRiskStatus(row).label }}</el-tag>
             <div v-else class="todo-actions">
-              <el-button link type="warning" @click="goTenantFinanceRisk(row)">退款 {{ Number(row.pendingRefundCount || 0) }}</el-button>
-              <el-button link type="danger" @click="goTenantFinanceRisk(row)">回调 {{ Number(row.callbackRiskCount || 0) }}</el-button>
-              <el-button link type="danger" @click="goTenantFinanceRisk(row)">对账 {{ Number(row.pendingReconciliationCount || 0) }}</el-button>
+              <el-button v-if="canViewFinance" link type="warning" @click="goTenantFinanceRisk(row)">退款 {{ Number(row.pendingRefundCount || 0) }}</el-button>
+              <el-button v-if="canViewFinance" link type="danger" @click="goTenantFinanceRisk(row)">回调 {{ Number(row.callbackRiskCount || 0) }}</el-button>
+              <el-button v-if="canViewFinance" link type="danger" @click="goTenantFinanceRisk(row)">对账 {{ Number(row.pendingReconciliationCount || 0) }}</el-button>
             </div>
           </template>
         </el-table-column>
@@ -904,7 +1062,7 @@ onMounted(() => {
           <template #default="{ row }">
             <div class="status-actions">
               <el-tag :type="tenantAdminStatus(row).type">{{ tenantAdminStatus(row).label }}</el-tag>
-              <el-button link type="primary" @click="goTenantAdminAccounts(row)">
+              <el-button v-if="canManageAdminAccounts" link type="primary" @click="goTenantAdminAccounts(row)">
                 {{ Number(row.adminCount || 0) > 0 ? "查看账号" : "创建管理员" }}
               </el-button>
             </div>
@@ -914,8 +1072,8 @@ onMounted(() => {
           <template #default="{ row }">
             <div class="status-actions">
               <el-tag :type="paymentAccountStatus(row).type">{{ paymentAccountStatus(row).label }}</el-tag>
-              <el-button link type="success" @click="goConfigurePayment(row)">
-                {{ Number(row.paymentAccountCount || 0) > 0 ? "查看收款" : "配置收款" }}
+              <el-button v-if="canViewPaymentAccounts" link type="success" @click="goConfigurePayment(row)">
+                {{ canManagePaymentAccounts && Number(row.paymentAccountCount || 0) === 0 ? "配置收款" : "查看收款" }}
               </el-button>
             </div>
           </template>
@@ -924,29 +1082,29 @@ onMounted(() => {
           <template #default="{ row }">
             <div class="status-actions">
               <el-tag :type="mallAuthorizationStatus(row).type">{{ mallAuthorizationStatus(row).label }}</el-tag>
-              <el-switch v-model="row.settings.mallEnabled" @change="updatePermissions(row)" />
+              <el-switch v-model="row.settings.mallEnabled" :disabled="!canManageTenantPermissions || permissionUpdatingId === row.id" @change="updatePermissions(row)" />
             </div>
           </template>
         </el-table-column>
         <el-table-column label="活动发布审核" width="170">
-          <template #default="{ row }"><el-switch v-model="row.settings.activityPublishReviewRequired" @change="updatePermissions(row)" /></template>
+          <template #default="{ row }"><el-switch v-model="row.settings.activityPublishReviewRequired" :disabled="!canManageTenantPermissions || permissionUpdatingId === row.id" @change="updatePermissions(row)" /></template>
         </el-table-column>
         <el-table-column label="报名审核权限" width="170">
-          <template #default="{ row }"><el-switch v-model="row.settings.registrationReviewEnabled" @change="updatePermissions(row)" /></template>
+          <template #default="{ row }"><el-switch v-model="row.settings.registrationReviewEnabled" :disabled="!canManageTenantPermissions || permissionUpdatingId === row.id" @change="updatePermissions(row)" /></template>
         </el-table-column>
         <el-table-column label="收款配置权限" width="170">
-          <template #default="{ row }"><el-switch v-model="row.settings.paymentAccountEditable" @change="updatePermissions(row)" /></template>
+          <template #default="{ row }"><el-switch v-model="row.settings.paymentAccountEditable" :disabled="!canManageTenantPermissions || permissionUpdatingId === row.id" @change="updatePermissions(row)" /></template>
         </el-table-column>
-        <el-table-column label="操作" width="700" fixed="right">
+        <el-table-column label="操作" :width="canManageTenant || canManageAdminAccounts || canManagePaymentAccounts ? 700 : 430" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="warning" plain :icon="ArrowRight" @click="goTenantNextAction(row)">处理下一步</el-button>
+            <el-button v-if="canHandleTenantNextAction(row)" size="small" type="warning" plain :icon="ArrowRight" @click="goTenantNextAction(row)">处理下一步</el-button>
             <el-button size="small" type="primary" plain :icon="View" @click="previewTenantH5(row)">预览H5</el-button>
             <el-button size="small" plain :icon="CopyDocument" @click="copyTenantH5Url(row)">复制链接</el-button>
             <el-button size="small" plain :icon="Grid" @click="showTenantH5Qr(row)">二维码</el-button>
             <el-button size="small" @click="openDetail(row)">查看详情</el-button>
-            <el-button size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
-            <el-button size="small" type="primary" plain :icon="UserFilled" @click="goCreateTenantAdmin(row)">创建管理员</el-button>
-            <el-button size="small" type="success" plain :icon="Money" @click="goConfigurePayment(row)">配置收款</el-button>
+            <el-button v-if="canManageTenant" size="small" :icon="Edit" @click="openEdit(row)">编辑</el-button>
+            <el-button v-if="canManageAdminAccounts" size="small" type="primary" plain :icon="UserFilled" @click="goCreateTenantAdmin(row)">创建管理员</el-button>
+            <el-button v-if="canManagePaymentAccounts" size="small" type="success" plain :icon="Money" @click="goConfigurePayment(row)">配置收款</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -973,7 +1131,7 @@ onMounted(() => {
           </div>
           <div class="detail-item">
             <span>联系电话</span>
-            <strong>{{ drawerRow.contactPhone || "-" }}</strong>
+            <strong>{{ maskedPhone(drawerRow.contactPhone) || "-" }}</strong>
           </div>
           <div class="detail-item">
             <span>内部备注</span>
@@ -1045,13 +1203,13 @@ onMounted(() => {
           <h4>下一步建议</h4>
           <p>{{ tenantNextAction(drawerRow) }}</p>
           <div class="drawer-actions">
-            <el-button type="warning" plain :icon="ArrowRight" @click="goTenantNextAction(drawerRow)">处理下一步</el-button>
+            <el-button v-if="canHandleTenantNextAction(drawerRow)" type="warning" plain :icon="ArrowRight" @click="goTenantNextAction(drawerRow)">处理下一步</el-button>
             <el-button type="primary" plain :icon="View" @click="previewTenantH5(drawerRow)">预览H5</el-button>
             <el-button plain :icon="CopyDocument" @click="copyTenantH5Url(drawerRow)">复制链接</el-button>
             <el-button plain :icon="Grid" @click="showTenantH5Qr(drawerRow)">二维码</el-button>
-            <el-button @click="openEdit(drawerRow)">编辑资料</el-button>
-            <el-button type="primary" plain @click="goTenantAdminAccounts(drawerRow)">查看账号</el-button>
-            <el-button type="success" plain @click="goConfigurePayment(drawerRow)">配置收款</el-button>
+            <el-button v-if="canManageTenant" @click="openEdit(drawerRow)">编辑资料</el-button>
+            <el-button v-if="canManageAdminAccounts" type="primary" plain @click="goTenantAdminAccounts(drawerRow)">查看账号</el-button>
+            <el-button v-if="canViewPaymentAccounts" type="success" plain @click="goConfigurePayment(drawerRow)">{{ canManagePaymentAccounts ? "配置收款" : "查看收款" }}</el-button>
           </div>
         </div>
 
@@ -1083,34 +1241,44 @@ onMounted(() => {
             </label>
             <label>
               <span>活动发布需要平台审核</span>
-              <el-switch v-model="drawerRow.settings.activityPublishReviewRequired" @change="updatePermissions(drawerRow)" />
+              <el-switch v-model="drawerRow.settings.activityPublishReviewRequired" :disabled="!canManageTenantPermissions || permissionUpdatingId === drawerRow.id" @change="updatePermissions(drawerRow)" />
             </label>
             <label>
               <span>允许商家开启报名审核</span>
-              <el-switch v-model="drawerRow.settings.registrationReviewEnabled" @change="updatePermissions(drawerRow)" />
+              <el-switch v-model="drawerRow.settings.registrationReviewEnabled" :disabled="!canManageTenantPermissions || permissionUpdatingId === drawerRow.id" @change="updatePermissions(drawerRow)" />
             </label>
             <label>
               <span>允许商家配置收款方式</span>
-              <el-switch v-model="drawerRow.settings.paymentAccountEditable" @change="updatePermissions(drawerRow)" />
+              <el-switch v-model="drawerRow.settings.paymentAccountEditable" :disabled="!canManageTenantPermissions || permissionUpdatingId === drawerRow.id" @change="updatePermissions(drawerRow)" />
             </label>
             <label>
               <span>开通商城运营：开启后商家端显示商城菜单，前台商城和商城接口可用</span>
-              <el-switch v-model="drawerRow.settings.mallEnabled" @change="updatePermissions(drawerRow)" />
+              <el-switch v-model="drawerRow.settings.mallEnabled" :disabled="!canManageTenantPermissions || permissionUpdatingId === drawerRow.id" @change="updatePermissions(drawerRow)" />
             </label>
+          </div>
+          <div class="drawer-actions subscription-actions">
+            <template v-if="canManageTenantSubscription">
+              <el-button type="primary" @click="openSubscription(drawerRow, 'renew')">续费</el-button>
+              <el-button @click="openSubscription(drawerRow, 'upgrade')">升级</el-button>
+              <el-button @click="openSubscription(drawerRow, 'downgrade')">降级</el-button>
+              <el-button type="warning" plain @click="openSubscription(drawerRow, 'suspend')">暂停</el-button>
+              <el-button type="success" plain @click="openSubscription(drawerRow, 'restore')">恢复</el-button>
+            </template>
+            <el-button v-else @click="openSubscription(drawerRow)">查看套餐记录</el-button>
           </div>
         </div>
 
         <div class="drawer-section">
           <h4>待办直达</h4>
           <div class="drawer-actions">
-            <el-button plain @click="goTenantPendingActivities(drawerRow)">待审核活动 {{ Number(drawerRow.pendingActivityCount || 0) }}</el-button>
-            <el-button plain @click="goTenantPendingRegistrations(drawerRow)">待审核报名 {{ Number(drawerRow.pendingRegistrationCount || 0) }}</el-button>
-            <el-button plain type="danger" @click="goTenantFinanceRisk(drawerRow)">财务风险</el-button>
-            <el-button plain @click="goTenantOperations(drawerRow)">活动运营</el-button>
+            <el-button v-if="canApproveActivities" plain @click="goTenantPendingActivities(drawerRow)">待审核活动 {{ Number(drawerRow.pendingActivityCount || 0) }}</el-button>
+            <el-button v-if="canViewRegistrations" plain @click="goTenantPendingRegistrations(drawerRow)">待审核报名 {{ Number(drawerRow.pendingRegistrationCount || 0) }}</el-button>
+            <el-button v-if="canViewFinance" plain type="danger" @click="goTenantFinanceRisk(drawerRow)">财务风险</el-button>
+            <el-button v-if="canViewActivities" plain @click="goTenantOperations(drawerRow)">活动运营</el-button>
           </div>
         </div>
 
-        <div class="drawer-section">
+        <div v-if="canViewLogs" class="drawer-section">
           <h4>日志排查</h4>
           <div class="drawer-actions">
             <el-button plain @click="goTenantOperationLogs(drawerRow)">操作日志</el-button>
@@ -1127,7 +1295,28 @@ onMounted(() => {
       :url="tenantQrUrl"
     />
 
-    <el-dialog v-model="dialog" width="640px" :title="editingId ? '编辑商家' : '新建商家'" destroy-on-close>
+    <el-dialog v-model="subscriptionDialog" width="760px" title="套餐生命周期管理">
+      <el-form v-if="canManageTenantSubscription" label-position="top">
+        <div class="form-grid">
+          <el-form-item label="操作"><el-select v-model="subscriptionForm.action" style="width: 100%"><el-option v-for="item in subscriptionActions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+          <el-form-item v-if="['upgrade', 'downgrade'].includes(subscriptionForm.action)" label="目标套餐"><el-select v-model="subscriptionForm.packagePlan" style="width: 100%"><el-option v-for="item in packageOptions" :key="item.value" :label="item.label" :value="item.value" /></el-select></el-form-item>
+          <el-form-item v-if="subscriptionForm.action !== 'suspend'" label="新到期日"><el-date-picker v-model="subscriptionForm.packageExpiresAt" value-format="YYYY-MM-DD" type="date" clearable style="width: 100%" /></el-form-item>
+          <el-form-item class="full" label="备注"><el-input v-model="subscriptionForm.remark" type="textarea" :rows="2" maxlength="500" show-word-limit /></el-form-item>
+        </div>
+        <el-alert type="info" show-icon :closable="false" title="宽限期可继续运营；只读期保留查看和历史履约，禁止新增或修改业务数据。" />
+      </el-form>
+      <el-alert v-if="subscriptionError" type="error" show-icon :closable="false" :title="subscriptionError"><template #default><el-button size="small" :loading="subscriptionLoading" @click="drawerRow && openSubscription(drawerRow, subscriptionForm.action)">重试加载</el-button></template></el-alert>
+      <el-table v-loading="subscriptionLoading" :data="subscriptionEvents" stripe max-height="300" empty-text="暂无套餐变更记录" class="subscription-history">
+        <el-table-column label="操作" width="90"><template #default="{ row }">{{ subscriptionActionText(row.action) }}</template></el-table-column>
+        <el-table-column label="套餐" min-width="150"><template #default="{ row }">{{ row.fromPlan || '-' }} → {{ row.toPlan || '-' }}</template></el-table-column>
+        <el-table-column label="到期日" min-width="190"><template #default="{ row }">{{ row.fromExpiresAt || '长期' }} → {{ row.toExpiresAt || '长期' }}</template></el-table-column>
+        <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
+        <el-table-column label="时间" width="170"><template #default="{ row }">{{ String(row.createdAt || '').replace('T', ' ').slice(0, 16) }}</template></el-table-column>
+      </el-table>
+      <template #footer><el-button @click="subscriptionDialog=false">关闭</el-button><el-button v-if="canManageTenantSubscription" type="primary" :loading="saving" @click="submitSubscriptionChange">确认变更</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-if="canManageTenant" v-model="dialog" width="640px" :title="editingId ? '编辑商家' : '新建商家'" destroy-on-close>
       <el-form label-position="top">
         <div class="form-grid">
           <el-form-item label="商家编码" required><el-input v-model="form.code" maxlength="64" placeholder="例如 east_shanghai" /></el-form-item>
@@ -1136,22 +1325,24 @@ onMounted(() => {
           <el-form-item label="联系人"><el-input v-model="form.contactName" maxlength="100" /></el-form-item>
           <el-form-item label="联系电话"><el-input v-model="form.contactPhone" maxlength="40" /></el-form-item>
           <el-form-item><el-checkbox v-model="form.enabled">启用商家</el-checkbox></el-form-item>
-          <el-form-item label="商家套餐">
+          <el-form-item v-if="canManageTenantSubscription" label="商家套餐">
             <el-select v-model="form.packagePlan" style="width: 100%">
               <el-option v-for="item in packageOptions" :key="item.value" :label="item.label" :value="item.value" />
             </el-select>
           </el-form-item>
-          <el-form-item label="套餐到期日">
+          <el-form-item v-if="canManageTenantSubscription" label="套餐到期日">
             <el-date-picker v-model="form.packageExpiresAt" value-format="YYYY-MM-DD" type="date" clearable placeholder="不填表示长期有效" style="width: 100%" />
           </el-form-item>
-          <el-form-item class="full"><el-alert type="info" show-icon :closable="false" title="以下权限由平台按商家单独控制，保存后会影响商家后台页面和后端接口。" /></el-form-item>
-          <el-form-item class="full">
+          <el-form-item v-if="canManageTenantPermissions" class="full"><el-alert type="info" show-icon :closable="false" title="以下权限由平台按商家单独控制，保存后会影响商家后台页面和后端接口。" /></el-form-item>
+          <el-form-item v-if="canManageTenantPermissions && canManageTenantSubscription" class="full">
             <el-button type="primary" plain @click="applyPackagePermissionTemplate">套用套餐权限模板</el-button>
           </el-form-item>
-          <el-form-item class="full"><el-checkbox v-model="form.activityPublishReviewRequired">活动发布需要平台审核：开启后商家发布活动必须先提交平台审核</el-checkbox></el-form-item>
-          <el-form-item class="full"><el-checkbox v-model="form.registrationReviewEnabled">允许商家开启报名审核：关闭后商家不能把活动报名设为人工审核</el-checkbox></el-form-item>
-          <el-form-item class="full"><el-checkbox v-model="form.paymentAccountEditable">允许商家配置收款方式：关闭后商家收款账户和支付说明只读</el-checkbox></el-form-item>
-          <el-form-item class="full"><el-checkbox v-model="form.mallEnabled">开通商城运营：商家可管理商品、订单、营销、物流，并使用自己的收款配置</el-checkbox></el-form-item>
+          <template v-if="canManageTenantPermissions">
+            <el-form-item class="full"><el-checkbox v-model="form.activityPublishReviewRequired">活动发布需要平台审核：开启后商家发布活动必须先提交平台审核</el-checkbox></el-form-item>
+            <el-form-item class="full"><el-checkbox v-model="form.registrationReviewEnabled">允许商家开启报名审核：关闭后商家不能把活动报名设为人工审核</el-checkbox></el-form-item>
+            <el-form-item class="full"><el-checkbox v-model="form.paymentAccountEditable">允许商家配置收款方式：关闭后商家收款账户和支付说明只读</el-checkbox></el-form-item>
+            <el-form-item class="full"><el-checkbox v-model="form.mallEnabled">开通商城运营：商家可管理商品、订单、营销、物流，并使用自己的收款配置</el-checkbox></el-form-item>
+          </template>
         </div>
       </el-form>
       <template #footer>
@@ -1188,6 +1379,8 @@ small { color: #64748b; }
 .drawer-section { border-top: 1px solid #e2e8f0; padding-top: 16px; margin-top: 16px; }
 .drawer-section h4 { margin: 0 0 10px; font-size: 15px; color: #0f172a; }
 .drawer-section p { margin: 0 0 12px; color: #475569; line-height: 1.6; }
+.subscription-actions { margin-top: 12px; }
+.subscription-history { margin-top: 14px; }
 .drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; }
 .launch-list { display: flex; flex-wrap: wrap; gap: 8px; }
 .permission-list { display: flex; flex-direction: column; gap: 10px; }

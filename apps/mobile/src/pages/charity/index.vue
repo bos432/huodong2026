@@ -1,19 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { fetchMyCharityTransactions, getCurrentRouteWithQuery, getUserToken, request } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { reviewSafeText } from "../../review-safe-text";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { API_BASE } from "../../api-base";
 
 const detail = ref<any | null>(null);
 const myDetail = ref<any | null>(null);
 const transactions = ref<any[]>([]);
 const projects = ref<any[]>([]);
 const loading = ref(true);
+const loadError = ref("");
+const myLoadError = ref("");
 const loadingMore = ref(false);
 const page = ref(1);
 const pageSize = 20;
 const total = ref(0);
+const loadGuard = createTenantLoadGuard();
+const pageLoadGuard = createTenantLoadGuard();
+const downloadingCertificateId = ref(0);
 
 const ambassador = computed(() => myDetail.value?.ambassador || {});
 const pool = computed(() => detail.value?.pool || detail.value || {});
@@ -28,7 +37,12 @@ const decorationSections = computed(() => contentSections.value.filter((section)
 }));
 
 async function load() {
+  const token = loadGuard.begin();
+  pageLoadGuard.invalidate();
   loading.value = true;
+  loadingMore.value = false;
+  loadError.value = "";
+  myLoadError.value = "";
   try {
     page.value = 1;
     transactions.value = [];
@@ -38,6 +52,7 @@ async function load() {
       request<any>("/public/charity/summary"),
       request<any[]>("/public/charity/projects")
     ]);
+    if (!loadGuard.isCurrent(token)) return;
     detail.value = summary;
     projects.value = publicProjects?.length ? publicProjects : summary?.projects || [];
     if (!getUserToken()) return;
@@ -46,30 +61,42 @@ async function load() {
         request<any>("/public/me/charity"),
         fetchMyCharityTransactions(1, pageSize)
       ]);
+      if (!loadGuard.isCurrent(token)) return;
       myDetail.value = myCharity;
       transactions.value = txPage.items || [];
       total.value = Number(txPage.total || transactions.value.length);
-    } catch {
+    } catch (error: any) {
+      if (!loadGuard.isCurrent(token)) return;
       myDetail.value = null;
       transactions.value = [];
       total.value = 0;
+      myLoadError.value = reviewSafeText(error?.message || "个人公益信息加载失败");
     }
+  } catch (error: any) {
+    if (!loadGuard.isCurrent(token)) return;
+    detail.value = null;
+    projects.value = [];
+    loadError.value = reviewSafeText(error?.message || "公益公示加载失败");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
 async function loadMore() {
   if (!hasMyCharity.value || !hasMore.value || loadingMore.value) return;
+  const token = pageLoadGuard.begin();
+  const expectedPage = page.value + 1;
   loadingMore.value = true;
   try {
-    const nextPage = page.value + 1;
-    const txPage = await fetchMyCharityTransactions(nextPage, pageSize);
+    const txPage = await fetchMyCharityTransactions(expectedPage, pageSize);
+    if (!pageLoadGuard.isCurrent(token) || page.value + 1 !== expectedPage) return;
     transactions.value = [...transactions.value, ...(txPage.items || [])];
     total.value = Number(txPage.total || transactions.value.length);
-    page.value = nextPage;
+    page.value = expectedPage;
+  } catch (error: any) {
+    if (pageLoadGuard.isCurrent(token)) uni.showToast({ title: reviewSafeText(error?.message || "公益流水加载失败"), icon: "none" });
   } finally {
-    loadingMore.value = false;
+    if (pageLoadGuard.isCurrent(token)) loadingMore.value = false;
   }
 }
 
@@ -85,6 +112,7 @@ function typeText(type?: string) {
   const map: Record<string, string> = {
     charity_accrual: "订单公益金",
     charity_reversal: "退款冲回",
+    charity_retention: "退款保留",
     project_disbursement: "项目拨付",
     manual_adjust: "人工调整"
   };
@@ -121,15 +149,63 @@ function goLogin() {
   uni.navigateTo({ url: `/pages/user/login?redirect=${redirect}` });
 }
 
-onMounted(() => {
-  load();
-  loadDecoration();
+function contributionCertificateImageUrl(item: any) {
+  const path = String(item?.certificatePreviewUrl || "");
+  if (!path || /^https?:\/\//i.test(path) || !API_BASE.startsWith("http")) return path;
+  return `${API_BASE.replace(/\/api$/, "")}${path}`;
+}
+
+function previewContributionCertificate(item: any) {
+  const url = contributionCertificateImageUrl(item);
+  if (url) uni.previewImage({ current: url, urls: [url] });
+}
+
+function verifyContributionCertificate(item: any) {
+  if (item?.certificateNo) uni.navigateTo({ url: `/pages/credential/verify?type=charity&code=${encodeURIComponent(item.certificateNo)}` });
+}
+
+async function downloadContributionCertificate(item: any) {
+  if (!item?.id || downloadingCertificateId.value) return;
+  downloadingCertificateId.value = item.id;
+  // #ifdef H5
+  try {
+    const token = getUserToken();
+    const response = await fetch(`${API_BASE}/public/me/charity/transactions/${item.id}/certificate/download`, { headers: token ? { Authorization: `Bearer ${token}` } : {} });
+    if (!response.ok) throw new Error("公益贡献凭证下载失败");
+    const blob = await response.blob();
+    if (downloadingCertificateId.value !== item.id) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `公益贡献凭证-${item.certificateNo || item.id}.svg`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } catch (error: any) {
+    uni.showToast({ title: reviewSafeText(error?.message || "公益贡献凭证下载失败"), icon: "none" });
+  } finally {
+    downloadingCertificateId.value = 0;
+  }
+  // #endif
+  // #ifndef H5
+  previewContributionCertificate(item);
+  downloadingCertificateId.value = 0;
+  // #endif
+}
+
+onShow(() => {
+  void load();
+  void loadDecoration();
 });
 </script>
 
 <template>
   <view class="charity-page">
     <view v-if="loading" class="empty-card">加载中...</view>
+    <view v-else-if="loadError" class="empty-card error-card">
+      <view class="section-title">公益公示加载失败</view>
+      <view class="empty error-copy">{{ loadError }}</view>
+      <view class="login-link retry-link" @click="load">重新加载</view>
+    </view>
     <template v-else>
       <view class="hero">
         <view>
@@ -142,7 +218,12 @@ onMounted(() => {
 
       <PageDecorationBlocks :sections="decorationSections" />
 
-      <view v-if="hasMyCharity && ambassador.eligible" class="ambassador-card active">
+      <view v-if="myLoadError" class="ambassador-card personal-error">
+        <view class="ambassador-label">个人公益信息加载失败</view>
+        <view class="ambassador-copy">{{ myLoadError }}</view>
+        <view class="login-link retry-link" @click="load">重新同步</view>
+      </view>
+      <view v-else-if="hasMyCharity && ambassador.eligible" class="ambassador-card active">
         <view>
           <view class="ambassador-label">电子勋章</view>
           <view class="ambassador-title">{{ ambassador.title }} {{ ambassador.number }}</view>
@@ -186,7 +267,8 @@ onMounted(() => {
           <view class="section-title">我的公益明细</view>
           <view class="section-sub">每一笔订单对应的公益金</view>
         </view>
-        <view v-if="!hasMyCharity" class="empty">登录后可查看个人公益金明细。</view>
+        <view v-if="myLoadError" class="empty error-copy">个人公益明细暂未同步，请点击上方“重新同步”。</view>
+        <view v-else-if="!hasMyCharity" class="empty">登录后可查看个人公益金明细。</view>
         <view v-else-if="!transactions.length" class="empty">暂无公益金明细，完成活动报名支付后会在这里显示。</view>
         <view v-for="item in transactions" :key="item.id" class="tx">
           <view class="tx-head">
@@ -204,6 +286,11 @@ onMounted(() => {
           <view class="tx-foot">
             <text>{{ typeText(item.type) }}</text>
             <text>{{ item.retainedOnRefund ? "退款保留公益金" : item.refundStatus ? `退款状态：${item.refundStatus}` : formatTime(item.createdAt) }}</text>
+          </view>
+          <view v-if="item.certificateEligible" class="certificate-actions">
+            <view role="button" tabindex="0" @click="previewContributionCertificate(item)" @keyup.enter="previewContributionCertificate(item)">查看贡献凭证</view>
+            <view role="button" tabindex="0" @click="downloadContributionCertificate(item)" @keyup.enter="downloadContributionCertificate(item)">{{ downloadingCertificateId === item.id ? "下载中..." : "下载" }}</view>
+            <view role="button" tabindex="0" @click="verifyContributionCertificate(item)" @keyup.enter="verifyContributionCertificate(item)">验真</view>
           </view>
         </view>
         <view v-if="hasMore" class="load-more" @click="loadMore">{{ loadingMore ? "加载中..." : "加载更多" }}</view>
@@ -318,6 +405,9 @@ onMounted(() => {
   border-color: rgba(202, 151, 72, 0.45);
   background: #fff8e8;
 }
+.error-card, .personal-error { border-color:#fecaca; background:#fff7f7; }
+.error-copy { padding:10rpx 0 0; color:#b91c1c; text-align:left; }
+.retry-link { width:fit-content; min-width:180rpx; padding:0 24rpx; }
 
 .volunteer-entry {
   border-color: rgba(79, 124, 88, 0.42);
@@ -474,6 +564,25 @@ onMounted(() => {
   justify-content: space-between;
   gap: 12rpx;
   margin-top: 12rpx;
+}
+
+.certificate-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12rpx;
+  margin-top: 16rpx;
+}
+
+.certificate-actions view {
+  min-height: 58rpx;
+  display: flex;
+  align-items: center;
+  padding: 0 18rpx;
+  border: 1rpx solid #315c4c;
+  border-radius: 8px;
+  color: #315c4c;
+  font-size: 23rpx;
+  font-weight: 850;
 }
 
 .load-more {

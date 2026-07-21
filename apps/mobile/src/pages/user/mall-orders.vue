@@ -1,8 +1,11 @@
 <template>
   <view class="orders-page">
-    <scroll-view scroll-x class="tabs">
+    <view v-if="pageLoading" class="state-card" role="status" aria-live="polite">商城订单加载中...</view>
+    <view v-if="loadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载商城订单" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
+    <view v-if="actionError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ actionError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="关闭订单操作错误" @click="actionError = ''" @keyup.enter="actionError = ''" @keyup.space.prevent="actionError = ''">知道了</view></view>
+    <scroll-view scroll-x class="tabs" role="tablist" aria-label="商城订单状态筛选">
       <view class="tabs-inner">
-        <view v-for="item in statusTabs" :key="item.value" class="tab" :class="{ active: currentStatus === item.value }" @click="switchStatus(item.value)">{{ item.label }}</view>
+        <view v-for="item in statusTabs" :key="item.value" class="tab" :class="{ active: currentStatus === item.value }" role="tab" tabindex="0" :aria-selected="currentStatus === item.value" @click="switchStatus(item.value)" @keyup.enter="switchStatus(item.value)" @keyup.space.prevent="switchStatus(item.value)">{{ item.label }}</view>
       </view>
     </scroll-view>
     <view v-if="focusCheckoutGroupNo" class="checkout-group-focus">
@@ -19,9 +22,9 @@
           <text v-if="!checkoutGroupSummary.pendingActions" class="summary-chip done">本次拆单已处理完</text>
         </view>
       </view>
-      <text class="focus-clear" @click="clearCheckoutGroupFocus">查看全部</text>
+      <text class="focus-clear" role="button" tabindex="0" aria-label="取消跨店结算组筛选并查看全部订单" @click="clearCheckoutGroupFocus" @keyup.enter="clearCheckoutGroupFocus" @keyup.space.prevent="clearCheckoutGroupFocus">查看全部</text>
     </view>
-    <view v-for="order in visibleOrders" :key="order.id" class="card" @click="goDetail(order)">
+    <view v-for="order in visibleOrders" :key="order.id" class="card" role="button" tabindex="0" :aria-label="`查看订单${order.orderNo}详情`" @click="goDetail(order)" @keyup.enter="goDetail(order)" @keyup.space.prevent="goDetail(order)">
       <view class="row">
         <text class="order-no">{{ order.orderNo }}</text>
         <text class="status">{{ statusText(order.status) }}</text>
@@ -33,31 +36,38 @@
       <view class="row footer">
         <text>¥{{ money(order.amount) }} · {{ paymentText(order.paymentMethod) }} · {{ dateText(order.createdAt) }}</text>
         <view class="actions">
-          <button v-if="order.status === 'pending_payment' && order.paymentMethod === 'balance'" size="mini" @click.stop="payBalance(order)">继续支付</button>
-          <button v-if="order.status === 'pending_payment' && order.paymentMethod === 'wechat'" size="mini" @click.stop="payWechat(order)">微信支付</button>
-          <button v-if="['pending_payment','pending_confirm'].includes(order.status)" size="mini" class="ghost" @click.stop="cancelOrder(order)">取消订单</button>
-          <button v-if="order.status === 'shipped'" size="mini" @click.stop="confirmReceived(order)">确认收货</button>
-          <button v-if="canRequestRefund(order)" size="mini" @click.stop="requestRefund(order)">申请售后</button>
+          <button v-if="order.status === 'pending_payment' && order.paymentMethod === 'balance'" size="mini" :disabled="!!activeAction" @click.stop="payBalance(order)">{{ actionText(order, 'pay-balance', '继续支付', '支付中...') }}</button>
+          <button v-if="order.status === 'pending_payment' && order.paymentMethod === 'wechat'" size="mini" :disabled="!!activeAction" @click.stop="payWechat(order)">{{ actionText(order, 'pay-wechat', '微信支付', '处理中...') }}</button>
+          <button v-if="['pending_payment','pending_confirm'].includes(order.status)" size="mini" class="ghost" :disabled="!!activeAction" @click.stop="cancelOrder(order)">{{ actionText(order, 'cancel-order', '取消订单', '取消中...') }}</button>
+          <button v-if="order.status === 'shipped'" size="mini" :disabled="!!activeAction" @click.stop="confirmReceived(order)">{{ actionText(order, 'confirm-received', '确认收货', '确认中...') }}</button>
+          <button v-if="canRequestRefund(order)" size="mini" :disabled="!!activeAction" @click.stop="requestRefund(order)">{{ actionText(order, 'refund-request', '申请售后', '提交中...') }}</button>
           <text v-else-if="refundActionTip(order)" class="refund-pill">{{ refundActionTip(order) }}</text>
         </view>
       </view>
       <view v-if="order.expressNo" class="logistics">物流：{{ order.expressCompany || '' }} {{ order.expressNo }}</view>
       <view v-if="order.refund" class="logistics">售后：{{ refundText(order.refund.status) }} {{ refundSummaryText(order.refund) }}</view>
     </view>
-    <EmptyState v-if="!visibleOrders.length" icon="🛍" text="暂无商城订单" />
+    <EmptyState v-if="!pageLoading && !loadError && !visibleOrders.length" icon="🛍" text="暂无商城订单" />
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
 import EmptyState from "../../components/EmptyState.vue";
 
 const orders = ref<any[]>([]);
 const currentStatus = ref("all");
 const focusCheckoutGroupNo = ref("");
+const loadedTenantCode = ref("");
+const loadGuard = createTenantLoadGuard();
+const pageLoading = ref(true);
+const loadError = ref("");
+const actionError = ref("");
+const activeAction = ref("");
 const visibleOrders = computed(() => {
   const groupNo = focusCheckoutGroupNo.value;
   if (!groupNo) return orders.value;
@@ -94,7 +104,7 @@ function money(value: any) { return Number(value || 0).toFixed(2); }
 function statusText(value: string) { return ({ pending_payment: "待付款", pending_confirm: "待确认收款", paid: "待发货", shipped: "待收货", completed: "已完成", refund_pending: "售后中", refunded: "已退款", closed: "已关闭" } as any)[value] || value; }
 function paymentText(value: string) { return ({ balance: "余额支付", offline: "线下收款", wechat: "微信支付" } as any)[value] || value; }
 function refundText(value: string) { return ({ pending: "待审核", processing: "处理中", approved: "已通过", rejected: "已拒绝", failed: "处理异常" } as any)[value] || value; }
-function dateText(value: string) { return value ? String(value).slice(0, 16).replace("T", " ") : ""; }
+function dateText(value: string) { return value ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)).replaceAll("/", "-") : ""; }
 function merchantName(order: any) { return order?.merchant?.name || order?.tenant?.name || "商城店铺"; }
 function canRequestRefund(order: any) {
   return ["paid", "shipped", "completed"].includes(order?.status) && (!order?.refund || order.refund.status === "rejected");
@@ -136,8 +146,30 @@ function statusTip(order: any) {
   return "点击查看订单详情。";
 }
 function goDetail(order: any) { uni.navigateTo({ url: withTenantCode(`/pages/user/mall-order-detail?id=${order.id}`) }); }
+function actionKey(order: any, action: string) { return `${action}:${Number(order?.id || 0)}`; }
+function actionText(order: any, action: string, idle: string, busy: string) { return activeAction.value === actionKey(order, action) || activeAction.value === `${actionKey(order, action)}:prompt` ? busy : idle; }
+function orderActionContext(order: any) { return { tenantCode: getCurrentTenantCode(), orderId: Number(order?.id || 0) }; }
+function assertOrderActionContext(context: { tenantCode: string; orderId: number }) {
+  if (getCurrentTenantCode() !== context.tenantCode || !orders.value.some((row) => Number(row.id) === context.orderId)) throw new Error("当前城市或订单已变化，请重新操作");
+}
+async function runOrderAction(order: any, action: string, fallback: string, handler: () => Promise<void>) {
+  if (activeAction.value) return;
+  const context = orderActionContext(order);
+  activeAction.value = actionKey(order, action);
+  actionError.value = "";
+  try {
+    assertOrderActionContext(context);
+    await handler();
+    if (getCurrentTenantCode() !== context.tenantCode) throw new Error("当前城市已变化，请重新查看订单");
+  } catch (error: any) {
+    actionError.value = error?.message || fallback;
+  } finally {
+    activeAction.value = "";
+  }
+}
 function switchStatus(value: string) {
   if (currentStatus.value === value) return;
+  focusCheckoutGroupNo.value = "";
   currentStatus.value = value;
   load();
 }
@@ -149,58 +181,71 @@ function clearCheckoutGroupFocus() {
   }
 }
 async function load() {
+  const loadToken = loadGuard.begin();
+  if (loadedTenantCode.value && loadedTenantCode.value !== loadToken.tenantCode) orders.value = [];
+  pageLoading.value = true;
+  loadError.value = "";
   try {
     await ensureUser();
     const query = currentStatus.value === "all" ? "" : `?status=${currentStatus.value}`;
-    orders.value = await request<any[]>(`/public/me/mall/orders${query}`);
+    const rows = await request<any[]>(`/public/me/mall/orders${query}`);
+    if (!loadGuard.isCurrent(loadToken)) return;
+    orders.value = rows;
+    loadedTenantCode.value = loadToken.tenantCode;
   } catch (error: any) {
-    orders.value = [];
-    uni.showToast({ title: error.message || "加载订单失败", icon: "none" });
+    if (!loadGuard.isCurrent(loadToken)) return;
+    if (!loadedTenantCode.value || loadedTenantCode.value !== loadToken.tenantCode) orders.value = [];
+    loadError.value = error.message || "加载订单失败，请重新加载。";
+  } finally {
+    if (loadGuard.isCurrent(loadToken)) pageLoading.value = false;
   }
 }
 async function confirmReceived(order: any) {
-  try {
+  await runOrderAction(order, "confirm-received", "确认收货失败", async () => {
     await request(`/public/me/mall/orders/${order.id}/confirm-received`, { method: "POST" });
     uni.showToast({ title: "已确认收货", icon: "none" });
-    load();
-  } catch (error: any) {
-    uni.showToast({ title: error.message || "确认失败", icon: "none" });
-  }
+    await load();
+  });
 }
 async function payBalance(order: any) {
-  try {
+  await runOrderAction(order, "pay-balance", "余额支付失败", async () => {
     await request(`/public/mall/orders/${order.id}/pay/balance`, { method: "POST" });
     uni.showToast({ title: "支付成功", icon: "none" });
-    load();
-  } catch (error: any) {
-    uni.showToast({ title: error.message || "支付失败", icon: "none" });
-  }
+    await load();
+  });
 }
 async function payWechat(order: any) {
-  try {
+  await runOrderAction(order, "pay-wechat", "发起微信支付失败", async () => {
     const pay = await request<any>(`/public/mall/orders/${order.id}/pay/wechat`, { method: "POST", data: { paymentScene: preferredMallWechatPaymentScene() } });
     const redirected = await handleMallWechatPayResult(pay);
     if (redirected) return;
-    load();
-  } catch (error: any) {
-    uni.showToast({ title: error.message || "发起微信支付失败", icon: "none" });
-  }
+    await load();
+  });
 }
 function cancelOrder(order: any) {
+  if (activeAction.value) return;
+  const context = orderActionContext(order);
+  activeAction.value = `${actionKey(order, "cancel-order")}:prompt`;
+  actionError.value = "";
   uni.showModal({
     title: "取消订单",
     content: "取消后会释放商品库存，订单不可继续支付。",
     confirmText: "确认取消",
     success: async (res) => {
-      if (!res.confirm) return;
+      if (!res.confirm) { activeAction.value = ""; return; }
+      activeAction.value = actionKey(order, "cancel-order");
       try {
+        assertOrderActionContext(context);
         await request(`/public/me/mall/orders/${order.id}/cancel`, { method: "POST" });
         uni.showToast({ title: "订单已取消", icon: "none" });
-        load();
+        await load();
       } catch (error: any) {
-        uni.showToast({ title: error.message || "取消失败", icon: "none" });
+        actionError.value = error.message || "取消失败";
+      } finally {
+        activeAction.value = "";
       }
-    }
+    },
+    fail: () => { activeAction.value = ""; }
   });
 }
 function requestRefund(order: any) {
@@ -208,20 +253,29 @@ function requestRefund(order: any) {
     uni.showToast({ title: refundActionTip(order) || "当前订单不能申请售后", icon: "none" });
     return;
   }
+  if (activeAction.value) return;
+  const context = orderActionContext(order);
+  activeAction.value = `${actionKey(order, "refund-request")}:prompt`;
+  actionError.value = "";
   uni.showModal({
     title: "申请售后",
     editable: true,
     placeholderText: "请填写退款/退货原因",
     success: async (res: any) => {
-      if (!res.confirm) return;
+      if (!res.confirm) { activeAction.value = ""; return; }
+      activeAction.value = actionKey(order, "refund-request");
       try {
+        assertOrderActionContext(context);
         await request(`/public/me/mall/orders/${order.id}/refund-request`, { method: "POST", data: { reason: res.content || "用户申请售后", amount: Number(order.amount) } });
         uni.showToast({ title: "售后已提交", icon: "none" });
-        load();
+        await load();
       } catch (error: any) {
-        uni.showToast({ title: error.message || "提交失败", icon: "none" });
+        actionError.value = error.message || "提交失败";
+      } finally {
+        activeAction.value = "";
       }
-    }
+    },
+    fail: () => { activeAction.value = ""; }
   });
 }
 onLoad((query) => {
@@ -231,7 +285,7 @@ onShow(load);
 </script>
 
 <style scoped>
-.orders-page { min-height:100vh; padding:24rpx; background:#f8fafc; }
+.orders-page { min-height:100vh; box-sizing:border-box; padding:24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); background:#f8fafc; }
 .tabs { white-space: nowrap; margin-bottom: 20rpx; }
 .tabs-inner { display: flex; gap: 14rpx; padding-bottom: 4rpx; }
 .tab { display: inline-flex; align-items: center; justify-content: center; padding: 14rpx 24rpx; border-radius: 999rpx; color: #92400e; background: #fffbeb; border: 1rpx solid #fde68a; font-size: 25rpx; font-weight: 800; }
@@ -258,4 +312,9 @@ onShow(load);
 .logistics { margin-top:12rpx; padding:12rpx; background:#fff7ed; color:#9a3412; border-radius:16rpx; font-size:24rpx; }
 button { margin-left: 0; border-radius:999rpx; background:#9a3412; color:#fff; font-weight:800; }
 button.ghost { background:#f1f5f9; color:#475569; }
+.state-card { display:grid; gap:12rpx; margin-bottom:18rpx; padding:20rpx; border-radius:8px; background:#fff; color:#64748b; font-size:25rpx; line-height:1.5; overflow-wrap:anywhere; }
+.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.state-retry { width:max-content; color:#c2410c; font-weight:900; }
+.tab:focus-visible, .focus-clear:focus-visible, .card:focus-visible, .state-retry:focus-visible { outline:3rpx solid #0f766e; outline-offset:3rpx; }
+@media (min-width:760px) { .orders-page { width:760px; margin:0 auto; } }
 </style>

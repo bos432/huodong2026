@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
+import { canAccess } from "../permissions";
 
 type ReleaseSetting = {
   id?: number;
@@ -30,9 +31,14 @@ type ReleaseLog = {
   detail?: Record<string, unknown>;
 };
 
-const loading = ref(false);
+const settingLoading = ref(false);
+const logsLoading = ref(false);
 const saving = ref(false);
 const actionLoading = ref("");
+const settingLoadError = ref("");
+const logsLoadError = ref("");
+const saveError = ref("");
+const actionError = ref("");
 const setting = ref<ReleaseSetting | null>(null);
 const logs = ref<ReleaseLog[]>([]);
 const form = reactive({
@@ -44,6 +50,11 @@ const form = reactive({
   projectPath: "apps/mobile/dist/build/mp-weixin",
   auditItemText: "{}"
 });
+
+const canManage = computed(() => canAccess(["miniprogram_release.manage"]));
+const loading = computed(() => settingLoading.value || logsLoading.value);
+const mutationBusy = computed(() => saving.value || Boolean(actionLoading.value));
+const pageBusy = computed(() => loading.value || mutationBusy.value);
 
 const readiness = computed(() => [
   { label: "AppID", ok: Boolean(form.appId || setting.value?.appId), hint: "微信小程序后台的 AppID。" },
@@ -129,18 +140,22 @@ function fillForm(row: ReleaseSetting | null) {
 }
 
 async function load() {
-  loading.value = true;
+  if (pageBusy.value) return;
+  await Promise.all([loadSetting(), loadLogs()]);
+}
+
+async function loadSetting(notify = true) {
+  if (settingLoading.value) return;
+  settingLoading.value = true;
+  settingLoadError.value = "";
   try {
-    const [settingData, logRows] = await Promise.all([
-      api.get<any, ReleaseSetting | null>("/admin/miniprogram-release/setting"),
-      api.get<any, ReleaseLog[]>("/admin/miniprogram-release/logs")
-    ]);
+    const settingData = await api.get<any, ReleaseSetting | null>("/admin/miniprogram-release/setting");
     fillForm(settingData);
-    logs.value = Array.isArray(logRows) ? logRows : [];
   } catch (error: any) {
-    ElMessage.error(error.message || "加载小程序发布配置失败");
+    settingLoadError.value = error.message || "加载小程序发布配置失败";
+    if (notify) ElMessage.error(settingLoadError.value);
   } finally {
-    loading.value = false;
+    settingLoading.value = false;
   }
 }
 
@@ -155,21 +170,32 @@ function parseAuditItem() {
 }
 
 async function save() {
+  if (!canManage.value || pageBusy.value) return;
   let auditItem: Record<string, unknown>;
   try {
     auditItem = parseAuditItem();
   } catch (error: any) {
     return ElMessage.error(error.message);
   }
+  const appId = form.appId.trim();
+  const version = form.version.trim();
+  const description = form.description.trim();
+  const projectPath = form.projectPath.trim();
+  if (!appId) return ElMessage.error("请填写小程序 AppID");
+  if (appId.length > 80) return ElMessage.error("小程序 AppID 不能超过 80 个字符");
+  if (version.length > 40) return ElMessage.error("版本号不能超过 40 个字符");
+  if (description.length > 500) return ElMessage.error("版本描述不能超过 500 个字符");
+  if (projectPath.length > 255) return ElMessage.error("构建目录不能超过 255 个字符");
   saving.value = true;
+  saveError.value = "";
   try {
     const saved = await api.post<any, ReleaseSetting>("/admin/miniprogram-release/setting", {
-      appId: form.appId,
+      appId,
       appSecret: form.appSecret || undefined,
       privateKey: form.privateKey || undefined,
-      version: form.version,
-      description: form.description,
-      projectPath: form.projectPath,
+      version,
+      description,
+      projectPath,
       auditItem
     });
     fillForm(saved);
@@ -178,37 +204,54 @@ async function save() {
     ElMessage.success("小程序发布配置已保存");
     await loadLogs();
   } catch (error: any) {
-    ElMessage.error(error.message || "保存失败");
+    saveError.value = error.message || "保存失败";
+    ElMessage.error(saveError.value);
   } finally {
     saving.value = false;
   }
 }
 
-async function loadLogs() {
-  logs.value = await api.get<any, ReleaseLog[]>("/admin/miniprogram-release/logs");
+async function loadLogs(notify = true) {
+  if (logsLoading.value) return;
+  logsLoading.value = true;
+  logsLoadError.value = "";
+  try {
+    const rows = await api.get<any, ReleaseLog[]>("/admin/miniprogram-release/logs");
+    logs.value = Array.isArray(rows) ? rows : [];
+  } catch (error: any) {
+    logsLoadError.value = error.message || "加载小程序发布记录失败";
+    if (notify) ElMessage.error(logsLoadError.value);
+  } finally {
+    logsLoading.value = false;
+  }
 }
 
 async function runAction(action: "upload" | "submit-audit" | "audit-status" | "release") {
+  if (!canManage.value || pageBusy.value) return;
+  if (action === "upload" && !form.version.trim()) return ElMessage.error("请先填写版本号并保存配置");
   const confirmText: Record<string, string> = {
     upload: "确认上传体验版？上传前请确保服务器已执行小程序构建。",
     "submit-audit": "确认提交微信审核？提交后需等待微信审核结果。",
     "audit-status": "确认查询最新审核状态？",
     release: "确认发布线上版？该操作会把已审核版本发布给用户，请谨慎。"
   };
-  if (action === "release") {
-    await ElMessageBox.confirm(confirmText[action], "发布线上版", { type: "warning", confirmButtonText: "确认发布" });
-  } else {
-    await ElMessageBox.confirm(confirmText[action], "小程序发布管理", { type: "info" });
-  }
+  const confirmed = await ElMessageBox.confirm(
+    confirmText[action],
+    action === "release" ? "发布线上版" : "小程序发布管理",
+    action === "release" ? { type: "warning", confirmButtonText: "确认发布" } : { type: "info" }
+  ).then(() => true).catch(() => false);
+  if (!confirmed) return;
   actionLoading.value = action;
+  actionError.value = "";
   try {
     const body = action === "upload" ? { version: form.version, description: form.description } : {};
     await api.post(`/admin/miniprogram-release/${action}`, body);
     ElMessage.success("操作已完成，已写入发布记录");
     await loadLogs();
   } catch (error: any) {
-    ElMessage.error(error.message || "操作失败");
-    await loadLogs().catch(() => undefined);
+    actionError.value = error.message || "操作失败";
+    ElMessage.error(actionError.value);
+    await loadLogs(false);
   } finally {
     actionLoading.value = "";
   }
@@ -234,10 +277,22 @@ onMounted(load);
         <p class="subtitle">上传体验版、提交微信审核、查询审核状态并发布线上版。</p>
       </div>
       <div class="actions">
-        <el-button @click="load">刷新</el-button>
-        <el-button type="primary" :loading="saving" @click="save">保存配置</el-button>
+        <el-button :loading="loading" :disabled="pageBusy" @click="load">刷新</el-button>
+        <el-button v-if="canManage" type="primary" :loading="saving" :disabled="pageBusy" @click="save">保存配置</el-button>
       </div>
     </div>
+
+    <div v-if="settingLoadError" class="error-recovery">
+      <el-alert type="error" :title="settingLoadError" show-icon :closable="false" />
+      <el-button :loading="settingLoading" :disabled="pageBusy" @click="loadSetting()">重试配置</el-button>
+    </div>
+    <div v-if="logsLoadError" class="error-recovery">
+      <el-alert type="error" :title="logsLoadError" show-icon :closable="false" />
+      <el-button :loading="logsLoading" :disabled="pageBusy" @click="loadLogs()">重试记录</el-button>
+    </div>
+    <el-alert v-if="saveError" class="operation-error" type="error" :title="saveError" show-icon :closable="false" />
+    <el-alert v-if="actionError" class="operation-error" type="error" :title="actionError" show-icon :closable="false" />
+    <el-alert v-if="!canManage" class="notice" type="info" :closable="false" show-icon title="当前账号为只读模式，可查看发布配置、阶段和记录，不能保存配置或执行上传、提审和发布。" />
 
     <el-alert
       class="notice"
@@ -270,7 +325,7 @@ onMounted(load);
     <div class="layout">
       <div class="card">
         <h3>发布配置</h3>
-        <el-form label-width="120px">
+        <el-form label-width="120px" :disabled="!canManage || pageBusy">
           <el-form-item label="小程序 AppID"><el-input v-model="form.appId" placeholder="wx..." /></el-form-item>
           <el-form-item label="AppSecret">
             <el-input v-model="form.appSecret" show-password placeholder="留空表示不修改已保存 Secret" />
@@ -293,11 +348,11 @@ onMounted(load);
       <div class="card action-card">
         <h3>发布操作</h3>
         <el-alert class="action-hint" type="info" :closable="false" show-icon title="推荐顺序：保存配置 -> 上传体验版 -> 微信开发者工具/体验码验收 -> 提交审核 -> 查询状态 -> 审核通过后发布。" />
-        <div class="action-grid">
-          <el-button type="primary" :loading="actionLoading === 'upload'" @click="runAction('upload')">上传体验版</el-button>
-          <el-button type="warning" :loading="actionLoading === 'submit-audit'" @click="runAction('submit-audit')">提交微信审核</el-button>
-          <el-button :loading="actionLoading === 'audit-status'" @click="runAction('audit-status')">查询审核状态</el-button>
-          <el-button type="danger" :loading="actionLoading === 'release'" @click="runAction('release')">发布线上版</el-button>
+        <div v-if="canManage" class="action-grid">
+          <el-button type="primary" :loading="actionLoading === 'upload'" :disabled="pageBusy" @click="runAction('upload')">上传体验版</el-button>
+          <el-button type="warning" :loading="actionLoading === 'submit-audit'" :disabled="pageBusy" @click="runAction('submit-audit')">提交微信审核</el-button>
+          <el-button :loading="actionLoading === 'audit-status'" :disabled="pageBusy" @click="runAction('audit-status')">查询审核状态</el-button>
+          <el-button type="danger" :loading="actionLoading === 'release'" :disabled="pageBusy" @click="runAction('release')">发布线上版</el-button>
         </div>
         <div class="qr-box">
           <template v-if="latestQrCode">
@@ -327,7 +382,7 @@ onMounted(load);
 
     <div class="card">
       <h3>发布记录</h3>
-      <el-table :data="logs" stripe empty-text="暂无发布记录">
+      <el-table :data="logs" stripe empty-text="暂无发布记录" v-loading="logsLoading">
         <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="动作" width="120"><template #default="{ row }">{{ actionLabels[row.action] || row.action }}</template></el-table-column>
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="statusTypes[row.status] || 'info'">{{ row.status }}</el-tag></template></el-table-column>
@@ -350,6 +405,9 @@ onMounted(load);
 .subtitle { margin: 6px 0 0; color: #64748b; }
 .actions { display: flex; gap: 10px; }
 .notice { margin-bottom: 16px; }
+.error-recovery { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.error-recovery .el-alert { flex: 1; min-width: 0; }
+.operation-error { margin-bottom: 16px; }
 .stage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stage-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 118px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .stage-card.success { border-color: #bbf7d0; background: #f0fdf4; }
@@ -385,6 +443,9 @@ onMounted(load);
   .checklist-card { grid-column: auto; }
 }
 @media (max-width: 640px) {
+  .toolbar { align-items: stretch; flex-direction: column; }
+  .actions { flex-wrap: wrap; }
+  .error-recovery { align-items: stretch; flex-direction: column; }
   .stage-grid { grid-template-columns: 1fr; }
 }
 </style>

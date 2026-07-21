@@ -57,6 +57,17 @@ BUILD_TIME=<iso-build-time>
 - `/api/health/ready`：数据库和生产配置可接流量。
 - `/api/health`：API、数据库、配置状态和发布版本。
 - `/api/health/metrics`：Prometheus 文本指标，包含 `activity_api_up`、`activity_database_up`、`activity_config_error`、`activity_process_uptime_seconds`、`activity_build_info`。
+- 业务风险指标包含到期任务、死信任务、过期处理锁、15 分钟支付回调失败、退款服务商失败、库存异常和资金风险告警。
+
+可由 cron、Windows 任务计划或外部监控每分钟执行：
+
+```bash
+MONITOR_API_ORIGIN=https://api.example.com/api \
+MONITOR_ALERT_WEBHOOK_URL=https://monitor.example.com/webhook \
+npm run monitor:health
+```
+
+脚本会写入 `deploy/monitor-health-result.json`，相同告警指纹不会重复通知；故障恢复后发送 `recovered` 事件。未配置 webhook 时仍会完成检查和结果留档，critical 状态返回非零退出码。
 
 如果 `ready` 不通过，不要切流量；优先检查数据库连通、生产配置体检和容器日志。
 
@@ -108,6 +119,12 @@ API 每个响应都会带 `X-Request-Id`，错误响应体也会包含 `requestI
 
 每日至少自动备份一次 MySQL。备份目录必须在持久化磁盘，或同步到对象存储。
 
+`private-data/registration-attachments`、`private-data/settlement-proofs` 和 `private-data/course-resources` 分别保存新报名附件、代理线下打款回单及课程原文件，不得通过 Nginx 静态目录暴露。私有文件必须与数据库使用同一恢复点执行 `npm run private-data:backup` 和恢复演练，否则业务记录中的附件令牌会失去对应文件。当前令牌使用 `PRIVATE_ASSET_SIGNING_SECRET`（配置时优先）或 `JWT_SECRET` 签名；生产环境轮换相关密钥前必须保留旧令牌兼容或完成重新签发。课程媒体接口需要保留 `Range` 请求头和 `206/416` 响应，CDN 或反向代理不得缓存超过短链有效期。
+
+文件上传安全扫描通过 `UPLOAD_MALWARE_SCAN_MODE` 控制：`disabled` 只执行内置危险测试特征拦截，`optional` 在 ClamAV 不可用时记录降级并继续，`required` 在扫描不可用或发现风险时拒绝上传。正式运营应部署 ClamAV daemon，设置 `CLAMAV_HOST`、`CLAMAV_PORT`、`CLAMAV_TIMEOUT_MS`，完成 EICAR 拒绝和服务中断拒绝演练后再把模式切换为 `required`。
+
+私有文件孤立项清理先执行 `npm run private-data:prune-unclaimed` 查看 dry-run 报告；确认候选均为未绑定上传后，设置 `PRIVATE_DATA_PRUNE_CONFIRM=delete-unclaimed-private-data` 再执行。保留期由 `PRIVATE_DATA_UNCLAIMED_RETENTION_HOURS` 控制，生产建议不少于 24 小时。禁止直接删除无 `.meta.json` 的历史文件，清理前必须先完成 `npm run private-data:backup`。
+
 手动备份：
 
 ```bash
@@ -138,6 +155,22 @@ RESTORE_CONFIRM=activity_registration BACKUP_FILE=backups/mysql/activity_registr
 6. 检查 `/api/health/ready`。
 7. 执行 `npm run smoke`。
 8. 恢复流量，并记录回滚结果。
+
+本地或预发环境可执行受控 API 故障注入与镜像回滚演练：
+
+```bash
+npm run drill:rollback:api
+```
+
+脚本会保留当前健康镜像为 baseline，生成一个故意不启动 HTTP 服务的候选镜像，确认 readiness 失败后自动恢复 baseline 并等待 ready。结果写入 `deploy/rollback-drill-result.json`，演练不会修改数据库或持久化卷。
+
+后台、H5 与 Nginx 静态入口可执行独立的受控故障与自动恢复演练：
+
+```bash
+npm run drill:rollback:static
+```
+
+脚本会先检查 Nginx 配置、H5/后台入口、版本文件、首屏 JS/CSS 和 API readiness，再临时写入带唯一标记的故障首页。确认两个静态入口均被探针识别且 API 继续 ready 后，脚本按原始字节恢复首页，校验恢复前后 SHA-256、全部首屏资产和应用入口。异常路径同样先执行紧急恢复；结果写入 `deploy/static-rollback-drill-result.json`，不重启 API、不执行 migration、不修改数据库或上传目录。
 
 ## 8. 日常巡检
 

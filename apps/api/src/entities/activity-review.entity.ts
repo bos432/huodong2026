@@ -29,6 +29,9 @@ export class ActivityReview {
   @Column({ type: "varchar", length: 255, nullable: true })
   adminReply!: string | null;
 
+  @Column({ type: "boolean", default: false })
+  featured!: boolean;
+
   @CreateDateColumn()
   createdAt!: Date;
 

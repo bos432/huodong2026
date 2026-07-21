@@ -6,6 +6,7 @@ import { User } from "./user.entity";
 
 @Entity("mall_browse_histories")
 @Index("IDX_mall_browse_unique_user_product", ["tenant", "user", "product"], { unique: true })
+@Index("IDX_mall_browse_user_viewed", ["tenant", "user", "lastViewedAt"])
 export class MallBrowseHistory {
   @PrimaryGeneratedColumn()
   id!: number;

@@ -28,6 +28,21 @@ export class ForumReply {
   depth!: number;
 
   @Column({ type: "int", nullable: true })
+  floorNo!: number | null;
+
+  @Column({ type: "int", nullable: true })
+  quoteReplyId!: number | null;
+
+  @Column({ type: "int", nullable: true })
+  quoteFloorNo!: number | null;
+
+  @Column({ type: "varchar", length: 120, nullable: true })
+  quoteAuthorName!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  quoteContent!: string | null;
+
+  @Column({ type: "int", nullable: true })
   userId!: number | null;
 
   @ManyToOne(() => User, { eager: true, nullable: true, onDelete: "SET NULL" })

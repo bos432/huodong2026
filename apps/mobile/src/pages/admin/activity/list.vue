@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { activityStatusText, type ActivityStatus } from "@activity/shared";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { ActivityStatus, activityStatusText } from "@activity/shared";
 import { adminActivityPreviewUrl, mobileAdminRequest, requireMobileAdmin } from "../../../mobile-admin";
 import AdminBottomNav from "../../../components/AdminBottomNav.vue";
 
@@ -8,12 +9,16 @@ const rows = ref<any[]>([]);
 const counts = ref<Record<string, number>>({});
 const bootstrap = ref<any>(null);
 const loading = ref(true);
+const errorMessage = ref("");
+const actionId = ref<number | null>(null);
 const keyword = ref("");
 const status = ref<"all" | ActivityStatus>("all");
 const page = ref(1);
 const total = ref(0);
 const pageSize = 20;
+let requestSerial = 0;
 const canWrite = computed(() => Boolean(bootstrap.value?.permissions?.canWriteActivities));
+const pageCount = computed(() => Math.max(1, Math.ceil(total.value / pageSize)));
 
 const tabs: Array<{ label: string; value: "all" | ActivityStatus }> = [
   { label: "全部", value: "all" },
@@ -36,27 +41,44 @@ function buildUrl() {
 
 async function load() {
   requireMobileAdmin();
+  const serial = ++requestSerial;
   loading.value = true;
+  errorMessage.value = "";
   try {
-    const [boot, data] = await Promise.all([
-      bootstrap.value ? Promise.resolve(bootstrap.value) : mobileAdminRequest<any>("/admin/mobile/bootstrap"),
-      mobileAdminRequest<any>(buildUrl())
-    ]);
+    const boot = bootstrap.value || await mobileAdminRequest<any>("/admin/mobile/bootstrap");
+    if (serial !== requestSerial) return;
     bootstrap.value = boot;
+    const data = await mobileAdminRequest<any>(buildUrl());
+    if (serial !== requestSerial) return;
     rows.value = data.items || [];
     counts.value = data.counts || {};
     total.value = data.total || 0;
   } catch (err: any) {
+    if (serial !== requestSerial) return;
+    errorMessage.value = err.message || "活动加载失败";
     uni.showToast({ title: err.message || "加载失败", icon: "none" });
   } finally {
-    loading.value = false;
+    if (serial === requestSerial) loading.value = false;
   }
 }
 
 function setStatus(value: "all" | ActivityStatus) {
+  if (loading.value || status.value === value) return;
   status.value = value;
   page.value = 1;
-  load();
+  void load();
+}
+
+function search() {
+  if (loading.value) return;
+  page.value = 1;
+  void load();
+}
+
+function changePage(next: number) {
+  if (loading.value || actionId.value !== null || next < 1 || next > pageCount.value || next === page.value) return;
+  page.value = next;
+  void load();
 }
 
 function createActivity() {
@@ -79,24 +101,47 @@ function copyPublicLink(item: any) {
   uni.setClipboardData({ data: url, success: () => uni.showToast({ title: "已复制", icon: "success" }) });
 }
 
-function closeActivity(item: any) {
+function runLifecycle(item: any, options: { title: string; content: string; path: string; successText: string }) {
+  if (actionId.value !== null) return;
+  actionId.value = item.id;
   uni.showModal({
-    title: "下架活动",
-    content: `确认下架「${item.title}」？`,
+    title: options.title,
+    content: options.content,
     success: async (res) => {
-      if (!res.confirm) return;
+      if (!res.confirm) {
+        actionId.value = null;
+        return;
+      }
       try {
-        await mobileAdminRequest(`/admin/activities/${item.id}/close`, { method: "POST" });
-        uni.showToast({ title: "已下架", icon: "success" });
-        load();
+        await mobileAdminRequest(`/admin/activities/${item.id}/${options.path}`, { method: "POST" });
+        uni.showToast({ title: options.successText, icon: "success" });
+        await load();
       } catch (err: any) {
         uni.showToast({ title: err.message || "操作失败", icon: "none" });
+      } finally {
+        actionId.value = null;
       }
-    }
+    },
+    fail: () => { actionId.value = null; }
   });
 }
 
-onMounted(load);
+function closeActivity(item: any) {
+  if (item.status !== ActivityStatus.Open) return;
+  runLifecycle(item, { title: "下架活动", content: `确认下架「${item.title}」？`, path: "close", successText: "已下架" });
+}
+
+function reopenActivity(item: any) {
+  if (item.status !== ActivityStatus.Closed) return;
+  runLifecycle(item, { title: "重新上架", content: `确认重新上架「${item.title}」？`, path: "reopen", successText: "已重新上架" });
+}
+
+function withdrawApproval(item: any) {
+  if (item.status !== ActivityStatus.PendingApproval || !bootstrap.value?.admin?.tenantId) return;
+  runLifecycle(item, { title: "撤回审核", content: `确认撤回「${item.title}」的审核申请？`, path: "withdraw-approval", successText: "已撤回审核" });
+}
+
+onShow(load);
 </script>
 
 <template>
@@ -108,15 +153,16 @@ onMounted(load);
       </view>
       <view v-if="canWrite" class="create" @click="createActivity">新增</view>
     </view>
+    <view v-if="errorMessage" class="error-panel"><text>{{ errorMessage }}</text><view class="retry" @click="load">重试</view></view>
 
     <view class="search">
-      <input v-model="keyword" placeholder="搜索活动或地点" confirm-type="search" @confirm="load" />
-      <view class="search-btn" @click="load">搜索</view>
+      <input v-model="keyword" :disabled="loading" placeholder="搜索活动或地点" confirm-type="search" @confirm="search" />
+      <view class="search-btn" :class="{ disabled: loading }" @click="search">{{ loading ? "查询中" : "搜索" }}</view>
     </view>
 
     <scroll-view scroll-x class="tabs" :show-scrollbar="false">
       <view class="track">
-        <view v-for="tab in tabs" :key="tab.value" class="tab" :class="{ active: status === tab.value }" @click="setStatus(tab.value)">
+        <view v-for="tab in tabs" :key="tab.value" class="tab" :class="{ active: status === tab.value, disabled: loading }" @click="setStatus(tab.value)">
           <text>{{ tab.label }}</text>
           <text>{{ tab.value === 'all' ? total : counts[tab.value] || 0 }}</text>
         </view>
@@ -140,8 +186,15 @@ onMounted(load);
         <view v-if="canWrite" @click="editActivity(item.id)">编辑</view>
         <view @click="previewActivity(item)">预览</view>
         <view @click="copyPublicLink(item)">复制链接</view>
-        <view v-if="canWrite && item.status !== 'closed'" class="danger" @click="closeActivity(item)">下架</view>
+        <view v-if="canWrite && item.status === 'pending_approval' && bootstrap?.admin?.tenantId" :class="{ disabled: actionId !== null }" @click="withdrawApproval(item)">{{ actionId === item.id ? "处理中..." : "撤回审核" }}</view>
+        <view v-if="canWrite && item.status === 'closed'" :class="{ disabled: actionId !== null }" @click="reopenActivity(item)">{{ actionId === item.id ? "处理中..." : "重新上架" }}</view>
+        <view v-if="canWrite && item.status === 'open'" class="danger" :class="{ disabled: actionId !== null }" @click="closeActivity(item)">{{ actionId === item.id ? "处理中..." : "下架" }}</view>
       </view>
+    </view>
+    <view v-if="total > pageSize" class="pager">
+      <view :class="{ disabled: loading || page <= 1 }" @click="changePage(page - 1)">上一页</view>
+      <text>第 {{ page }} / {{ pageCount }} 页 · 共 {{ total }} 条</text>
+      <view :class="{ disabled: loading || page >= pageCount }" @click="changePage(page + 1)">下一页</view>
     </view>
     <AdminBottomNav current="activities" :permissions="bootstrap?.permissions" />
   </view>
@@ -173,4 +226,7 @@ onMounted(load);
 .ops view { padding: 8rpx 14rpx; border-radius: 999px; background: #f3faf8; }
 .ops .pill { background: #fff4e6; color: #8f4c32; }
 .ops .danger { color: #b42318; background: #fff1f3; }
+.pager { display:grid; grid-template-columns:120rpx 1fr 120rpx; align-items:center; gap:12rpx; margin:20rpx 0; color:#7a5b52; text-align:center; font-size:23rpx; }.pager view { padding:14rpx 8rpx; border-radius:16rpx; background:#fff; color:#0f766e; font-weight:900; }
+.error-panel { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-top:18rpx; padding:20rpx; border-radius:24rpx; background:#fff1f3; color:#b42318; }.retry { padding:10rpx 18rpx; border-radius:16rpx; background:#b42318; color:#fff; font-weight:800; }.disabled { opacity:.55; pointer-events:none; }
+@media (min-width: 900px) { .admin-list { max-width:760px; margin:0 auto; } }
 </style>

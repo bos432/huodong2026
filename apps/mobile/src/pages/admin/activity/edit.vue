@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref, watch } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { ActivityStatus, FieldType, activityStatusText, checkActivityContentCompliance } from "@activity/shared";
 import { adminActivityPreviewUrl, mobileAdminRequest, requireMobileAdmin, uploadAdminImage } from "../../../mobile-admin";
 
@@ -10,11 +11,14 @@ type SectionDraft = { type: string; title: string; content: string; imageUrl: st
 const id = ref(0);
 const step = ref(0);
 const loading = ref(true);
+const loadError = ref("");
 const saving = ref(false);
 const actionNotice = ref("");
 const actionNoticeTone = ref<"info" | "success" | "error">("info");
 const actionBusyLabel = ref("");
 const lastSavedAt = ref("");
+const dirty = ref(false);
+const uploadingTarget = ref("");
 const bootstrap = ref<any>(null);
 const form = ref<any>(defaultForm());
 const fields = ref<FieldDraft[]>([defaultField()]);
@@ -36,20 +40,27 @@ const tenantPermissions = computed(() => selectedTenant.value?.settings || boots
 const canSubmitApproval = computed(() => Boolean(bootstrap.value?.admin?.tenantId));
 const canDirectOpen = computed(() => bootstrap.value?.admin?.role === "super_admin" || tenantPermissions.value.activityPublishReviewRequired === false);
 const registrationReviewEnabled = computed(() => tenantPermissions.value.registrationReviewEnabled !== false);
+const selectionLocked = computed(() => saving.value || Boolean(uploadingTarget.value));
 const saveTargetStatus = computed(() => {
-  if (form.value.status === ActivityStatus.Open) return ActivityStatus.Open;
-  if (form.value.status === ActivityStatus.PendingApproval) return ActivityStatus.PendingApproval;
-  return ActivityStatus.Draft;
+  if (form.value.status === ActivityStatus.Rejected) return ActivityStatus.Draft;
+  return form.value.status || ActivityStatus.Draft;
 });
 const saveActionLabel = computed(() => {
   if (form.value.status === ActivityStatus.Open) return "保存上线";
   if (form.value.status === ActivityStatus.PendingApproval) return "保存待审";
   return "保存";
 });
-const showPublishAction = computed(() => form.value.status !== ActivityStatus.Open && form.value.status !== ActivityStatus.PendingApproval);
+const showPublishAction = computed(() => [ActivityStatus.Draft, ActivityStatus.Rejected].includes(form.value.status));
 const compliance = computed(() => checkActivityContentCompliance({ title: form.value.title, description: form.value.description, notice: form.value.notice, sections: sections.value }));
 
 let saveInFlight = false;
+let loadSerial = 0;
+let initialized = false;
+let hydrating = false;
+
+watch([form, fields, hosts, sections], () => {
+  if (initialized && !hydrating) dirty.value = true;
+}, { deep: true, flush: "sync" });
 
 function showActionNotice(message: string, tone: "info" | "success" | "error" = "error", targetStep?: number) {
   actionNotice.value = message;
@@ -107,6 +118,10 @@ function defaultSection(): SectionDraft {
 }
 
 function toInputTime(value: Date | string) {
+  if (typeof value === "string") {
+    const parts = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
+    if (parts) return `${parts[1]}-${parts[2]}-${parts[3]} ${parts[4]}:${parts[5]}`;
+  }
   const date = value instanceof Date ? value : new Date(value);
   if (Number.isNaN(date.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -127,6 +142,7 @@ function setBoolean(key: string, value: boolean) {
 }
 
 function pickTenant(e: any) {
+  if (selectionLocked.value) return;
   const tenant = (bootstrap.value?.tenants || [])[Number(e.detail.value)];
   if (!tenant) return;
   form.value.tenantId = tenant.id;
@@ -134,21 +150,25 @@ function pickTenant(e: any) {
 }
 
 function pickCategory(e: any) {
+  if (selectionLocked.value) return;
   const category = (bootstrap.value?.categories || [])[Number(e.detail.value)];
   form.value.categoryId = category?.id;
 }
 
 function pickAgent(e: any) {
+  if (selectionLocked.value) return;
   const index = Number(e.detail.value);
   form.value.agentId = index <= 0 ? undefined : bootstrap.value?.agents?.[index - 1]?.id;
 }
 
 function pickMember(key: "minMemberLevelId" | "priorityMemberLevelId", e: any) {
+  if (selectionLocked.value) return;
   const index = Number(e.detail.value);
   form.value[key] = index <= 0 ? undefined : bootstrap.value?.memberLevels?.[index - 1]?.id;
 }
 
 function pickFieldType(index: number, e: any) {
+  if (selectionLocked.value) return;
   fields.value[index].type = fieldTypes[Number(e.detail.value)]?.value || FieldType.Text;
 }
 
@@ -185,6 +205,8 @@ function removeSection(index: number) {
 }
 
 async function chooseImage(target: "cover" | "groupQr" | "section", index = 0) {
+  if (uploadingTarget.value || saving.value) return;
+  uploadingTarget.value = target === "section" ? `section:${index}` : target;
   try {
     const chosen = await new Promise<UniApp.ChooseImageSuccessCallbackResult>((resolve, reject) => uni.chooseImage({ count: 1, success: resolve, fail: reject }));
     const filePath = chosen.tempFilePaths[0];
@@ -194,12 +216,25 @@ async function chooseImage(target: "cover" | "groupQr" | "section", index = 0) {
     else if (target === "groupQr") form.value.groupQrCodeUrl = uploaded.url;
     else sections.value[index].imageUrl = uploaded.url;
   } catch (err: any) {
-    uni.showToast({ title: err.message || "上传失败", icon: "none" });
-  }
+    if (err?.errMsg && String(err.errMsg).includes("cancel")) return;
+    showActionNotice(err.message || "图片上传失败", "error");
+  } finally { uploadingTarget.value = ""; }
 }
 
 function normalizeOptions(text: string) {
   return text.split(/\n|,|，/).map((item) => item.trim()).filter(Boolean).map((label) => ({ label, value: label }));
+}
+
+function parsedTime(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return Number.NaN;
+  return new Date(text.replace(" ", "T")).getTime();
+}
+
+function invalidHttpUrl(value: unknown) {
+  const text = String(value || "").trim();
+  if (!text) return false;
+  return !/^https?:\/\//i.test(text) && !text.startsWith("/uploads/");
 }
 
 function payload(status: ActivityStatus) {
@@ -230,8 +265,31 @@ function validateBeforeSave(targetStatus: ActivityStatus) {
   if (!form.value.title.trim()) return { message: "请填写活动标题。", step: 0 };
   if (!form.value.description.trim()) return { message: "请填写活动介绍。", step: 0 };
   if (!form.value.location.trim()) return { message: "请填写活动地点。", step: 0 };
+  const start = parsedTime(form.value.startTime);
+  const end = parsedTime(form.value.endTime);
+  const deadline = parsedTime(form.value.registrationDeadline);
+  if (![start, end, deadline].every(Number.isFinite)) return { message: "请按 YYYY-MM-DD HH:mm 填写有效时间。", step: 0 };
+  if (end <= start) return { message: "结束时间必须晚于开始时间。", step: 0 };
+  if (deadline >= start) return { message: "报名截止时间必须早于活动开始时间。", step: 0 };
+  if (!Number.isInteger(Number(form.value.capacity)) || Number(form.value.capacity) < 1) return { message: "活动名额必须是大于 0 的整数。", step: 0 };
+  if (!Number.isFinite(Number(form.value.price)) || Number(form.value.price) < 0 || !/^\d+(?:\.\d{1,2})?$/.test(String(form.value.price))) return { message: "价格必须是非负金额，最多保留两位小数。", step: 0 };
+  if (invalidHttpUrl(form.value.locationMapUrl)) return { message: "地图链接仅支持 HTTP(S) 地址。", step: 0 };
+  if (invalidHttpUrl(form.value.coverUrl)) return { message: "封面图地址仅支持 HTTP(S) 或系统上传地址。", step: 0 };
+  if (invalidHttpUrl(form.value.groupQrCodeUrl)) return { message: "入群二维码仅支持 HTTP(S) 或系统上传地址。", step: 1 };
+  if (form.value.priorityMemberLevelId) {
+    const priorityEnd = parsedTime(form.value.priorityRegistrationEndsAt);
+    if (!Number.isFinite(priorityEnd)) return { message: "请填写有效的优先报名截止时间。", step: 1 };
+    if (priorityEnd >= deadline) return { message: "优先报名截止时间必须早于报名截止时间。", step: 1 };
+  }
   if (!fields.value.length || fields.value.some((field) => !field.label.trim())) return { message: "请完善报名字段。", step: 1 };
+  for (const field of fields.value) {
+    if (![FieldType.SingleChoice, FieldType.MultipleChoice].includes(field.type)) continue;
+    const options = normalizeOptions(field.optionsText);
+    if (options.length < 2) return { message: `报名字段“${field.label}”至少需要两个选项。`, step: 1 };
+    if (new Set(options.map((item) => item.value)).size !== options.length) return { message: `报名字段“${field.label}”存在重复选项。`, step: 1 };
+  }
   if (targetStatus !== ActivityStatus.Draft && sections.value.some((section) => !section.title.trim() || !section.content.trim())) return { message: "发布前请完善详情模块标题和内容。", step: 2 };
+  if (sections.value.some((section) => invalidHttpUrl(section.imageUrl))) return { message: "详情图片仅支持 HTTP(S) 或系统上传地址。", step: 2 };
   if (!compliance.value.passed) return { message: compliance.value.blockingIssues[0]?.message || "活动内容存在合规风险。", step: 3 };
   if (targetStatus === ActivityStatus.Open && !canDirectOpen.value && form.value.status !== ActivityStatus.Open) return { message: "当前商家活动发布需要平台审核，请点击提交审核。", step: 3 };
   return null;
@@ -253,12 +311,12 @@ function beginSaving(targetStatus: ActivityStatus) {
   uni.showLoading({ title: actionBusyLabel.value, mask: true });
 }
 
-function save(targetStatus: ActivityStatus, redirectAfterSave = true): Promise<any | null> {
-  if (saveInFlight) return Promise.resolve(null);
+async function save(targetStatus: ActivityStatus, redirectAfterSave = true): Promise<any | null> {
+  if (saveInFlight) return null;
   const validation = validateBeforeSave(targetStatus);
   if (validation) {
     showActionNotice(validation.message, "error", validation.step);
-    return Promise.resolve(null);
+    return null;
   }
 
   beginSaving(targetStatus);
@@ -267,7 +325,8 @@ function save(targetStatus: ActivityStatus, redirectAfterSave = true): Promise<a
     ? mobileAdminRequest<any>(`/admin/activities/${id.value}`, { method: "PATCH", data: payload(targetStatus) })
     : mobileAdminRequest<any>("/admin/activities", { method: "POST", data: payload(targetStatus) });
 
-  return request.then((saved) => {
+  try {
+    const saved = await request;
     id.value = saved.id;
     const previousStatus = form.value.status;
     form.value.status = saved.status || targetStatus;
@@ -279,15 +338,18 @@ function save(targetStatus: ActivityStatus, redirectAfterSave = true): Promise<a
       return saved;
     }
 
-    return loadActivity().then(() => {
-      finishSaving();
-      return saved;
-    });
-  }).catch((err: any) => {
+    try {
+      await loadActivity();
+    } catch (refreshError: any) {
+      showActionNotice(`保存成功，但刷新失败：${refreshError.message || "请重新进入页面"}`, "error");
+    }
+    finishSaving();
+    return saved;
+  } catch (err: any) {
     showActionNotice(err.message || "保存失败，请稍后重试。", "error");
     finishSaving();
     return null;
-  });
+  }
 }
 
 async function submitApproval() {
@@ -352,9 +414,11 @@ function copyLink() {
   uni.setClipboardData({ data: adminActivityPreviewUrl(id.value, tenantCode), success: () => uni.showToast({ title: "已复制", icon: "success" }) });
 }
 
-async function loadActivity() {
+async function loadActivity(expectedSerial = loadSerial) {
   if (!id.value) return;
   const activity = await mobileAdminRequest<any>(`/admin/activities/${id.value}`);
+  if (expectedSerial !== loadSerial) return;
+  hydrating = true;
   form.value = {
     ...defaultForm(),
     tenantId: activity.tenant?.id,
@@ -387,26 +451,38 @@ async function loadActivity() {
   hosts.value = (activity.hosts || []).map((host: any, index: number) => ({ name: host.name || "", title: host.title || "", avatarUrl: host.avatarUrl || "", bio: host.bio || "", sortOrder: index + 1 }));
   sections.value = (activity.sections || []).map((section: any, index: number) => ({ type: section.type || "rich_text", title: section.title || "", content: section.content || "", imageUrl: section.imageUrl || "", sortOrder: index + 1 }));
   if (!sections.value.length) sections.value = [defaultSection()];
+  hydrating = false;
+  dirty.value = false;
 }
 
 async function load() {
-  requireMobileAdmin();
+  try { requireMobileAdmin(); } catch { loading.value = false; return; }
+  const serial = ++loadSerial;
   loading.value = true;
+  loadError.value = "";
   try {
-    bootstrap.value = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
+    const boot = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
+    if (serial !== loadSerial) return;
+    bootstrap.value = boot;
     if (!form.value.tenantId && bootstrap.value?.admin?.tenantId) form.value.tenantId = bootstrap.value.admin.tenantId;
     if (!form.value.tenantId && bootstrap.value?.tenants?.length === 1) form.value.tenantId = bootstrap.value.tenants[0].id;
     const pages = getCurrentPages();
     id.value = Number((pages[pages.length - 1] as any).options?.id || 0);
-    await loadActivity();
+    await loadActivity(serial);
+    if (serial !== loadSerial) return;
+    initialized = true;
+    dirty.value = false;
   } catch (err: any) {
-    uni.showToast({ title: err.message || "加载失败", icon: "none" });
+    if (serial !== loadSerial) return;
+    loadError.value = err.message || "活动编辑页加载失败";
   } finally {
-    loading.value = false;
+    if (serial === loadSerial) loading.value = false;
   }
 }
 
-onMounted(load);
+onShow(() => {
+  if (!initialized || (!dirty.value && !saving.value && !uploadingTarget.value)) void load();
+});
 </script>
 
 <template>
@@ -416,30 +492,31 @@ onMounted(load);
         <view class="title">{{ id ? "编辑活动" : "发布活动" }}</view>
         <view class="sub">{{ activityStatusText[form.status] || "草稿" }}</view>
       </view>
-      <view class="preview" @click="preview">预览</view>
+      <view class="preview" role="button" tabindex="0" aria-label="预览活动" @click="preview" @keyup.enter="preview" @keyup.space.prevent="preview">预览</view>
     </view>
 
     <view class="steps">
-      <view v-for="(item, index) in steps" :key="item" class="step" :class="{ active: step === index }" @click="step = index">{{ item }}</view>
+      <view v-for="(item, index) in steps" :key="item" class="step" role="tab" tabindex="0" :aria-selected="step === index" :aria-label="`编辑${item}步骤`" :class="{ active: step === index }" @click="step = index" @keyup.enter="step = index" @keyup.space.prevent="step = index">{{ item }}</view>
     </view>
 
     <view v-if="loading" class="panel">加载中...</view>
+    <view v-else-if="loadError" class="panel error-panel" role="alert" aria-live="assertive"><view>{{ loadError }}</view><view class="retry" role="button" tabindex="0" aria-label="重新加载活动编辑页" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view></view>
     <template v-else>
       <view v-show="step === 0" class="panel">
         <view v-if="canSelectTenant" class="field">
           <view class="label">归属商家</view>
-          <picker :range="bootstrap.tenants" range-key="name" @change="pickTenant">
+          <picker :disabled="selectionLocked" :range="bootstrap.tenants" range-key="name" @change="pickTenant">
             <view class="picker">{{ selectedTenant?.name || "请选择商家" }}</view>
           </picker>
         </view>
-        <view class="field"><view class="label">活动标题</view><input v-model="form.title" class="input" placeholder="例如：慢π杭州城市体验活动" /></view>
-        <view class="field"><view class="label">封面图</view><view class="upload" @click="chooseImage('cover')"><image v-if="form.coverUrl" :src="form.coverUrl" mode="aspectFill" /><text v-else>上传封面</text></view></view>
-        <view class="field"><view class="label">活动介绍</view><textarea v-model="form.description" class="textarea" auto-height placeholder="一句话说明活动亮点、对象和收益" /></view>
+        <view class="field"><view class="label">活动标题</view><input v-model="form.title" class="input" maxlength="120" cursor-spacing="24" confirm-type="next" aria-label="活动标题" placeholder="例如：慢π杭州城市体验活动" /></view>
+        <view class="field"><view class="label">封面图</view><view class="upload" :class="{ disabled: uploadingTarget }" @click="chooseImage('cover')"><image v-if="form.coverUrl" :src="form.coverUrl" mode="aspectFill" /><text v-else>{{ uploadingTarget === 'cover' ? '上传中...' : '上传封面' }}</text></view></view>
+        <view class="field"><view class="label">活动介绍</view><textarea v-model="form.description" class="textarea" maxlength="10000" cursor-spacing="24" aria-label="活动介绍" auto-height placeholder="一句话说明活动亮点、对象和收益" /></view>
         <view class="grid2">
-          <view class="field"><view class="label">分类</view><picker :range="bootstrap.categories" range-key="name" @change="pickCategory"><view class="picker">{{ bootstrap.categories.find((c:any)=>c.id===form.categoryId)?.name || "选择分类" }}</view></picker></view>
-          <view class="field"><view class="label">代理/主办</view><picker :range="['平台自营'].concat((bootstrap.agents || []).map((a:any)=>a.name))" @change="pickAgent"><view class="picker">{{ bootstrap.agents.find((a:any)=>a.id===form.agentId)?.name || "平台自营" }}</view></picker></view>
+          <view class="field"><view class="label">分类</view><picker :disabled="selectionLocked" :range="bootstrap.categories" range-key="name" @change="pickCategory"><view class="picker">{{ bootstrap.categories.find((c:any)=>c.id===form.categoryId)?.name || "选择分类" }}</view></picker></view>
+          <view class="field"><view class="label">代理/主办</view><picker :disabled="selectionLocked" :range="['平台自营'].concat((bootstrap.agents || []).map((a:any)=>a.name))" @change="pickAgent"><view class="picker">{{ bootstrap.agents.find((a:any)=>a.id===form.agentId)?.name || "平台自营" }}</view></picker></view>
         </view>
-        <view class="field"><view class="label">地点</view><input v-model="form.location" class="input" placeholder="活动地址" /></view>
+        <view class="field"><view class="label">地点</view><input v-model="form.location" class="input" maxlength="200" cursor-spacing="24" confirm-type="next" aria-label="活动地点" placeholder="活动地址" /></view>
         <view class="grid2">
           <view class="field"><view class="label">开始时间</view><input v-model="form.startTime" class="input" placeholder="YYYY-MM-DD HH:mm" /></view>
           <view class="field"><view class="label">结束时间</view><input v-model="form.endTime" class="input" placeholder="YYYY-MM-DD HH:mm" /></view>
@@ -456,30 +533,30 @@ onMounted(load);
 
       <view v-show="step === 1" class="panel">
         <view class="toggles">
-          <view :class="{ on: form.requireReview, disabled: !registrationReviewEnabled }" @click="setBoolean('requireReview', !form.requireReview)">报名审核</view>
-          <view :class="{ on: form.allowCancel }" @click="setBoolean('allowCancel', !form.allowCancel)">允许取消</view>
-          <view :class="{ on: form.featured }" @click="setBoolean('featured', !form.featured)">推荐展示</view>
+          <view role="switch" tabindex="0" :aria-checked="form.requireReview" :aria-disabled="!registrationReviewEnabled" :class="{ on: form.requireReview, disabled: !registrationReviewEnabled }" @click="setBoolean('requireReview', !form.requireReview)" @keyup.enter="setBoolean('requireReview', !form.requireReview)" @keyup.space.prevent="setBoolean('requireReview', !form.requireReview)">报名审核</view>
+          <view role="switch" tabindex="0" :aria-checked="form.allowCancel" :class="{ on: form.allowCancel }" @click="setBoolean('allowCancel', !form.allowCancel)" @keyup.enter="setBoolean('allowCancel', !form.allowCancel)" @keyup.space.prevent="setBoolean('allowCancel', !form.allowCancel)">允许取消</view>
+          <view role="switch" tabindex="0" :aria-checked="form.featured" :class="{ on: form.featured }" @click="setBoolean('featured', !form.featured)" @keyup.enter="setBoolean('featured', !form.featured)" @keyup.space.prevent="setBoolean('featured', !form.featured)">推荐展示</view>
         </view>
         <view v-if="!registrationReviewEnabled" class="issue">当前商家未开通报名审核权限，活动报名将自动通过或进入付款流程。</view>
         <view class="field">
           <view class="label">报名成功入群二维码</view>
           <view class="hint-line">报名成功后在报名详情页显示，公开活动页只提示入群流程，不直接展示二维码。</view>
-          <view class="upload qr-upload" @click="chooseImage('groupQr')">
+          <view class="upload qr-upload" :class="{ disabled: uploadingTarget }" @click="chooseImage('groupQr')">
             <image v-if="form.groupQrCodeUrl" :src="form.groupQrCodeUrl" mode="aspectFit" />
-            <text v-else>上传入群二维码</text>
+            <text v-else>{{ uploadingTarget === 'groupQr' ? '上传中...' : '上传入群二维码' }}</text>
           </view>
           <input v-model="form.groupQrCodeUrl" class="input input-after-upload" placeholder="也可粘贴二维码图片链接" />
         </view>
         <view class="grid2">
-          <view class="field"><view class="label">会员门槛</view><picker :range="['无门槛'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('minMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.minMemberLevelId)?.name || "无门槛" }}</view></picker></view>
-          <view class="field"><view class="label">优先会员</view><picker :range="['无优先'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('priorityMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.priorityMemberLevelId)?.name || "无优先" }}</view></picker></view>
+          <view class="field"><view class="label">会员门槛</view><picker :disabled="selectionLocked" :range="['无门槛'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('minMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.minMemberLevelId)?.name || "无门槛" }}</view></picker></view>
+          <view class="field"><view class="label">优先会员</view><picker :disabled="selectionLocked" :range="['无优先'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('priorityMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.priorityMemberLevelId)?.name || "无优先" }}</view></picker></view>
         </view>
         <view v-if="form.priorityMemberLevelId" class="field"><view class="label">优先报名截止</view><input v-model="form.priorityRegistrationEndsAt" class="input" placeholder="YYYY-MM-DD HH:mm" /></view>
         <view class="section-head"><view>报名字段</view><view @click="addField">新增字段</view></view>
         <view v-for="(field, index) in fields" :key="index" class="sub-card">
           <view class="row"><view class="mini-title">字段 {{ index + 1 }}</view><view class="delete" @click="removeField(index)">删除</view></view>
           <input v-model="field.label" class="input" placeholder="字段名称" />
-          <picker :range="fieldTypes" range-key="label" @change="pickFieldType(index, $event)"><view class="picker">{{ fieldTypes.find((item)=>item.value===field.type)?.label || "文本" }}</view></picker>
+          <picker :disabled="selectionLocked" :range="fieldTypes" range-key="label" @change="pickFieldType(index, $event)"><view class="picker">{{ fieldTypes.find((item)=>item.value===field.type)?.label || "文本" }}</view></picker>
           <view class="switch-line" @click="field.required = !field.required"><text>必填</text><switch :checked="field.required" /></view>
           <textarea v-if="[FieldType.SingleChoice, FieldType.MultipleChoice].includes(field.type)" v-model="field.optionsText" class="textarea small" auto-height placeholder="选项一行一个，或用逗号分隔" />
         </view>
@@ -497,7 +574,7 @@ onMounted(load);
         <view v-for="(section, index) in sections" :key="index" class="sub-card">
           <view class="row"><view class="mini-title">模块 {{ index + 1 }}</view><view class="delete" @click="removeSection(index)">删除</view></view>
           <input v-model="section.title" class="input" placeholder="模块标题" />
-          <view class="upload compact" @click="chooseImage('section', index)"><image v-if="section.imageUrl" :src="section.imageUrl" mode="aspectFill" /><text v-else>上传模块图片</text></view>
+          <view class="upload compact" :class="{ disabled: uploadingTarget }" @click="chooseImage('section', index)"><image v-if="section.imageUrl" :src="section.imageUrl" mode="aspectFill" /><text v-else>{{ uploadingTarget === `section:${index}` ? '上传中...' : '上传模块图片' }}</text></view>
           <textarea v-model="section.content" class="textarea rich" auto-height placeholder="支持 Markdown：# 标题、**加粗**、[链接](https://...)、```代码```" />
         </view>
         <view class="field"><view class="label">报名须知</view><textarea v-model="form.notice" class="textarea" auto-height placeholder="退款、签到、注意事项等" /></view>
@@ -507,17 +584,18 @@ onMounted(load);
         <view class="review-line"><text>合规检查</text><text :class="compliance.passed ? 'ok' : 'bad'">{{ compliance.passed ? "通过" : "需修改" }}</text></view>
         <view v-for="issue in compliance.issues" :key="issue.field + issue.keyword" class="issue">{{ issue.message }}</view>
         <view class="review-line"><text>发布方式</text><text>{{ canDirectOpen ? "可直接发布" : "需提交平台审核" }}</text></view>
+        <view v-if="[ActivityStatus.Closed, ActivityStatus.Cancelled, ActivityStatus.Ended].includes(form.status)" class="issue">当前状态只能保存内容并保持原状态；重新上架请从活动列表执行专用操作。</view>
         <view class="review-line"><text>保存状态</text><text :class="lastSavedAt ? 'ok' : ''">{{ lastSavedAt ? `已保存 ${lastSavedAt}` : "本页修改后请点底部保存" }}</text></view>
         <view v-if="canSelectTenant && !form.tenantId" class="issue">平台超级管理员需要先选择商家。</view>
-        <view class="link" @click="copyLink">复制公开链接</view>
+        <view class="link" role="button" tabindex="0" aria-label="复制活动公开链接" @click="copyLink" @keyup.enter="copyLink" @keyup.space.prevent="copyLink">复制公开链接</view>
       </view>
     </template>
 
     <view class="action-notice" v-if="actionNotice" :class="actionNoticeTone">{{ actionNotice }}</view>
     <view class="bottom" :class="{ compact: !showPublishAction }">
-      <view class="ghost" @tap="step = Math.max(step - 1, 0)">上一步</view>
-      <view class="ghost" @tap="step = Math.min(step + 1, steps.length - 1)">下一步</view>
-      <view class="save" :class="{ disabled: saving || !canWriteActivities }" @tap="handleSaveTap">{{ actionBusyLabel || saveActionLabel }}</view>
+      <view class="ghost" role="button" tabindex="0" aria-label="上一步" @tap="step = Math.max(step - 1, 0)" @keyup.enter="step = Math.max(step - 1, 0)" @keyup.space.prevent="step = Math.max(step - 1, 0)">上一步</view>
+      <view class="ghost" role="button" tabindex="0" aria-label="下一步" @tap="step = Math.min(step + 1, steps.length - 1)" @keyup.enter="step = Math.min(step + 1, steps.length - 1)" @keyup.space.prevent="step = Math.min(step + 1, steps.length - 1)">下一步</view>
+      <view class="save" role="button" tabindex="0" :aria-disabled="saving || !canWriteActivities" :aria-busy="saving" :aria-label="actionBusyLabel || saveActionLabel" :class="{ disabled: saving || !canWriteActivities }" @tap="handleSaveTap" @keyup.enter="handleSaveTap" @keyup.space.prevent="handleSaveTap">{{ actionBusyLabel || saveActionLabel }}</view>
       <view v-if="canDirectOpen && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @tap="handlePublishTap">{{ actionBusyLabel || "发布" }}</view>
       <view v-else-if="canSubmitApproval && showPublishAction" class="publish" :class="{ disabled: saving || !canWriteActivities }" @tap="handleSubmitApprovalTap">{{ actionBusyLabel || "提交审核" }}</view>
     </view>
@@ -525,12 +603,12 @@ onMounted(load);
 </template>
 
 <style scoped>
-.edit-page { min-height: 100vh; padding: 24rpx 24rpx 176rpx; background: radial-gradient(circle at 18% 0%, rgba(255, 232, 198, 0.9), transparent 34%), linear-gradient(180deg, #fff8ef 0%, #f5f0e8 44%, #f7f3ed 100%); color: #2f211c; }
+.edit-page { min-height: 100vh; width:100%; max-width:760px; margin:0 auto; box-sizing:border-box; padding: calc(24rpx + env(safe-area-inset-top)) 24rpx calc(176rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; background: radial-gradient(circle at 18% 0%, rgba(255, 232, 198, 0.9), transparent 34%), linear-gradient(180deg, #fff8ef 0%, #f5f0e8 44%, #f7f3ed 100%); color: #2f211c; }
 .head { position: relative; overflow: hidden; display: flex; justify-content: space-between; align-items: center; gap: 18rpx; padding: 34rpx 28rpx; border-radius: 30rpx; background: linear-gradient(135deg, #5b2f24 0%, #8f4c32 48%, #d29a5a 100%); color: #fff; box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.24); }
-.head::after { content: ""; position: absolute; right: -80rpx; top: -90rpx; width: 240rpx; height: 240rpx; border-radius: 999px; background: rgba(255,255,255,.18); }
+.head::after { content: ""; position: absolute; right: -80rpx; top: -90rpx; width: 240rpx; height: 240rpx; border-radius: 999px; background: rgba(255,255,255,.18); pointer-events: none; }
 .title { position: relative; font-size: 40rpx; font-weight: 950; }
 .sub { position: relative; margin-top: 6rpx; color: rgba(255,255,255,.76); font-size: 24rpx; }
-.preview { padding: 12rpx 22rpx; border-radius: 999px; background: rgba(255,255,255,.14); font-size: 24rpx; font-weight: 900; }
+.preview { position: relative; z-index: 1; padding: 12rpx 22rpx; border-radius: 999px; background: rgba(255,255,255,.14); font-size: 24rpx; font-weight: 900; }
 .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; margin: 20rpx 0; }
 .step { height: 66rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: rgba(255,255,255,.88); color: #7a5b52; font-size: 24rpx; font-weight: 900; box-shadow: 0 8rpx 20rpx rgba(91,47,36,.05); }
 .step.active { background: #0f766e; color: #fff; box-shadow: 0 10rpx 22rpx rgba(15,118,110,.2); }
@@ -571,6 +649,7 @@ onMounted(load);
 .action-notice.info { background: #eff6ff; color: #175cd3; }
 .action-notice.success { background: #ecfdf3; color: #067647; }
 .action-notice.error { background: #fff1f3; color: #b42318; }
+.error-panel { color:#b42318; background:#fff1f3; }.retry { display:inline-flex; margin-top:16rpx; padding:10rpx 18rpx; border-radius:16rpx; background:#b42318; color:#fff; font-weight:800; }
 .bottom { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: 1fr 1fr 1fr 1.25fr; gap: 10rpx; padding: 16rpx 18rpx calc(16rpx + env(safe-area-inset-bottom)); background: rgba(255,252,247,.96); border-top: 1rpx solid rgba(91, 47, 36, 0.08); box-shadow: 0 -12rpx 34rpx rgba(91,47,36,.12); backdrop-filter: blur(16px); }
 .bottom.compact { grid-template-columns: 1fr 1fr 1.25fr; }
 .bottom view { min-height: 76rpx; display: flex; align-items: center; justify-content: center; border-radius: 20rpx; font-size: 25rpx; font-weight: 900; }
@@ -578,4 +657,5 @@ onMounted(load);
 .save { background: #e6f2ef; color: #0f766e; }
 .publish { background: linear-gradient(135deg, #0f766e, #15907f); color: #fff; box-shadow: 0 12rpx 24rpx rgba(15,118,110,.2); }
 .disabled { opacity: .55; }
+@media (min-width: 900px) { .edit-page { max-width:760px; margin:0 auto; } }
 </style>

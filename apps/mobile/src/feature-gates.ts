@@ -1,5 +1,5 @@
 import { ref } from "vue";
-import { getCurrentTenantCode, request } from "./api";
+import { getCurrentTenantCode, request, withTenantCode } from "./api";
 
 type HomepageSectionView = {
   id: number;
@@ -28,6 +28,7 @@ export type FeatureGateKey =
 export type FeatureGates = Record<FeatureGateKey, boolean>;
 
 const FEATURE_GATES_STORAGE_KEY = "mp_feature_gates";
+let featureDisabledDialogOpen = false;
 
 export const defaultFeatureGates: FeatureGates = {
   courses: true,
@@ -66,7 +67,7 @@ const featureGateKeys = Object.keys(defaultFeatureGates) as FeatureGateKey[];
 export const featureGatesState = ref<FeatureGates>({ ...defaultFeatureGates });
 
 let loadedTenantCode = "";
-let loadingPromise: Promise<FeatureGates> | null = null;
+let loadingRequest: { tenantCode: string; promise: Promise<FeatureGates> } | null = null;
 
 function normalizePath(url?: string) {
   const text = String(url || "").trim();
@@ -104,9 +105,9 @@ function readStoredFeatureGates() {
   }
 }
 
-function writeStoredFeatureGates(gates: FeatureGates) {
+function writeStoredFeatureGates(gates: FeatureGates, tenantCode = getCurrentTenantCode()) {
   try {
-    uni.setStorageSync(FEATURE_GATES_STORAGE_KEY, { tenantCode: getCurrentTenantCode(), gates, updatedAt: Date.now() });
+    uni.setStorageSync(FEATURE_GATES_STORAGE_KEY, { tenantCode, gates, updatedAt: Date.now() });
   } catch {
     // Storage failure should not block navigation.
   }
@@ -127,23 +128,27 @@ export async function loadFeatureGates(force = false) {
     featureGatesState.value = stored;
     return stored;
   }
-  if (loadingPromise) return loadingPromise;
-  loadingPromise = request<{ launchConfig?: { featureGates?: unknown } }>("/public/settings/operation")
+  if (loadingRequest?.tenantCode === tenantCode) return loadingRequest.promise;
+  let promise!: Promise<FeatureGates>;
+  promise = request<{ launchConfig?: { featureGates?: unknown } }>("/public/settings/operation")
     .then((setting) => {
       const gates = normalizeFeatureGates(setting?.launchConfig?.featureGates);
-      loadedTenantCode = tenantCode;
-      featureGatesState.value = gates;
-      writeStoredFeatureGates(gates);
-      loadingPromise = null;
+      if (getCurrentTenantCode() === tenantCode) {
+        loadedTenantCode = tenantCode;
+        featureGatesState.value = gates;
+        writeStoredFeatureGates(gates, tenantCode);
+      }
+      if (loadingRequest?.promise === promise) loadingRequest = null;
       return gates;
     })
     .catch(() => {
-      const fallback = stored || featureGatesState.value || { ...defaultFeatureGates };
-      featureGatesState.value = fallback;
-      loadingPromise = null;
+      const fallback = stored || { ...defaultFeatureGates };
+      if (getCurrentTenantCode() === tenantCode) featureGatesState.value = fallback;
+      if (loadingRequest?.promise === promise) loadingRequest = null;
       return fallback;
     });
-  return loadingPromise;
+  loadingRequest = { tenantCode, promise };
+  return promise;
 }
 
 export function featureGateForLink(url?: string): FeatureGateKey | null {
@@ -152,8 +157,8 @@ export function featureGateForLink(url?: string): FeatureGateKey | null {
   if (path === "/pages/forum/publish") return "forumPost";
   if (path.startsWith("/pages/forum/") || path === "/pages/user/forum-posts") return "forum";
   if (path === "/pages/community/publish" || path === "/pages/community/checkin") return "communityPublish";
-  if (path.startsWith("/pages/community/") || path === "/pages/user/community-posts") return "community";
-  if (path.startsWith("/pages/courses/") || path.startsWith("/pages/course/") || ["/pages/user/courses", "/pages/user/learning", "/pages/user/favorites"].includes(path)) return "courses";
+  if (path.startsWith("/pages/community/") || ["/pages/user/community-posts", "/pages/user/community-social", "/pages/user/content-appeals"].includes(path)) return "community";
+  if (path.startsWith("/pages/courses/") || path.startsWith("/pages/course/") || ["/pages/search/index", "/pages/user/courses", "/pages/user/learning", "/pages/user/favorites"].includes(path)) return "courses";
   if (path.startsWith("/pages/mall/") || path === "/pages/user/mall-orders" || path === "/pages/user/mall-order-detail") return "mall";
   if (path.startsWith("/pages/charity/") || path === "/pages/apply/aid") return "charity";
   if (path.startsWith("/pages/volunteer/")) return "volunteer";
@@ -178,6 +183,22 @@ export function featureDisabledText(url?: string) {
 
 export function showFeatureDisabledToast(url?: string) {
   uni.showToast({ title: featureDisabledText(url), icon: "none" });
+}
+
+export function showFeatureDisabledDialog(url?: string, onConfirm?: () => void) {
+  if (featureDisabledDialogOpen) return;
+  featureDisabledDialogOpen = true;
+  uni.showModal({
+    title: "暂时无法使用",
+    content: `${featureDisabledText(url)}。请稍后再试或联系主办方。`,
+    showCancel: false,
+    confirmText: "我知道了",
+    success: () => {
+      featureDisabledDialogOpen = false;
+      onConfirm?.();
+    },
+    fail: () => { featureDisabledDialogOpen = false; }
+  });
 }
 
 export function filterNavigationItemsByFeature(items: any[]) {
@@ -207,9 +228,9 @@ export function guardCurrentPageFeature() {
   const page = pages[pages.length - 1] as any;
   const path = page?.route ? `/${page.route}` : "";
   if (!path || isLinkAllowedByFeature(path)) return true;
-  showFeatureDisabledToast(path);
-  setTimeout(() => {
-    uni.reLaunch({ url: "/pages/index/index" });
-  }, 300);
+  showFeatureDisabledDialog(path, () => {
+    if (pages.length > 1) uni.navigateBack();
+    else uni.reLaunch({ url: withTenantCode("/pages/index/index") });
+  });
   return false;
 }

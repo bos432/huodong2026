@@ -16,6 +16,9 @@ export class MallCoupon {
   @ManyToOne(() => MallMerchant, { eager: true, nullable: true, onDelete: "SET NULL" })
   merchant!: MallMerchant | null;
 
+  @Column({ type: "varchar", length: 24, default: "merchant" })
+  issuerScope!: "platform" | "merchant";
+
   @Column({ type: "varchar", length: 40 })
   code!: string;
 
@@ -39,6 +42,15 @@ export class MallCoupon {
 
   @Column({ type: "int", default: 0 })
   usageLimit!: number;
+
+  @Column({ type: "int", default: 0 })
+  issuanceLimit!: number;
+
+  @Column({ type: "int", default: 0 })
+  claimedCount!: number;
+
+  @Column({ type: "varchar", length: 24, default: "full_refund" })
+  refundReleasePolicy!: "never" | "full_refund";
 
   @Column({ type: "int", default: 0 })
   perUserLimit!: number;

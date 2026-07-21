@@ -7,6 +7,7 @@ const TENANT_CODE_STORAGE_KEY = "h5_tenant_code";
 const TENANT_CODE_SOURCE_STORAGE_KEY = "h5_tenant_code_source";
 const ACTIVITY_LIST_INTENT_STORAGE_KEY = "h5_activity_list_intent";
 const USER_TOKEN_STORAGE_KEY = "user_token";
+const DEVICE_ID_STORAGE_KEY = "mall_promotion_device_id";
 const HOME_PAGE_URL = "/pages/index/index";
 const LOGIN_PAGE_URL = "/pages/user/login";
 const GUEST_PAGE_URLS = new Set([HOME_PAGE_URL, LOGIN_PAGE_URL, "/pages/user/my"]);
@@ -35,7 +36,7 @@ export type ActivityListIntent = {
 };
 
 export class ApiClientError extends Error {
-  constructor(message: string, public readonly requestId?: string) {
+  constructor(message: string, public readonly requestId?: string, public readonly statusCode?: number) {
     super(requestId ? `${message}（请求编号：${requestId}）` : message);
     this.name = "ApiClientError";
   }
@@ -51,6 +52,14 @@ function headerValue(headers: unknown, name: string) {
 function normalizeTenantCode(value?: unknown) {
   const code = typeof value === "string" ? value.trim() : "";
   return code || "";
+}
+
+export function getClientDeviceId() {
+  const current = String(uni.getStorageSync(DEVICE_ID_STORAGE_KEY) || "").trim();
+  if (current) return current;
+  const created = `device_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+  uni.setStorageSync(DEVICE_ID_STORAGE_KEY, created);
+  return created;
 }
 
 const DEFAULT_TENANT_CODE = normalizeTenantCode(import.meta.env.VITE_DEFAULT_TENANT_CODE);
@@ -105,6 +114,16 @@ export function setCurrentTenantCode(value: string) {
     const nextUrl = new URL(window.location.href);
     if (code) nextUrl.searchParams.set("tenantCode", code);
     else nextUrl.searchParams.delete("tenantCode");
+    const hashText = nextUrl.hash.replace(/^#/, "");
+    const hashQueryStart = hashText.indexOf("?");
+    if (hashText) {
+      const hashPath = hashQueryStart >= 0 ? hashText.slice(0, hashQueryStart) : hashText;
+      const hashParams = new URLSearchParams(hashQueryStart >= 0 ? hashText.slice(hashQueryStart + 1) : "");
+      if (code) hashParams.set("tenantCode", code);
+      else hashParams.delete("tenantCode");
+      const hashQuery = hashParams.toString();
+      nextUrl.hash = `${hashPath}${hashQuery ? `?${hashQuery}` : ""}`;
+    }
     window.history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
   }
   // #endif
@@ -127,7 +146,7 @@ export function getCurrentTenantCodeSource() {
 export type TenantBootstrap = {
   tenants: Array<{ id: number; code: string; name: string; region?: string | null }>;
   defaultTenant: { id: number; code: string; name: string; region?: string | null } | null;
-  policy?: { precedence?: string[]; serverDefaultTenantCode?: string | null };
+  policy?: { precedence?: string[]; serverDefaultTenantCode?: string | null; selectionPersistence?: string; assetScope?: string; assetScopeMessage?: string };
 };
 
 export async function applyTenantBootstrapDefault() {
@@ -202,16 +221,21 @@ export function request<T>(url: string, options: UniApp.RequestOptions = {}): Pr
   const tenantHeader = tenantCode && isPublicApiUrl(url) ? { "x-tenant-code": tenantCode } : {};
   const userToken = isPublicApiUrl(url) ? String(uni.getStorageSync(USER_TOKEN_STORAGE_KEY) || "") : "";
   const authHeader = userToken ? { Authorization: `Bearer ${userToken}` } : {};
+  const deviceHeader = isPublicApiUrl(url) ? { "x-device-id": getClientDeviceId() } : {};
   return new Promise((resolve, reject) => {
     uni.request({
       url: `${API_BASE}${requestUrl}`,
       method: options.method || "GET",
       data: options.data,
-      header: { "Content-Type": "application/json", ...tenantHeader, ...authHeader, ...(options.header || {}) },
+      header: { "Content-Type": "application/json", ...tenantHeader, ...authHeader, ...deviceHeader, ...(options.header || {}) },
       success(res) {
         const body = res.data as any;
-        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(body.data as T);
-        else reject(new ApiClientError(body?.message || "请求失败", body?.requestId || headerValue(res.header, "x-request-id")));
+        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) {
+          resolve(body.data as T);
+          return;
+        }
+        if (res.statusCode === 401) clearUser();
+        reject(new ApiClientError(body?.message || "请求失败", body?.requestId || headerValue(res.header, "x-request-id"), res.statusCode));
       },
       fail(error) {
         reject(clientError(error, "请求失败", { method: options.method || "GET", url: requestUrl }));
@@ -226,17 +250,21 @@ function requestPublicArrayBuffer(url: string): Promise<ArrayBuffer> {
   const tenantHeader = tenantCode && isPublicApiUrl(url) ? { "x-tenant-code": tenantCode } : {};
   const userToken = isPublicApiUrl(url) ? String(uni.getStorageSync(USER_TOKEN_STORAGE_KEY) || "") : "";
   const authHeader = userToken ? { Authorization: `Bearer ${userToken}` } : {};
+  const deviceHeader = isPublicApiUrl(url) ? { "x-device-id": getClientDeviceId() } : {};
   return new Promise((resolve, reject) => {
     uni.request({
       url: `${API_BASE}${requestUrl}`,
       method: "GET",
       responseType: "arraybuffer",
-      header: { ...tenantHeader, ...authHeader },
+      header: { ...tenantHeader, ...authHeader, ...deviceHeader },
       success(res) {
         const data = res.data as unknown;
         const isArrayBuffer = data instanceof ArrayBuffer || Object.prototype.toString.call(data) === "[object ArrayBuffer]";
         if (res.statusCode >= 200 && res.statusCode < 300 && isArrayBuffer) resolve(data as ArrayBuffer);
-        else reject(new ApiClientError("二维码图片下载失败", headerValue(res.header, "x-request-id")));
+        else {
+          if (res.statusCode === 401) clearUser();
+          reject(new ApiClientError("二维码图片下载失败", headerValue(res.header, "x-request-id"), res.statusCode));
+        }
       },
       fail(error) {
         reject(clientError(error, "二维码图片下载失败", { method: "GET", url: requestUrl }));
@@ -274,6 +302,7 @@ export async function requestCheckInQrImage(registrationId: number) {
 }
 
 function isInvalidUserSessionError(error: unknown) {
+  if (error instanceof ApiClientError && error.statusCode === 401) return true;
   const message = error instanceof Error ? error.message : String((error as any)?.message || error || "");
   return message.includes("登录凭证无效") || message.includes("登录已过期") || message.includes("登录已失效");
 }
@@ -345,6 +374,7 @@ function saveUserSession(result: any, phone: string, nickname?: string) {
   const user = result.user || result;
   uni.setStorageSync("user_id", user.id);
   if (result.userAccessToken) uni.setStorageSync(USER_TOKEN_STORAGE_KEY, result.userAccessToken);
+  else uni.removeStorageSync(USER_TOKEN_STORAGE_KEY);
   uni.setStorageSync("user_phone", phone);
   uni.setStorageSync("user_nickname", user.nickname || nickname || "");
   return user;
@@ -413,7 +443,7 @@ export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: s
       url: `${API_BASE}${appendTenantCode("/public/me/avatar", tenantCode)}`,
       filePath,
       name: "file",
-      header: { ...(tenantCode ? { "x-tenant-code": tenantCode } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      header: { ...(tenantCode ? { "x-tenant-code": tenantCode } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), "x-device-id": getClientDeviceId() },
       success(res) {
         let body: any = res.data;
         if (typeof body === "string") {
@@ -441,11 +471,23 @@ export function uploadMallRefundImage(filePath: string): Promise<{ url: string; 
   return uploadPublicImage("/public/me/mall/refund-images", filePath);
 }
 
+export function uploadMallMerchantApplicationFile(filePath: string): Promise<{ url: string; path: string; originalName?: string }> {
+  return uploadPublicImage("/public/me/mall/merchant-application-files", filePath);
+}
+
+export function uploadRegistrationAttachment(filePath: string): Promise<{ url: string; path: string; originalName?: string }> {
+  return uploadPublicImage("/public/me/registration-attachments", filePath);
+}
+
+export function uploadAidApplicationMaterial(applicationId: number, filePath: string, category = "supporting_document") {
+  return uploadPublicImage(`/public/me/aid-applications/${applicationId}/materials`, filePath, { category, businessKey: `aid-material:${applicationId}:${Date.now()}:${Math.random().toString(16).slice(2)}` });
+}
+
 export function uploadCommunityPostImage(filePath: string): Promise<{ url: string; path: string }> {
   return uploadPublicImage("/public/me/community/post-images", filePath);
 }
 
-function uploadPublicImage(path: string, filePath: string): Promise<{ url: string; path: string }> {
+function uploadPublicImage(path: string, filePath: string, formData?: Record<string, string>): Promise<any> {
   const token = getUserToken();
   const tenantCode = getCurrentTenantCode();
   return new Promise((resolve, reject) => {
@@ -453,7 +495,8 @@ function uploadPublicImage(path: string, filePath: string): Promise<{ url: strin
       url: `${API_BASE}${appendTenantCode(path, tenantCode)}`,
       filePath,
       name: "file",
-      header: { ...(tenantCode ? { "x-tenant-code": tenantCode } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+      formData,
+      header: { ...(tenantCode ? { "x-tenant-code": tenantCode } : {}), ...(token ? { Authorization: `Bearer ${token}` } : {}), "x-device-id": getClientDeviceId() },
       success(res) {
         let body: any = res.data;
         if (typeof body === "string") {
@@ -486,8 +529,10 @@ export async function loginWechat(code: string, nickname?: string, avatarUrl?: s
   const user = result.user || result;
   uni.setStorageSync("user_id", user.id);
   if (result.userAccessToken) uni.setStorageSync(USER_TOKEN_STORAGE_KEY, result.userAccessToken);
+  else uni.removeStorageSync(USER_TOKEN_STORAGE_KEY);
   uni.setStorageSync("user_nickname", user.nickname || nickname || "");
   if (user.phone) uni.setStorageSync("user_phone", user.phone);
+  else uni.removeStorageSync("user_phone");
   return user;
 }
 

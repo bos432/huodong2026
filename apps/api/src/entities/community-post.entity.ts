@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Activity } from "./activity.entity";
 import { Tenant } from "./tenant.entity";
 
@@ -6,6 +6,7 @@ export type CommunityPostSource = "official" | "participant";
 export type CommunityPostStatus = "pending" | "approved" | "rejected";
 
 @Entity("community_posts")
+@Index("IDX_community_posts_tenantId", ["tenant"])
 export class CommunityPost {
   @PrimaryGeneratedColumn() id!: number;
   @Column() userId!: number;
@@ -15,6 +16,7 @@ export class CommunityPost {
   @Column({ default: 0 }) likes!: number;
   @Column({ default: 0 }) comments!: number;
   @Column({ default: 0 }) shareCount!: number;
+  @Column({ default: 0 }) favoriteCount!: number;
   @Column({ type: "varchar", length: 24, default: "official" }) source!: CommunityPostSource;
   @Column({ type: "varchar", length: 24, default: "approved" }) status!: CommunityPostStatus;
   @Column({ type: "varchar", length: 120, nullable: true }) city!: string | null;
@@ -23,6 +25,7 @@ export class CommunityPost {
   @Column({ type: "simple-json", nullable: true }) posterConfig!: Record<string, unknown> | null;
   @Column({ type: "datetime", nullable: true }) approvedAt!: Date | null;
   @Column({ default: true }) visible!: boolean;
+  @Column({ type:"datetime", nullable:true }) deletedAt!:Date|null;
   @ManyToOne(() => Activity, { eager: true, nullable: true, onDelete: "SET NULL" })
   @JoinColumn({ name: "activityId" })
   activity!: Activity | null;

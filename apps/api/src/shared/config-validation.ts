@@ -50,6 +50,11 @@ export function inspectRuntimeConfig(config: ConfigService): RuntimeConfigInspec
   addCheck(checks, "NODE_ENV", "运行环境", "ok", isProduction ? "当前为生产环境，严格配置校验已启用。" : "当前不是生产环境，生产上线前需切换为 production。", environment);
   addReleaseChecks(checks, config, isProduction);
   addSecretCheck(checks, "JWT_SECRET", "JWT 密钥", config.get<string>("JWT_SECRET", ""), 32, isProduction, unsafeValues, "请替换为至少 32 位的随机字符串。");
+  addSecretCheck(checks, "CONFIG_ENCRYPTION_KEY", "配置加密密钥", config.get<string>("CONFIG_ENCRYPTION_KEY", ""), 32, isProduction, unsafeValues, "请配置独立的至少 32 位随机密钥，用于加密短信、支付、微信和存储凭据。");
+  addSecretCheck(checks, "AID_LOOKUP_HASH_SECRET", "援助申请检索哈希密钥", config.get<string>("AID_LOOKUP_HASH_SECRET", ""), 32, isProduction, unsafeValues, "请配置独立的至少 32 位随机密钥，用于援助申请手机号盲索引。");
+  addSecretCheck(checks, "ECOSYSTEM_LOOKUP_HASH_SECRET", "大使伙伴检索哈希密钥", config.get<string>("ECOSYSTEM_LOOKUP_HASH_SECRET", ""), 32, isProduction, unsafeValues, "请配置独立的至少 32 位随机密钥，用于大使与伙伴手机号盲索引。");
+  addSecretCheck(checks, "VOLUNTEER_LOOKUP_HASH_SECRET", "志愿者检索哈希密钥", config.get<string>("VOLUNTEER_LOOKUP_HASH_SECRET", ""), 32, isProduction, unsafeValues, "请配置独立的至少 32 位随机密钥，用于志愿者手机号盲索引。");
+  addSecretCheck(checks, "VOLUNTEER_ATTENDANCE_SECRET", "志愿签到签名密钥", config.get<string>("VOLUNTEER_ATTENDANCE_SECRET", ""), 32, isProduction, unsafeValues, "请配置独立的至少 32 位随机密钥，用于志愿签到凭证签名。");
   addSecretCheck(checks, "DB_PASSWORD", "数据库密码", config.get<string>("DB_PASSWORD", ""), 12, isProduction, unsafeValues, "请替换为强数据库密码，并避免使用默认示例值。");
   addDatabaseSyncCheck(checks, config, isProduction);
   addOriginCheck(checks, "CORS_ORIGIN", "跨域白名单", config.get<string>("CORS_ORIGIN", ""), isProduction);
@@ -57,6 +62,9 @@ export function inspectRuntimeConfig(config: ConfigService): RuntimeConfigInspec
   addOriginCheck(checks, "PUBLIC_ADMIN_ORIGIN", "后台公开域名", config.get<string>("PUBLIC_ADMIN_ORIGIN", ""), isProduction);
   addOriginCheck(checks, "PUBLIC_API_ORIGIN", "API 公开域名", config.get<string>("PUBLIC_API_ORIGIN", ""), isProduction);
   addUploadDirCheck(checks, config.get<string>("UPLOAD_DIR", "uploads"));
+  addCheck(checks, "PRIVATE_CREDENTIAL_DIR", "支付凭据私有目录", config.get<string>("PRIVATE_CREDENTIAL_DIR", "") ? "ok" : isProduction ? "error" : "warning", config.get<string>("PRIVATE_CREDENTIAL_DIR", "") ? "已配置独立私有目录，需确保不由 Web 服务器公开。" : "请配置支付证书和私钥的独立持久化目录。", config.get<string>("PRIVATE_CREDENTIAL_DIR", "") || "未配置");
+  addCheck(checks, "PRIVATE_DOCUMENT_DIR", "援助材料私有目录", config.get<string>("PRIVATE_DOCUMENT_DIR", "") ? "ok" : isProduction ? "error" : "warning", config.get<string>("PRIVATE_DOCUMENT_DIR", "") ? "已配置援助材料加密持久化目录，禁止由 Web 服务器公开。" : "请配置援助申请敏感材料的独立持久化目录。", config.get<string>("PRIVATE_DOCUMENT_DIR", "") || "未配置");
+  addStorageProviderCheck(checks, config, isProduction);
   addSecurityRuntimeChecks(checks, config, isProduction);
   addH5AuthCheck(checks, config, isProduction);
   addH5CodeRateLimitChecks(checks, config);
@@ -67,7 +75,7 @@ export function inspectRuntimeConfig(config: ConfigService): RuntimeConfigInspec
   addMallMultiMerchantRuntimeChecks(checks, config);
   addSmsProviderCheck(checks, config);
   addProviderCheck(checks, config, "EMAIL_PROVIDER_ENABLED", ["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"], "邮件服务");
-  addProviderCheck(checks, config, "WECHAT_MESSAGE_PROVIDER_ENABLED", ["WECHAT_APP_ID", "WECHAT_APP_SECRET"], "微信订阅消息");
+  addProviderCheck(checks, config, "WECHAT_MESSAGE_PROVIDER_ENABLED", ["WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_MESSAGE_TEMPLATE_ID"], "微信订阅消息");
   addNumberCheck(checks, "OFFLINE_PAYMENT_EXPIRE_MINUTES", "线下付款有效期", Number(config.get("OFFLINE_PAYMENT_EXPIRE_MINUTES", 1440)), 5, 43200, "分钟");
   addWorkerCheck(checks, config, isProduction);
 
@@ -100,6 +108,11 @@ const optionalWarningKeys = new Set([
 const productionRequiredKeys = new Set([
   "NODE_ENV",
   "JWT_SECRET",
+  "CONFIG_ENCRYPTION_KEY",
+  "AID_LOOKUP_HASH_SECRET",
+  "ECOSYSTEM_LOOKUP_HASH_SECRET",
+  "VOLUNTEER_LOOKUP_HASH_SECRET",
+  "VOLUNTEER_ATTENDANCE_SECRET",
   "DB_PASSWORD",
   "DB_SYNCHRONIZE",
   "CORS_ORIGIN",
@@ -188,6 +201,22 @@ function addOriginCheck(checks: RuntimeConfigCheck[], key: string, label: string
   const status: RuntimeConfigCheckStatus = local || !https ? (strict ? "error" : "warning") : "ok";
   const message = status === "ok" ? "已配置真实域名。" : "生产环境应使用 HTTPS 真实域名，不能继续使用 localhost 或 example.com。";
   addCheck(checks, key, label, status, message, maskOrigins(value));
+}
+
+function addStorageProviderCheck(checks: RuntimeConfigCheck[], config: ConfigService, strict: boolean) {
+  const provider = config.get<string>("STORAGE_PROVIDER", "local").trim();
+  if (provider === "local") {
+    addCheck(checks, "STORAGE_PROVIDER", "对象存储", strict ? "warning" : "ok", strict ? "生产环境建议配置 OSS、COS 或 S3 兼容对象存储，并启用独立文件域名。" : "当前使用本地文件存储。", provider);
+    return;
+  }
+  const supported = ["aliyun-oss", "tencent-cos", "s3"].includes(provider);
+  const required = ["STORAGE_ENDPOINT", "STORAGE_BUCKET", "STORAGE_ACCESS_KEY_ID", "STORAGE_ACCESS_KEY_SECRET", "STORAGE_PUBLIC_BASE_URL"];
+  const missing = required.filter((key) => !config.get<string>(key, "").trim());
+  const publicBase = config.get<string>("STORAGE_PUBLIC_BASE_URL", "");
+  const insecure = Boolean(publicBase) && !publicBase.startsWith("https://");
+  const status: RuntimeConfigCheckStatus = supported && !missing.length && (!strict || !insecure) ? "ok" : strict ? "error" : "warning";
+  const issues = [...(!supported ? ["不支持的存储服务商"] : []), ...(missing.length ? [`缺少 ${missing.join("、")}`] : []), ...(insecure ? ["文件公开域名应使用 HTTPS"] : [])];
+  addCheck(checks, "STORAGE_PROVIDER", "对象存储", status, issues.length ? issues.join("；") : "对象存储基础参数已配置，可继续执行上传/读取连通测试。", provider);
 }
 
 function addPaymentSecretCheck(checks: RuntimeConfigCheck[], key: string, label: string, value: string, strict: boolean) {
@@ -344,6 +373,11 @@ function addWorkerCheck(checks: RuntimeConfigCheck[], config: ConfigService, str
   const interval = Number(config.get("ORDER_CLOSE_WORKER_INTERVAL_SECONDS", 300));
   if (!enabled) addCheck(checks, "ORDER_CLOSE_WORKER_ENABLED", "自动关单任务", "warning", "自动关单任务未启用，待付款订单不会自动关闭。", "未启用");
   else addNumberCheck(checks, "ORDER_CLOSE_WORKER_INTERVAL_SECONDS", "自动关单间隔", interval, 30, 3600, "秒");
+  addNumberCheck(checks, "MALL_PENDING_PAYMENT_EXPIRE_MINUTES", "商城待支付有效期", Number(config.get("MALL_PENDING_PAYMENT_EXPIRE_MINUTES", 30)), 1, 43200, "分钟");
+  addNumberCheck(checks, "MALL_PENDING_CONFIRM_EXPIRE_MINUTES", "商城待确认有效期", Number(config.get("MALL_PENDING_CONFIRM_EXPIRE_MINUTES", 1440)), 1, 43200, "分钟");
+  addNumberCheck(checks, "MALL_PENDING_ORDER_WORKER_INTERVAL_MINUTES", "商城订单任务间隔", Number(config.get("MALL_PENDING_ORDER_WORKER_INTERVAL_MINUTES", 5)), 1, 1440, "分钟");
+  addNumberCheck(checks, "MALL_PENDING_ORDER_BATCH_SIZE", "商城自动关单批大小", Number(config.get("MALL_PENDING_ORDER_BATCH_SIZE", 50)), 1, 200, "单");
+  addNumberCheck(checks, "MALL_PENDING_ORDER_MAX_BATCHES", "商城自动关单最大批次", Number(config.get("MALL_PENDING_ORDER_MAX_BATCHES", 20)), 1, 100, "批");
 
   const forceFail = config.get<string>("NOTIFICATION_FORCE_FAIL", "false") === "true";
   addCheck(

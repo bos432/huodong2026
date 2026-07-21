@@ -53,4 +53,16 @@ describe("ApiExceptionFilter", () => {
     expect(response.json.mock.calls[0][0]).not.toHaveProperty("path");
     expect(consoleError).not.toHaveBeenCalled();
   });
+
+  it("maps database unique conflicts to a stable 409 response", () => {
+    const filter = new ApiExceptionFilter();
+    const response = { headersSent: false, status: vi.fn().mockReturnThis(), json: vi.fn() };
+    filter.catch(Object.assign(new Error("Duplicate entry"), { code: "ER_DUP_ENTRY", errno: 1062 }), httpHost(response));
+    expect(response.status).toHaveBeenCalledWith(HttpStatus.CONFLICT);
+    expect(response.json).toHaveBeenCalledWith(expect.objectContaining({
+      code: HttpStatus.CONFLICT,
+      message: "数据已存在或编码重复，请刷新后调整再提交。",
+      data: null
+    }));
+  });
 });

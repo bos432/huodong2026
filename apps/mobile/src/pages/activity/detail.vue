@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getUserToken, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
+import { addActivityToCalendar } from "../../activity-calendar";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -15,11 +18,60 @@ const error = ref("");
 const inviteCode = ref("");
 const channelCode = ref("");
 const source = ref("h5");
+const activeAction = ref("");
+const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;
   return true;
+}));
+
+async function reportReview(review: any) {
+  const actionKey = `report:${review?.id || 0}`;
+  if (activeAction.value) return;
+  try { await ensureUser(); } catch { return; }
+  activeAction.value = actionKey;
+  const reasons = ["广告或垃圾信息", "辱骂或不友善内容", "虚假或误导信息", "泄露个人隐私", "其他违规内容"];
+  uni.showActionSheet({ itemList: reasons, success: async ({ tapIndex }) => {
+    try {
+      const result = await request<any>(`/public/reviews/${review.id}/report`, { method: "POST", data: { reason: reasons[tapIndex] } });
+      uni.showToast({ title: result.idempotent ? "你已举报过" : "举报已提交", icon: "none" });
+    } catch (error: any) { uni.showToast({ title: reviewSafeText(error.message || "举报失败"), icon: "none" }); }
+    finally { if (activeAction.value === actionKey) activeAction.value = ""; }
+  }, fail: () => { if (activeAction.value === actionKey) activeAction.value = ""; } });
+}
+
+function activitySharePath() {
+  const query = [
+    `id=${activity.value?.id || ""}`,
+    inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : "",
+    channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
+    "source=wechat_share"
+  ].filter(Boolean).join("&");
+  return withTenantCode(`/pages/activity/detail?${query}`);
+}
+
+function defaultSource() {
+  // #ifdef MP-WEIXIN
+  return "wechat_mini_program";
+  // #endif
+  // #ifdef H5
+  return "h5";
+  // #endif
+  return "mobile";
+}
+
+onShareAppMessage(() => ({
+  title: activity.value?.shareTitle || activity.value?.title || "活动详情",
+  path: activitySharePath(),
+  imageUrl: activity.value?.shareImageUrl || activity.value?.coverUrl || undefined
+}));
+
+onShareTimeline(() => ({
+  title: activity.value?.shareTitle || activity.value?.title || "活动详情",
+  query: activitySharePath().split("?")[1] || "",
+  imageUrl: activity.value?.shareImageUrl || activity.value?.coverUrl || undefined
 }));
 
 function registrationPaused() {
@@ -94,7 +146,10 @@ function priceText(price: string | number) {
 
 function formatTime(value: string) {
   if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.replace("T", " ").slice(0, 16);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
 }
 
 function locationLatitude() {
@@ -133,12 +188,16 @@ function showMemberAccess() {
 const hasGroupQrCode = computed(() => Boolean(activity.value?.hasGroupQrCode));
 
 async function makeInvite() {
+  if (activeAction.value || !activity.value?.id) return;
+  activeAction.value = "invite";
   try {
     await ensureUser();
     invite.value = await request(`/public/activities/${activity.value.id}/share-poster`, { method: "POST", data: {} });
     uni.showToast({ title: "邀请链接已生成", icon: "success" });
   } catch (err: any) {
     uni.showToast({ title: reviewSafeText(err.message || "生成失败"), icon: "none" });
+  } finally {
+    if (activeAction.value === "invite") activeAction.value = "";
   }
 }
 
@@ -184,11 +243,27 @@ function openLocation() {
   else copyText(activity.value?.location);
 }
 
-function subscribeNotice() {
-  uni.showToast({ title: "提醒已记录，请关注后续通知", icon: "none" });
+async function subscribeNotice() {
+  if (activeAction.value || !activity.value) return;
+  activeAction.value = "calendar";
+  try {
+    await addActivityToCalendar({
+      title: activity.value?.title || "慢π活动",
+      startTime: activity.value?.startTime,
+      endTime: activity.value?.endTime,
+      location: activity.value?.location,
+      description: activity.value?.description || "慢π活动提醒"
+    });
+    uni.showToast({ title: "已添加活动提醒", icon: "success" });
+  } catch (error: any) {
+    uni.showToast({ title: reviewSafeText(error?.message || "添加提醒失败"), icon: "none" });
+  } finally {
+    if (activeAction.value === "calendar") activeAction.value = "";
+  }
 }
 
 async function load() {
+  const token = loadGuard.begin();
   loading.value = true;
   error.value = "";
   try {
@@ -197,7 +272,7 @@ async function load() {
     const id = Number(options.id);
     inviteCode.value = options.inviteCode || "";
     channelCode.value = options.channelCode || "";
-    source.value = options.source || "h5";
+    source.value = options.source || defaultSource();
     const query = [
       inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : "",
       channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
@@ -207,17 +282,17 @@ async function load() {
       request(`/public/activities/${id}/enhanced?${query}`),
       request("/public/settings/operation")
     ]);
+    if (!loadGuard.isCurrent(token)) return;
     activity.value = reviewSafeData(detail);
     operationSetting.value = reviewSafeData(setting);
   } catch (err: any) {
-    error.value = reviewSafeText(err.message || "加载失败");
+    if (loadGuard.isCurrent(token)) error.value = reviewSafeText(err.message || "加载失败");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
-onMounted(load);
-onMounted(loadDecoration);
+onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 </script>
 
 <template>
@@ -225,7 +300,7 @@ onMounted(loadDecoration);
     <view v-if="loading" class="card subtle">加载中...</view>
     <view v-else-if="error" class="card">
       <view class="subtle">{{ error }}</view>
-      <view class="button secondary retry" @click="load">重试</view>
+      <view class="button secondary retry" role="button" tabindex="0" aria-label="重新加载活动详情" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view>
     </view>
 
     <template v-else-if="activity">
@@ -288,14 +363,14 @@ onMounted(loadDecoration);
             :scale="16"
             @click="openLocation"
           />
-          <view v-else class="map-link" @click="openLocation">
+          <view v-else class="map-link" role="button" tabindex="0" aria-label="打开活动地点" @click="openLocation" @keyup.enter="openLocation" @keyup.space.prevent="openLocation">
             <view class="map-pin">地</view>
             <view>
               <view class="name">查看地图</view>
               <view class="subtle">{{ activity.location }}</view>
             </view>
           </view>
-          <view class="map-action" @click="openLocation">{{ mapActionText() }}</view>
+        <view class="map-action" role="button" tabindex="0" aria-label="打开地图导航" @click="openLocation" @keyup.enter="openLocation" @keyup.space.prevent="openLocation">{{ mapActionText() }}</view>
         </view>
         <view class="line"><text>费用</text><text>{{ priceText(activity.price) }}</text></view>
         <view v-if="activity.minMemberLevel" class="line"><text>门槛</text><text>{{ activity.minMemberLevel.name }}及以上会员</text></view>
@@ -318,15 +393,15 @@ onMounted(loadDecoration);
 
       <view class="card action-card">
         <view class="section-title">快捷操作</view>
-        <view class="action-item" @click="makeInvite">
+        <view class="action-item" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'invite'" aria-label="邀请好友" :class="{ disabled: Boolean(activeAction) }" @click="makeInvite" @keyup.enter="makeInvite" @keyup.space.prevent="makeInvite">
           <text>邀</text>
           <view>邀请好友</view>
         </view>
-        <view class="action-item" @click="subscribeNotice">
+        <view class="action-item" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'calendar'" aria-label="订阅活动通知" :class="{ disabled: Boolean(activeAction) }" @click="subscribeNotice" @keyup.enter="subscribeNotice" @keyup.space.prevent="subscribeNotice">
           <text>醒</text>
-          <view>活动提醒</view>
+          <view>添加到日历</view>
         </view>
-        <view class="action-item" @click="goService">
+        <view class="action-item" role="button" tabindex="0" aria-label="联系客服" @click="goService" @keyup.enter="goService" @keyup.space.prevent="goService">
           <text>服</text>
           <view>客服说明</view>
         </view>
@@ -345,12 +420,12 @@ onMounted(loadDecoration);
       </view>
 
       <view class="card invite-card">
-        <view class="row"><view class="title small">邀请好友</view><view class="mini-button" @click="makeInvite">生成</view></view>
+        <view class="row"><view class="title small">邀请好友</view><view class="mini-button" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :class="{ disabled: Boolean(activeAction) }" @click="makeInvite" @keyup.enter="makeInvite" @keyup.space.prevent="makeInvite">{{ activeAction === "invite" ? "生成中" : "生成" }}</view></view>
         <view class="body-text invite-copy">生成专属邀请码，用于追踪分享访问和后续邀请报名。</view>
         <view v-if="invite" class="invite-box">
           <view class="name">邀请码：{{ invite.code }}</view>
           <view class="subtle">{{ invite.inviteText }}</view>
-          <view class="share-url" @click="copyText(invite.shareUrl)">{{ invite.shareUrl }}</view>
+        <view class="share-url" role="button" tabindex="0" aria-label="复制邀请链接" @click="copyText(invite.shareUrl)" @keyup.enter="copyText(invite.shareUrl)" @keyup.space.prevent="copyText(invite.shareUrl)">{{ invite.shareUrl }}</view>
           <view class="copy-hint">点击链接可复制</view>
         </view>
       </view>
@@ -379,19 +454,19 @@ onMounted(loadDecoration);
       <view class="card" v-if="activity.notice"><view class="title small">报名须知</view><text class="section-content">{{ activity.notice }}</text></view>
       <view class="card" v-if="activity.reviews?.length">
         <view class="title small">活动评价</view>
-        <view v-for="review in activity.reviews" :key="review.id" class="review"><view class="name">{{ "★".repeat(review.rating) }}</view><view>{{ review.content }}</view><view v-if="review.adminReply" class="subtle reply">主办方回复：{{ review.adminReply }}</view></view>
+        <view v-for="review in activity.reviews" :key="review.id" class="review"><view class="review-head"><view class="name">{{ "★".repeat(review.rating) }}<text v-if="review.featured" class="featured-review">精选</text></view><view class="report-link" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :class="{ disabled: Boolean(activeAction) }" @click="reportReview(review)" @keyup.enter="reportReview(review)" @keyup.space.prevent="reportReview(review)">{{ activeAction === `report:${review.id}` ? "提交中" : "举报" }}</view></view><view>{{ review.content }}</view><view v-if="review.adminReply" class="subtle reply">主办方回复：{{ review.adminReply }}</view></view>
       </view>
 
       <view class="bottom-bar" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
         <view class="bottom-info"><text>{{ priceText(activity.price) }}</text><text>{{ activity.displayStatus === "full" ? "候补开放" : statusText(activity.displayStatus) }}</text></view>
-        <view class="button action-button" :class="{ secondary: !canRegister() }" @click="register">{{ registerButtonText() }}</view>
+        <view class="button action-button" role="button" tabindex="0" :aria-disabled="!canRegister()" :aria-label="registerButtonText()" :class="{ secondary: !canRegister() }" @click="register" @keyup.enter="register" @keyup.space.prevent="register">{{ registerButtonText() }}</view>
       </view>
     </template>
   </view>
 </template>
 
 <style scoped>
-.detail-page { padding-bottom: 168rpx; }
+.detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(24rpx + env(safe-area-inset-top)) 24rpx calc(168rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
 .detail-hero {
   position: relative;
   overflow: hidden;

@@ -1,12 +1,11 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
-import { mkdirSync } from "fs";
-import { diskStorage } from "multer";
-import { extname, join } from "path";
+import { extname } from "path";
 import { AdminRole, AdminRoles } from "../admin/admin-roles";
 import { CurrentAdmin } from "../admin/current-admin.decorator";
-import { MallCategoryDto, MallCommissionBatchSettleDto, MallCommissionSettleDto, MallCouponDto, MallFlashSaleDto, MallGroupBuyDto, MallInventoryAdjustDto, MallListQueryDto, MallLogisticsCompanyDto, MallMerchantAccessDto, MallMerchantDto, MallMerchantPaymentAccountDto, MallOrderCloseDto, MallProductDto, MallPromotionCodeDto, MallRefundReviewDto, MallReviewModerationDto, MallSettlementGenerateDto, MallSettlementPaidDto, MallSettlementReviewDto, MallShipDto } from "./mall.dto";
+import { sanitizeAuditValue } from "../admin/audit-sanitizer";
+import { MallBrandDto, MallCategoryDto, MallCommissionBatchSettleDto, MallCommissionRiskReviewDto, MallCommissionRuleDto, MallCommissionSettleDto, MallCouponDto, MallFlashSaleDto, MallGroupBuyDto, MallInventoryAdjustDto, MallInventoryAnomalyResolveDto, MallListQueryDto, MallLogisticsCompanyDto, MallMerchantAccessDto, MallMerchantApplicationReviewDto, MallMerchantContractDto, MallMerchantDto, MallMerchantPaymentAccountDto, MallMerchantQualificationDto, MallMerchantQualificationReviewDto, MallOrderCloseDto, MallProductDto, MallProductReviewDto, MallPromotionCodeDto, MallRefundExchangeShipmentDto, MallRefundMessageDto, MallRefundReviewDto, MallReviewModerationDto, MallReviewReportReviewDto, MallSettlementAdjustmentDto, MallSettlementGenerateDto, MallSettlementPaidDto, MallSettlementReviewDto, MallShipDto, MallShipmentUpdateDto, MallStatementFetchDto, MallStatementImportDto, MallStatementResolveDto } from "./mall.dto";
 import { MallService } from "./mall.service";
 
 const MALL_OPERATION_ROLES = [AdminRole.SuperAdmin, AdminRole.Operator];
@@ -18,12 +17,23 @@ function paymentCredentialExtension(file: Express.Multer.File) {
   return extname(file.originalname || "").toLowerCase();
 }
 
-function paymentCredentialDirectory() {
-  const dir = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "payment-credentials");
-  mkdirSync(dir, { recursive: true });
-  return dir;
+function sanitizeMallStatementResponse(value: unknown): unknown {
+  const sanitized = sanitizeAuditValue(value);
+  const removed = new Set(["passwordHash", "openid", "unionid", "wechatAppId", "settings", "businessSnapshot", "addressSnapshot", "rawPayload"]);
+  const strip = (current: any): any => {
+    if (Array.isArray(current)) return current.map(strip);
+    if (!current || typeof current !== "object") return current;
+    for (const key of Object.keys(current)) {
+      if (removed.has(key)) delete current[key];
+      else current[key] = strip(current[key]);
+    }
+    if (current.user && typeof current.user === "object") current.user = { id: current.user.id, nickname: current.user.nickname, phone: current.user.phone };
+    if (current.tenant && typeof current.tenant === "object") current.tenant = { id: current.tenant.id, code: current.tenant.code, name: current.tenant.name };
+    if (current.merchant && typeof current.merchant === "object") current.merchant = { id: current.merchant.id, code: current.merchant.code, name: current.merchant.name };
+    return current;
+  };
+  return strip(sanitized);
 }
-const PAYMENT_CREDENTIAL_DIRECTORY = paymentCredentialDirectory();
 
 @Controller("admin/mall")
 export class MallAdminController {
@@ -58,6 +68,50 @@ export class MallAdminController {
   updateMerchant(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.saveMerchant(dto, id, admin);
   }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Get("merchant-applications")
+  merchantApplications(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.adminMerchantApplications(query, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchant-applications/:id/review")
+  reviewMerchantApplication(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantApplicationReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.reviewMerchantApplication(id, dto, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Get("merchant-qualifications")
+  merchantQualifications(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.adminMerchantQualifications(query, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchant-qualifications")
+  createMerchantQualification(@Body() dto: MallMerchantQualificationDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.saveMerchantQualification(dto, undefined, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Patch("merchant-qualifications/:id")
+  updateMerchantQualification(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantQualificationDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.saveMerchantQualification(dto, id, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchant-qualifications/:id/review")
+  reviewMerchantQualification(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantQualificationReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.reviewMerchantQualification(id, dto, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Get("merchant-contracts")
+  merchantContracts(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.adminMerchantContracts(query, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchant-contracts")
+  createMerchantContract(@Body() dto: MallMerchantContractDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.saveMerchantContract(dto, undefined, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Patch("merchant-contracts/:id")
+  updateMerchantContract(@Param("id", ParseIntPipe) id: number, @Body() dto: MallMerchantContractDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.saveMerchantContract(dto, id, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchant-contracts/:id/activate")
+  activateMerchantContract(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.activateMerchantContract(id, admin); }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("merchant-governance/run")
+  runMerchantGovernance(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.service.runMerchantGovernanceLifecycle(admin); }
 
   @AdminRoles(AdminRole.SuperAdmin)
   @Get("merchant-access")
@@ -98,19 +152,12 @@ export class MallAdminController {
   @AdminRoles(...MALL_PAYMENT_ROLES)
   @Post("merchant-payment-credentials")
   @UseInterceptors(FileInterceptor("file", {
-    storage: diskStorage({
-      destination: PAYMENT_CREDENTIAL_DIRECTORY,
-      filename: (_req, file, callback) => {
-        const suffix = PAYMENT_CREDENTIAL_EXTENSIONS.has(paymentCredentialExtension(file)) ? paymentCredentialExtension(file) : ".pem";
-        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
-      }
-    }),
     limits: { fileSize: 2 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
       callback(null, PAYMENT_CREDENTIAL_EXTENSIONS.has(paymentCredentialExtension(file)));
     }
   }))
-  uploadMerchantPaymentCredential(@UploadedFile() file: Express.Multer.File) {
+  async uploadMerchantPaymentCredential(@UploadedFile() file: Express.Multer.File) {
     return this.service.uploadedMerchantPaymentCredential(file);
   }
 
@@ -122,14 +169,14 @@ export class MallAdminController {
 
   @AdminRoles(AdminRole.SuperAdmin)
   @Post("products/:id/approve")
-  approveProduct(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.approveProduct(id, admin);
+  approveProduct(@Param("id", ParseIntPipe) id: number, @Body() dto: MallProductReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.approveProduct(id, dto, admin);
   }
 
   @AdminRoles(AdminRole.SuperAdmin)
   @Post("products/:id/reject")
-  rejectProduct(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.rejectProduct(id, admin);
+  rejectProduct(@Param("id", ParseIntPipe) id: number, @Body() dto: MallProductReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.rejectProduct(id, dto, admin);
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
@@ -148,9 +195,21 @@ export class MallAdminController {
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
+  @Get("settlements/:id")
+  settlementDetail(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminSettlementDetail(id, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
   @Post("settlements/generate")
   generateSettlement(@Body() dto: MallSettlementGenerateDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.generateSettlement(dto, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("settlements/:id/adjustments")
+  addSettlementAdjustment(@Param("id", ParseIntPipe) id: number, @Body() dto: MallSettlementAdjustmentDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.addSettlementAdjustment(id, dto, admin);
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
@@ -175,6 +234,24 @@ export class MallAdminController {
   @Get("categories")
   categories(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminCategories(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("brands")
+  brands(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminBrands(query, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Post("brands")
+  createBrand(@Body() dto: MallBrandDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveBrand(dto, undefined, admin);
+  }
+
+  @AdminRoles(AdminRole.SuperAdmin)
+  @Patch("brands/:id")
+  updateBrand(@Param("id", ParseIntPipe) id: number, @Body() dto: MallBrandDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveBrand(dto, id, admin);
   }
 
   @AdminRoles(...MALL_OPERATION_ROLES)
@@ -217,6 +294,24 @@ export class MallAdminController {
   @Get("promotion-codes")
   promotionCodes(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminPromotionCodes(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("promotion-risk-events")
+  promotionRiskEvents(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminPromotionRiskEvents(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("promotion-risk-alerts")
+  promotionRiskAlerts(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminPromotionRiskAlerts(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Patch("promotion-risk-alerts/:id")
+  reviewPromotionRiskAlert(@Param("id", ParseIntPipe) id: number, @Body() dto: { status?: string; remark?: string }, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.reviewPromotionRiskAlert(id, dto, admin);
   }
 
   @AdminRoles(...MALL_OPERATION_ROLES)
@@ -319,6 +414,12 @@ export class MallAdminController {
   }
 
   @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("products/:id/audit-history")
+  productAuditHistory(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.productAuditHistory(id, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
   @Post("products")
   createProduct(@Body() dto: MallProductDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.saveProduct(dto, undefined, admin);
@@ -343,6 +444,15 @@ export class MallAdminController {
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
+  @Get("orders/export")
+  async exportOrders(@Query() query: MallListQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {
+    const buffer = await this.service.exportAdminOrders(query, admin);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=mall-orders.xlsx");
+    res.end(Buffer.from(buffer));
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
   @Get("analytics")
   analytics(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminAnalytics(query, admin);
@@ -352,6 +462,11 @@ export class MallAdminController {
   @Get("orders/:id/logistics")
   orderLogistics(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminOrderLogistics(id, admin);
+  }
+
+  @Get("orders/:id")
+  orderDetail(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminOrderDetail(id, admin);
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
@@ -364,6 +479,30 @@ export class MallAdminController {
   @Get("commissions")
   commissions(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminCommissions(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("commission-rules")
+  commissionRules(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminCommissionRules(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("commission-rules")
+  saveCommissionRule(@Body() dto: MallCommissionRuleDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveCommissionRule(dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("commission-rules/:id/retire")
+  retireCommissionRule(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.retireCommissionRule(id, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Get("commission-adjustments")
+  commissionAdjustments(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminCommissionAdjustments(query, admin);
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
@@ -409,6 +548,18 @@ export class MallAdminController {
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("commissions/:id/risk-review")
+  reviewCommissionRisk(@Param("id", ParseIntPipe) id: number, @Body() dto: MallCommissionRiskReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.reviewCommissionRisk(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("commissions/:id/clawback-settle")
+  settleCommissionClawback(@Param("id", ParseIntPipe) id: number, @Body() dto: MallCommissionSettleDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.settleCommissionClawback(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
   @Get("payment-callback-logs")
   paymentCallbackLogs(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminPaymentCallbackLogs(query, admin);
@@ -445,15 +596,6 @@ export class MallAdminController {
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
-  @Get("orders/export")
-  async exportOrders(@Query() query: MallListQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {
-    const buffer = await this.service.exportAdminOrders(query, admin);
-    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
-    res.setHeader("Content-Disposition", "attachment; filename=mall-orders.xlsx");
-    res.end(Buffer.from(buffer));
-  }
-
-  @AdminRoles(...MALL_FINANCE_ROLES)
   @Post("orders/:id/confirm-offline-payment")
   confirmOffline(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminConfirmOffline(id, admin);
@@ -463,6 +605,18 @@ export class MallAdminController {
   @Post("orders/:id/ship")
   ship(@Param("id", ParseIntPipe) id: number, @Body() dto: MallShipDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.adminShip(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Patch("orders/:orderId/shipments/:shipmentId")
+  updateShipment(@Param("orderId", ParseIntPipe) orderId: number, @Param("shipmentId", ParseIntPipe) shipmentId: number, @Body() dto: MallShipmentUpdateDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminUpdateShipment(orderId, shipmentId, dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("orders/:orderId/shipments/:shipmentId/sync-tracking")
+  syncShipmentTracking(@Param("orderId", ParseIntPipe) orderId: number, @Param("shipmentId", ParseIntPipe) shipmentId: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminSyncShipmentTracking(orderId, shipmentId, admin);
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)
@@ -522,6 +676,36 @@ export class MallAdminController {
     return this.service.adjustSkuStock(id, dto, admin);
   }
 
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("review-reports")
+  reviewReports(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminReviewReports(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("review-reports/:id/review")
+  reviewReviewReport(@Param("id", ParseIntPipe) id: number, @Body() dto: MallReviewReportReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.reviewReviewReport(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Get("inventory-anomalies")
+  inventoryAnomalies(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.adminInventoryAnomalies(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("inventory-anomalies/scan")
+  scanInventoryAnomalies(@Body() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.scanInventoryGovernance(query, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("inventory-anomalies/:id/resolve")
+  resolveInventoryAnomaly(@Param("id", ParseIntPipe) id: number, @Body() dto: MallInventoryAnomalyResolveDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.resolveInventoryAnomaly(id, dto, admin);
+  }
+
   @AdminRoles(...MALL_FINANCE_ROLES)
   @Post("refunds/:id/approve")
   approveRefund(@Param("id", ParseIntPipe) id: number, @Body() dto: MallRefundReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
@@ -532,6 +716,68 @@ export class MallAdminController {
   @Post("refunds/:id/retry")
   retryRefund(@Param("id", ParseIntPipe) id: number, @Body() dto: MallRefundReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.retryRefund(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("refunds/:id/messages")
+  addRefundMessage(@Param("id", ParseIntPipe) id: number, @Body() dto: MallRefundMessageDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.addAdminRefundMessage(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("refunds/:id/receive-return")
+  receiveRefundReturn(@Param("id", ParseIntPipe) id: number, @Body() dto: MallRefundReviewDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.receiveRefundReturn(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_OPERATION_ROLES)
+  @Post("refunds/:id/ship-exchange")
+  shipRefundExchange(@Param("id", ParseIntPipe) id: number, @Body() dto: MallRefundExchangeShipmentDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.shipRefundExchange(id, dto, admin);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Get("payment-statements")
+  async paymentStatements(@Query() query: MallListQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return sanitizeMallStatementResponse(await this.service.listPaymentStatements(query, admin));
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Get("payment-statements/export")
+  async exportPaymentStatements(@Query() query: MallListQueryDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }, @Res() res: Response) {
+    const buffer = await this.service.exportPaymentStatements(query, admin);
+    res.setHeader("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet");
+    res.setHeader("Content-Disposition", "attachment; filename=mall-payment-statements.xlsx");
+    res.end(buffer);
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("payment-statements/import")
+  async importPaymentStatements(@Body() dto: MallStatementImportDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return sanitizeMallStatementResponse(await this.service.importPaymentStatements(dto, admin));
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("payment-statements/fetch")
+  async fetchPaymentStatements(@Body() dto: MallStatementFetchDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return sanitizeMallStatementResponse(await this.service.fetchPaymentStatements(dto, admin));
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("payment-statements/:id/claim")
+  async claimPaymentStatement(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return sanitizeMallStatementResponse(await this.service.claimPaymentStatement(id, admin));
+  }
+
+  @AdminRoles(...MALL_FINANCE_ROLES)
+  @Post("payment-statements/:id/resolve")
+  async resolvePaymentStatement(@Param("id", ParseIntPipe) id: number, @Body() dto: MallStatementResolveDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return sanitizeMallStatementResponse(await this.service.resolvePaymentStatement(id, dto, admin));
+  }
+
+  @Post("refunds/provider-scan")
+  scanProviderRefunds(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.scanProviderRefunds(admin);
   }
 
   @AdminRoles(...MALL_FINANCE_ROLES)

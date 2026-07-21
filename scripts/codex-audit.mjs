@@ -652,6 +652,9 @@ function scanAdminDtoPayloadRisk() {
     const lines = fs.readFileSync(file, "utf8").split(/\r?\n/);
     lines.forEach((line, index) => {
       if (!spreadPattern.test(line)) return;
+      // Copying an API record into local form state is not a mutation payload.
+      // Only flag spreads that participate in a submitted payload or mutation call.
+      if (/\b\w*Form\.value\s*=/.test(line) && !mutationPattern.test(line)) return;
       const context = lines.slice(Math.max(0, index - 4), Math.min(lines.length, index + 5)).join("\n");
       if (!mutationPattern.test(context)) return;
       if (safePattern.test(context)) return;

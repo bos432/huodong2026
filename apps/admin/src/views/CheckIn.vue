@@ -1,17 +1,25 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onBeforeUnmount, onMounted, reactive, ref } from "vue";
 import { Camera, Finished, RefreshLeft } from "@element-plus/icons-vue";
 import QrScanDialog from "../components/QrScanDialog.vue";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 
 const form = reactive({ code: "", remark: "" });
 const scanDialogVisible = ref(false);
 const loading = ref(false);
 const overviewLoading = ref(false);
+const loadError = ref("");
+const creatingPoint = ref(false);
 const result = ref<any>(null);
 const selectedActivityId = ref<number>();
+const keyword = ref("");
+const points = ref<any[]>([]);
+const selectedPointId = ref<number>();
+const revokingId = ref<number | null>(null);
 const overview = ref<any>({ activities: [], stats: {}, pending: [], checked: [] });
+const autoRefresh = ref(true);
+let refreshTimer: number | null = null;
 const statCards = computed(() => {
   const stats = overview.value?.stats || {};
   return [
@@ -22,25 +30,48 @@ const statCards = computed(() => {
   ];
 });
 
-async function loadOverview() {
-  overviewLoading.value = true;
+async function loadOverview(silent = false) {
+  if (typeof silent !== "boolean") silent = false;
+  if (!silent) overviewLoading.value = true;
   try {
-    overview.value = await api.get("/admin/check-ins/overview", { params: { activityId: selectedActivityId.value || undefined } });
+    overview.value = await api.get("/admin/check-ins/overview", { params: { activityId: selectedActivityId.value || undefined, keyword: keyword.value.trim() || undefined } });
+    await loadPoints();
+    loadError.value = "";
   } catch (error: any) {
-    ElMessage.error(error.message || "加载核销统计失败");
+    loadError.value = error.message || "加载核销统计失败";
+    if (!silent) ElMessage.error(loadError.value);
   } finally {
-    overviewLoading.value = false;
+    if (!silent) overviewLoading.value = false;
   }
 }
 
+async function loadPoints() {
+  points.value = selectedActivityId.value ? await api.get<any, any[]>("/admin/check-in-points", { params: { activityId: selectedActivityId.value } }) : [];
+  if (selectedPointId.value && !points.value.some(item => item.id === selectedPointId.value && item.enabled)) selectedPointId.value = undefined;
+}
+
+async function createPoint() {
+  if (!selectedActivityId.value) return ElMessage.warning("请先选择活动");
+  if (creatingPoint.value) return;
+  creatingPoint.value = true;
+  try {
+    const { value: name } = await ElMessageBox.prompt("例如：主入口、VIP 通道、分会场 A", "新增核销点", { inputPlaceholder: "核销点名称", inputValidator: value => Boolean(value?.trim()) || "请输入名称" });
+    const { value: location } = await ElMessageBox.prompt("可填写楼层、门区或现场位置", "核销点位置", { inputPlaceholder: "位置（可选）" });
+    const saved = await api.post<any, any>("/admin/check-in-points", { activityId: selectedActivityId.value, name, location, enabled: true });
+    await loadPoints(); selectedPointId.value = saved.id; ElMessage.success("核销点已创建");
+  } catch (error: any) { if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "创建核销点失败"); }
+  finally { creatingPoint.value = false; }
+}
+
 async function submit() {
+  if (loading.value) return;
   if (!form.code.trim()) {
     ElMessage.warning("请输入签到码");
     return;
   }
   loading.value = true;
   try {
-    result.value = await api.post<any, any>("/admin/check-ins", { code: form.code.trim(), remark: form.remark.trim() || undefined });
+    result.value = await api.post<any, any>("/admin/check-ins", { code: form.code.trim(), remark: form.remark.trim() || undefined, expectedActivityId: selectedActivityId.value || undefined, pointId: selectedPointId.value || undefined });
     ElMessage.success("签到核销成功");
     form.code = "";
     await loadOverview();
@@ -113,7 +144,22 @@ function fillCode(row: any) {
   if (form.code) ElMessage.success("已填入签到码，请核对后点击核销");
 }
 
-onMounted(loadOverview);
+async function revoke(row: any) {
+  if (revokingId.value !== null) return;
+  revokingId.value = row.id;
+  try {
+    const { value } = await ElMessageBox.prompt(`撤销 ${attendeeName(row)} 的核销后，报名将恢复为待核销。`, "撤销核销", { inputPlaceholder: "必须填写撤销原因", inputValidator: text => Boolean(text?.trim()) || "请输入撤销原因", type: "warning" });
+    await api.post(`/admin/check-ins/${row.id}/revoke`, { reason: value });
+    ElMessage.success("核销已撤销"); await loadOverview();
+  } catch (error: any) { if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "撤销核销失败"); }
+  finally { revokingId.value = null; }
+}
+
+onMounted(() => {
+  loadOverview();
+  refreshTimer = window.setInterval(() => { if (autoRefresh.value && document.visibilityState === "visible" && !loading.value) loadOverview(true); }, 5000);
+});
+onBeforeUnmount(() => { if (refreshTimer !== null) window.clearInterval(refreshTimer); });
 </script>
 
 <template>
@@ -127,15 +173,39 @@ onMounted(loadOverview);
         <el-select v-model="selectedActivityId" clearable filterable placeholder="全部活动" style="width: 280px" @change="loadOverview">
           <el-option v-for="activity in overview.activities" :key="activity.id" :label="activity.title" :value="activity.id" />
         </el-select>
+        <el-select v-model="selectedPointId" clearable filterable placeholder="选择核销点" style="width: 190px">
+          <el-option v-for="point in points.filter(item => item.enabled)" :key="point.id" :label="point.name" :value="point.id" />
+        </el-select>
+        <el-button :loading="creatingPoint" :disabled="creatingPoint" @click="createPoint">新增核销点</el-button>
+        <el-input v-model="keyword" clearable placeholder="手机号、姓名、报名ID、订单号" style="width: 250px" @keyup.enter="loadOverview" @clear="loadOverview" />
         <el-button :loading="overviewLoading" @click="loadOverview">刷新</el-button>
-        <el-button :icon="Camera" size="large" @click="openScanner">扫码</el-button>
+        <el-switch v-model="autoRefresh" inline-prompt active-text="实时" inactive-text="暂停" />
+        <el-button :icon="Camera" size="large" :disabled="loading" @click="openScanner">扫码</el-button>
       </div>
     </div>
+
+    <el-alert v-if="loadError" class="load-alert" type="error" :closable="false" show-icon>
+      <template #title>现场数据同步失败</template>
+      <div class="alert-content"><span>{{ loadError }}</span><el-button size="small" :loading="overviewLoading" @click="loadOverview">重新加载</el-button></div>
+    </el-alert>
 
     <div class="stat-grid" v-loading="overviewLoading">
       <div v-for="item in statCards" :key="item.label" class="stat-card" :class="item.tone">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
+      </div>
+    </div>
+
+    <div class="live-summary-grid">
+      <div class="table-card compact-summary">
+        <div class="summary-head"><h3>核销点实时人数</h3><small>每 5 秒同步</small></div>
+        <el-empty v-if="!overview.pointStats?.length" description="暂无核销数据" />
+        <div v-else class="summary-items"><div v-for="item in overview.pointStats" :key="item.pointId || item.pointName"><span>{{ item.pointName }}</span><strong>{{ item.count }}</strong></div></div>
+      </div>
+      <div class="table-card compact-summary">
+        <div class="summary-head"><h3>票种到场分布</h3><small>{{ overview.sync?.serverTime ? `同步 ${formatTime(overview.sync.serverTime)}` : "" }}</small></div>
+        <el-empty v-if="!overview.ticketTypeStats?.length" description="暂无核销数据" />
+        <div v-else class="summary-items"><div v-for="item in overview.ticketTypeStats" :key="item.ticketTypeId || item.ticketTypeName"><span>{{ item.ticketTypeName }}</span><strong>{{ item.count }}</strong></div></div>
       </div>
     </div>
 
@@ -147,7 +217,7 @@ onMounted(loadOverview);
           </el-form-item>
           <el-form-item label="备注"><el-input v-model="form.remark" placeholder="可填写现场备注" /></el-form-item>
           <div class="actions">
-            <el-button size="large" :icon="Camera" @click="openScanner">扫码</el-button>
+            <el-button size="large" :icon="Camera" :disabled="loading" @click="openScanner">扫码</el-button>
             <el-button type="primary" size="large" :icon="Finished" :loading="loading" @click="submit">核销签到</el-button>
             <el-button size="large" :icon="RefreshLeft" @click="reset">清空</el-button>
           </div>
@@ -162,6 +232,7 @@ onMounted(loadOverview);
           <el-descriptions-item label="订单">{{ orderText(result) }}</el-descriptions-item>
           <el-descriptions-item label="核销时间">{{ formatTime(result.createdAt) }}</el-descriptions-item>
           <el-descriptions-item label="核销员">{{ result.operator?.name || result.operator?.username || "-" }}</el-descriptions-item>
+          <el-descriptions-item label="核销点">{{ result.point?.name || "未指定" }}</el-descriptions-item>
           <el-descriptions-item label="备注">{{ result.remark || "-" }}</el-descriptions-item>
         </el-descriptions>
       </div>
@@ -180,7 +251,7 @@ onMounted(loadOverview);
           </el-table-column>
           <el-table-column label="报名时间" width="150"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
           <el-table-column label="操作" width="110" fixed="right">
-            <template #default="{ row }"><el-button size="small" type="primary" plain @click="fillCode(row)">填入核销码</el-button></template>
+            <template #default="{ row }"><el-button size="small" type="primary" plain :disabled="loading" @click="fillCode(row)">填入核销码</el-button></template>
           </el-table-column>
         </el-table>
 
@@ -197,6 +268,8 @@ onMounted(loadOverview);
           </el-table-column>
           <el-table-column label="核销时间" width="150"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
           <el-table-column label="核销员" width="120"><template #default="{ row }">{{ row.operator?.name || row.operator?.username || "-" }}</template></el-table-column>
+          <el-table-column label="核销点" width="130"><template #default="{ row }">{{ row.point?.name || "未指定" }}</template></el-table-column>
+          <el-table-column label="操作" width="100" fixed="right"><template #default="{ row }"><el-button size="small" type="danger" plain :loading="revokingId === row.id" :disabled="revokingId !== null && revokingId !== row.id" @click="revoke(row)">撤销</el-button></template></el-table-column>
         </el-table>
       </div>
     </div>
@@ -206,10 +279,19 @@ onMounted(loadOverview);
 
 <style scoped>
 .check-page { min-width: 0; }
+.load-alert { margin-bottom: 14px; }
+.alert-content { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .check-toolbar { align-items: flex-start; gap: 12px; }
 .check-toolbar p { margin: 4px 0 0; color: #64748b; font-size: 13px; }
 .toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .stat-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 14px; }
+.live-summary-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 14px; }
+.compact-summary { min-width: 0; }
+.summary-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; }
+.summary-head h3 { margin: 0; font-size: 16px; }.summary-head small { color: #667085; }
+.summary-items { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.summary-items div { min-width: 0; padding: 12px; border: 1px solid #edf0f5; border-radius: 8px; display: flex; justify-content: space-between; gap: 8px; }
+.summary-items span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #667085; }.summary-items strong { color: #0f172a; }
 .stat-card { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 16px; display: grid; gap: 8px; }
 .stat-card span { color: #667085; font-size: 13px; }
 .stat-card strong { color: #0f172a; font-size: 26px; }
@@ -229,7 +311,7 @@ small { color: #667085; display: block; line-height: 1.5; }
   .check-toolbar { display: grid; grid-template-columns: 1fr; }
   .toolbar-actions { justify-content: stretch; }
   .toolbar-actions .el-select, .toolbar-actions .el-button { width: 100%; }
-  .stat-grid, .check-layout { grid-template-columns: 1fr; }
+  .stat-grid, .check-layout, .live-summary-grid, .summary-items { grid-template-columns: 1fr; }
   .check-card { width: 100%; padding: 14px; }
   .actions { display: grid; grid-template-columns: 1fr; }
   .actions .el-button { width: 100%; margin-left: 0; }

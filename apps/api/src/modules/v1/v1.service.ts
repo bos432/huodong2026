@@ -2,13 +2,17 @@ import { BadRequestException, Injectable, NotFoundException, OnModuleDestroy, On
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import ExcelJS from "exceljs";
-import { In, Repository } from "typeorm";
+import { EntityManager, In, Repository } from "typeorm";
 import { ActivityHost } from "../../entities/activity-host.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
+import { ActivityReviewReport } from "../../entities/activity-review-report.entity";
+import { ActivityRecapVersion } from "../../entities/activity-recap-version.entity";
+import { AdminOperationLog } from "../../entities/admin-operation-log.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { Activity } from "../../entities/activity.entity";
+import { AdminUser } from "../../entities/admin-user.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { InviteCode } from "../../entities/invite-code.entity";
@@ -18,6 +22,7 @@ import { MemberProfile } from "../../entities/member-profile.entity";
 import { NotificationSchedule } from "../../entities/notification-schedule.entity";
 import { NotificationTemplate } from "../../entities/notification-template.entity";
 import { Notification } from "../../entities/notification.entity";
+import { NotificationPreference } from "../../entities/notification-preference.entity";
 import { Order } from "../../entities/order.entity";
 import { OperationSetting } from "../../entities/operation-setting.entity";
 import { Registration } from "../../entities/registration.entity";
@@ -25,21 +30,26 @@ import { ShareVisit } from "../../entities/share-visit.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { User } from "../../entities/user.entity";
 import { UserTag } from "../../entities/user-tag.entity";
+import { ConversionEvent, ConversionEventType } from "../../entities/conversion-event.entity";
 import { OrderStatus, RegistrationStatus } from "../../shared/domain";
+import { maskPhone } from "../../shared/data-masking";
+import { renderNotificationTemplate, unknownNotificationTemplateVariables } from "../../shared/notification-template";
+import { notificationTenantScopeMatches } from "../../shared/notification-scope";
 import { applyTenantScopeToQuery, assertTenantAccessForActor, assertTenantOwnedResourceAccess, isTenantScopedActor, normalizeTenantCode, normalizeTenantHost, tenantRelationForActor } from "../../shared/tenant-scope";
 import { NotificationProviderService } from "./notification-provider.service";
+import { BusinessJobService } from "../reliability/business-job.service";
+import { MemberPointsService } from "../member-points/member-points.service";
+import { memberLevelScopeKey } from "../../shared/member-level-engine";
+import { contentAudienceMatches } from "../../shared/content-audience";
+import { boundedPercentage } from "../admin/dashboard-metrics";
+import { adminCanAccessActivity, applyAdminActivityDataScope, normalizeAdminDataScope } from "../admin/admin-data-scope";
+import { yuanToFen } from "../../shared/money";
 
-type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
+type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[]; dataScope?: Record<string, unknown>; clientIp?: string | null; userAgent?: string | null; requestId?: string | null };
 type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
 type ActivityTrackingInput = { source?: string; inviteCode?: string; channelCode?: string; clientIp?: string | null };
-
-export interface AnnouncementInput {
-  title: string;
-  content: string;
-  type?: string;
-  enabled?: boolean;
-  pinned?: boolean;
-}
+type ReviewAdminQuery = { status?: string; activityId?: number; page?: number; pageSize?: number };
+type ReviewReportAdminQuery = { status?: string; page?: number; pageSize?: number };
 
 export interface ReviewInput {
   userId?: number;
@@ -50,6 +60,7 @@ export interface ReviewInput {
 export interface ReviewModerationInput {
   status: string;
   adminReply?: string;
+  featured?: boolean;
 }
 
 export interface TrackShareInput {
@@ -57,6 +68,13 @@ export interface TrackShareInput {
   userId?: number;
   source?: string;
   scene?: string;
+}
+
+export interface RecapVersionInput {
+  summary?: string;
+  problems?: string[];
+  actionItems?: string[];
+  images?: string[];
 }
 
 export interface NotificationTemplateInput {
@@ -108,6 +126,7 @@ export interface NotificationScheduleInput {
 
 const NOTIFICATION_RATE_LIMIT_WINDOW_MS = 10 * 60 * 1000;
 const NOTIFICATION_RATE_LIMIT_COUNT = 5;
+const NOTIFICATION_RETRY_COOLDOWN_MS = 5 * 1000;
 
 @Injectable()
 export class V1Service implements OnModuleInit, OnModuleDestroy {
@@ -119,6 +138,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(ActivityHost) private readonly hosts: Repository<ActivityHost>,
     @InjectRepository(ActivitySection) private readonly sections: Repository<ActivitySection>,
     @InjectRepository(ActivityReview) private readonly reviews: Repository<ActivityReview>,
+    @InjectRepository(ActivityRecapVersion) private readonly recapVersions: Repository<ActivityRecapVersion>,
     @InjectRepository(ActivityViewLog) private readonly viewLogs: Repository<ActivityViewLog>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
@@ -128,19 +148,51 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(User) private readonly users: Repository<User>,
     @InjectRepository(InviteCode) private readonly inviteCodes: Repository<InviteCode>,
     @InjectRepository(ShareVisit) private readonly shareVisits: Repository<ShareVisit>,
+    @InjectRepository(ConversionEvent) private readonly conversionEvents: Repository<ConversionEvent>,
     @InjectRepository(MemberLevel) private readonly memberLevels: Repository<MemberLevel>,
     @InjectRepository(MemberProfile) private readonly memberProfiles: Repository<MemberProfile>,
     @InjectRepository(MemberPointLog) private readonly memberPointLogs: Repository<MemberPointLog>,
     @InjectRepository(NotificationTemplate) private readonly notificationTemplates: Repository<NotificationTemplate>,
     @InjectRepository(Notification) private readonly notifications: Repository<Notification>,
     @InjectRepository(NotificationSchedule) private readonly notificationSchedules: Repository<NotificationSchedule>,
+    @InjectRepository(NotificationPreference) private readonly notificationPreferences: Repository<NotificationPreference>,
     @InjectRepository(UserTag) private readonly userTags: Repository<UserTag>,
     @InjectRepository(OperationSetting) private readonly operationSettings: Repository<OperationSetting>,
     private readonly notificationProvider: NotificationProviderService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly businessJobs: BusinessJobService,
+    private readonly memberPoints: MemberPointsService
   ) {}
 
   async onModuleInit() {
+    this.businessJobs.register("notification.deliver", async (payload, job) => {
+      const notificationId = Number(payload.notificationId);
+      const claimed = await this.notifications.manager.transaction(async (manager) => {
+        const notification = await manager.getRepository(Notification).createQueryBuilder("notification")
+          .setLock("pessimistic_write")
+          .leftJoinAndSelect("notification.tenant", "tenant")
+          .leftJoinAndSelect("notification.activity", "activity")
+          .leftJoinAndSelect("activity.tenant", "activityTenant")
+          .leftJoinAndSelect("notification.user", "user")
+          .where("notification.id = :notificationId", { notificationId })
+          .getOne();
+        if (!notification) return { notification: null, reason: "notification_not_found" };
+        const notificationTenantId = notification.tenant?.id || notification.activity?.tenant?.id || 0;
+        if (notificationTenantId !== Number(job.tenantId || 0)) throw new NotFoundException("通知补偿任务不属于当前商家");
+        if (notification.status === "sent") return { notification: null, reason: "already_sent" };
+        if (notification.status !== "failed") return { notification: null, reason: "notification_not_failed" };
+        if (this.notificationRetryCoolingDown(notification)) throw new BadRequestException("通知刚完成重试，请稍后再试");
+        notification.retryCount += 1;
+        notification.status = "pending";
+        notification.errorMessage = null;
+        notification.failedAt = null;
+        return { notification: await manager.getRepository(Notification).save(notification), reason: null };
+      });
+      if (!claimed.notification) return { skipped: true, reason: claimed.reason };
+      const saved = await this.deliverNotification(claimed.notification, false);
+      if (saved.status !== "sent") throw new Error(saved.errorMessage || "Notification delivery failed");
+      return { notificationId: saved.id, provider: saved.provider || null, providerMessageId: saved.providerMessageId || null };
+    });
     await this.ensureV1Seeds();
     this.startScheduleWorker();
   }
@@ -149,39 +201,39 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (this.scheduleTimer) clearInterval(this.scheduleTimer);
   }
 
-  async publicAnnouncements(context?: PublicTenantContext) {
+  async publicAnnouncements(context?: PublicTenantContext, userId?: number | null) {
     const tenant = await this.resolveTenantContext(context);
+    const now = new Date();
     const builder = this.announcements
       .createQueryBuilder("announcement")
       .leftJoin("announcement.tenant", "tenant")
       .where("announcement.enabled = :enabled", { enabled: true })
+      .andWhere("(announcement.publishAt IS NULL OR announcement.publishAt <= :now)", { now })
+      .andWhere("(announcement.endAt IS NULL OR announcement.endAt >= :now)", { now })
       .andWhere("(announcement.tenantId IS NULL OR tenant.enabled = :tenantEnabled)", { tenantEnabled: true });
     if (tenant) builder.andWhere("announcement.tenantId = :tenantId", { tenantId: tenant.id });
-    return builder.orderBy("announcement.pinned", "DESC").addOrderBy("announcement.publishAt", "DESC").addOrderBy("announcement.createdAt", "DESC").take(6).getMany();
+    else builder.andWhere("announcement.tenantId IS NULL");
+    const rows = await builder.orderBy("announcement.pinned", "DESC").addOrderBy("announcement.publishAt", "DESC").addOrderBy("announcement.createdAt", "DESC").take(60).getMany();
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    const profile = userId ? await this.memberProfiles.findOne({ where: { user: { id: userId }, tenantScopeKey } }) : null;
+    return rows
+      .filter((row) => contentAudienceMatches(row.audience, userId, profile?.level?.id))
+      .slice(0, 50)
+      .map((row) => this.publicAnnouncement(row));
   }
 
-  async adminAnnouncements(admin?: AdminContext) {
-    const builder = this.announcements.createQueryBuilder("announcement").orderBy("announcement.pinned", "DESC").addOrderBy("announcement.createdAt", "DESC");
-    applyTenantScopeToQuery(builder, "announcement", admin);
-    return builder.getMany();
-  }
-
-  async saveAnnouncement(input: AnnouncementInput, id?: number, admin?: AdminContext) {
-    const row = id ? await this.announcements.findOneBy({ id }) : this.announcements.create();
-    if (!row) throw new NotFoundException("公告不存在");
-    assertTenantAccessForActor(row, admin, "Announcement not found or not in current tenant");
-    if (!input.title?.trim() || !input.content?.trim()) {
-      throw new BadRequestException("请填写公告标题和内容");
-    }
-
-    row.tenant = row.tenant || tenantRelationForActor<Tenant>(admin);
-    row.title = input.title.trim();
-    row.content = input.content.trim();
-    row.type = input.type || "notice";
-    row.enabled = input.enabled ?? true;
-    row.pinned = input.pinned ?? false;
-    row.publishAt = row.publishAt || new Date();
-    return this.announcements.save(row);
+  private publicAnnouncement(row: Announcement) {
+    return {
+      id: row.id,
+      title: row.title,
+      content: row.content,
+      type: row.type,
+      pinned: row.pinned,
+      publishAt: row.publishAt,
+      endAt: row.endAt,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    };
   }
 
   private async resolveTenantContext(context?: PublicTenantContext | null) {
@@ -248,8 +300,63 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   private publicActivity(activity: Activity) {
-    const { groupQrCodeUrl: _groupQrCodeUrl, ...publicActivity } = activity as Activity & { groupQrCodeUrl?: string | null };
-    return publicActivity;
+    return {
+      id: activity.id,
+      title: activity.title,
+      tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region } : null,
+      coverUrl: activity.coverUrl,
+      shareTitle: activity.shareTitle,
+      shareDescription: activity.shareDescription,
+      shareImageUrl: activity.shareImageUrl,
+      description: activity.description,
+      notice: activity.notice,
+      location: activity.location,
+      locationProvince: activity.locationProvince,
+      locationCity: activity.locationCity,
+      locationDistrict: activity.locationDistrict,
+      locationLatitude: activity.locationLatitude,
+      locationLongitude: activity.locationLongitude,
+      locationMapUrl: activity.locationMapUrl,
+      startTime: activity.startTime,
+      endTime: activity.endTime,
+      registrationDeadline: activity.registrationDeadline,
+      capacity: activity.capacity,
+      price: activity.price,
+      status: activity.status,
+      cancelledAt: activity.cancelledAt,
+      cancellationReason: activity.cancellationReason,
+      featured: activity.featured,
+      requireReview: activity.requireReview,
+      allowCancel: activity.allowCancel,
+      category: activity.category ? { id: activity.category.id, name: activity.category.name, iconUrl: activity.category.iconUrl, coverUrl: activity.category.coverUrl } : null,
+      agent: activity.agent ? { id: activity.agent.id, name: activity.agent.name, region: activity.agent.region } : null,
+      minMemberLevel: this.publicMemberLevel(activity.minMemberLevel),
+      priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel),
+      priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt,
+      fields: (activity.fields || []).map((field) => ({ id: field.id, label: field.label, type: field.type, required: field.required, options: field.options || [], sortOrder: field.sortOrder })),
+      formSchemaVersion: activity.formSchemaVersion,
+      eligibilityRules: this.publicEligibilityRules(activity.eligibilityRules),
+      createdAt: activity.createdAt,
+      updatedAt: activity.updatedAt
+    };
+  }
+
+  private publicMemberLevel(level?: MemberLevel | null) {
+    if (!level) return null;
+    return { id: level.id, name: level.name, discountRate: level.discountRate, priorityBooking: level.priorityBooking, benefits: level.benefits || [] };
+  }
+
+  private publicEligibilityRules(rules?: Activity["eligibilityRules"]) {
+    if (!rules) return null;
+    return {
+      minAge: rules.minAge,
+      maxAge: rules.maxAge,
+      allowedRegions: rules.allowedRegions || [],
+      maxRegistrationsPerUser: rules.maxRegistrationsPerUser,
+      requirePrivacyConsent: Boolean(rules.requirePrivacyConsent),
+      allowCompanions: Boolean(rules.allowCompanions),
+      maxCompanions: rules.maxCompanions
+    };
   }
 
   private findOperationSetting(tenant?: Tenant | null) {
@@ -291,11 +398,12 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const activity = await this.findPublicActivity(activityId);
     if (!activity) throw new NotFoundException("Activity not found");
     await this.assertPublicActivityTenantAccess(activity, context);
-    return this.reviews.find({
+    const rows = await this.reviews.find({
       where: { activity: { id: activityId }, status: "visible" },
-      order: { createdAt: "DESC" },
+      order: { featured: "DESC", createdAt: "DESC" },
       take: 20
     });
+    return rows.map((row) => this.publicActivityReview(row));
   }
 
   private async assertPublicRegistrationTenantAccess(registration: Registration, context?: PublicTenantContext) {
@@ -311,9 +419,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (!registration) throw new NotFoundException("报名记录不存在");
     await this.assertPublicRegistrationTenantAccess(registration, context);
     if (registration.user.id !== user.id) throw new BadRequestException("只能评价自己的报名");
-    if (![RegistrationStatus.Approved, RegistrationStatus.CheckedIn].includes(registration.status)) {
-      throw new BadRequestException("报名成功或签到后才能评价");
-    }
+    if (registration.status !== RegistrationStatus.CheckedIn) throw new BadRequestException("完成现场签到后才能评价");
     if (await this.reviews.findOne({ where: { registration: { id: registrationId } } })) {
       throw new BadRequestException("该报名已评价");
     }
@@ -330,38 +436,223 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
         status: "visible"
       })
     );
-    await this.awardPoints(registration.user, 10, "activity_review", review.id, "活动评价奖励");
-    return review;
+    await this.memberPoints.awardEvent({
+      user: registration.user,
+      tenant: registration.tenant || registration.activity?.tenant || null,
+      eventType: "activity_review",
+      sourceType: "activity_review",
+      sourceId: review.id,
+      remark: "活动评价奖励"
+    });
+    const order = await this.orders.findOne({ where: { registration: { id: registration.id } } });
+    await this.recordConversionEvent("review", { activity: registration.activity, user: registration.user, registration, order, source: "member", idempotencyKey: `review:${review.id}`, payload: { rating: review.rating } });
+    return this.publicActivityReview(review);
   }
 
-  async adminReviews(status?: string, activityId?: number, admin?: AdminContext) {
-    const builder = this.reviews
-      .createQueryBuilder("review")
-      .leftJoinAndSelect("review.activity", "activity")
-      .leftJoinAndSelect("review.registration", "registration")
-      .leftJoinAndSelect("review.user", "user")
+  async reportReview(reviewId: number, reason: string, user: User, context?: PublicTenantContext) {
+    const review = await this.reviews.findOneBy({ id: reviewId });
+    if (!review || review.status !== "visible") throw new NotFoundException("评价不存在");
+    await this.assertPublicActivityTenantAccess(review.activity, context);
+    if (review.user.id === user.id) throw new BadRequestException("不能举报自己的评价");
+    const repo = this.reviews.manager.getRepository(ActivityReviewReport);
+    const existing = await repo.findOne({ where: { review: { id: reviewId }, user: { id: user.id } } });
+    if (existing) return { report: this.publicActivityReviewReport(existing), idempotent: true };
+    const cleaned = String(reason || "").trim();
+    if (!cleaned) throw new BadRequestException("请填写举报原因");
+    const report = await repo.save(repo.create({ review, user, reason: cleaned.slice(0, 500), status: "pending", resolution: null, handledBy: null, handledAt: null }));
+    return { report: this.publicActivityReviewReport(report), idempotent: false };
+  }
+
+  private publicActivityReview(review: ActivityReview) {
+    return {
+      id: review.id,
+      user: { nickname: this.publicUserDisplayName(review.user), avatarUrl: review.user?.avatarUrl || null },
+      rating: review.rating,
+      content: review.content,
+      adminReply: review.adminReply,
+      featured: review.featured,
+      createdAt: review.createdAt,
+      updatedAt: review.updatedAt
+    };
+  }
+
+  private publicActivityReviewReport(report: ActivityReviewReport) {
+    return { id: report.id, reviewId: report.review?.id || null, reason: report.reason, status: report.status, resolution: report.resolution, createdAt: report.createdAt, updatedAt: report.updatedAt };
+  }
+
+  private publicUserDisplayName(user?: User | null) {
+    const nickname = String(user?.nickname || "").trim();
+    if (nickname) return nickname;
+    const phone = String(user?.phone || "");
+    return /^1\d{10}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : "参与者";
+  }
+
+  async reviewOptions(admin?: AdminContext) {
+    const builder = this.activities.createQueryBuilder("activity")
+      .leftJoin("activity.tenant", "tenant")
+      .select(["activity.id", "activity.title", "activity.status", "tenant.id", "tenant.code", "tenant.name"])
+      .orderBy("activity.createdAt", "DESC");
+    applyTenantScopeToQuery(builder, "activity", admin);
+    applyAdminActivityDataScope(builder, "activity", admin?.dataScope);
+    const rows = await builder.getMany();
+    return { activities: rows.map((row) => ({ id: row.id, title: row.title, status: row.status, tenant: row.tenant ? { id: row.tenant.id, code: row.tenant.code, name: row.tenant.name } : null })) };
+  }
+
+  async adminReviews(query: ReviewAdminQuery = {}, admin?: AdminContext) {
+    const { page, pageSize } = this.reviewPagination(query.page, query.pageSize);
+    if (query.status && !["visible", "hidden"].includes(query.status)) throw new BadRequestException("评价状态不正确");
+    if (query.activityId !== undefined && (!Number.isInteger(query.activityId) || query.activityId <= 0)) throw new BadRequestException("活动 ID 不正确");
+    const builder = this.reviews.createQueryBuilder("review")
+      .leftJoin("review.activity", "activity")
+      .leftJoin("activity.tenant", "tenant")
+      .leftJoin("review.registration", "registration")
+      .leftJoin("review.user", "user")
+      .select([
+        "review.id", "review.rating", "review.content", "review.status", "review.adminReply", "review.featured", "review.createdAt", "review.updatedAt",
+        "activity.id", "activity.title", "activity.status", "tenant.id", "tenant.code", "tenant.name",
+        "registration.id", "registration.status", "user.id", "user.nickname", "user.phone"
+      ])
       .orderBy("review.createdAt", "DESC");
-    if (status) builder.where("review.status = :status", { status });
-    if (activityId) builder.andWhere("activity.id = :activityId", { activityId });
+    if (query.status) builder.andWhere("review.status = :status", { status: query.status });
+    if (query.activityId) builder.andWhere("activity.id = :activityId", { activityId: query.activityId });
     if (isTenantScopedActor(admin)) builder.andWhere("(activity.tenantId = :tenantId OR registration.tenantId = :tenantId)", { tenantId: admin?.tenantId });
-    return builder.getMany();
+    applyAdminActivityDataScope(builder, "review", admin?.dataScope);
+    const [rows, total] = await builder.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+    const includeSensitive = Boolean(admin?.permissions?.includes("review.sensitive"));
+    return { items: rows.map((row) => this.publicAdminReview(row, includeSensitive)), total, page, pageSize };
   }
 
   async moderateReview(id: number, input: ReviewModerationInput, admin?: AdminContext) {
-    const row = await this.reviews.findOneBy({ id });
-    this.assertReviewTenantAccess(row, admin);
-    if (!row) throw new NotFoundException("评价不存在");
     if (!["visible", "hidden"].includes(input.status)) throw new BadRequestException("评价状态不正确");
+    const reply = String(input.adminReply || "").trim();
+    if (reply.length > 255) throw new BadRequestException("管理员回复不能超过 255 个字符");
+    const saved = await this.reviews.manager.transaction(async (manager) => {
+      const row = await manager.getRepository(ActivityReview).createQueryBuilder("review")
+        .setLock("pessimistic_write")
+        .innerJoinAndSelect("review.activity", "activity")
+        .leftJoinAndSelect("activity.tenant", "activityTenant")
+        .innerJoinAndSelect("review.registration", "registration")
+        .leftJoinAndSelect("registration.tenant", "registrationTenant")
+        .innerJoinAndSelect("review.user", "user")
+        .where("review.id = :id", { id })
+        .getOne();
+      this.assertReviewTenantAccess(row, admin);
+      if (!row) throw new NotFoundException("评价不存在");
+      row.status = input.status;
+      row.adminReply = reply || null;
+      if (input.featured !== undefined) row.featured = Boolean(input.featured);
+      if (row.status === "hidden") row.featured = false;
+      return manager.getRepository(ActivityReview).save(row);
+    });
+    await this.logReviewOperation(admin, "review.moderate", "activity_review", saved.id, `处置活动评价：${saved.activity.title}`, { status: saved.status, featured: saved.featured, replied: Boolean(saved.adminReply) });
+    return this.publicAdminReview(saved, Boolean(admin?.permissions?.includes("review.sensitive")));
+  }
 
-    row.status = input.status;
-    row.adminReply = input.adminReply || null;
-    return this.reviews.save(row);
+  async reviewReports(query: ReviewReportAdminQuery = {}, admin?: AdminContext) {
+    const { page, pageSize } = this.reviewPagination(query.page, query.pageSize);
+    if (query.status && !["pending", "resolved", "rejected"].includes(query.status)) throw new BadRequestException("举报状态不正确");
+    const builder = this.reviews.manager.getRepository(ActivityReviewReport).createQueryBuilder("report")
+      .leftJoin("report.review", "review")
+      .leftJoin("review.activity", "activity")
+      .leftJoin("activity.tenant", "tenant")
+      .leftJoin("review.registration", "registration")
+      .leftJoin("report.user", "user")
+      .select([
+        "report.id", "report.reason", "report.status", "report.resolution", "report.handledBy", "report.handledAt", "report.createdAt", "report.updatedAt",
+        "review.id", "review.rating", "review.content", "review.status", "review.adminReply", "review.featured", "review.createdAt", "review.updatedAt",
+        "activity.id", "activity.title", "activity.status", "tenant.id", "tenant.code", "tenant.name",
+        "registration.id", "registration.status", "user.id", "user.nickname", "user.phone"
+      ])
+      .orderBy("report.createdAt", "DESC");
+    if (query.status) builder.andWhere("report.status = :status", { status: query.status });
+    if (isTenantScopedActor(admin)) builder.andWhere("(activity.tenantId = :tenantId OR registration.tenantId = :tenantId)", { tenantId: admin?.tenantId });
+    applyAdminActivityDataScope(builder, "review", admin?.dataScope);
+    const [rows, total] = await builder.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+    const includeSensitive = Boolean(admin?.permissions?.includes("review.sensitive"));
+    return { items: rows.map((row) => this.publicAdminReviewReport(row, includeSensitive)), total, page, pageSize };
+  }
+
+  async handleReviewReport(id: number, input: { status: string; resolution?: string; hideReview?: boolean }, admin?: AdminContext) {
+    if (!["resolved", "rejected"].includes(input.status)) throw new BadRequestException("举报处理状态不正确");
+    const resolution = String(input.resolution || "").trim();
+    if (!resolution) throw new BadRequestException("请填写举报处理说明");
+    if (resolution.length > 500) throw new BadRequestException("举报处理说明不能超过 500 个字符");
+    const saved = await this.reviews.manager.transaction(async (manager) => {
+      const report = await manager.getRepository(ActivityReviewReport).createQueryBuilder("report")
+        .setLock("pessimistic_write")
+        .innerJoinAndSelect("report.review", "review")
+        .innerJoinAndSelect("review.activity", "activity")
+        .leftJoinAndSelect("activity.tenant", "activityTenant")
+        .innerJoinAndSelect("review.registration", "registration")
+        .leftJoinAndSelect("registration.tenant", "registrationTenant")
+        .innerJoinAndSelect("report.user", "user")
+        .where("report.id = :id", { id })
+        .getOne();
+      if (!report) throw new NotFoundException("举报记录不存在");
+      this.assertReviewTenantAccess(report.review, admin);
+      if (report.status !== "pending") throw new BadRequestException("只有待处理举报可以处置");
+      Object.assign(report, { status: input.status, resolution, handledBy: admin?.username || "system", handledAt: new Date() });
+      if (input.hideReview && input.status === "resolved") {
+        report.review.status = "hidden";
+        report.review.featured = false;
+        await manager.getRepository(ActivityReview).save(report.review);
+      }
+      return manager.getRepository(ActivityReviewReport).save(report);
+    });
+    await this.logReviewOperation(admin, "review_report.handle", "activity_review_report", saved.id, `处置评价举报：${saved.review.activity.title}`, { status: saved.status, hideReview: Boolean(input.hideReview && input.status === "resolved") });
+    return this.publicAdminReviewReport(saved, Boolean(admin?.permissions?.includes("review.sensitive")));
   }
 
   private assertReviewTenantAccess(row: ActivityReview | null, admin?: AdminContext) {
-    if (!row || !isTenantScopedActor(admin)) return;
-    if (row.activity.tenant?.id === admin?.tenantId || row.registration.tenant?.id === admin?.tenantId) return;
-    throw new NotFoundException("Review not found or not in current tenant");
+    if (!row) return;
+    if (isTenantScopedActor(admin) && row.activity.tenant?.id !== admin?.tenantId && row.registration.tenant?.id !== admin?.tenantId) throw new NotFoundException("评价不存在或不属于当前商家");
+    if (!adminCanAccessActivity(admin?.dataScope, row.activity.id)) throw new NotFoundException("评价不存在或不在岗位活动范围内");
+  }
+
+  private reviewPagination(pageValue?: number, pageSizeValue?: number) {
+    const page = pageValue ?? 1;
+    const pageSize = pageSizeValue ?? 20;
+    if (!Number.isInteger(page) || page < 1) throw new BadRequestException("页码不正确");
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new BadRequestException("每页数量必须在 1 到 100 之间");
+    return { page, pageSize };
+  }
+
+  private publicAdminReview(row: ActivityReview, includeSensitive = false) {
+    return {
+      id: row.id,
+      activity: row.activity ? { id: row.activity.id, title: row.activity.title, status: row.activity.status, tenant: row.activity.tenant ? { id: row.activity.tenant.id, code: row.activity.tenant.code, name: row.activity.tenant.name } : null } : null,
+      registration: row.registration ? { id: row.registration.id, status: row.registration.status } : null,
+      user: row.user ? { id: row.user.id, nickname: row.user.nickname, phone: includeSensitive ? row.user.phone : maskPhone(row.user.phone) } : null,
+      rating: row.rating,
+      content: row.content,
+      status: row.status,
+      adminReply: row.adminReply,
+      featured: row.featured,
+      sensitiveMasked: !includeSensitive,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    };
+  }
+
+  private publicAdminReviewReport(row: ActivityReviewReport, includeSensitive = false) {
+    return {
+      id: row.id,
+      review: this.publicAdminReview(row.review, includeSensitive),
+      user: row.user ? { id: row.user.id, nickname: row.user.nickname, phone: includeSensitive ? row.user.phone : maskPhone(row.user.phone) } : null,
+      reason: row.reason,
+      status: row.status,
+      resolution: row.resolution,
+      handledBy: includeSensitive ? row.handledBy : null,
+      handledAt: row.handledAt,
+      sensitiveMasked: !includeSensitive,
+      createdAt: row.createdAt,
+      updatedAt: row.updatedAt
+    };
+  }
+
+  private async logReviewOperation(admin: AdminContext | undefined, action: string, targetType: string, targetId: number, summary: string, detail: Record<string, unknown>) {
+    const repo = this.reviews.manager.getRepository(AdminOperationLog);
+    await repo.save(repo.create({ adminId: admin?.id || null, adminUsername: admin?.username || null, tenantId: admin?.tenantId ?? null, adminRole: admin?.role || null, clientIp: admin?.clientIp || null, userAgent: admin?.userAgent || null, requestId: admin?.requestId || null, action, targetType, targetId: String(targetId), summary, detail }));
   }
 
   async sharePoster(activityId: number, user: User, context?: PublicTenantContext) {
@@ -375,7 +666,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       shareUrl: `/pages/activity/detail?id=${activity.id}&inviteCode=${invite.code}`,
       title: activity.title,
       coverUrl: activity.coverUrl,
-      inviteText: `${user.nickname || user.phone || "好友"} 邀请你参加《${activity.title}》`
+      inviteText: `${this.publicUserDisplayName(user)} 邀请你参加《${activity.title}》`
     };
   }
 
@@ -384,17 +675,52 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (!activity) throw new NotFoundException("活动不存在");
     await this.assertPublicActivityTenantAccess(activity, context);
 
-    const invite = input.code ? await this.inviteCodes.findOne({ where: { code: input.code } }) : null;
+    const invite = input.code ? await this.inviteCodes.findOne({ where: { code: input.code, activity: { id: activity.id } } }) : null;
     const visitor = input.userId ? await this.users.findOneBy({ id: input.userId }) : null;
     if (invite) {
       invite.visitCount += 1;
       await this.inviteCodes.save(invite);
     }
 
-    return this.shareVisits.save(
-      this.shareVisits.create({ activity, inviteCode: invite, visitor, source: input.source || "share", scene: input.scene || null })
+    const saved = await this.shareVisits.save(
+      this.shareVisits.create({ activity, inviteCode: invite, visitor, source: this.cleanTrackingText(input.source, 80) || "share", scene: this.cleanTrackingText(input.scene, 120) || null })
     );
+    await this.recordConversionEvent("share_visit", { activity, user: visitor, source: saved.source || "share", idempotencyKey: `share_visit:${saved.id}`, payload: { scene: saved.scene, inviteCode: invite?.code || null } });
+    return { id: saved.id, recorded: true, createdAt: saved.createdAt };
   }
+
+  private async recordConversionEvent(type: ConversionEventType, input: { activity?: Activity | null; user?: User | null; registration?: Registration | null; order?: Order | null; channel?: ActivityChannel | null; amount?: string | number | null; source?: string | null; idempotencyKey: string; payload?: Record<string, unknown> | null }) {
+    const registration = input.registration || input.order?.registration || null;
+    const activity = input.activity || registration?.activity || null;
+    const channel = input.channel || registration?.channel || null;
+    const ticketType = input.order?.ticketType || null;
+    const result = await this.conversionEvents.createQueryBuilder().insert().values({
+      type,
+      tenant: this.relationId(activity?.tenant || input.order?.tenant || registration?.tenant || channel?.tenant || null),
+      activity: this.relationId(activity),
+      user: this.relationId(input.user || registration?.user || null),
+      registration: this.relationId(registration),
+      order: this.relationId(input.order || null),
+      channel: this.relationId(channel),
+      ticketTypeIdSnapshot: ticketType?.id || null,
+      ticketTypeNameSnapshot: ticketType?.name || null,
+      channelCodeSnapshot: registration?.attributionChannelCode || channel?.code || null,
+      channelNameSnapshot: registration?.attributionChannelName || channel?.name || null,
+      provinceSnapshot: registration?.attributionProvince || activity?.locationProvince || null,
+      citySnapshot: registration?.attributionCity || activity?.locationCity || null,
+      districtSnapshot: registration?.attributionDistrict || activity?.locationDistrict || null,
+      amount: Number(input.amount || 0).toFixed(2),
+      source: this.cleanTrackingText(registration?.attributionSource || input.source, 80) || null,
+      idempotencyKey: input.idempotencyKey,
+      clientIp: null,
+      userAgent: null,
+      payload: input.payload || null
+    } as any).orIgnore().updateEntity(false).execute();
+    const id = Number(result.identifiers[0]?.id || result.raw?.insertId || 0);
+    return id ? { id } : null;
+  }
+
+  private relationId<T extends { id: number }>(entity: T | null | undefined) { return entity ? ({ id: entity.id } as T) : null; }
 
   async dashboard(admin?: AdminContext) {
     const tenantId = admin?.tenantId || 0;
@@ -475,64 +801,210 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
         shareVisitCount,
         notificationCount,
         paidAmount: Number(amount?.sum || 0).toFixed(2),
-        signupRate: viewCount ? Math.min((registrationCount / viewCount) * 100, 100).toFixed(1) : "0.0",
+        signupRate: boundedPercentage(registrationCount, viewCount).toFixed(1),
         checkInRate: approvedCount ? ((checkInCount / approvedCount) * 100).toFixed(1) : "0.0"
       },
       recentActivities
     };
   }
 
+  async analyticsActivityOptions(admin?: AdminContext) {
+    const builder = this.activities.createQueryBuilder("activity").leftJoin("activity.tenant", "tenant")
+      .select(["activity.id", "activity.title", "activity.status", "activity.startTime", "activity.locationCity", "tenant.id", "tenant.code", "tenant.name"])
+      .orderBy("activity.startTime", "DESC").addOrderBy("activity.id", "DESC");
+    applyTenantScopeToQuery(builder, "activity", admin);
+    applyAdminActivityDataScope(builder, "activity", admin?.dataScope);
+    const rows = await builder.take(1000).getMany();
+    return rows.map((row) => ({ id: row.id, title: row.title, status: row.status, startTime: row.startTime, locationCity: row.locationCity, tenant: row.tenant ? { id: row.tenant.id, code: row.tenant.code, name: row.tenant.name } : null }));
+  }
+
   async activityFunnel(activityId: number, admin?: AdminContext) {
     const activity = await this.activities.findOneBy({ id: activityId });
+    this.assertAnalyticsActivityAccess(activity, admin);
+    return this.buildActivityFunnel(activity!, this.conversionEvents.manager);
+  }
+
+  private assertAnalyticsActivityAccess(activity: Activity | null, admin?: AdminContext) {
     assertTenantAccessForActor(activity, admin, "Activity not found or not in current tenant");
-    if (!activity) throw new NotFoundException("活动不存在");
+    if (!activity || !adminCanAccessActivity(admin?.dataScope, activity.id)) throw new NotFoundException("活动不存在或不在岗位活动范围内");
+  }
 
-    const [viewCount, shareVisitCount, inviteCount, registrationCount, paidCount, approvedCount, checkInCount, reviewCount] =
-      await Promise.all([
-        this.viewLogs.count({ where: { activity: { id: activityId } } }),
-        this.shareVisits.count({ where: { activity: { id: activityId } } }),
-        this.inviteCodes.count({ where: { activity: { id: activityId } } }),
-        this.registrations.count({ where: { activity: { id: activityId } } }),
-        this.orders.count({ where: { registration: { activity: { id: activityId } }, status: OrderStatus.Paid } }),
-        this.registrations.count({
-          where: { activity: { id: activityId }, status: In([RegistrationStatus.Approved, RegistrationStatus.CheckedIn]) }
-        }),
-        this.registrations.count({ where: { activity: { id: activityId }, status: RegistrationStatus.CheckedIn } }),
-        this.reviews.count({ where: { activity: { id: activityId }, status: "visible" } })
-      ]);
-    const topInvites = await this.inviteCodes.find({
-      where: { activity: { id: activityId } },
-      order: { registrationCount: "DESC", visitCount: "DESC" },
-      take: 10
-    });
+  private async buildActivityFunnel(activity: Activity, manager: EntityManager) {
+    const eventRepo = manager.getRepository(ConversionEvent);
+    const eventRows = await eventRepo.createQueryBuilder("event")
+      .select("event.type", "type").addSelect("COUNT(event.id)", "count").addSelect("COALESCE(SUM(event.amount), 0)", "amount")
+      .where("event.activityId = :activityId", { activityId: activity.id }).groupBy("event.type").getRawMany<any>();
+    const eventMap = new Map(eventRows.map((row) => [String(row.type), { count: Number(row.count || 0), amountFen: yuanToFen(row.amount || 0) }]));
+    const count = (type: ConversionEventType) => eventMap.get(type)?.count || 0;
+    const amount = (type: ConversionEventType) => eventMap.get(type)?.amountFen || 0;
 
+    const approvedCount = await manager.getRepository(Registration).createQueryBuilder("registration")
+      .where("registration.activityId = :activityId", { activityId: activity.id })
+      .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] }).getCount();
+    const inviteCount = await manager.getRepository(InviteCode).count({ where: { activity: { id: activity.id } } });
+
+    const ticketEvents = await eventRepo.createQueryBuilder("event")
+      .select("COALESCE(event.ticketTypeIdSnapshot, 0)", "dimensionId")
+      .addSelect("COALESCE(MAX(event.ticketTypeNameSnapshot), '默认票/未指定')", "dimensionName")
+      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
+      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", "paidCount")
+      .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", "checkInCount")
+      .addSelect("SUM(CASE WHEN event.type = 'review' THEN 1 ELSE 0 END)", "reviewCount")
+      .addSelect("SUM(CASE WHEN event.type = 'cancel' THEN 1 ELSE 0 END)", "cancelCount")
+      .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "grossAmount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
+      .where("event.activityId = :activityId", { activityId: activity.id })
+      .andWhere("event.type IN ('register','pay','check_in','review','cancel','refund')")
+      .groupBy("COALESCE(event.ticketTypeIdSnapshot, 0)").getRawMany<any>();
+    const approvedTickets = await manager.getRepository(Registration).createQueryBuilder("registration")
+      .leftJoin(Order, "businessOrder", "businessOrder.registrationId = registration.id")
+      .select("COALESCE(businessOrder.ticketTypeId, 0)", "dimensionId").addSelect("COUNT(DISTINCT registration.id)", "approvedCount")
+      .where("registration.activityId = :activityId", { activityId: activity.id })
+      .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
+      .groupBy("COALESCE(businessOrder.ticketTypeId, 0)").getRawMany<any>();
+    const approvedTicketMap = new Map(approvedTickets.map((row) => [Number(row.dimensionId || 0), Number(row.approvedCount || 0)]));
+
+    const channelEvents = await eventRepo.createQueryBuilder("event")
+      .select("COALESCE(event.channelCodeSnapshot, CONCAT('source:', COALESCE(event.source, 'direct')))", "dimensionKey")
+      .addSelect("COALESCE(MAX(event.channelNameSnapshot), MAX(event.source), '直接访问')", "dimensionName")
+      .addSelect("COALESCE(MAX(event.channelCodeSnapshot), '')", "code").addSelect("COALESCE(MAX(event.source), 'direct')", "source")
+      .addSelect("SUM(CASE WHEN event.type = 'view' THEN 1 ELSE 0 END)", "viewCount")
+      .addSelect("SUM(CASE WHEN event.type = 'share_visit' THEN 1 ELSE 0 END)", "shareVisitCount")
+      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
+      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", "paidCount")
+      .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", "checkInCount")
+      .addSelect("SUM(CASE WHEN event.type = 'review' THEN 1 ELSE 0 END)", "reviewCount")
+      .addSelect("SUM(CASE WHEN event.type = 'cancel' THEN 1 ELSE 0 END)", "cancelCount")
+      .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "grossAmount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
+      .where("event.activityId = :activityId", { activityId: activity.id })
+      .groupBy("COALESCE(event.channelCodeSnapshot, CONCAT('source:', COALESCE(event.source, 'direct')))").getRawMany<any>();
+    const approvedChannels = await manager.getRepository(Registration).createQueryBuilder("registration")
+      .select("COALESCE(registration.attributionChannelCode, CONCAT('source:', COALESCE(registration.attributionSource, 'direct')))", "dimensionKey")
+      .addSelect("COUNT(registration.id)", "approvedCount").where("registration.activityId = :activityId", { activityId: activity.id })
+      .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
+      .groupBy("COALESCE(registration.attributionChannelCode, CONCAT('source:', COALESCE(registration.attributionSource, 'direct')))").getRawMany<any>();
+    const approvedChannelMap = new Map(approvedChannels.map((row) => [String(row.dimensionKey), Number(row.approvedCount || 0)]));
+
+    const cityEvents = await eventRepo.createQueryBuilder("event")
+      .select("COALESCE(event.provinceSnapshot, '未知')", "province").addSelect("COALESCE(event.citySnapshot, '未知')", "city").addSelect("COALESCE(event.districtSnapshot, '未知')", "district")
+      .addSelect("SUM(CASE WHEN event.type = 'view' THEN 1 ELSE 0 END)", "viewCount")
+      .addSelect("SUM(CASE WHEN event.type = 'share_visit' THEN 1 ELSE 0 END)", "shareVisitCount")
+      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
+      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", "paidCount")
+      .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", "checkInCount")
+      .addSelect("SUM(CASE WHEN event.type = 'review' THEN 1 ELSE 0 END)", "reviewCount")
+      .addSelect("SUM(CASE WHEN event.type = 'cancel' THEN 1 ELSE 0 END)", "cancelCount")
+      .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "grossAmount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
+      .where("event.activityId = :activityId", { activityId: activity.id })
+      .groupBy("COALESCE(event.provinceSnapshot, '未知')").addGroupBy("COALESCE(event.citySnapshot, '未知')").addGroupBy("COALESCE(event.districtSnapshot, '未知')").getRawMany<any>();
+    const approvedCities = await manager.getRepository(Registration).createQueryBuilder("registration")
+      .select("COALESCE(registration.attributionProvince, '未知')", "province").addSelect("COALESCE(registration.attributionCity, '未知')", "city").addSelect("COALESCE(registration.attributionDistrict, '未知')", "district")
+      .addSelect("COUNT(registration.id)", "approvedCount").where("registration.activityId = :activityId", { activityId: activity.id })
+      .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
+      .groupBy("COALESCE(registration.attributionProvince, '未知')").addGroupBy("COALESCE(registration.attributionCity, '未知')").addGroupBy("COALESCE(registration.attributionDistrict, '未知')").getRawMany<any>();
+    const cityKey = (row: any) => `${row.province}|${row.city}|${row.district}`;
+    const approvedCityMap = new Map(approvedCities.map((row) => [cityKey(row), Number(row.approvedCount || 0)]));
+
+    const dimensionRow = (row: any, approved: number) => {
+      const grossAmountFen = yuanToFen(row.grossAmount || 0); const refundAmountFen = yuanToFen(row.refundAmount || 0);
+      const registrationCount = Number(row.registrationCount || 0); const paidCount = Number(row.paidCount || 0); const checkInCount = Number(row.checkInCount || 0);
+      return { viewCount: Number(row.viewCount || 0), shareVisitCount: Number(row.shareVisitCount || 0), registrationCount, paidCount, approvedCount: approved, checkInCount, reviewCount: Number(row.reviewCount || 0), cancelCount: Number(row.cancelCount || 0), refundCount: Number(row.refundCount || 0), grossAmountFen, refundAmountFen, netAmountFen: grossAmountFen - refundAmountFen, signupRate: boundedPercentage(registrationCount, Number(row.viewCount || 0)).toFixed(1), paymentRate: boundedPercentage(paidCount, registrationCount).toFixed(1), checkInRate: boundedPercentage(checkInCount, approved).toFixed(1) };
+    };
+    const ticketTypes = ticketEvents.map((row) => ({ id: Number(row.dimensionId || 0) || null, name: row.dimensionName, ...dimensionRow(row, approvedTicketMap.get(Number(row.dimensionId || 0)) || 0) })).sort((a, b) => b.paidCount - a.paidCount || b.registrationCount - a.registrationCount);
+    const channels = channelEvents.map((row) => ({ key: row.dimensionKey, code: row.code || null, name: row.dimensionName, source: row.source, ...dimensionRow(row, approvedChannelMap.get(String(row.dimensionKey)) || 0) })).sort((a, b) => b.paidCount - a.paidCount || b.registrationCount - a.registrationCount || b.viewCount - a.viewCount);
+    const cities = cityEvents.map((row) => ({ province: row.province, city: row.city, district: row.district, ...dimensionRow(row, approvedCityMap.get(cityKey(row)) || 0) })).sort((a, b) => b.registrationCount - a.registrationCount || b.viewCount - a.viewCount);
+
+    const attributionMismatchCount = await eventRepo.createQueryBuilder("event").innerJoin("event.registration", "registration")
+      .where("event.activityId = :activityId", { activityId: activity.id })
+      .andWhere("event.type IN ('register','pay','check_in','review','cancel','refund')")
+      .andWhere("(NOT (event.source <=> registration.attributionSource) OR NOT (event.channelCodeSnapshot <=> registration.attributionChannelCode) OR NOT (event.citySnapshot <=> registration.attributionCity))").getCount();
+
+    const funnel = { viewCount: count("view"), shareVisitCount: count("share_visit"), inviteCount, registrationCount: count("register"), paidCount: count("pay"), approvedCount, checkInCount: count("check_in"), reviewCount: count("review"), cancelCount: count("cancel"), refundCount: count("refund"), grossAmountFen: amount("pay"), refundAmountFen: amount("refund"), netAmountFen: amount("pay") - amount("refund") };
+    const sum = (rows: any[], key: string) => rows.reduce((total, row) => total + Number(row[key] || 0), 0);
+    const reconciles = (rows: any[], includeViews: boolean) => ({ view: !includeViews || sum(rows, "viewCount") === funnel.viewCount, shareVisit: !includeViews || sum(rows, "shareVisitCount") === funnel.shareVisitCount, register: sum(rows, "registrationCount") === funnel.registrationCount, pay: sum(rows, "paidCount") === funnel.paidCount, approved: sum(rows, "approvedCount") === funnel.approvedCount, checkIn: sum(rows, "checkInCount") === funnel.checkInCount, review: sum(rows, "reviewCount") === funnel.reviewCount, cancel: sum(rows, "cancelCount") === funnel.cancelCount, refund: sum(rows, "refundCount") === funnel.refundCount, grossAmount: sum(rows, "grossAmountFen") === funnel.grossAmountFen, refundAmount: sum(rows, "refundAmountFen") === funnel.refundAmountFen, netAmount: sum(rows, "netAmountFen") === funnel.netAmountFen });
+
+    const topInvites = (await manager.getRepository(InviteCode).find({ where: { activity: { id: activity.id } }, order: { registrationCount: "DESC", visitCount: "DESC" }, take: 10 }))
+      .map((row) => ({ id: row.id, code: row.code, user: row.user ? { id: row.user.id, nickname: row.user.nickname, phone: maskPhone(row.user.phone) } : null, visitCount: row.visitCount, registrationCount: row.registrationCount, createdAt: row.createdAt }));
     return {
-      activity,
-      funnel: { viewCount, shareVisitCount, inviteCount, registrationCount, paidCount, approvedCount, checkInCount, reviewCount },
-      rates: {
-        signupRate: viewCount ? ((registrationCount / viewCount) * 100).toFixed(1) : "0.0",
-        paymentRate: registrationCount ? ((paidCount / registrationCount) * 100).toFixed(1) : "0.0",
-        checkInRate: approvedCount ? ((checkInCount / approvedCount) * 100).toFixed(1) : "0.0",
-        reviewRate: checkInCount ? ((reviewCount / checkInCount) * 100).toFixed(1) : "0.0"
-      },
+      activity: { id: activity.id, title: activity.title, location: activity.location, locationProvince: activity.locationProvince, locationCity: activity.locationCity, locationDistrict: activity.locationDistrict, startTime: activity.startTime, endTime: activity.endTime, tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name } : null },
+      funnel,
+      rates: { signupRate: boundedPercentage(funnel.registrationCount, funnel.viewCount).toFixed(1), paymentRate: boundedPercentage(funnel.paidCount, funnel.registrationCount).toFixed(1), checkInRate: boundedPercentage(funnel.checkInCount, funnel.approvedCount).toFixed(1), reviewRate: boundedPercentage(funnel.reviewCount, funnel.checkInCount).toFixed(1), refundRate: boundedPercentage(funnel.refundCount, funnel.paidCount).toFixed(1) },
+      dimensions: { ticketTypes, channels, cities },
+      reconciliation: { ticketTypes: reconciles(ticketTypes, false), channels: reconciles(channels, true), cities: reconciles(cities, true), attribution: { consistent: attributionMismatchCount === 0, mismatchCount: attributionMismatchCount } },
       topInvites
     };
   }
 
-  async activityRecap(activityId: number, admin?: AdminContext) {
+  async activityRecap(activityId: number, admin?: AdminContext, versionNo?: number) {
+    if (versionNo !== undefined) {
+      if (!Number.isInteger(versionNo) || versionNo < 1) throw new BadRequestException("复盘版本号不正确");
+      const activity = await this.activities.findOneBy({ id: activityId });
+      this.assertAnalyticsActivityAccess(activity, admin);
+      const version = await this.recapVersions.findOne({ where: { activity: { id: activityId }, versionNo } });
+      if (!version) throw new NotFoundException("复盘版本不存在");
+      return { ...(version.metricSnapshot as any), version: this.publicRecapVersion(version, true), isHistorical: true };
+    }
     const funnel = await this.activityFunnel(activityId, admin);
-    const reviews = await this.reviews.find({
-      where: { activity: { id: activityId }, status: "visible" },
-      order: { createdAt: "DESC" },
-      take: 20
-    });
+    const reviews = await this.reviews.find({ where: { activity: { id: activityId }, status: "visible" }, order: { createdAt: "DESC" }, take: 20 });
     const averageRating = reviews.length ? (reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length).toFixed(1) : "0.0";
     const notifications = await this.notifications.count({ where: { activity: { id: activityId } } });
-    return { ...funnel, reviewSummary: { averageRating, latestReviews: reviews }, notifications };
+    const latestVersion = await this.recapVersions.findOne({ where: { activity: { id: activityId } }, order: { versionNo: "DESC" } });
+    return { ...funnel, reviewSummary: { averageRating, latestReviews: reviews.map((row) => ({ id: row.id, user: row.user ? { id: row.user.id, nickname: row.user.nickname, phone: maskPhone(row.user.phone) } : null, rating: row.rating, content: row.content, createdAt: row.createdAt })) }, notifications, latestVersion: latestVersion ? this.publicRecapVersion(latestVersion, false) : null, generatedAt: new Date(), isHistorical: false };
   }
 
-  async exportActivityRecap(activityId: number, admin?: AdminContext) {
-    const recap = await this.activityRecap(activityId, admin);
+  async listActivityRecapVersions(activityId: number, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id: activityId });
+    this.assertAnalyticsActivityAccess(activity, admin);
+    const rows = await this.recapVersions.find({ where: { activity: { id: activityId } }, order: { versionNo: "DESC" }, take: 200 });
+    return rows.map((row) => this.publicRecapVersion(row, false));
+  }
+
+  async createActivityRecapVersion(activityId: number, input: RecapVersionInput, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id: activityId });
+    this.assertAnalyticsActivityAccess(activity, admin);
+    const content = this.normalizeRecapVersionInput(input);
+    const live = await this.activityRecap(activityId, admin);
+    const metricSnapshot = { ...(live as any) };
+    delete metricSnapshot.latestVersion;
+    delete metricSnapshot.isHistorical;
+    const saved = await this.recapVersions.manager.transaction(async (manager) => {
+      const lockedActivity = await manager.getRepository(Activity).createQueryBuilder("activity").setLock("pessimistic_write").leftJoinAndSelect("activity.tenant", "tenant").where("activity.id = :activityId", { activityId }).getOne();
+      this.assertAnalyticsActivityAccess(lockedActivity, admin);
+      const raw = await manager.getRepository(ActivityRecapVersion).createQueryBuilder("version").select("COALESCE(MAX(version.versionNo), 0)", "versionNo").where("version.activityId = :activityId", { activityId }).getRawOne<{ versionNo: string }>();
+      const versionNo = Number(raw?.versionNo || 0) + 1;
+      return manager.getRepository(ActivityRecapVersion).save(manager.getRepository(ActivityRecapVersion).create({ activity: lockedActivity!, tenant: lockedActivity!.tenant || null, tenantScopeKey: lockedActivity!.tenant ? `tenant:${lockedActivity!.tenant.id}` : "platform", versionNo, ...content, metricSnapshot, createdBy: admin?.id ? ({ id: admin.id, username: admin.username } as AdminUser) : null }));
+    });
+    await this.logReviewOperation(admin, "activity_recap.version.create", "activity_recap_version", saved.id, `创建活动复盘版本：${activity!.title} v${saved.versionNo}`, { activityId, versionNo: saved.versionNo, problemCount: saved.problems.length, actionCount: saved.actionItems.length, imageCount: saved.images.length });
+    return this.publicRecapVersion(saved, true);
+  }
+
+  private normalizeRecapVersionInput(input: RecapVersionInput) {
+    const summary = String(input?.summary || "").trim();
+    const list = (value: unknown, label: string, maxItems: number, maxLength: number) => {
+      if (value !== undefined && !Array.isArray(value)) throw new BadRequestException(`${label}必须是数组`);
+      const rows = (Array.isArray(value) ? value : []).map((item) => String(item || "").trim()).filter(Boolean);
+      if (rows.length > maxItems) throw new BadRequestException(`${label}最多 ${maxItems} 条`);
+      if (rows.some((item) => item.length > maxLength)) throw new BadRequestException(`${label}单条不能超过 ${maxLength} 个字符`);
+      return rows;
+    };
+    if (summary.length > 10000) throw new BadRequestException("复盘总结不能超过 10000 个字符");
+    const problems = list(input?.problems, "复盘问题", 20, 500); const actionItems = list(input?.actionItems, "行动项", 20, 500); const images = list(input?.images, "复盘图片", 9, 500);
+    if (images.some((url) => !/^https:\/\//i.test(url) && !url.startsWith("/uploads/"))) throw new BadRequestException("复盘图片只支持 HTTPS 或站内上传地址");
+    if (!summary && !problems.length && !actionItems.length && !images.length) throw new BadRequestException("请至少填写总结、问题、行动项或图片中的一项");
+    return { summary, problems, actionItems, images };
+  }
+
+  private publicRecapVersion(row: ActivityRecapVersion, includeContent: boolean) {
+    return { id: row.id, versionNo: row.versionNo, activityId: row.activity.id, tenantScopeKey: row.tenantScopeKey, createdBy: row.createdBy ? { id: row.createdBy.id, username: row.createdBy.username } : null, createdAt: row.createdAt, ...(includeContent ? { summary: row.summary, problems: row.problems || [], actionItems: row.actionItems || [], images: row.images || [] } : { summaryPreview: String(row.summary || "").slice(0, 120), problemCount: row.problems?.length || 0, actionCount: row.actionItems?.length || 0, imageCount: row.images?.length || 0 }) };
+  }
+
+  async exportActivityRecap(activityId: number, admin?: AdminContext, versionNo?: number) {
+    const recap: any = await this.activityRecap(activityId, admin, versionNo);
     const workbook = new ExcelJS.Workbook();
     workbook.creator = "activity-registration-platform";
     workbook.created = new Date();
@@ -553,6 +1025,11 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       { name: "报名成功", value: recap.funnel.approvedCount },
       { name: "签到", value: recap.funnel.checkInCount },
       { name: "评价", value: recap.funnel.reviewCount },
+      { name: "取消", value: recap.funnel.cancelCount },
+      { name: "退款", value: recap.funnel.refundCount },
+      { name: "支付毛额（分）", value: recap.funnel.grossAmountFen },
+      { name: "退款额（分）", value: recap.funnel.refundAmountFen },
+      { name: "净额（分）", value: recap.funnel.netAmountFen },
       { name: "通知触达", value: recap.notifications },
       { name: "报名转化率", value: `${recap.rates.signupRate}%` },
       { name: "付款转化率", value: `${recap.rates.paymentRate}%` },
@@ -560,6 +1037,15 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       { name: "评价率", value: `${recap.rates.reviewRate}%` },
       { name: "评价均分", value: recap.reviewSummary.averageRating }
     ]);
+
+    const addDimensionSheet = (name: string, rows: any[], label: (row: any) => string) => {
+      const sheet = workbook.addWorksheet(name);
+      sheet.columns = [{ header: "维度", key: "label", width: 28 }, { header: "浏览", key: "viewCount", width: 10 }, { header: "分享", key: "shareVisitCount", width: 10 }, { header: "报名", key: "registrationCount", width: 10 }, { header: "支付", key: "paidCount", width: 10 }, { header: "成功", key: "approvedCount", width: 10 }, { header: "核销", key: "checkInCount", width: 10 }, { header: "评价", key: "reviewCount", width: 10 }, { header: "取消", key: "cancelCount", width: 10 }, { header: "退款", key: "refundCount", width: 10 }, { header: "毛额分", key: "grossAmountFen", width: 14 }, { header: "退款分", key: "refundAmountFen", width: 14 }, { header: "净额分", key: "netAmountFen", width: 14 }];
+      rows.forEach((row) => sheet.addRow({ label: label(row), ...row }));
+    };
+    addDimensionSheet("票种拆分", recap.dimensions.ticketTypes, (row) => row.name);
+    addDimensionSheet("渠道拆分", recap.dimensions.channels, (row) => row.code ? `${row.name} (${row.code})` : `${row.name} (${row.source})`);
+    addDimensionSheet("城市拆分", recap.dimensions.cities, (row) => [row.province, row.city, row.district].filter((value) => value && value !== "未知").join("/") || "未知");
 
     const invites = workbook.addWorksheet("邀请榜");
     invites.columns = [
@@ -569,7 +1055,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       { header: "报名", key: "registrationCount", width: 12 },
       { header: "生成时间", key: "createdAt", width: 24 }
     ];
-    recap.topInvites.forEach((item) => {
+    recap.topInvites.forEach((item: any) => {
       invites.addRow({
         code: item.code,
         user: item.user?.nickname || item.user?.phone || "-",
@@ -586,7 +1072,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       { header: "评价内容", key: "content", width: 50 },
       { header: "时间", key: "createdAt", width: 24 }
     ];
-    recap.reviewSummary.latestReviews.forEach((item) => {
+    recap.reviewSummary.latestReviews.forEach((item: any) => {
       reviewSheet.addRow({
         user: item.user?.nickname || item.user?.phone || "-",
         rating: item.rating,
@@ -595,46 +1081,133 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       });
     });
 
+    if (recap.version) {
+      const content = workbook.addWorksheet("复盘内容");
+      content.columns = [{ header: "分类", key: "type", width: 16 }, { header: "内容", key: "content", width: 90 }];
+      content.addRow({ type: "版本", content: `v${recap.version.versionNo}` });
+      content.addRow({ type: "总结", content: recap.version.summary || "" });
+      (recap.version.problems || []).forEach((item: string) => content.addRow({ type: "问题", content: item }));
+      (recap.version.actionItems || []).forEach((item: string) => content.addRow({ type: "行动项", content: item }));
+      (recap.version.images || []).forEach((item: string) => content.addRow({ type: "图片", content: item }));
+    }
+
     for (const sheet of workbook.worksheets) {
       sheet.getRow(1).font = { bold: true };
       sheet.views = [{ state: "frozen", ySplit: 1 }];
     }
 
+    await this.logReviewOperation(admin, "activity_recap.export", "activity", activityId, `导出活动复盘：${recap.activity.title}`, { versionNo: recap.version?.versionNo || null, historical: Boolean(recap.isHistorical) });
     return workbook.xlsx.writeBuffer();
   }
 
   async listNotificationTemplates(admin?: AdminContext) {
-    const builder = this.notificationTemplates.createQueryBuilder("template").leftJoinAndSelect("template.tenant", "tenant").orderBy("template.createdAt", "DESC");
+    const builder = this.notificationTemplates.createQueryBuilder("template").leftJoin("template.tenant", "tenant")
+      .select(["template.id", "template.name", "template.channel", "template.title", "template.content", "template.enabled", "template.createdAt", "template.updatedAt", "tenant.id", "tenant.code", "tenant.name"])
+      .orderBy("template.createdAt", "DESC");
     if (isTenantScopedActor(admin)) builder.andWhere("(template.tenantId IS NULL OR template.tenantId = :tenantId)", { tenantId: admin?.tenantId });
-    return builder.getMany();
+    return (await builder.take(200).getMany()).map((row) => this.publicNotificationTemplate(row));
   }
 
   async saveNotificationTemplate(input: NotificationTemplateInput, id?: number, admin?: AdminContext) {
     const row = id ? await this.notificationTemplates.findOneBy({ id }) : this.notificationTemplates.create();
-    this.assertNotificationTemplateWriteAccess(row, admin);
+    if (id) this.assertNotificationTemplateWriteAccess(row, admin);
     if (!row) throw new NotFoundException("通知模板不存在");
     if (!input.name?.trim() || !input.title?.trim() || !input.content?.trim()) {
       throw new BadRequestException("请填写模板名称、标题和内容");
     }
+    this.assertNotificationTemplateVariables(input.title, input.content);
 
     row.tenant = row.tenant || tenantRelationForActor<Tenant>(admin);
-    row.name = input.name.trim();
-    row.channel = input.channel || "site";
-    row.title = input.title.trim();
-    row.content = input.content.trim();
+    const name = input.name.trim();
+    const title = input.title.trim();
+    const content = input.content.trim();
+    const channel = this.notificationChannel(input.channel || "site");
+    if (name.length > 120) throw new BadRequestException("模板名称不能超过 120 个字符");
+    if (title.length > 160) throw new BadRequestException("通知标题不能超过 160 个字符");
+    if (content.length > 5000) throw new BadRequestException("通知内容不能超过 5000 个字符");
+    row.name = name;
+    row.channel = channel;
+    row.title = title;
+    row.content = content;
     row.enabled = input.enabled ?? true;
-    return this.notificationTemplates.save(row);
+    const saved = await this.notificationTemplates.save(row);
+    await this.logNotificationOperation(admin, id ? "notification_template.update" : "notification_template.create", "notification_template", saved.id, `${id ? "更新" : "创建"}通知模板：${saved.name}`, { channel: saved.channel, enabled: saved.enabled });
+    return this.publicNotificationTemplate(saved);
   }
 
-  async listNotifications(admin?: AdminContext) {
+  async notificationOptions(admin?: AdminContext) {
+    const activityBuilder = this.activities.createQueryBuilder("activity").leftJoin("activity.tenant", "tenant")
+      .select(["activity.id", "activity.title", "activity.status", "activity.createdAt", "tenant.id", "tenant.code", "tenant.name"])
+      .orderBy("activity.createdAt", "DESC");
+    applyTenantScopeToQuery(activityBuilder, "activity", admin);
+    applyAdminActivityDataScope(activityBuilder, "activity", admin?.dataScope);
+    const tagBuilder = this.userTags.createQueryBuilder("tag").leftJoin("tag.user", "user")
+      .select("tag.name", "name").addSelect("MAX(tag.color)", "color").addSelect("COUNT(DISTINCT user.id)", "count")
+      .where("tag.name <> ''").groupBy("tag.name").orderBy("count", "DESC").addOrderBy("tag.name", "ASC").limit(300);
+    tagBuilder.andWhere("tag.tenantScopeKey = :tagScopeKey", { tagScopeKey: isTenantScopedActor(admin) ? `tenant:${admin?.tenantId}` : "platform" });
+    this.applyNotificationMemberDataScope(tagBuilder, "user", admin);
+    const [activities, tags] = await Promise.all([activityBuilder.take(500).getMany(), tagBuilder.getRawMany<{ name: string; color: string; count: string }>()]);
+    return {
+      activities: activities.map((row) => ({ id: row.id, title: row.title, status: row.status, tenant: row.tenant ? { id: row.tenant.id, code: row.tenant.code, name: row.tenant.name } : null })),
+      tags: tags.map((row) => ({ name: row.name, color: row.color || "default", count: Number(row.count || 0) }))
+    };
+  }
+
+  async listNotifications(query: { page?: number; pageSize?: number; status?: string } = {}, admin?: AdminContext) {
+    const { page, pageSize } = this.notificationPagination(query.page, query.pageSize);
+    if (query.status && !["pending", "sent", "failed", "suppressed"].includes(query.status)) throw new BadRequestException("通知状态不正确");
     const builder = this.notifications
       .createQueryBuilder("notification")
-      .leftJoinAndSelect("notification.activity", "activity")
-      .leftJoinAndSelect("notification.user", "user")
-      .orderBy("notification.createdAt", "DESC")
-      .take(100);
-    if (isTenantScopedActor(admin)) builder.andWhere("activity.tenantId = :tenantId", { tenantId: admin?.tenantId });
-    return builder.getMany();
+      .leftJoin("notification.activity", "activity")
+      .leftJoin("activity.tenant", "activityTenant")
+      .leftJoin("notification.user", "user")
+      .select([
+        "notification.id", "notification.channel", "notification.tenantScopeKey", "notification.title", "notification.content", "notification.status", "notification.provider", "notification.providerMessageId", "notification.errorMessage", "notification.suppressedReason", "notification.variablesSnapshot", "notification.retryCount", "notification.sentAt", "notification.failedAt", "notification.remark", "notification.createdAt",
+        "activity.id", "activity.title", "activity.status", "activityTenant.id", "activityTenant.code", "activityTenant.name",
+        "user.id", "user.nickname", "user.phone"
+      ])
+      .orderBy("notification.createdAt", "DESC");
+    if (isTenantScopedActor(admin)) builder.andWhere("notification.tenantScopeKey = :tenantScopeKey", { tenantScopeKey: `tenant:${admin?.tenantId}` });
+    this.applyNotificationActivityDataScope(builder, "notification", admin);
+    if (query.status) builder.andWhere("notification.status = :status", { status: query.status });
+    const [rows, total] = await builder.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+    const includeSensitive = this.notificationIncludesSensitive(admin);
+    return { items: rows.map((row) => this.notificationPublicPayload(row, includeSensitive)), total, page, pageSize, sensitiveMasked: !includeSensitive };
+  }
+
+  async listNotificationPreferences(query: { userId?: number; page?: number; pageSize?: number } = {}, admin?: AdminContext) {
+    const { page, pageSize } = this.notificationPagination(query.page, query.pageSize);
+    const scopeKey = isTenantScopedActor(admin) ? `tenant:${admin?.tenantId}` : "platform";
+    if (query.userId) await this.assertNotificationUserAccess(query.userId, admin);
+    const builder = this.notificationPreferences.createQueryBuilder("preference").leftJoin("preference.user", "user")
+      .select(["preference.id", "preference.tenantScopeKey", "preference.channel", "preference.subscribed", "preference.reason", "preference.unsubscribedAt", "preference.createdAt", "preference.updatedAt", "user.id", "user.nickname", "user.phone"])
+      .where("preference.tenantScopeKey = :scopeKey", { scopeKey }).orderBy("preference.updatedAt", "DESC");
+    this.applyNotificationMemberDataScope(builder, "user", admin);
+    if (query.userId) builder.andWhere("user.id = :userId", { userId: query.userId });
+    const [rows, total] = await builder.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+    const includeSensitive = this.notificationIncludesSensitive(admin);
+    return { items: rows.map((row) => ({
+      id: row.id, user: this.publicNotificationUser(row.user, includeSensitive),
+      tenantScopeKey: row.tenantScopeKey, channel: row.channel, subscribed: row.subscribed,
+      reason: row.reason, unsubscribedAt: row.unsubscribedAt, createdAt: row.createdAt, updatedAt: row.updatedAt
+    })), total, page, pageSize, sensitiveMasked: !includeSensitive };
+  }
+
+  async saveNotificationPreference(userId: number, input: { channel?: string; subscribed?: boolean; reason?: string }, admin?: AdminContext) {
+    const user = await this.users.findOneBy({ id: userId });
+    if (!user) throw new NotFoundException("用户不存在");
+    await this.assertNotificationUserAccess(userId, admin);
+    const channel = this.notificationChannel(input.channel || "");
+    const tenant = isTenantScopedActor(admin) ? await this.tenants.findOneBy({ id: Number(admin?.tenantId) }) : null;
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    let row = await this.notificationPreferences.findOne({ where: { user: { id: userId }, tenantScopeKey, channel } });
+    if (!row) row = this.notificationPreferences.create({ user, tenant, tenantScopeKey, channel });
+    row.subscribed = input.subscribed !== false;
+    row.reason = String(input.reason || "").trim().slice(0, 255) || null;
+    row.unsubscribedAt = row.subscribed ? null : new Date();
+    const saved = await this.notificationPreferences.save(row);
+    await this.logNotificationOperation(admin, "notification_preference.update", "notification_preference", saved.id, `${saved.subscribed ? "恢复" : "关闭"}会员通知渠道：${channel}`, { userId, channel, subscribed: saved.subscribed });
+    return { id: saved.id, user: this.publicNotificationUser(user, this.notificationIncludesSensitive(admin)), tenantScopeKey: saved.tenantScopeKey, channel: saved.channel, subscribed: saved.subscribed, reason: saved.reason, unsubscribedAt: saved.unsubscribedAt, createdAt: saved.createdAt, updatedAt: saved.updatedAt, sensitiveMasked: !this.notificationIncludesSensitive(admin) };
   }
 
   async notificationProviderStatus(admin?: AdminContext) {
@@ -656,28 +1229,36 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   async previewNotification(input: PreviewNotificationInput, admin?: AdminContext) {
     const prepared = await this.prepareNotification(input, admin);
+    const includeSensitive = this.notificationIncludesSensitive(admin);
+    const variables = this.publicNotificationVariables(prepared.variables, includeSensitive);
     return {
       channel: prepared.channel,
-      title: prepared.title,
-      content: prepared.content,
-      variables: prepared.variables
+      title: this.sanitizeNotificationText(prepared.title, prepared.variables, variables, includeSensitive),
+      content: this.sanitizeNotificationText(prepared.content, prepared.variables, variables, includeSensitive),
+      variables,
+      sensitiveMasked: !includeSensitive
     };
   }
 
   async sendNotification(input: SendNotificationInput, admin?: AdminContext) {
+    if (!input.userId) throw new BadRequestException("发送单条通知必须选择目标会员");
     const prepared = await this.prepareNotification(input, admin);
     const user = input.userId ? await this.users.findOneBy({ id: input.userId }) : null;
     const activity = input.activityId ? await this.activities.findOneBy({ id: input.activityId }) : null;
     if (input.userId && !user) throw new NotFoundException("用户不存在");
     if (input.activityId && !activity) throw new NotFoundException("活动不存在");
 
-    return this.createAndDeliverNotification({ channel: prepared.channel, title: prepared.title, content: prepared.content, user, activity, remark: input.remark || null });
+    await this.assertNotificationUserAccess(user!.id, admin);
+    const saved = await this.createAndDeliverNotification({ channel: prepared.channel, title: prepared.title, content: prepared.content, variables: prepared.variables, user, activity, tenant: activity?.tenant || (isTenantScopedActor(admin) ? await this.tenants.findOneBy({ id: Number(admin?.tenantId) }) : null), remark: input.remark || null });
+    await this.logNotificationOperation(admin, "notification.send", "notification", saved.id, `发送单条通知：${saved.title}`, { channel: saved.channel, userId: user!.id, status: saved.status });
+    return this.notificationPublicPayload(saved, this.notificationIncludesSensitive(admin));
   }
 
   async sendActivityReminder(activityId: number, input: SendActivityReminderInput, admin?: AdminContext) {
     const activity = await this.activities.findOneBy({ id: activityId });
     assertTenantAccessForActor(activity, admin, "Activity not found or not in current tenant");
     if (!activity) throw new NotFoundException("活动不存在");
+    this.assertNotificationActivityAccess(activity, admin);
 
     const statuses = input.statuses?.length ? input.statuses : [RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
     const registrations = await this.registrations.find({
@@ -699,19 +1280,23 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
           channel: prepared.channel,
           title: prepared.title,
           content: prepared.content,
+          variables: prepared.variables,
           user: registration.user,
           activity,
+          tenant: activity.tenant || registration.tenant || null,
           remark: input.remark || "活动提醒"
         })
       );
     }
 
-    return {
+    const result = {
       activityId,
       sentCount: rows.filter((row) => row.status === "sent").length,
       failedCount: rows.filter((row) => row.status === "failed").length,
-      records: rows
+      records: rows.map((row) => this.notificationPublicPayload(row, this.notificationIncludesSensitive(admin)))
     };
+    await this.logNotificationOperation(admin, "notification.activity_send", "activity", activity.id, `发送活动提醒：${activity.title}`, { channel: input.channel || "site", matchedCount: registrations.length, sentCount: result.sentCount, failedCount: result.failedCount });
+    return result;
   }
 
   async sendTaggedNotification(input: SendTaggedNotificationInput, admin?: AdminContext) {
@@ -721,7 +1306,10 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
     const activity = input.activityId ? await this.activities.findOneBy({ id: input.activityId }) : null;
     if (input.activityId && !activity) throw new NotFoundException("活动不存在");
-    if (activity) assertTenantAccessForActor(activity, admin, "Activity not found or not in current tenant");
+    if (activity) {
+      assertTenantAccessForActor(activity, admin, "Activity not found or not in current tenant");
+      this.assertNotificationActivityAccess(activity, admin);
+    }
 
     const builder = this.userTags
       .createQueryBuilder("tag")
@@ -729,11 +1317,15 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .leftJoinAndSelect("tag.tenant", "tenant")
       .where("tag.name = :tagName", { tagName })
       .orderBy("tag.createdAt", "ASC")
-      .take(300);
-    if (isTenantScopedActor(admin)) builder.andWhere("tenant.id = :tenantId", { tenantId: admin?.tenantId });
+      .take(10001);
+    const targetTenantId = activity?.tenant?.id || (isTenantScopedActor(admin) ? Number(admin?.tenantId || 0) : null);
+    const targetScopeKey = targetTenantId ? `tenant:${targetTenantId}` : "platform";
+    builder.andWhere("tag.tenantScopeKey = :targetScopeKey", { targetScopeKey });
+    this.applyNotificationMemberDataScope(builder, "user", admin);
     const tags = await builder.getMany();
     const users = Array.from(new Map(tags.map((tag) => [tag.user.id, tag.user])).values());
     if (!users.length) throw new BadRequestException("当前标签下没有可通知的会员");
+    if (users.length > 10000) throw new BadRequestException("当前标签会员超过 10000 人，请拆分人群后分批发送");
 
     const rows: Notification[] = [];
     for (const user of users) {
@@ -743,46 +1335,63 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
           channel: prepared.channel,
           title: prepared.title,
           content: prepared.content,
+          variables: prepared.variables,
           user,
           activity,
+          tenant: activity?.tenant || (isTenantScopedActor(admin) ? await this.tenants.findOneBy({ id: Number(admin?.tenantId) }) : null),
           remark: input.remark || `会员分群通知：${tagName}`
         })
       );
     }
 
-    return {
+    const result = {
       tagName,
       matchedCount: users.length,
       sentCount: rows.filter((row) => row.status === "sent").length,
       failedCount: rows.filter((row) => row.status === "failed").length,
-      records: rows
+      records: rows.map((row) => this.notificationPublicPayload(row, this.notificationIncludesSensitive(admin)))
     };
+    await this.logNotificationOperation(admin, "notification.tag_send", "user_tag", 0, `发送标签通知：${tagName}`, { activityId: activity?.id || null, channel: input.channel || "site", matchedCount: result.matchedCount, sentCount: result.sentCount, failedCount: result.failedCount });
+    return result;
   }
 
   async retryNotification(id: number, admin?: AdminContext) {
-    const notification = await this.notifications.findOneBy({ id });
-    this.assertNotificationTenantAccess(notification, admin);
-    if (!notification) throw new NotFoundException("通知记录不存在");
-    if (notification.status !== "failed") throw new BadRequestException("只有发送失败的通知可以重试");
-
-    notification.retryCount += 1;
-    notification.status = "pending";
-    notification.errorMessage = null;
-    notification.failedAt = null;
-    const saved = await this.notifications.save(notification);
-    return this.deliverNotification(saved);
+    const saved = await this.notifications.manager.transaction(async (manager) => {
+      const notification = await manager.getRepository(Notification).createQueryBuilder("notification")
+        .setLock("pessimistic_write")
+        .leftJoinAndSelect("notification.activity", "activity")
+        .leftJoinAndSelect("activity.tenant", "tenant")
+        .leftJoinAndSelect("notification.user", "user")
+        .where("notification.id = :id", { id }).getOne();
+      this.assertNotificationTenantAccess(notification, admin);
+      if (!notification) throw new NotFoundException("通知记录不存在");
+      if (notification.activity) this.assertNotificationActivityAccess(notification.activity, admin);
+      if (notification.status !== "failed") throw new BadRequestException("只有发送失败的通知可以重试");
+      if (this.notificationRetryCoolingDown(notification)) throw new BadRequestException("通知刚完成重试，请稍后再试");
+      notification.retryCount += 1;
+      notification.status = "pending";
+      notification.errorMessage = null;
+      notification.failedAt = null;
+      return manager.getRepository(Notification).save(notification);
+    });
+    const delivered = await this.deliverNotification(saved);
+    await this.logNotificationOperation(admin, "notification.retry", "notification", delivered.id, `重试通知：${delivered.title}`, { retryCount: delivered.retryCount, status: delivered.status });
+    return this.notificationPublicPayload(delivered, this.notificationIncludesSensitive(admin));
   }
 
   async listNotificationSchedules(activityId?: number, admin?: AdminContext) {
     const builder = this.notificationSchedules
       .createQueryBuilder("schedule")
-      .leftJoinAndSelect("schedule.activity", "activity")
-      .leftJoinAndSelect("schedule.template", "template")
+      .leftJoin("schedule.activity", "activity")
+      .leftJoin("activity.tenant", "tenant")
+      .leftJoin("schedule.template", "template")
+      .select(["schedule.id", "schedule.name", "schedule.channel", "schedule.beforeHours", "schedule.enabled", "schedule.title", "schedule.content", "schedule.remark", "schedule.lastRunAt", "schedule.lastSentCount", "schedule.lastFailedCount", "schedule.createdAt", "schedule.updatedAt", "activity.id", "activity.title", "activity.status", "tenant.id", "tenant.code", "tenant.name", "template.id", "template.name", "template.channel", "template.enabled"])
       .orderBy("schedule.enabled", "DESC")
       .addOrderBy("schedule.createdAt", "DESC");
     if (activityId) builder.andWhere("activity.id = :activityId", { activityId });
     if (isTenantScopedActor(admin)) builder.andWhere("activity.tenantId = :tenantId", { tenantId: admin?.tenantId });
-    return builder.getMany();
+    applyAdminActivityDataScope(builder, "activity", admin?.dataScope);
+    return (await builder.take(200).getMany()).map((row) => this.publicNotificationSchedule(row));
   }
 
   async saveNotificationSchedule(input: NotificationScheduleInput, id?: number, admin?: AdminContext) {
@@ -793,6 +1402,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const activity = await this.activities.findOneBy({ id: input.activityId });
     assertTenantAccessForActor(activity, admin, "Activity not found or not in current tenant");
     if (!activity) throw new NotFoundException("活动不存在");
+    this.assertNotificationActivityAccess(activity, admin);
     const template = await this.notificationTemplateForActor(input.templateId, admin);
     if (input.templateId && !template) throw new NotFoundException("通知模板不存在");
     if (!input.name?.trim()) throw new BadRequestException("请填写提醒规则名称");
@@ -802,17 +1412,29 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
     row.activity = activity;
     row.template = template;
-    row.name = input.name.trim();
-    row.channel = input.channel || template?.channel || "site";
-    row.beforeHours = Math.max(Number(input.beforeHours ?? 24), 0);
+    const name = input.name.trim();
+    const title = input.title?.trim() || null;
+    const content = input.content?.trim() || null;
+    const remark = input.remark?.trim() || null;
+    if (name.length > 80) throw new BadRequestException("提醒规则名称不能超过 80 个字符");
+    if (title && title.length > 160) throw new BadRequestException("提醒标题不能超过 160 个字符");
+    if (content && content.length > 5000) throw new BadRequestException("提醒内容不能超过 5000 个字符");
+    if (remark && remark.length > 255) throw new BadRequestException("提醒备注不能超过 255 个字符");
+    const beforeHours = Number(input.beforeHours ?? 24);
+    if (!Number.isInteger(beforeHours) || beforeHours < 0 || beforeHours > 720) throw new BadRequestException("提前小时必须为 0-720 的整数");
+    row.name = name;
+    row.channel = this.notificationChannel(input.channel || template?.channel || "site");
+    row.beforeHours = beforeHours;
     row.enabled = input.enabled ?? true;
-    row.title = input.title?.trim() || null;
-    row.content = input.content?.trim() || null;
-    row.remark = input.remark?.trim() || null;
+    row.title = title;
+    row.content = content;
+    row.remark = remark;
     row.lastRunAt = id ? null : row.lastRunAt || null;
     row.lastSentCount = id ? 0 : row.lastSentCount || 0;
     row.lastFailedCount = id ? 0 : row.lastFailedCount || 0;
-    return this.notificationSchedules.save(row);
+    const saved = await this.notificationSchedules.save(row);
+    await this.logNotificationOperation(admin, id ? "notification_schedule.update" : "notification_schedule.create", "notification_schedule", saved.id, `${id ? "更新" : "创建"}提醒规则：${saved.name}`, { activityId: activity.id, beforeHours, enabled: saved.enabled });
+    return this.publicNotificationSchedule(saved);
   }
 
   async runDueNotificationSchedules(now = new Date(), admin?: AdminContext) {
@@ -824,20 +1446,40 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     });
 
     const results = [];
-    for (const schedule of due) {
-      const result = await this.sendActivityReminder(schedule.activity.id, {
-        templateId: schedule.template?.id,
-        channel: schedule.channel,
-        title: schedule.title || undefined,
-        content: schedule.content || undefined,
-        remark: schedule.remark || schedule.name
-      }, admin);
-      schedule.lastRunAt = now;
-      schedule.lastSentCount = result.sentCount;
-      schedule.lastFailedCount = result.failedCount;
-      await this.notificationSchedules.save(schedule);
-      results.push({ scheduleId: schedule.id, name: schedule.name, ...result });
+    for (const candidate of due) {
+      const schedule = await this.notificationSchedules.manager.transaction(async (manager) => {
+        const locked = await manager.getRepository(NotificationSchedule).createQueryBuilder("schedule")
+          .setLock("pessimistic_write")
+          .leftJoinAndSelect("schedule.activity", "activity")
+          .leftJoinAndSelect("activity.tenant", "tenant")
+          .leftJoinAndSelect("schedule.template", "template")
+          .where("schedule.id = :id", { id: candidate.id }).getOne();
+        if (!locked || !locked.enabled || locked.lastRunAt) return null;
+        this.assertNotificationActivityAccess(locked.activity, admin);
+        locked.lastRunAt = now;
+        return manager.getRepository(NotificationSchedule).save(locked);
+      });
+      if (!schedule) continue;
+      try {
+        const result = await this.sendActivityReminder(schedule.activity.id, {
+          templateId: schedule.template?.id,
+          channel: schedule.channel,
+          title: schedule.title || undefined,
+          content: schedule.content || undefined,
+          remark: schedule.remark || schedule.name
+        }, admin);
+        schedule.lastSentCount = result.sentCount;
+        schedule.lastFailedCount = result.failedCount;
+        await this.notificationSchedules.save(schedule);
+        results.push({ scheduleId: schedule.id, name: schedule.name, ...result });
+      } catch (error: any) {
+        schedule.lastSentCount = 0;
+        schedule.lastFailedCount = 1;
+        await this.notificationSchedules.save(schedule);
+        results.push({ scheduleId: schedule.id, name: schedule.name, sentCount: 0, failedCount: 1, error: error?.message || "提醒规则执行失败" });
+      }
     }
+    await this.logNotificationOperation(admin, "notification_schedule.run_due", "notification_schedule", 0, "执行到期通知规则", { checkedCount: schedules.length, dueCount: due.length, claimedCount: results.length });
     return { checkedCount: schedules.length, dueCount: due.length, results };
   }
 
@@ -849,13 +1491,50 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .where("schedule.enabled = :enabled", { enabled: true })
       .orderBy("schedule.createdAt", "ASC");
     if (isTenantScopedActor(admin)) builder.andWhere("activity.tenantId = :tenantId", { tenantId: admin?.tenantId });
+    applyAdminActivityDataScope(builder, "activity", admin?.dataScope);
     return builder.getMany();
   }
 
   private assertNotificationTenantAccess(notification: Notification | null, admin?: AdminContext) {
     if (!notification || !isTenantScopedActor(admin)) return;
-    if (notification.activity?.tenant?.id === admin?.tenantId) return;
+    if (notificationTenantScopeMatches({ actorTenantId: admin?.tenantId, tenantScopeKey: notification.tenantScopeKey, activityTenantId: notification.activity?.tenant?.id })) return;
     throw new NotFoundException("Notification not found or not in current tenant");
+  }
+
+  private assertNotificationActivityAccess(activity: Activity | null | undefined, admin?: AdminContext) {
+    if (activity && !adminCanAccessActivity(admin?.dataScope, activity.id)) throw new NotFoundException("活动不存在或不在岗位活动范围内");
+  }
+
+  private applyNotificationActivityDataScope(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, alias: string, admin?: AdminContext) {
+    const scope = normalizeAdminDataScope(admin?.dataScope);
+    if (scope.type !== "activity_ids") return;
+    if (!scope.activityIds.length) {
+      builder.andWhere("1 = 0");
+      return;
+    }
+    builder.andWhere(`${alias}.activityId IN (:...notificationActivityScopeIds)`, { notificationActivityScopeIds: scope.activityIds });
+  }
+
+  private applyNotificationMemberDataScope(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, userAlias: string, admin?: AdminContext) {
+    const scope = normalizeAdminDataScope(admin?.dataScope);
+    if (scope.type !== "activity_ids") return;
+    if (!scope.activityIds.length) {
+      builder.andWhere("1 = 0");
+      return;
+    }
+    builder.andWhere(`${userAlias}.id IN (SELECT notification_scope_registration.userId FROM registrations notification_scope_registration WHERE notification_scope_registration.activityId IN (:...notificationMemberScopeIds))`, { notificationMemberScopeIds: scope.activityIds });
+  }
+
+  private async assertNotificationUserAccess(userId: number, admin?: AdminContext) {
+    if (!isTenantScopedActor(admin)) return;
+    const tenantScopeKey = `tenant:${admin?.tenantId}`;
+    const profile = await this.memberProfiles.findOne({ where: { user: { id: userId }, tenantScopeKey } });
+    if (!profile) throw new NotFoundException("用户不存在或不属于当前商家");
+    const scope = normalizeAdminDataScope(admin?.dataScope);
+    if (scope.type !== "activity_ids") return;
+    if (!scope.activityIds.length) throw new NotFoundException("用户不存在或不在岗位活动范围内");
+    const count = await this.registrations.createQueryBuilder("registration").where("registration.userId = :userId", { userId }).andWhere("registration.activityId IN (:...notificationUserScopeIds)", { notificationUserScopeIds: scope.activityIds }).getCount();
+    if (!count) throw new NotFoundException("用户不存在或不在岗位活动范围内");
   }
 
   private async notificationTemplateForActor(templateId?: number, admin?: AdminContext) {
@@ -905,39 +1584,51 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     channel: string;
     title: string;
     content: string;
+    variables?: Record<string, string>;
     user?: User | null;
     activity?: Activity | null;
+    tenant?: Tenant | null;
     remark?: string | null;
   }) {
-    const rateLimitError = await this.notificationRateLimitError(input.channel, input.user, input.activity);
-    const row = await this.notifications.save(
-      this.notifications.create({
+    const tenantScopeKey = input.tenant ? `tenant:${input.tenant.id}` : "platform";
+    const createdAt = new Date();
+    const row = await this.notifications.manager.transaction(async (manager) => {
+      if (input.user) {
+        const lockedUser = await manager.getRepository(User).createQueryBuilder("user")
+          .setLock("pessimistic_write")
+          .where("user.id = :userId", { userId: input.user.id })
+          .getOne();
+        if (!lockedUser) throw new NotFoundException("用户不存在");
+      }
+      const suppression = await this.notificationSuppressionReason(input.channel, input.user, tenantScopeKey, input.activity, manager);
+      const repository = manager.getRepository(Notification);
+      const notification = repository.create({
         channel: input.channel,
+        tenant: input.tenant || null,
+        tenantScopeKey,
         title: input.title,
         content: input.content,
         user: input.user || null,
         activity: input.activity || null,
-        status: "pending",
-        provider: null,
+        status: suppression ? "suppressed" : "pending",
+        provider: suppression?.provider || null,
         providerMessageId: null,
         errorMessage: null,
+        suppressedReason: suppression?.reason || null,
+        variablesSnapshot: input.variables || null,
         retryCount: 0,
         sentAt: null,
         failedAt: null,
-        remark: input.remark || null
-      })
-    );
-    if (rateLimitError) {
-      row.status = "failed";
-      row.provider = "rate-limit";
-      row.errorMessage = rateLimitError;
-      row.failedAt = new Date();
-      return this.notifications.save(row);
-    }
+        remark: input.remark || null,
+        createdAt
+      });
+      return repository.save(notification);
+    });
+    if (row.status === "suppressed") return row;
     return this.deliverNotification(row);
   }
 
-  private async deliverNotification(row: Notification) {
+  private async deliverNotification(row: Notification, enqueueFailure = true) {
     const result = await this.notificationProvider.deliver({
       channel: row.channel,
       title: row.title,
@@ -955,21 +1646,37 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     row.errorMessage = result.errorMessage || null;
     row.sentAt = result.status === "sent" ? new Date() : null;
     row.failedAt = result.status === "failed" ? new Date() : null;
-    return this.notifications.save(row);
+    const saved = await this.notifications.save(row);
+    if (enqueueFailure && saved.status === "failed") {
+      await this.businessJobs.publish({
+        tenantId: saved.tenant?.id || saved.activity?.tenant?.id || null,
+        type: "notification.deliver",
+        idempotencyKey: `notification:${saved.id}`,
+        payload: { notificationId: saved.id },
+        maxAttempts: 5
+      });
+    }
+    return saved;
   }
 
-  private async notificationRateLimitError(channel: string, user?: User | null, activity?: Activity | null) {
-    if (!user || !activity) return null;
+  private async notificationSuppressionReason(channel: string, user: User | null | undefined, tenantScopeKey: string, activity?: Activity | null, manager?: EntityManager) {
+    if (!user) return null;
+    const preferenceRepository = manager?.getRepository(NotificationPreference) || this.notificationPreferences;
+    const notificationRepository = manager?.getRepository(Notification) || this.notifications;
+    const preference = await preferenceRepository.findOne({ where: { user: { id: user.id }, tenantScopeKey, channel } });
+    if (preference && !preference.subscribed) return { provider: "preference", reason: preference.reason || "用户已退订该通知渠道" };
     const since = new Date(Date.now() - NOTIFICATION_RATE_LIMIT_WINDOW_MS);
-    const count = await this.notifications
+    const count = await notificationRepository
       .createQueryBuilder("n")
       .where("n.channel = :channel", { channel })
       .andWhere("n.userId = :userId", { userId: user.id })
-      .andWhere("n.activityId = :activityId", { activityId: activity.id })
+      .andWhere("n.tenantScopeKey = :tenantScopeKey", { tenantScopeKey })
+      .andWhere(activity ? "n.activityId = :activityId" : "n.activityId IS NULL", activity ? { activityId: activity.id } : {})
+      .andWhere("n.status IN (:...rateStatuses)", { rateStatuses: ["pending", "sent"] })
       .andWhere("n.createdAt >= :since", { since })
       .getCount();
     if (count >= NOTIFICATION_RATE_LIMIT_COUNT) {
-      return "发送过于频繁，请稍后再试";
+      return { provider: "rate-limit", reason: "发送过于频繁，请稍后再试" };
     }
     return null;
   }
@@ -977,29 +1684,41 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   private async prepareNotification(input: PreviewNotificationInput, admin?: AdminContext) {
     let title = input.title?.trim();
     let content = input.content?.trim();
-    let channel = input.channel || "site";
+    let channel = this.notificationChannel(input.channel || "site");
 
     if (input.templateId) {
       const template = await this.notificationTemplateForActor(input.templateId, admin);
       if (!template || !template.enabled) throw new BadRequestException("通知模板不存在或已停用");
       title ||= template.title;
       content ||= template.content;
-      channel = input.channel || template.channel;
+      channel = this.notificationChannel(input.channel || template.channel);
     }
 
     if (!title || !content) throw new BadRequestException("请填写通知标题和内容");
+    if (title.length > 160) throw new BadRequestException("通知标题不能超过 160 个字符");
+    if (content.length > 5000) throw new BadRequestException("通知内容不能超过 5000 个字符");
+    this.assertNotificationTemplateVariables(title, content);
 
     const activity = input.activityId ? await this.activities.findOneBy({ id: input.activityId }) : null;
     const user = input.userId ? await this.users.findOneBy({ id: input.userId }) : null;
     const registration = input.registrationId ? await this.registrations.findOne({ where: { id: input.registrationId } }) : null;
     if (isTenantScopedActor(admin)) {
       const scopedActivity = activity || registration?.activity || null;
-      if (!scopedActivity) throw new BadRequestException("Tenant notification must be associated with an activity or registration");
-      assertTenantAccessForActor(scopedActivity, admin, "Activity not found or not in current tenant");
+      if (scopedActivity) {
+        assertTenantAccessForActor(scopedActivity, admin, "Activity not found or not in current tenant");
+        this.assertNotificationActivityAccess(scopedActivity, admin);
+      }
+      else {
+        if (!user) throw new BadRequestException("租户通知必须关联活动、报名或本租户会员");
+        await this.assertNotificationUserAccess(user.id, admin);
+      }
     }
     if (input.activityId && !activity) throw new NotFoundException("活动不存在");
     if (input.userId && !user) throw new NotFoundException("用户不存在");
     if (input.registrationId && !registration) throw new NotFoundException("报名记录不存在");
+    if (registration && activity && registration.activity.id !== activity.id) throw new BadRequestException("报名记录不属于所选活动");
+    if (registration && user && registration.user.id !== user.id) throw new BadRequestException("报名记录不属于所选会员");
+    if (user) await this.assertNotificationUserAccess(user.id, admin);
 
     const variables = this.notificationVariables({ activity: activity || registration?.activity || null, user: user || registration?.user || null, registration });
     return {
@@ -1026,7 +1745,84 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   private renderTemplate(template: string, variables: Record<string, string>) {
-    return template.replace(/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/g, (_, key: string) => variables[key] ?? "");
+    return renderNotificationTemplate(template, variables);
+  }
+
+  private notificationIncludesSensitive(admin?: AdminContext) {
+    return Boolean(admin?.permissions?.includes("notification.sensitive"));
+  }
+
+  private notificationPagination(pageValue?: number, pageSizeValue?: number) {
+    const page = pageValue ?? 1;
+    const pageSize = pageSizeValue ?? 20;
+    if (!Number.isInteger(page) || page < 1) throw new BadRequestException("页码不正确");
+    if (!Number.isInteger(pageSize) || pageSize < 1 || pageSize > 100) throw new BadRequestException("每页数量必须为 1-100");
+    return { page, pageSize };
+  }
+
+  private notificationRetryCoolingDown(notification: Notification) {
+    return notification.retryCount > 0 && Boolean(notification.failedAt) && Date.now() - new Date(notification.failedAt!).getTime() < NOTIFICATION_RETRY_COOLDOWN_MS;
+  }
+
+  private notificationChannel(value: string) {
+    const channel = String(value || "").trim();
+    if (!["site", "sms", "wechat", "email"].includes(channel)) throw new BadRequestException("通知渠道不正确");
+    return channel;
+  }
+
+  private publicNotificationUser(user: User | null | undefined, includeSensitive: boolean) {
+    return user ? { id: user.id, nickname: user.nickname, phone: includeSensitive ? user.phone : maskPhone(user.phone), sensitiveMasked: !includeSensitive } : null;
+  }
+
+  private publicNotificationVariables(variables: Record<string, string> | null | undefined, includeSensitive: boolean) {
+    const result = { ...(variables || {}) };
+    if (includeSensitive) return result;
+    result.userPhone = maskPhone(result.userPhone);
+    if (/^1\d{10}$/.test(result.userName || "")) result.userName = maskPhone(result.userName);
+    if (result.checkInCode) result.checkInCode = `${result.checkInCode.slice(0, 2)}****${result.checkInCode.slice(-2)}`;
+    return result;
+  }
+
+  private sanitizeNotificationText(text: string, original: Record<string, string> | null | undefined, safe: Record<string, string>, includeSensitive = false) {
+    let result = String(text || "");
+    for (const key of ["userPhone", "userName", "checkInCode"]) {
+      const source = String(original?.[key] || "");
+      const target = String(safe[key] || "");
+      if (source && source !== target) result = result.split(source).join(target);
+    }
+    if (!includeSensitive) result = result.replace(/(^|\D)(1\d{10})(?!\d)/g, (_match, prefix, phone) => `${prefix}${maskPhone(phone)}`);
+    return result;
+  }
+
+  private publicNotificationTemplate(row: NotificationTemplate) {
+    return { id: row.id, name: row.name, channel: row.channel, title: row.title, content: row.content, enabled: row.enabled, tenant: row.tenant ? { id: row.tenant.id, code: row.tenant.code, name: row.tenant.name } : null, createdAt: row.createdAt, updatedAt: row.updatedAt };
+  }
+
+  private publicNotificationSchedule(row: NotificationSchedule) {
+    return { id: row.id, name: row.name, channel: row.channel, beforeHours: row.beforeHours, enabled: row.enabled, title: row.title, content: row.content, remark: row.remark, lastRunAt: row.lastRunAt, lastSentCount: row.lastSentCount, lastFailedCount: row.lastFailedCount, createdAt: row.createdAt, updatedAt: row.updatedAt, activity: row.activity ? { id: row.activity.id, title: row.activity.title, status: row.activity.status, tenant: row.activity.tenant ? { id: row.activity.tenant.id, code: row.activity.tenant.code, name: row.activity.tenant.name } : null } : null, template: row.template ? { id: row.template.id, name: row.template.name, channel: row.template.channel, enabled: row.template.enabled } : null };
+  }
+
+  private notificationPublicPayload(row: Notification, includeSensitive = false) {
+    const variables = this.publicNotificationVariables(row.variablesSnapshot, includeSensitive);
+    return {
+      id: row.id, channel: row.channel, tenantScopeKey: row.tenantScopeKey,
+      title: this.sanitizeNotificationText(row.title, row.variablesSnapshot, variables, includeSensitive), content: this.sanitizeNotificationText(row.content, row.variablesSnapshot, variables, includeSensitive), status: row.status, provider: row.provider,
+      providerMessageId: includeSensitive ? row.providerMessageId : null, errorMessage: includeSensitive ? row.errorMessage : null,
+      suppressedReason: row.suppressedReason, variablesSnapshot: variables,
+      retryCount: row.retryCount, sentAt: row.sentAt, failedAt: row.failedAt,
+      user: this.publicNotificationUser(row.user, includeSensitive),
+      activity: row.activity ? { id: row.activity.id, title: row.activity.title, status: row.activity.status, tenant: row.activity.tenant ? { id: row.activity.tenant.id, code: row.activity.tenant.code, name: row.activity.tenant.name } : null } : null,
+      remark: row.remark, sensitiveMasked: !includeSensitive, createdAt: row.createdAt
+    };
+  }
+
+  private logNotificationOperation(admin: AdminContext | undefined, action: string, targetType: string, targetId: number, summary: string, detail: Record<string, unknown>) {
+    return this.logReviewOperation(admin, action, targetType, targetId, summary, detail);
+  }
+
+  private assertNotificationTemplateVariables(...templates: string[]) {
+    const unknown = unknownNotificationTemplateVariables(...templates);
+    if (unknown.length) throw new BadRequestException(`通知模板包含未知变量：${unknown.join("、")}`);
   }
 
   private formatDateTime(value: Date) {
@@ -1059,37 +1855,30 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     return this.inviteCodes.save(this.inviteCodes.create({ activity, user, code }));
   }
 
-  private async awardPoints(user: User, points: number, sourceType: string, sourceId: string | number, remark: string) {
-    const key = String(sourceId);
-    const exists = await this.memberPointLogs.findOne({ where: { sourceType, sourceId: key } });
-    if (exists) return exists;
-    const log = await this.memberPointLogs.save(this.memberPointLogs.create({ user, points, type: points >= 0 ? "earn" : "deduct", sourceType, sourceId: key, remark }));
-    await this.refreshMemberProfile(user);
-    return log;
-  }
-
-  private async refreshMemberProfile(user: User) {
-    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id } } });
-    if (!profile) profile = this.memberProfiles.create({ user, level: null });
+  private async refreshMemberProfile(user: User, tenant: Tenant | null = null) {
+    const tenantScopeKey = memberLevelScopeKey(tenant);
+    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey } });
+    if (!profile) profile = this.memberProfiles.create({ user, tenant, tenantScopeKey, level: null, pointDebt: 0 });
+    const tenantFilter = tenant ? " = :tenantId" : " IS NULL";
     const [registrationCount, checkInCount, reviewCount, paidAmount, pointSum] = await Promise.all([
-      this.registrations.count({ where: { user: { id: user.id } } }),
-      this.checkIns.count({ where: { registration: { user: { id: user.id } } } }),
-      this.reviews.count({ where: { user: { id: user.id } } }),
-      this.orders.createQueryBuilder("o").leftJoin("o.registration", "r").select("COALESCE(SUM(o.amount), 0)", "sum").where("r.userId = :userId", { userId: user.id }).andWhere("o.status IN (:...statuses)", { statuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] }).getRawOne<{ sum: string }>(),
-      this.memberPointLogs.createQueryBuilder("p").select("COALESCE(SUM(p.points), 0)", "sum").where("p.userId = :userId", { userId: user.id }).getRawOne<{ sum: string }>()
+      this.registrations.createQueryBuilder("registration").where("registration.userId = :userId", { userId: user.id }).andWhere(`registration.tenantId${tenantFilter}`, { tenantId: tenant?.id }).getCount(),
+      this.checkIns.createQueryBuilder("checkin").leftJoin("checkin.registration", "registration").where("registration.userId = :userId", { userId: user.id }).andWhere(`registration.tenantId${tenantFilter}`, { tenantId: tenant?.id }).andWhere("checkin.revokedAt IS NULL").getCount(),
+      this.reviews.createQueryBuilder("review").leftJoin("review.activity", "activity").where("review.userId = :userId", { userId: user.id }).andWhere(`activity.tenantId${tenantFilter}`, { tenantId: tenant?.id }).getCount(),
+      this.orders.createQueryBuilder("o").leftJoin("o.registration", "r").select("COALESCE(SUM(o.amount), 0)", "sum").where("r.userId = :userId", { userId: user.id }).andWhere(`o.tenantId${tenantFilter}`, { tenantId: tenant?.id }).andWhere("o.status IN (:...statuses)", { statuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] }).getRawOne<{ sum: string }>(),
+      this.memberPointLogs.createQueryBuilder("p").select("COALESCE(SUM(p.points), 0)", "sum").where("p.userId = :userId", { userId: user.id }).andWhere("p.tenantScopeKey = :tenantScopeKey", { tenantScopeKey }).andWhere("p.reversedAt IS NULL").andWhere("(p.expiresAt IS NULL OR p.expiresAt > :now)", { now: new Date() }).getRawOne<{ sum: string }>()
     ]);
     profile.points = Number(pointSum?.sum || 0);
     profile.totalSpent = Number(paidAmount?.sum || 0).toFixed(2);
     profile.registrationCount = registrationCount;
     profile.checkInCount = checkInCount;
     profile.reviewCount = reviewCount;
-    profile.level = await this.resolveMemberLevel(profile.points);
+    profile.level = await this.resolveMemberLevel(profile.points, tenant);
     profile.lastActiveAt = new Date();
     return this.memberProfiles.save(profile);
   }
 
-  private async resolveMemberLevel(points: number) {
-    const levels = await this.memberLevels.find({ where: { enabled: true }, order: { minPoints: "DESC" } });
+  private async resolveMemberLevel(points: number, tenant: Tenant | null = null) {
+    const levels = await this.memberLevels.find({ where: { enabled: true, tenantScopeKey: memberLevelScopeKey(tenant) }, order: { minPoints: "DESC" } });
     return levels.find((level) => points >= level.minPoints) || null;
   }
 
@@ -1100,8 +1889,9 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (!user) {
       return { requiredLevel, currentLevel: null, eligible: false, message: priorityActive ? `优先报名截止前仅限${requiredLevel.name}及以上会员报名` : `该活动仅限${requiredLevel.name}及以上会员报名`, priorityActive, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     }
-    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id } } });
-    if (!profile) profile = await this.refreshMemberProfile(user);
+    const tenant = activity.tenant || null;
+    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey: memberLevelScopeKey(tenant) } });
+    if (!profile) profile = await this.refreshMemberProfile(user, tenant);
     const currentLevel = profile.level || null;
     const eligible = Boolean(currentLevel && currentLevel.minPoints >= requiredLevel.minPoints);
     return {

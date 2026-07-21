@@ -52,6 +52,7 @@ const files = {
   sharedIndex: read("packages/shared/src/index.ts"),
   permissions: read("apps/admin/src/permissions.ts"),
   router: read("apps/admin/src/router.ts"),
+  adminMenu: read("apps/admin/src/navigation/admin-menu.ts"),
   layout: read("apps/admin/src/views/Layout.vue"),
   tenantsView: read("apps/admin/src/views/Tenants.vue"),
   tenantRegionsView: read("apps/admin/src/views/TenantRegions.vue"),
@@ -332,17 +333,49 @@ includesAll(files.tenantRegionsView, [
   "多边形"
 ], "admin tenant region polygon and bulk import UI");
 
+includesAll(files.adminController + files.adminService, [
+  '@Get("tenant-regions/options")',
+  "tenantRegionOptions(admin?: AdminContext)",
+  "delegatedRegionAccess"
+], "tenant region delegated read options");
+
+includesAll(files.adminPermissions + files.permissions, [
+  "tenant_region.view",
+  "tenant_region.manage",
+  "tenant_region.approve"
+], "tenant region view manage approval permission split");
+
+includesAll(files.router + files.adminMenu, [
+  "tenant_region.view",
+  "tenant-regions",
+  "区域保护"
+], "tenant region viewer route and menu");
+
+includesAll(files.tenantRegionsView, [
+  "/admin/tenant-regions/options",
+  "canManage",
+  "canApprove",
+  "loadError",
+  "operationBusy"
+], "tenant region read-only and operation state UI");
+
 includesAll(files.adminController, [
   '@Get("tenant-region-hit-logs/summary")',
+  '@Get("tenant-region-hit-logs/options")',
+  '@Get("tenant-region-hit-logs/export")',
   '@Get("tenant-region-hit-logs")',
   "TenantRegionHitLogQueryDto",
   "tenantRegionHitLogSummary",
+  "tenantRegionHitLogOptions",
+  "exportTenantRegionHitLogs",
   "listTenantRegionHitLogs"
 ], "admin tenant region hit log endpoint");
 
 includesAll(files.adminService, [
   "listTenantRegionHitLogs(query: TenantRegionHitLogQueryDto",
   "tenantRegionHitLogSummary(query: TenantRegionHitLogQueryDto",
+  "tenantRegionHitLogOptions(admin?: AdminContext)",
+  "exportTenantRegionHitLogs(query: TenantRegionHitLogQueryDto",
   "tenantRegionHitLogQuery(query",
   "applyTenantRegionHitLogFilters",
   "startDate",
@@ -355,24 +388,31 @@ includesAll(files.adminService, [
   "query.source?.trim()",
   "COALESCE(log.source, 'public_tenant_resolve')",
   "COALESCE(tenant.id, regionTenant.id)",
-  "matchRate"
+  "matchRate",
+  "canViewSensitiveTenantRegionHitLogs",
+  "maskClientIp",
+  "tenant_region_hit_logs"
 ], "admin tenant region hit log listing and summary");
 
 includesAll(files.adminPermissions, [
   "tenant-region-hit-logs",
-  "tenant_region.manage"
+  "tenant_region_hit_log.view",
+  "tenant_region_hit_log.sensitive",
+  "tenant_region_hit_log.export"
 ], "tenant region hit log permission mapping");
 
 includesAll(files.router + files.layout, [
   "TenantRegionHitLogs",
   "tenant-region-hit-logs",
   "定位命中日志",
-  "tenant_region.manage"
+  "tenant_region_hit_log.view"
 ], "admin tenant region hit log route and menu");
 
 includesAll(files.tenantRegionHitLogsView, [
   "/admin/tenant-region-hit-logs",
   "/admin/tenant-region-hit-logs/summary",
+  "/admin/tenant-region-hit-logs/options",
+  "/admin/tenant-region-hit-logs/export",
   "summary.total",
   "summary.matched",
   "summary.unmatched",
@@ -385,6 +425,11 @@ includesAll(files.tenantRegionHitLogsView, [
   "pageSize",
   "clientIp",
   "userAgent",
+  "canViewSensitive",
+  "canExport",
+  "loadError",
+  "exportError",
+  "downloadFile",
   "public_tenant_resolve",
   "mapUrl"
 ], "admin tenant region hit log page");
@@ -499,6 +544,7 @@ includesAll(files.adminController, [
   '@Patch("homepage/sections/:id")',
   '@Delete("homepage/sections/:id")',
   '@Put("homepage/sections/reorder")',
+  '@Post("homepage/sections/replace")',
   '@Post("homepage/sections/reset-default")',
   '@Post("activities/:id/submit-approval")',
   '@Post("activities/:id/approve")',
@@ -691,6 +737,39 @@ includesAll(files.tenantsView, [
   "tenantQrScopeName",
   "H5QrDialog"
 ], "tenants view management workflow");
+
+includesAll(files.adminPermissions + files.permissions, [
+  "tenant.view",
+  "tenant.manage",
+  "tenant.permissions.manage",
+  "tenant.subscription.manage",
+  "tenant.export"
+], "tenant administration permission split");
+
+includesAll(files.adminService, [
+  "publicTenantListItem",
+  "sensitiveMasked",
+  "delegatedTenantAccess",
+  'canSelectTenant: hasPermission("tenant.view")',
+  "listTenants(admin, { includeSensitive: true })"
+], "tenant delegated access and safe projection");
+
+includesAll(files.router + files.adminMenu, [
+  "tenant.view",
+  "tenant.permissions.manage",
+  "商家/代理列表",
+  "权限配置"
+], "tenant viewer and rights manager route menu");
+
+includesAll(files.tenantsView, [
+  "canManageTenant",
+  "canManageTenantPermissions",
+  "canManageTenantSubscription",
+  "canExportTenants",
+  "canHandleTenantNextAction",
+  "permissionUpdatingId",
+  "subscriptionError"
+], "tenant administration read-only and operation state UI");
 
 includesAll(files.adminsView, [
   "tenantStaffRoles",
@@ -895,6 +974,13 @@ includesAll(files.homepageBuilderView, [
   ':before-close="closeDrawer"',
   "保存模块"
 ], "homepage builder save and unsaved-change UX");
+
+includesAll(files.homepageBuilderView, [
+  'hasPermission("homepage.manage")',
+  '"/admin/homepage/sections/replace"',
+  'v-if="loadError"',
+  "confirmAction"
+], "homepage builder transactional replace and recovery UX");
 
 includesAll(files.notificationsView, [
   'params.set("tenantId", String(filters.tenantId))',

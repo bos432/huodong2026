@@ -20,6 +20,15 @@ export class Activity {
   @Column({ type: "varchar", length: 500, nullable: true })
   coverUrl!: string | null;
 
+  @Column({ type: "varchar", length: 200, nullable: true })
+  shareTitle!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  shareDescription!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  shareImageUrl!: string | null;
+
   @Column({ type: "text" })
   description!: string;
 
@@ -28,6 +37,15 @@ export class Activity {
 
   @Column({ type: "varchar", length: 255 })
   location!: string;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  locationProvince!: string | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  locationCity!: string | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  locationDistrict!: string | null;
 
   @Column({ type: "decimal", precision: 10, scale: 6, nullable: true })
   locationLatitude!: string | null;
@@ -59,6 +77,15 @@ export class Activity {
   @Column({ type: "enum", enum: ActivityStatus, default: ActivityStatus.Draft })
   status!: ActivityStatus;
 
+  @Column({ type: "datetime", nullable: true })
+  scheduledPublishAt!: Date | null;
+
+  @Column({ type: "datetime", nullable: true })
+  cancelledAt!: Date | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  cancellationReason!: string | null;
+
   @Column({ type: "boolean", default: false })
   featured!: boolean;
 
@@ -85,6 +112,12 @@ export class Activity {
 
   @OneToMany(() => ActivityField, (field) => field.activity, { cascade: true })
   fields!: ActivityField[];
+
+  @Column({ type: "int", default: 1 })
+  formSchemaVersion!: number;
+
+  @Column({ type: "json", nullable: true })
+  eligibilityRules!: { minAge?: number; maxAge?: number; allowedRegions?: string[]; maxRegistrationsPerUser?: number; requirePrivacyConsent?: boolean; allowCompanions?: boolean; maxCompanions?: number; blacklistPhones?: string[] } | null;
 
   @CreateDateColumn()
   createdAt!: Date;

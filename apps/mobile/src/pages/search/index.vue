@@ -3,12 +3,18 @@
     <view class="search-bar">
       <view class="search-input-wrap">
         <text class="search-icon">搜</text>
-        <input class="search-input" v-model="keyword" placeholder="搜索活动、内容、主理人..." confirm-type="search" @confirm="doSearch" />
+        <input class="search-input" v-model="keyword" aria-label="搜索专题内容" placeholder="搜索内容、讲师或分类" confirm-type="search" @confirm="doSearch" />
       </view>
-      <text class="search-cancel" @click="goBack">取消</text>
+      <text class="search-cancel" role="button" aria-label="取消搜索并返回" @click="goBack">取消</text>
     </view>
 
-    <view v-if="!keyword">
+    <view v-if="loading" class="state-card" aria-live="polite">专题内容加载中...</view>
+    <view v-else-if="loadError" class="state-card error-state" aria-live="assertive">
+      <text>{{ loadError }}</text>
+      <view class="button secondary" role="button" aria-label="重新加载搜索内容" @click="loadCourses">重新加载</view>
+    </view>
+
+    <view v-else-if="!keyword">
       <view class="search-hero">
         <view class="hero-kicker">慢π搜索</view>
         <view class="hero-title">找到想看的内容</view>
@@ -17,18 +23,18 @@
 
       <view class="section-title"><text class="title-md">热门搜索</text></view>
       <view class="tags-cloud">
-        <text v-for="tag in hotTags" :key="tag" class="tag tag-secondary search-tag" @click="keyword=tag">{{ tag }}</text>
+        <text v-for="tag in hotTags" :key="tag" class="tag tag-secondary search-tag" role="button" :aria-label="`搜索${tag}`" @click="applyKeyword(tag)">{{ tag }}</text>
       </view>
       <view class="section-title history-title"><text class="title-md">搜索历史</text></view>
       <view class="tags-cloud">
-        <text v-for="(h, i) in history" :key="i" class="tag history-tag" @click="keyword=h">{{ h }}</text>
+        <text v-for="h in history" :key="h" class="tag history-tag" role="button" :aria-label="`再次搜索${h}`" @click="applyKeyword(h)">{{ h }}</text>
       </view>
-      <text v-if="history.length" class="clear-history" @click="history=[]">清空搜索历史</text>
+      <text v-if="history.length" class="clear-history" role="button" aria-label="清空搜索历史" @click="clearHistory">清空搜索历史</text>
     </view>
 
     <view v-else>
       <text class="result-summary">搜索 "{{ keyword }}" 共 {{ results.length }} 个结果</text>
-      <view v-for="(r, i) in results" :key="i" class="search-result-item" @click="goCourse(r)">
+      <view v-for="r in results" :key="r.id" class="search-result-item" role="button" :aria-label="`查看${r.title}`" @click="goCourse(r)">
         <view class="result-row">
           <view class="result-cover" :style="{ background: r.color }">
             <text class="result-icon">{{ r.icon }}</text>
@@ -46,13 +52,20 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue";
-import { withTenantCode } from "../../api";
+import { ref, computed } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { getCurrentTenantCode, withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText, type CourseCard } from "../../course-data";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import { reviewSafeText } from "../../review-safe-text";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const keyword = ref("");
-const history = ref(["国学","书法","论语"]);
+const history = ref<string[]>([]);
 const allCourses = ref<CourseCard[]>([]);
+const loading = ref(false);
+const loadError = ref("");
+const loadGuard = createTenantLoadGuard();
 const hotTags = computed(() => {
   const tags = allCourses.value.flatMap((course) => [course.title, course.teacher, course.category]).filter(Boolean);
   return Array.from(new Set(tags)).slice(0, 8);
@@ -68,25 +81,56 @@ const results = computed(() => {
 });
 
 async function loadCourses() {
+  const token = loadGuard.begin();
+  loading.value = true;
+  loadError.value = "";
+  allCourses.value = [];
+  readHistory(token.tenantCode);
   try {
-    allCourses.value = await fetchPublishedCourses();
-  } catch {
-    allCourses.value = [];
+    const rows = await fetchPublishedCourses();
+    if (loadGuard.isCurrent(token)) allCourses.value = rows;
+  } catch (error: any) {
+    if (loadGuard.isCurrent(token)) loadError.value = reviewSafeText(error?.message || "搜索内容加载失败");
+  } finally {
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
-function doSearch() { if (keyword.value && !history.value.includes(keyword.value)) history.value.unshift(keyword.value); }
+function historyKey(tenantCode = getCurrentTenantCode()) { return `course_search_history:${tenantCode || "global"}`; }
+function readHistory(tenantCode = getCurrentTenantCode()) {
+  const stored = uni.getStorageSync(historyKey(tenantCode));
+  history.value = Array.isArray(stored) ? stored.map(String).filter(Boolean).slice(0, 10) : [];
+}
+function writeHistory() { uni.setStorageSync(historyKey(), history.value.slice(0, 10)); }
+function doSearch() {
+  const value = keyword.value.trim();
+  keyword.value = value;
+  if (!value) return;
+  history.value = [value, ...history.value.filter((item) => item !== value)].slice(0, 10);
+  writeHistory();
+}
+function applyKeyword(value: string) { keyword.value = value; doSearch(); }
+function clearHistory() { history.value = []; writeHistory(); }
 function goBack() { uni.navigateBack(); }
 function goCourse(r:any) { uni.navigateTo({ url: withTenantCode("/pages/course/detail?id="+r.id) }); }
 
-onMounted(loadCourses);
+onShow(async () => {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
+  await loadCourses();
+});
 </script>
 <style scoped>
 .search-page {
   min-height: 100vh;
+  box-sizing: border-box;
+  padding-bottom: calc(32rpx + env(safe-area-inset-bottom));
   background:
     linear-gradient(180deg, #f7efe3 0%, #fbf7ef 40%, #f4eadc 100%);
 }
+.state-card { margin-top:20rpx; padding:32rpx; border:1rpx solid rgba(199,181,157,.58); border-radius:16rpx; background:#fff; text-align:center; line-height:1.6; }
+.state-card .button { margin:20rpx auto 0; }
+.error-state { color:#b42318; border-color:#f0b8b0; background:#fff4f2; }
 
 .search-bar {
   display: flex;
@@ -277,5 +321,8 @@ onMounted(loadCourses);
   color: #8f8172;
   font-size: 25rpx;
   text-align: center;
+}
+@media (min-width: 900px) {
+  .search-page { max-width:760px; margin:0 auto; }
 }
 </style>

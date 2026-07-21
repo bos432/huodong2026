@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { ensureUser, fetchMyProfile, requestPhoneChangeCode, updateMyPassword, updateMyPhone } from "../../api";
+import { computed, onUnmounted, ref, watch } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { ensureUser, fetchMyProfile, getCurrentTenantCode, requestPhoneChangeCode, updateMyPassword, updateMyPhone } from "../../api";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { reviewSafeText } from "../../review-safe-text";
 
 const profile = ref<any>(null);
 const loading = ref(true);
+const loadError = ref("");
 const sending = ref(false);
 const savingPhone = ref(false);
 const savingPassword = ref(false);
@@ -12,22 +16,63 @@ const newPhone = ref("");
 const code = ref("");
 const token = ref("");
 const devCode = ref("");
+const codePhone = ref("");
 const password = ref("");
 const confirmPassword = ref("");
+const operationError = ref("");
+const cooldownSeconds = ref(0);
+const loadedTenantCode = ref("");
+const loadGuard = createTenantLoadGuard();
+let cooldownTimer: ReturnType<typeof setInterval> | null = null;
 
-const canSendCode = computed(() => /^1\d{10}$/.test(newPhone.value.trim()) && !sending.value);
-const canSavePhone = computed(() => canSendCode.value && /^\d{6}$/.test(code.value.trim()) && Boolean(token.value) && !savingPhone.value);
+const validPhone = computed(() => /^1\d{10}$/.test(newPhone.value.trim()));
+const canSendCode = computed(() => validPhone.value && !sending.value && cooldownSeconds.value <= 0);
+const canSavePhone = computed(() => validPhone.value && /^\d{6}$/.test(code.value.trim()) && Boolean(token.value) && codePhone.value === newPhone.value.trim() && !savingPhone.value);
 const canSavePassword = computed(() => password.value.length >= 6 && password.value.length <= 64 && password.value === confirmPassword.value && !savingPassword.value);
 
 async function load() {
+  const loadToken = loadGuard.begin();
+  if (loadedTenantCode.value && loadedTenantCode.value !== loadToken.tenantCode) {
+    profile.value = null;
+    clearVerificationState();
+  }
   loading.value = true;
+  loadError.value = "";
   try {
     await ensureUser();
-    profile.value = await fetchMyProfile();
+    const nextProfile = await fetchMyProfile();
+    if (!loadGuard.isCurrent(loadToken)) return;
+    profile.value = nextProfile;
     newPhone.value = profile.value?.phone || "";
+    loadedTenantCode.value = loadToken.tenantCode;
+  } catch (error: any) {
+    if (!loadGuard.isCurrent(loadToken)) return;
+    if (!String(error?.message || "").includes("请先完成")) loadError.value = reviewSafeText(error?.message || "账号安全信息加载失败，请稍后重试。");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(loadToken)) loading.value = false;
   }
+}
+
+function clearVerificationState() {
+  token.value = "";
+  codePhone.value = "";
+  code.value = "";
+  devCode.value = "";
+  cooldownSeconds.value = 0;
+  if (cooldownTimer) clearInterval(cooldownTimer);
+  cooldownTimer = null;
+}
+
+function startCooldown(seconds = 60) {
+  cooldownSeconds.value = Math.max(1, Number(seconds) || 60);
+  if (cooldownTimer) clearInterval(cooldownTimer);
+  cooldownTimer = setInterval(() => {
+    cooldownSeconds.value = Math.max(0, cooldownSeconds.value - 1);
+    if (cooldownSeconds.value <= 0 && cooldownTimer) {
+      clearInterval(cooldownTimer);
+      cooldownTimer = null;
+    }
+  }, 1000);
 }
 
 async function sendCode() {
@@ -35,15 +80,20 @@ async function sendCode() {
     uni.showToast({ title: "请输入正确的手机号", icon: "none" });
     return;
   }
+  operationError.value = "";
+  const tenantCode = getCurrentTenantCode();
   sending.value = true;
   try {
     const result = await requestPhoneChangeCode(newPhone.value.trim());
+    if (getCurrentTenantCode() !== tenantCode) return;
     token.value = result.verificationToken;
+    codePhone.value = newPhone.value.trim();
     devCode.value = result.devCode || "";
     if (devCode.value) code.value = devCode.value;
+    startCooldown((result as any).cooldownSeconds || 60);
     uni.showToast({ title: devCode.value ? `验证码 ${devCode.value}` : "验证码已发送", icon: "none" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "发送失败", icon: "none" });
+    operationError.value = reviewSafeText(error?.message || "验证码发送失败");
   } finally {
     sending.value = false;
   }
@@ -54,15 +104,17 @@ async function savePhone() {
     uni.showToast({ title: "请填写手机号和验证码", icon: "none" });
     return;
   }
+  operationError.value = "";
+  const tenantCode = getCurrentTenantCode();
   savingPhone.value = true;
   try {
-    profile.value = await updateMyPhone(newPhone.value.trim(), token.value, code.value.trim());
-    token.value = "";
-    code.value = "";
-    devCode.value = "";
+    const nextProfile = await updateMyPhone(newPhone.value.trim(), token.value, code.value.trim());
+    if (getCurrentTenantCode() !== tenantCode) return;
+    profile.value = nextProfile;
+    clearVerificationState();
     uni.showToast({ title: "手机号已更新", icon: "success" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "修改失败", icon: "none" });
+    operationError.value = reviewSafeText(error?.message || "手机号修改失败");
   } finally {
     savingPhone.value = false;
   }
@@ -77,26 +129,35 @@ async function savePassword() {
     uni.showToast({ title: "两次输入的密码不一致", icon: "none" });
     return;
   }
+  operationError.value = "";
+  const tenantCode = getCurrentTenantCode();
   savingPassword.value = true;
   try {
     await updateMyPassword(password.value);
+    if (getCurrentTenantCode() !== tenantCode) return;
     password.value = "";
     confirmPassword.value = "";
     profile.value = await fetchMyProfile();
     uni.showToast({ title: "密码已保存", icon: "success" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "保存失败", icon: "none" });
+    operationError.value = reviewSafeText(error?.message || "密码保存失败");
   } finally {
     savingPassword.value = false;
   }
 }
 
-onMounted(load);
+onShow(load);
+onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
+watch(newPhone, (value) => {
+  if (!codePhone.value || value.trim() === codePhone.value) return;
+  clearVerificationState();
+});
 </script>
 
 <template>
   <view class="security-page">
     <view v-if="loading" class="card muted">加载中...</view>
+    <view v-else-if="loadError" class="card error-card" role="alert" aria-live="assertive"><text>{{ loadError }}</text><button class="button" aria-label="重新加载账号安全信息" @click="load">重新加载</button></view>
     <template v-else>
       <view class="head">
         <view class="title">账号安全</view>
@@ -108,17 +169,18 @@ onMounted(load);
         <view class="sub">更换手机号需要校验新手机号验证码。</view>
         <view class="field">
           <view class="label">新手机号</view>
-          <input v-model="newPhone" class="input" type="number" maxlength="11" placeholder="请输入新手机号" />
+          <input v-model="newPhone" class="input" type="number" maxlength="11" cursor-spacing="24" confirm-type="next" placeholder="请输入新手机号" />
         </view>
         <view class="field">
           <view class="label">验证码</view>
           <view class="code-row">
-            <input v-model="code" class="input" type="number" maxlength="6" placeholder="6 位验证码" />
-            <view class="mini-button" :class="{ disabled: !canSendCode }" @click="sendCode">{{ sending ? "发送中" : "获取验证码" }}</view>
+            <input v-model="code" class="input" type="number" maxlength="6" cursor-spacing="24" confirm-type="done" placeholder="6 位验证码" />
+            <button class="mini-button" :disabled="!canSendCode" aria-label="获取换号验证码" @click="sendCode">{{ sending ? "发送中" : cooldownSeconds > 0 ? `${cooldownSeconds} 秒后重试` : "获取验证码" }}</button>
           </view>
         </view>
         <view v-if="devCode" class="notice">本地开发验证码：{{ devCode }}</view>
-        <view class="button" :class="{ disabled: !canSavePhone }" @click="savePhone">{{ savingPhone ? "保存中..." : "保存手机号" }}</view>
+        <view v-if="operationError" class="operation-error" role="alert" aria-live="assertive">{{ operationError }}</view>
+        <view class="button" role="button" tabindex="0" :aria-disabled="!canSavePhone" :aria-busy="savingPhone" :aria-label="savingPhone ? '保存中' : '保存手机号'" :class="{ disabled: !canSavePhone }" @click="savePhone" @keyup.enter="savePhone" @keyup.space.prevent="savePhone">{{ savingPhone ? "保存中..." : "保存手机号" }}</view>
       </view>
 
       <view class="card">
@@ -126,13 +188,13 @@ onMounted(load);
         <view class="sub">设置后可在 H5 使用手机号和密码登录，短信登录仍然保留。</view>
         <view class="field">
           <view class="label">新密码</view>
-          <input v-model="password" class="input" type="password" maxlength="64" placeholder="6-64 位" />
+          <input v-model="password" class="input" type="password" maxlength="64" cursor-spacing="24" confirm-type="next" placeholder="6-64 位" />
         </view>
         <view class="field">
           <view class="label">确认密码</view>
-          <input v-model="confirmPassword" class="input" type="password" maxlength="64" placeholder="再次输入新密码" />
+          <input v-model="confirmPassword" class="input" type="password" maxlength="64" cursor-spacing="24" confirm-type="done" placeholder="再次输入新密码" />
         </view>
-        <view class="button" :class="{ disabled: !canSavePassword }" @click="savePassword">{{ savingPassword ? "保存中..." : "保存密码" }}</view>
+        <view class="button" role="button" tabindex="0" :aria-disabled="!canSavePassword" :aria-busy="savingPassword" :aria-label="savingPassword ? '保存中' : '保存密码'" :class="{ disabled: !canSavePassword }" @click="savePassword" @keyup.enter="savePassword" @keyup.space.prevent="savePassword">{{ savingPassword ? "保存中..." : "保存密码" }}</view>
       </view>
     </template>
 
@@ -143,7 +205,8 @@ onMounted(load);
 <style scoped>
 .security-page {
   min-height: 100vh;
-  padding: 24rpx 24rpx 160rpx;
+  box-sizing: border-box;
+  padding: 24rpx 24rpx calc(160rpx + env(safe-area-inset-bottom));
   background:
     linear-gradient(180deg, #f7efe3 0%, #fbf7ef 40%, #f4eadc 100%);
   color: #263d3c;
@@ -234,7 +297,8 @@ onMounted(load);
 }
 
 .mini-button.disabled,
-.button.disabled {
+.button.disabled,
+.mini-button[disabled] {
   opacity: .5;
 }
 
@@ -259,4 +323,10 @@ onMounted(load);
   font-size: 28rpx;
   font-weight: 950;
 }
+.mini-button::after, .error-card .button::after { border:0; }
+.operation-error { margin-top:18rpx; color:#b42318; font-size:24rpx; line-height:1.55; overflow-wrap:anywhere; }
+.error-card { border-color:#fecaca; background:#fff7f7; color:#b91c1c; line-height:1.6; }
+.error-card .button { margin-top:18rpx; }
+.mini-button.disabled, .button.disabled { pointer-events:none; }
+@media (min-width: 900px) { .security-page { max-width:760px; margin:0 auto; } }
 </style>

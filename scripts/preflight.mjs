@@ -189,7 +189,10 @@ const dockerComposeBackupOnlyKeys = new Set([
   "BACKUP_DIR",
   "BACKUP_RETENTION_DAYS",
   "BACKUP_USE_DOCKER",
-  "MYSQL_CONTAINER"
+  "MYSQL_CONTAINER",
+  "API_CONTAINER",
+  "PRIVATE_DATA_DIR",
+  "PRIVATE_DATA_BACKUP_DIR"
 ]);
 
 function hasEvidenceValue(value) {
@@ -489,6 +492,7 @@ function checkProductionEnv() {
   check(env.ACCESS_LOG_ENABLED === "true", `${envPath} must enable ACCESS_LOG_ENABLED.`);
   check((env.TRUST_PROXY || "false") !== "false", `${envPath} must enable TRUST_PROXY when deploying behind Nginx.`);
   check(Boolean(env.BACKUP_DIR), `${envPath} must set BACKUP_DIR.`);
+  check(Boolean(env.PRIVATE_DATA_BACKUP_DIR), `${envPath} must set PRIVATE_DATA_BACKUP_DIR.`);
   check(Number(env.BACKUP_RETENTION_DAYS || 0) >= 7, `${envPath} must set BACKUP_RETENTION_DAYS to at least 7.`);
   numberInRange(env, "H5_CODE_EXPIRE_MINUTES", 1, 30, "minutes");
   numberInRange(env, "H5_CODE_COOLDOWN_SECONDS", 10, 600, "seconds");
@@ -501,6 +505,11 @@ function checkProductionEnv() {
   numberInRange(env, "OFFLINE_PAYMENT_EXPIRE_MINUTES", 5, 43200, "minutes");
   check(env.ORDER_CLOSE_WORKER_ENABLED === "true", `${envPath} should enable ORDER_CLOSE_WORKER_ENABLED=true so unpaid orders release seats automatically.`);
   if (env.ORDER_CLOSE_WORKER_ENABLED === "true") numberInRange(env, "ORDER_CLOSE_WORKER_INTERVAL_SECONDS", 30, 3600, "seconds");
+  numberInRange(env, "MALL_PENDING_PAYMENT_EXPIRE_MINUTES", 1, 43200, "minutes");
+  numberInRange(env, "MALL_PENDING_CONFIRM_EXPIRE_MINUTES", 1, 43200, "minutes");
+  numberInRange(env, "MALL_PENDING_ORDER_WORKER_INTERVAL_MINUTES", 1, 1440, "minutes");
+  numberInRange(env, "MALL_PENDING_ORDER_BATCH_SIZE", 1, 200, "orders");
+  numberInRange(env, "MALL_PENDING_ORDER_MAX_BATCHES", 1, 100, "batches");
   if (env.NOTIFICATION_SCHEDULE_WORKER_ENABLED === "true") numberInRange(env, "NOTIFICATION_SCHEDULE_WORKER_INTERVAL_SECONDS", 30, 3600, "seconds");
 }
 
@@ -533,15 +542,23 @@ function checkBackupScripts() {
   check(exists("scripts/db-backup.mjs"), "Database backup script missing.");
   check(exists("scripts/db-restore.mjs"), "Database restore script missing.");
   check(exists("scripts/db-prune-backups.mjs"), "Database backup prune script missing.");
+  check(exists("scripts/private-data-backup.mjs"), "Private data backup script missing.");
+  check(exists("scripts/private-data-restore.mjs"), "Private data restore script missing.");
   const packageJson = JSON.parse(read("package.json"));
   check(Boolean(packageJson.scripts?.["db:backup"]), "package.json must expose db:backup.");
   check(Boolean(packageJson.scripts?.["db:restore"]), "package.json must expose db:restore.");
   check(Boolean(packageJson.scripts?.["db:prune-backups"]), "package.json must expose db:prune-backups.");
+  check(Boolean(packageJson.scripts?.["private-data:backup"]), "package.json must expose private-data:backup.");
+  check(Boolean(packageJson.scripts?.["private-data:restore"]), "package.json must expose private-data:restore.");
 }
 
 function checkMigrations() {
   try {
-    const output = execFileSync(process.platform === "win32" ? "npm.cmd" : "npm", ["--prefix", "apps/api", "run", "migration:show"], { cwd: root, encoding: "utf8", shell: process.platform === "win32" });
+    const command = process.platform === "win32" ? process.env.ComSpec || "cmd.exe" : "npm";
+    const args = process.platform === "win32"
+      ? ["/d", "/s", "/c", "npm.cmd --prefix apps/api run migration:show"]
+      : ["--prefix", "apps/api", "run", "migration:show"];
+    const output = execFileSync(command, args, { cwd: root, encoding: "utf8" });
     warn(!output.includes("[ ]"), "There are pending migrations. Run npm --prefix apps/api run migration:run on the target database after backup.");
   } catch (error) {
     warnings.push(`Could not run migration:show: ${error.message}`);

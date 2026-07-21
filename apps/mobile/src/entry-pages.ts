@@ -1,6 +1,7 @@
-import { reactive } from "vue";
+import { reactive, ref } from "vue";
 import { request } from "./api";
 import { reviewSafeData } from "./review-safe-text";
+import { createTenantLoadGuard } from "./tenant-load-guard";
 
 export type EntryPageConfig = {
   eyebrow: string;
@@ -65,18 +66,29 @@ const defaults: Record<string, EntryPageConfig> = {
 
 export function useEntryPageConfig(key: keyof typeof defaults) {
   const config = reactive<EntryPageConfig>({ ...defaults[key], items: [...defaults[key].items], flowItems: [...(defaults[key].flowItems || [])] });
+  const loading = ref(false);
+  const error = ref("");
+  const loadGuard = createTenantLoadGuard();
 
   async function load() {
+    const token = loadGuard.begin();
+    loading.value = true;
+    error.value = "";
     try {
       const landing = reviewSafeData(await request<any>("/public/ambassador/landing"));
+      if (!loadGuard.isCurrent(token)) return false;
       const remote = landing?.setting?.config?.entryPages?.[key] || {};
       Object.assign(config, { ...remote });
       config.items = Array.isArray(remote.items) && remote.items.length ? remote.items : [...defaults[key].items];
       config.flowItems = Array.isArray(remote.flowItems) && remote.flowItems.length ? remote.flowItems : [...(defaults[key].flowItems || [])];
-    } catch {
-      // Keep local defaults so the public page still opens if config loading fails.
+      return true;
+    } catch (loadError: any) {
+      if (loadGuard.isCurrent(token)) error.value = loadError?.message || "页面配置加载失败";
+      return false;
+    } finally {
+      if (loadGuard.isCurrent(token)) loading.value = false;
     }
   }
 
-  return { config, load };
+  return { config, loading, error, load };
 }

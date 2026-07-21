@@ -12,6 +12,11 @@
 
     <PageDecorationBlocks :sections="decorationSections" />
 
+    <view v-if="configError" class="state-warning" role="alert" aria-live="assertive">
+      <text>品牌配置同步失败，当前展示默认内容。</text>
+      <button class="retry-button" :disabled="configLoading" @click="refreshTenantScopedPage">{{ configLoading ? "重试中..." : "重新加载" }}</button>
+    </view>
+
     <view class="section">
       <text class="section-title">{{ config.sectionTitle }}</text>
       <view v-for="item in parsedBeliefs" :key="item.title" class="belief-card">
@@ -30,9 +35,9 @@
     <view class="section">
       <text class="section-title">{{ config.joinTitle }}</text>
       <view class="join-grid">
-        <view class="join-card" @click="goDean">院长招募</view>
-        <view class="join-card" @click="goAmbassador">大使申请</view>
-        <view class="join-card" @click="goAid">帮扶申请</view>
+        <view class="join-card" role="button" tabindex="0" aria-label="进入院长招募" @click="goDean">院长招募</view>
+        <view class="join-card" role="button" tabindex="0" aria-label="进入大使申请" @click="goAmbassador">大使申请</view>
+        <view class="join-card" role="button" tabindex="0" aria-label="进入帮扶申请" @click="goAid">帮扶申请</view>
       </view>
     </view>
 
@@ -41,19 +46,17 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
-import { getCurrentTenantCode, withTenantCode } from "../../api";
+import { computed } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { withTenantCode } from "../../api";
 import { useEntryPageConfig } from "../../entry-pages";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
-const { config, load } = useEntryPageConfig("brandStory");
+const { config, loading: configLoading, error: configError, load } = useEntryPageConfig("brandStory");
 const { bottomNavSection, contentSections, showBottomNav, loadDecoration } = usePageDecoration("brand_story", "/pages/brand/story");
-const mounted = ref(false);
-const lastLoadedTenantCode = ref("");
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "品牌故事") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;
@@ -70,29 +73,17 @@ function goAmbassador() { uni.navigateTo({ url: withTenantCode("/pages/apply/amb
 function goAid() { uni.navigateTo({ url: withTenantCode("/pages/apply/aid") }); }
 
 async function refreshTenantScopedPage() {
-  lastLoadedTenantCode.value = getCurrentTenantCode();
   await Promise.all([load(), loadDecoration()]);
 }
 
-onLoad(() => {
-  refreshTenantScopedPage();
-});
-
-onMounted(() => {
-  mounted.value = true;
-  refreshTenantScopedPage();
-});
-
-onShow(() => {
-  if (!mounted.value) return;
-  if (getCurrentTenantCode() === lastLoadedTenantCode.value) return;
-  loadPageTheme();
-  refreshTenantScopedPage();
+onShow(async () => {
+  await loadPageTheme();
+  await refreshTenantScopedPage();
 });
 </script>
 
 <style scoped>
-.story-page { min-height: 100vh; padding: 28rpx 24rpx 150rpx; background: #f7f0e5; color: #2d241c; }
+.story-page { min-height: 100vh; box-sizing:border-box; padding: 28rpx 24rpx calc(150rpx + env(safe-area-inset-bottom)); background: #f7f0e5; color: #2d241c; overflow-wrap:anywhere; }
 .hero { padding: 44rpx 34rpx; border-radius: 28rpx; background: radial-gradient(circle at 80% 12%, rgba(216,162,74,0.34), transparent 34%), linear-gradient(135deg, #4b2d22, #8b5a2b); color: #fff8e8; box-shadow: 0 24rpx 60rpx rgba(91,47,36,0.22); }
 .eyebrow { font-size: 24rpx; color: #f7d58f; font-weight: 900; }
 .title { display: block; margin-top: 18rpx; font-size: 46rpx; line-height: 1.22; font-weight: 950; }
@@ -112,4 +103,8 @@ onShow(() => {
 .flow-item { padding: 14rpx 20rpx; border-radius: 999px; background: #fff; color: #8b5a2b; font-size: 25rpx; font-weight: 900; border: 1px solid #efd9bd; }
 .join-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14rpx; }
 .join-card { min-height: 112rpx; display: flex; align-items: center; justify-content: center; border-radius: 18rpx; background: #fff7ec; color: #8b5a2b; font-size: 26rpx; font-weight: 900; }
+.state-warning { display:grid; gap:14rpx; margin-top:20rpx; padding:22rpx; border:1rpx solid #f7c97c; background:#fff8e8; color:#8b5a2b; font-size:25rpx; line-height:1.6; }
+.retry-button { width:max-content; min-height:60rpx; margin:0; padding:0 24rpx; border:0; border-radius:8rpx; background:#8b5a2b; color:#fff; font-size:24rpx; font-weight:900; }
+.retry-button::after { border:0; }
+@media (min-width: 900px) { .story-page { max-width:760px; margin:0 auto; } }
 </style>

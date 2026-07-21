@@ -10,6 +10,15 @@
       </view>
     </view>
     <PageDecorationBlocks :sections="decorationSections" />
+    <view v-if="loading" class="state-card">商城数据加载中...</view>
+    <view v-else-if="loadError" class="state-card error-state">
+      <text>{{ loadError }}</text>
+      <view class="state-retry" @click="load">重新加载</view>
+    </view>
+    <view v-else-if="loadWarning" class="state-card warning-state">
+      <text>{{ loadWarning }}</text>
+      <view class="state-retry" @click="load">重新同步</view>
+    </view>
     <scroll-view class="category-row" scroll-x :show-scrollbar="false">
       <view class="category-chip" :class="{ active: !categoryId }" @click="selectCategory(0)">全部</view>
       <view v-for="item in categories" :key="item.id" class="category-chip" :class="{ active: categoryId === item.id }" @click="selectCategory(item.id)">{{ item.name }}</view>
@@ -120,7 +129,7 @@
         </view>
       </view>
     </view>
-    <EmptyState v-if="!products.length && !loading" icon="🛍" text="暂无商品，请在后台商城商品中上架" />
+    <EmptyState v-if="!products.length && !loading && !loadError" icon="🛍" text="暂无商品，请在后台商城商品中上架" />
     <view style="height:120rpx;"></view>
     <TabBar current="index" />
   </view>
@@ -129,11 +138,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { request, withTenantCode } from "../../api";
+import { getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import EmptyState from "../../components/EmptyState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TabBar from "../../components/TabBar.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const categories = ref<any[]>([]);
 const products = ref<any[]>([]);
@@ -143,9 +153,12 @@ const groupBuys = ref<any[]>([]);
 const categoryId = ref(0);
 const selectedMerchantId = ref(0);
 const loading = ref(false);
+const loadError = ref("");
+const loadWarning = ref("");
 const keyword = ref("");
 const sort = ref<"featured" | "newest" | "hot">("featured");
 const recentKeywords = ref<string[]>([]);
+const loadGuard = createTenantLoadGuard();
 const sortTabs = [
   { label: "推荐", value: "featured" as const },
   { label: "新品", value: "newest" as const },
@@ -161,30 +174,47 @@ const decorationSections = computed(() => contentSections.value.filter((section)
 function money(value: any) { return Number(value || 0).toFixed(2); }
 function availableProductStock(item: any) { return Math.max(Number(item.stock || 0), 0); }
 async function load() {
+  const token = loadGuard.begin();
+  const requestedMerchantId = selectedMerchantId.value;
+  const requestedCategoryId = categoryId.value;
+  const requestedSort = sort.value;
+  const requestedKeyword = keyword.value.trim();
   loading.value = true;
+  loadError.value = "";
+  loadWarning.value = "";
   try {
-    merchants.value = await request<any[]>("/public/mall/merchants").catch(() => []);
-    const scope = selectedMerchantId.value ? `merchantId=${selectedMerchantId.value}` : "";
-    categories.value = await request<any[]>(`/public/mall/categories${scope ? `?${scope}` : ""}`).catch(() => []);
-    const activityScope = selectedMerchantId.value ? `?merchantId=${selectedMerchantId.value}` : "";
-    flashSales.value = await request<any[]>(`/public/mall/flash-sales${activityScope}`).catch(() => []);
-    groupBuys.value = await request<any[]>(`/public/mall/group-buys${activityScope}`).catch(() => []);
+    const scope = requestedMerchantId ? `merchantId=${requestedMerchantId}` : "";
+    const activityScope = requestedMerchantId ? `?merchantId=${requestedMerchantId}` : "";
+    const supportResults = await Promise.allSettled([
+      request<any[]>("/public/mall/merchants"),
+      request<any[]>(`/public/mall/categories${scope ? `?${scope}` : ""}`),
+      request<any[]>(`/public/mall/flash-sales${activityScope}`),
+      request<any[]>(`/public/mall/group-buys${activityScope}`)
+    ]);
+    if (!loadGuard.isCurrent(token)) return;
+    merchants.value = supportResults[0].status === "fulfilled" ? supportResults[0].value : [];
+    categories.value = supportResults[1].status === "fulfilled" ? supportResults[1].value : [];
+    flashSales.value = supportResults[2].status === "fulfilled" ? supportResults[2].value : [];
+    groupBuys.value = supportResults[3].status === "fulfilled" ? supportResults[3].value : [];
+    const failedSupportCount = supportResults.filter((item) => item.status === "rejected").length;
+    if (failedSupportCount) loadWarning.value = `部分商城数据同步失败（${failedSupportCount} 项），商品列表仍可继续浏览。`;
     const params = [`pageSize=50`];
-    params.push(`sort=${sort.value}`);
-    if (selectedMerchantId.value) params.push(`merchantId=${selectedMerchantId.value}`);
-    if (categoryId.value) params.push(`categoryId=${categoryId.value}`);
-    const searchText = keyword.value.trim();
-    if (searchText) {
-      params.push(`keyword=${encodeURIComponent(searchText)}`);
-      saveRecentKeyword(searchText);
+    params.push(`sort=${requestedSort}`);
+    if (requestedMerchantId) params.push(`merchantId=${requestedMerchantId}`);
+    if (requestedCategoryId) params.push(`categoryId=${requestedCategoryId}`);
+    if (requestedKeyword) {
+      params.push(`keyword=${encodeURIComponent(requestedKeyword)}`);
+      saveRecentKeyword(requestedKeyword);
     }
     const result = await request<any>(`/public/mall/products?${params.join("&")}`);
+    if (!loadGuard.isCurrent(token)) return;
     products.value = result.items || [];
   } catch (error: any) {
+    if (!loadGuard.isCurrent(token)) return;
     products.value = [];
-    uni.showToast({ title: error.message || "加载商城失败", icon: "none" });
+    loadError.value = error.message || "加载商城失败";
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 function selectCategory(id: number) { categoryId.value = id; load(); }
@@ -196,8 +226,9 @@ function selectMerchant(id: number) {
 function selectSort(value: "featured" | "newest" | "hot") { sort.value = value; load(); }
 function saveRecentKeyword(value: string) {
   recentKeywords.value = [value, ...recentKeywords.value.filter((item) => item !== value)].slice(0, 5);
-  uni.setStorageSync("mall_recent_keywords", JSON.stringify(recentKeywords.value));
+  uni.setStorageSync(recentKeywordStorageKey(), JSON.stringify(recentKeywords.value));
 }
+function recentKeywordStorageKey() { return `mall_recent_keywords:${getCurrentTenantCode() || "global"}`; }
 function useRecent(value: string) {
   keyword.value = value;
   load();
@@ -210,7 +241,7 @@ function goCart() { uni.navigateTo({ url: withTenantCode("/pages/mall/cart") });
 function goCoupons() { uni.navigateTo({ url: withTenantCode("/pages/mall/coupons") }); }
 onShow(() => {
   try {
-    const stored = JSON.parse(String(uni.getStorageSync("mall_recent_keywords") || "[]"));
+    const stored = JSON.parse(String(uni.getStorageSync(recentKeywordStorageKey()) || "[]"));
     recentKeywords.value = Array.isArray(stored) ? stored.slice(0, 5) : [];
   } catch {
     recentKeywords.value = [];
@@ -222,6 +253,10 @@ onShow(() => {
 
 <style scoped>
 .mall-page { min-height: 100vh; padding: 24rpx 28rpx; background: linear-gradient(180deg, #fff7ed 0%, #f8fafc 46%, #fff 100%); }
+.state-card { display:grid; gap:14rpx; margin:20rpx 0; padding:22rpx 24rpx; border-radius:8px; background:#fff; color:#64748b; font-size:25rpx; line-height:1.55; box-shadow:0 10rpx 24rpx rgba(124,45,18,.06); }
+.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.state-card.warning-state { border:1rpx solid #fed7aa; background:#fffaf0; color:#9a3412; }
+.state-retry { width:fit-content; padding:10rpx 18rpx; border-radius:8px; background:#9a3412; color:#fff; font-size:23rpx; font-weight:900; }
 .mall-hero { padding: 36rpx 30rpx; border-radius: 32rpx; background: linear-gradient(135deg, #7c2d12, #c2410c); color: #fff; display: grid; gap: 12rpx; }
 .eyebrow { font-size: 24rpx; opacity: .84; }
 .hero-title { font-size: 40rpx; font-weight: 900; line-height: 1.25; }

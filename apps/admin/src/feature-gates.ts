@@ -15,12 +15,17 @@ export type FeatureGateKey =
 
 export type FeatureGates = Record<FeatureGateKey, boolean>;
 
+export const featureGateDependencies: Partial<Record<FeatureGateKey, FeatureGateKey>> = {
+  communityPublish: "community",
+  forumPost: "forum"
+};
+
 export const featureGateItems: Array<{ key: FeatureGateKey; label: string; description: string }> = [
   { key: "courses", label: "专题/课程", description: "前台专题、课程详情、我的内容和学习记录。" },
   { key: "community", label: "共修动态/心得", description: "前台共修动态、活动心得和我的心得。" },
-  { key: "communityPublish", label: "发布心得/打卡", description: "用户发布活动心得、打卡任务入口。" },
+  { key: "communityPublish", label: "发布心得/打卡", description: "用户发布活动心得、打卡任务入口；依赖共修动态/心得。" },
   { key: "forum", label: "论坛浏览", description: "关闭后隐藏论坛首页、帖子详情和我的论坛入口。" },
-  { key: "forumPost", label: "论坛发帖", description: "只控制发帖、回复和互动投稿；不隐藏论坛浏览。" },
+  { key: "forumPost", label: "论坛发帖", description: "控制发帖、回复和互动投稿；依赖论坛浏览。" },
   { key: "mall", label: "商城", description: "商城、购物车、商城订单、优惠券和商品入口。" },
   { key: "charity", label: "公益池", description: "公益池公示、我的公益贡献和帮扶申请。" },
   { key: "volunteer", label: "志愿服务", description: "志愿任务、报名和服务记录入口。" },
@@ -80,6 +85,9 @@ export function normalizeFeatureGates(value: unknown): FeatureGates {
       result[key] = raw !== 0;
     }
   }
+  for (const [child, parent] of Object.entries(featureGateDependencies) as Array<[FeatureGateKey, FeatureGateKey]>) {
+    if (!result[parent]) result[child] = false;
+  }
   return result;
 }
 
@@ -111,8 +119,28 @@ export function adminFeatureGateForPath(path?: string): FeatureGateKey | null {
   return null;
 }
 
+function tenantEntitlementForGate(gate: FeatureGateKey) {
+  const mapping: Partial<Record<FeatureGateKey, string>> = {
+    adCenter: "ads",
+    agentSettlement: "agentSettlement"
+  };
+  return mapping[gate] || null;
+}
+
+function currentTenantEntitlements() {
+  try {
+    const settings = JSON.parse(localStorage.getItem("admin_tenant_settings") || "null");
+    return settings?.entitlements?.features && typeof settings.entitlements.features === "object" ? settings.entitlements.features as Record<string, unknown> : {};
+  } catch {
+    return {};
+  }
+}
+
 export function isAdminFeaturePathEnabled(path: string, platformAdmin: boolean, gates = readStoredFeatureGates()) {
   if (platformAdmin) return true;
   const gate = adminFeatureGateForPath(path);
-  return !gate || gates[gate] !== false;
+  if (!gate) return true;
+  if (gates[gate] === false) return false;
+  const entitlement = tenantEntitlementForGate(gate);
+  return !entitlement || currentTenantEntitlements()[entitlement] !== false;
 }

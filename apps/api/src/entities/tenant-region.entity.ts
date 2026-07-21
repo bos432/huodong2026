@@ -1,9 +1,13 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Tenant } from "./tenant.entity";
 
 export type TenantRegionBoundaryPoint = { lat: number; lng: number };
+export type TenantRegionAuthorizationStatus = "pending" | "approved" | "rejected";
 
 @Entity("tenant_regions")
+@Index("IDX_tenant_regions_authorization_validity", ["enabled", "authorizationStatus", "validFrom", "validUntil"])
+@Index("IDX_tenant_regions_tenant_status", ["tenant", "authorizationStatus", "enabled"])
+@Index("IDX_tenant_regions_city_status", ["province", "city", "authorizationStatus", "enabled"])
 export class TenantRegion {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -40,6 +44,18 @@ export class TenantRegion {
 
   @Column({ type: "int", default: 0 })
   priority!: number;
+
+  @Column({ type: "varchar", length: 20, default: "approved" })
+  authorizationStatus!: TenantRegionAuthorizationStatus;
+
+  @Column({ type: "date", nullable: true })
+  validFrom!: string | null;
+
+  @Column({ type: "date", nullable: true })
+  validUntil!: string | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  approvalRemark!: string | null;
 
   @Column({ type: "boolean", default: true })
   enabled!: boolean;

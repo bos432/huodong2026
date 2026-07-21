@@ -54,7 +54,7 @@ async function main() {
   await refundFlow(paidActivity, finance.token);
   await commentFlow(ops.token);
   await courseFlow(finance.token);
-  await mallFlow(finance.token, ops.token);
+  await mallFlow(finance.token, ops.token, admin.settings?.entitlements?.features?.agentSettlement === true);
   await financeChecks(finance.token, paidFlow.order.id);
 
   console.log("\n线上演示商家闭环验收通过。");
@@ -109,7 +109,7 @@ async function paidRegistrationFlow(activity) {
   const afterWallet = await api(`/public/me/wallet?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) });
   assert(Number(afterWallet.availableBalance) < Number(beforeWallet.availableBalance), "余额支付后钱包余额应减少");
   const txs = pickList(await api(`/public/me/wallet/transactions?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) }));
-  assert(txs.some((item) => item.type === "balance_pay" && item.order?.id === paid.order.id), "余额支付流水缺失");
+  assert(txs.some((item) => item.type === "balance_pay" && item.status === "success" && Number(item.amount) === Number(paid.order.amount)), "余额支付流水缺失");
   reportStep("收费报名余额支付闭环", "报名 -> 订单 -> 余额扣款 -> 钱包流水");
   return { user, registration: paid.order.registration || registered.registration, order: paid.order };
 }
@@ -231,9 +231,10 @@ async function courseFlow(financeToken) {
   reportStep("课程交付闭环", "下单 -> 后台确认 -> 播放权限 -> 学习进度 -> 我的课程");
 }
 
-async function mallFlow(financeToken, opsToken) {
+async function mallFlow(financeToken, opsToken, agentSettlementEnabled) {
   const demo = smokeUser("paid");
   const user = await loginUser(demo.phone, demo.nickname);
+  const mallRunKey = `showcase-${Date.now()}-${demo.userId}`;
   const products = pickList(await api(`/public/mall/products?tenantCode=${TENANT_CODE}&pageSize=20`, { headers: tenantHeader() }));
   assert(products.length >= 4, "商城商品不足 4 个，请先执行 seed");
   const newestProducts = pickList(await api(`/public/mall/products?tenantCode=${TENANT_CODE}&sort=newest&pageSize=20`, { headers: tenantHeader() }));
@@ -342,7 +343,7 @@ async function mallFlow(financeToken, opsToken) {
   const flashOrder = await api(`/public/mall/orders?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ items: [{ skuId: calligraphySku.id, quantity: 1, flashSaleId: flashSale.id }], paymentMethod: "balance", addressId: address.id, buyerRemark: "online-showcase 商城秒杀余额支付验收" })
+    body: JSON.stringify({ items: [{ skuId: calligraphySku.id, quantity: 1, flashSaleId: flashSale.id }], paymentMethod: "balance", addressId: address.id, clientOrderKey: `${mallRunKey}-flash`, buyerRemark: "online-showcase 商城秒杀余额支付验收" })
   });
   assert(flashOrder.status === "paid" && Number(flashOrder.goodsAmount || 0) === Number(flashSale.salePrice || 0), "商城秒杀余额支付订单状态或金额不正确");
   const flashOrderDetail = await api(`/public/me/mall/orders/${flashOrder.id}?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) });
@@ -352,7 +353,7 @@ async function mallFlow(financeToken, opsToken) {
   const groupBuyOrder = await api(`/public/mall/orders?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ items: [{ skuId: groupBuySku.id, quantity: 1, groupBuyId: groupBuy.id }], paymentMethod: "balance", addressId: address.id, buyerRemark: "online-showcase 商城拼团余额支付验收" })
+    body: JSON.stringify({ items: [{ skuId: groupBuySku.id, quantity: 1, groupBuyId: groupBuy.id }], paymentMethod: "balance", addressId: address.id, clientOrderKey: `${mallRunKey}-group`, buyerRemark: "online-showcase 商城拼团余额支付验收" })
   });
   assert(groupBuyOrder.status === "paid" && Number(groupBuyOrder.goodsAmount || 0) === Number(groupBuy.groupPrice || 0), "商城拼团余额支付订单状态或金额不正确");
   const groupBuyOrderDetail = await api(`/public/me/mall/orders/${groupBuyOrder.id}?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) });
@@ -377,7 +378,7 @@ async function mallFlow(financeToken, opsToken) {
   const joinGroupBuyOrder = await api(`/public/mall/orders?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(joinUser.userAccessToken),
-    body: JSON.stringify({ items: [{ skuId: groupBuySku.id, quantity: 1, groupBuyId: groupBuy.id, joinTeamNo: joinableTeam.teamNo }], paymentMethod: "balance", addressId: joinAddress.id, buyerRemark: "online-showcase 商城拼团参团成团验收" })
+    body: JSON.stringify({ items: [{ skuId: groupBuySku.id, quantity: 1, groupBuyId: groupBuy.id, joinTeamNo: joinableTeam.teamNo }], paymentMethod: "balance", addressId: joinAddress.id, clientOrderKey: `${mallRunKey}-join`, buyerRemark: "online-showcase 商城拼团参团成团验收" })
   });
   assert(joinGroupBuyOrder.status === "paid" && Number(joinGroupBuyOrder.goodsAmount || 0) === Number(groupBuy.groupPrice || 0), "商城拼团参团支付订单状态或金额不正确");
   const joinGroupBuyOrderDetail = await api(`/public/me/mall/orders/${joinGroupBuyOrder.id}?tenantCode=${TENANT_CODE}`, { headers: userAuth(joinUser.userAccessToken) });
@@ -432,7 +433,7 @@ async function mallFlow(financeToken, opsToken) {
   const failedTeamOrder = await api(`/public/mall/orders?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ items: [{ skuId: unrelatedSku.id, quantity: 1, groupBuyId: expiredGroupBuy.id }], paymentMethod: "balance", addressId: address.id, buyerRemark: "online-showcase 商城拼团未成团自动退款验收" })
+    body: JSON.stringify({ items: [{ skuId: unrelatedSku.id, quantity: 1, groupBuyId: expiredGroupBuy.id }], paymentMethod: "balance", addressId: address.id, clientOrderKey: `${mallRunKey}-expired`, buyerRemark: "online-showcase 商城拼团未成团自动退款验收" })
   });
   assert(failedTeamOrder.status === "paid", "商城过期拼团支付后应先为 paid");
   await api(`/admin/mall/group-buys/${expiredGroupBuy.id}`, { method: "PATCH", headers: auth(opsToken), body: JSON.stringify({ ...expiredGroupBuyPayload, endsAt: expiredGroupBuyPastEnd }) });
@@ -455,7 +456,7 @@ async function mallFlow(financeToken, opsToken) {
   const offlineFailOrder = await api(`/public/mall/orders?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ items: [{ skuId: unrelatedSku.id, quantity: 1, groupBuyId: offlineGroupBuy.id }], paymentMethod: "offline", addressId: address.id, buyerRemark: "online-showcase 商城线下拼团未成团人工退款验收" })
+    body: JSON.stringify({ items: [{ skuId: unrelatedSku.id, quantity: 1, groupBuyId: offlineGroupBuy.id }], paymentMethod: "offline", addressId: address.id, clientOrderKey: `${mallRunKey}-offline`, buyerRemark: "online-showcase 商城线下拼团未成团人工退款验收" })
   });
   assert(offlineFailOrder.status === "pending_confirm", "商城线下拼团订单应先待财务确认");
   const confirmedOfflineFailOrder = await api(`/admin/mall/orders/${offlineFailOrder.id}/confirm-offline-payment`, { method: "POST", headers: auth(financeToken), body: JSON.stringify({}) });
@@ -544,6 +545,7 @@ async function mallFlow(financeToken, opsToken) {
   const pointLogsAfterMallPay = pickList(memberDetailAfterMallPay.points);
   assert(pointLogsAfterMallPay.some((item) => item.sourceType === "mall_points_redeem" && item.sourceId === String(order.id) && Number(item.points) === -200), "会员积分流水缺少商城积分抵扣记录");
   assert(pointLogsAfterMallPay.some((item) => item.sourceType === "mall_order_paid" && item.sourceId === String(order.id)), "会员积分流水缺少商城消费赠送记录");
+  if (agentSettlementEnabled) {
   const commissionRows = pickList(await api(`/admin/mall/commissions?keyword=${encodeURIComponent(order.orderNo)}${merchantQuery}`, { headers: auth(financeToken) }));
   const pendingCommission = commissionRows.find((item) => item.order?.id === order.id && item.code === "SHOWMALL5" && item.status === "pending" && Number(item.commissionAmount || 0) > 0);
   assert(pendingCommission, "商城推广佣金未生成待结算记录");
@@ -581,6 +583,11 @@ async function mallFlow(financeToken, opsToken) {
   assert(Number(batchSettleResult.settledCount || 0) >= 1 && Number(batchSettleResult.settledAmount || 0) > 0, "商城批量结算未返回有效结果");
   const batchAfterSummary = await api(`/admin/mall/commissions/summary?keyword=${encodeURIComponent(batchSettleOrder.orderNo)}${merchantQuery}`, { headers: auth(financeToken) });
   assert(Number(batchAfterSummary.pendingCount || 0) === 0 && Number(batchAfterSummary.settledCount || 0) >= 1, "商城批量结算后汇总状态不正确");
+  } else {
+    const disabledCommissionRows = pickList(await api(`/admin/mall/commissions?keyword=${encodeURIComponent(order.orderNo)}${merchantQuery}`, { headers: auth(financeToken) }));
+    assert(!disabledCommissionRows.some((item) => item.order?.id === order.id), "标准版关闭代理结算后不应生成商城佣金");
+    reportStep("标准版商城佣金权益边界", "推广归因保留，代理结算关闭时不生成佣金");
+  }
   const salesExport = await fetch(`${API_BASE}/admin/mall/products/export-sales?${merchantOnlyQuery}`, { headers: auth(opsToken) });
   assert(salesExport.ok, "商城商品销售统计导出失败");
   const salesExportBuffer = await salesExport.arrayBuffer();
@@ -685,18 +692,20 @@ async function mallFlow(financeToken, opsToken) {
   assert(callbackExportRes.ok && callbackExportBuffer.byteLength > 1000, "商城支付回调日志导出文件生成失败");
   const refundLogs = pickList(await api(`/admin/mall/refund-logs?keyword=${encodeURIComponent(approvedWechatRefund.providerRefundNo)}${merchantQuery}`, { headers: auth(financeToken) }));
   assert(refundLogs.some((item) => item.provider === "wechat" && item.status === "success"), "后台商城退款日志缺少微信退款成功记录");
-  const voidCommissions = pickList(await api(`/admin/mall/commissions?keyword=${encodeURIComponent(wechatOrder.orderNo)}${merchantQuery}`, { headers: auth(financeToken) }));
-  assert(voidCommissions.some((item) => item.order?.id === wechatOrder.id && item.status === "void"), "商城微信退款后推广佣金未作废");
-  const voidCommissionSummary = await api(`/admin/mall/commissions/summary?keyword=${encodeURIComponent(wechatOrder.orderNo)}${merchantQuery}`, { headers: auth(financeToken) });
-  assert(Number(voidCommissionSummary.voidCount || 0) >= 1 && Number(voidCommissionSummary.voidAmount || 0) > 0, "商城推广佣金汇总缺少作废数据");
-  const voidPromoterSummary = pickList(await api(`/admin/mall/commissions/by-promoter?keyword=${encodeURIComponent(wechatOrder.orderNo)}${merchantQuery}`, { headers: auth(financeToken) }));
-  assert(voidPromoterSummary.some((item) => Number(item.voidCount || 0) >= 1 && Number(item.voidAmount || 0) > 0), "商城推广对象汇总缺少作废数据");
+  if (agentSettlementEnabled) {
+    const voidCommissions = pickList(await api(`/admin/mall/commissions?keyword=${encodeURIComponent(wechatOrder.orderNo)}${merchantQuery}`, { headers: auth(financeToken) }));
+    assert(voidCommissions.some((item) => item.order?.id === wechatOrder.id && item.status === "void"), "商城微信退款后推广佣金未作废");
+    const voidCommissionSummary = await api(`/admin/mall/commissions/summary?keyword=${encodeURIComponent(wechatOrder.orderNo)}${merchantQuery}`, { headers: auth(financeToken) });
+    assert(Number(voidCommissionSummary.voidCount || 0) >= 1 && Number(voidCommissionSummary.voidAmount || 0) > 0, "商城推广佣金汇总缺少作废数据");
+    const voidPromoterSummary = pickList(await api(`/admin/mall/commissions/by-promoter?keyword=${encodeURIComponent(wechatOrder.orderNo)}${merchantQuery}`, { headers: auth(financeToken) }));
+    assert(voidPromoterSummary.some((item) => Number(item.voidCount || 0) >= 1 && Number(item.voidAmount || 0) > 0), "商城推广对象汇总缺少作废数据");
+  }
   }
   reportStep("商城榜单搜索与商品统计闭环", "推荐/新品/热销排序 -> 搜索商品 -> 商品销售统计导出");
   reportStep("商城优惠券运营闭环", "配置有效期/限量 -> 后台识别可用状态 -> 前台下单抵扣");
   reportStep("商城低库存预警闭环", "后台读取可售库存 -> 低库存规格提醒 -> 可进入补货调整");
   reportStep("商城收藏与足迹闭环", "浏览商品 -> 收藏商品 -> 我的收藏/足迹可查");
-  reportStep("商城购物车余额支付与优惠券/积分/推广闭环", "地址 -> 加购 -> 用券满减 -> 积分抵扣 -> 推广码归因 -> 余额扣款 -> 会员积分和佣金结算/导出可查");
+  reportStep("商城购物车余额支付与优惠券/积分/推广闭环", agentSettlementEnabled ? "地址 -> 加购 -> 用券满减 -> 积分抵扣 -> 推广码归因 -> 余额扣款 -> 会员积分和佣金结算/导出可查" : "地址 -> 加购 -> 用券满减 -> 积分抵扣 -> 推广码归因 -> 余额扣款 -> 标准版不生成佣金");
   reportStep("商城拼团运营追踪闭环", "拼团价报价 -> 开团/参团余额支付 -> 达到人数自动成团 -> 未成团余额自动退款/线下待人工退款 -> 后台团号和进度可查");
   reportStep("商城取消订单兜底", "线下待确认订单 -> 用户取消 -> 库存释放 -> 订单关闭");
   reportStep("商城幂等下单兜底", "同一 clientOrderKey 重复提交 -> 返回同一订单 -> 不重复锁库存");
@@ -742,9 +751,9 @@ async function mallFlow(financeToken, opsToken) {
   assert(logisticsDetail.provider === "manual" && logisticsDetail.trackingStatus === "shipped", "商城用户物流详情接口未返回已发货状态");
   assert(logisticsDetail.expressNo === shipped.expressNo && logisticsDetail.trackingUrl, "商城用户物流详情缺少单号或查询网址");
   assert(pickList(logisticsDetail.timeline).some((item) => item.key === "shipped" && item.active), "商城用户物流时间线缺少发货节点");
-  const adminLogisticsDetail = await api(`/admin/mall/orders/${fulfillmentOrder.id}/logistics`, { headers: auth(financeToken) });
+  const adminLogisticsDetail = await api(`/admin/mall/orders/${fulfillmentOrder.id}/logistics`, { headers: auth(opsToken) });
   assert(adminLogisticsDetail.orderId === fulfillmentOrder.id && adminLogisticsDetail.expressNo === shipped.expressNo, "后台商城物流详情接口数据不正确");
-  const autoCompletePreview = await api(`/admin/mall/orders/complete-expired-shipped`, { method: "POST", headers: auth(financeToken), body: JSON.stringify({}) });
+  const autoCompletePreview = await api(`/admin/mall/orders/complete-expired-shipped`, { method: "POST", headers: auth(opsToken), body: JSON.stringify({}) });
   assert(Number.isFinite(Number(autoCompletePreview.checkedCount || 0)) && Number(autoCompletePreview.shippedDays || 0) >= 0, "商城已发货自动完成接口返回异常");
   const shippedAfterAutoComplete = await api(`/public/me/mall/orders/${fulfillmentOrder.id}?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) });
   assert(shippedAfterAutoComplete.status === "shipped", "未超过自动完成天数的商城订单不应被自动完成");
@@ -779,17 +788,19 @@ async function mallFlow(financeToken, opsToken) {
   assert(visibleReview, "商城评价审核通过后商品详情未展示");
   assert(Array.isArray(visibleReview.images) && visibleReview.images.length >= 1, "商城晒图评价审核通过后商品详情未展示图片");
   assert(visibleReview.merchantReply === approvedReview.merchantReply, "商城商品详情未展示商家评价回复");
+  const afterSaleBusinessKey = `showcase-after-sale-${fulfillmentOrder.id}-${Date.now()}`;
+  const afterSaleItems = [{ orderItemId: reviewItem.id, quantity: 1 }];
   const refund = await api(`/public/me/mall/orders/${fulfillmentOrder.id}/refund-request?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ type: "return_refund", amount: Number(completed.amount || 0), reason: "online-showcase 商城售后退款验收", images: ["https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?auto=format&fit=crop&w=800&q=80"] })
+    body: JSON.stringify({ type: "refund_only", amount: Number(completed.amount || 0), reason: "online-showcase 商城售后退款验收", businessKey: afterSaleBusinessKey, items: afterSaleItems, images: ["https://images.unsplash.com/photo-1513475382585-d06e58bcb0e0?auto=format&fit=crop&w=800&q=80"] })
   });
   assert(refund.id && refund.status === "pending", "商城售后申请后应生成待审核售后单");
   assert(Array.isArray(refund.images) && refund.images.length >= 1, "商城售后申请后应保留用户上传凭证");
   const duplicateRefund = await api(`/public/me/mall/orders/${fulfillmentOrder.id}/refund-request?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ type: "return_refund", amount: Number(completed.amount || 0), reason: "online-showcase 商城售后重复提交验收" })
+    body: JSON.stringify({ type: "refund_only", amount: Number(completed.amount || 0), reason: "online-showcase 商城售后重复提交验收", businessKey: afterSaleBusinessKey, items: afterSaleItems })
   });
   assert(duplicateRefund.id === refund.id && duplicateRefund.status === "pending", "商城同一订单不应重复生成待处理售后单");
   const approvedRefund = await api(`/admin/mall/refunds/${refund.id}/approve`, {
@@ -855,7 +866,7 @@ async function prepareSmokeUsers(tenantAdminToken, platformToken, tenantId) {
       await api(`/admin/users/${userId}/wallet/adjust`, {
         method: "POST",
         headers: auth(platformToken),
-        body: JSON.stringify({ tenantId, amount: 800, type: "recharge", remark: "online-showcase smoke runtime recharge" })
+        body: JSON.stringify({ tenantId, amount: 800, type: "recharge", remark: "online-showcase smoke runtime recharge", idempotencyKey: `smoke-wallet-${base}-${index}` })
       });
     }
     users.set(template.key, { ...template, phone, nickname, userId });

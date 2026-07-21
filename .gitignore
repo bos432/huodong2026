@@ -6,6 +6,9 @@ deploy/.env.production
 deploy/real-payment-smoke-result.json
 deploy/tenant-smoke-result.json
 deploy/mall-multi-merchant-smoke-result.json
+deploy/monitor-health-result.json
+deploy/rollback-drill-result.json
+deploy/static-rollback-drill-result.json
 .DS_Store
 coverage
 logs
@@ -18,6 +21,8 @@ uploads
 *.lock
 .local-mysql
 .local-logs
+.local-tools
+.deploy-backups
 docs/auto-audit-report-latest.md
 _release
 _attachment_changes.docx
@@ -28,3 +33,8 @@ _attachment_images
 /*.html
 apps/*/dist
 apps/mobile/unpackage
+/admin
+/assets
+/version.json
+/delivery/candidate-*
+/delivery/activity-registration-candidate-*.zip

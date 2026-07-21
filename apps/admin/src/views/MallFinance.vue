@@ -6,21 +6,30 @@
         <p>集中核对商城订单实收、退款、支付流水、佣金和结算风险；本页只读汇总，资金处理请进入售后或结算中心。</p>
       </div>
       <div class="header-actions">
-        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" @change="handleTenantChange">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" :disabled="filtersLocked" @change="handleTenantChange">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
         </el-select>
-        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部授权店铺；可选单店" style="width:280px" @change="handleMerchantChange">
+        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部授权店铺；可选单店" style="width:280px" :disabled="filtersLocked" @change="handleMerchantChange">
           <el-option v-for="merchant in merchants" :key="merchant.id" :label="merchantLabel(merchant)" :value="merchant.id" />
         </el-select>
-        <el-select v-model="filters.paymentMethod" clearable placeholder="支付方式" style="width:140px" @change="loadFinanceData">
+        <el-select v-model="filters.paymentMethod" clearable placeholder="支付方式" style="width:140px" :disabled="filtersLocked" @change="loadFinanceData">
           <el-option label="微信支付" value="wechat" />
           <el-option label="余额支付" value="balance" />
           <el-option label="线下收款" value="offline" />
           <el-option label="支付宝" value="alipay" />
         </el-select>
-        <el-button :loading="loadingAny" @click="loadFinanceData">刷新财务</el-button>
+        <el-button :loading="loadingAny" :disabled="filtersLocked" @click="loadFinanceData">刷新财务</el-button>
       </div>
     </div>
+
+    <el-alert v-if="tenantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" title="商家范围加载失败">
+      <p>{{ tenantErrorMessage }}</p>
+      <el-button size="small" @click="retryScopeLoading">重试商家列表</el-button>
+    </el-alert>
+    <el-alert v-if="merchantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" title="店铺范围加载失败">
+      <p>{{ merchantErrorMessage }}</p>
+      <el-button size="small" @click="retryScopeLoading">重试店铺列表</el-button>
+    </el-alert>
 
     <el-alert
       v-if="deepLinkWarning"
@@ -63,23 +72,23 @@
         <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-orders')">订单管理</el-button>
         <el-button size="small" type="danger" plain @click="goMerchantAdmin('/mall-refunds')">售后中心</el-button>
         <el-button size="small" type="warning" plain @click="goMerchantAdmin('/mall-payment-logs')">支付日志</el-button>
-        <el-button size="small" type="info" plain @click="goMerchantAdmin('/mall-settlements')">商城结算</el-button>
-        <el-button size="small" type="success" plain @click="goMerchantAdmin('/mall-statistics')">经营统计</el-button>
+        <el-button v-if="!settlementErrorMessage" size="small" type="info" plain @click="goMerchantAdmin('/mall-settlements')">商城结算</el-button>
+        <el-button v-if="canViewStatistics" size="small" type="success" plain @click="goMerchantAdmin('/mall-statistics')">经营统计</el-button>
         <el-button size="small" @click="copyWorkbenchLink">复制财务链接</el-button>
       </div>
     </el-card>
 
     <el-card shadow="never" class="filter-card">
       <div class="filter-row">
-        <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" style="width:250px" @change="handleDateRangeChange" />
-        <el-input v-model="filters.keyword" clearable placeholder="订单号/交易号/手机号/失败原因" style="width:280px" @keyup.enter="loadFinanceData" @clear="loadFinanceData" />
-        <el-input v-model="filters.checkoutGroupNo" clearable placeholder="跨店结算组号" style="width:190px" @keyup.enter="loadFinanceData" @clear="loadFinanceData" />
+        <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始日期" end-placeholder="结束日期" style="width:250px" :disabled="filtersLocked" @change="handleDateRangeChange" />
+        <el-input v-model="filters.keyword" clearable placeholder="订单号/交易号/手机号/失败原因" style="width:280px" :disabled="filtersLocked" @keyup.enter="loadFinanceData" @clear="loadFinanceData" />
+        <el-input v-model="filters.checkoutGroupNo" clearable placeholder="跨店结算组号" style="width:190px" :disabled="filtersLocked" @keyup.enter="loadFinanceData" @clear="loadFinanceData" />
       </div>
       <div class="filter-row">
-        <el-button @click="exportOrders">导出订单</el-button>
-        <el-button @click="exportRefunds">导出售后</el-button>
-        <el-button @click="exportPaymentTransactions">导出支付流水</el-button>
-        <el-button @click="exportSettlements">导出结算</el-button>
+        <el-button :loading="exportingKey === 'orders'" :disabled="Boolean(exportingKey)" @click="exportOrders">导出订单</el-button>
+        <el-button :loading="exportingKey === 'refunds'" :disabled="Boolean(exportingKey)" @click="exportRefunds">导出售后</el-button>
+        <el-button :loading="exportingKey === 'transactions'" :disabled="Boolean(exportingKey)" @click="exportPaymentTransactions">导出支付流水</el-button>
+        <el-button v-if="!settlementErrorMessage" :loading="exportingKey === 'settlements'" :disabled="Boolean(exportingKey)" @click="exportSettlements">导出结算</el-button>
       </div>
       <el-alert
         class="finance-tip"
@@ -89,6 +98,11 @@
         title="财务口径：实收=已确认收款订单金额，净收=实收-已通过退款；结算以结算中心生成的结算单为准。"
       />
     </el-card>
+
+    <el-alert v-if="summaryErrorMessage" class="section-alert" type="error" show-icon :closable="false" title="订单财务摘要加载失败">
+      <p>{{ summaryErrorMessage }}</p>
+      <el-button size="small" :loading="summaryLoading" :disabled="filtersLocked" @click="loadOrderSummary">重试订单摘要</el-button>
+    </el-alert>
 
     <div class="summary-grid">
       <el-card v-for="item in summaryCards" :key="item.label" shadow="never">
@@ -106,7 +120,8 @@
             <small>成功、差异和失败都要能追到订单</small>
           </div>
         </template>
-        <el-table v-loading="loading" :data="paymentTransactions" size="small" stripe empty-text="暂无支付流水">
+        <el-alert v-if="transactionErrorMessage" class="section-alert" type="error" show-icon :closable="false" title="支付流水加载失败"><p>{{ transactionErrorMessage }}</p><el-button size="small" :loading="transactionLoading" @click="loadPaymentTransactions">重试支付流水</el-button></el-alert>
+        <el-table v-loading="transactionLoading" :data="paymentTransactions" size="small" stripe empty-text="暂无支付流水">
           <el-table-column label="订单/交易号" min-width="220">
             <template #default="{ row }">
               <strong>{{ row.order?.orderNo || "-" }}</strong>
@@ -130,7 +145,8 @@
             <small>失败记录优先进入售后中心处理</small>
           </div>
         </template>
-        <el-table v-loading="loading" :data="refundLogs" size="small" stripe empty-text="暂无退款日志">
+        <el-alert v-if="refundErrorMessage" class="section-alert" type="error" show-icon :closable="false" title="退款日志加载失败"><p>{{ refundErrorMessage }}</p><el-button size="small" :loading="refundLoading" @click="loadRefundLogs">重试退款日志</el-button></el-alert>
+        <el-table v-loading="refundLoading" :data="refundLogs" size="small" stripe empty-text="暂无退款日志">
           <el-table-column label="售后/订单" min-width="220">
             <template #default="{ row }">
               <strong>{{ row.refund?.refundNo || "-" }}</strong>
@@ -153,7 +169,8 @@
             <small>草稿、已审核未打款和负向扣回要重点核对</small>
           </div>
         </template>
-        <el-table v-loading="loading" :data="mallSettlements" size="small" stripe empty-text="暂无结算单">
+        <el-alert v-if="settlementErrorMessage" class="section-alert" type="warning" show-icon :closable="false" title="结算风险加载失败"><p>{{ settlementErrorMessage }}</p><el-button size="small" :loading="settlementLoading" @click="loadSettlementRisk">重试结算风险</el-button></el-alert>
+        <el-table v-loading="settlementLoading" :data="mallSettlements" size="small" stripe empty-text="暂无结算单">
           <el-table-column prop="settlementNo" label="结算单号" width="180" />
           <el-table-column label="店铺" min-width="150"><template #default="{ row }">{{ row.merchant?.name || "-" }}</template></el-table-column>
           <el-table-column label="周期" width="180"><template #default="{ row }">{{ row.periodStart }} 至 {{ row.periodEnd }}</template></el-table-column>
@@ -170,6 +187,7 @@
             <small>佣金结算独立核对，不在财务总览直接处理</small>
           </div>
         </template>
+        <el-alert v-if="commissionErrorMessage" class="section-alert" type="error" show-icon :closable="false" title="佣金摘要加载失败"><p>{{ commissionErrorMessage }}</p><el-button size="small" :loading="commissionLoading" @click="loadCommissionSummary">重试佣金摘要</el-button></el-alert>
         <div class="commission-summary">
           <div v-for="item in commissionSummaryCards" :key="item.label">
             <small>{{ item.label }}</small>
@@ -189,7 +207,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api, downloadFile } from "../api";
 import { copyToClipboard } from "../h5-preview";
-import { isPlatformAdmin } from "../permissions";
+import { hasPermission, isPlatformAdmin } from "../permissions";
 
 type Merchant = {
   id: number;
@@ -211,10 +229,29 @@ const refundLogs = ref<any[]>([]);
 const commissionSummary = ref<any>({});
 const mallSettlements = ref<any[]>([]);
 const settlementPending = ref<any[]>([]);
-const loading = ref(false);
+const summaryLoading = ref(false);
+const transactionLoading = ref(false);
+const refundLoading = ref(false);
+const commissionLoading = ref(false);
+const settlementLoading = ref(false);
 const merchantLoading = ref(false);
+const summaryErrorMessage = ref("");
+const transactionErrorMessage = ref("");
+const refundErrorMessage = ref("");
+const commissionErrorMessage = ref("");
+const settlementErrorMessage = ref("");
+const tenantErrorMessage = ref("");
+const merchantErrorMessage = ref("");
+const exportingKey = ref("");
 const deepLinkWarning = ref("");
 const dateRange = ref<string[]>([]);
+let tenantLoadSequence = 0;
+let merchantLoadSequence = 0;
+let summaryLoadSequence = 0;
+let transactionLoadSequence = 0;
+let refundLoadSequence = 0;
+let commissionLoadSequence = 0;
+let settlementLoadSequence = 0;
 const filters = reactive({
   tenantId: routeTenantId(),
   merchantId: routeMerchantId(),
@@ -226,7 +263,10 @@ const filters = reactive({
 });
 
 const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
+const canViewStatistics = computed(() => hasPermission("mall.statistics.view"));
+const loading = computed(() => summaryLoading.value || transactionLoading.value || refundLoading.value || commissionLoading.value || settlementLoading.value);
 const loadingAny = computed(() => loading.value || merchantLoading.value);
+const filtersLocked = computed(() => Boolean(exportingKey.value));
 const summaryCards = computed(() => [
   { label: "订单数", value: orderSummary.value.orderCount || 0, desc: "当前筛选范围" },
   { label: "实收金额", value: `¥${money(orderSummary.value.receivedAmount ?? orderSummary.value.paidAmount)}`, desc: "已确认收款" },
@@ -317,22 +357,56 @@ async function syncRouteQuery() {
 }
 
 function clearFinanceData() {
+  summaryLoadSequence += 1;
+  transactionLoadSequence += 1;
+  refundLoadSequence += 1;
+  commissionLoadSequence += 1;
+  settlementLoadSequence += 1;
+  summaryLoading.value = false;
+  transactionLoading.value = false;
+  refundLoading.value = false;
+  commissionLoading.value = false;
+  settlementLoading.value = false;
   orderSummary.value = {};
   paymentTransactions.value = [];
   refundLogs.value = [];
   commissionSummary.value = {};
   mallSettlements.value = [];
   settlementPending.value = [];
+  summaryErrorMessage.value = "";
+  transactionErrorMessage.value = "";
+  refundErrorMessage.value = "";
+  commissionErrorMessage.value = "";
+  settlementErrorMessage.value = "";
 }
 
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  const sequence = ++tenantLoadSequence;
+  tenantErrorMessage.value = "";
+  try {
+    const rows = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = Array.isArray(rows) ? rows : [];
+    return true;
+  } catch (error: any) {
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = [];
+    tenantErrorMessage.value = error.message || "商家列表加载失败";
+    return false;
+  }
 }
 
 async function loadMerchants() {
+  const sequence = ++merchantLoadSequence;
+  const tenantId = filters.tenantId;
   merchantLoading.value = true;
+  merchantErrorMessage.value = "";
+  merchants.value = [];
+  clearFinanceData();
   try {
-    merchants.value = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: "true" } });
+    const rows = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? tenantId : undefined, enabled: "true" } });
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = Array.isArray(rows) ? rows : [];
     const requestedMerchantId = routeMerchantId();
     deepLinkWarning.value = "";
     if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) filters.merchantId = requestedMerchantId;
@@ -345,41 +419,143 @@ async function loadMerchants() {
     if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
     return true;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载可核对财务的店铺失败");
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = [];
+    merchantErrorMessage.value = error.message || "加载可核对财务的店铺失败";
     return false;
   } finally {
-    merchantLoading.value = false;
+    if (sequence === merchantLoadSequence) merchantLoading.value = false;
+  }
+}
+
+async function retryScopeLoading() {
+  await loadTenants();
+  const ok = await loadMerchants();
+  if (ok) await loadFinanceData();
+}
+
+function currentFinanceContext() {
+  return { tenantId: filters.tenantId, merchantId: filters.merchantId, paymentMethod: filters.paymentMethod, keyword: filters.keyword.trim(), checkoutGroupNo: filters.checkoutGroupNo.trim(), startDate: filters.startDate, endDate: filters.endDate };
+}
+
+function sameFinanceContext(context: ReturnType<typeof currentFinanceContext>) {
+  const current = currentFinanceContext();
+  return Object.keys(context).every((key) => context[key as keyof typeof context] === current[key as keyof typeof current]);
+}
+
+async function loadOrderSummary() {
+  const sequence = ++summaryLoadSequence;
+  const context = currentFinanceContext();
+  summaryLoading.value = true;
+  summaryErrorMessage.value = "";
+  orderSummary.value = {};
+  try {
+    const result = await api.get<any, any>("/admin/mall/orders/summary", { params: baseFinanceParams() });
+    if (sequence !== summaryLoadSequence || !sameFinanceContext(context)) return false;
+    orderSummary.value = result && typeof result === "object" && !Array.isArray(result) ? result : {};
+    return true;
+  } catch (error: any) {
+    if (sequence !== summaryLoadSequence || !sameFinanceContext(context)) return false;
+    orderSummary.value = {};
+    summaryErrorMessage.value = error.message || "加载商城订单财务摘要失败";
+    return false;
+  } finally {
+    if (sequence === summaryLoadSequence) summaryLoading.value = false;
+  }
+}
+
+async function loadPaymentTransactions() {
+  const sequence = ++transactionLoadSequence;
+  const context = currentFinanceContext();
+  transactionLoading.value = true;
+  transactionErrorMessage.value = "";
+  paymentTransactions.value = [];
+  try {
+    const rows = await api.get<any, any[]>("/admin/mall/payment-transactions", { params: baseFinanceParams() });
+    if (sequence !== transactionLoadSequence || !sameFinanceContext(context)) return false;
+    paymentTransactions.value = Array.isArray(rows) ? rows : [];
+    return true;
+  } catch (error: any) {
+    if (sequence !== transactionLoadSequence || !sameFinanceContext(context)) return false;
+    paymentTransactions.value = [];
+    transactionErrorMessage.value = error.message || "加载商城支付流水失败";
+    return false;
+  } finally {
+    if (sequence === transactionLoadSequence) transactionLoading.value = false;
+  }
+}
+
+async function loadRefundLogs() {
+  const sequence = ++refundLoadSequence;
+  const context = currentFinanceContext();
+  refundLoading.value = true;
+  refundErrorMessage.value = "";
+  refundLogs.value = [];
+  try {
+    const rows = await api.get<any, any[]>("/admin/mall/refund-logs", { params: baseFinanceParams() });
+    if (sequence !== refundLoadSequence || !sameFinanceContext(context)) return false;
+    refundLogs.value = Array.isArray(rows) ? rows : [];
+    return true;
+  } catch (error: any) {
+    if (sequence !== refundLoadSequence || !sameFinanceContext(context)) return false;
+    refundLogs.value = [];
+    refundErrorMessage.value = error.message || "加载商城退款日志失败";
+    return false;
+  } finally {
+    if (sequence === refundLoadSequence) refundLoading.value = false;
+  }
+}
+
+async function loadCommissionSummary() {
+  const sequence = ++commissionLoadSequence;
+  const context = currentFinanceContext();
+  commissionLoading.value = true;
+  commissionErrorMessage.value = "";
+  commissionSummary.value = {};
+  try {
+    const result = await api.get<any, any>("/admin/mall/commissions/summary", { params: baseFinanceParams() });
+    if (sequence !== commissionLoadSequence || !sameFinanceContext(context)) return false;
+    commissionSummary.value = result && typeof result === "object" && !Array.isArray(result) ? result : {};
+    return true;
+  } catch (error: any) {
+    if (sequence !== commissionLoadSequence || !sameFinanceContext(context)) return false;
+    commissionSummary.value = {};
+    commissionErrorMessage.value = error.message || "加载商城佣金摘要失败";
+    return false;
+  } finally {
+    if (sequence === commissionLoadSequence) commissionLoading.value = false;
+  }
+}
+
+async function loadSettlementRisk() {
+  const sequence = ++settlementLoadSequence;
+  const context = currentFinanceContext();
+  settlementLoading.value = true;
+  settlementErrorMessage.value = "";
+  mallSettlements.value = [];
+  settlementPending.value = [];
+  try {
+    const result = await api.get<any, any>("/admin/mall/settlements", { params: baseFinanceParams() });
+    if (sequence !== settlementLoadSequence || !sameFinanceContext(context)) return false;
+    mallSettlements.value = Array.isArray(result?.items) ? result.items : [];
+    settlementPending.value = Array.isArray(result?.pending) ? result.pending : [];
+    return true;
+  } catch (error: any) {
+    if (sequence !== settlementLoadSequence || !sameFinanceContext(context)) return false;
+    mallSettlements.value = [];
+    settlementPending.value = [];
+    settlementErrorMessage.value = error.message || "当前店铺未授予结算查看权限，核心财务数据仍可正常查看。";
+    return false;
+  } finally {
+    if (sequence === settlementLoadSequence) settlementLoading.value = false;
   }
 }
 
 async function loadFinanceData() {
   if (deepLinkWarning.value) return;
-  if (!isPlatformAdmin() && !filters.merchantId) {
-    clearFinanceData();
-    return;
-  }
-  loading.value = true;
-  try {
-    const params = baseFinanceParams();
-    const [summary, transactions, refundRows, commissionSummaryRow, settlementResult] = await Promise.all([
-      api.get<any, any>("/admin/mall/orders/summary", { params }),
-      api.get<any, any[]>("/admin/mall/payment-transactions", { params }),
-      api.get<any, any[]>("/admin/mall/refund-logs", { params }),
-      api.get<any, any>("/admin/mall/commissions/summary", { params }),
-      api.get<any, any>("/admin/mall/settlements", { params })
-    ]);
-    orderSummary.value = summary || {};
-    paymentTransactions.value = transactions || [];
-    refundLogs.value = refundRows || [];
-    commissionSummary.value = commissionSummaryRow || {};
-    mallSettlements.value = settlementResult?.items || [];
-    settlementPending.value = settlementResult?.pending || [];
-    await syncRouteQuery();
-  } catch (error: any) {
-    ElMessage.error(error.message || "加载商城财务总览失败");
-  } finally {
-    loading.value = false;
-  }
+  if (!isPlatformAdmin() && !filters.merchantId) return clearFinanceData();
+  await Promise.allSettled([loadOrderSummary(), loadPaymentTransactions(), loadRefundLogs(), loadCommissionSummary(), loadSettlementRisk()]);
+  await syncRouteQuery();
 }
 
 async function handleTenantChange() {
@@ -439,29 +615,33 @@ function openRelatedOrder(row: any) {
 }
 
 async function exportOrders() {
-  await exportFile("/admin/mall/orders/export", "mall-orders.xlsx", "导出商城订单失败");
+  await exportFile("orders", "/admin/mall/orders/export", "mall-orders.xlsx", "导出商城订单失败");
 }
 
 async function exportRefunds() {
-  await exportFile("/admin/mall/refunds/export", "mall-refunds.xlsx", "导出商城售后失败");
+  await exportFile("refunds", "/admin/mall/refunds/export", "mall-refunds.xlsx", "导出商城售后失败");
 }
 
 async function exportPaymentTransactions() {
-  await exportFile("/admin/mall/payment-transactions/export", "mall-payment-transactions.xlsx", "导出支付流水失败");
+  await exportFile("transactions", "/admin/mall/payment-transactions/export", "mall-payment-transactions.xlsx", "导出支付流水失败");
 }
 
 async function exportSettlements() {
-  await exportFile("/admin/mall/settlements/export", "mall-settlements.xlsx", "导出商城结算失败");
+  await exportFile("settlements", "/admin/mall/settlements/export", "mall-settlements.xlsx", "导出商城结算失败");
 }
 
-async function exportFile(path: string, filename: string, message: string) {
+async function exportFile(key: string, path: string, filename: string, message: string) {
   if (deepLinkWarning.value) return ElMessage.error("当前商城财务店铺链接不可用，请先确认店铺授权后再导出。");
+  if (exportingKey.value) return;
+  exportingKey.value = key;
   try {
     const clean = new URLSearchParams();
     appendBaseFinanceParams(clean);
     await downloadFile(`${path}?${clean.toString()}`, filename);
   } catch (error: any) {
     ElMessage.error(error.message || message);
+  } finally {
+    exportingKey.value = "";
   }
 }
 
@@ -544,6 +724,8 @@ watch(() => [route.query.tenantId, route.query.merchantId, route.query.keyword],
 .header-actions, .filter-row { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .filter-row { justify-content: flex-start; }
 .scope-alert { margin-bottom: 2px; }
+.scope-alert p, .section-alert p { margin: 0 0 8px; }
+.section-alert { margin-bottom: 12px; }
 .merchant-card { border-color: #c7d2fe; background: linear-gradient(135deg, #eef2ff 0%, #fff 72%); }
 .merchant-card :deep(.el-card__body) { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
 .merchant-card strong { color: #0f172a; }

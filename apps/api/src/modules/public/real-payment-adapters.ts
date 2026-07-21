@@ -3,10 +3,11 @@ import { ConfigService } from "@nestjs/config";
 import { createDecipheriv, createSign, createVerify, randomBytes } from "crypto";
 import type { KeyObject } from "crypto";
 import { readFileSync } from "fs";
+import { readPrivateCredential } from "../../shared/private-credential";
 import { gunzipSync, inflateRawSync } from "zlib";
 import { Order } from "../../entities/order.entity";
 import { ProviderPayDto } from "./dto";
-import type { NormalizedPaymentCallback, PaymentProviderAdapter, PaymentProviderRuntimeConfig, ProviderPaymentCreateOptions, ProviderPaymentResult, ProviderRefundNotificationResult, ProviderRefundQueryRequest, ProviderRefundQueryResult, ProviderRefundRequest, ProviderRefundResult, ProviderStatementFetchRequest, ProviderStatementFetchResult, ProviderStatementItem, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
+import type { NormalizedPaymentCallback, PaymentProviderAdapter, PaymentProviderRuntimeConfig, ProviderPaymentCloseResult, ProviderPaymentCreateOptions, ProviderPaymentQueryResult, ProviderPaymentResult, ProviderRefundNotificationResult, ProviderRefundQueryRequest, ProviderRefundQueryResult, ProviderRefundRequest, ProviderRefundResult, ProviderStatementFetchRequest, ProviderStatementFetchResult, ProviderStatementItem, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
 
 type PaymentDraft = {
   provider: SupportedPaymentProvider;
@@ -85,6 +86,8 @@ export type AlipayPaymentDraftOptions = {
 export type WechatRefundQueryDraftOptions = Omit<WechatPaymentDraftOptions, "appId" | "notifyUrl">;
 
 export type AlipayRefundQueryDraftOptions = Omit<AlipayPaymentDraftOptions, "notifyUrl">;
+export type WechatPaymentQueryDraftOptions = WechatRefundQueryDraftOptions;
+export type AlipayPaymentQueryDraftOptions = AlipayRefundQueryDraftOptions;
 
 export type WechatRefundRequestDraftOptions = WechatRefundQueryDraftOptions;
 
@@ -128,6 +131,16 @@ abstract class BaseRealPaymentAdapter implements PaymentProviderAdapter {
     const draft = this.paymentDraft(order, options?.notifyUrl?.trim() || this.notifyUrl());
     void draft;
     throw new NotImplementedException(`${this.provider} real payment SDK create call is not implemented yet`);
+  }
+
+  queryPayment(order: Order): Promise<ProviderPaymentQueryResult> | ProviderPaymentQueryResult {
+    void order;
+    throw new NotImplementedException(`${this.provider} real payment query SDK request is not implemented yet`);
+  }
+
+  closePayment(order: Order): Promise<ProviderPaymentCloseResult> | ProviderPaymentCloseResult {
+    void order;
+    throw new NotImplementedException(`${this.provider} real payment close SDK request is not implemented yet`);
   }
 
   parseCallback(context: RealPaymentCallbackContext): NormalizedPaymentCallback {
@@ -238,7 +251,7 @@ abstract class BaseRealPaymentAdapter implements PaymentProviderAdapter {
     try {
       const cached = this.fileCache.get(path);
       if (cached) return cached;
-      const content = readFileSync(path, "utf8");
+      const content = path.startsWith("secure-credential://") ? readPrivateCredential(path).toString("utf8") : readFileSync(path, "utf8");
       this.fileCache.set(path, content);
       return content;
     } catch {
@@ -291,6 +304,22 @@ export class WechatPayAdapter extends BaseRealPaymentAdapter {
       appId: config.appId,
       privateKey: this.readConfiguredFile(config.privateKeyPath, "WECHAT_PAY_PRIVATE_KEY_PATH")
     });
+  }
+
+  async queryPayment(order: Order): Promise<ProviderPaymentQueryResult> {
+    const config = this.wechatConfig({ requireNotifyUrl: false });
+    if (!this.flagEnabled("REAL_PAYMENT_QUERY_CLOSE_IMPLEMENTED")) return super.queryPayment(order);
+    const draft = buildWechatPaymentQueryRequestDraft(order, { mchId: config.mchId, certSerialNo: config.certSerialNo, privateKey: this.readConfiguredFile(config.privateKeyPath, "WECHAT_PAY_PRIVATE_KEY_PATH") });
+    const payload = await executeRealPaymentHttpRequestDraft(draft, undefined, { publicKey: this.readConfiguredFile(config.platformCertPath, "WECHAT_PAY_PLATFORM_CERT_PATH") });
+    return normalizeWechatPaymentQueryPayload(order, payload);
+  }
+
+  async closePayment(order: Order): Promise<ProviderPaymentCloseResult> {
+    const config = this.wechatConfig({ requireNotifyUrl: false });
+    if (!this.flagEnabled("REAL_PAYMENT_QUERY_CLOSE_IMPLEMENTED")) return super.closePayment(order);
+    const draft = buildWechatPaymentCloseRequestDraft(order, { mchId: config.mchId, certSerialNo: config.certSerialNo, privateKey: this.readConfiguredFile(config.privateKeyPath, "WECHAT_PAY_PRIVATE_KEY_PATH") });
+    await executeRealPaymentHttpRequestDraft(draft);
+    return { provider: "wechat", mode: "real", orderNo: order.orderNo, status: "closed" };
   }
 
   parseCallback(context: RealPaymentCallbackContext): NormalizedPaymentCallback {
@@ -422,6 +451,23 @@ export class AlipayAdapter extends BaseRealPaymentAdapter {
     });
     const payload = await executeRealPaymentHttpRequestDraft(draft, undefined, { publicKey: this.readConfiguredFile(config.publicCertPath, "ALIPAY_PUBLIC_CERT_PATH") });
     return normalizeAlipayPaymentCreatePayload(order, unwrapAlipayPaymentCreatePayload(payload));
+  }
+
+  async queryPayment(order: Order): Promise<ProviderPaymentQueryResult> {
+    const config = this.alipayConfig();
+    if (!this.flagEnabled("REAL_PAYMENT_QUERY_CLOSE_IMPLEMENTED")) return super.queryPayment(order);
+    const draft = buildAlipayPaymentQueryRequestDraft(order, { appId: config.appId, privateKey: this.readConfiguredFile(config.privateKeyPath, "ALIPAY_PRIVATE_KEY_PATH") });
+    const payload = await executeRealPaymentHttpRequestDraft(draft, undefined, { publicKey: this.readConfiguredFile(config.publicCertPath, "ALIPAY_PUBLIC_CERT_PATH") });
+    return normalizeAlipayPaymentQueryPayload(order, unwrapAlipayResponsePayload(payload));
+  }
+
+  async closePayment(order: Order): Promise<ProviderPaymentCloseResult> {
+    const config = this.alipayConfig();
+    if (!this.flagEnabled("REAL_PAYMENT_QUERY_CLOSE_IMPLEMENTED")) return super.closePayment(order);
+    const draft = buildAlipayPaymentCloseRequestDraft(order, { appId: config.appId, privateKey: this.readConfiguredFile(config.privateKeyPath, "ALIPAY_PRIVATE_KEY_PATH") });
+    const payload = await executeRealPaymentHttpRequestDraft(draft, undefined, { publicKey: this.readConfiguredFile(config.publicCertPath, "ALIPAY_PUBLIC_CERT_PATH") });
+    const response = unwrapAlipayResponsePayload(payload);
+    return { provider: "alipay", mode: "real", orderNo: order.orderNo, status: String(response.code || "") === "10000" ? "closed" : "already_closed", raw: response };
   }
 
   parseCallback(context: RealPaymentCallbackContext): NormalizedPaymentCallback {
@@ -768,6 +814,44 @@ export function buildWechatRefundRequestDraft(request: ProviderRefundRequest, op
   };
 }
 
+function buildWechatSignedRequestDraft(method: "GET" | "POST", path: string, body: string, options: WechatPaymentQueryDraftOptions): RealPaymentHttpRequestDraft {
+  const timestamp = options.timestamp || Math.floor(Date.now() / 1000).toString();
+  const nonce = options.nonce || randomBytes(16).toString("hex");
+  const signature = signRsaSha256(`${method}\n${path}\n${timestamp}\n${nonce}\n${body}\n`, options.privateKey);
+  const authorization = `WECHATPAY2-SHA256-RSA2048 ${[`mchid="${options.mchId}"`, `nonce_str="${nonce}"`, `signature="${signature}"`, `timestamp="${timestamp}"`, `serial_no="${options.certSerialNo}"`].join(",")}`;
+  return { provider: "wechat", method, url: `${options.baseUrl || "https://api.mch.weixin.qq.com"}${path}`, path, headers: { Accept: "application/json", ...(body ? { "Content-Type": "application/json" } : {}), Authorization: authorization }, body: body || null };
+}
+
+export function buildWechatPaymentQueryRequestDraft(order: Order, options: WechatPaymentQueryDraftOptions): RealPaymentHttpRequestDraft {
+  return buildWechatSignedRequestDraft("GET", `/v3/pay/transactions/out-trade-no/${encodeURIComponent(order.orderNo)}?mchid=${encodeURIComponent(options.mchId)}`, "", options);
+}
+
+export function buildWechatPaymentCloseRequestDraft(order: Order, options: WechatPaymentQueryDraftOptions): RealPaymentHttpRequestDraft {
+  return buildWechatSignedRequestDraft("POST", `/v3/pay/transactions/out-trade-no/${encodeURIComponent(order.orderNo)}/close`, JSON.stringify({ mchid: options.mchId }), options);
+}
+
+function buildAlipayTradeRequestDraft(methodName: string, order: Order, options: AlipayPaymentQueryDraftOptions): RealPaymentHttpRequestDraft {
+  const params: Record<string, string> = { app_id: options.appId, method: methodName, charset: "utf-8", sign_type: "RSA2", timestamp: options.timestamp || alipayTimestamp(new Date()), version: "1.0", biz_content: JSON.stringify({ out_trade_no: order.orderNo }) };
+  params.sign = signRsaSha256(alipaySignContent(params), options.privateKey);
+  return { provider: "alipay", method: "POST", url: options.gatewayUrl || "https://openapi.alipay.com/gateway.do", path: "/gateway.do", headers: { "Content-Type": "application/x-www-form-urlencoded;charset=utf-8" }, body: new URLSearchParams(params).toString() };
+}
+
+export function buildAlipayPaymentQueryRequestDraft(order: Order, options: AlipayPaymentQueryDraftOptions) { return buildAlipayTradeRequestDraft("alipay.trade.query", order, options); }
+export function buildAlipayPaymentCloseRequestDraft(order: Order, options: AlipayPaymentQueryDraftOptions) { return buildAlipayTradeRequestDraft("alipay.trade.close", order, options); }
+
+export function normalizeWechatPaymentQueryPayload(order: Order, payload: Record<string, unknown>): ProviderPaymentQueryResult {
+  const state = String(payload.trade_state || "").toUpperCase();
+  const map: Record<string, ProviderPaymentQueryResult["status"]> = { SUCCESS: "success", CLOSED: "closed", REVOKED: "closed", PAYERROR: "failed", NOTPAY: "pending", USERPAYING: "pending" };
+  const total = Number((payload.amount as any)?.total);
+  return { provider: "wechat", mode: "real", orderNo: order.orderNo, transactionNo: typeof payload.transaction_id === "string" ? payload.transaction_id : null, amount: Number.isFinite(total) ? (total / 100).toFixed(2) : Number(order.amount).toFixed(2), status: map[state] || "failed", raw: payload };
+}
+
+export function normalizeAlipayPaymentQueryPayload(order: Order, payload: Record<string, unknown>): ProviderPaymentQueryResult {
+  const state = String(payload.trade_status || "").toUpperCase();
+  const map: Record<string, ProviderPaymentQueryResult["status"]> = { TRADE_SUCCESS: "success", TRADE_FINISHED: "success", TRADE_CLOSED: "closed", WAIT_BUYER_PAY: "pending" };
+  return { provider: "alipay", mode: "real", orderNo: order.orderNo, transactionNo: typeof payload.trade_no === "string" ? payload.trade_no : null, amount: Number(payload.total_amount || order.amount).toFixed(2), status: map[state] || "failed", raw: payload };
+}
+
 export function buildAlipayRefundQueryRequestDraft(request: ProviderRefundQueryRequest, options: AlipayRefundQueryDraftOptions): RealPaymentHttpRequestDraft {
   const method = "POST";
   const path = "/gateway.do";
@@ -842,6 +926,7 @@ export async function executeRealPaymentHttpRequestDraft(draft: RealPaymentHttpR
   }
 
   const text = await response.text();
+  if (response.ok && !text.trim()) return {};
   if (verification) verifyProviderHttpResponse(draft.provider, text, response, verification.publicKey);
   const payload = parseProviderJson(draft.provider, text);
   if (!response.ok) {

@@ -4,6 +4,7 @@ export enum ActivityStatus {
   Rejected = "rejected",
   Open = "open",
   Closed = "closed",
+  Cancelled = "cancelled",
   Ended = "ended"
 }
 
@@ -39,7 +40,14 @@ export enum FieldType {
   MultipleChoice = "multiple_choice",
   Phone = "phone",
   IdCard = "id_card",
-  Remark = "remark"
+  Remark = "remark",
+  Email = "email",
+  Number = "number",
+  Date = "date",
+  DateTime = "date_time",
+  Region = "region",
+  Address = "address",
+  Attachment = "attachment"
 }
 
 export const activityStatusText: Record<ActivityStatus, string> = {
@@ -48,6 +56,7 @@ export const activityStatusText: Record<ActivityStatus, string> = {
   [ActivityStatus.Rejected]: "已驳回",
   [ActivityStatus.Open]: "报名中",
   [ActivityStatus.Closed]: "已下架",
+  [ActivityStatus.Cancelled]: "已取消",
   [ActivityStatus.Ended]: "已结束"
 };
 

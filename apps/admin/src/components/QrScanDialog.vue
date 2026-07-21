@@ -58,7 +58,7 @@ onUnmounted(() => {
     <div class="scan-dialog">
       <div class="scan-header">
         <strong>扫码核销</strong>
-        <span class="scan-close" @click="close">关闭</span>
+        <span class="scan-close" role="button" tabindex="0" @click="close" @keydown.enter.prevent="close" @keydown.space.prevent="close">关闭</span>
       </div>
       <div class="scan-body">
         <div v-if="error" class="scan-error">{{ error }}</div>
@@ -67,7 +67,7 @@ onUnmounted(() => {
         <p class="scan-hint">请将用户报名详情里的签到二维码放入取景框，识别后会自动核销。</p>
       </div>
       <div class="scan-footer">
-        <span class="scan-link" @click="handleManualEntry">手动输入签到码</span>
+        <span class="scan-link" role="button" tabindex="0" @click="handleManualEntry" @keydown.enter.prevent="handleManualEntry" @keydown.space.prevent="handleManualEntry">手动输入签到码</span>
       </div>
     </div>
   </div>

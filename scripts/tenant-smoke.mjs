@@ -182,10 +182,12 @@ async function h5Login(phone, nickname) {
     body: JSON.stringify({ phone })
   });
   assert(code.verificationToken, "H5 verification token missing");
-  return api("/public/auth/h5-login", {
+  const result = await api("/public/auth/h5-login", {
     method: "POST",
     body: JSON.stringify({ phone, nickname, verificationToken: code.verificationToken, verificationCode: code.devCode || "000000" })
   });
+  assert(result.userAccessToken, "H5 user access token missing");
+  return result;
 }
 
 function activityPayload(title, price = 0) {
@@ -268,6 +270,7 @@ async function saveOperationSetting(token, marker) {
       registrationEnabled: true,
       registrationDisabledMessage: "",
       offlinePaymentInstructions: `offline payment ${marker}`,
+      paymentMethods: { free: true, wechat: true, alipay: false, balance: true, offline: true },
       customerServiceName: `tenant-smoke-${marker}`,
       customerServicePhone: "13800000000",
       customerServiceWechat: `tenant_smoke_${marker}`,
@@ -362,7 +365,7 @@ async function registerFreeActivity(activity, tenant, token, suffix) {
   const activityDetail = await api(`/admin/activities/${activity.id}`, { headers: auth(token) });
   const registration = await api(`/public/activities/${activity.id}/register?tenantCode=${encodeURIComponent(tenant.code)}`, {
     method: "POST",
-    headers: tenantHeader(tenant.code),
+    headers: { ...tenantHeader(tenant.code), ...auth(user.userAccessToken) },
     body: JSON.stringify({ userId: user.id, answers: answers(activityDetail.fields || [], `export-${suffix}`) })
   });
   assert(registration.registration?.id || registration.id, `${tenant.code} export registration missing`);
@@ -395,28 +398,35 @@ async function verifyPaymentBoundary(a) {
   const user = await h5Login(`139${String(runId).slice(-8)}`, `tenant-smoke-user-${runId}`);
   const registration = await api(`/public/activities/${paidActivity.id}/register?tenantCode=${encodeURIComponent(tenantA.code)}`, {
     method: "POST",
-    headers: tenantHeader(tenantA.code),
-    body: JSON.stringify({ userId: user.id, answers: answers(paidActivityDetail.fields || [], "paid-A") })
+    headers: { ...tenantHeader(tenantA.code), ...auth(user.userAccessToken) },
+    body: JSON.stringify({ userId: user.id, answers: answers(paidActivityDetail.fields || [], "paid-A"), paymentMethod: "wechat" })
   });
   assert(registration.order?.id, "Paid registration order missing");
 
   await expectApiFailure(
     `/public/orders/${registration.order.id}/pay/wechat?tenantCode=${encodeURIComponent(tenantB.code)}`,
-    { method: "POST", headers: tenantHeader(tenantB.code), body: JSON.stringify({}) },
+    { method: "POST", headers: { ...tenantHeader(tenantB.code), ...auth(user.userAccessToken) }, body: JSON.stringify({}) },
     "Tenant B paying Tenant A order"
   );
 
   const payment = await api(`/public/orders/${registration.order.id}/pay/wechat?tenantCode=${encodeURIComponent(tenantA.code)}`, {
     method: "POST",
-    headers: tenantHeader(tenantA.code),
+    headers: { ...tenantHeader(tenantA.code), ...auth(user.userAccessToken) },
     body: JSON.stringify({})
   });
   assert(payment.payParams?.sign, "Sandbox payment sign missing");
-  const callbackResult = await api("/payment/wechat/callback", {
+  await api("/payment/wechat/callback", {
     method: "POST",
     body: JSON.stringify({ ...payment.payParams, tenantId: 999999, tenantCode: tenantB.code })
   });
-  assert(callbackResult.order?.tenant?.code === tenantA.code || callbackResult.order?.tenant?.id, "Callback result should remain bound to Tenant A order");
+  const orderKeyword = encodeURIComponent(registration.order.orderNo);
+  const [aFinance, bFinance] = await Promise.all([loginFinance(tenantA), loginFinance(tenantB)]);
+  const aOrdersResult = await api(`/admin/orders?keyword=${orderKeyword}&pageSize=10`, { headers: auth(aFinance.token) });
+  const bOrdersResult = await api(`/admin/orders?keyword=${orderKeyword}&pageSize=10`, { headers: auth(bFinance.token) });
+  const aOrders = Array.isArray(aOrdersResult) ? aOrdersResult : aOrdersResult.items;
+  const bOrders = Array.isArray(bOrdersResult) ? bOrdersResult : bOrdersResult.items;
+  assert(aOrders.some((order) => order.id === registration.order.id && order.status === "paid"), "Tenant A callback order should be paid");
+  assert(!bOrders.some((order) => order.id === registration.order.id), "Tenant B must not find Tenant A callback order");
   markSmokeCheck("paymentBoundary");
   console.log("OK tenant payment callback boundary");
 }
@@ -447,10 +457,10 @@ async function verifyTenantSettlementBoundary(a, b) {
 
   const aList = await api("/admin/agent-settlements", { headers: auth(a.financeToken) });
   const bList = await api("/admin/agent-settlements", { headers: auth(b.financeToken) });
-  assert(aList.some((item) => item.id === aSettlement.id), "Tenant A settlement list missing Tenant A settlement");
-  assert(!aList.some((item) => item.id === bSettlement.id), "Tenant A settlement list should not include Tenant B settlement");
-  assert(bList.some((item) => item.id === bSettlement.id), "Tenant B settlement list missing Tenant B settlement");
-  assert(!bList.some((item) => item.id === aSettlement.id), "Tenant B settlement list should not include Tenant A settlement");
+  assert(aList.items.some((item) => item.id === aSettlement.id), "Tenant A settlement list missing Tenant A settlement");
+  assert(!aList.items.some((item) => item.id === bSettlement.id), "Tenant A settlement list should not include Tenant B settlement");
+  assert(bList.items.some((item) => item.id === bSettlement.id), "Tenant B settlement list missing Tenant B settlement");
+  assert(!bList.items.some((item) => item.id === aSettlement.id), "Tenant B settlement list should not include Tenant A settlement");
   await expectApiFailure(`/admin/agent-settlements/${bSettlement.id}/details`, { headers: auth(a.financeToken) }, "Tenant A finance accessing Tenant B settlement");
 
   const aSettlementExport = await downloadWorkbookText("/admin/agent-settlements/export", a.financeToken);

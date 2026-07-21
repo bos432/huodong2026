@@ -30,6 +30,8 @@ export const tenantScopedRoutePaths = new Set([
   "/support",
   "/registrations",
   "/orders",
+  "/unified-orders",
+  "/course-refunds",
   "/mall-merchants",
   "/mall-payments",
   "/mall-products",
@@ -51,6 +53,7 @@ export const tenantScopedRoutePaths = new Set([
   "/ad-center",
   "/homepage-builder",
   "/operation-logs",
+  "/business-jobs",
   "/courses",
   "/community"
 ]);
@@ -60,6 +63,7 @@ export const tenantQuickLinks: TenantQuickLink[] = [
   { label: "客服", path: "/support" },
   { label: "报名", path: "/registrations" },
   { label: "订单", path: "/orders" },
+  { label: "统一订单", path: "/unified-orders" },
   { label: "商城", path: "/mall-products" },
   { label: "商城订单", path: "/mall-orders" },
   { label: "商城统计", path: "/mall-statistics" },
@@ -90,11 +94,11 @@ const rawMenuGroups: AdminMenuGroup[] = [
     label: "商家管理",
     scope: "platform",
     items: [
-      { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: ["tenant.manage"], scope: "platform" },
-      { index: "/tenant-regions", icon: "Location", label: "区域保护", roles: ["tenant_region.manage"], scope: "platform" },
-      { index: "/tenant-region-hit-logs", icon: "Aim", label: "定位命中日志", roles: ["tenant_region.manage"], scope: "platform" },
-      { index: "/admins", icon: "UserFilled", label: "商家账号", roles: ["admin.manage"], scope: "platform" },
-      { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: ["tenant.manage"], scope: "platform" }
+      { index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: ["tenant.view"], scope: "platform" },
+      { index: "/tenant-regions", icon: "Location", label: "区域保护", roles: ["tenant_region.view"], scope: "platform" },
+      { index: "/tenant-region-hit-logs", icon: "Aim", label: "定位命中日志", roles: ["tenant_region_hit_log.view"], scope: "platform" },
+      { index: "/admins", icon: "UserFilled", label: "商家账号", roles: ["admin.view"], scope: "platform" },
+      { index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: ["tenant.permissions.manage"], scope: "platform" }
     ]
   },
   {
@@ -106,8 +110,8 @@ const rawMenuGroups: AdminMenuGroup[] = [
       { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: ["activity.approve"], scope: "platform" },
       { index: "/activities", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
       { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
-      { index: "/announcements", icon: "Bell", label: "公告监管", roles: ["announcement.manage"], scope: "platform" },
-      { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: ["category.manage"], scope: "platform" }
+      { index: "/announcements", icon: "Bell", label: "公告监管", roles: ["announcement.view"], scope: "platform" },
+      { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: ["category.view"], scope: "platform" }
     ]
   },
   {
@@ -117,8 +121,8 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "platform",
     items: [
       { index: "/homepage-builder", icon: "Grid", label: "前台全局装修", roles: ["homepage.manage"], scope: "platform" },
-      { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.manage"], scope: "platform" },
-      { index: "/ad-center", icon: "Money", label: "广告中心", roles: ["ad_center.manage"], scope: "platform" }
+      { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.view"], scope: "platform" },
+      { index: "/ad-center", icon: "Money", label: "广告中心", roles: ["ad_center.view"], scope: "platform" }
     ]
   },
   {
@@ -128,7 +132,9 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "platform",
     items: [
       { index: "/orders", icon: "Wallet", label: "全局订单", roles: ["order.view"], scope: "platform" },
+      { index: "/unified-orders", icon: "DocumentChecked", label: "统一订单中心", roles: ["order.view"], scope: "platform" },
       { index: "/finance", icon: "CreditCard", label: "全局对账", roles: permissions.finance, scope: "platform" },
+      { index: "/course-refunds", icon: "RefreshLeft", label: "课程退款", roles: ["order.refund"], scope: "platform" },
       { index: "/agents", icon: "Shop", label: "商家收款账户", roles: ["payment_account.view"], scope: "platform" }
     ]
   },
@@ -171,7 +177,9 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "platform",
     items: [
       { index: "/charity", icon: "Coin", label: "公益池", roles: ["charity.view"], scope: "platform" },
-      { index: "/ambassador", icon: "Flag", label: "文化大使招募", roles: ["ambassador.manage"], scope: "platform" },
+      { index: "/credential-templates", icon: "Postcard", label: "证书模板", roles: ["certificate_template.view"], scope: "platform" },
+      { index: "/aid-applications", icon: "FirstAidKit", label: "援助申请", roles: ["aid.view"], scope: "platform" },
+      { index: "/ambassador", icon: "Flag", label: "大使与伙伴 CRM", roles: ["ambassador.view", "partner.view"], scope: "platform" },
       { index: "/volunteers", icon: "UserFilled", label: "志愿者档案", roles: ["ambassador.manage"], scope: "platform" }
     ]
   },
@@ -191,15 +199,16 @@ const rawMenuGroups: AdminMenuGroup[] = [
     label: "系统与安全",
     scope: "platform",
     items: [
-      { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.manage"], scope: "platform" },
-      { index: "/config-check", icon: "Monitor", label: "上线体检", roles: permissions.superAdmin as string[], scope: "platform" },
-      { index: "/miniprogram-release", icon: "Promotion", label: "小程序发布", roles: ["miniprogram_release.manage"], scope: "platform" },
+      { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.view"], scope: "platform" },
+      { index: "/config-check", icon: "Monitor", label: "上线体检", roles: ["system.view"], scope: "platform" },
+      { index: "/miniprogram-release", icon: "Promotion", label: "小程序发布", roles: ["miniprogram_release.view"], scope: "platform" },
       { index: "/operation-flow", icon: "Connection", label: "操作流程图", roles: ["dashboard.view"], scope: "platform" },
-      { index: "/operation-guide", icon: "Guide", label: "运维教程", roles: ["system.manage"], scope: "platform" },
-      { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["system.manage"], scope: "platform" },
+      { index: "/operation-guide", icon: "Guide", label: "运维教程", roles: ["system.view"], scope: "platform" },
+      { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["system.view", "dashboard.view"], scope: "platform" },
       { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "platform" },
-      { index: "/admin-login-logs", icon: "Key", label: "登录日志", roles: ["logs.view"], scope: "platform" },
-      { index: "/h5-code-logs", icon: "Lock", label: "验证码日志", roles: ["logs.view"], scope: "platform" }
+      { index: "/business-jobs", icon: "List", label: "业务任务", roles: ["business_job.view"], scope: "platform" },
+      { index: "/admin-login-logs", icon: "Key", label: "登录日志", roles: ["security_log.view"], scope: "platform" },
+      { index: "/h5-code-logs", icon: "Lock", label: "验证码日志", roles: ["security_log.view"], scope: "platform" }
     ]
   },
   {
@@ -220,9 +229,9 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/activities", icon: "Calendar", label: "活动管理", roles: permissions.activityView, scope: "tenant" },
-      { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: ["category.manage"], scope: "tenant" },
-      { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: ["ticket.manage"], scope: "tenant" },
-      { index: "/coupons", icon: "Discount", label: "优惠码", roles: ["coupon.manage"], scope: "tenant" }
+      { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: ["category.view"], scope: "tenant" },
+      { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: ["ticket.view"], scope: "tenant" },
+      { index: "/coupons", icon: "Discount", label: "优惠券与兑换码", roles: ["coupon.view", "redemption_code.view"], scope: "tenant" }
     ]
   },
   {
@@ -232,7 +241,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/registrations", icon: "Tickets", label: "报名管理", roles: permissions.registrationView, scope: "tenant" },
-      { index: "/waitlists", icon: "List", label: "候补管理", roles: ["waitlist.manage"], scope: "tenant" },
+      { index: "/waitlists", icon: "List", label: "候补管理", roles: ["waitlist.view"], scope: "tenant" },
       { index: "/check-in", icon: "Finished", label: "签到核销", roles: permissions.checkIn, scope: "tenant" }
     ]
   },
@@ -243,7 +252,9 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/orders", icon: "Wallet", label: "订单管理", roles: ["order.view"], scope: "tenant" },
+      { index: "/unified-orders", icon: "DocumentChecked", label: "统一订单中心", roles: ["order.view"], scope: "tenant" },
       { index: "/finance", icon: "CreditCard", label: "财务对账", roles: permissions.finance, scope: "tenant" },
+      { index: "/course-refunds", icon: "RefreshLeft", label: "课程退款", roles: ["order.refund"], scope: "tenant" },
       { index: "/agents", icon: "Shop", label: "收款方式", roles: permissions.paymentAccountView, scope: "tenant" },
       { index: "/agent-settlements", icon: "Money", label: "代理结算", roles: ["agent_settlement.view"], scope: "tenant" }
     ]
@@ -254,6 +265,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     label: "扩展 · 商城",
     scope: "tenant",
     items: [
+      { index: "/mall-merchants", icon: "Shop", label: "店铺管理", roles: ["mall.merchant.manage"], scope: "tenant" },
       { index: "/mall-products", icon: "Goods", label: "商品管理", roles: ["mall.product.manage"], scope: "tenant" },
       { index: "/mall-categories", icon: "CollectionTag", label: "店铺分类", roles: ["mall.product.manage"], scope: "tenant" },
       { index: "/mall-inventory", icon: "Warning", label: "库存预警", roles: ["mall.product.manage"], scope: "tenant" },
@@ -276,9 +288,9 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/members", icon: "User", label: "会员资料管理", roles: ["member.view"], scope: "tenant" },
-      { index: "/tags", icon: "PriceTag", label: "用户标签", roles: ["tag.manage"], scope: "tenant" },
-      { index: "/notifications", icon: "Message", label: "通知中心", roles: ["notification.manage"], scope: "tenant" },
-      { index: "/reviews", icon: "ChatDotRound", label: "评价管理", roles: ["review.manage"], scope: "tenant" }
+      { index: "/tags", icon: "PriceTag", label: "用户标签", roles: ["tag.view"], scope: "tenant" },
+      { index: "/notifications", icon: "Message", label: "通知中心", roles: ["notification.view"], scope: "tenant" },
+      { index: "/reviews", icon: "ChatDotRound", label: "评价管理", roles: ["review.view"], scope: "tenant" }
     ]
   },
   {
@@ -288,11 +300,11 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/homepage-builder", icon: "Grid", label: "首页装修", roles: permissions.operation, scope: "tenant" },
-      { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.manage"], scope: "tenant" },
-      { index: "/ad-center", icon: "Money", label: "广告中心", roles: ["ad_center.manage"], scope: "tenant" },
-      { index: "/announcements", icon: "Bell", label: "公告管理", roles: ["announcement.manage"], scope: "tenant" },
-      { index: "/funnels", icon: "TrendCharts", label: "活动漏斗", roles: ["activity.view"], scope: "tenant" },
-      { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: ["activity.view"], scope: "tenant" }
+      { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.view"], scope: "tenant" },
+      { index: "/ad-center", icon: "Money", label: "广告中心", roles: ["ad_center.view"], scope: "tenant" },
+      { index: "/announcements", icon: "Bell", label: "公告管理", roles: ["announcement.view"], scope: "tenant" },
+      { index: "/funnels", icon: "TrendCharts", label: "增长分析", roles: ["analytics.view"], scope: "tenant" },
+      { index: "/recaps", icon: "PieChart", label: "活动复盘", roles: ["analytics.view"], scope: "tenant" }
     ]
   },
   {
@@ -311,7 +323,8 @@ const rawMenuGroups: AdminMenuGroup[] = [
     label: "扩展 · 公益池",
     scope: "tenant",
     items: [
-      { index: "/charity", icon: "Coin", label: "公益池", roles: ["charity.view"], scope: "tenant" }
+      { index: "/charity", icon: "Coin", label: "公益池", roles: ["charity.view"], scope: "tenant" },
+      { index: "/credential-templates", icon: "Postcard", label: "证书模板", roles: ["certificate_template.view"], scope: "tenant" }
     ]
   },
   {
@@ -320,11 +333,13 @@ const rawMenuGroups: AdminMenuGroup[] = [
     label: "设置",
     scope: "tenant",
     items: [
-      { index: "/system-settings", icon: "Tools", label: "运营设置", roles: ["operation_settings.manage"], scope: "tenant" },
+      { index: "/system-settings", icon: "Tools", label: "运营设置", roles: ["operation_settings.view"], scope: "tenant" },
       { index: "/operation-flow", icon: "Connection", label: "操作流程图", roles: ["dashboard.view"], scope: "tenant" },
+      { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["dashboard.view"], scope: "tenant" },
       { index: "/tenant-profile", icon: "Shop", label: "商家资料", roles: ["tenant_profile.manage"], scope: "tenant" },
-      { index: "/admins", icon: "UserFilled", label: "员工账号", roles: ["admin.manage"], scope: "tenant" },
-      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "tenant" }
+      { index: "/admins", icon: "UserFilled", label: "员工账号", roles: ["admin.view"], scope: "tenant" },
+      { index: "/operation-logs", icon: "Document", label: "操作日志", roles: ["logs.view"], scope: "tenant" },
+      { index: "/business-jobs", icon: "List", label: "业务任务", roles: ["business_job.view"], scope: "tenant" }
     ]
   }
 ];

@@ -40,6 +40,7 @@ function tenantConfig(suffix) {
     password: requiredEnv(`TENANT_${suffix}_PASSWORD`),
     financeUsername: env[`TENANT_${suffix}_FINANCE_ADMIN`] || `${requiredEnv(`TENANT_${suffix}_ADMIN`)}_finance`,
     financePassword: env[`TENANT_${suffix}_FINANCE_PASSWORD`] || requiredEnv(`TENANT_${suffix}_PASSWORD`),
+    packagePlan: env[`TENANT_${suffix}_PACKAGE_PLAN`] || null,
     agentName: env[`TENANT_${suffix}_AGENT_NAME`] || `Smoke Tenant ${suffix} Agent`,
     domain: env[`TENANT_${suffix}_DOMAIN`] || null,
     h5Domain: env[`TENANT_${suffix}_H5_DOMAIN`] || null
@@ -96,6 +97,7 @@ async function upsertTenantWithAdmin(connection, tenant) {
   const settings = {};
   if (tenant.domain) settings.domain = tenant.domain;
   if (tenant.h5Domain) settings.h5Domain = tenant.h5Domain;
+  if (tenant.packagePlan) settings.packagePlan = tenant.packagePlan;
   await connection.execute(
     `
       INSERT INTO tenants (code, name, region, enabled, settings, createdAt, updatedAt)

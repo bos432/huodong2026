@@ -25,15 +25,15 @@
         <el-date-picker v-model="dateRange" type="daterange" value-format="YYYY-MM-DD" range-separator="至" start-placeholder="开始日期" end-placeholder="结束日期" style="width:250px" @change="onDateRangeChange" />
         <el-input v-model="filters.keyword" clearable placeholder="订单号/手机号" style="width:220px" @keyup.enter="loadOrders" @clear="loadOrders" />
         <el-input v-model="filters.checkoutGroupNo" clearable placeholder="跨店结算组号" style="width:180px" @keyup.enter="loadOrders" @clear="loadOrders" />
-        <el-button :disabled="selectedMerchant && !selectedMerchantOpen" @click="openLogisticsDialog">物流设置</el-button>
-        <el-button type="success" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openCouponDialog">优惠券管理</el-button>
-        <el-button type="danger" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openFlashSaleDialog">秒杀管理</el-button>
-        <el-button type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openGroupBuyDialog">拼团管理</el-button>
+        <el-button v-if="canManageLogistics" :disabled="selectedMerchant && !selectedMerchantOpen" @click="openLogisticsDialog">物流设置</el-button>
+        <el-button v-if="canManageProducts" type="success" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openCouponDialog">优惠券管理</el-button>
+        <el-button v-if="canManageProducts" type="danger" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openFlashSaleDialog">秒杀管理</el-button>
+        <el-button v-if="canManageProducts" type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openGroupBuyDialog">拼团管理</el-button>
         <el-button type="warning" plain @click="openGroupBuyRecordDialog">参团记录</el-button>
-        <el-button type="primary" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openPromotionDialog">推广码管理</el-button>
-        <el-button :loading="closingExpired" type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="closeExpiredOrders">清理超时订单</el-button>
-        <el-button :loading="failingGroupBuys" type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="failExpiredGroupBuys">处理未成团</el-button>
-        <el-button :loading="completingShipped" type="success" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="completeExpiredShippedOrders">自动完成已发货</el-button>
+        <el-button v-if="canManageProducts" type="primary" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="openPromotionDialog">推广码管理</el-button>
+        <el-button v-if="canManageOrders" :loading="closingExpired" type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="closeExpiredOrders">清理超时订单</el-button>
+        <el-button v-if="canManageProducts" :loading="failingGroupBuys" type="warning" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="failExpiredGroupBuys">处理未成团</el-button>
+        <el-button v-if="canManageOrders" :loading="completingShipped" type="success" plain :disabled="selectedMerchant && !selectedMerchantOpen" @click="completeExpiredShippedOrders">自动完成已发货</el-button>
         <el-button @click="exportOrders">导出订单</el-button>
         <el-button :loading="loading" @click="reload">刷新</el-button>
       </div>
@@ -57,6 +57,9 @@
       title="订单管理店铺链接不可用"
       :description="deepLinkWarning"
     />
+    <el-alert v-if="scopeError" class="page-error" type="error" show-icon :closable="false" title="商城店铺范围同步失败" aria-live="assertive">
+      <template #default><p>{{ scopeError }}</p><el-button size="small" @click="reloadMerchantScope">重新同步店铺范围</el-button></template>
+    </el-alert>
 
     <el-card v-if="selectedMerchant && !deepLinkWarning" shadow="never" class="merchant-context-card">
       <div class="merchant-context-main">
@@ -71,11 +74,11 @@
         </div>
       </div>
       <div class="merchant-context-actions">
-        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-products')">商品管理</el-button>
-        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-payments')">收款配置</el-button>
-        <el-button size="small" type="warning" plain @click="goMerchantAdmin('/mall-refunds')">售后处理</el-button>
-        <el-button size="small" type="success" plain @click="goMerchantAdmin('/mall-marketing')">营销工具</el-button>
-        <el-button size="small" type="info" plain @click="goMerchantAdmin('/mall-statistics')">经营统计</el-button>
+        <el-button v-if="canManageProducts" size="small" type="primary" plain @click="goMerchantAdmin('/mall-products')">商品管理</el-button>
+        <el-button v-if="canManagePayments" size="small" type="primary" plain @click="goMerchantAdmin('/mall-payments')">收款配置</el-button>
+        <el-button v-if="canManageRefunds" size="small" type="warning" plain @click="goMerchantAdmin('/mall-refunds')">售后处理</el-button>
+        <el-button v-if="canManageProducts" size="small" type="success" plain @click="goMerchantAdmin('/mall-marketing')">营销工具</el-button>
+        <el-button v-if="canViewStatistics" size="small" type="info" plain @click="goMerchantAdmin('/mall-statistics')">经营统计</el-button>
         <el-button size="small" @click="openMerchantH5">打开 H5 店铺</el-button>
         <el-button size="small" @click="copyMerchantPageLink">复制当前后台链接</el-button>
       </div>
@@ -111,6 +114,9 @@
         show-icon
         title="本卡片按结算组号独立汇总子订单、售后、支付、退款和佣金，不受顶部状态/日期筛选影响；如需追完整跨店交易，平台视角请保持“全部店铺”。"
       />
+      <el-alert v-if="checkoutGroupTraceError" class="page-error" type="error" show-icon :closable="false" title="跨店结算组追踪失败" aria-live="assertive">
+        <template #default><p>{{ checkoutGroupTraceError }}</p><el-button size="small" :loading="checkoutGroupTraceLoading" @click="loadCheckoutGroupTrace">重新加载本组</el-button></template>
+      </el-alert>
       <div class="checkout-trace-grid">
         <div v-for="item in checkoutGroupTraceCards" :key="item.label">
           <small>{{ item.label }}</small>
@@ -125,7 +131,7 @@
           </template>
         </el-table-column>
         <el-table-column label="店铺" min-width="160"><template #default="{ row }">{{ row.merchant?.name || "默认店铺" }}</template></el-table-column>
-        <el-table-column label="用户" width="130"><template #default="{ row }">{{ row.user?.phone || row.user?.nickname || "-" }}</template></el-table-column>
+        <el-table-column label="用户" width="130"><template #default="{ row }">{{ maskedPhone(row.user?.phone) || row.user?.nickname || "-" }}</template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag :type="statusType(row.status)">{{ statusText(row.status) }}</el-tag></template></el-table-column>
         <el-table-column label="支付" width="100"><template #default="{ row }">{{ paymentText(row.paymentMethod) }}</template></el-table-column>
         <el-table-column label="金额" width="110"><template #default="{ row }">¥{{ money(row.amount) }}</template></el-table-column>
@@ -148,6 +154,9 @@
           <el-button size="small" :loading="analyticsLoading" @click="loadAnalytics">刷新看板</el-button>
         </div>
       </template>
+      <el-alert v-if="analyticsError" class="page-error" type="error" show-icon :closable="false" title="商城运营看板加载失败" aria-live="assertive">
+        <template #default><p>{{ analyticsError }}</p><el-button size="small" :loading="analyticsLoading" @click="loadAnalytics">重新加载看板</el-button></template>
+      </el-alert>
       <div class="analytics-summary">
         <div v-for="item in analyticsCards" :key="item.label">
           <small>{{ item.label }}</small>
@@ -234,6 +243,9 @@
           </span>
         </div>
       </template>
+      <el-alert v-if="settlementError" class="page-error" type="error" show-icon :closable="false" title="商城结算加载失败" aria-live="assertive">
+        <template #default><p>{{ settlementError }}</p><el-button size="small" :loading="settlementLoading" @click="loadSettlements">重新加载结算</el-button></template>
+      </el-alert>
       <el-alert class="settlement-tip" type="info" :closable="false" show-icon :title="canManageMallSettlements ? '生成结算单前请先选择上方日期范围；系统只统计已完成商城订单，并扣减已通过售后。正数为应打款，负数为应扣回/冲抵。' : '当前账号可查看店铺结算状态；生成、审核、打款和扣回由平台财务处理。'" />
       <el-table v-if="settlementPending.length" :data="settlementPending" size="small" border class="settlement-pending">
         <el-table-column label="待生成店铺" min-width="170"><template #default="{ row }">{{ row.merchant?.name || "默认店铺" }}</template></el-table-column>
@@ -264,7 +276,10 @@
       </el-table>
     </el-card>
 
-    <el-table v-loading="loading" :data="orders" stripe @row-click="openDetail">
+    <el-alert v-if="orderError" class="page-error" type="error" show-icon :closable="false" title="商城订单加载失败" aria-live="assertive">
+      <template #default><p>{{ orderError }}</p><el-button size="small" :loading="loading" @click="loadOrders">重新加载订单</el-button></template>
+    </el-alert>
+    <el-table v-loading="loading" :data="orders" stripe empty-text="暂无匹配商城订单" @row-click="openDetail">
       <el-table-column prop="orderNo" label="订单号" width="190" />
       <el-table-column label="结算组" width="180">
         <template #default="{ row }">
@@ -277,7 +292,7 @@
           <div v-for="item in row.items || []" :key="item.id" class="item-line">{{ item.productTitle }} / {{ item.skuName }} × {{ item.quantity }}</div>
         </template>
       </el-table-column>
-      <el-table-column label="用户" min-width="140"><template #default="{ row }">{{ row.user?.phone || row.user?.nickname || "-" }}</template></el-table-column>
+      <el-table-column label="用户" min-width="140"><template #default="{ row }">{{ maskedPhone(row.user?.phone) || row.user?.nickname || "-" }}</template></el-table-column>
       <el-table-column label="店铺" min-width="150"><template #default="{ row }">{{ row.merchant?.name || "默认店铺" }}</template></el-table-column>
       <el-table-column label="收货人" min-width="170"><template #default="{ row }">{{ receiverText(row) }}</template></el-table-column>
       <el-table-column label="金额" width="130">
@@ -295,9 +310,9 @@
       <el-table-column label="操作" width="330" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click.stop="openDetail(row)">详情</el-button>
-          <el-button size="small" type="success" :disabled="row.status !== 'pending_confirm'" @click.stop="confirmOffline(row)">确认收款</el-button>
-          <el-button size="small" :disabled="row.status !== 'paid'" @click.stop="openShip(row)">发货</el-button>
-          <el-button size="small" type="danger" plain :disabled="!['pending_payment','pending_confirm'].includes(row.status)" @click.stop="closeOrder(row)">关闭</el-button>
+          <el-button v-if="canManageOrders" size="small" type="success" :disabled="row.status !== 'pending_confirm'" @click.stop="confirmOffline(row)">确认收款</el-button>
+          <el-button v-if="canManageOrders" size="small" :disabled="row.status !== 'paid'" @click.stop="openShip(row)">发货</el-button>
+          <el-button v-if="canManageOrders" size="small" type="danger" plain :disabled="!['pending_payment','pending_confirm'].includes(row.status)" @click.stop="closeOrder(row)">关闭</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -306,6 +321,12 @@
     <div class="refund-toolbar">
       <el-select v-model="refundFilters.status" clearable placeholder="全部售后状态" style="width:150px" @change="loadRefunds">
         <el-option label="待处理" value="pending" />
+        <el-option label="待买家寄回" value="awaiting_buyer_return" />
+        <el-option label="退货运输中" value="returning" />
+        <el-option label="待商家收货" value="awaiting_merchant_receipt" />
+        <el-option label="待寄换货商品" value="awaiting_exchange_shipment" />
+        <el-option label="换货已发出" value="exchange_shipped" />
+        <el-option label="平台介入" value="platform_intervening" />
         <el-option label="处理中" value="processing" />
         <el-option label="已通过" value="approved" />
         <el-option label="失败" value="failed" />
@@ -315,7 +336,32 @@
       <el-button @click="exportRefunds">导出售后</el-button>
       <el-button @click="loadRefunds">刷新售后</el-button>
     </div>
-    <el-table :data="refunds" stripe @row-click="openRefundOrder">
+    <el-alert v-if="refundError" class="page-error" type="error" show-icon :closable="false" title="商城售后加载失败" aria-live="assertive">
+      <template #default><p>{{ refundError }}</p><el-button size="small" @click="loadRefunds">重新加载售后</el-button></template>
+    </el-alert>
+    <el-table :data="refunds" stripe empty-text="暂无匹配售后申请" @row-click="openRefundOrder">
+      <el-table-column type="expand" width="44">
+        <template #default="{ row }">
+          <div class="after-sale-detail" @click.stop>
+            <el-descriptions :column="2" border size="small">
+              <el-descriptions-item label="责任归属">{{ refundResponsibilityText(row.responsibility) }}</el-descriptions-item>
+              <el-descriptions-item label="响应期限">{{ formatTime(row.responseDeadlineAt) }}</el-descriptions-item>
+              <el-descriptions-item label="退货地址" :span="2">{{ refundAddressText(row.returnAddressSnapshot) || "-" }}</el-descriptions-item>
+              <el-descriptions-item label="买家寄回">{{ row.returnExpressNo ? `${row.returnExpressCompany || '快递'} ${row.returnExpressNo}` : "-" }}</el-descriptions-item>
+              <el-descriptions-item label="换货物流">{{ row.exchangeShipment ? `${row.exchangeShipment.expressCompany || '快递'} ${row.exchangeShipment.expressNo}` : "-" }}</el-descriptions-item>
+            </el-descriptions>
+            <el-table :data="row.items || []" size="small" border>
+              <el-table-column label="售后商品" min-width="220"><template #default="{ row: item }">{{ item.itemSnapshot?.productTitle || "商品" }} {{ item.itemSnapshot?.skuName || "" }}</template></el-table-column>
+              <el-table-column prop="requestedQuantity" label="申请数量" width="90" />
+              <el-table-column prop="receivedQuantity" label="收货数量" width="90" />
+              <el-table-column label="可退金额" width="100"><template #default="{ row: item }">¥{{ money(item.refundableAmount) }}</template></el-table-column>
+            </el-table>
+            <el-timeline v-if="row.messages?.length" class="refund-message-timeline">
+              <el-timeline-item v-for="message in row.messages" :key="message.id" :timestamp="formatTime(message.createdAt)" placement="top"><strong>{{ message.actorName || message.actorType }}</strong><div>{{ message.content }}</div></el-timeline-item>
+            </el-timeline>
+          </div>
+        </template>
+      </el-table-column>
       <el-table-column prop="refundNo" label="售后单号" width="190" />
       <el-table-column label="订单/结算组" width="190">
         <template #default="{ row }">
@@ -324,7 +370,7 @@
         </template>
       </el-table-column>
       <el-table-column label="店铺" min-width="150"><template #default="{ row }">{{ row.merchant?.name || row.order?.merchant?.name || "默认店铺" }}</template></el-table-column>
-      <el-table-column label="用户" width="140"><template #default="{ row }">{{ row.user?.phone || "-" }}</template></el-table-column>
+      <el-table-column label="用户" width="140"><template #default="{ row }">{{ maskedPhone(row.user?.phone) || "-" }}</template></el-table-column>
       <el-table-column label="类型" width="100"><template #default="{ row }">{{ refundTypeText(row.type) }}</template></el-table-column>
       <el-table-column label="金额" width="100"><template #default="{ row }">¥{{ money(row.amount) }}</template></el-table-column>
       <el-table-column prop="reason" label="原因" min-width="200" show-overflow-tooltip />
@@ -344,11 +390,14 @@
         </template>
       </el-table-column>
       <el-table-column label="审核" min-width="220"><template #default="{ row }">{{ row.reviewedBy || "-" }} {{ formatTime(row.reviewedAt) }}<div class="muted-line">{{ row.reviewRemark || "-" }}</div></template></el-table-column>
-      <el-table-column label="操作" width="280">
+      <el-table-column v-if="canManageRefunds" label="操作" width="430">
         <template #default="{ row }">
-          <el-button size="small" type="success" :disabled="row.status !== 'pending'" @click.stop="approveRefund(row)">通过</el-button>
+          <el-button size="small" type="success" :disabled="!['pending','platform_intervening'].includes(row.status)" @click.stop="approveRefund(row)">通过</el-button>
+          <el-button size="small" type="success" plain :disabled="!['returning','awaiting_merchant_receipt'].includes(row.status)" @click.stop="receiveRefundReturn(row)">确认收货</el-button>
+          <el-button size="small" type="primary" plain :disabled="row.status !== 'awaiting_exchange_shipment'" @click.stop="shipRefundExchange(row)">寄出换货</el-button>
+          <el-button size="small" type="primary" text :disabled="['approved','rejected','cancelled'].includes(row.status)" @click.stop="addRefundMessage(row)">协商</el-button>
           <el-button size="small" type="warning" plain :disabled="!['processing','failed'].includes(row.status)" @click.stop="retryRefund(row)">重试退款</el-button>
-          <el-button size="small" type="danger" :disabled="row.status !== 'pending'" @click.stop="rejectRefund(row)">拒绝</el-button>
+          <el-button size="small" type="danger" :disabled="!['pending','platform_intervening'].includes(row.status)" @click.stop="rejectRefund(row)">拒绝</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -375,6 +424,9 @@
       <el-button @click="exportPaymentCallbackLogs">导出回调</el-button>
       <el-button @click="loadPaymentData">刷新支付日志</el-button>
     </div>
+    <el-alert v-if="paymentError" class="page-error" type="error" show-icon :closable="false" title="商城支付与佣金数据加载失败" aria-live="assertive">
+      <template #default><p>{{ paymentError }}</p><el-button size="small" @click="loadPaymentData">重新加载支付数据</el-button></template>
+    </el-alert>
     <div class="payment-log-grid">
       <el-card shadow="never">
         <template #header>支付流水</template>
@@ -436,7 +488,7 @@
           <div class="card-header-line">
             <span>推广佣金</span>
             <span>
-              <el-button size="small" type="success" plain :disabled="!Number(commissionSummary.pendingCount || 0)" @click.stop="batchSettleCommissions">批量结算待结算</el-button>
+              <el-button v-if="canManageCommissions" size="small" type="success" plain :disabled="!Number(commissionSummary.pendingCount || 0)" @click.stop="batchSettleCommissions">批量结算待结算</el-button>
               <el-button size="small" @click.stop="exportCommissionPromoters">导出汇总</el-button>
               <el-button size="small" @click.stop="exportCommissions">导出明细</el-button>
             </span>
@@ -461,7 +513,7 @@
           <el-table-column label="待结算" width="120"><template #default="{ row }">¥{{ money(row.pendingAmount) }} / {{ row.pendingCount }} 笔</template></el-table-column>
           <el-table-column label="已结算" width="120"><template #default="{ row }">¥{{ money(row.settledAmount) }} / {{ row.settledCount }} 笔</template></el-table-column>
           <el-table-column label="已作废" width="120"><template #default="{ row }">¥{{ money(row.voidAmount) }} / {{ row.voidCount }} 笔</template></el-table-column>
-          <el-table-column label="操作" width="120">
+          <el-table-column v-if="canManageCommissions" label="操作" width="120">
             <template #default="{ row }">
               <el-button size="small" type="success" plain :disabled="!Number(row.pendingCount || 0)" @click="batchSettleCommissions(row)">结算该对象</el-button>
             </template>
@@ -475,7 +527,7 @@
               <small>{{ row.order?.checkoutGroup?.groupNo || "非跨店订单" }}</small>
             </template>
           </el-table-column>
-          <el-table-column label="推广人/代理" min-width="140"><template #default="{ row }">{{ row.promoterUser?.phone || row.agent?.name || "-" }}</template></el-table-column>
+          <el-table-column label="推广人/代理" min-width="140"><template #default="{ row }">{{ row.promoterUser?.phone ? maskedPhone(row.promoterUser.phone) : row.agent?.name || "-" }}</template></el-table-column>
           <el-table-column label="订单金额" width="100"><template #default="{ row }">¥{{ money(row.orderAmount) }}</template></el-table-column>
           <el-table-column label="佣金" width="110"><template #default="{ row }">¥{{ money(row.commissionAmount) }}</template></el-table-column>
           <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="commissionStatusType(row.status)">{{ commissionStatusText(row.status) }}</el-tag></template></el-table-column>
@@ -488,19 +540,22 @@
           <el-table-column label="操作" width="160">
             <template #default="{ row }">
               <el-button size="small" text type="primary" :disabled="!relatedOrderIdentity(row)" @click.stop="openRelatedOrder(row)">打开</el-button>
-              <el-button size="small" type="success" plain :disabled="row.status !== 'pending'" @click="settleCommission(row)">结算</el-button>
+              <el-button v-if="canManageCommissions" size="small" type="success" plain :disabled="row.status !== 'pending'" @click="settleCommission(row)">结算</el-button>
             </template>
           </el-table-column>
         </el-table>
       </el-card>
     </div>
 
-    <el-drawer v-model="detailVisible" title="商城订单详情" size="560px">
+    <el-drawer v-model="detailVisible" v-loading="detailLoading" title="商城订单详情" size="560px">
+      <el-alert v-if="detailError" class="dialog-error" type="error" show-icon :closable="false" title="商城订单详情加载失败" aria-live="assertive">
+        <template #default><p>{{ detailError }}</p><el-button size="small" :loading="detailLoading" @click="retryCurrentOrderDetail">重新加载订单详情</el-button></template>
+      </el-alert>
       <template v-if="currentOrder">
         <el-descriptions :column="1" border>
           <el-descriptions-item label="订单号">{{ currentOrder.orderNo }}</el-descriptions-item>
           <el-descriptions-item label="状态"><el-tag :type="statusType(currentOrder.status)">{{ statusText(currentOrder.status) }}</el-tag></el-descriptions-item>
-          <el-descriptions-item label="用户">{{ currentOrder.user?.phone || currentOrder.user?.nickname || "-" }}</el-descriptions-item>
+          <el-descriptions-item label="用户">{{ maskedPhone(currentOrder.user?.phone) || currentOrder.user?.nickname || "-" }}</el-descriptions-item>
           <el-descriptions-item label="支付方式">{{ paymentText(currentOrder.paymentMethod) }}</el-descriptions-item>
           <el-descriptions-item label="商品金额">¥{{ money(currentOrder.goodsAmount || currentOrder.amount) }}</el-descriptions-item>
           <el-descriptions-item label="优惠金额">¥{{ money(currentOrder.discountAmount) }} {{ currentOrder.couponSnapshot ? `（${currentOrder.couponSnapshot.name || ""} ${currentOrder.couponSnapshot.code || ""}）` : "" }}</el-descriptions-item>
@@ -533,6 +588,9 @@
               </template>
             </el-table-column>
           </el-table>
+          <el-alert v-if="checkoutGroupError" class="dialog-error" type="error" show-icon :closable="false" title="跨店子订单加载失败" aria-live="assertive">
+            <template #default><p>{{ checkoutGroupError }}</p><el-button size="small" :loading="checkoutGroupLoading" @click="loadCheckoutGroupOrders(currentOrder)">重新加载跨店子单</el-button></template>
+          </el-alert>
         </template>
 
         <h3>订单进度</h3>
@@ -559,18 +617,33 @@
         </el-table>
 
         <h3>物流/售后</h3>
+        <el-table v-if="currentOrder.shipments?.length" :data="currentOrder.shipments" size="small" border class="shipment-table">
+          <el-table-column prop="shipmentNo" label="包裹号" min-width="155" />
+          <el-table-column label="物流" min-width="220"><template #default="{ row }"><div>{{ row.expressCompany || "快递" }} {{ row.expressNo }}</div><div v-if="row.trackingEvents?.length" class="muted-line">最新：{{ row.trackingEvents[row.trackingEvents.length - 1].description }}</div></template></el-table-column>
+          <el-table-column label="商品" min-width="180"><template #default="{ row }"><div v-for="item in row.items || []" :key="item.id">{{ item.itemSnapshot?.productTitle || `商品明细 ${item.orderItemId}` }} × {{ item.quantity }}</div></template></el-table-column>
+          <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.status === 'delivered' ? 'success' : row.status === 'cancelled' ? 'info' : 'warning'">{{ row.status === "delivered" ? "已签收" : row.status === "cancelled" ? "已取消" : "运输中" }}</el-tag></template></el-table-column>
+          <el-table-column label="发货时间" width="165"><template #default="{ row }">{{ formatTime(row.shippedAt) }}</template></el-table-column>
+          <el-table-column v-if="canManageLogistics" label="操作" width="150"><template #default="{ row }"><el-button link type="primary" :disabled="row.status === 'cancelled'" @click="openEditShipment(row)">改单号</el-button><el-button link type="success" :disabled="row.status !== 'shipped'" @click="syncShipmentTracking(row)">同步轨迹</el-button></template></el-table-column>
+        </el-table>
+        <el-timeline v-if="currentOrder.events?.length" class="order-event-timeline">
+          <el-timeline-item v-for="event in currentOrder.events" :key="event.id" :timestamp="formatTime(event.occurredAt)" placement="top">
+            <strong>{{ orderEventText(event.eventType) }}</strong>
+            <div class="muted-line">{{ event.remark || `${event.fromStatus || '-'} → ${event.toStatus}` }}<span v-if="event.operator"> · {{ event.operator }}</span></div>
+          </el-timeline-item>
+        </el-timeline>
         <el-descriptions :column="1" border>
-          <el-descriptions-item label="物流">{{ currentOrder.expressCompany || "" }} {{ currentOrder.expressNo || "-" }}</el-descriptions-item>
-          <el-descriptions-item label="售后">{{ refundSummary(currentOrder.refund) }}</el-descriptions-item>
-          <el-descriptions-item v-if="currentOrder.refund?.images?.length" label="售后凭证">
-            <div class="review-image-list">
-              <el-image v-for="image in currentOrder.refund.images" :key="image" class="review-thumb" :src="image" :preview-src-list="currentOrder.refund.images" preview-teleported fit="cover" />
-            </div>
-          </el-descriptions-item>
-          <el-descriptions-item v-if="currentOrder.refund" label="售后审核">{{ currentOrder.refund.reviewedBy || "-" }} {{ formatTime(currentOrder.refund.reviewedAt) }} {{ currentOrder.refund.reviewRemark || "" }}</el-descriptions-item>
+          <el-descriptions-item label="履约进度">{{ currentOrder.shippedQuantity || 0 }} / {{ currentOrder.totalQuantity || orderTotalQuantity(currentOrder) }}，{{ fulfillmentStatusText(currentOrder.fulfillmentStatus) }}</el-descriptions-item>
+          <el-descriptions-item v-if="!currentOrder.shipments?.length" label="物流">{{ currentOrder.expressCompany || "" }} {{ currentOrder.expressNo || "-" }}</el-descriptions-item>
+          <el-descriptions-item label="售后">共 {{ currentOrder.refunds?.length || 0 }} 笔，{{ refundSummary(currentOrder.refund) }}</el-descriptions-item>
         </el-descriptions>
+        <el-table v-if="currentOrder.refunds?.length" :data="currentOrder.refunds" size="small" border class="shipment-table">
+          <el-table-column prop="refundNo" label="售后单" min-width="170" />
+          <el-table-column label="类型/状态" min-width="150"><template #default="{ row }">{{ refundTypeText(row.type) }} · {{ refundText(row.status) }}</template></el-table-column>
+          <el-table-column label="商品" min-width="190"><template #default="{ row }"><div v-for="item in row.items || []" :key="item.id">{{ item.itemSnapshot?.productTitle || "商品" }} × {{ item.requestedQuantity }}</div></template></el-table-column>
+          <el-table-column label="协商" min-width="200"><template #default="{ row }"><div v-for="message in row.messages || []" :key="message.id">{{ message.actorName || message.actorType }}：{{ message.content }}</div></template></el-table-column>
+        </el-table>
 
-        <div class="drawer-actions">
+        <div v-if="canManageOrders" class="drawer-actions">
           <el-button type="success" :disabled="currentOrder.status !== 'pending_confirm'" @click="confirmOffline(currentOrder)">确认线下收款</el-button>
           <el-button type="primary" :disabled="currentOrder.status !== 'paid'" @click="openShip(currentOrder)">发货</el-button>
           <el-button type="danger" plain :disabled="!['pending_payment','pending_confirm'].includes(currentOrder.status)" @click="closeOrder(currentOrder)">关闭订单</el-button>
@@ -578,26 +651,44 @@
       </template>
     </el-drawer>
 
-    <el-dialog v-model="shipDialogVisible" title="商城订单发货" width="420px">
-      <el-alert v-if="currentOrder" type="info" :closable="false" class="ship-alert">
-        <template #default>订单 {{ currentOrder.orderNo }}，收货地址：{{ fullAddress(currentOrder) || "-" }}</template>
+    <el-dialog v-model="shipDialogVisible" v-loading="shipLoading" :title="shipForm.shipmentId ? '修改包裹物流' : '商城订单分包发货'" width="620px">
+      <el-alert v-if="shipError" class="dialog-error" type="error" show-icon :closable="false" title="发货上下文加载失败" aria-live="assertive">
+        <template #default><p>{{ shipError }}</p><el-button v-if="shipTargetRow" size="small" :loading="shipLoading" @click="openShip(shipTargetRow)">重新加载发货订单</el-button></template>
+      </el-alert>
+      <el-alert v-if="shipLogisticsError" class="dialog-error" type="error" show-icon :closable="false" title="发货物流选项加载失败" aria-live="assertive">
+        <template #default><p>{{ shipLogisticsError }}</p><el-button v-if="shipOrderTarget" size="small" :loading="shipLogisticsLoading" @click="loadShipLogisticsCompanies(shipOrderTarget)">重新加载物流选项</el-button></template>
+      </el-alert>
+      <el-alert v-if="shipOrderTarget" type="info" :closable="false" class="ship-alert">
+        <template #default>订单 {{ shipOrderTarget.orderNo }}，收货地址：{{ fullAddress(shipOrderTarget) || "-" }}</template>
       </el-alert>
       <el-form label-width="90px">
         <el-form-item label="快递公司">
-          <el-select v-model="shipForm.expressCompany" filterable allow-create default-first-option placeholder="选择或输入快递公司" @visible-change="(visible: boolean) => visible && loadLogisticsCompanies()">
-            <el-option v-for="item in enabledLogisticsCompanies" :key="item.id" :label="item.name" :value="item.name" />
+          <el-select v-model="shipForm.expressCompany" filterable allow-create default-first-option placeholder="选择或输入快递公司" @visible-change="(visible: boolean) => visible && shipOrderTarget && loadShipLogisticsCompanies(shipOrderTarget)">
+            <el-option v-for="item in enabledShipLogisticsCompanies" :key="item.id" :label="item.name" :value="item.name" />
           </el-select>
         </el-form-item>
         <el-form-item label="快递单号" required><el-input v-model="shipForm.expressNo" /></el-form-item>
-        <el-form-item label="备注"><el-input v-model="shipForm.remark" /></el-form-item>
+        <el-form-item v-if="shipForm.shipmentId" label="修改原因" required><el-input v-model="shipForm.reason" placeholder="请说明改单号原因，系统将写入审计历史" /></el-form-item>
+        <el-form-item v-else label="备注"><el-input v-model="shipForm.remark" /></el-form-item>
+        <el-form-item v-if="!shipForm.shipmentId" label="包裹商品">
+          <el-table :data="shipForm.items" size="small" border>
+            <el-table-column prop="productTitle" label="商品" min-width="180" />
+            <el-table-column prop="skuName" label="规格" width="110" />
+            <el-table-column label="已发/总数" width="100"><template #default="{ row }">{{ row.shippedQuantity }} / {{ row.totalQuantity }}</template></el-table-column>
+            <el-table-column label="本次发货" width="120"><template #default="{ row }"><el-input-number v-model="row.quantity" :min="0" :max="row.remainingQuantity" :precision="0" controls-position="right" /></template></el-table-column>
+          </el-table>
+        </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="shipDialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="shipOrder">确认发货</el-button>
+        <el-button type="primary" :disabled="shipLoading || shipLogisticsLoading || !shipOrderTarget || !!shipError || !!shipLogisticsError" @click="shipOrder">{{ shipForm.shipmentId ? "保存修改" : "创建包裹" }}</el-button>
       </template>
     </el-dialog>
 
     <el-dialog v-model="logisticsDialogVisible" title="商城物流设置" width="920px">
+      <el-alert v-if="logisticsError" class="dialog-error" type="error" show-icon :closable="false" title="商城物流设置加载失败" aria-live="assertive">
+        <template #default><p>{{ logisticsError }}</p><el-button size="small" :loading="logisticsLoading" @click="loadLogisticsCompanies">重新加载物流设置</el-button></template>
+      </el-alert>
       <div class="logistics-form">
         <el-input v-model="logisticsForm.name" placeholder="物流公司，如顺丰速运" />
         <el-input v-model="logisticsForm.code" placeholder="编码，可选，如 SF" />
@@ -605,7 +696,7 @@
         <el-input v-model="logisticsForm.trackingUrl" placeholder="查询网址，可选" />
         <el-input-number v-model="logisticsForm.sortOrder" :precision="0" placeholder="排序" />
         <el-switch v-model="logisticsForm.enabled" active-text="启用" />
-        <el-button type="primary" :loading="logisticsSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveLogisticsCompany">{{ logisticsForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="logisticsSaving" :disabled="logisticsLoading || !!logisticsError || (selectedMerchant && !selectedMerchantOpen)" @click="saveLogisticsCompany">{{ logisticsForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="logisticsForm.id" @click="resetLogisticsForm">取消编辑</el-button>
       </div>
       <el-table v-loading="logisticsLoading" :data="logisticsCompanies" size="small" border>
@@ -624,6 +715,15 @@
     </el-dialog>
 
     <el-dialog v-model="couponDialogVisible" title="商城优惠券管理" width="1080px">
+      <el-alert v-if="couponOptionsError" class="dialog-error" type="error" show-icon :closable="false" title="优惠券适用范围加载失败" aria-live="assertive">
+        <template #default><p>{{ couponOptionsError }}</p><el-button size="small" @click="loadCouponOptions">重新加载适用范围</el-button></template>
+      </el-alert>
+      <el-alert v-if="couponError" class="dialog-error" type="error" show-icon :closable="false" title="优惠券列表加载失败" aria-live="assertive">
+        <template #default><p>{{ couponError }}</p><el-button size="small" :loading="couponLoading" @click="loadCoupons">重新加载优惠券</el-button></template>
+      </el-alert>
+      <el-alert v-if="couponUsageError" class="dialog-error" type="error" show-icon :closable="false" title="优惠券使用记录加载失败" aria-live="assertive">
+        <template #default><p>{{ couponUsageError }}</p><el-button size="small" :loading="couponUsageLoading" @click="loadCouponUsages">重新加载使用记录</el-button></template>
+      </el-alert>
       <el-alert type="info" :closable="false" class="ship-alert">
         <template #default>支持全场券、指定分类券、指定商品券、总限量和每人限用。下单会生成使用记录，未支付/未确认订单关闭后自动释放，方便运营对账。</template>
       </el-alert>
@@ -639,6 +739,10 @@
         <el-button :loading="couponLoading" @click="loadCoupons">刷新</el-button>
       </div>
       <div class="coupon-form">
+        <el-select v-model="couponForm.issuerScope" placeholder="发行方" @change="handleCouponIssuerChange">
+          <el-option label="平台券" value="platform" />
+          <el-option label="店铺券" value="merchant" />
+        </el-select>
         <el-input v-model="couponForm.code" placeholder="券码，如 STUDY8" />
         <el-input v-model="couponForm.name" placeholder="名称，如 学习用品满减券" />
         <el-input-number v-model="couponForm.minAmount" :min="0" :precision="2" placeholder="门槛" />
@@ -649,17 +753,22 @@
           <el-option label="指定商品" value="product" />
         </el-select>
         <el-select v-if="couponForm.scope === 'category'" v-model="couponForm.scopeCategoryId" filterable placeholder="选择分类">
-          <el-option v-for="category in couponCategories" :key="category.id" :label="category.name" :value="category.id" />
+          <el-option v-for="category in couponCategoryOptions" :key="category.id" :label="category.name" :value="category.id" />
         </el-select>
         <el-select v-if="couponForm.scope === 'product'" v-model="couponForm.scopeProductId" filterable placeholder="选择商品">
-          <el-option v-for="product in couponProducts" :key="product.id" :label="product.title" :value="product.id" />
+          <el-option v-for="product in couponProductOptions" :key="product.id" :label="product.title" :value="product.id" />
         </el-select>
-        <el-input-number v-model="couponForm.usageLimit" :min="0" :precision="0" placeholder="限量" />
+        <el-input-number v-model="couponForm.issuanceLimit" :min="0" :precision="0" placeholder="发放总量" />
+        <el-input-number v-model="couponForm.usageLimit" :min="0" :precision="0" placeholder="核销总量" />
         <el-input-number v-model="couponForm.perUserLimit" :min="0" :precision="0" placeholder="每人限用" />
         <el-date-picker v-model="couponForm.startsAt" type="datetime" placeholder="开始时间" value-format="YYYY-MM-DD HH:mm:ss" />
         <el-date-picker v-model="couponForm.endsAt" type="datetime" placeholder="结束时间" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-select v-model="couponForm.refundReleasePolicy" placeholder="退款返券">
+          <el-option label="全额退款后返还" value="full_refund" />
+          <el-option label="退款后不返还" value="never" />
+        </el-select>
         <el-switch v-model="couponForm.enabled" active-text="启用" inactive-text="停用" />
-        <el-button type="primary" :loading="couponSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveCoupon">{{ couponForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="couponSaving" :disabled="!!couponOptionsError || !!couponError || (selectedMerchant && !selectedMerchantOpen)" @click="saveCoupon">{{ couponForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="couponForm.id" @click="resetCouponForm">取消编辑</el-button>
       </div>
       <el-table v-loading="couponLoading" :data="coupons" size="small" border>
@@ -672,10 +781,17 @@
         <el-table-column label="规则" min-width="170">
           <template #default="{ row }">满 ¥{{ money(row.minAmount) }} 减 ¥{{ money(row.discountAmount) }}</template>
         </el-table-column>
-        <el-table-column label="适用范围" min-width="170"><template #default="{ row }">{{ couponScopeText(row) }}</template></el-table-column>
-        <el-table-column label="用量" width="140">
+        <el-table-column label="发行/退款" min-width="150">
           <template #default="{ row }">
-            {{ row.usedCount || 0 }} / {{ row.usageLimit || "不限" }}
+            {{ couponIssuerText(row) }}
+            <div class="muted-line">{{ couponRefundPolicyText(row.refundReleasePolicy) }}</div>
+          </template>
+        </el-table-column>
+        <el-table-column label="适用范围" min-width="170"><template #default="{ row }">{{ couponScopeText(row) }}</template></el-table-column>
+        <el-table-column label="领取/使用" width="170">
+          <template #default="{ row }">
+            领 {{ row.claimedCount || 0 }} / {{ row.issuanceLimit || "不限" }}
+            <div class="muted-line">用 {{ row.usedCount || 0 }} / {{ row.usageLimit || "不限" }}</div>
             <div class="muted-line">每人 {{ row.perUserLimit || "不限" }}</div>
           </template>
         </el-table-column>
@@ -705,7 +821,7 @@
           </template>
         </el-table-column>
         <el-table-column label="订单" min-width="180"><template #default="{ row }">{{ row.order?.orderNo || "-" }}</template></el-table-column>
-        <el-table-column label="用户" width="140"><template #default="{ row }">{{ row.user?.phone || row.user?.nickname || "-" }}</template></el-table-column>
+        <el-table-column label="用户" width="140"><template #default="{ row }">{{ maskedPhone(row.user?.phone) || row.user?.nickname || "-" }}</template></el-table-column>
         <el-table-column label="优惠" width="100"><template #default="{ row }">¥{{ money(row.discountAmount) }}</template></el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><el-tag :type="row.status === 'used' ? 'success' : 'info'">{{ couponUsageStatusText(row.status) }}</el-tag></template>
@@ -716,6 +832,12 @@
     </el-dialog>
 
     <el-dialog v-model="flashSaleDialogVisible" title="商城秒杀管理" width="1080px">
+      <el-alert v-if="couponOptionsError" class="dialog-error" type="error" show-icon :closable="false" title="秒杀商品选项加载失败" aria-live="assertive">
+        <template #default><p>{{ couponOptionsError }}</p><el-button size="small" @click="loadCouponOptions">重新加载商品选项</el-button></template>
+      </el-alert>
+      <el-alert v-if="flashSaleError" class="dialog-error" type="error" show-icon :closable="false" title="秒杀活动加载失败" aria-live="assertive">
+        <template #default><p>{{ flashSaleError }}</p><el-button size="small" :loading="flashSaleLoading" @click="loadFlashSales">重新加载秒杀活动</el-button></template>
+      </el-alert>
       <el-alert type="warning" :closable="false" class="ship-alert">
         <template #default>秒杀会单独锁定活动库存，并按秒杀价成交。订单关闭会释放锁定库存，支付成功扣减已售库存，退款会回补已售库存。</template>
       </el-alert>
@@ -747,7 +869,7 @@
           <el-option label="停用" value="disabled" />
         </el-select>
         <el-input-number v-model="flashSaleForm.sortOrder" :precision="0" placeholder="排序" />
-        <el-button type="primary" :loading="flashSaleSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveFlashSale">{{ flashSaleForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="flashSaleSaving" :disabled="!!couponOptionsError || !!flashSaleError || (selectedMerchant && !selectedMerchantOpen)" @click="saveFlashSale">{{ flashSaleForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="flashSaleForm.id" @click="resetFlashSaleForm">取消编辑</el-button>
       </div>
       <el-table v-loading="flashSaleLoading" :data="flashSales" size="small" border>
@@ -782,6 +904,12 @@
     </el-dialog>
 
     <el-dialog v-model="groupBuyDialogVisible" title="商城拼团管理" width="1080px">
+      <el-alert v-if="couponOptionsError" class="dialog-error" type="error" show-icon :closable="false" title="拼团商品选项加载失败" aria-live="assertive">
+        <template #default><p>{{ couponOptionsError }}</p><el-button size="small" @click="loadCouponOptions">重新加载商品选项</el-button></template>
+      </el-alert>
+      <el-alert v-if="groupBuyError" class="dialog-error" type="error" show-icon :closable="false" title="拼团活动加载失败" aria-live="assertive">
+        <template #default><p>{{ groupBuyError }}</p><el-button size="small" :loading="groupBuyLoading" @click="loadGroupBuys">重新加载拼团活动</el-button></template>
+      </el-alert>
       <el-alert type="warning" :closable="false" class="ship-alert">
         <template #default>当前为拼团第一版：按拼团价成交并锁定活动库存，先覆盖运营价、活动库存、限购和订单履约；多人组队失败自动退款后续独立增强。</template>
       </el-alert>
@@ -814,7 +942,7 @@
           <el-option label="停用" value="disabled" />
         </el-select>
         <el-input-number v-model="groupBuyForm.sortOrder" :precision="0" placeholder="排序" />
-        <el-button type="primary" :loading="groupBuySaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="saveGroupBuy">{{ groupBuyForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="groupBuySaving" :disabled="!!couponOptionsError || !!groupBuyError || (selectedMerchant && !selectedMerchantOpen)" @click="saveGroupBuy">{{ groupBuyForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="groupBuyForm.id" @click="resetGroupBuyForm">取消编辑</el-button>
       </div>
       <el-table v-loading="groupBuyLoading" :data="groupBuys" size="small" border>
@@ -849,6 +977,9 @@
     </el-dialog>
 
     <el-dialog v-model="groupBuyRecordDialogVisible" title="拼团参团记录" width="1080px">
+      <el-alert v-if="groupBuyRecordError" class="dialog-error" type="error" show-icon :closable="false" title="参团记录加载失败" aria-live="assertive">
+        <template #default><p>{{ groupBuyRecordError }}</p><el-button size="small" :loading="groupBuyRecordLoading" @click="loadGroupBuyRecords">重新加载参团记录</el-button></template>
+      </el-alert>
       <el-alert type="info" :closable="false" class="ship-alert">
         <template #default>这里展示用户通过拼团入口产生的订单记录，便于运营核对活动、用户、订单、成交金额和后续退款状态。</template>
       </el-alert>
@@ -872,8 +1003,8 @@
         </el-table-column>
         <el-table-column label="用户/订单" min-width="190">
           <template #default="{ row }">
-            <strong>{{ row.user?.nickname || row.user?.phone || "-" }}</strong>
-            <div class="muted-line">{{ row.user?.phone || "-" }} / {{ row.order?.orderNo || "-" }}</div>
+            <strong>{{ row.user?.nickname || maskedPhone(row.user?.phone) || "-" }}</strong>
+            <div class="muted-line">{{ maskedPhone(row.user?.phone) || "-" }} / {{ row.order?.orderNo || "-" }}</div>
           </template>
         </el-table-column>
         <el-table-column label="商品" min-width="190">
@@ -909,6 +1040,12 @@
     </el-dialog>
 
     <el-dialog v-model="promotionDialogVisible" title="商城推广码管理" width="980px">
+      <el-alert v-if="agentError" class="dialog-error" type="error" show-icon :closable="false" title="推广代理选项加载失败" aria-live="assertive">
+        <template #default><p>{{ agentError }}</p><el-button size="small" @click="loadAgents">重新加载代理选项</el-button></template>
+      </el-alert>
+      <el-alert v-if="promotionError" class="dialog-error" type="error" show-icon :closable="false" title="推广码加载失败" aria-live="assertive">
+        <template #default><p>{{ promotionError }}</p><el-button size="small" :loading="promotionLoading" @click="loadPromotionCodes">重新加载推广码</el-button></template>
+      </el-alert>
       <el-alert type="info" :closable="false" class="ship-alert">
         <template #default>用于商品推广、代理归因和佣金计算。用户下单填写推广码后，支付成功会生成待结算佣金；订单退款后佣金会自动作废。</template>
       </el-alert>
@@ -928,9 +1065,11 @@
           <el-option v-for="agent in agents" :key="agent.id" :label="agentLabel(agent)" :value="agent.id" />
         </el-select>
         <el-input-number v-model="promotionForm.promoterUserId" :min="1" :precision="0" placeholder="推广用户ID（可选）" />
+        <el-date-picker v-model="promotionForm.startsAt" type="datetime" placeholder="开始时间（可选）" value-format="YYYY-MM-DD HH:mm:ss" />
+        <el-date-picker v-model="promotionForm.endsAt" type="datetime" placeholder="结束时间（可选）" value-format="YYYY-MM-DD HH:mm:ss" />
         <el-switch v-model="promotionForm.enabled" active-text="启用" inactive-text="停用" />
         <el-input v-model="promotionForm.remark" placeholder="运营备注，可选" />
-        <el-button type="primary" :loading="promotionSaving" :disabled="selectedMerchant && !selectedMerchantOpen" @click="savePromotionCode">{{ promotionForm.id ? "保存" : "新增" }}</el-button>
+        <el-button type="primary" :loading="promotionSaving" :disabled="!!agentError || !!promotionError || (selectedMerchant && !selectedMerchantOpen)" @click="savePromotionCode">{{ promotionForm.id ? "保存" : "新增" }}</el-button>
         <el-button v-if="promotionForm.id" @click="resetPromotionForm">取消编辑</el-button>
       </div>
       <el-table v-loading="promotionLoading" :data="promotionCodes" size="small" border>
@@ -942,13 +1081,14 @@
         </el-table-column>
         <el-table-column label="归属" min-width="170">
           <template #default="{ row }">
-            <span>{{ row.agent?.name || row.promoterUser?.phone || "未绑定" }}</span>
+            <span>{{ row.agent?.name || (row.promoterUser?.phone ? maskedPhone(row.promoterUser.phone) : "未绑定") }}</span>
             <div class="muted-line">{{ row.agent?.region || row.promoterUser?.nickname || "-" }}</div>
           </template>
         </el-table-column>
         <el-table-column label="佣金比例" width="110"><template #default="{ row }">{{ percent(row.commissionRate) }}%</template></el-table-column>
         <el-table-column label="推广订单" width="110"><template #default="{ row }">{{ row.orderCount || 0 }} 单</template></el-table-column>
         <el-table-column label="推广金额" width="120"><template #default="{ row }">¥{{ money(row.orderAmount) }}</template></el-table-column>
+        <el-table-column label="有效期" min-width="210"><template #default="{ row }">{{ promotionValidityText(row) }}</template></el-table-column>
         <el-table-column label="状态" width="90"><template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? "启用" : "停用" }}</el-tag></template></el-table-column>
         <el-table-column prop="remark" label="备注" min-width="180" show-overflow-tooltip />
         <el-table-column label="操作" width="170" fixed="right">
@@ -982,11 +1122,20 @@ const commissions = ref<any[]>([]);
 const commissionPromoterSummary = ref<any[]>([]);
 const mallSettlements = ref<any[]>([]);
 const settlementPending = ref<any[]>([]);
+const canManageOrders = computed(() => hasPermission("mall.order.manage"));
+const canManageRefunds = computed(() => hasPermission("mall.refund.manage"));
+const canManageProducts = computed(() => hasPermission("mall.product.manage"));
+const canManageLogistics = computed(() => hasPermission("mall.logistics.manage"));
+const canManagePayments = computed(() => hasPermission("mall.payment.manage"));
+const canViewStatistics = computed(() => hasPermission("mall.statistics.view"));
+const canManageCommissions = computed(() => hasPermission("mall.settlement.manage"));
 const canManageMallSettlements = computed(() => !currentTenantId() && hasPermission("mall.settlement.manage"));
 const coupons = ref<any[]>([]);
 const couponUsages = ref<any[]>([]);
 const couponCategories = ref<any[]>([]);
 const couponProducts = ref<any[]>([]);
+const platformCouponCategories = ref<any[]>([]);
+const platformCouponProducts = ref<any[]>([]);
 const flashSales = ref<any[]>([]);
 const groupBuys = ref<any[]>([]);
 const groupBuyRecords = ref<any[]>([]);
@@ -997,6 +1146,26 @@ const orderSummary = ref<any>({});
 const commissionSummary = ref<any>({});
 const mallAnalytics = ref<any>({});
 const paymentReadiness = ref<any>(null);
+const scopeError = ref("");
+const orderError = ref("");
+const analyticsError = ref("");
+const refundError = ref("");
+const paymentError = ref("");
+const settlementError = ref("");
+const checkoutGroupTraceError = ref("");
+const detailError = ref("");
+const checkoutGroupError = ref("");
+const shipError = ref("");
+const shipLogisticsError = ref("");
+const logisticsError = ref("");
+const couponOptionsError = ref("");
+const couponError = ref("");
+const couponUsageError = ref("");
+const flashSaleError = ref("");
+const groupBuyError = ref("");
+const groupBuyRecordError = ref("");
+const agentError = ref("");
+const promotionError = ref("");
 const loading = ref(false);
 const analyticsLoading = ref(false);
 const logisticsLoading = ref(false);
@@ -1027,6 +1196,9 @@ const currentOrder = ref<any>(null);
 const checkoutGroupOrders = ref<any[]>([]);
 const checkoutGroupLoading = ref(false);
 const checkoutGroupTraceLoading = ref(false);
+const detailLoading = ref(false);
+const shipLoading = ref(false);
+const shipLogisticsLoading = ref(false);
 const checkoutGroupTrace = ref<any>({
   orders: [],
   summary: {},
@@ -1038,7 +1210,31 @@ const checkoutGroupTrace = ref<any>({
   commissionSummary: {}
 });
 const logisticsCompanies = ref<any[]>([]);
+const shipLogisticsCompanies = ref<any[]>([]);
+const detailTargetRow = ref<any>(null);
+const shipTargetRow = ref<any>(null);
+const shipOrderTarget = ref<any>(null);
 const deepLinkWarning = ref("");
+let scopeLoadSequence = 0;
+let orderLoadSequence = 0;
+let analyticsLoadSequence = 0;
+let refundLoadSequence = 0;
+let paymentLoadSequence = 0;
+let settlementLoadSequence = 0;
+let checkoutGroupTraceLoadSequence = 0;
+let detailLoadSequence = 0;
+let checkoutGroupLoadSequence = 0;
+let shipLoadSequence = 0;
+let shipLogisticsLoadSequence = 0;
+let logisticsLoadSequence = 0;
+let couponOptionsLoadSequence = 0;
+let couponLoadSequence = 0;
+let couponUsageLoadSequence = 0;
+let flashSaleLoadSequence = 0;
+let groupBuyLoadSequence = 0;
+let groupBuyRecordLoadSequence = 0;
+let agentLoadSequence = 0;
+let promotionLoadSequence = 0;
 const routeTenantId = () => {
   const id = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : 0;
   return isPlatformAdmin() && id ? id : undefined;
@@ -1062,18 +1258,20 @@ const groupBuyFilters = reactive({ status: "", keyword: "" });
 const groupBuyRecordFilters = reactive({ status: "", keyword: "" });
 const promotionFilters = reactive({ enabled: "", keyword: "" });
 const paymentKeyword = ref("");
-const shipForm = reactive({ expressCompany: "", expressNo: "", remark: "" });
+const shipForm = reactive<any>({ shipmentId: null, businessKey: "", expressCompany: "", expressNo: "", remark: "", reason: "", items: [] });
 const logisticsForm = reactive<any>({ id: null, name: "", code: "", servicePhone: "", trackingUrl: "", sortOrder: 0, enabled: true });
-const couponForm = reactive<any>({ id: null, code: "", name: "", minAmount: 0, discountAmount: 0, scope: "all", scopeCategoryId: null, scopeProductId: null, usageLimit: 0, perUserLimit: 0, startsAt: "", endsAt: "", enabled: true });
+const couponForm = reactive<any>({ id: null, code: "", name: "", issuerScope: "merchant", refundReleasePolicy: "full_refund", minAmount: 0, discountAmount: 0, scope: "all", scopeCategoryId: null, scopeProductId: null, issuanceLimit: 0, claimedCount: 0, usageLimit: 0, perUserLimit: 0, startsAt: "", endsAt: "", enabled: true });
 const flashSaleForm = reactive<any>({ id: null, title: "", productId: null, skuId: null, salePrice: 0, saleStock: 1, perUserLimit: 1, startsAt: "", endsAt: "", status: "draft", sortOrder: 0 });
 const groupBuyForm = reactive<any>({ id: null, title: "", productId: null, skuId: null, groupPrice: 0, minPeople: 2, groupStock: 1, perUserLimit: 1, startsAt: "", endsAt: "", status: "draft", sortOrder: 0 });
-const promotionForm = reactive<any>({ id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, enabled: true, remark: "" });
-const enabledLogisticsCompanies = computed(() => logisticsCompanies.value.filter((item) => item.enabled));
+const promotionForm = reactive<any>({ id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, startsAt: "", endsAt: "", enabled: true, remark: "" });
+const enabledShipLogisticsCompanies = computed(() => shipLogisticsCompanies.value.filter((item) => item.enabled));
 const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
 const selectedMerchantOpen = computed(() => merchantOperational(selectedMerchant.value));
 const selectedMerchantDisabledReason = computed(() => merchantDisabledReason(selectedMerchant.value));
 const selectedFlashSaleSkus = computed(() => couponProducts.value.find((item) => item.id === flashSaleForm.productId)?.skus || []);
 const selectedGroupBuySkus = computed(() => couponProducts.value.find((item) => item.id === groupBuyForm.productId)?.skus || []);
+const couponCategoryOptions = computed(() => couponForm.issuerScope === "platform" ? platformCouponCategories.value : couponCategories.value);
+const couponProductOptions = computed(() => couponForm.issuerScope === "platform" ? platformCouponProducts.value : couponProducts.value);
 const activePanel = computed(() => String(route.query.panel || route.path.replace("/mall-", "") || "orders"));
 const pageHeader = computed(() => {
   const headers: Record<string, { title: string; desc: string; note: string }> = {
@@ -1105,6 +1303,12 @@ const paymentMethods = [
 const refundStatuses = [
   { label: "无售后", value: "none" },
   { label: "待处理", value: "pending" },
+  { label: "待买家寄回", value: "awaiting_buyer_return" },
+  { label: "退货运输中", value: "returning" },
+  { label: "待商家收货", value: "awaiting_merchant_receipt" },
+  { label: "待寄换货商品", value: "awaiting_exchange_shipment" },
+  { label: "换货已发出", value: "exchange_shipped" },
+  { label: "平台介入", value: "platform_intervening" },
   { label: "处理中", value: "processing" },
   { label: "已通过", value: "approved" },
   { label: "已拒绝", value: "rejected" },
@@ -1160,6 +1364,13 @@ function merchantDisabledReason(merchant: any) {
 function merchantProductAuditRequired(merchant: any) { return merchant?.productAuditRequired !== false; }
 function agentLabel(agent: any) { return `${agent.name}${agent.region ? `（${agent.region}）` : ""}`; }
 function money(value: any) { return Number(value || 0).toFixed(2); }
+function orderTotalQuantity(row: any) { return (row?.items || []).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0); }
+function fulfillmentStatusText(value: string) { return value === "partial_shipped" ? "部分发货" : value === "shipped" ? "已全部发货" : value === "received" ? "已签收" : value === "cancelled" ? "已取消" : "待发货"; }
+function orderEventText(value: string) { const labels: Record<string, string> = { order_created: "订单创建", payment_confirmed: "收款确认", order_partially_shipped: "部分发货", order_shipped: "全部发货", shipment_tracking_updated: "修改物流单号", shipment_delivered: "包裹签收", shipment_auto_delivered: "包裹自动签收", order_completed: "订单完成", order_auto_completed: "订单自动完成", order_closed: "订单关闭" }; return labels[value] || value; }
+function orderItemShippedQuantity(row: any, orderItemId: number) {
+  return (row?.shipments || []).filter((shipment: any) => shipment.status !== "cancelled").flatMap((shipment: any) => shipment.items || []).filter((item: any) => Number(item.orderItemId) === Number(orderItemId)).reduce((sum: number, item: any) => sum + Number(item.quantity || 0), 0);
+}
+function createShipmentBusinessKey(orderId: number) { return `shipment:${orderId}:${Date.now()}:${Math.random().toString(36).slice(2, 10)}`; }
 function settlementAmountText(value: any) {
   const amount = Number(value || 0);
   return `${amount < 0 ? "应扣回" : "应打款"} ¥${Math.abs(amount).toFixed(2)}`;
@@ -1173,8 +1384,8 @@ function paymentText(value: string) { return ({ wechat: "微信支付", balance:
 function paymentModeText(value: string) { return value === "merchant_direct" ? "商户直收" : "平台代收"; }
 function statusText(value: string) { return Object.fromEntries(statuses.map((item) => [item.value, item.label]))[value] || value; }
 function checkoutGroupStatusText(value: string) { return ({ pending_payment: "待付款", partial_paid: "部分支付", paid: "已支付", completed: "已完成", closed: "已关闭", refunded: "已退款" } as any)[value] || value; }
-function refundText(value: string) { return ({ pending: "待处理", processing: "处理中", approved: "已通过", rejected: "已拒绝", failed: "失败" } as any)[value] || value; }
-function refundStatusType(value: string) { return value === "approved" ? "success" : value === "failed" ? "danger" : value === "pending" || value === "processing" ? "warning" : "info"; }
+function refundText(value: string) { return ({ pending: "待处理", awaiting_buyer_return: "待买家寄回", returning: "退货运输中", awaiting_merchant_receipt: "待商家收货", awaiting_exchange_shipment: "待寄换货商品", exchange_shipped: "换货已发出", platform_intervening: "平台介入", processing: "退款处理中", approved: "已完成", rejected: "已拒绝", failed: "退款失败", cancelled: "已取消" } as any)[value] || value; }
+function refundStatusType(value: string) { return value === "approved" ? "success" : value === "failed" || value === "platform_intervening" ? "danger" : ["pending", "processing", "awaiting_buyer_return", "returning", "awaiting_merchant_receipt", "awaiting_exchange_shipment", "exchange_shipped"].includes(value) ? "warning" : "info"; }
 function paymentStatusText(value: string) { return ({ success: "成功", discrepancy: "差异", failed: "失败" } as any)[value] || value || "-"; }
 function callbackStatusText(value: string) { return ({ received: "已接收", success: "成功", failed: "失败", idempotent: "幂等" } as any)[value] || value || "-"; }
 function callbackStatusType(value: string) { return value === "success" || value === "idempotent" ? "success" : value === "failed" ? "danger" : "warning"; }
@@ -1195,7 +1406,9 @@ function commissionRemark(row: any) { return row.status === "settled" ? `${row.s
 function settlementStatusText(value: string) { return ({ draft: "草稿", approved: "已审核", paid: "已打款", rejected: "已拒绝", cancelled: "已取消" } as any)[value] || value || "-"; }
 function settlementStatusType(value: string) { return value === "paid" ? "success" : value === "approved" ? "warning" : value === "rejected" || value === "cancelled" ? "danger" : "info"; }
 function paymentReadinessTagType(value: string) { return value === "real_ready" ? "success" : value === "sandbox_ready" ? "warning" : value === "disabled" ? "info" : "danger"; }
-function refundTypeText(value: string) { return ({ refund_only: "仅退款", return_refund: "退货退款" } as any)[value] || value || "-"; }
+function refundTypeText(value: string) { return ({ refund_only: "仅退款", return_refund: "退货退款", exchange: "换货" } as any)[value] || value || "-"; }
+function refundResponsibilityText(value: string) { return ({ undetermined: "待判定", buyer: "买家责任", merchant: "商家责任", logistics: "物流责任", platform: "平台责任" } as any)[value] || value || "待判定"; }
+function refundAddressText(value: any) { return [value?.receiverName, maskedPhone(value?.receiverPhone), value?.province, value?.city, value?.district, value?.detail].filter(Boolean).join(" "); }
 function refundProviderName(value: string) { return ({ wechat: "微信", balance: "余额", offline: "线下" } as any)[value] || value || "-"; }
 function refundProviderText(row: any) {
   const provider = row.order?.paymentMethod || row.providerRefundPayload?.provider || "";
@@ -1203,15 +1416,39 @@ function refundProviderText(row: any) {
   return `${refundProviderName(provider)}${mode}`;
 }
 function couponScopeText(row: any) {
-  if (row.scope === "category") return `指定分类：${couponCategories.value.find((item) => item.id === row.scopeCategoryId)?.name || row.scopeCategoryId || "-"}`;
-  if (row.scope === "product") return `指定商品：${couponProducts.value.find((item) => item.id === row.scopeProductId)?.title || row.scopeProductId || "-"}`;
-  return "全场通用";
+  const categoryRows = row.issuerScope === "platform" ? platformCouponCategories.value : couponCategories.value;
+  const productRows = row.issuerScope === "platform" ? platformCouponProducts.value : couponProducts.value;
+  if (row.scope === "category") return `指定分类：${categoryRows.find((item) => item.id === row.scopeCategoryId)?.name || row.scopeCategoryId || "-"}`;
+  if (row.scope === "product") return `指定商品：${productRows.find((item) => item.id === row.scopeProductId)?.title || row.scopeProductId || "-"}`;
+  return row.issuerScope === "platform" ? "租户全场通用" : "全店通用";
+}
+function couponIssuerText(row: any) { return row.issuerScope === "platform" ? "平台券" : "店铺券"; }
+function couponRefundPolicyText(value: string) { return value === "never" ? "退款不返还" : "全额退款返还"; }
+function promotionValidityText(row: any) {
+  if (!row.startsAt && !row.endsAt) return "长期有效";
+  return `${row.startsAt ? formatTime(row.startsAt) : "立即生效"} 至 ${row.endsAt ? formatTime(row.endsAt) : "长期"}`;
+}
+function handleCouponIssuerChange() {
+  couponForm.scopeCategoryId = null;
+  couponForm.scopeProductId = null;
+}
+function validOptionalTimeRange(startsAt: any, endsAt: any, label: string) {
+  if (!startsAt || !endsAt) return true;
+  const start = new Date(String(startsAt).replace(" ", "T")).getTime();
+  const end = new Date(String(endsAt).replace(" ", "T")).getTime();
+  if (!Number.isFinite(start) || !Number.isFinite(end) || start > end) {
+    ElMessage.error(`${label}结束时间不能早于开始时间`);
+    return false;
+  }
+  return true;
 }
 function statusType(value: string) { return value === "paid" || value === "shipped" || value === "completed" ? "success" : value === "closed" || value === "refunded" ? "info" : "warning"; }
-function receiverText(row: any) { const address = row.addressSnapshot || {}; return [address.receiverName, address.receiverPhone].filter(Boolean).join(" ") || "-"; }
+function maskedPhone(value?: string | null) { const phone = String(value || ""); return /^1\d{10}$/.test(phone) ? `${phone.slice(0, 3)}****${phone.slice(-4)}` : phone || ""; }
+function receiverText(row: any) { const address = row.addressSnapshot || {}; return [address.receiverName, maskedPhone(address.receiverPhone)].filter(Boolean).join(" ") || "-"; }
 function orderActionTip(row: any) {
   if (row.status === "pending_payment") return row.paymentMethod === "wechat" ? "等待微信支付回调，可关闭释放库存" : "等待用户余额支付，可关闭释放库存";
   if (row.status === "pending_confirm") return "核对线下收款后确认";
+  if (row.status === "paid" && row.fulfillmentStatus === "partial_shipped") return `已部分发货 ${row.shippedQuantity || 0}/${row.totalQuantity || orderTotalQuantity(row)}，继续创建剩余包裹`;
   if (row.status === "paid") return "已收款，尽快填写物流发货";
   if (row.status === "shipped") return "等待用户确认收货";
   if (row.status === "completed") return "履约完成，可用于对账";
@@ -1222,7 +1459,7 @@ function orderActionTip(row: any) {
 }
 function fullAddress(row: any) {
   const address = row?.addressSnapshot || {};
-  return [address.receiverName, address.receiverPhone, address.province, address.city, address.district, address.detail].filter(Boolean).join(" ");
+  return [address.receiverName, maskedPhone(address.receiverPhone), address.province, address.city, address.district, address.detail].filter(Boolean).join(" ");
 }
 function orderTimeline(row: any) {
   const status = row?.status;
@@ -1238,11 +1475,48 @@ function refundSummary(refund: any) {
   return `${refundText(refund.status)} · ${refundTypeText(refund.type)} · ¥${money(refund.amount)} · ${refund.reason || "无原因"}`;
 }
 
-async function loadTenants() { tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : []; }
+function requestErrorText(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+async function loadTenants() {
+  if (!isPlatformAdmin()) {
+    tenants.value = [];
+    return true;
+  }
+  try {
+    const result = await api.get<any, any[]>("/admin/tenants");
+    if (!Array.isArray(result)) throw new Error("商家选项响应格式无效");
+    tenants.value = result;
+    return true;
+  } catch (error: unknown) {
+    tenants.value = [];
+    scopeError.value = requestErrorText(error, "加载商家选项失败");
+    return false;
+  }
+}
 function merchantLinkWarning(requestedMerchantId: number) {
   return `当前链接指定的店铺 #${requestedMerchantId} 对当前账号不可见，或已被商家/关键词筛选条件过滤。为避免误操作，系统不会自动切换到其它店铺；请联系平台管理员确认店铺授权，或清空筛选后重试。`;
 }
 function clearMallScopeData() {
+  orderLoadSequence += 1;
+  analyticsLoadSequence += 1;
+  refundLoadSequence += 1;
+  paymentLoadSequence += 1;
+  settlementLoadSequence += 1;
+  checkoutGroupTraceLoadSequence += 1;
+  detailLoadSequence += 1;
+  checkoutGroupLoadSequence += 1;
+  shipLoadSequence += 1;
+  shipLogisticsLoadSequence += 1;
+  logisticsLoadSequence += 1;
+  couponOptionsLoadSequence += 1;
+  couponLoadSequence += 1;
+  couponUsageLoadSequence += 1;
+  flashSaleLoadSequence += 1;
+  groupBuyLoadSequence += 1;
+  groupBuyRecordLoadSequence += 1;
+  agentLoadSequence += 1;
+  promotionLoadSequence += 1;
   orders.value = [];
   refunds.value = [];
   paymentTransactions.value = [];
@@ -1256,17 +1530,58 @@ function clearMallScopeData() {
   couponUsages.value = [];
   couponCategories.value = [];
   couponProducts.value = [];
+  platformCouponCategories.value = [];
+  platformCouponProducts.value = [];
   flashSales.value = [];
   groupBuys.value = [];
   groupBuyRecords.value = [];
   promotionCodes.value = [];
   logisticsCompanies.value = [];
+  shipLogisticsCompanies.value = [];
   orderSummary.value = {};
   commissionSummary.value = {};
   mallAnalytics.value = {};
   paymentReadiness.value = null;
   currentOrder.value = null;
   checkoutGroupOrders.value = [];
+  orderError.value = "";
+  analyticsError.value = "";
+  refundError.value = "";
+  paymentError.value = "";
+  settlementError.value = "";
+  checkoutGroupTraceError.value = "";
+  detailError.value = "";
+  checkoutGroupError.value = "";
+  shipError.value = "";
+  shipLogisticsError.value = "";
+  logisticsError.value = "";
+  couponOptionsError.value = "";
+  couponError.value = "";
+  couponUsageError.value = "";
+  flashSaleError.value = "";
+  groupBuyError.value = "";
+  groupBuyRecordError.value = "";
+  agentError.value = "";
+  promotionError.value = "";
+  loading.value = false;
+  analyticsLoading.value = false;
+  settlementLoading.value = false;
+  checkoutGroupTraceLoading.value = false;
+  detailLoading.value = false;
+  shipLoading.value = false;
+  shipLogisticsLoading.value = false;
+  logisticsLoading.value = false;
+  detailVisible.value = false;
+  shipDialogVisible.value = false;
+  logisticsDialogVisible.value = false;
+  couponDialogVisible.value = false;
+  flashSaleDialogVisible.value = false;
+  groupBuyDialogVisible.value = false;
+  groupBuyRecordDialogVisible.value = false;
+  promotionDialogVisible.value = false;
+  detailTargetRow.value = null;
+  shipTargetRow.value = null;
+  shipOrderTarget.value = null;
   resetCheckoutGroupTrace();
 }
 function blockInvalidMerchantLink() {
@@ -1301,19 +1616,44 @@ async function copyMerchantPageLink() {
   ElMessage.success("当前店铺后台链接已复制，可发给已授权的商家/代理账号。");
 }
 async function loadMerchants() {
-  merchants.value = await api.get<any, any[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: "true" } });
-  const requestedMerchantId = routeMerchantId();
-  deepLinkWarning.value = "";
-  if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) {
-    filters.merchantId = requestedMerchantId;
-  } else if (requestedMerchantId) {
+  const sequence = ++scopeLoadSequence;
+  scopeError.value = "";
+  merchants.value = [];
+  clearMallScopeData();
+  try {
+    const result = await api.get<any, any[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: "true" } });
+    if (sequence !== scopeLoadSequence) return false;
+    if (!Array.isArray(result)) throw new Error("可运营店铺响应格式无效");
+    merchants.value = result;
+    const requestedMerchantId = routeMerchantId();
+    deepLinkWarning.value = "";
+    if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) {
+      filters.merchantId = requestedMerchantId;
+    } else if (requestedMerchantId) {
+      filters.merchantId = undefined;
+      deepLinkWarning.value = merchantLinkWarning(requestedMerchantId);
+      clearMallScopeData();
+      return false;
+    } else if (filters.merchantId && !merchants.value.some((merchant) => merchant.id === filters.merchantId)) filters.merchantId = undefined;
+    if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
+    return true;
+  } catch (error: unknown) {
+    if (sequence !== scopeLoadSequence) return false;
     filters.merchantId = undefined;
-    deepLinkWarning.value = merchantLinkWarning(requestedMerchantId);
+    deepLinkWarning.value = "";
+    scopeError.value = requestErrorText(error, "加载可运营店铺失败");
     clearMallScopeData();
     return false;
-  } else if (filters.merchantId && !merchants.value.some((merchant) => merchant.id === filters.merchantId)) filters.merchantId = undefined;
-  if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
-  return true;
+  }
+}
+async function reloadMerchantScope() {
+  scopeError.value = "";
+  const tenantsReady = await loadTenants();
+  if (!tenantsReady) return;
+  const merchantScopeReady = await loadMerchants();
+  if (!merchantScopeReady) return;
+  reload();
+  await openRoutePanel();
 }
 function currentMallParams(extra: Record<string, any> = {}) {
   return {
@@ -1398,13 +1738,17 @@ async function loadCheckoutGroupTrace() {
   if (blockInvalidMerchantLink()) return;
   const groupNo = checkoutGroupTraceNo.value;
   if (!groupNo) {
+    checkoutGroupTraceError.value = "";
     resetCheckoutGroupTrace();
     return;
   }
+  const sequence = ++checkoutGroupTraceLoadSequence;
   checkoutGroupTraceLoading.value = true;
+  checkoutGroupTraceError.value = "";
+  resetCheckoutGroupTrace();
   try {
     const params = currentMallParams({ checkoutGroupNo: groupNo });
-    const [orderResult, summary, refundRows, transactionRows, callbackRows, refundLogRows, commissionRows, commissionSummaryRow] = await Promise.all([
+    const results = await Promise.allSettled([
       api.get<any, any>("/admin/mall/orders", { params: { ...params, page: 1, pageSize: 100 } }),
       api.get<any, any>("/admin/mall/orders/summary", { params }),
       api.get<any, any[]>("/admin/mall/refunds", { params }),
@@ -1414,20 +1758,34 @@ async function loadCheckoutGroupTrace() {
       api.get<any, any[]>("/admin/mall/commissions", { params }),
       api.get<any, any>("/admin/mall/commissions/summary", { params })
     ]);
+    if (sequence !== checkoutGroupTraceLoadSequence || groupNo !== checkoutGroupTraceNo.value) return;
+    const labels = ["子订单", "汇总", "售后", "支付流水", "支付回调", "退款日志", "佣金", "佣金汇总"];
+    const failures = results.flatMap((result, index) => result.status === "rejected" ? [`${labels[index]}：${requestErrorText(result.reason, "读取失败")}`] : []);
+    const value = (index: number) => results[index].status === "fulfilled" ? (results[index] as PromiseFulfilledResult<any>).value : undefined;
+    const orderResult = value(0);
+    const summary = value(1);
+    const refundRows = value(2);
+    const transactionRows = value(3);
+    const callbackRows = value(4);
+    const refundLogRows = value(5);
+    const commissionRows = value(6);
+    const commissionSummaryRow = value(7);
     checkoutGroupTrace.value = {
-      orders: orderResult.items || [],
+      orders: Array.isArray(orderResult?.items) ? orderResult.items : [],
       summary: summary || {},
-      refunds: refundRows || [],
-      paymentTransactions: transactionRows || [],
-      paymentCallbackLogs: callbackRows || [],
-      refundLogs: refundLogRows || [],
-      commissions: commissionRows || [],
+      refunds: Array.isArray(refundRows) ? refundRows : [],
+      paymentTransactions: Array.isArray(transactionRows) ? transactionRows : [],
+      paymentCallbackLogs: Array.isArray(callbackRows) ? callbackRows : [],
+      refundLogs: Array.isArray(refundLogRows) ? refundLogRows : [],
+      commissions: Array.isArray(commissionRows) ? commissionRows : [],
       commissionSummary: commissionSummaryRow || {}
     };
+    checkoutGroupTraceError.value = failures.join("；");
   } catch (error: any) {
-    ElMessage.error(error.message || "加载跨店结算组追踪失败");
+    if (sequence !== checkoutGroupTraceLoadSequence || groupNo !== checkoutGroupTraceNo.value) return;
+    checkoutGroupTraceError.value = requestErrorText(error, "加载跨店结算组追踪失败");
   } finally {
-    checkoutGroupTraceLoading.value = false;
+    if (sequence === checkoutGroupTraceLoadSequence) checkoutGroupTraceLoading.value = false;
   }
 }
 function onDateRangeChange(value?: string[]) {
@@ -1438,46 +1796,79 @@ function onDateRangeChange(value?: string[]) {
 }
 async function loadOrders() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++orderLoadSequence;
   loading.value = true;
+  orderError.value = "";
+  orders.value = [];
+  orderSummary.value = {};
   try {
     const params = { ...orderQueryParams(), page: filters.page, pageSize: filters.pageSize };
-    const [result, summary] = await Promise.all([
+    const [orderResult, summaryResult] = await Promise.allSettled([
       api.get<any, any>("/admin/mall/orders", { params }),
       api.get<any, any>("/admin/mall/orders/summary", { params: orderQueryParams() })
     ]);
-    orders.value = result.items || [];
-    orderSummary.value = summary || {};
+    if (sequence !== orderLoadSequence) return;
+    const failures: string[] = [];
+    if (orderResult.status === "fulfilled" && Array.isArray(orderResult.value?.items)) orders.value = orderResult.value.items;
+    else failures.push(`订单列表：${orderResult.status === "rejected" ? requestErrorText(orderResult.reason, "读取失败") : "响应格式无效"}`);
+    if (summaryResult.status === "fulfilled" && summaryResult.value && typeof summaryResult.value === "object") orderSummary.value = summaryResult.value;
+    else failures.push(`订单汇总：${summaryResult.status === "rejected" ? requestErrorText(summaryResult.reason, "读取失败") : "响应格式无效"}`);
+    orderError.value = failures.join("；");
     await loadCheckoutGroupTrace();
   } catch (error: any) {
-    ElMessage.error(error.message || "加载商城订单失败");
+    if (sequence !== orderLoadSequence) return;
+    orderError.value = requestErrorText(error, "加载商城订单失败");
   } finally {
-    loading.value = false;
+    if (sequence === orderLoadSequence) loading.value = false;
   }
 }
 async function loadAnalytics() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++analyticsLoadSequence;
   analyticsLoading.value = true;
+  analyticsError.value = "";
+  mallAnalytics.value = {};
   try {
-    mallAnalytics.value = await api.get<any, any>("/admin/mall/analytics", { params: currentMallParams() });
+    const result = await api.get<any, any>("/admin/mall/analytics", { params: currentMallParams() });
+    if (sequence !== analyticsLoadSequence) return;
+    if (!result || typeof result !== "object" || Array.isArray(result)) throw new Error("商城运营看板响应格式无效");
+    mallAnalytics.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载商城运营看板失败");
+    if (sequence !== analyticsLoadSequence) return;
+    analyticsError.value = requestErrorText(error, "加载商城运营看板失败");
   } finally {
-    analyticsLoading.value = false;
+    if (sequence === analyticsLoadSequence) analyticsLoading.value = false;
   }
 }
 async function loadRefunds() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++refundLoadSequence;
+  refundError.value = "";
+  refunds.value = [];
   try {
-    refunds.value = await api.get<any, any[]>("/admin/mall/refunds", { params: currentMallParams({ status: refundFilters.status || undefined, paymentMethod: filters.paymentMethod || undefined, checkoutGroupNo: filters.checkoutGroupNo.trim() || undefined, startDate: filters.startDate || undefined, endDate: filters.endDate || undefined, keyword: refundFilters.keyword.trim() || filters.keyword.trim() || undefined }) });
+    const result = await api.get<any, any[]>("/admin/mall/refunds", { params: currentMallParams({ status: refundFilters.status || undefined, paymentMethod: filters.paymentMethod || undefined, checkoutGroupNo: filters.checkoutGroupNo.trim() || undefined, startDate: filters.startDate || undefined, endDate: filters.endDate || undefined, keyword: refundFilters.keyword.trim() || filters.keyword.trim() || undefined }) });
+    if (sequence !== refundLoadSequence) return;
+    if (!Array.isArray(result)) throw new Error("商城售后响应格式无效");
+    refunds.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载售后失败");
+    if (sequence !== refundLoadSequence) return;
+    refundError.value = requestErrorText(error, "加载售后失败");
   }
 }
 async function loadPaymentData() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++paymentLoadSequence;
+  paymentError.value = "";
+  paymentTransactions.value = [];
+  paymentCallbackLogs.value = [];
+  refundLogs.value = [];
+  commissions.value = [];
+  commissionSummary.value = {};
+  commissionPromoterSummary.value = [];
+  paymentReadiness.value = null;
   try {
     const baseParams = currentMallParams({ keyword: paymentKeyword.value.trim() || filters.keyword.trim() || undefined, checkoutGroupNo: filters.checkoutGroupNo.trim() || undefined });
-    const [transactions, callbackLogs, refundLogRows, commissionRows, commissionSummaryRow, promoterSummaryRows, readiness] = await Promise.all([
+    const results = await Promise.allSettled([
       api.get<any, any[]>("/admin/mall/payment-transactions", { params: { ...baseParams, status: paymentFilters.status || undefined } }),
       api.get<any, any[]>("/admin/mall/payment-callback-logs", { params: { ...baseParams, status: callbackFilters.status || undefined } }),
       api.get<any, any[]>("/admin/mall/refund-logs", { params: baseParams }),
@@ -1486,34 +1877,64 @@ async function loadPaymentData() {
       api.get<any, any[]>("/admin/mall/commissions/by-promoter", { params: { ...baseParams, status: commissionFilters.status || undefined } }),
       api.get<any, any>("/admin/mall/payment-readiness", { params: currentMallParams() })
     ]);
-    paymentTransactions.value = transactions || [];
-    paymentCallbackLogs.value = callbackLogs || [];
-    refundLogs.value = refundLogRows || [];
-    commissions.value = commissionRows || [];
-    commissionSummary.value = commissionSummaryRow || {};
-    commissionPromoterSummary.value = promoterSummaryRows || [];
-    paymentReadiness.value = readiness || null;
+    if (sequence !== paymentLoadSequence) return;
+    const labels = ["支付流水", "支付回调", "退款日志", "佣金明细", "佣金汇总", "推广人汇总", "支付就绪度"];
+    const failures = results.flatMap((result, index) => result.status === "rejected" ? [`${labels[index]}：${requestErrorText(result.reason, "读取失败")}`] : []);
+    const value = (index: number) => results[index].status === "fulfilled" ? (results[index] as PromiseFulfilledResult<any>).value : undefined;
+    const transactions = value(0);
+    const callbackLogs = value(1);
+    const refundLogRows = value(2);
+    const commissionRows = value(3);
+    const commissionSummaryRow = value(4);
+    const promoterSummaryRows = value(5);
+    const readiness = value(6);
+    paymentTransactions.value = Array.isArray(transactions) ? transactions : [];
+    paymentCallbackLogs.value = Array.isArray(callbackLogs) ? callbackLogs : [];
+    refundLogs.value = Array.isArray(refundLogRows) ? refundLogRows : [];
+    commissions.value = Array.isArray(commissionRows) ? commissionRows : [];
+    commissionSummary.value = commissionSummaryRow && typeof commissionSummaryRow === "object" ? commissionSummaryRow : {};
+    commissionPromoterSummary.value = Array.isArray(promoterSummaryRows) ? promoterSummaryRows : [];
+    paymentReadiness.value = readiness && typeof readiness === "object" ? readiness : null;
+    results.forEach((result, index) => {
+      if (result.status !== "fulfilled") return;
+      const responseInvalid = index < 4 || index === 5 ? !Array.isArray(result.value) : !result.value || typeof result.value !== "object" || Array.isArray(result.value);
+      if (responseInvalid) failures.push(`${labels[index]}：响应格式无效`);
+    });
+    paymentError.value = failures.join("；");
     await loadCheckoutGroupTrace();
     await loadSettlements();
   } catch (error: any) {
-    ElMessage.error(error.message || "加载支付日志失败");
+    if (sequence !== paymentLoadSequence) return;
+    paymentError.value = requestErrorText(error, "加载支付日志失败");
   }
 }
 
 async function loadSettlements() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++settlementLoadSequence;
   settlementLoading.value = true;
+  settlementError.value = "";
+  mallSettlements.value = [];
+  settlementPending.value = [];
   try {
     const result = await api.get<any, any>("/admin/mall/settlements", {
       params: currentMallParams({ status: settlementFilters.status || undefined, startDate: filters.startDate || undefined, endDate: filters.endDate || undefined })
     });
-    mallSettlements.value = result.items || [];
-    settlementPending.value = result.pending || [];
+    if (sequence !== settlementLoadSequence) return;
+    if (!result || !Array.isArray(result.items) || !Array.isArray(result.pending)) throw new Error("商城结算响应格式无效");
+    mallSettlements.value = result.items;
+    settlementPending.value = result.pending;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载商城结算失败");
+    if (sequence !== settlementLoadSequence) return;
+    settlementError.value = requestErrorText(error, "加载商城结算失败");
   } finally {
-    settlementLoading.value = false;
+    if (sequence === settlementLoadSequence) settlementLoading.value = false;
   }
+}
+
+function mallSettlementOperationKey(action: string, id?: number) {
+  const uuid = typeof crypto !== "undefined" && crypto.randomUUID ? crypto.randomUUID() : `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return `mall-settlement:${action}:${id || 0}:${uuid}`;
 }
 
 async function generateSettlement(row?: any) {
@@ -1527,6 +1948,7 @@ async function generateSettlement(row?: any) {
       merchantId,
       periodStart: filters.startDate,
       periodEnd: filters.endDate,
+      businessKey: mallSettlementOperationKey("generate", merchantId),
       remark: "后台商城财务生成结算单"
     });
     ElMessage.success("结算单已生成");
@@ -1539,7 +1961,7 @@ async function generateSettlement(row?: any) {
 async function approveSettlement(row: any) {
   if (!canManageMallSettlements.value) return ElMessage.error("商城结算审核由平台财务处理");
   const { value } = await ElMessageBox.prompt(`审核通过结算单 ${row.settlementNo}？${settlementAmountText(row.payableAmount)}`, "审核商城结算", { inputValue: "财务已核对订单、退款和服务费", confirmButtonText: "通过", cancelButtonText: "取消" });
-  await api.post(`/admin/mall/settlements/${row.id}/approve`, { remark: value });
+  await api.post(`/admin/mall/settlements/${row.id}/approve`, { remark: value, businessKey: mallSettlementOperationKey("approve", row.id) });
   ElMessage.success("结算单已审核");
   await loadSettlements();
 }
@@ -1547,7 +1969,7 @@ async function approveSettlement(row: any) {
 async function rejectSettlement(row: any) {
   if (!canManageMallSettlements.value) return ElMessage.error("商城结算审核由平台财务处理");
   const { value } = await ElMessageBox.prompt(`拒绝结算单 ${row.settlementNo}？`, "拒绝商城结算", { inputValue: "结算数据需重新核对", confirmButtonText: "拒绝", cancelButtonText: "取消" });
-  await api.post(`/admin/mall/settlements/${row.id}/reject`, { remark: value });
+  await api.post(`/admin/mall/settlements/${row.id}/reject`, { remark: value, businessKey: mallSettlementOperationKey("reject", row.id) });
   ElMessage.success("结算单已拒绝");
   await loadSettlements();
 }
@@ -1556,7 +1978,7 @@ async function markSettlementPaid(row: any) {
   if (!canManageMallSettlements.value) return ElMessage.error("商城结算打款/扣回由平台财务处理");
   const actionText = settlementFinishActionText(row);
   const { value } = await ElMessageBox.prompt(`标记结算单 ${row.settlementNo} 已${actionText}？`, "标记商城结算完成", { inputValue: row.paidReference || "", inputPlaceholder: actionText === "扣回/冲抵" ? "填写扣回/冲抵凭证号或后续抵扣说明" : "填写打款流水号或线下凭证号", confirmButtonText: `确认${actionText}`, cancelButtonText: "取消", inputValidator: (value) => Boolean(String(value || "").trim()) || `请填写${actionText}凭证号或说明，方便财务对账` });
-  await api.post(`/admin/mall/settlements/${row.id}/mark-paid`, { paidReference: value, remark: actionText === "扣回/冲抵" ? "财务确认已扣回/冲抵" : "财务确认已打款" });
+  await api.post(`/admin/mall/settlements/${row.id}/mark-paid`, { paidReference: value, remark: actionText === "扣回/冲抵" ? "财务确认已扣回/冲抵" : "财务确认已打款", businessKey: mallSettlementOperationKey("paid", row.id) });
   ElMessage.success(`结算单已标记${actionText}`);
   await loadSettlements();
 }
@@ -1574,6 +1996,7 @@ async function exportSettlements() {
   }
 }
 async function settleCommission(row: any) {
+  if (!canManageCommissions.value) return ElMessage.error("当前账号无商城佣金结算权限");
   try {
     const result = await ElMessageBox.prompt(`确认将推广码 ${row.code} 的 ¥${money(row.commissionAmount)} 佣金标记为已结算？`, "结算商城佣金", { inputValue: "财务确认已结算", confirmButtonText: "确认结算", cancelButtonText: "取消" });
     await api.post(`/admin/mall/commissions/${row.id}/settle`, { remark: result.value || "财务确认已结算" });
@@ -1585,6 +2008,7 @@ async function settleCommission(row: any) {
   }
 }
 async function batchSettleCommissions(target?: any) {
+  if (!canManageCommissions.value) return ElMessage.error("当前账号无商城佣金结算权限");
   try {
     const pendingCount = Number(target?.pendingCount ?? commissionSummary.value.pendingCount ?? 0);
     const pendingAmount = money(target?.pendingAmount ?? commissionSummary.value.pendingAmount);
@@ -1608,101 +2032,221 @@ async function batchSettleCommissions(target?: any) {
 }
 async function loadLogisticsCompanies() {
   if (blockInvalidMerchantLink()) return;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(selectedMerchant.value?.tenant?.id || filters.tenantId || 0);
+  const sequence = ++logisticsLoadSequence;
   logisticsLoading.value = true;
+  logisticsError.value = "";
+  logisticsCompanies.value = [];
   try {
-    logisticsCompanies.value = await api.get<any, any[]>("/admin/mall/logistics-companies", { params: currentMallParams() });
+    const result = await api.get<any, any[]>("/admin/mall/logistics-companies", { params: { tenantId: isPlatformAdmin() && tenantId ? tenantId : undefined, merchantId: merchantId || undefined } });
+    if (sequence !== logisticsLoadSequence || !logisticsDialogVisible.value || Number(filters.merchantId || 0) !== merchantId) return;
+    if (!Array.isArray(result)) throw new Error("商城物流设置响应格式无效");
+    logisticsCompanies.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载物流设置失败");
+    if (sequence !== logisticsLoadSequence || !logisticsDialogVisible.value || Number(filters.merchantId || 0) !== merchantId) return;
+    logisticsError.value = requestErrorText(error, "加载物流设置失败");
   } finally {
-    logisticsLoading.value = false;
+    if (sequence === logisticsLoadSequence) logisticsLoading.value = false;
   }
+}
+async function loadShipLogisticsCompanies(order: any) {
+  const orderId = Number(order?.id || 0);
+  const merchantId = Number(order?.merchant?.id || filters.merchantId || 0);
+  const tenantId = Number(order?.tenant?.id || order?.merchant?.tenant?.id || filters.tenantId || 0);
+  const sequence = ++shipLogisticsLoadSequence;
+  shipLogisticsLoading.value = true;
+  shipLogisticsError.value = "";
+  shipLogisticsCompanies.value = [];
+  try {
+    const result = await api.get<any, any[]>("/admin/mall/logistics-companies", { params: { tenantId: isPlatformAdmin() && tenantId ? tenantId : undefined, merchantId: merchantId || undefined } });
+    if (sequence !== shipLogisticsLoadSequence || !shipDialogVisible.value || Number(shipOrderTarget.value?.id || 0) !== orderId) return;
+    if (!Array.isArray(result)) throw new Error("发货物流选项响应格式无效");
+    shipLogisticsCompanies.value = result;
+  } catch (error: any) {
+    if (sequence !== shipLogisticsLoadSequence || !shipDialogVisible.value || Number(shipOrderTarget.value?.id || 0) !== orderId) return;
+    shipLogisticsError.value = requestErrorText(error, "加载发货物流选项失败");
+  } finally {
+    if (sequence === shipLogisticsLoadSequence) shipLogisticsLoading.value = false;
+  }
+}
+function merchantContextMatches(merchantId: number, tenantId: number) {
+  const currentMerchantId = Number(filters.merchantId || 0);
+  const currentTenant = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
+  return currentMerchantId === merchantId && currentTenant === tenantId;
 }
 async function loadCouponOptions() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++couponOptionsLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
+  couponOptionsError.value = "";
+  couponCategories.value = [];
+  couponProducts.value = [];
+  platformCouponCategories.value = [];
+  platformCouponProducts.value = [];
   try {
     const params = currentMallParams();
-    const [categories, productResult] = await Promise.all([
-      api.get<any, any[]>("/admin/mall/categories", { params }),
-      api.get<any, any>("/admin/mall/products", { params: { ...params, pageSize: 200 } })
+    const results = await Promise.allSettled([
+      api.get<any, any[]>("/admin/mall/categories", { params: { ...params, scope: "merchant" } }),
+      api.get<any, any>("/admin/mall/products", { params: { ...params, pageSize: 100 } }),
+      api.get<any, any[]>("/admin/mall/categories", { params: currentTenantParams({ scope: "platform", enabled: "true" }) }),
+      api.get<any, any>("/admin/mall/products", { params: currentTenantParams({ scope: "platform", pageSize: 100 }) })
     ]);
-    couponCategories.value = categories || [];
-    couponProducts.value = productResult?.items || productResult || [];
+    if (sequence !== couponOptionsLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    const labels = ["店铺分类", "店铺商品", "平台分类", "平台商品"];
+    const failures = results.flatMap((result, index) => result.status === "rejected" ? [`${labels[index]}：${requestErrorText(result.reason, "读取失败")}`] : []);
+    const value = (index: number) => results[index].status === "fulfilled" ? (results[index] as PromiseFulfilledResult<any>).value : undefined;
+    const list = (value: any) => Array.isArray(value) ? value : Array.isArray(value?.items) ? value.items : [];
+    couponCategories.value = list(value(0));
+    couponProducts.value = list(value(1));
+    platformCouponCategories.value = list(value(2));
+    platformCouponProducts.value = list(value(3));
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled" && !Array.isArray(result.value) && !Array.isArray(result.value?.items)) failures.push(`${labels[index]}：响应格式无效`);
+    });
+    couponOptionsError.value = failures.join("；");
   } catch (error: any) {
-    ElMessage.error(error.message || "加载优惠券适用范围失败");
+    if (sequence !== couponOptionsLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    couponOptionsError.value = requestErrorText(error, "加载优惠券适用范围失败");
   }
 }
 async function loadCoupons() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++couponLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
   couponLoading.value = true;
+  couponError.value = "";
+  coupons.value = [];
   try {
-    coupons.value = await api.get<any, any[]>("/admin/mall/coupons", { params: currentMallParams({ status: couponFilters.status || undefined, keyword: couponFilters.keyword.trim() || undefined }) });
+    const result = await api.get<any, any[]>("/admin/mall/coupons", { params: currentMallParams({ status: couponFilters.status || undefined, keyword: couponFilters.keyword.trim() || undefined }) });
+    if (sequence !== couponLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    if (!Array.isArray(result)) throw new Error("优惠券列表响应格式无效");
+    coupons.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载优惠券失败");
+    if (sequence !== couponLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    couponError.value = requestErrorText(error, "加载优惠券失败");
   } finally {
-    couponLoading.value = false;
+    if (sequence === couponLoadSequence) couponLoading.value = false;
   }
 }
 async function loadFlashSales() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++flashSaleLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
   flashSaleLoading.value = true;
+  flashSaleError.value = "";
+  flashSales.value = [];
   try {
-    flashSales.value = await api.get<any, any[]>("/admin/mall/flash-sales", { params: currentMallParams({ status: flashSaleFilters.status || undefined, keyword: flashSaleFilters.keyword.trim() || undefined }) });
+    const result = await api.get<any, any[]>("/admin/mall/flash-sales", { params: currentMallParams({ status: flashSaleFilters.status || undefined, keyword: flashSaleFilters.keyword.trim() || undefined }) });
+    if (sequence !== flashSaleLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    if (!Array.isArray(result)) throw new Error("秒杀活动响应格式无效");
+    flashSales.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载秒杀活动失败");
+    if (sequence !== flashSaleLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    flashSaleError.value = requestErrorText(error, "加载秒杀活动失败");
   } finally {
-    flashSaleLoading.value = false;
+    if (sequence === flashSaleLoadSequence) flashSaleLoading.value = false;
   }
 }
 async function loadGroupBuys() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++groupBuyLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
   groupBuyLoading.value = true;
+  groupBuyError.value = "";
+  groupBuys.value = [];
   try {
-    groupBuys.value = await api.get<any, any[]>("/admin/mall/group-buys", { params: currentMallParams({ status: groupBuyFilters.status || undefined, keyword: groupBuyFilters.keyword.trim() || undefined }) });
+    const result = await api.get<any, any[]>("/admin/mall/group-buys", { params: currentMallParams({ status: groupBuyFilters.status || undefined, keyword: groupBuyFilters.keyword.trim() || undefined }) });
+    if (sequence !== groupBuyLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    if (!Array.isArray(result)) throw new Error("拼团活动响应格式无效");
+    groupBuys.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载拼团活动失败");
+    if (sequence !== groupBuyLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    groupBuyError.value = requestErrorText(error, "加载拼团活动失败");
   } finally {
-    groupBuyLoading.value = false;
+    if (sequence === groupBuyLoadSequence) groupBuyLoading.value = false;
   }
 }
 async function loadGroupBuyRecords() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++groupBuyRecordLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
   groupBuyRecordLoading.value = true;
+  groupBuyRecordError.value = "";
+  groupBuyRecords.value = [];
   try {
-    groupBuyRecords.value = await api.get<any, any[]>("/admin/mall/group-buy-records", { params: currentMallParams({ status: groupBuyRecordFilters.status || undefined, keyword: groupBuyRecordFilters.keyword.trim() || undefined }) });
+    const result = await api.get<any, any[]>("/admin/mall/group-buy-records", { params: currentMallParams({ status: groupBuyRecordFilters.status || undefined, keyword: groupBuyRecordFilters.keyword.trim() || undefined }) });
+    if (sequence !== groupBuyRecordLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    if (!Array.isArray(result)) throw new Error("参团记录响应格式无效");
+    groupBuyRecords.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载参团记录失败");
+    if (sequence !== groupBuyRecordLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    groupBuyRecordError.value = requestErrorText(error, "加载参团记录失败");
   } finally {
-    groupBuyRecordLoading.value = false;
+    if (sequence === groupBuyRecordLoadSequence) groupBuyRecordLoading.value = false;
   }
 }
 async function loadCouponUsages() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++couponUsageLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
   couponUsageLoading.value = true;
+  couponUsageError.value = "";
+  couponUsages.value = [];
   try {
-    couponUsages.value = await api.get<any, any[]>("/admin/mall/coupon-usages", { params: currentMallParams({ status: couponUsageFilters.status || undefined, keyword: couponUsageFilters.keyword.trim() || couponFilters.keyword.trim() || undefined }) });
+    const result = await api.get<any, any[]>("/admin/mall/coupon-usages", { params: currentMallParams({ status: couponUsageFilters.status || undefined, keyword: couponUsageFilters.keyword.trim() || couponFilters.keyword.trim() || undefined }) });
+    if (sequence !== couponUsageLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    if (!Array.isArray(result)) throw new Error("优惠券使用记录响应格式无效");
+    couponUsages.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载优惠券使用记录失败");
+    if (sequence !== couponUsageLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    couponUsageError.value = requestErrorText(error, "加载优惠券使用记录失败");
   } finally {
-    couponUsageLoading.value = false;
+    if (sequence === couponUsageLoadSequence) couponUsageLoading.value = false;
   }
 }
 async function loadAgents() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++agentLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
+  agentError.value = "";
+  agents.value = [];
   try {
-    agents.value = await api.get<any, any[]>("/admin/agents", { params: { includeDisabled: true, tenantId: isPlatformAdmin() ? filters.tenantId || selectedMerchant.value?.tenant?.id || undefined : undefined } });
-  } catch {
-    agents.value = [];
+    const result = await api.get<any, any[] | { items?: any[] }>("/admin/agents", { params: { includeDisabled: true, tenantId: isPlatformAdmin() ? tenantId || undefined : undefined, page: 1, pageSize: 100 } });
+    if (sequence !== agentLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    const items = Array.isArray(result) ? result : result?.items;
+    if (!Array.isArray(items)) throw new Error("推广代理选项响应格式无效");
+    agents.value = items;
+  } catch (error: any) {
+    if (sequence !== agentLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    agentError.value = requestErrorText(error, "加载推广代理选项失败");
   }
 }
 async function loadPromotionCodes() {
   if (blockInvalidMerchantLink()) return;
+  const sequence = ++promotionLoadSequence;
+  const merchantId = Number(filters.merchantId || 0);
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
   promotionLoading.value = true;
+  promotionError.value = "";
+  promotionCodes.value = [];
   try {
-    promotionCodes.value = await api.get<any, any[]>("/admin/mall/promotion-codes", { params: currentMallParams({ enabled: promotionFilters.enabled || undefined, keyword: promotionFilters.keyword.trim() || undefined }) });
+    const result = await api.get<any, any[]>("/admin/mall/promotion-codes", { params: currentMallParams({ enabled: promotionFilters.enabled || undefined, keyword: promotionFilters.keyword.trim() || undefined }) });
+    if (sequence !== promotionLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    if (!Array.isArray(result)) throw new Error("推广码响应格式无效");
+    promotionCodes.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载推广码失败");
+    if (sequence !== promotionLoadSequence || !merchantContextMatches(merchantId, tenantId)) return;
+    promotionError.value = requestErrorText(error, "加载推广码失败");
   } finally {
-    promotionLoading.value = false;
+    if (sequence === promotionLoadSequence) promotionLoading.value = false;
   }
 }
 function reload() {
@@ -1851,12 +2395,19 @@ async function exportCommissionPromoters() {
   }
 }
 async function closeExpiredOrders() {
+  if (!canManageOrders.value) return ElMessage.error("当前账号无商城订单处理权限");
   if (!requireOpenMerchant("清理超时订单")) return;
   try {
     await ElMessageBox.confirm("系统会扫描超过配置时间仍待支付/待确认的商城订单，自动关闭并释放库存和优惠券占用。确认立即执行一次？", "清理超时订单", { type: "warning", confirmButtonText: "立即清理", cancelButtonText: "取消" });
     closingExpired.value = true;
     const result = await api.post<any, any>("/admin/mall/orders/close-expired");
-    ElMessage.success(`清理完成：检查 ${result.checkedCount || 0} 单，关闭 ${result.closedCount || 0} 单`);
+    const summary = `共 ${result.batchCount || 0} 批，检查 ${result.checkedCount || 0} 单，关闭 ${result.closedCount || 0} 单，并发跳过 ${result.skippedConcurrentCount || 0} 单`;
+    if (Number(result.failedCount || 0) > 0 || result.hasMore) {
+      const failedOrders = (result.failures || []).map((item: any) => item.orderNo).filter(Boolean).join("、");
+      ElMessage.error(`清理未完全收口：${summary}，失败 ${result.failedCount || 0} 单${failedOrders ? `（${failedOrders}）` : ""}${result.hasMore ? "，仍有后续批次" : ""}，请查看操作日志后重试`);
+    } else {
+      ElMessage.success(`清理完成：${summary}`);
+    }
     await reload();
   } catch (error: any) {
     if (error === "cancel") return;
@@ -1866,6 +2417,7 @@ async function closeExpiredOrders() {
   }
 }
 async function failExpiredGroupBuys() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireOpenMerchant("处理未成团拼团")) return;
   try {
     await ElMessageBox.confirm("系统会扫描已过结束时间但仍未成团的拼团队伍。余额支付订单会自动退款并回补库存；其他支付方式会标记未成团并保留人工处理。确认立即执行一次？", "处理未成团拼团", { type: "warning", confirmButtonText: "立即处理", cancelButtonText: "取消" });
@@ -1882,6 +2434,7 @@ async function failExpiredGroupBuys() {
   }
 }
 async function completeExpiredShippedOrders() {
+  if (!canManageOrders.value) return ElMessage.error("当前账号无商城订单处理权限");
   if (!requireOpenMerchant("自动完成已发货订单")) return;
   try {
     await ElMessageBox.confirm("系统会扫描超过配置天数仍未确认收货的已发货订单，自动标记为已完成。售后中的订单不会被处理。确认立即执行一次？", "自动完成已发货订单", { type: "warning", confirmButtonText: "立即执行", cancelButtonText: "取消" });
@@ -1896,21 +2449,55 @@ async function completeExpiredShippedOrders() {
     completingShipped.value = false;
   }
 }
-function refreshCurrentOrder(id: number) {
-  const next = orders.value.find((item) => item.id === id);
-  if (!next) return;
-  currentOrder.value = next;
-  loadCheckoutGroupOrders(next);
+async function refreshCurrentOrder(id: number) {
+  if (!detailVisible.value || Number(detailTargetRow.value?.id || 0) !== Number(id)) return;
+  const next = orders.value.find((item) => item.id === id) || detailTargetRow.value;
+  if (next) await loadOrderDetail(next);
 }
-function openDetail(row: any) {
-  currentOrder.value = row;
+function currentTenantParams(extra: Record<string, any> = {}) {
+  return {
+    tenantId: isPlatformAdmin() ? filters.tenantId || selectedMerchant.value?.tenant?.id : undefined,
+    ...extra
+  };
+}
+async function loadOrderDetail(row: any) {
+  const orderId = Number(row?.id || 0);
+  if (!orderId) return;
+  const sequence = ++detailLoadSequence;
+  detailTargetRow.value = row;
   detailVisible.value = true;
-  loadCheckoutGroupOrders(row);
+  detailLoading.value = true;
+  detailError.value = "";
+  checkoutGroupError.value = "";
+  currentOrder.value = null;
+  checkoutGroupOrders.value = [];
+  checkoutGroupLoadSequence += 1;
+  try {
+    const result = await api.get<any, any>(`/admin/mall/orders/${orderId}`);
+    if (sequence !== detailLoadSequence || !detailVisible.value || Number(detailTargetRow.value?.id || 0) !== orderId) return;
+    if (!result || typeof result !== "object" || Number(result.id || 0) !== orderId) throw new Error("商城订单详情响应格式无效");
+    currentOrder.value = result;
+    await loadCheckoutGroupOrders(result);
+  } catch (error: any) {
+    if (sequence !== detailLoadSequence || !detailVisible.value || Number(detailTargetRow.value?.id || 0) !== orderId) return;
+    detailError.value = requestErrorText(error, "加载商城订单详情失败");
+  } finally {
+    if (sequence === detailLoadSequence) detailLoading.value = false;
+  }
+}
+async function openDetail(row: any) {
+  await loadOrderDetail(row);
+}
+async function retryCurrentOrderDetail() {
+  if (detailTargetRow.value) await loadOrderDetail(detailTargetRow.value);
 }
 async function loadCheckoutGroupOrders(row: any) {
+  const orderId = Number(row?.id || 0);
   const groupNo = row?.checkoutGroup?.groupNo;
+  const sequence = ++checkoutGroupLoadSequence;
   checkoutGroupOrders.value = [];
-  if (!groupNo) return;
+  checkoutGroupError.value = "";
+  if (!groupNo || !orderId) return;
   checkoutGroupLoading.value = true;
   try {
     const params = {
@@ -1921,16 +2508,18 @@ async function loadCheckoutGroupOrders(row: any) {
       pageSize: 100
     };
     const result = await api.get<any, any>("/admin/mall/orders", { params });
-    checkoutGroupOrders.value = result.items || [];
+    if (sequence !== checkoutGroupLoadSequence || !detailVisible.value || Number(currentOrder.value?.id || 0) !== orderId || currentOrder.value?.checkoutGroup?.groupNo !== groupNo) return;
+    if (!result || !Array.isArray(result.items)) throw new Error("跨店子订单响应格式无效");
+    checkoutGroupOrders.value = result.items;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载跨店拆单失败");
+    if (sequence !== checkoutGroupLoadSequence || !detailVisible.value || Number(currentOrder.value?.id || 0) !== orderId || currentOrder.value?.checkoutGroup?.groupNo !== groupNo) return;
+    checkoutGroupError.value = requestErrorText(error, "加载跨店拆单失败");
   } finally {
-    checkoutGroupLoading.value = false;
+    if (sequence === checkoutGroupLoadSequence) checkoutGroupLoading.value = false;
   }
 }
-function selectCheckoutGroupOrder(row: any) {
-  currentOrder.value = row;
-  loadCheckoutGroupOrders(row);
+async function selectCheckoutGroupOrder(row: any) {
+  await loadOrderDetail(row);
 }
 function relatedOrderIdentity(row: any) {
   return row?.order?.id || row?.order?.orderNo || row?.orderNo || "";
@@ -1967,6 +2556,7 @@ function openRefundOrder(row: any) {
   openRelatedOrder(row);
 }
 async function confirmOffline(row: any) {
+  if (!canManageOrders.value) return ElMessage.error("当前账号无商城订单处理权限");
   try {
     await ElMessageBox.confirm(`确认商城订单 ${row.orderNo} 已线下收款？`, "确认收款", { type: "warning" });
     await api.post(`/admin/mall/orders/${row.id}/confirm-offline-payment`);
@@ -1979,6 +2569,7 @@ async function confirmOffline(row: any) {
   }
 }
 async function closeOrder(row: any) {
+  if (!canManageOrders.value) return ElMessage.error("当前账号无商城订单处理权限");
   try {
     const result = await ElMessageBox.prompt("请输入关闭原因，关闭后会释放已锁定库存，订单不可继续支付。", `关闭订单 ${row.orderNo}`, { inputValue: "后台确认关闭", confirmButtonText: "确认关闭", cancelButtonText: "取消", inputValidator: (value) => Boolean(String(value || "").trim()) || "请填写关闭原因" });
     await api.post(`/admin/mall/orders/${row.id}/close`, { reason: result.value?.trim() || "后台确认关闭" });
@@ -1990,36 +2581,132 @@ async function closeOrder(row: any) {
     ElMessage.error(error.message || "关闭失败");
   }
 }
-function openShip(row: any) {
-  currentOrder.value = row;
-  Object.assign(shipForm, { expressCompany: row.expressCompany || "", expressNo: row.expressNo || "", remark: "" });
+async function openShip(row: any) {
+  if (!canManageOrders.value) return ElMessage.error("当前账号无商城订单处理权限");
+  const orderId = Number(row?.id || 0);
+  if (!orderId) return ElMessage.error("发货订单标识无效");
+  const sequence = ++shipLoadSequence;
+  shipTargetRow.value = row;
+  shipOrderTarget.value = null;
+  shipError.value = "";
+  shipLogisticsError.value = "";
+  shipLogisticsCompanies.value = [];
+  Object.assign(shipForm, { shipmentId: null, businessKey: "", expressCompany: "", expressNo: "", remark: "", reason: "", items: [] });
   shipDialogVisible.value = true;
-  loadLogisticsCompanies();
+  shipLoading.value = true;
+  try {
+    const detail = await api.get<any, any>(`/admin/mall/orders/${orderId}`);
+    if (sequence !== shipLoadSequence || !shipDialogVisible.value || Number(shipTargetRow.value?.id || 0) !== orderId) return;
+    if (!detail || typeof detail !== "object" || Number(detail.id || 0) !== orderId || !Array.isArray(detail.items)) throw new Error("发货订单详情响应格式无效");
+    shipOrderTarget.value = detail;
+    Object.assign(shipForm, { shipmentId: null, businessKey: createShipmentBusinessKey(detail.id), expressCompany: "", expressNo: "", remark: "", reason: "", items: detail.items.map((item: any) => {
+      const shippedQuantity = orderItemShippedQuantity(detail, item.id);
+      const totalQuantity = Number(item.quantity || 0);
+      const remainingQuantity = Math.max(totalQuantity - shippedQuantity, 0);
+      return { orderItemId: item.id, productTitle: item.productTitle, skuName: item.skuName, shippedQuantity, totalQuantity, remainingQuantity, quantity: remainingQuantity };
+    }).filter((item: any) => item.remainingQuantity > 0) });
+    await loadShipLogisticsCompanies(detail);
+  } catch (error: any) {
+    if (sequence !== shipLoadSequence || !shipDialogVisible.value || Number(shipTargetRow.value?.id || 0) !== orderId) return;
+    shipError.value = requestErrorText(error, "加载发货订单失败");
+  } finally {
+    if (sequence === shipLoadSequence) shipLoading.value = false;
+  }
+}
+function openEditShipment(shipment: any) {
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流管理权限");
+  if (!currentOrder.value?.id) return ElMessage.error("当前订单详情不可用，请重新加载后再修改物流");
+  shipLoadSequence += 1;
+  shipTargetRow.value = currentOrder.value;
+  shipOrderTarget.value = currentOrder.value;
+  shipError.value = "";
+  shipLogisticsError.value = "";
+  shipLogisticsCompanies.value = [];
+  Object.assign(shipForm, { shipmentId: shipment.id, businessKey: "", expressCompany: shipment.expressCompany || "", expressNo: shipment.expressNo || "", remark: "", reason: "", items: [] });
+  shipDialogVisible.value = true;
+  loadShipLogisticsCompanies(currentOrder.value);
 }
 async function shipOrder() {
+  if (!canManageOrders.value && !shipForm.shipmentId) return ElMessage.error("当前账号无商城订单处理权限");
+  if (!canManageLogistics.value && shipForm.shipmentId) return ElMessage.error("当前账号无商城物流管理权限");
   if (!shipForm.expressNo.trim()) return ElMessage.error("请输入快递单号");
+  const orderId = Number(shipOrderTarget.value?.id || 0);
+  if (!orderId || Number(shipTargetRow.value?.id || 0) !== orderId) return ElMessage.error("发货订单上下文已失效，请关闭弹窗后重新打开");
+  if (shipError.value || shipLogisticsError.value) return ElMessage.error("发货上下文尚未恢复，请先重新加载失败分区");
+  if (shipForm.shipmentId && !shipForm.reason.trim()) return ElMessage.error("请填写修改物流单号的原因");
+  const selectedItems = (shipForm.items || []).filter((item: any) => Number(item.quantity || 0) > 0).map((item: any) => ({ orderItemId: item.orderItemId, quantity: Number(item.quantity) }));
+  if (!shipForm.shipmentId && !selectedItems.length) return ElMessage.error("请至少选择一个商品数量发货");
   try {
-    await api.post(`/admin/mall/orders/${currentOrder.value.id}/ship`, shipForm);
-    ElMessage.success("已发货");
+    if (shipForm.shipmentId) await api.patch(`/admin/mall/orders/${orderId}/shipments/${shipForm.shipmentId}`, { expressCompany: shipForm.expressCompany, expressNo: shipForm.expressNo, reason: shipForm.reason });
+    else await api.post(`/admin/mall/orders/${orderId}/ship`, { businessKey: shipForm.businessKey, expressCompany: shipForm.expressCompany, expressNo: shipForm.expressNo, remark: shipForm.remark, items: selectedItems });
+    ElMessage.success(shipForm.shipmentId ? "物流单号已修改" : "包裹已创建");
     shipDialogVisible.value = false;
     await loadOrders();
-    refreshCurrentOrder(currentOrder.value.id);
+    refreshCurrentOrder(orderId);
   } catch (error: any) {
     ElMessage.error(error.message || "发货失败");
   }
 }
-async function approveRefund(row: any) {
+async function syncShipmentTracking(shipment: any) {
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流管理权限");
   try {
-    await ElMessageBox.confirm(`确认通过售后 ${row.refundNo}？余额支付订单会退回余额，库存会回补。`, "通过售后", { type: "warning" });
-    await api.post(`/admin/mall/refunds/${row.id}/approve`, { remark: "后台审核通过" });
-    ElMessage.success("售后已通过");
+    const result = await api.post<any, any>(`/admin/mall/orders/${currentOrder.value.id}/shipments/${shipment.id}/sync-tracking`);
+    ElMessage.success(`物流轨迹已同步，新增 ${result.addedCount || 0} 条`);
+    currentOrder.value = result.order;
+    await loadOrders();
+  } catch (error: any) {
+    ElMessage.error(error.message || "同步物流轨迹失败");
+  }
+}
+async function approveRefund(row: any) {
+  if (!canManageRefunds.value) return ElMessage.error("当前账号无商城售后处理权限");
+  try {
+    let returnAddress: any = undefined;
+    if (["return_refund", "exchange"].includes(row.type)) {
+      const result = await ElMessageBox.prompt("请输入退货地址，格式：收件人|电话|省|市|区|详细地址", row.type === "exchange" ? "同意换货" : "同意退货退款", { inputValue: "售后收货人|||||", inputValidator: (value) => String(value || "").split("|").length >= 6 || "请按指定格式填写完整地址" });
+      const [receiverName, receiverPhone, province, city, district, detail] = String(result.value || "").split("|").map((item) => item.trim());
+      returnAddress = { receiverName, receiverPhone, province, city, district, detail };
+    } else {
+      await ElMessageBox.confirm(`确认通过售后 ${row.refundNo}？系统会按支付方式发起退款，并仅回补符合条件的商品库存。`, "通过售后", { type: "warning" });
+    }
+    await api.post(`/admin/mall/refunds/${row.id}/approve`, { remark: row.status === "platform_intervening" ? "平台介入裁决通过" : "后台审核通过", responsibility: row.status === "platform_intervening" ? "merchant" : "undetermined", returnAddress });
+    ElMessage.success(row.type === "refund_only" ? "退款已进入处理" : "已同意售后，等待买家寄回");
     reload();
   } catch (error: any) {
     if (error === "cancel") return;
     ElMessage.error(error.message || "处理失败");
   }
 }
+async function receiveRefundReturn(row: any) {
+  if (!canManageRefunds.value) return ElMessage.error("当前账号无商城售后处理权限");
+  try {
+    const result = await ElMessageBox.prompt(`确认已收到售后 ${row.refundNo} 的退货商品？退货退款将进入原路退款，换货将进入待发货。`, "确认退货收货", { inputValue: "已核对商品和数量，确认收货", inputValidator: (value) => Boolean(String(value || "").trim()) || "请填写验收说明" });
+    await api.post(`/admin/mall/refunds/${row.id}/receive-return`, { remark: result.value, responsibility: "merchant" });
+    ElMessage.success(row.type === "exchange" ? "已确认收货，请寄出换货商品" : "已确认收货，退款已进入处理");
+    reload();
+  } catch (error: any) { if (error !== "cancel") ElMessage.error(error.message || "确认收货失败"); }
+}
+async function shipRefundExchange(row: any) {
+  if (!canManageRefunds.value) return ElMessage.error("当前账号无商城售后处理权限");
+  try {
+    const result = await ElMessageBox.prompt("请输入换货物流，格式：快递公司|物流单号", `寄出换货商品 ${row.refundNo}`, { inputValidator: (value) => String(value || "").split("|").filter(Boolean).length >= 2 || "请填写快递公司和物流单号" });
+    const [expressCompany, expressNo] = String(result.value || "").split("|").map((item) => item.trim());
+    await api.post(`/admin/mall/refunds/${row.id}/ship-exchange`, { expressCompany, expressNo, businessKey: `exchange:${row.id}`, remark: "售后换货发货" });
+    ElMessage.success("换货商品已寄出");
+    reload();
+  } catch (error: any) { if (error !== "cancel") ElMessage.error(error.message || "换货发货失败"); }
+}
+async function addRefundMessage(row: any) {
+  if (!canManageRefunds.value) return ElMessage.error("当前账号无商城售后处理权限");
+  try {
+    const result = await ElMessageBox.prompt("请输入要发送给买家的协商说明或补充材料说明。", `售后协商 ${row.refundNo}`, { inputValidator: (value) => Boolean(String(value || "").trim()) || "请填写协商内容" });
+    await api.post(`/admin/mall/refunds/${row.id}/messages`, { content: result.value, images: [] });
+    ElMessage.success("协商记录已发送");
+    reload();
+  } catch (error: any) { if (error !== "cancel") ElMessage.error(error.message || "发送失败"); }
+}
 async function retryRefund(row: any) {
+  if (!canManageRefunds.value) return ElMessage.error("当前账号无商城售后处理权限");
   try {
     const result = await ElMessageBox.prompt(`确认重试售后 ${row.refundNo} 的退款？系统会重新调用当前退款通道并写入退款日志。`, "重试商城退款", { inputValue: "财务重试退款", confirmButtonText: "确认重试", cancelButtonText: "取消" });
     await api.post(`/admin/mall/refunds/${row.id}/retry`, { remark: result.value || "财务重试退款" });
@@ -2031,6 +2718,7 @@ async function retryRefund(row: any) {
   }
 }
 async function rejectRefund(row: any) {
+  if (!canManageRefunds.value) return ElMessage.error("当前账号无商城售后处理权限");
   try {
     const result = await ElMessageBox.prompt("请输入拒绝原因，方便客服回访用户。", "拒绝售后", { inputValue: "后台审核拒绝", confirmButtonText: "确认拒绝", cancelButtonText: "取消" });
     await api.post(`/admin/mall/refunds/${row.id}/reject`, { remark: result.value || "后台审核拒绝" });
@@ -2042,12 +2730,14 @@ async function rejectRefund(row: any) {
   }
 }
 function openLogisticsDialog() {
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流管理权限");
   if (!requireMerchantSelection("配置物流")) return;
   resetLogisticsForm();
   logisticsDialogVisible.value = true;
   loadLogisticsCompanies();
 }
 function openCouponDialog() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置优惠券")) return;
   resetCouponForm();
   couponDialogVisible.value = true;
@@ -2056,6 +2746,7 @@ function openCouponDialog() {
   loadCouponUsages();
 }
 function openFlashSaleDialog() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置秒杀活动")) return;
   resetFlashSaleForm();
   flashSaleDialogVisible.value = true;
@@ -2063,6 +2754,7 @@ function openFlashSaleDialog() {
   loadFlashSales();
 }
 function openGroupBuyDialog() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置拼团活动")) return;
   resetGroupBuyForm();
   groupBuyDialogVisible.value = true;
@@ -2074,6 +2766,7 @@ function openGroupBuyRecordDialog() {
   loadGroupBuyRecords();
 }
 function openPromotionDialog() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置推广码")) return;
   resetPromotionForm();
   promotionDialogVisible.value = true;
@@ -2084,7 +2777,7 @@ function resetLogisticsForm() {
   Object.assign(logisticsForm, { id: null, name: "", code: "", servicePhone: "", trackingUrl: "", sortOrder: 0, enabled: true });
 }
 function resetCouponForm() {
-  Object.assign(couponForm, { id: null, code: "", name: "", minAmount: 0, discountAmount: 0, scope: "all", scopeCategoryId: null, scopeProductId: null, usageLimit: 0, perUserLimit: 0, startsAt: "", endsAt: "", enabled: true });
+  Object.assign(couponForm, { id: null, code: "", name: "", issuerScope: "merchant", refundReleasePolicy: "full_refund", minAmount: 0, discountAmount: 0, scope: "all", scopeCategoryId: null, scopeProductId: null, issuanceLimit: 0, claimedCount: 0, usageLimit: 0, perUserLimit: 0, startsAt: "", endsAt: "", enabled: true });
 }
 function resetFlashSaleForm() {
   Object.assign(flashSaleForm, { id: null, title: "", productId: null, skuId: null, salePrice: 0, saleStock: 1, perUserLimit: 1, startsAt: "", endsAt: "", status: "draft", sortOrder: 0 });
@@ -2093,7 +2786,7 @@ function resetGroupBuyForm() {
   Object.assign(groupBuyForm, { id: null, title: "", productId: null, skuId: null, groupPrice: 0, minPeople: 2, groupStock: 1, perUserLimit: 1, startsAt: "", endsAt: "", status: "draft", sortOrder: 0 });
 }
 function resetPromotionForm() {
-  Object.assign(promotionForm, { id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, enabled: true, remark: "" });
+  Object.assign(promotionForm, { id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, startsAt: "", endsAt: "", enabled: true, remark: "" });
 }
 function editLogisticsCompany(row: any) {
   if (!requireMerchantSelection("配置物流")) return;
@@ -2105,11 +2798,15 @@ function editCoupon(row: any) {
     id: row.id,
     code: row.code || "",
     name: row.name || "",
+    issuerScope: row.issuerScope === "platform" ? "platform" : "merchant",
+    refundReleasePolicy: row.refundReleasePolicy === "never" ? "never" : "full_refund",
     minAmount: Number(row.minAmount || 0),
     discountAmount: Number(row.discountAmount || 0),
     scope: row.scope || "all",
     scopeCategoryId: row.scopeCategoryId || null,
     scopeProductId: row.scopeProductId || null,
+    issuanceLimit: Number(row.issuanceLimit || 0),
+    claimedCount: Number(row.claimedCount || 0),
     usageLimit: Number(row.usageLimit || 0),
     perUserLimit: Number(row.perUserLimit || 0),
     startsAt: row.startsAt ? String(row.startsAt).slice(0, 19).replace("T", " ") : "",
@@ -2159,11 +2856,14 @@ function editPromotionCode(row: any) {
     commissionRatePercent: Number(row.commissionRate || 0) * 100,
     promoterUserId: row.promoterUser?.id || null,
     agentId: row.agent?.id || null,
+    startsAt: row.startsAt ? String(row.startsAt).slice(0, 19).replace("T", " ") : "",
+    endsAt: row.endsAt ? String(row.endsAt).slice(0, 19).replace("T", " ") : "",
     enabled: row.enabled,
     remark: row.remark || ""
   });
 }
 async function saveLogisticsCompany() {
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流管理权限");
   if (!requireMerchantSelection("配置物流")) return;
   if (!logisticsForm.name?.trim()) return ElMessage.error("请输入物流公司名称");
   logisticsSaving.value = true;
@@ -2189,23 +2889,28 @@ async function saveLogisticsCompany() {
   }
 }
 async function saveCoupon() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置优惠券")) return;
   if (!couponForm.code?.trim()) return ElMessage.error("请输入优惠券码");
   if (!couponForm.name?.trim()) return ElMessage.error("请输入优惠券名称");
   if (Number(couponForm.discountAmount || 0) <= 0) return ElMessage.error("优惠金额必须大于 0");
   if (couponForm.scope === "category" && !couponForm.scopeCategoryId) return ElMessage.error("请选择适用分类");
   if (couponForm.scope === "product" && !couponForm.scopeProductId) return ElMessage.error("请选择适用商品");
+  if (!validOptionalTimeRange(couponForm.startsAt, couponForm.endsAt, "优惠券")) return;
   couponSaving.value = true;
   try {
     const payload = {
       code: couponForm.code.trim(),
       name: couponForm.name.trim(),
       ...currentMallParams(),
+      issuerScope: couponForm.issuerScope,
+      refundReleasePolicy: couponForm.refundReleasePolicy,
       minAmount: Number(couponForm.minAmount || 0),
       discountAmount: Number(couponForm.discountAmount || 0),
       scope: couponForm.scope,
       scopeCategoryId: couponForm.scope === "category" ? couponForm.scopeCategoryId : null,
       scopeProductId: couponForm.scope === "product" ? couponForm.scopeProductId : null,
+      issuanceLimit: Number(couponForm.issuanceLimit || 0),
       usageLimit: Number(couponForm.usageLimit || 0),
       perUserLimit: Number(couponForm.perUserLimit || 0),
       startsAt: couponForm.startsAt || null,
@@ -2224,6 +2929,7 @@ async function saveCoupon() {
   }
 }
 async function saveFlashSale() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置秒杀活动")) return;
   if (!flashSaleForm.title?.trim()) return ElMessage.error("请输入秒杀标题");
   if (!flashSaleForm.productId || !flashSaleForm.skuId) return ElMessage.error("请选择秒杀商品和规格");
@@ -2257,6 +2963,7 @@ async function saveFlashSale() {
   }
 }
 async function saveGroupBuy() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置拼团活动")) return;
   if (!groupBuyForm.title?.trim()) return ElMessage.error("请输入拼团标题");
   if (!groupBuyForm.productId || !groupBuyForm.skuId) return ElMessage.error("请选择拼团商品和规格");
@@ -2292,9 +2999,11 @@ async function saveGroupBuy() {
   }
 }
 async function savePromotionCode() {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置推广码")) return;
   if (!promotionForm.code?.trim()) return ElMessage.error("请输入推广码");
   if (!promotionForm.name?.trim()) return ElMessage.error("请输入推广码名称");
+  if (!validOptionalTimeRange(promotionForm.startsAt, promotionForm.endsAt, "推广码")) return;
   promotionSaving.value = true;
   try {
     const payload = {
@@ -2304,6 +3013,8 @@ async function savePromotionCode() {
       promoterUserId: promotionForm.promoterUserId || null,
       agentId: promotionForm.agentId || null,
       commissionRate: Number(promotionForm.commissionRatePercent || 0) / 100,
+      startsAt: promotionForm.startsAt || null,
+      endsAt: promotionForm.endsAt || null,
       enabled: promotionForm.enabled,
       remark: promotionForm.remark?.trim() || undefined
     };
@@ -2319,6 +3030,7 @@ async function savePromotionCode() {
   }
 }
 async function toggleLogisticsCompany(row: any) {
+  if (!canManageLogistics.value) return ElMessage.error("当前账号无商城物流管理权限");
   if (!requireMerchantSelection("配置物流")) return;
   try {
     await api.patch(`/admin/mall/logistics-companies/${row.id}`, {
@@ -2338,6 +3050,7 @@ async function toggleLogisticsCompany(row: any) {
   }
 }
 async function toggleCoupon(row: any) {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置优惠券")) return;
   try {
     await api.patch(`/admin/mall/coupons/${row.id}`, {
@@ -2345,11 +3058,14 @@ async function toggleCoupon(row: any) {
       name: row.name,
       tenantId: isPlatformAdmin() ? row.tenant?.id || filters.tenantId : undefined,
       merchantId: row.merchant?.id || filters.merchantId || undefined,
+      issuerScope: row.issuerScope === "platform" ? "platform" : "merchant",
+      refundReleasePolicy: row.refundReleasePolicy === "never" ? "never" : "full_refund",
       minAmount: Number(row.minAmount || 0),
       discountAmount: Number(row.discountAmount || 0),
       scope: row.scope || "all",
       scopeCategoryId: row.scopeCategoryId || null,
       scopeProductId: row.scopeProductId || null,
+      issuanceLimit: Number(row.issuanceLimit || 0),
       usageLimit: Number(row.usageLimit || 0),
       perUserLimit: Number(row.perUserLimit || 0),
       startsAt: row.startsAt || null,
@@ -2363,6 +3079,7 @@ async function toggleCoupon(row: any) {
   }
 }
 async function toggleFlashSale(row: any) {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置秒杀活动")) return;
   try {
     await api.patch(`/admin/mall/flash-sales/${row.id}`, {
@@ -2386,6 +3103,7 @@ async function toggleFlashSale(row: any) {
   }
 }
 async function toggleGroupBuy(row: any) {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置拼团活动")) return;
   try {
     await api.patch(`/admin/mall/group-buys/${row.id}`, {
@@ -2410,6 +3128,7 @@ async function toggleGroupBuy(row: any) {
   }
 }
 async function togglePromotionCode(row: any) {
+  if (!canManageProducts.value) return ElMessage.error("当前账号无商城营销管理权限");
   if (!requireMerchantSelection("配置推广码")) return;
   try {
     await api.patch(`/admin/mall/promotion-codes/${row.id}`, {
@@ -2420,6 +3139,8 @@ async function togglePromotionCode(row: any) {
       promoterUserId: row.promoterUser?.id || null,
       agentId: row.agent?.id || null,
       commissionRate: Number(row.commissionRate || 0),
+      startsAt: row.startsAt || null,
+      endsAt: row.endsAt || null,
       enabled: !row.enabled,
       remark: row.remark || undefined
     });
@@ -2430,7 +3151,8 @@ async function togglePromotionCode(row: any) {
   }
 }
 onMounted(async () => {
-  await loadTenants();
+  const tenantsReady = await loadTenants();
+  if (!tenantsReady) return;
   const merchantScopeReady = await loadMerchants();
   if (!merchantScopeReady) return;
   reload();
@@ -2444,6 +3166,98 @@ watch(() => [route.path, route.query.panel, route.query.tenantId, route.query.me
   reload();
   await openRoutePanel();
 });
+watch(detailVisible, (visible) => {
+  if (visible) return;
+  detailLoadSequence += 1;
+  checkoutGroupLoadSequence += 1;
+  detailLoading.value = false;
+  checkoutGroupLoading.value = false;
+  detailError.value = "";
+  checkoutGroupError.value = "";
+  detailTargetRow.value = null;
+  currentOrder.value = null;
+  checkoutGroupOrders.value = [];
+});
+watch(shipDialogVisible, (visible) => {
+  if (visible) return;
+  shipLoadSequence += 1;
+  shipLogisticsLoadSequence += 1;
+  shipLoading.value = false;
+  shipLogisticsLoading.value = false;
+  shipError.value = "";
+  shipLogisticsError.value = "";
+  shipTargetRow.value = null;
+  shipOrderTarget.value = null;
+  shipLogisticsCompanies.value = [];
+});
+watch(logisticsDialogVisible, (visible) => {
+  if (visible) return;
+  logisticsLoadSequence += 1;
+  logisticsLoading.value = false;
+  logisticsError.value = "";
+  logisticsCompanies.value = [];
+  resetLogisticsForm();
+});
+watch(couponDialogVisible, (visible) => {
+  if (visible) return;
+  couponOptionsLoadSequence += 1;
+  couponLoadSequence += 1;
+  couponUsageLoadSequence += 1;
+  couponLoading.value = false;
+  couponUsageLoading.value = false;
+  couponOptionsError.value = "";
+  couponError.value = "";
+  couponUsageError.value = "";
+  coupons.value = [];
+  couponUsages.value = [];
+  couponCategories.value = [];
+  couponProducts.value = [];
+  platformCouponCategories.value = [];
+  platformCouponProducts.value = [];
+  resetCouponForm();
+});
+watch(flashSaleDialogVisible, (visible) => {
+  if (visible) return;
+  couponOptionsLoadSequence += 1;
+  flashSaleLoadSequence += 1;
+  flashSaleLoading.value = false;
+  couponOptionsError.value = "";
+  flashSaleError.value = "";
+  couponProducts.value = [];
+  platformCouponProducts.value = [];
+  flashSales.value = [];
+  resetFlashSaleForm();
+});
+watch(groupBuyDialogVisible, (visible) => {
+  if (visible) return;
+  couponOptionsLoadSequence += 1;
+  groupBuyLoadSequence += 1;
+  groupBuyLoading.value = false;
+  couponOptionsError.value = "";
+  groupBuyError.value = "";
+  couponProducts.value = [];
+  platformCouponProducts.value = [];
+  groupBuys.value = [];
+  resetGroupBuyForm();
+});
+watch(groupBuyRecordDialogVisible, (visible) => {
+  if (visible) return;
+  groupBuyRecordLoadSequence += 1;
+  groupBuyRecordLoading.value = false;
+  groupBuyRecordError.value = "";
+  groupBuyRecords.value = [];
+});
+watch(promotionDialogVisible, (visible) => {
+  if (visible) return;
+  agentLoadSequence += 1;
+  promotionLoadSequence += 1;
+  promotionLoading.value = false;
+  agentError.value = "";
+  promotionError.value = "";
+  agents.value = [];
+  promotionCodes.value = [];
+  resetPromotionForm();
+});
 </script>
 
 <style scoped>
@@ -2453,6 +3267,8 @@ watch(() => [route.path, route.query.panel, route.query.tenantId, route.query.me
 .finance-note { font-size: 12px; color: #94a3b8 !important; }
 .scope-hint { margin-bottom: 16px; }
 .deep-link-alert { margin-bottom: 16px; }
+.page-error { margin-bottom: 14px; overflow-wrap: anywhere; }
+.page-error p { margin: 0 0 8px; line-height: 1.6; }
 .merchant-disabled-alert { margin-bottom: 16px; }
 .merchant-context-card { margin-bottom: 16px; border-color: #dbeafe; background: linear-gradient(135deg, #eff6ff, #fff); }
 .merchant-context-card :deep(.el-card__body) { display: flex; justify-content: space-between; align-items: center; gap: 14px; flex-wrap: wrap; }
@@ -2489,6 +3305,8 @@ watch(() => [route.path, route.query.panel, route.query.tenantId, route.query.me
 .item-line { line-height: 1.7; color: #334155; }
 .action-tip { color: #475569; line-height: 1.5; }
 .refund-toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-bottom: 12px; }
+.after-sale-detail { padding: 12px 18px 18px; display: grid; gap: 12px; background: #f8fafc; }
+.refund-message-timeline { padding: 8px 12px 0; background: #fff; border: 1px solid #e5e7eb; }
 .payment-log-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; }
 .card-header-line { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .commission-summary { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; margin-bottom: 10px; }

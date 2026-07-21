@@ -1,7 +1,7 @@
 <template>
   <view class="container user-subpage has-custom-nav">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">‹ 返回</view>
+      <view class="nav-back" role="button" aria-label="返回" @click="goBack">返回</view>
       <text class="nav-title">我的收藏</text>
       <view class="nav-placeholder"></view>
     </view>
@@ -10,8 +10,13 @@
       <view class="hero-title">留住想看的内容</view>
       <view class="hero-desc">把感兴趣的内容先收藏，方便稍后继续了解。</view>
     </view>
-    <view class="course-grid">
-      <view v-for="c in favorites" :key="c.id" class="course-card" @click="goDetail(c)">
+    <view v-if="loading" class="state-card" aria-live="polite">收藏内容加载中...</view>
+    <view v-else-if="loadError" class="state-card error-state" aria-live="assertive">
+      <text>{{ loadError }}</text>
+      <view class="button secondary" role="button" aria-label="重新加载收藏" @click="loadFavorites">重新加载</view>
+    </view>
+    <view v-else-if="favorites.length" class="course-grid">
+      <view v-for="c in favorites" :key="c.id" class="course-card" role="button" :aria-label="`查看收藏内容${c.title}`" @click="goDetail(c)">
         <view class="course-cover" :style="{background:c.color}"><text class="course-icon">{{ c.icon }}</text></view>
         <view class="course-info">
           <text class="course-title">{{ c.title }}</text>
@@ -20,7 +25,7 @@
         </view>
       </view>
     </view>
-    <view v-if="!favorites.length" class="empty-card">
+    <view v-else class="empty-card">
       <view class="empty-icon">藏</view>
       <view class="empty-title">暂无收藏</view>
       <view class="empty-desc">遇到喜欢的内容时，点收藏后会出现在这里。</view>
@@ -29,35 +34,56 @@
   </view>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import { normalizeCourse, priceText, type CourseCard } from "../../course-data";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import { reviewSafeText } from "../../review-safe-text";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 
 const favorites = ref<CourseCard[]>([]);
+const loading = ref(false);
+const loadError = ref("");
+const loadGuard = createTenantLoadGuard();
 
 async function loadFavorites() {
+  const token = loadGuard.begin();
+  loading.value = true;
+  loadError.value = "";
+  favorites.value = [];
   try {
     await ensureUser();
     const rows = await request<any[]>("/public/me/favorite-courses");
-    favorites.value = (Array.isArray(rows) ? rows : []).map(normalizeCourse);
-  } catch {
-    favorites.value = [];
+    if (loadGuard.isCurrent(token)) favorites.value = (Array.isArray(rows) ? rows : []).map(normalizeCourse);
+  } catch (error: any) {
+    if (loadGuard.isCurrent(token)) loadError.value = reviewSafeText(error?.message || "收藏内容加载失败");
+  } finally {
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
 function goBack() { uni.navigateBack(); }
 function goDetail(c:any) { uni.navigateTo({ url: withTenantCode("/pages/course/detail?id="+c.id) }); }
 
-onMounted(loadFavorites);
+onShow(async () => {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
+  await loadFavorites();
+});
 </script>
 <style scoped>
 .user-subpage {
   min-height: 100vh;
-  padding-bottom: 160rpx;
+  box-sizing:border-box;
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
   background:
     linear-gradient(180deg, #f7efe3 0%, #fbf7ef 40%, #f4eadc 100%);
 }
+.state-card { margin-top:22rpx; padding:34rpx; border:1rpx solid rgba(199,181,157,.58); border-radius:16rpx; background:#fff; text-align:center; line-height:1.6; }
+.state-card .button { margin:20rpx auto 0; }
+.error-state { color:#b42318; border-color:#f0b8b0; background:#fff4f2; }
 
 .custom-nav {
   display: flex;
@@ -205,5 +231,8 @@ onMounted(loadFavorites);
   color: #8f8172;
   font-size: 24rpx;
   line-height: 1.6;
+}
+@media (min-width: 900px) {
+  .user-subpage { max-width:760px; margin:0 auto; }
 }
 </style>

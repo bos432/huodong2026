@@ -24,6 +24,11 @@
       </view>
     </view>
 
+    <view v-if="activitiesLoading && !featuredActivities.length" class="activity-state" aria-live="polite">近期活动加载中...</view>
+    <view v-else-if="activitiesError" class="activity-state activity-error" role="alert" aria-live="assertive">
+      <text>{{ activitiesError }}</text>
+      <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载近期活动" @click="loadActivities">重试</button>
+    </view>
     <view v-if="featuredActivities.length" class="activity-preview-list">
       <view v-for="activity in featuredActivities" :key="activity.id" class="activity-preview-card" @click="goActivityDetail(activity)">
         <view class="activity-date">
@@ -51,43 +56,59 @@ import { onShow } from "@dcloudio/uni-app";
 import { applyTenantBootstrapDefault, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { resolveTenantByCurrentLocation } from "../../tenant-location";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { usePageDecoration } from "../../decoration";
+import { reviewSafeText } from "../../review-safe-text";
 
 const { tenant, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
 const lastLoadedTenantCode = ref("");
 const featuredActivities = ref<any[]>([]);
+const activitiesLoading = ref(false);
+const activitiesError = ref("");
+const loadedActivitiesTenantCode = ref("");
+const activityLoadGuard = createTenantLoadGuard();
 
 onShow(async () => {
-  loadPageTheme();
+  await loadPageTheme();
   const beforeTenantCode = getCurrentTenantCode();
   await applyTenantBootstrapDefault();
   await resolveTenantByCurrentLocation({ silent: true });
   const changedByLocation = getCurrentTenantCode() !== beforeTenantCode || getCurrentTenantCode() !== lastLoadedTenantCode.value;
-  await Promise.all([loadDecoration(), loadActivities()]);
+  await Promise.allSettled([loadDecoration(), loadActivities()]);
   lastLoadedTenantCode.value = getCurrentTenantCode();
   if (changedByLocation && beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
 });
 
 async function handleTenantChanged() {
-  loadPageTheme();
-  await Promise.all([loadDecoration(), loadActivities()]);
+  await loadPageTheme();
+  await Promise.allSettled([loadDecoration(), loadActivities()]);
   lastLoadedTenantCode.value = getCurrentTenantCode();
 }
 
 async function loadActivities() {
+  const loadToken = activityLoadGuard.begin();
+  if (loadedActivitiesTenantCode.value && loadedActivitiesTenantCode.value !== loadToken.tenantCode) featuredActivities.value = [];
+  activitiesLoading.value = true;
+  activitiesError.value = "";
   try {
     const result = await request<any>("/public/activities?page=1&pageSize=3&status=open&featured=true");
+    if (!activityLoadGuard.isCurrent(loadToken)) return;
     let items = Array.isArray(result) ? result : result?.items || [];
     if (!items.length) {
       const fallback = await request<any>("/public/activities?page=1&pageSize=3&status=open");
+      if (!activityLoadGuard.isCurrent(loadToken)) return;
       items = Array.isArray(fallback) ? fallback : fallback?.items || [];
     }
     featuredActivities.value = items.slice(0, 3);
-  } catch {
-    featuredActivities.value = [];
+    loadedActivitiesTenantCode.value = loadToken.tenantCode;
+  } catch (error: any) {
+    if (!activityLoadGuard.isCurrent(loadToken)) return;
+    activitiesError.value = reviewSafeText(error?.message || "近期活动加载失败");
+  } finally {
+    if (activityLoadGuard.isCurrent(loadToken)) activitiesLoading.value = false;
   }
 }
 
@@ -171,6 +192,11 @@ function formatActivityHour(value: string) {
   background: rgba(74, 107, 138, 0.08);
   border-radius: 20rpx;
 }
+
+.activity-state { display:grid; gap:12rpx; margin:0 0 18rpx; padding:22rpx 24rpx; border-radius:8px; background:#fff; color:#667085; font-size:25rpx; line-height:1.55; }
+.activity-error { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.activity-retry { width:max-content; min-height:60rpx; margin:0; padding:0 24rpx; border:0; border-radius:8rpx; background:rgba(74,107,138,.12); color:#4a6b8a; font-size:24rpx; font-weight:800; }
+.activity-retry::after { border:0; }
 
 .search-icon {
   color: #4A6B8A;

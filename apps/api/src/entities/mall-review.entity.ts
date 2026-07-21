@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from "typeorm";
 import { MallMerchant } from "./mall-merchant.entity";
 import { MallOrderItem } from "./mall-order-item.entity";
 import { MallOrder } from "./mall-order.entity";
@@ -7,9 +7,10 @@ import { MallSku } from "./mall-sku.entity";
 import { Tenant } from "./tenant.entity";
 import { User } from "./user.entity";
 
-export type MallReviewStatus = "pending" | "approved" | "rejected";
+export type MallReviewStatus = "pending" | "approved" | "rejected" | "hidden";
 
 @Entity("mall_reviews")
+@Unique("UQ_mall_reviews_order_item_user", ["orderItem", "user"])
 export class MallReview {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -43,6 +44,36 @@ export class MallReview {
 
   @Column({ type: "json", nullable: true })
   images!: string[] | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  appendContent!: string | null;
+
+  @Column({ type: "json", nullable: true })
+  appendImages!: string[] | null;
+
+  @Column({ type: "datetime", nullable: true })
+  appendedAt!: Date | null;
+
+  @Column({ type: "varchar", length: 24, nullable: true })
+  appendStatus!: "pending" | "approved" | "rejected" | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  appendReviewRemark!: string | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  appendReviewedBy!: string | null;
+
+  @Column({ type: "datetime", nullable: true })
+  appendReviewedAt!: Date | null;
+
+  @Column({ type: "int", default: 0 })
+  reportCount!: number;
+
+  @Column({ type: "datetime", nullable: true })
+  hiddenAt!: Date | null;
+
+  @Column({ type: "varchar", length: 255, nullable: true })
+  hiddenReason!: string | null;
 
   @Index()
   @Column({ type: "varchar", length: 24, default: "pending" })

@@ -1,0 +1,13 @@
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class SupportWorkOrders1783430000000 implements MigrationInterface {
+  name = "SupportWorkOrders1783430000000";
+  async up(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query("CREATE TABLE `support_work_orders` (`id` int NOT NULL AUTO_INCREMENT, `orderNo` varchar(40) NOT NULL, `tenantId` int NULL, `tenantScopeKey` varchar(32) NOT NULL DEFAULT 'platform', `userId` int NULL, `title` varchar(160) NOT NULL, `description` text NOT NULL, `category` varchar(40) NOT NULL DEFAULT 'consultation', `priority` varchar(20) NOT NULL DEFAULT 'normal', `status` varchar(30) NOT NULL DEFAULT 'open', `businessType` varchar(60) NULL, `businessId` varchar(100) NULL, `businessSnapshot` json NULL, `assigneeId` int NULL, `firstResponseAt` datetime NULL, `dueAt` datetime NULL, `resolvedAt` datetime NULL, `closedAt` datetime NULL, `resolution` varchar(500) NULL, `createdAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), `updatedAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6) ON UPDATE CURRENT_TIMESTAMP(6), UNIQUE INDEX `IDX_support_work_order_no` (`orderNo`), INDEX `IDX_support_work_order_status` (`tenantScopeKey`,`status`,`updatedAt`), INDEX `IDX_support_work_order_user` (`tenantScopeKey`,`userId`,`createdAt`), PRIMARY KEY (`id`), CONSTRAINT `FK_support_work_order_tenant` FOREIGN KEY (`tenantId`) REFERENCES `tenants`(`id`) ON DELETE SET NULL, CONSTRAINT `FK_support_work_order_user` FOREIGN KEY (`userId`) REFERENCES `users`(`id`) ON DELETE SET NULL, CONSTRAINT `FK_support_work_order_assignee` FOREIGN KEY (`assigneeId`) REFERENCES `admin_users`(`id`) ON DELETE SET NULL) ENGINE=InnoDB");
+    await queryRunner.query("CREATE TABLE `support_work_order_logs` (`id` int NOT NULL AUTO_INCREMENT, `workOrderId` int NOT NULL, `operatorId` int NULL, `operatorName` varchar(80) NOT NULL, `action` varchar(40) NOT NULL, `content` text NULL, `fromStatus` varchar(30) NULL, `toStatus` varchar(30) NULL, `snapshot` json NULL, `createdAt` datetime(6) NOT NULL DEFAULT CURRENT_TIMESTAMP(6), INDEX `IDX_support_work_order_log_time` (`workOrderId`,`createdAt`), PRIMARY KEY (`id`), CONSTRAINT `FK_support_work_order_log_order` FOREIGN KEY (`workOrderId`) REFERENCES `support_work_orders`(`id`) ON DELETE CASCADE, CONSTRAINT `FK_support_work_order_log_operator` FOREIGN KEY (`operatorId`) REFERENCES `admin_users`(`id`) ON DELETE SET NULL) ENGINE=InnoDB");
+  }
+  async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query("DROP TABLE `support_work_order_logs`");
+    await queryRunner.query("DROP TABLE `support_work_orders`");
+  }
+}

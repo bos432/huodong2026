@@ -1,8 +1,11 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { getCurrentTenantCode, request, withTenantCode } from "../../api";
+import { request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
+import { isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
+import { reviewSafeText } from "../../review-safe-text";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { loadPageTheme } from "../../theme";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
@@ -10,54 +13,60 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
 const setting = ref<any>();
 const loading = ref(true);
-const mounted = ref(false);
-const lastLoadedTenantCode = ref("");
+const loadError = ref("");
+const copying = ref("");
 const paymentInstructionsField = "offlinePaymentInstructions";
+const loadGuard = createTenantLoadGuard();
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("service_center", "/pages/service/index");
 
 async function load() {
+  const token = loadGuard.begin();
   loading.value = true;
+  loadError.value = "";
+  setting.value = undefined;
   try {
-    setting.value = await request("/public/settings/operation");
+    const result = await request("/public/settings/operation");
+    if (loadGuard.isCurrent(token)) setting.value = result;
+  } catch (error: any) {
+    if (loadGuard.isCurrent(token)) loadError.value = reviewSafeText(error?.message || "服务信息加载失败");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
 function copy(text?: string) {
-  if (!text) return;
-  uni.setClipboardData({ data: text, success: () => uni.showToast({ title: "已复制", icon: "success" }) });
+  if (!text || copying.value) return;
+  copying.value = text;
+  uni.setClipboardData({
+    data: text,
+    success: () => uni.showToast({ title: "已复制", icon: "success" }),
+    fail: () => uni.showToast({ title: "复制失败", icon: "none" }),
+    complete: () => { copying.value = ""; }
+  });
 }
 
 function goPartner() {
+  if (!isLinkAllowedByFeature("/pages/partner/index")) return showFeatureDisabledToast("/pages/partner/index");
   uni.navigateTo({ url: withTenantCode("/pages/partner/index") });
 }
 
 function paymentInstructions() {
-  void setting.value?.[paymentInstructionsField];
-  return "本次上线支持微信支付和后台充值余额支付；如余额不足，请联系工作人员充值后再支付。";
+  return setting.value?.[paymentInstructionsField] || "支付方式与付款截止时间以订单确认页为准；如需协助，请联系工作人员。";
 }
 
 async function refreshTenantScopedPage() {
-  lastLoadedTenantCode.value = getCurrentTenantCode();
-  await Promise.all([load(), loadDecoration()]);
+  await Promise.allSettled([load(), loadDecoration()]);
 }
 
 async function handleTenantChanged() {
   await loadPageTheme();
+  await loadFeatureGates(true);
   await refreshTenantScopedPage();
 }
 
-onMounted(() => {
-  mounted.value = true;
-  refreshTenantScopedPage();
-});
-
-onShow(() => {
-  if (!mounted.value) return;
-  if (getCurrentTenantCode() === lastLoadedTenantCode.value) return;
-  loadPageTheme();
-  refreshTenantScopedPage();
+onShow(async () => {
+  await Promise.all([loadPageTheme(), loadFeatureGates(true)]);
+  await refreshTenantScopedPage();
 });
 </script>
 
@@ -75,21 +84,25 @@ onShow(() => {
 
     <PageDecorationBlocks :sections="contentSections" />
 
-    <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-if="loading" class="card subtle" aria-live="polite">服务信息加载中...</view>
+    <view v-else-if="loadError" class="card error-card" aria-live="assertive">
+      <text>{{ loadError }}</text>
+      <view class="button secondary" role="button" aria-label="重新加载服务信息" @click="refreshTenantScopedPage">重新加载</view>
+    </view>
     <template v-else-if="setting">
       <view class="card">
         <view class="card-kicker">客服支持</view>
         <view class="card-title">联系主办方</view>
         <view v-if="setting.customerServiceName" class="line"><text>客服</text><text>{{ setting.customerServiceName }}</text></view>
-        <view v-if="setting.customerServicePhone" class="line" @click="copy(setting.customerServicePhone)"><text>电话</text><text>{{ setting.customerServicePhone }}</text></view>
-        <view v-if="setting.customerServiceWechat" class="line" @click="copy(setting.customerServiceWechat)"><text>微信</text><text>{{ setting.customerServiceWechat }}</text></view>
+        <view v-if="setting.customerServicePhone" class="line" role="button" aria-label="复制客服电话" @click="copy(setting.customerServicePhone)"><text>电话</text><text>{{ setting.customerServicePhone }}</text></view>
+        <view v-if="setting.customerServiceWechat" class="line" role="button" aria-label="复制客服微信" @click="copy(setting.customerServiceWechat)"><text>微信</text><text>{{ setting.customerServiceWechat }}</text></view>
       </view>
 
       <view class="card">
         <view class="card-kicker">合作入口</view>
         <view class="card-title">城市合伙人</view>
         <view class="content">面向文化空间、书院、书法教室、读书会主理人和本地社群开放合作。你可以拥有自己的活动后台、收款方式、会员和报名数据。</view>
-        <view class="partner-entry" @click="goPartner">
+        <view class="partner-entry" role="button" aria-label="查看城市合伙人方案" @click="goPartner">
           <text>查看合作方案</text>
           <text>进入</text>
         </view>
@@ -119,7 +132,7 @@ onShow(() => {
 </template>
 
 <style scoped>
-.service-page { min-height: 100vh; padding: 24rpx; background: var(--page-bg-layer, #f5f0e8); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #333333); }
+.service-page { min-height: 100vh; box-sizing:border-box; padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); background: var(--page-bg-layer, #f5f0e8); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #333333); }
 .service-page.has-custom-nav { padding-bottom: 160rpx; }
 .service-hero {
   position: relative;
@@ -172,4 +185,9 @@ onShow(() => {
 .line text:last-child { color: var(--text-color, #333333); font-weight: 700; overflow-wrap: anywhere; }
 .content { color: #666666; font-size: 27rpx; line-height: 1.7; white-space: pre-wrap; }
 .partner-entry { margin-top: 22rpx; min-height: 80rpx; padding: 0 22rpx; border-radius: 18rpx; background: rgba(196, 61, 61, 0.1); color: #c43d3d; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; font-size: 27rpx; font-weight: 800; }
+.error-card { color:#b42318; border:1rpx solid #f0b8b0; background:#fff4f2; line-height:1.6; }
+.error-card .button { margin-top:18rpx; }
+@media (min-width: 900px) {
+  .service-page { max-width:760px; margin:0 auto; }
+}
 </style>

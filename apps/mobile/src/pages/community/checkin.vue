@@ -1,12 +1,16 @@
 <template>
   <view class="container checkin-page">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">返回</view>
+      <view class="nav-back" role="button" aria-label="返回" @click="goBack">返回</view>
       <text class="nav-title">今日打卡</text>
-      <view class="nav-placeholder"></view>
+      <view class="nav-action" role="button" aria-label="刷新今日打卡" @click="loadCheckin">刷新</view>
     </view>
-    <view v-if="loading" class="checkin-card state-card">
+    <view v-if="loading" class="checkin-card state-card" aria-live="polite">
       <text class="subtle state-text">加载今日打卡...</text>
+    </view>
+    <view v-else-if="loadError" class="checkin-card state-card error-state" aria-live="assertive">
+      <text class="state-text">{{ loadError }}</text>
+      <view class="button secondary block" role="button" aria-label="重新加载今日打卡" @click="loadCheckin">重新加载</view>
     </view>
     <view v-else-if="!task" class="checkin-card state-card">
       <text class="title-lg state-title">暂无今日任务</text>
@@ -21,7 +25,7 @@
         <text class="personal-status-title">{{ checkedIn ? "你今天已完成打卡" : "你今天还未打卡" }}</text>
         <text class="personal-status-sub">{{ checkedIn ? "今天已经点亮，明天继续保持。" : `点击后会点亮 ${currentDay} 日，并计入你的月度记录。` }}</text>
       </view>
-      <view v-if="!checkedIn" class="button block button-lg" :class="{ disabled: submitting }" @click="doCheckin">{{ submitting ? "打卡中..." : "完成今日打卡" }}</view>
+      <view v-if="!checkedIn" class="button block button-lg" :class="{ disabled: submitting }" role="button" :aria-label="submitting ? '正在完成今日打卡' : '完成今日打卡'" @click="doCheckin">{{ submitting ? "打卡中..." : "完成今日打卡" }}</view>
       <view v-else class="button block button-lg disabled done-button">已完成</view>
       <view class="checkin-stats">
         <view class="checkin-stat">
@@ -36,7 +40,7 @@
     </view>
 
     <!-- 打卡日历 -->
-    <view class="card calendar-card">
+    <view v-if="!loadError" class="card calendar-card">
       <text class="title-md calendar-title">{{ monthTitle }}打卡</text>
       <view class="calendar-grid">
         <text v-for="(d, i) in daysInMonth" :key="i" class="calendar-day"
@@ -48,14 +52,19 @@
 </template>
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onLoad } from "@dcloudio/uni-app";
-import { ensureUser, request } from "../../api";
+import { onShow } from "@dcloudio/uni-app";
+import { ensureUser, getCurrentTenantCode, request } from "../../api";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import { reviewSafeText } from "../../review-safe-text";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 const checkedIn = ref(false);
 const loading = ref(true);
 const submitting = ref(false);
+const loadError = ref("");
 const task = ref<any>(null);
 const today = ref("");
 const checkedDays = ref<number[]>([]);
+const loadGuard = createTenantLoadGuard();
 const completedCount = computed(() => Math.max(0, Number(task.value?.completedCount || 0)));
 const currentDay = computed(() => Number((today.value || localDateString()).slice(8, 10)));
 const daysInMonth = computed(() => {
@@ -83,44 +92,58 @@ function localDateString() {
 }
 
 async function loadCheckin() {
+  const token = loadGuard.begin();
   loading.value = true;
+  loadError.value = "";
+  task.value = null;
+  checkedIn.value = false;
+  checkedDays.value = [];
   try {
     await ensureUser();
     const data = await request<any>("/public/checkin/today");
+    if (!loadGuard.isCurrent(token)) return;
     task.value = data;
     today.value = data?.today || localDateString();
     checkedIn.value = Boolean(data?.checkedToday);
     checkedDays.value = Array.isArray(data?.checkedDays) ? data.checkedDays : [];
   } catch (error: any) {
-    uni.showToast({ title: error.message || "加载打卡失败", icon: "none" });
+    if (loadGuard.isCurrent(token)) loadError.value = reviewSafeText(error?.message || "今日打卡加载失败");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
 async function doCheckin() {
   if (submitting.value || checkedIn.value) return;
+  const tenantCode = getCurrentTenantCode();
   submitting.value = true;
   try {
     await ensureUser();
     await request("/public/checkin/today/complete", { method: "POST" });
+    if (getCurrentTenantCode() !== tenantCode) return;
     await loadCheckin();
-    uni.showToast({ title:"🎉 打卡成功！坚持就是胜利", icon:"none", duration:2000 });
+    if (getCurrentTenantCode() === tenantCode) uni.showToast({ title:"打卡成功", icon:"success", duration:2000 });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "打卡失败", icon: "none" });
+    if (getCurrentTenantCode() === tenantCode) uni.showToast({ title: reviewSafeText(error?.message || "打卡失败"), icon: "none" });
   } finally {
-    submitting.value = false;
+    if (getCurrentTenantCode() === tenantCode) submitting.value = false;
   }
 }
-onLoad(loadCheckin);
+onShow(async () => {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
+  await loadCheckin();
+});
 </script>
 <style scoped>
-.checkin-page { padding-bottom: 42rpx; }
+.checkin-page { min-height:100vh; box-sizing:border-box; padding-bottom:calc(42rpx + env(safe-area-inset-bottom)); }
 .custom-nav { display:flex; align-items:center; justify-content: space-between; padding:16rpx 0; }
-.nav-back, .nav-placeholder { min-width: 104rpx; min-height: 58rpx; display: flex; align-items: center; color:#4a6b8a; font-size:27rpx; font-weight: 800; }
+.nav-back, .nav-action { min-width: 104rpx; min-height: 58rpx; display: flex; align-items: center; color:#4a6b8a; font-size:27rpx; font-weight: 800; }
+.nav-action { justify-content:flex-end; }
 .nav-title { flex:1; text-align:center; color:#333333; font-size:32rpx; font-weight:900; font-family:"STKaiti","KaiTi",serif; }
 .checkin-card { margin-top:24rpx; background:#fff; border-radius:24rpx; padding:40rpx; box-shadow:0 12rpx 34rpx rgba(91,47,36,0.07); }
 .state-card { text-align:center; }
+.error-state { color:#b42318; border:1rpx solid #f0b8b0; background:#fff4f2; }
 .state-title { text-align:center; display:block; font-family:"STKaiti","KaiTi",serif; }
 .state-text { display:block; text-align:center; margin-top:16rpx; }
 .task-card { text-align:center; }
@@ -143,4 +166,7 @@ onLoad(loadCheckin);
 .calendar-day { text-align:center; padding:12rpx; font-size:26rpx; color:#666666; border-radius:14rpx; background:#f9f4ee; }
 .calendar-day.active { background:#c43d3d; color:#fff; }
 .calendar-day.today { box-shadow: inset 0 0 0 2rpx #c43d3d; }
+@media (min-width: 900px) {
+  .checkin-page { max-width:760px; margin:0 auto; }
+}
 </style>

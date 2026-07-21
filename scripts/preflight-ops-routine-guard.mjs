@@ -110,7 +110,12 @@ checkSourceIncludesAll(opsRoutine, [
   "/system-settings",
   "/agent-settlements",
   "/agents",
-  "localStorage"
+  "localStorage",
+  "accountScopeKey",
+  "localDateKey",
+  "availableItems",
+  "canUseItem",
+  ".catch(() => false)"
 ], "admin ops routine workbench");
 
 checkSourceIncludesAll(configCheck, [

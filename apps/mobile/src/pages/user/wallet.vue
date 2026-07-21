@@ -1,36 +1,75 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { ensureUser, fetchMyProfile, request } from "../../api";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { ensureUser, getUserId, getUserToken, request } from "../../api";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import { reviewSafeText } from "../../review-safe-text";
 
 const wallet = ref<any | null>(null);
 const rows = ref<any[]>([]);
 const loading = ref(true);
+const loadError = ref("");
 const phoneBindVisible = ref(false);
+const loadedContextKey = ref("");
+const loadGuard = createTenantLoadGuard();
 
-const creditAmount = computed(() => rows.value.filter((item) => item.direction !== "debit").reduce((sum, item) => sum + Number(item.amount || 0), 0));
-const debitAmount = computed(() => rows.value.filter((item) => item.direction === "debit").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+const creditAmount = computed(() => rows.value.filter((item) => item.direction !== "debit" && item.type !== "balance_unfreeze").reduce((sum, item) => sum + Number(item.amount || 0), 0));
+const debitAmount = computed(() => rows.value.filter((item) => item.direction === "debit" && item.type !== "balance_freeze").reduce((sum, item) => sum + Number(item.amount || 0), 0));
 
 async function load() {
+  const loadToken = loadGuard.begin();
+  let requestedUserId = getUserId();
+  let requestedUserToken = getUserToken();
+  const isCurrentContext = () => loadGuard.isCurrent(loadToken)
+    && getUserId() === requestedUserId
+    && getUserToken() === requestedUserToken;
+  const initialContextKey = `${loadToken.tenantCode}:${getUserId() || "guest"}`;
+  if (loadedContextKey.value && loadedContextKey.value !== initialContextKey) {
+    wallet.value = null;
+    rows.value = [];
+  }
   loading.value = true;
+  loadError.value = "";
   try {
     await ensureUser();
-    const profile = await fetchMyProfile();
+    if (!loadGuard.isCurrent(loadToken)) return;
+    requestedUserId = getUserId();
+    requestedUserToken = getUserToken();
+    const contextKey = `${loadToken.tenantCode}:${requestedUserId}`;
+    if (loadedContextKey.value && loadedContextKey.value !== contextKey) {
+      wallet.value = null;
+      rows.value = [];
+    }
+    const profile = await request<any>("/public/me/profile");
+    if (!isCurrentContext()) return;
     if (!profile?.phone) {
       phoneBindVisible.value = true;
       wallet.value = null;
       rows.value = [];
+      loadedContextKey.value = contextKey;
       return;
     }
+    phoneBindVisible.value = false;
     const [walletDetail, transactions] = await Promise.all([
-      request<any>("/public/me/wallet").catch(() => null),
-      request<any[]>("/public/me/wallet/transactions").catch(() => [])
+      request<any>("/public/me/wallet"),
+      request<any[]>("/public/me/wallet/transactions")
     ]);
+    if (!isCurrentContext()) return;
+    if (!walletDetail || typeof walletDetail !== "object" || !Array.isArray(transactions)) {
+      throw new Error("余额数据格式异常，请重新加载");
+    }
     wallet.value = walletDetail;
     rows.value = transactions;
+    loadedContextKey.value = contextKey;
+  } catch (error: any) {
+    if (!isCurrentContext()) return;
+    wallet.value = null;
+    rows.value = [];
+    loadError.value = reviewSafeText(error?.message || "余额信息加载失败");
   } finally {
-    loading.value = false;
+    if (isCurrentContext()) loading.value = false;
   }
 }
 
@@ -51,12 +90,15 @@ function formatTime(value: string) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${year}-${month}-${day} ${hour}:${minute}`;
+  return new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false
+  }).format(date).replaceAll("/", "-");
 }
 
 function walletTypeText(type: string) {
@@ -64,6 +106,10 @@ function walletTypeText(type: string) {
     admin_recharge: "后台充值",
     admin_deduct: "后台扣减",
     admin_adjust: "余额调整",
+    gift_grant: "发放赠送金",
+    gift_revoke: "扣回赠送金",
+    balance_freeze: "资金冻结",
+    balance_unfreeze: "资金解冻",
     balance_pay: "余额支付",
     refund_return: "退款返还"
   };
@@ -75,11 +121,18 @@ function walletAmountText(item: any) {
   return `${prefix}¥${money(item.amount)}`;
 }
 
-onMounted(load);
+onShow(() => { void load(); });
 </script>
 
 <template>
   <view class="wallet-page">
+    <view v-if="loading" class="card loading-card" role="status" aria-live="polite">余额信息加载中...</view>
+    <view v-else-if="loadError" class="card error-card" role="alert" aria-live="assertive">
+      <view class="section-title">余额加载失败</view>
+      <view class="empty error-copy">{{ loadError }}</view>
+      <view class="retry-button" role="button" tabindex="0" aria-label="重新加载余额信息" @click="load" @keyup.enter="load" @keyup.space="load">重新加载</view>
+    </view>
+    <template v-else>
     <view class="hero">
       <view>
         <view class="label">账户余额</view>
@@ -92,14 +145,15 @@ onMounted(load);
       <view><text>累计充值</text><strong>¥{{ money(wallet?.totalRecharge) }}</strong></view>
       <view><text>累计消费</text><strong>¥{{ money(wallet?.totalSpent) }}</strong></view>
       <view><text>冻结金额</text><strong>¥{{ money(wallet?.frozenBalance) }}</strong></view>
+      <view><text>可用赠送金</text><strong>¥{{ money(wallet?.giftBalance) }}</strong></view>
+      <view><text>冻结赠送金</text><strong>¥{{ money(wallet?.frozenGiftBalance) }}</strong></view>
       <view><text>本页收入</text><strong>¥{{ money(creditAmount) }}</strong></view>
       <view><text>本页支出</text><strong>¥{{ money(debitAmount) }}</strong></view>
     </view>
 
     <view class="card">
       <view class="section-title">流水记录</view>
-      <view v-if="loading" class="empty">加载中...</view>
-      <view v-else-if="!rows.length" class="empty">暂无余额流水。后台充值、余额支付或退款返还后会显示在这里。</view>
+      <view v-if="!rows.length" class="empty" role="status">暂无余额流水。后台充值、余额支付或退款返还后会显示在这里。</view>
       <view v-for="item in rows" v-else :key="item.id" class="flow-item">
         <view>
           <view class="flow-title">{{ walletTypeText(item.type) }}</view>
@@ -109,9 +163,11 @@ onMounted(load);
         <view class="flow-right" :class="{ debit: item.direction === 'debit' }">
           <view>{{ walletAmountText(item) }}</view>
           <text>余额 ¥{{ money(item.balanceAfter) }}</text>
+          <text v-if="Number(item.giftAfter || 0) || Number(item.frozenGiftAfter || 0)">赠送金 ¥{{ money(item.giftAfter) }} / 冻结 ¥{{ money(item.frozenGiftAfter) }}</text>
         </view>
       </view>
     </view>
+    </template>
 
     <AppBottomNav current-path="/pages/user/my" />
     <WechatPhoneBindSheet
@@ -210,6 +266,10 @@ onMounted(load);
   background: rgba(255, 252, 246, 0.96);
   box-shadow: 0 12rpx 34rpx rgba(72, 55, 38, 0.08);
 }
+.error-card { margin-top:0; border-color:#fecaca; background:#fff7f7; }
+.loading-card { color:#7f7467; text-align:center; }
+.error-copy { padding:10rpx 0 18rpx; color:#b91c1c; text-align:left; }
+.retry-button { width:fit-content; padding:12rpx 20rpx; border-radius:8px; background:#8b4a3e; color:#fff; font-size:24rpx; font-weight:900; }
 
 .section-title {
   margin-bottom: 12rpx;

@@ -1,8 +1,9 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Tenant } from "./tenant.entity";
 import { User } from "./user.entity";
 
 @Entity("mall_addresses")
+@Index("IDX_mall_address_user_default", ["tenant", "user", "isDefault", "id"])
 export class MallAddress {
   @PrimaryGeneratedColumn()
   id!: number;

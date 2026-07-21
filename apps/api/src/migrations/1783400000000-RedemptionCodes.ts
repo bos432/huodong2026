@@ -1,0 +1,10 @@
+import { MigrationInterface, QueryRunner } from "typeorm";
+
+export class RedemptionCodes1783400000000 implements MigrationInterface {
+  name = "RedemptionCodes1783400000000";
+  async up(queryRunner: QueryRunner) {
+    await queryRunner.query(`CREATE TABLE IF NOT EXISTS redemption_codes (id INT NOT NULL AUTO_INCREMENT, tenantId INT NULL, code VARCHAR(64) NOT NULL, name VARCHAR(100) NOT NULL, targetType VARCHAR(32) NOT NULL, targetId INT NULL, points INT NOT NULL DEFAULT 0, usageLimit INT NOT NULL DEFAULT 0, perUserLimit INT NOT NULL DEFAULT 1, usedCount INT NOT NULL DEFAULT 0, enabled TINYINT NOT NULL DEFAULT 1, startsAt DATETIME NULL, endsAt DATETIME NULL, createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (id), UNIQUE KEY UQ_redemption_code (code), KEY IDX_redemption_code_tenant_enabled (tenantId, enabled), CONSTRAINT FK_redemption_code_tenant FOREIGN KEY (tenantId) REFERENCES tenants(id) ON DELETE CASCADE) ENGINE=InnoDB`);
+    await queryRunner.query(`CREATE TABLE IF NOT EXISTS redemption_code_usages (id INT NOT NULL AUTO_INCREMENT, tenantId INT NULL, redemptionCodeId INT NOT NULL, userId INT NOT NULL, usedCount INT NOT NULL DEFAULT 1, createdAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, updatedAt DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP, PRIMARY KEY (id), UNIQUE KEY UQ_redemption_code_user (redemptionCodeId, userId), KEY IDX_redemption_usage_tenant_user (tenantId, userId), CONSTRAINT FK_redemption_usage_tenant FOREIGN KEY (tenantId) REFERENCES tenants(id) ON DELETE CASCADE, CONSTRAINT FK_redemption_usage_code FOREIGN KEY (redemptionCodeId) REFERENCES redemption_codes(id) ON DELETE CASCADE, CONSTRAINT FK_redemption_usage_user FOREIGN KEY (userId) REFERENCES users(id) ON DELETE CASCADE) ENGINE=InnoDB`);
+  }
+  async down(queryRunner: QueryRunner) { await queryRunner.query("DROP TABLE IF EXISTS redemption_code_usages"); await queryRunner.query("DROP TABLE IF EXISTS redemption_codes"); }
+}

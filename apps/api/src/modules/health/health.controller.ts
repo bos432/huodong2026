@@ -60,6 +60,7 @@ export class HealthController {
   async metrics() {
     const database = await this.databaseStatus();
     const configStatus = inspectRuntimeConfig(this.config).status;
+    const operations = database === "up" ? await this.operationalMetrics() : null;
     const lines = [
       "# HELP activity_api_up API process liveness.",
       "# TYPE activity_api_up gauge",
@@ -75,7 +76,31 @@ export class HealthController {
       `activity_process_uptime_seconds ${this.uptimeSeconds()}`,
       "# HELP activity_build_info Build and release metadata.",
       "# TYPE activity_build_info gauge",
-      `activity_build_info{version="${this.metricLabel(this.releaseInfo().version)}",commit="${this.metricLabel(this.releaseInfo().commit)}"} 1`
+      `activity_build_info{version="${this.metricLabel(this.releaseInfo().version)}",commit="${this.metricLabel(this.releaseInfo().commit)}"} 1`,
+      "# HELP activity_operational_metrics_up Operational risk metrics query status.",
+      "# TYPE activity_operational_metrics_up gauge",
+      `activity_operational_metrics_up ${operations ? 1 : 0}`,
+      "# HELP activity_business_jobs_due Pending business jobs whose retry time is due.",
+      "# TYPE activity_business_jobs_due gauge",
+      `activity_business_jobs_due ${operations?.businessJobsDue ?? 0}`,
+      "# HELP activity_business_jobs_dead_letter Business jobs in the dead-letter state.",
+      "# TYPE activity_business_jobs_dead_letter gauge",
+      `activity_business_jobs_dead_letter ${operations?.businessJobsDeadLetter ?? 0}`,
+      "# HELP activity_business_jobs_stale_processing Processing jobs whose lock has expired.",
+      "# TYPE activity_business_jobs_stale_processing gauge",
+      `activity_business_jobs_stale_processing ${operations?.businessJobsStaleProcessing ?? 0}`,
+      "# HELP activity_payment_callback_failures_15m Failed or invalid payment callbacks in the last 15 minutes.",
+      "# TYPE activity_payment_callback_failures_15m gauge",
+      `activity_payment_callback_failures_15m ${operations?.paymentCallbackFailures15m ?? 0}`,
+      "# HELP activity_refund_provider_failures Refunds waiting after a provider failure.",
+      "# TYPE activity_refund_provider_failures gauge",
+      `activity_refund_provider_failures ${operations?.refundProviderFailures ?? 0}`,
+      "# HELP activity_inventory_anomalies_open Open mall inventory anomalies.",
+      "# TYPE activity_inventory_anomalies_open gauge",
+      `activity_inventory_anomalies_open ${operations?.inventoryAnomaliesOpen ?? 0}`,
+      "# HELP activity_fund_risk_alerts_open Open or acknowledged fund risk alerts.",
+      "# TYPE activity_fund_risk_alerts_open gauge",
+      `activity_fund_risk_alerts_open ${operations?.fundRiskAlertsOpen ?? 0}`
     ];
     return `${lines.join("\n")}\n`;
   }
@@ -86,6 +111,33 @@ export class HealthController {
       return "up";
     } catch {
       return "down";
+    }
+  }
+
+  private async operationalMetrics() {
+    try {
+      const rows = await this.dataSource.query(`
+        SELECT
+          (SELECT COUNT(*) FROM business_jobs WHERE status = 'pending' AND nextAttemptAt <= CURRENT_TIMESTAMP) AS businessJobsDue,
+          (SELECT COUNT(*) FROM business_jobs WHERE status = 'dead_letter') AS businessJobsDeadLetter,
+          (SELECT COUNT(*) FROM business_jobs WHERE status = 'processing' AND lockedUntil < CURRENT_TIMESTAMP) AS businessJobsStaleProcessing,
+          (SELECT COUNT(*) FROM payment_callback_logs WHERE createdAt >= DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 15 MINUTE) AND (resultStatus = 'failed' OR signatureValid = 0)) AS paymentCallbackFailures15m,
+          (SELECT COUNT(*) FROM refunds WHERE status NOT IN ('completed', 'rejected') AND providerRefundFailureReason IS NOT NULL) AS refundProviderFailures,
+          (SELECT COUNT(*) FROM mall_inventory_anomalies WHERE status = 'open') AS inventoryAnomaliesOpen,
+          (SELECT COUNT(*) FROM fund_risk_alerts WHERE status IN ('open', 'acknowledged')) AS fundRiskAlertsOpen
+      `);
+      const row = rows[0] || {};
+      return {
+        businessJobsDue: Number(row.businessJobsDue || 0),
+        businessJobsDeadLetter: Number(row.businessJobsDeadLetter || 0),
+        businessJobsStaleProcessing: Number(row.businessJobsStaleProcessing || 0),
+        paymentCallbackFailures15m: Number(row.paymentCallbackFailures15m || 0),
+        refundProviderFailures: Number(row.refundProviderFailures || 0),
+        inventoryAnomaliesOpen: Number(row.inventoryAnomaliesOpen || 0),
+        fundRiskAlertsOpen: Number(row.fundRiskAlertsOpen || 0)
+      };
+    } catch {
+      return null;
     }
   }
 

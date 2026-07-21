@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Tenant } from "./tenant.entity";
+import { ContentAudience } from "../shared/content-audience";
 
 @Entity("announcements")
 export class Announcement {
@@ -26,6 +27,18 @@ export class Announcement {
 
   @Column({ type: "datetime", nullable: true })
   publishAt!: Date | null;
+
+  @Column({ type: "datetime", nullable: true })
+  endAt!: Date | null;
+
+  @Column({ type: "json", nullable: true })
+  audience!: ContentAudience | null;
+
+  @Column({ type: "int", default: 0 })
+  viewCount!: number;
+
+  @Column({ type: "int", default: 0 })
+  clickCount!: number;
 
   @CreateDateColumn()
   createdAt!: Date;

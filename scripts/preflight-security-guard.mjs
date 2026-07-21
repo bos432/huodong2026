@@ -30,6 +30,11 @@ const compose = read("docker-compose.yml");
 const systemSettings = read("apps/admin/src/views/SystemSettings.vue");
 const launchChecklist = read("docs/launch-checklist.md");
 const progress = read("docs/project-progress.md");
+const rootPackage = JSON.parse(read("package.json"));
+const apiPackage = JSON.parse(read("apps/api/package.json"));
+const runtimeAudit = read("scripts/runtime-dependency-audit.mjs");
+const secretScan = read("scripts/secret-scan.mjs");
+const qualityWorkflow = read(".github/workflows/quality.yml");
 
 for (const key of securityKeys) {
   checkSourceIncludes(doctor, key, "doctor");
@@ -86,6 +91,18 @@ checkSourceIncludes(launchChecklist, "VALIDATION_FORBID_NON_WHITELISTED=true", "
 checkSourceIncludes(launchChecklist, "ACCESS_LOG_ENABLED=true", "launch checklist");
 checkSourceIncludes(launchChecklist, "TRUST_PROXY", "launch checklist");
 checkSourceIncludes(progress, "上线准备", "project progress");
+check(rootPackage.scripts?.["audit:runtime"] === "node scripts/runtime-dependency-audit.mjs", "audit:runtime must use the effective runtime dependency audit.");
+check(rootPackage.packageManager === "npm@11.6.2", "packageManager must pin npm 11.6.2 for lockfile reproducibility.");
+check(apiPackage.overrides?.exceljs?.uuid === "11.1.1", "ExcelJS runtime uuid override must stay on 11.1.1.");
+check(apiPackage.overrides?.["tencentcloud-sdk-nodejs"]?.uuid === "11.1.1", "TencentCloud runtime uuid override must stay on 11.1.1.");
+checkSourceIncludes(runtimeAudit, "--omit=dev", "runtime dependency audit");
+checkSourceIncludes(runtimeAudit, "high or critical", "runtime dependency audit");
+checkSourceIncludes(runtimeAudit, 'versionAtLeast(row.version, "11.1.1")', "runtime dependency audit");
+check(rootPackage.scripts?.["security:secrets"] === "node scripts/secret-scan.mjs", "security:secrets must use the repository secret scanner.");
+checkSourceIncludes(secretScan, 'git", ["ls-files", "--cached", "--others", "--exclude-standard", "-z"]', "repository secret scanner");
+checkSourceIncludes(secretScan, "PRIVATE KEY", "repository secret scanner");
+checkSourceIncludes(secretScan, "GitHub token", "repository secret scanner");
+checkSourceIncludes(qualityWorkflow, "npm run security:secrets", "quality workflow");
 
 if (failures.length) {
   for (const failure of failures) console.error(`ERR  ${failure}`);

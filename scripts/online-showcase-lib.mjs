@@ -73,11 +73,14 @@ export async function loginAdmin(username, password) {
 }
 
 export async function loginPlatformAdmin() {
-  return loginAdmin(env("SHOWCASE_ADMIN_USERNAME", "admin"), env("SHOWCASE_ADMIN_PASSWORD"));
+  return loginAdmin(env("PLATFORM_ADMIN_USERNAME", "admin"), env("PLATFORM_ADMIN_PASSWORD", "Admin123456"));
 }
 
 export async function loginShowcaseAdmin(username = "showcase_admin") {
-  return loginAdmin(username, env("SHOWCASE_PASSWORD"));
+  const password = username === "showcase_admin"
+    ? env("SHOWCASE_ADMIN_PASSWORD", env("SHOWCASE_PASSWORD", "Qiwai123456"))
+    : env("SHOWCASE_PASSWORD", "Qiwai123456");
+  return loginAdmin(username, password);
 }
 
 export async function loginUser(phone, nickname) {
@@ -114,6 +117,10 @@ export function formatDateTime(date) {
 export function answers(fields = [], suffix = "") {
   return fields.map((field) => {
     let value = `慢π演示验收${suffix}`;
+    const firstOption = field.options?.[0];
+    const firstOptionValue = typeof firstOption === "string" ? firstOption : firstOption?.value ?? firstOption?.label;
+    if (field.type === "single_choice" && firstOptionValue !== undefined) value = firstOptionValue;
+    if (field.type === "multi_choice" && firstOptionValue !== undefined) value = [firstOptionValue];
     if (String(field.label || "").includes("姓名")) value = `演示学员${suffix}`;
     if (String(field.label || "").includes("手机") || field.type === "phone") value = `1399000${String(Date.now()).slice(-4)}`;
     if (String(field.label || "").includes("微信")) value = `showcase_${suffix || "user"}`;

@@ -2,6 +2,8 @@
 import { computed, ref } from "vue";
 import { useRouter } from "vue-router";
 import { Refresh } from "@element-plus/icons-vue";
+import { ElMessage, ElMessageBox } from "element-plus";
+import { canAccess, currentTenantId, isPlatformScopedAdmin } from "../permissions";
 
 type Cadence = "daily" | "weekly" | "monthly";
 type RiskLevel = "high" | "medium" | "low";
@@ -16,12 +18,22 @@ type RoutineItem = {
   evidence: string;
   action: string;
   path: string;
+  platformRoles?: string[];
+  tenantRoles?: string[];
 };
 
 const router = useRouter();
 const activeCadence = ref<Cadence>("daily");
-const todayKey = new Date().toISOString().slice(0, 10);
-const storageKey = `ops-routine:${todayKey}`;
+
+function localDateKey(value = new Date()) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+const accountScopeKey = `${currentTenantId() || "platform"}:${localStorage.getItem("admin_username") || "anonymous"}`;
+const storageKey = `ops-routine:${accountScopeKey}:${localDateKey()}`;
 
 const cadenceOptions = [
   { value: "daily", label: "每日巡检" },
@@ -39,7 +51,8 @@ const routineItems: RoutineItem[] = [
     target: "生产环境、真实域名、支付、通知、上传目录和发布标识",
     evidence: "无“需修复”项，或已记录处理人和处理时间",
     action: "查看上线体检",
-    path: "/config-check"
+    path: "/config-check",
+    platformRoles: ["system.view"]
   },
   {
     id: "finance",
@@ -50,7 +63,9 @@ const routineItems: RoutineItem[] = [
     target: "待处理对账、待处理账单、待审退款、失败回调和服务商回执",
     evidence: "高风险差异已处理，待办数量可解释",
     action: "处理财务对账",
-    path: "/finance"
+    path: "/finance",
+    platformRoles: ["finance.view"],
+    tenantRoles: ["finance.view"]
   },
   {
     id: "registration-channel",
@@ -61,7 +76,9 @@ const routineItems: RoutineItem[] = [
     target: "全站报名开关、暂停报名文案、客服电话和活动展示配置",
     evidence: "开关状态符合当天排期，暂停文案可被用户理解",
     action: "查看系统设置",
-    path: "/system-settings"
+    path: "/system-settings",
+    platformRoles: ["system.view"],
+    tenantRoles: ["operation_settings.view"]
   },
   {
     id: "admin-login-logs",
@@ -72,7 +89,8 @@ const routineItems: RoutineItem[] = [
     target: "后台登录失败、触发限流、异常 IP 和异常浏览器",
     evidence: "异常登录已确认来源，必要时已禁用账号",
     action: "查看登录日志",
-    path: "/admin-login-logs"
+    path: "/admin-login-logs",
+    platformRoles: ["logs.view"]
   },
   {
     id: "h5-code-logs",
@@ -83,7 +101,8 @@ const routineItems: RoutineItem[] = [
     target: "H5 验证码发送失败、触发限流、服务商消息 ID 和异常手机号",
     evidence: "失败峰值已定位到服务商、模板或用户行为",
     action: "查看验证码日志",
-    path: "/h5-code-logs"
+    path: "/h5-code-logs",
+    platformRoles: ["logs.view"]
   },
   {
     id: "operation-logs",
@@ -94,7 +113,9 @@ const routineItems: RoutineItem[] = [
     target: "确认收款、通过退款、签到核销、候补补位和运营设置变更",
     evidence: "高风险操作均能追溯到管理员、对象和原因",
     action: "查看操作日志",
-    path: "/operation-logs"
+    path: "/operation-logs",
+    platformRoles: ["logs.view"],
+    tenantRoles: ["logs.view"]
   },
   {
     id: "admins",
@@ -105,7 +126,9 @@ const routineItems: RoutineItem[] = [
     target: "管理员角色、禁用状态、默认账号、离职账号和弱权限边界",
     evidence: "无闲置超级管理员，离职/临时账号已禁用",
     action: "管理账号",
-    path: "/admins"
+    path: "/admins",
+    platformRoles: ["admin.manage"],
+    tenantRoles: ["admin.manage"]
   },
   {
     id: "agent-settlements",
@@ -116,7 +139,8 @@ const routineItems: RoutineItem[] = [
     target: "地区代理结算单、打款凭证、待处理差异和真实打款回执",
     evidence: "已审核结算均有凭证，未处理差异不进入打款",
     action: "核对代理结算",
-    path: "/agent-settlements"
+    path: "/agent-settlements",
+    tenantRoles: ["agent_settlement.view"]
   },
   {
     id: "agents",
@@ -127,7 +151,9 @@ const routineItems: RoutineItem[] = [
     target: "代理启用状态、微信/支付宝收款账号和配置脱敏展示",
     evidence: "代理收款账号与地区/活动归属一致",
     action: "查看代理收款",
-    path: "/agents"
+    path: "/agents",
+    platformRoles: ["payment_account.view"],
+    tenantRoles: ["payment_account.view"]
   },
   {
     id: "backup-restore",
@@ -138,7 +164,8 @@ const routineItems: RoutineItem[] = [
     target: "数据库备份文件、恢复脚本、保留策略和恢复耗时",
     evidence: "完成一次恢复演练，并记录恢复环境和结果",
     action: "查看上线体检",
-    path: "/config-check"
+    path: "/config-check",
+    platformRoles: ["system.view"]
   },
   {
     id: "provider-balance",
@@ -149,7 +176,9 @@ const routineItems: RoutineItem[] = [
     target: "短信、邮件、微信通知服务商余额、签名和模板状态",
     evidence: "余额足够覆盖下月活动，模板未过期或被驳回",
     action: "查看系统设置",
-    path: "/system-settings"
+    path: "/system-settings",
+    platformRoles: ["system.view"],
+    tenantRoles: ["operation_settings.view"]
   },
   {
     id: "default-admin",
@@ -160,9 +189,18 @@ const routineItems: RoutineItem[] = [
     target: "默认管理员、烟测账号、长期未登录账号和超级管理员数量",
     evidence: "默认/烟测账号已禁用或更换强密码",
     action: "复核管理员",
-    path: "/admins"
+    path: "/admins",
+    platformRoles: ["admin.manage"],
+    tenantRoles: ["admin.manage"]
   }
 ];
+
+function canUseItem(item: RoutineItem) {
+  const roles = isPlatformScopedAdmin() ? item.platformRoles : item.tenantRoles;
+  return Boolean(roles?.length && canAccess(roles));
+}
+
+const availableItems = computed(() => routineItems.filter(canUseItem));
 
 function loadCompleted() {
   try {
@@ -175,12 +213,12 @@ function loadCompleted() {
 
 const completedIds = ref<string[]>(loadCompleted());
 
-const currentItems = computed(() => routineItems.filter((item) => item.cadence === activeCadence.value));
+const currentItems = computed(() => availableItems.value.filter((item) => item.cadence === activeCadence.value));
 const currentDoneCount = computed(() => currentItems.value.filter((item) => completedIds.value.includes(item.id)).length);
-const totalDoneCount = computed(() => routineItems.filter((item) => completedIds.value.includes(item.id)).length);
+const totalDoneCount = computed(() => availableItems.value.filter((item) => completedIds.value.includes(item.id)).length);
 const summary = computed(() =>
   cadenceOptions.map((option) => {
-    const items = routineItems.filter((item) => item.cadence === option.value);
+    const items = availableItems.value.filter((item) => item.cadence === option.value);
     return {
       ...option,
       total: items.length,
@@ -198,8 +236,14 @@ function riskType(risk: RiskLevel) {
 }
 
 function saveCompleted(ids: string[]) {
-  completedIds.value = ids;
-  localStorage.setItem(storageKey, JSON.stringify(ids));
+  try {
+    localStorage.setItem(storageKey, JSON.stringify(ids));
+    completedIds.value = ids;
+    return true;
+  } catch {
+    ElMessage.error("保存巡检状态失败，请检查浏览器存储空间");
+    return false;
+  }
 }
 
 function toggleItem(row: RoutineItem, checked: boolean) {
@@ -213,8 +257,12 @@ function toggleItemFromCheckbox(row: RoutineItem, checked: string | number | boo
   toggleItem(row, Boolean(checked));
 }
 
-function resetToday() {
-  saveCompleted([]);
+async function resetToday() {
+  const confirmed = await ElMessageBox.confirm("确认清空当前账号今天的全部巡检完成状态？", "重置巡检状态", { type: "warning" })
+    .then(() => true)
+    .catch(() => false);
+  if (!confirmed) return;
+  if (saveCompleted([])) ElMessage.success("今日巡检状态已重置");
 }
 
 function go(path: string) {
@@ -233,13 +281,13 @@ function go(path: string) {
     </div>
 
     <div class="routine-summary">
-      <div v-for="item in summary" :key="item.value" class="routine-card" :class="{ active: activeCadence === item.value }" @click="activeCadence = item.value">
+      <div v-for="item in summary" :key="item.value" class="routine-card" :class="{ active: activeCadence === item.value }" role="button" tabindex="0" @click="activeCadence = item.value" @keydown.enter.prevent="activeCadence = item.value" @keydown.space.prevent="activeCadence = item.value">
         <span>{{ item.label }}</span>
         <strong>{{ item.done }}/{{ item.total }}</strong>
       </div>
       <div class="routine-card total">
         <span>今日已完成</span>
-        <strong>{{ totalDoneCount }}/{{ routineItems.length }}</strong>
+        <strong>{{ totalDoneCount }}/{{ availableItems.length }}</strong>
       </div>
     </div>
 

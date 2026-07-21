@@ -1,58 +1,73 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
-import { ensureUser, fetchMyProfile, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
+import { ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { ensureUser, fetchMyProfile, getCurrentTenantCode, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const profile = ref<any>(null);
 const nickname = ref("");
 const avatarUrl = ref("");
 const saving = ref(false);
 const loading = ref(true);
+const loadError = ref("");
+const saveError = ref("");
+const uploadingLocalAvatar = ref(false);
 const uploadingWechatAvatar = ref(false);
 const phoneBindVisible = ref(false);
+const profileLoadGuard = createTenantLoadGuard();
 
 function displayName() {
   return profile.value?.nickname || profile.value?.phone || `用户${profile.value?.id || ""}`;
 }
 
 async function load() {
+  const token = profileLoadGuard.begin();
   loading.value = true;
+  loadError.value = "";
+  profile.value = null;
+  nickname.value = "";
+  avatarUrl.value = "";
   try {
     await ensureUser();
-    profile.value = await fetchMyProfile();
+    const result = await fetchMyProfile();
+    if (!profileLoadGuard.isCurrent(token)) return;
+    profile.value = result;
     nickname.value = profile.value.nickname || "";
     avatarUrl.value = profile.value.avatarUrl || "";
+  } catch (error: any) {
+    if (profileLoadGuard.isCurrent(token) && !String(error?.message || "").includes("请先完成")) loadError.value = error?.message || "会员资料加载失败，请稍后重试。";
   } finally {
-    loading.value = false;
+    if (profileLoadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
-function chooseLocalAvatar() {
-  uni.chooseImage({
-    count: 1,
-    sizeType: ["compressed"],
-    sourceType: ["album", "camera"],
-    success: async (res) => {
-      const filePath = res.tempFilePaths[0];
-      if (!filePath) return;
-      try {
-        uni.showLoading({ title: "上传中" });
-        const uploaded = await uploadMyAvatar(filePath);
-        avatarUrl.value = uploaded.url;
-        profile.value = await fetchMyProfile();
-        uni.showToast({ title: "头像已更新", icon: "success" });
-      } catch (error: any) {
-        uni.showToast({ title: error.message || "上传失败", icon: "none" });
-      } finally {
-        uni.hideLoading();
-      }
-    }
-  });
+async function chooseLocalAvatar() {
+  if (uploadingLocalAvatar.value || uploadingWechatAvatar.value || saving.value || loading.value || loadError.value) return;
+  const tenantCode = getCurrentTenantCode();
+  uploadingLocalAvatar.value = true;
+  try {
+    const res = await new Promise<UniApp.ChooseImageSuccessCallbackResult>((resolve, reject) => uni.chooseImage({ count: 1, sizeType: ["compressed"], sourceType: ["album", "camera"], success: resolve, fail: reject }));
+    const filePath = res.tempFilePaths[0];
+    if (!filePath) return;
+    uni.showLoading({ title: "上传中" });
+    const uploaded = await uploadMyAvatar(filePath);
+    if (getCurrentTenantCode() !== tenantCode) return;
+    avatarUrl.value = uploaded.url;
+    await load();
+    uni.showToast({ title: "头像已更新", icon: "success" });
+  } catch (error: any) {
+    if (!String(error?.errMsg || "").includes("cancel") && getCurrentTenantCode() === tenantCode) uni.showToast({ title: error.message || "上传失败", icon: "none" });
+  } finally {
+    uploadingLocalAvatar.value = false;
+    uni.hideLoading();
+  }
 }
 
 async function chooseWechatAvatar(event: any) {
-  if (uploadingWechatAvatar.value) return;
+  if (uploadingWechatAvatar.value || uploadingLocalAvatar.value || saving.value || loading.value || loadError.value) return;
+  const tenantCode = getCurrentTenantCode();
   const filePath = String(event?.detail?.avatarUrl || "");
   if (!filePath) {
     uni.showToast({ title: "未选择头像", icon: "none" });
@@ -62,11 +77,12 @@ async function chooseWechatAvatar(event: any) {
   try {
     uni.showLoading({ title: "上传中" });
     const uploaded = await uploadMyAvatar(filePath);
+    if (getCurrentTenantCode() !== tenantCode) return;
     avatarUrl.value = uploaded.url;
-    profile.value = await fetchMyProfile();
+    await load();
     uni.showToast({ title: "头像已更新", icon: "success" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "上传失败", icon: "none" });
+    if (getCurrentTenantCode() === tenantCode) uni.showToast({ title: error.message || "上传失败", icon: "none" });
   } finally {
     uploadingWechatAvatar.value = false;
     uni.hideLoading();
@@ -74,16 +90,26 @@ async function chooseWechatAvatar(event: any) {
 }
 
 async function save() {
+  if (saving.value || uploadingLocalAvatar.value || uploadingWechatAvatar.value || loading.value || loadError.value) return;
   if (nickname.value.trim().length > 40) {
     uni.showToast({ title: "昵称不能超过 40 个字", icon: "none" });
     return;
   }
   saving.value = true;
+  saveError.value = "";
+  const tenantCode = getCurrentTenantCode();
   try {
-    profile.value = await updateMyProfile({ nickname: nickname.value.trim(), avatarUrl: avatarUrl.value.trim() });
+    const result = await updateMyProfile({ nickname: nickname.value.trim(), avatarUrl: avatarUrl.value.trim() });
+    if (getCurrentTenantCode() !== tenantCode) return;
+    profile.value = result;
+    nickname.value = result.nickname || "";
+    avatarUrl.value = result.avatarUrl || "";
     uni.showToast({ title: "资料已保存", icon: "success" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "保存失败", icon: "none" });
+    if (getCurrentTenantCode() === tenantCode) {
+      saveError.value = error.message || "保存失败";
+      uni.showToast({ title: saveError.value, icon: "none" });
+    }
   } finally {
     saving.value = false;
   }
@@ -107,13 +133,14 @@ async function handlePhoneBound(profileData: any) {
   await load();
 }
 
-onMounted(load);
+onShow(() => { void load(); });
 </script>
 
 <template>
   <view class="profile-page">
     <view v-if="loading" class="card muted">加载中...</view>
-    <template v-else>
+    <view v-else-if="loadError" class="card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载会员资料" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
+    <template v-else-if="profile">
       <view class="hero">
         <image v-if="avatarUrl" class="avatar" :src="avatarUrl" mode="aspectFill" />
         <view v-else class="avatar fallback">{{ displayName().slice(0, 1) }}</view>
@@ -132,7 +159,7 @@ onMounted(load);
             <!-- #ifdef MP-WEIXIN -->
             <button class="mini-button wechat-button" open-type="chooseAvatar" :class="{ disabled: uploadingWechatAvatar }" @chooseavatar="chooseWechatAvatar">{{ uploadingWechatAvatar ? "上传中" : "选择头像" }}</button>
             <!-- #endif -->
-            <view class="mini-button" @click="chooseLocalAvatar">上传头像</view>
+            <view class="mini-button" :class="{ disabled: uploadingLocalAvatar || uploadingWechatAvatar || saving }" @click="chooseLocalAvatar">{{ uploadingLocalAvatar ? "上传中" : "上传头像" }}</view>
           </view>
         </view>
         <view class="field">
@@ -144,10 +171,11 @@ onMounted(load);
           <input v-model="nickname" class="input" maxlength="40" placeholder="填写昵称" />
           <!-- #endif -->
         </view>
-        <view class="button" :class="{ disabled: saving }" @click="save">{{ saving ? "保存中..." : "保存资料" }}</view>
+        <view v-if="saveError" class="save-error">{{ saveError }}</view>
+        <view class="button" role="button" tabindex="0" :aria-disabled="saving || uploadingLocalAvatar || uploadingWechatAvatar" :aria-busy="saving" :aria-label="saving ? '保存中' : '保存资料'" :class="{ disabled: saving || uploadingLocalAvatar || uploadingWechatAvatar }" @click="save" @keyup.enter="save" @keyup.space.prevent="save">{{ saving ? "保存中..." : "保存资料" }}</view>
       </view>
 
-      <view class="card security-entry" @click="goSecurity">
+      <view class="card security-entry" role="button" tabindex="0" aria-label="打开账号安全" @click="goSecurity" @keyup.enter="goSecurity" @keyup.space.prevent="goSecurity">
         <view>
           <view class="entry-title">账号安全</view>
           <view class="sub">修改手机号、设置或修改 H5 登录密码</view>
@@ -155,7 +183,7 @@ onMounted(load);
         <view class="arrow">进入</view>
       </view>
 
-      <view v-if="!profile?.phone" class="card security-entry phone-entry" @click="openPhoneBind">
+      <view v-if="!profile?.phone" class="card security-entry phone-entry" role="button" tabindex="0" aria-label="绑定手机号" @click="openPhoneBind" @keyup.enter="openPhoneBind" @keyup.space.prevent="openPhoneBind">
         <view>
           <view class="entry-title">手机号快捷绑定</view>
           <view class="sub">小程序端可一键绑定手机号，用于报名、下单和会员权益。</view>
@@ -192,6 +220,7 @@ onMounted(load);
   background: rgba(255, 252, 246, 0.96);
   box-shadow: 0 12rpx 34rpx rgba(72, 55, 38, 0.08);
 }
+.error-state { border-color:#fecaca; background:#fff7f7; color:#b91c1c; line-height:1.6; }.state-retry { width:max-content; margin-top:16rpx; color:#b84435; font-weight:900; }.save-error { margin-bottom:16rpx; padding:14rpx; border-radius:8px; background:#fff1f0; color:#b42318; font-size:24rpx; line-height:1.5; }
 
 .hero {
   display: flex;

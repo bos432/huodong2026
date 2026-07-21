@@ -16,6 +16,19 @@
       </div>
     </div>
 
+    <el-alert v-if="tenantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" title="商家范围加载失败">
+      <p>{{ tenantErrorMessage }}</p>
+      <el-button size="small" :loading="tenantLoading" @click="loadTenants">重试商家列表</el-button>
+    </el-alert>
+    <el-alert v-if="merchantErrorMessage" class="scope-alert" type="error" show-icon :closable="false" title="店铺范围加载失败">
+      <p>{{ merchantErrorMessage }}</p>
+      <el-button size="small" :loading="merchantLoading" @click="retryMerchantScope">重试店铺列表</el-button>
+    </el-alert>
+    <el-alert v-if="analyticsErrorMessage" class="scope-alert" type="error" show-icon :closable="false" title="商城经营统计加载失败">
+      <p>{{ analyticsErrorMessage }}</p>
+      <el-button size="small" :loading="loading" @click="loadAnalytics">重试统计数据</el-button>
+    </el-alert>
+
     <el-alert
       v-if="deepLinkWarning"
       class="scope-alert"
@@ -54,10 +67,10 @@
         <el-tag type="warning" effect="plain">{{ paymentModeText(selectedMerchant.paymentMode) }}</el-tag>
       </div>
       <div class="merchant-actions">
-        <el-button size="small" type="primary" plain @click="goMerchantAdmin('/mall-orders')">订单管理</el-button>
-        <el-button size="small" type="success" plain @click="goMerchantAdmin('/mall-marketing')">营销中心</el-button>
-        <el-button size="small" type="warning" plain @click="goMerchantAdmin('/mall-payments')">收款配置</el-button>
-        <el-button size="small" type="info" plain @click="goMerchantAdmin('/mall-logistics')">物流设置</el-button>
+        <el-button v-if="canViewOrders" size="small" type="primary" plain @click="goMerchantAdmin('/mall-orders')">订单管理</el-button>
+        <el-button v-if="canManageProducts" size="small" type="success" plain @click="goMerchantAdmin('/mall-marketing')">营销中心</el-button>
+        <el-button v-if="canManagePayments" size="small" type="warning" plain @click="goMerchantAdmin('/mall-payments')">收款配置</el-button>
+        <el-button v-if="canManageLogistics" size="small" type="info" plain @click="goMerchantAdmin('/mall-logistics')">物流设置</el-button>
         <el-button size="small" @click="openMerchantH5">打开 H5 店铺</el-button>
         <el-button size="small" @click="copyWorkbenchLink">复制统计后台链接</el-button>
       </div>
@@ -168,7 +181,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api } from "../api";
 import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
-import { isPlatformAdmin } from "../permissions";
+import { hasPermission, isPlatformAdmin } from "../permissions";
 
 type Merchant = {
   id: number;
@@ -186,12 +199,23 @@ const tenants = ref<any[]>([]);
 const merchants = ref<Merchant[]>([]);
 const mallAnalytics = ref<any>({});
 const loading = ref(false);
+const tenantLoading = ref(false);
 const merchantLoading = ref(false);
+const tenantErrorMessage = ref("");
+const merchantErrorMessage = ref("");
+const analyticsErrorMessage = ref("");
 const deepLinkWarning = ref("");
+let tenantLoadSequence = 0;
+let merchantLoadSequence = 0;
+let analyticsLoadSequence = 0;
 const filters = reactive({ tenantId: routeTenantId(), merchantId: routeMerchantId() });
 
 const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
-const loadingAny = computed(() => loading.value || merchantLoading.value);
+const loadingAny = computed(() => loading.value || tenantLoading.value || merchantLoading.value);
+const canViewOrders = computed(() => hasPermission("mall.order.view"));
+const canManageProducts = computed(() => hasPermission("mall.product.manage"));
+const canManagePayments = computed(() => hasPermission("mall.payment.manage"));
+const canManageLogistics = computed(() => hasPermission("mall.logistics.manage"));
 const analyticsCards = computed(() => [
   { label: "30天订单", value: mallAnalytics.value.summary?.orderCount || 0, desc: "已收款相关订单" },
   { label: "30天实收", value: `¥${money(mallAnalytics.value.summary?.receivedAmount)}`, desc: "含已支付/已发货/已完成" },
@@ -246,17 +270,46 @@ async function syncRouteQuery() {
 }
 
 function clearAnalytics() {
+  analyticsLoadSequence += 1;
+  loading.value = false;
   mallAnalytics.value = {};
+  analyticsErrorMessage.value = "";
 }
 
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  const sequence = ++tenantLoadSequence;
+  tenantErrorMessage.value = "";
+  if (!isPlatformAdmin()) {
+    tenants.value = [];
+    return;
+  }
+  tenantLoading.value = true;
+  try {
+    const rows = await api.get<any, any[]>("/admin/tenants");
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = Array.isArray(rows) ? rows : [];
+    return true;
+  } catch (error: any) {
+    if (sequence !== tenantLoadSequence) return false;
+    tenants.value = [];
+    tenantErrorMessage.value = error.message || "商家列表加载失败";
+    return false;
+  } finally {
+    if (sequence === tenantLoadSequence) tenantLoading.value = false;
+  }
 }
 
 async function loadMerchants() {
+  const sequence = ++merchantLoadSequence;
+  const tenantId = filters.tenantId;
   merchantLoading.value = true;
+  merchantErrorMessage.value = "";
+  merchants.value = [];
+  clearAnalytics();
   try {
-    merchants.value = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? filters.tenantId : undefined, enabled: "true" } });
+    const rows = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: isPlatformAdmin() ? tenantId : undefined, enabled: "true" } });
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = Array.isArray(rows) ? rows : [];
     const requestedMerchantId = routeMerchantId();
     deepLinkWarning.value = "";
     if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) filters.merchantId = requestedMerchantId;
@@ -269,11 +322,22 @@ async function loadMerchants() {
     if (!filters.merchantId && !isPlatformAdmin() && merchants.value.length === 1) filters.merchantId = merchants.value[0].id;
     return true;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载可统计店铺失败");
+    if (sequence !== merchantLoadSequence || tenantId !== filters.tenantId) return false;
+    merchants.value = [];
+    merchantErrorMessage.value = error.message || "可统计店铺加载失败";
     return false;
   } finally {
-    merchantLoading.value = false;
+    if (sequence === merchantLoadSequence) merchantLoading.value = false;
   }
+}
+
+function currentAnalyticsContext() {
+  return { tenantId: filters.tenantId, merchantId: filters.merchantId };
+}
+
+function sameAnalyticsContext(context: ReturnType<typeof currentAnalyticsContext>) {
+  const current = currentAnalyticsContext();
+  return context.tenantId === current.tenantId && context.merchantId === current.merchantId;
 }
 
 async function loadAnalytics() {
@@ -282,18 +346,33 @@ async function loadAnalytics() {
     clearAnalytics();
     return;
   }
+  const sequence = ++analyticsLoadSequence;
+  const context = currentAnalyticsContext();
   loading.value = true;
+  analyticsErrorMessage.value = "";
+  mallAnalytics.value = {};
   try {
-    mallAnalytics.value = await api.get<any, any>("/admin/mall/analytics", { params: currentMallParams() });
+    const result = await api.get<any, any>("/admin/mall/analytics", { params: currentMallParams() });
+    if (sequence !== analyticsLoadSequence || !sameAnalyticsContext(context)) return false;
+    mallAnalytics.value = result && typeof result === "object" && !Array.isArray(result) ? result : {};
+    return true;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载商城统计失败");
+    if (sequence !== analyticsLoadSequence || !sameAnalyticsContext(context)) return false;
+    mallAnalytics.value = {};
+    analyticsErrorMessage.value = error.message || "商城统计加载失败";
+    return false;
   } finally {
-    loading.value = false;
+    if (sequence === analyticsLoadSequence) loading.value = false;
   }
 }
 
 async function reload() {
   await loadAnalytics();
+}
+
+async function retryMerchantScope() {
+  const ok = await loadMerchants();
+  if (ok) await loadAnalytics();
 }
 
 async function handleTenantChange() {
@@ -324,6 +403,14 @@ function merchantH5Url() {
 
 function goMerchantAdmin(path: string) {
   if (!selectedMerchant.value) return;
+  const permissionByPath: Record<string, string> = {
+    "/mall-orders": "mall.order.view",
+    "/mall-marketing": "mall.product.manage",
+    "/mall-payments": "mall.payment.manage",
+    "/mall-logistics": "mall.logistics.manage"
+  };
+  const permission = permissionByPath[path];
+  if (permission && !hasPermission(permission)) return;
   router.push({ path, query: { tenantId: selectedMerchant.value.tenant?.id, merchantId: selectedMerchant.value.id } });
 }
 
@@ -398,6 +485,7 @@ watch(() => [route.query.tenantId, route.query.merchantId], async () => {
 .page-header p { margin: 0; color: #64748b; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .scope-alert { margin-bottom: 2px; }
+.scope-alert p { margin: 0 0 8px; }
 .merchant-card { border-color: #fed7aa; background: linear-gradient(135deg, #fff7ed 0%, #fff 72%); }
 .merchant-card :deep(.el-card__body) { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
 .merchant-card strong { color: #0f172a; }

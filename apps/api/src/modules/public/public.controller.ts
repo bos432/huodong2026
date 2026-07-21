@@ -1,12 +1,11 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
-import { mkdirSync } from "fs";
-import { diskStorage } from "multer";
-import { join } from "path";
 import QRCode from "qrcode";
 import { PublicService, PublicTenantContext } from "./public.service";
-import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto, WechatPhoneDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MarketingPopupEventDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerAttendanceSubmitDto, VolunteerServiceConfirmDto, VolunteerTaskApplyDto, VolunteerTaskCancelDto, WechatLoginDto, WechatPhoneDto } from "./dto";
+import { AidApplicationCreateDto, AidApplicationMaterialDto, AidApplicationSupplementDto } from "./dto";
+import { AidService } from "../aid/aid.service";
 
 const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
   "image/jpeg": ".jpg",
@@ -15,16 +14,11 @@ const AVATAR_EXTENSION_BY_MIME: Record<string, string> = {
 };
 const REVIEW_IMAGE_EXTENSION_BY_MIME = AVATAR_EXTENSION_BY_MIME;
 const REFUND_IMAGE_EXTENSION_BY_MIME = AVATAR_EXTENSION_BY_MIME;
-const AVATAR_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "avatars");
-const MALL_REVIEW_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "mall-reviews");
-const MALL_REFUND_UPLOAD_DIR = join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "mall-refunds");
-mkdirSync(AVATAR_UPLOAD_DIR, { recursive: true });
-mkdirSync(MALL_REVIEW_UPLOAD_DIR, { recursive: true });
-mkdirSync(MALL_REFUND_UPLOAD_DIR, { recursive: true });
+const REGISTRATION_ATTACHMENT_MIMES = new Set(["image/jpeg", "image/png", "image/webp", "application/pdf"]);
 
 @Controller("public")
 export class PublicController {
-  constructor(private readonly service: PublicService) {}
+  constructor(private readonly service: PublicService, private readonly aid: AidService) {}
 
   @Post("auth/h5-login")
   h5Login(@Body() dto: H5LoginDto) {
@@ -91,8 +85,8 @@ export class PublicController {
   }
 
   @Post("marketing-popups/:id/events")
-  marketingPopupEvent(@Param("id", ParseIntPipe) id: number, @Body() dto: { event?: string }) {
-    return this.service.recordMarketingPopupEvent(id, String(dto?.event || "impression"));
+  marketingPopupEvent(@Param("id", ParseIntPipe) id: number, @Body() dto: MarketingPopupEventDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    return this.service.recordMarketingPopupEvent(id, dto.event, dto.pageKey, dto.platform, this.tenantContext(req, tenantCode));
   }
 
   @Get("ad-slots")
@@ -101,8 +95,8 @@ export class PublicController {
   }
 
   @Post("ad-slots/:id/events")
-  adSlotEvent(@Param("id", ParseIntPipe) id: number, @Body() dto: { event?: string; platform?: string }) {
-    return this.service.recordAdSlotEvent(id, String(dto?.event || "impression"), String(dto?.platform || "h5"));
+  adSlotEvent(@Param("id", ParseIntPipe) id: number, @Body() dto: { event?: string; platform?: string }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    return this.service.recordAdSlotEvent(id, String(dto?.event || "impression"), String(dto?.platform || "h5"), this.tenantContext(req, tenantCode));
   }
 
   @Get("charity/summary")
@@ -126,25 +120,91 @@ export class PublicController {
   }
 
   @Post("ambassador/applications")
-  submitAmbassadorApplication(@Body() dto: AmbassadorApplicationDto) {
+  async submitAmbassadorApplication(@Body() dto: AmbassadorApplicationDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const context = this.tenantContext(req, tenantCode);
+    const partnerSource = ["dean_recruit", "partner_apply", "brand_story_contact"].includes(String(dto.source || ""));
+    await this.service.assertFeatureGateEnabled(context, dto.kind === "partner" || partnerSource ? "partner" : "ambassador");
     return this.service.submitAmbassadorApplication(dto);
   }
 
+  @Post("aid/applications")
+  async createAidApplication(@Body() dto: AidApplicationCreateDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    const tenant = await this.service.assertFeatureGateEnabled(context, "charity");
+    return this.aid.createApplication(dto, user, tenant?.code);
+  }
+
+  @Get("me/aid-applications")
+  async myAidApplications(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    const tenant = await this.service.assertFeatureGateEnabled(context, "charity");
+    return this.aid.myApplications(user, tenant?.code);
+  }
+
+  @Post("me/aid-applications/:id/supplement")
+  async supplementAidApplication(@Param("id", ParseIntPipe) id: number, @Body() dto: AidApplicationSupplementDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    const tenant = await this.service.assertFeatureGateEnabled(context, "charity");
+    return this.aid.submitSupplement(id, dto, user, tenant?.code);
+  }
+
+  @Post("me/aid-applications/:id/materials")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 10 * 1024 * 1024 }, fileFilter: (_req, file, callback) => callback(null, REGISTRATION_ATTACHMENT_MIMES.has(file.mimetype)) }))
+  async uploadAidApplicationMaterial(@Param("id", ParseIntPipe) id: number, @Body() dto: AidApplicationMaterialDto, @UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    const tenant = await this.service.assertFeatureGateEnabled(context, "charity");
+    return this.aid.addMaterial(id, dto, file as Express.Multer.File & { buffer: Buffer }, user, tenant?.code);
+  }
+
   @Get("volunteer/tasks")
-  volunteerTasks(@Query("city") city?: string) {
-    return this.service.volunteerTasks(city);
+  async volunteerTasks(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("city") city?: string) {
+    const context = this.tenantContext(req, tenantCode);
+    await this.service.assertFeatureGateEnabled(context, "volunteer");
+    return this.service.volunteerTasks(city, context);
   }
 
   @Post("volunteer/apply")
-  async applyVolunteer(@Body() dto: VolunteerApplyDto, @Req() req: any) {
+  async applyVolunteer(@Body() dto: VolunteerApplyDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const context = this.tenantContext(req, tenantCode);
+    await this.service.assertFeatureGateEnabled(context, "volunteer");
     const user = this.service.optionalUserFromAuthorization(req.headers?.authorization);
-    return this.service.applyVolunteer(dto, await user);
+    return this.service.applyVolunteer(dto, await user, context);
   }
 
   @Post("volunteer/tasks/:id/apply")
-  async applyVolunteerTask(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskApplyDto, @Req() req: any) {
+  async applyVolunteerTask(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskApplyDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const context = this.tenantContext(req, tenantCode);
+    await this.service.assertFeatureGateEnabled(context, "volunteer");
     const user = this.service.optionalUserFromAuthorization(req.headers?.authorization);
-    return this.service.applyVolunteerTask(id, dto, await user);
+    return this.service.applyVolunteerTask(id, dto, await user, context);
+  }
+
+  @Post("me/volunteer/task-applications/:id/cancel")
+  async cancelVolunteerTaskApplication(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerTaskCancelDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    await this.service.assertFeatureGateEnabled(context, "volunteer");
+    return this.service.cancelVolunteerTaskApplication(id, dto, user, context);
+  }
+
+  @Post("me/volunteer/task-applications/:id/attendance")
+  async submitVolunteerAttendance(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerAttendanceSubmitDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    await this.service.assertFeatureGateEnabled(context, "volunteer");
+    return this.service.submitVolunteerAttendance(id, dto, user, context);
+  }
+
+  @Post("me/volunteer/service-records/:id/confirm")
+  async confirmVolunteerServiceRecord(@Param("id", ParseIntPipe) id: number, @Body() dto: VolunteerServiceConfirmDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    await this.service.assertFeatureGateEnabled(context, "volunteer");
+    return this.service.confirmVolunteerServiceRecord(id, dto, user, context);
   }
 
   @Get("activities")
@@ -170,7 +230,8 @@ export class PublicController {
     const host = req.headers?.["x-forwarded-host"] || req.headers?.host || null;
     return {
       tenantCode: tenantCode || (typeof headerCode === "string" ? headerCode : Array.isArray(headerCode) ? headerCode[0] : null),
-      host: typeof host === "string" ? host : null
+      host: typeof host === "string" ? host : null,
+      userId: this.service.optionalUserIdFromAuthorization(req.headers?.authorization)
     };
   }
 
@@ -246,9 +307,9 @@ export class PublicController {
   }
 
   @Get("me/profile")
-  async myProfile(@Req() req: any) {
+  async myProfile(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myProfile(user);
+    return this.service.myProfile(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/courses")
@@ -264,18 +325,82 @@ export class PublicController {
   }
 
   @Get("me/certificates")
-  async myCertificates(@Req() req: any) {
+  async myCertificates(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myCertificates(user);
+    return this.service.myCertificates(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/certificates/:id/download")
-  async downloadMyCertificate(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Res() res: Response) {
+  async downloadMyCertificate(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Res() res: Response, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    const result = await this.service.myCertificateDownload(user, id);
+    const result = await this.service.myCertificateDownload(user, id, this.tenantContext(req, tenantCode));
+    const encodedFilename = encodeURIComponent(result.filename).replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
     res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(result.filename)}"`);
+    res.setHeader("Content-Disposition", `attachment; filename="certificate.svg"; filename*=UTF-8''${encodedFilename}`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Content-Security-Policy", "sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.setHeader("X-Download-Options", "noopen");
     res.end(result.svg);
+  }
+
+  @Get("certificates/:certificateNo/image")
+  async certificateImage(@Param("certificateNo") certificateNo: string, @Res() res: Response) {
+    const result = await this.service.certificateImage(certificateNo);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Content-Security-Policy", "sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.end(result.svg);
+  }
+
+  @Get("coupons/available")
+  async availableCoupons(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("activityId") activityId?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.availableActivityCoupons(user, this.tenantContext(req, tenantCode), activityId ? Number(activityId) : undefined);
+  }
+
+  @Post("coupons/:id/claim")
+  async claimCoupon(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.claimActivityCoupon(id, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("redemption-codes/redeem")
+  async redeemCode(@Body() body: { code?: string }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.redeemCode(String(body.code || ""), user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("course-orders/:id/pay/wechat")
+  async payCourseWechat(@Param("id", ParseIntPipe) id: number, @Body() dto: ProviderPayDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.createCourseProviderPayment(id, "wechat", dto, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("course-orders/:id/pay/alipay")
+  async payCourseAlipay(@Param("id", ParseIntPipe) id: number, @Body() dto: ProviderPayDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.createCourseProviderPayment(id, "alipay", dto, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("course-orders/:id/pay/balance")
+  async payCourseBalance(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.payCourseOrderWithBalance(id, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("course-orders/:id/payment-status")
+  async queryCoursePayment(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.queryCourseOrderPayment(id, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("course-orders/:id/payment-close")
+  async closeCoursePayment(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.closeCourseOrderPayment(id, user, this.tenantContext(req, tenantCode));
   }
 
   @Get("certificates/:certificateNo/verify")
@@ -283,34 +408,39 @@ export class PublicController {
     return this.service.verifyCertificate(certificateNo);
   }
 
+  @Get("volunteer-proofs/:proofNo/verify")
+  verifyVolunteerProof(@Param("proofNo") proofNo: string) {
+    return this.service.verifyVolunteerProof(proofNo);
+  }
+
   @Get("me/favorite-courses")
-  async myFavoriteCourses(@Req() req: any) {
+  async myFavoriteCourses(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myFavoriteCourses(user);
+    return this.service.myFavoriteCourses(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/course-favorites/:id")
-  async favoriteCourseState(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async favoriteCourseState(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.favoriteCourseState(id, user);
+    return this.service.favoriteCourseState(id, user, this.tenantContext(req, tenantCode));
   }
 
   @Post("me/course-favorites/:id")
-  async toggleFavoriteCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  async toggleFavoriteCourse(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.toggleFavoriteCourse(id, user);
+    return this.service.toggleFavoriteCourse(id, user, this.tenantContext(req, tenantCode));
   }
 
   @Put("me/profile")
-  async updateMyProfileByPut(@Body() dto: UpdateProfileDto, @Req() req: any) {
+  async updateMyProfileByPut(@Body() dto: UpdateProfileDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.updateMyProfile(user, dto);
+    return this.service.updateMyProfile(user, dto, this.tenantContext(req, tenantCode));
   }
 
   @Patch("me/profile")
-  async updateMyProfile(@Body() dto: UpdateProfileDto, @Req() req: any) {
+  async updateMyProfile(@Body() dto: UpdateProfileDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.updateMyProfile(user, dto);
+    return this.service.updateMyProfile(user, dto, this.tenantContext(req, tenantCode));
   }
 
   @Post("me/password")
@@ -326,72 +456,51 @@ export class PublicController {
   }
 
   @Post("me/phone")
-  async updateMyPhone(@Body() dto: UpdatePhoneDto, @Req() req: any) {
+  async updateMyPhone(@Body() dto: UpdatePhoneDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.updateMyPhone(user, dto);
+    return this.service.updateMyPhone(user, dto, this.tenantContext(req, tenantCode));
   }
 
   @Post("me/phone/wechat")
-  async updateMyPhoneByWechat(@Body() dto: WechatPhoneDto, @Req() req: any) {
+  async updateMyPhoneByWechat(@Body() dto: WechatPhoneDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.bindWechatPhone(user, dto);
+    return this.service.bindWechatPhone(user, dto, this.tenantContext(req, tenantCode));
   }
 
   @Post("me/avatar")
   @UseInterceptors(FileInterceptor("file", {
-    storage: diskStorage({
-      destination: AVATAR_UPLOAD_DIR,
-      filename: (_req, file, callback) => {
-        const suffix = AVATAR_EXTENSION_BY_MIME[file.mimetype] || ".jpg";
-        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
-      }
-    }),
     limits: { fileSize: 2 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
       callback(null, Boolean(AVATAR_EXTENSION_BY_MIME[file.mimetype]));
     }
   }))
-  async uploadMyAvatar(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
+  async uploadMyAvatar(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.uploadMyAvatar(user, file);
+    return this.service.uploadMyAvatar(user, file, this.tenantContext(req, tenantCode));
   }
 
   @Post("me/mall/review-images")
   @UseInterceptors(FileInterceptor("file", {
-    storage: diskStorage({
-      destination: MALL_REVIEW_UPLOAD_DIR,
-      filename: (_req, file, callback) => {
-        const suffix = REVIEW_IMAGE_EXTENSION_BY_MIME[file.mimetype] || ".jpg";
-        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
-      }
-    }),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
       callback(null, Boolean(REVIEW_IMAGE_EXTENSION_BY_MIME[file.mimetype]));
     }
   }))
-  async uploadMallReviewImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
-    await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.uploadMallReviewImage(file);
+  async uploadMallReviewImage(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.uploadMallReviewImage(user, file, this.tenantContext(req, tenantCode));
   }
 
   @Post("me/mall/refund-images")
   @UseInterceptors(FileInterceptor("file", {
-    storage: diskStorage({
-      destination: MALL_REFUND_UPLOAD_DIR,
-      filename: (_req, file, callback) => {
-        const suffix = REFUND_IMAGE_EXTENSION_BY_MIME[file.mimetype] || ".jpg";
-        callback(null, `${Date.now()}-${Math.random().toString(16).slice(2)}${suffix}`);
-      }
-    }),
     limits: { fileSize: 5 * 1024 * 1024 },
     fileFilter: (_req, file, callback) => {
       callback(null, Boolean(REFUND_IMAGE_EXTENSION_BY_MIME[file.mimetype]));
     }
   }))
-  async uploadMallRefundImage(@UploadedFile() file: Express.Multer.File, @Req() req: any) {
-    await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.uploadMallRefundImage(file);
+  async uploadMallRefundImage(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.uploadMallRefundImage(user, file, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/wallet/transactions")
@@ -418,10 +527,41 @@ export class PublicController {
     return this.service.myCharityTransactions(user, page ? Number(page) : undefined, pageSize ? Number(pageSize) : undefined);
   }
 
-  @Get("me/volunteer")
-  async myVolunteer(@Req() req: any) {
+  @Get("me/charity/transactions/:id/certificate/download")
+  async downloadMyCharityContributionCertificate(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Res() res: Response) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
-    return this.service.myVolunteer(user);
+    const result = await this.service.myCharityContributionCertificate(user, id);
+    const encodedFilename = encodeURIComponent(result.filename).replace(/['()]/g, (character) => `%${character.charCodeAt(0).toString(16).toUpperCase()}`);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="charity-contribution.svg"; filename*=UTF-8''${encodedFilename}`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.setHeader("Content-Security-Policy", "sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.end(result.svg);
+  }
+
+  @Get("charity-certificates/:certificateNo/verify")
+  verifyCharityContributionCertificate(@Param("certificateNo") certificateNo: string) {
+    return this.service.verifyCharityContributionCertificate(certificateNo);
+  }
+
+  @Get("charity-certificates/:certificateNo/image")
+  async charityContributionCertificateImage(@Param("certificateNo") certificateNo: string, @Res() res: Response) {
+    const result = await this.service.charityContributionCertificateImage(certificateNo);
+    res.setHeader("Content-Type", "image/svg+xml; charset=utf-8");
+    res.setHeader("Content-Disposition", "inline");
+    res.setHeader("Cache-Control", "public, max-age=300");
+    res.setHeader("Content-Security-Policy", "sandbox");
+    res.setHeader("X-Content-Type-Options", "nosniff");
+    res.end(result.svg);
+  }
+
+  @Get("me/volunteer")
+  async myVolunteer(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const context = this.tenantContext(req, tenantCode);
+    await this.service.assertFeatureGateEnabled(context, "volunteer");
+    return this.service.myVolunteer(user, context);
   }
 
   @Get("me/registrations")
@@ -452,6 +592,38 @@ export class PublicController {
   async checkInCodeMe(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.checkInCode(id, user.id, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("me/registrations/:id/payment-status")
+  async registrationPaymentStatus(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.queryRegistrationPayment(id, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("me/registrations/:id/payment-close")
+  async closeRegistrationPayment(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.closeRegistrationPayment(id, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("me/registration-attachments")
+  @UseInterceptors(FileInterceptor("file", {
+    limits: { fileSize: 10 * 1024 * 1024 },
+    fileFilter: (_req, file, callback) => callback(null, REGISTRATION_ATTACHMENT_MIMES.has(file.mimetype))
+  }))
+  async uploadRegistrationAttachment(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.uploadRegistrationAttachment(user, file, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("me/registration-attachments/:token/download")
+  async downloadRegistrationAttachment(@Param("token") token: string, @Req() req: any, @Res() res: Response, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const file = await this.service.readMyRegistrationAttachment(token, user, this.tenantContext(req, tenantCode));
+    res.setHeader("Content-Type", file.mimetype);
+    res.setHeader("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(file.originalName)}`);
+    res.setHeader("Cache-Control", "private, no-store");
+    res.send(file.buffer);
   }
 
   @Get("me/registrations/:id/check-in-qrcode.png")
@@ -518,6 +690,16 @@ export class PaymentController {
   @Post("alipay/callback")
   alipayPaymentCallback(@Body() body: Record<string, unknown>, @Req() req: any) {
     return this.service.providerPaymentCallback("alipay", body, { headers: req.headers, rawBody: req.rawBody });
+  }
+
+  @Post("course/wechat/callback")
+  courseWechatPaymentCallback(@Body() body: Record<string, unknown>, @Req() req: any) {
+    return this.service.courseProviderPaymentCallback("wechat", body, { headers: req.headers, rawBody: req.rawBody });
+  }
+
+  @Post("course/alipay/callback")
+  courseAlipayPaymentCallback(@Body() body: Record<string, unknown>, @Req() req: any) {
+    return this.service.courseProviderPaymentCallback("alipay", body, { headers: req.headers, rawBody: req.rawBody });
   }
 
   @Post("wechat/refund-callback")

@@ -8,10 +8,10 @@ export function preferredMallWechatPaymentScene() {
   return "jsapi";
 }
 
-export async function handleMallWechatPayResult(pay: any) {
+export async function handleWechatPayResult(pay: any, fallbackCallbackPath = "/payment/mall/wechat/callback") {
   const payParams = pay?.payParams || {};
   if (pay?.mode === "sandbox") {
-    const callbackPath = pay.callbackPath || payParams.callbackPath || "/payment/mall/wechat/callback";
+    const callbackPath = pay.callbackPath || payParams.callbackPath || fallbackCallbackPath;
     await request(callbackPath, { method: "POST", data: { ...payParams, amount: Number(pay.amount) } });
     uni.showToast({ title: "微信支付成功", icon: "none" });
     return false;
@@ -46,7 +46,11 @@ export async function handleMallWechatPayResult(pay: any) {
   return false;
 }
 
-function requestWechatPayment(params: Record<string, any>) {
+export async function handleMallWechatPayResult(pay: any) {
+  return handleWechatPayResult(pay, "/payment/mall/wechat/callback");
+}
+
+export function requestWechatPayment(params: Record<string, any>) {
   return new Promise<void>((resolve, reject) => {
     uni.requestPayment({
       provider: "wxpay",
@@ -56,7 +60,7 @@ function requestWechatPayment(params: Record<string, any>) {
       signType: String(params.signType || "RSA"),
       paySign: String(params.paySign),
       success: () => resolve(),
-      fail: (error) => reject(clientError(error, "微信支付失败", { provider: "wxpay", tradeType: params.tradeType || "JSAPI" }))
+      fail: (error: unknown) => reject(clientError(error, "微信支付失败", { provider: "wxpay", tradeType: params.tradeType || "JSAPI" }))
     } as any);
   });
 }

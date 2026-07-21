@@ -1,11 +1,14 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { loginH5, loginH5Password, loginWechat, requestH5Code, uploadMyAvatar, withTenantCode } from "../../api";
+import { computed, onUnmounted, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { getCurrentTenantCode, loginH5, loginH5Password, loginWechat, requestH5Code, uploadMyAvatar, withTenantCode } from "../../api";
 import { isTabUrl, usePageDecoration } from "../../decoration";
+import { normalizeLoginRedirectTarget } from "../../login-redirect";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import { reviewSafeText } from "../../review-safe-text";
 
 type WechatProfilePayload = {
   nickname?: string;
@@ -23,6 +26,9 @@ const loginMode = ref<"password" | "code">("password");
 const sending = ref(false);
 const loggingIn = ref(false);
 const message = ref("");
+const actionError = ref("");
+const cooldownSeconds = ref(0);
+let cooldownTimer: ReturnType<typeof setInterval> | null = null;
 const wechatAuthVisible = ref(false);
 const wechatAuthNickname = ref("");
 const wechatAuthAvatarPath = ref("");
@@ -30,7 +36,7 @@ const wechatAuthMessage = ref("");
 const phoneBindVisible = ref(false);
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("login_page", "/pages/user/login");
 
-const canSend = computed(() => /^1\d{10}$/.test(phone.value.trim()) && !sending.value);
+const canSend = computed(() => /^1\d{10}$/.test(phone.value.trim()) && !sending.value && cooldownSeconds.value === 0);
 const canPasswordLogin = computed(() => /^1\d{10}$/.test(phone.value.trim()) && password.value.length >= 6 && !loggingIn.value);
 const canCodeLogin = computed(() => /^1\d{10}$/.test(phone.value.trim()) && /^\d{6}$/.test(code.value.trim()) && token.value && !loggingIn.value);
 const canLogin = computed(() => (loginMode.value === "password" ? canPasswordLogin.value : canCodeLogin.value));
@@ -51,6 +57,10 @@ function updateCode(event: any) {
   code.value = inputValue(event).replace(/\D/g, "").slice(0, 6);
 }
 
+function setLoginMode(mode: "password" | "code") {
+  if (!loggingIn.value) loginMode.value = mode;
+}
+
 function syncH5LoginInputs() {
   // #ifdef H5
   const readInput = (name: string) => {
@@ -69,9 +79,7 @@ function syncH5LoginInputs() {
 function redirectTarget() {
   const pages = getCurrentPages();
   const options = (pages[pages.length - 1] as any)?.options || {};
-  const target = decodeURIComponent(options.redirect || "/pages/index/index");
-  if (!target.startsWith("/pages/") || target.split("?")[0] === "/pages/user/login") return "/pages/index/index";
-  return target;
+  return normalizeLoginRedirectTarget(options.redirect, getCurrentTenantCode());
 }
 
 function goAdminLogin() {
@@ -84,8 +92,26 @@ function goHome() {
 
 function goAfterLogin() {
   const target = redirectTarget();
-  if (isTabUrl(target)) uni.reLaunch({ url: withTenantCode(target.split("?")[0]) });
-  else uni.redirectTo({ url: withTenantCode(target) });
+  if (isTabUrl(target)) uni.reLaunch({ url: target });
+  else uni.redirectTo({ url: target });
+}
+
+function startCooldown(seconds = 60) {
+  cooldownSeconds.value = Math.max(Math.trunc(Number(seconds) || 60), 1);
+  if (cooldownTimer) clearInterval(cooldownTimer);
+  cooldownTimer = setInterval(() => {
+    cooldownSeconds.value = Math.max(cooldownSeconds.value - 1, 0);
+    if (cooldownSeconds.value === 0 && cooldownTimer) {
+      clearInterval(cooldownTimer);
+      cooldownTimer = null;
+    }
+  }, 1000);
+}
+
+function formatExpiry(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value || "").replace("T", " ").slice(0, 16);
+  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", hour12:false, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }).replaceAll("/", "-");
 }
 
 async function sendCode() {
@@ -96,6 +122,7 @@ async function sendCode() {
   }
   sending.value = true;
   message.value = "";
+  actionError.value = "";
   try {
     const data = await requestH5Code(phone.value.trim());
     token.value = data.verificationToken;
@@ -103,9 +130,11 @@ async function sendCode() {
     devCode.value = data.devCode || "";
     if (devCode.value) code.value = devCode.value;
     message.value = devCode.value ? `本地开发验证码：${devCode.value}` : "验证码已发送，请查看短信";
+    startCooldown(data.cooldownSeconds || 60);
     uni.showToast({ title: "验证码已发送", icon: "success" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "发送失败", icon: "none" });
+    actionError.value = reviewSafeText(error.message || "验证码发送失败");
+    uni.showToast({ title: actionError.value, icon: "none" });
   } finally {
     sending.value = false;
   }
@@ -118,13 +147,15 @@ async function submit() {
     return;
   }
   loggingIn.value = true;
+  actionError.value = "";
   try {
     if (loginMode.value === "password") await loginH5Password(phone.value.trim(), password.value, `用户${phone.value.slice(-4)}`);
     else await loginH5(phone.value.trim(), token.value, code.value.trim(), `用户${phone.value.slice(-4)}`);
     uni.showToast({ title: "登录成功", icon: "success" });
     goAfterLogin();
   } catch (error: any) {
-    uni.showToast({ title: error.message || "登录失败", icon: "none" });
+    actionError.value = reviewSafeText(error.message || "登录失败");
+    uni.showToast({ title: actionError.value, icon: "none" });
   } finally {
     loggingIn.value = false;
   }
@@ -183,7 +214,8 @@ async function submitWechat() {
     const user = await finishWechatLogin();
     continueAfterWechatLogin(user);
   } catch (error: any) {
-    uni.showToast({ title: error.message || "授权登录失败", icon: "none" });
+    actionError.value = reviewSafeText(error.message || "授权登录失败");
+    uni.showToast({ title: actionError.value, icon: "none" });
   } finally {
     loggingIn.value = false;
   }
@@ -201,7 +233,8 @@ async function confirmWechatProfileLogin() {
     wechatAuthVisible.value = false;
     continueAfterWechatLogin(user);
   } catch (error: any) {
-    uni.showToast({ title: error.message || "授权登录失败", icon: "none" });
+    actionError.value = reviewSafeText(error.message || "授权登录失败");
+    uni.showToast({ title: actionError.value, icon: "none" });
   } finally {
     loggingIn.value = false;
   }
@@ -217,7 +250,8 @@ function handlePhoneBoundAfterLogin() {
   goAfterLogin();
 }
 
-onMounted(loadDecoration);
+onShow(async () => { await loadDecoration(); });
+onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
 </script>
 
 <template>
@@ -243,33 +277,34 @@ onMounted(loadDecoration);
       <view class="phone-login-section">
         <view class="field">
           <view class="label">手机号</view>
-          <input v-model="phone" data-login-field="phone" class="input" type="number" maxlength="11" placeholder="请输入手机号" @input="updatePhone" @change="updatePhone" @blur="updatePhone" />
+          <input v-model="phone" data-login-field="phone" class="input" type="number" maxlength="11" placeholder="请输入手机号" aria-label="手机号" confirm-type="next" @input="updatePhone" @change="updatePhone" @blur="updatePhone" />
         </view>
         <view class="login-tabs">
-          <view class="login-tab" :class="{ active: loginMode === 'password' }" @click="loginMode = 'password'">密码登录</view>
-          <view class="login-tab" :class="{ active: loginMode === 'code' }" @click="loginMode = 'code'">验证码登录</view>
+          <view class="login-tab" :class="{ active: loginMode === 'password', disabled: loggingIn }" role="button" tabindex="0" aria-label="切换到密码登录" @click="setLoginMode('password')">密码登录</view>
+          <view class="login-tab" :class="{ active: loginMode === 'code', disabled: loggingIn }" role="button" tabindex="0" aria-label="切换到验证码登录" @click="setLoginMode('code')">验证码登录</view>
         </view>
         <view v-if="loginMode === 'password'" class="field">
           <view class="label">密码</view>
-          <input v-model="password" data-login-field="password" class="input" type="password" maxlength="64" placeholder="请输入密码" @input="updatePassword" @change="updatePassword" @blur="updatePassword" />
+          <input v-model="password" data-login-field="password" class="input" type="password" maxlength="64" placeholder="请输入密码" aria-label="密码" confirm-type="done" @confirm="submit" @input="updatePassword" @change="updatePassword" @blur="updatePassword" />
         </view>
         <template v-else>
           <view class="field">
             <view class="label">验证码</view>
             <view class="code-row">
-              <input v-model="code" data-login-field="code" class="input" type="number" maxlength="6" placeholder="6 位验证码" @input="updateCode" @change="updateCode" @blur="updateCode" />
-              <view class="mini-button" :class="{ disabled: !canSend }" @click="sendCode">{{ sending ? "发送中" : "获取验证码" }}</view>
+              <input v-model="code" data-login-field="code" class="input" type="number" maxlength="6" placeholder="6 位验证码" aria-label="验证码" confirm-type="done" @confirm="submit" @input="updateCode" @change="updateCode" @blur="updateCode" />
+              <view class="mini-button" :class="{ disabled: !canSend }" role="button" tabindex="0" :aria-label="cooldownSeconds ? `${cooldownSeconds}秒后可重新获取验证码` : '获取验证码'" @click="sendCode">{{ sending ? "发送中" : cooldownSeconds ? `${cooldownSeconds}秒` : "获取验证码" }}</view>
             </view>
           </view>
           <view v-if="message" class="notice">{{ message }}</view>
-          <view v-if="expiresAt" class="subtle">有效期至：{{ expiresAt.replace("T", " ").slice(0, 16) }}</view>
+          <view v-if="expiresAt" class="subtle">有效期至：{{ formatExpiry(expiresAt) }}</view>
         </template>
-        <view class="button" :class="{ secondary: !canLogin }" @click="submit">{{ loggingIn ? "登录中..." : "登录" }}</view>
+        <view v-if="actionError" class="login-error" role="alert" aria-live="assertive">{{ actionError }}</view>
+        <view class="button" :class="{ secondary: !canLogin, disabled: loggingIn }" role="button" tabindex="0" aria-label="登录" @click="submit">{{ loggingIn ? "登录中..." : "登录" }}</view>
       </view>
-      <view class="admin-login-entry" @click="goAdminLogin">
+      <view class="admin-login-entry" role="button" tabindex="0" aria-label="进入管理端登录" @click="goAdminLogin">
         <text>管理端入口</text>
       </view>
-      <view class="home-entry" @click="goHome">
+      <view class="home-entry" role="button" tabindex="0" aria-label="返回首页" @click="goHome">
         <text>先逛首页</text>
       </view>
     </view>
@@ -390,6 +425,7 @@ onMounted(loadDecoration);
 .code-row { display: grid; grid-template-columns: 1fr 190rpx; gap: 12rpx; align-items: center; }
 .mini-button { height: 78rpx; border-radius: 16rpx; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 700; }
 .mini-button.disabled { background: #9ca3af; }
+.login-error { padding:18rpx; border:1rpx solid #f0b8b0; border-radius:12rpx; background:#fff4f2; color:#b42318; font-size:25rpx; line-height:1.6; overflow-wrap:anywhere; }
 .notice { padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); color: #4a6b8a; font-size: 26rpx; }
 .wechat-button { background: #16a34a; }
 .native-button { width: 100%; margin: 0; padding: 0; border: 0; line-height: normal; }
@@ -466,4 +502,6 @@ onMounted(loadDecoration);
 .auth-action.reject { background: #f3f4f6; color: #111827; }
 .auth-action.allow { background: #16a34a; color: #fff; }
 .auth-action[disabled] { opacity: .62; }
+.login-page { min-height:100vh; box-sizing:border-box; padding-bottom:calc(42rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
+@media (min-width:900px) { .login-page { max-width:760px; margin:0 auto; } }
 </style>

@@ -1,4 +1,4 @@
-import { request } from "./api";
+import { getCurrentTenantCode, request } from "./api";
 import { ref } from "vue";
 
 type PageTheme = {
@@ -42,6 +42,7 @@ export const pageBrand = ref({
 });
 
 let latestRuntimeTitle = defaultTheme.brandName;
+let themeLoadId = 0;
 
 function clamp(value: unknown, min: number, max: number, fallback: number) {
   const numeric = Number(value);
@@ -141,10 +142,14 @@ export function applyPageTheme(theme?: PageTheme | null) {
 }
 
 export async function loadPageTheme() {
+  const loadId = ++themeLoadId;
+  const tenantCode = getCurrentTenantCode();
   try {
     const setting = await request<{ pageTheme?: PageTheme }>("/public/settings/operation");
+    if (loadId !== themeLoadId || tenantCode !== getCurrentTenantCode()) return;
     applyPageTheme(setting?.pageTheme);
   } catch {
+    if (loadId !== themeLoadId || tenantCode !== getCurrentTenantCode()) return;
     applyPageTheme(defaultTheme);
   }
 }

@@ -1,15 +1,15 @@
 <template>
   <view class="container order-confirm-page">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">‹ 返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">‹ 返回</view>
       <text class="nav-title">确认订单</text>
       <view class="nav-placeholder"></view>
     </view>
 
     <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="error" class="card state-card">
+    <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
       <view>{{ error }}</view>
-      <view class="button secondary retry-button" @click="loadCourse">重试</view>
+      <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载订单" @click="loadCourse" @keyup.enter="loadCourse" @keyup.space.prevent="loadCourse">重试</view>
     </view>
 
     <template v-else-if="course">
@@ -36,14 +36,15 @@
       <view v-if="Number(course.price) > 0" class="section-card">
         <view class="section-title-row">
           <text class="section-title">支付方式</text>
-          <text class="section-badge">线下确认</text>
+          <text class="section-badge">安全支付</text>
         </view>
-        <view class="payment-notice">当前仅支持线下收款。后台确认后才会开通参与权益。</view>
-        <view v-for="(pm, i) in paymentMethods" :key="i" class="payment-option" @click="selectedPayment = i">
+        <view class="payment-notice">在线支付成功后立即开通；线下收款需后台确认。</view>
+        <view v-for="pm in availablePaymentMethods" :key="pm.value" class="payment-option" role="radio" tabindex="0" :aria-checked="selectedPayment === pm.value" :aria-label="`选择${pm.label}`" @click="selectedPayment = pm.value" @keyup.enter="selectedPayment = pm.value" @keyup.space.prevent="selectedPayment = pm.value">
           <text class="payment-icon">{{ pm.icon }}</text>
           <text class="payment-label">{{ pm.label }}</text>
-          <view class="radio" :class="{ checked: selectedPayment === i }">{{ selectedPayment === i ? "✓" : "" }}</view>
+          <view class="radio" :class="{ checked: selectedPayment === pm.value }">{{ selectedPayment === pm.value ? "✓" : "" }}</view>
         </view>
+        <view v-if="!availablePaymentMethods.length" class="payment-notice" role="alert">当前商家暂未开放支付方式，请联系管理员。</view>
       </view>
 
       <view class="section-card">
@@ -58,7 +59,7 @@
       </view>
 
       <view class="bottom-actions">
-        <view class="button block button-lg" :class="{ disabled: paying }" @click="doPay">{{ payButtonText }}</view>
+        <view class="button block button-lg" role="button" tabindex="0" :aria-disabled="paying" :aria-busy="paying" :aria-label="payButtonText" :class="{ disabled: paying }" @click="doPay" @keyup.enter="doPay" @keyup.space.prevent="doPay">{{ payButtonText }}</view>
       </view>
     </template>
     <WechatPhoneBindSheet
@@ -73,24 +74,38 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
+import { handleWechatPayResult } from "../../mall-payment";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
-const selectedPayment = ref(0);
+const selectedPayment = ref("");
 const loading = ref(true);
 const paying = ref(false);
 const error = ref("");
 const course = ref<any>();
+const operationSetting = ref<any>();
 const phoneBindVisible = ref(false);
 const pendingPhoneAction = ref<"" | "pay">("");
-const paymentMethods = [
-  { icon: "🏦", label: "线下收款（待后台确认）", value: "offline" }
+const clientOrderKey = ref(createClientOrderKey());
+const loadedContextKey = ref("");
+const loadGuard = createTenantLoadGuard();
+const paymentMethodOptions = [
+  { icon: "微", label: "微信支付", value: "wechat" },
+  { icon: "支", label: "支付宝", value: "alipay" },
+  { icon: "余", label: "余额支付", value: "balance" },
+  { icon: "线", label: "线下收款（待后台确认）", value: "offline" }
 ];
+const availablePaymentMethods = computed(() => {
+  const configured = { free: true, wechat: false, alipay: false, balance: true, offline: true, ...(operationSetting.value?.paymentMethods || {}) };
+  return paymentMethodOptions.filter((item) => configured[item.value as keyof typeof configured]);
+});
 const payButtonText = computed(() => {
   if (paying.value) return "处理中...";
-  return Number(course.value?.price || 0) > 0 ? `提交线下付款订单 ${priceText(course.value.price)}` : "免费开通内容";
+  return Number(course.value?.price || 0) > 0 ? `确认支付 ${priceText(course.value.price)}` : "免费开通内容";
 });
 
 function currentCourseId() {
@@ -100,19 +115,33 @@ function currentCourseId() {
 }
 
 async function loadCourse() {
+  const token = loadGuard.begin();
+  const id = currentCourseId();
+  const contextKey = `${token.tenantCode}:${id}`;
+  if (loadedContextKey.value && loadedContextKey.value !== contextKey) {
+    course.value = undefined;
+    clientOrderKey.value = createClientOrderKey();
+  }
   loading.value = true;
   error.value = "";
   try {
-    const id = currentCourseId();
     if (!id) throw new Error("缺少内容ID");
-    const data = await request<any>(`/public/courses/${id}`);
+    const [data, setting] = await Promise.all([request<any>(`/public/courses/${id}`), request<any>("/public/settings/operation")]);
+    if (!loadGuard.isCurrent(token)) return;
     if (!data) throw new Error("内容不存在或未发布");
     course.value = { ...data, title: reviewSafeText(data.title || "") };
+    operationSetting.value = setting;
+    if (!availablePaymentMethods.value.some((item) => item.value === selectedPayment.value)) selectedPayment.value = availablePaymentMethods.value[0]?.value || "";
+    loadedContextKey.value = contextKey;
   } catch (err: any) {
-    error.value = reviewSafeText(err.message || "订单加载失败");
+    if (loadGuard.isCurrent(token)) error.value = reviewSafeText(err.message || "订单加载失败");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
+}
+
+function createClientOrderKey() {
+  return `course_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
 function priceText(value: number | string) {
@@ -127,10 +156,11 @@ async function doPay() {
   paying.value = true;
   try {
     if (!(await requirePhoneBound("pay"))) return;
-    const paymentMethod = Number(course.value.price) > 0 ? paymentMethods[selectedPayment.value]?.value || "offline" : undefined;
+    const paymentMethod = Number(course.value.price) > 0 ? availablePaymentMethods.value.find((item) => item.value === selectedPayment.value)?.value : undefined;
+    if (Number(course.value.price) > 0 && !paymentMethod) throw new Error("当前商家暂未开放支付方式");
     const result = await request<any>(`/public/courses/${course.value.id}/orders`, {
       method: "POST",
-      data: { paymentMethod }
+      data: { paymentMethod, clientOrderKey: clientOrderKey.value }
     });
     if (result?.owned && !result?.order) {
       uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&id=${course.value.id}`) });
@@ -142,6 +172,27 @@ async function doPay() {
       uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&id=${course.value.id}&orderId=${order.id}`) });
       return;
     }
+    if (order.paymentMethod === "balance") {
+      await request(`/public/course-orders/${order.id}/pay/balance`, { method: "POST" });
+      uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&id=${course.value.id}&orderId=${order.id}`) });
+      return;
+    }
+    if (["wechat", "alipay"].includes(order.paymentMethod)) {
+      const pay = await request<any>(`/public/course-orders/${order.id}/pay/${order.paymentMethod}`, { method: "POST", data: { paymentScene: coursePaymentScene(order.paymentMethod), returnUrl: withTenantCode(`/pages/order/payment?status=pending&id=${course.value.id}&orderId=${order.id}`) } });
+      if (order.paymentMethod === "wechat") {
+        const redirected = await handleWechatPayResult(pay, "/payment/course/wechat/callback");
+        if (redirected) return;
+      } else {
+        const target = pay?.payParams?.h5Url || pay?.payParams?.payUrl;
+        if (target) {
+          // #ifdef H5
+          window.location.href = String(target);
+          return;
+          // #endif
+          uni.showModal({ title: "支付宝", content: "请在浏览器中打开后完成支付宝付款。", showCancel: false });
+        }
+      }
+    }
     uni.navigateTo({
       url: withTenantCode(`/pages/order/payment?status=pending&id=${course.value.id}&orderId=${order.id}`)
     });
@@ -150,6 +201,13 @@ async function doPay() {
   } finally {
     paying.value = false;
   }
+}
+
+function coursePaymentScene(provider: string) {
+  // #ifdef H5
+  return provider === "wechat" ? "h5" : "wap";
+  // #endif
+  return provider === "wechat" ? "jsapi" : "precreate";
 }
 
 async function requirePhoneBound(action: "pay") {
@@ -173,13 +231,18 @@ function handlePhoneBound() {
   if (action === "pay") doPay();
 }
 
-onMounted(loadCourse);
+onShow(loadCourse);
 </script>
 
 <style scoped>
 .order-confirm-page {
   min-height: 100vh;
-  padding-bottom: 148rpx;
+  width: 100%;
+  max-width: 760px;
+  box-sizing: border-box;
+  margin: 0 auto;
+  padding: calc(24rpx + env(safe-area-inset-top)) 24rpx calc(148rpx + env(safe-area-inset-bottom));
+  overflow-wrap: anywhere;
   background:
     linear-gradient(180deg, #f7efe3 0%, #fbf7ef 36%, #f6f0e7 100%);
 }

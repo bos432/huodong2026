@@ -14,6 +14,8 @@ export class CommunityPostComment {
 
   @Column()
   userId!: number;
+  @Column({type:"int",nullable:true})parentId!:number|null;
+  @Column({type:"json",nullable:true})mentionUserIds!:number[]|null;
 
   @Column({ type: "text" })
   content!: string;
@@ -23,6 +25,7 @@ export class CommunityPostComment {
 
   @Column({ type: "varchar", length: 255, nullable: true })
   reviewRemark!: string | null;
+  @Column({type:"datetime",nullable:true})deletedAt!:Date|null;
 
   @CreateDateColumn()
   createdAt!: Date;

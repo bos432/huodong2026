@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { OrderStatus, RegistrationStatus } from "@activity/shared";
 import QRCode from "qrcode";
-import { ensureUser, request, requestCheckInQrImage, requestRegistrationRefund, withTenantCode } from "../../api";
+import { ensureUser, getCurrentTenantCode, request, requestCheckInQrImage, requestRegistrationRefund, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { clientError } from "../../error-reporting";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
@@ -10,6 +11,9 @@ import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryEntries } from "../../query";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
+import { addActivityToCalendar } from "../../activity-calendar";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledDialog } from "../../feature-gates";
 
 const registrationStatusText: Record<RegistrationStatus, string> = {
   [RegistrationStatus.PendingPayment]: "待付款",
@@ -36,8 +40,15 @@ const codeQrMatrix = ref<boolean[][]>([]);
 const userId = ref(0);
 const loading = ref(true);
 const loadError = ref("");
+const actionError = ref("");
 const paying = ref<"" | "wechat" | "alipay" | "balance">("");
+const paymentChecking = ref(false);
+const paymentClosing = ref(false);
 const refunding = ref(false);
+const cancelling = ref(false);
+const loadedContextKey = ref("");
+const loadGuard = createTenantLoadGuard();
+let codeRequestSerial = 0;
 const groupDialogVisible = ref(false);
 const groupQrImageError = ref(false);
 const paymentInstructionsField = "offlinePaymentInstructions";
@@ -50,7 +61,33 @@ const orderStatus = computed(() => detail.value?.order?.status as OrderStatus | 
 const primaryAction = computed(() => actionForStatus(registrationStatus.value));
 const charityRefund = computed(() => detail.value?.charityRefund || null);
 const canShareActivityPost = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
+const communityPublishAvailable = computed(() => isLinkAllowedByFeature("/pages/community/publish"));
 const canShowCheckInCode = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
+const paymentBusy = computed(() => Boolean(paying.value) || paymentChecking.value || paymentClosing.value);
+
+type RegistrationActionContext = { tenantCode: string; registrationId: number; orderId: number };
+
+function routeRegistrationId() {
+  const pages = getCurrentPages();
+  return Number((pages[pages.length - 1] as any)?.options?.id || 0);
+}
+
+function actionContext(): RegistrationActionContext | null {
+  const registrationId = Number(detail.value?.registration?.id || 0);
+  if (!registrationId) return null;
+  return { tenantCode: getCurrentTenantCode(), registrationId, orderId: Number(detail.value?.order?.id || 0) };
+}
+
+function assertActionContext(context: RegistrationActionContext) {
+  const current = actionContext();
+  if (!current || current.tenantCode !== context.tenantCode || current.registrationId !== context.registrationId || current.orderId !== context.orderId) {
+    throw new Error("当前城市或报名已变化，请重新操作");
+  }
+}
+
+function showActionError(error: unknown, fallback: string) {
+  actionError.value = reviewSafeText((error as any)?.message || fallback);
+}
 
 function currentStepIndex(status: RegistrationStatus) {
   const index = steps.indexOf(status);
@@ -68,7 +105,9 @@ function money(value: string | number | undefined) {
 
 function formatTime(value?: string) {
   if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value.replace("T", " ").slice(0, 16);
+  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false });
 }
 
 function operationSetting() {
@@ -126,6 +165,22 @@ function canCancel() {
   return Boolean(status && ![RegistrationStatus.Cancelled, RegistrationStatus.CheckedIn].includes(status));
 }
 
+async function addCalendarReminder() {
+  const activity = detail.value?.registration?.activity;
+  try {
+    await addActivityToCalendar({
+      title: activity?.title || "慢π活动",
+      startTime: activity?.startTime,
+      endTime: activity?.endTime,
+      location: activity?.location,
+      description: "你已报名该活动，请提前安排出行并按时签到。"
+    });
+    uni.showToast({ title: "已添加活动提醒", icon: "success" });
+  } catch (error: any) {
+    uni.showToast({ title: reviewSafeText(error?.message || "添加提醒失败"), icon: "none" });
+  }
+}
+
 function showGroupDialog() {
   if (!groupQrCodeUrl.value || groupQrImageError.value) return;
   groupDialogVisible.value = true;
@@ -150,13 +205,24 @@ function scrollToCode() {
 }
 
 async function load() {
+  const loadToken = loadGuard.begin();
+  const id = routeRegistrationId();
+  const contextKey = `${loadToken.tenantCode}:${id}`;
+  if (loadedContextKey.value && loadedContextKey.value !== contextKey) {
+    detail.value = undefined;
+    code.value = "";
+    codeQrUrl.value = "";
+    codeQrMatrix.value = [];
+    groupDialogVisible.value = false;
+  }
   loading.value = true;
   loadError.value = "";
   try {
     userId.value = await ensureUser();
-    const pages = getCurrentPages();
-    const id = Number((pages[pages.length - 1] as any).options.id);
-    detail.value = reviewSafeData(await request(`/public/me/registrations/${id}`));
+    const nextDetail = reviewSafeData(await request(`/public/me/registrations/${id}`));
+    if (!loadGuard.isCurrent(loadToken) || routeRegistrationId() !== id) return;
+    detail.value = nextDetail;
+    loadedContextKey.value = contextKey;
     code.value = "";
     codeQrUrl.value = "";
     codeQrMatrix.value = [];
@@ -164,10 +230,10 @@ async function load() {
     groupDialogVisible.value = Boolean(detail.value?.groupQrCodeUrl);
     if (canShowCheckInCode.value) showCode(false);
   } catch (error: any) {
+    if (!loadGuard.isCurrent(loadToken)) return;
     loadError.value = reviewSafeText(error?.message || "加载报名详情失败，请稍后重试。");
-    uni.showToast({ title: loadError.value, icon: "none" });
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(loadToken)) loading.value = false;
   }
 }
 
@@ -227,59 +293,89 @@ async function generateCheckInQr(value: string, registrationId?: number) {
 }
 
 async function cancel() {
+  if (!canCancel() || cancelling.value) return;
+  const context = actionContext();
+  if (!context) return;
+  cancelling.value = true;
+  actionError.value = "";
   uni.showModal({
     title: "确认取消报名",
     content: "取消后可能需要重新报名，已付款订单请按主办方退款规则处理。",
     confirmText: "确认取消",
     confirmColor: "#dc2626",
     success: async (res) => {
-      if (!res.confirm) return;
-      await doCancel();
-    }
+      if (!res.confirm) {
+        cancelling.value = false;
+        return;
+      }
+      await doCancel(context);
+    },
+    fail: () => { cancelling.value = false; }
   });
 }
 
-async function doCancel() {
+async function doCancel(context: RegistrationActionContext) {
   try {
-    await request(`/public/me/registrations/${detail.value.registration.id}/cancel`, { method: "POST" });
+    assertActionContext(context);
+    await request(`/public/me/registrations/${context.registrationId}/cancel`, { method: "POST" });
+    assertActionContext(context);
     uni.showToast({ title: "已取消报名" });
     await load();
   } catch (error: any) {
-    uni.showToast({ title: reviewSafeText(error.message), icon: "none" });
+    showActionError(error, "取消报名失败");
+  } finally {
+    cancelling.value = false;
   }
 }
 
 async function requestRefund() {
   const preview = charityRefund.value;
   if (!detail.value?.registration?.id || !preview?.canRequest || refunding.value) return;
+  const context = actionContext();
+  if (!context) return;
+  refunding.value = true;
+  actionError.value = "";
   uni.showModal({
     title: "申请退款",
     content: `预计退回 ¥${money(preview.actualRefundAmount || preview.refundAmount)}，保留公益金 ¥${money(preview.charityAmount)}。提交后等待后台审核。`,
     confirmText: "提交申请",
     success: async (res) => {
-      if (!res.confirm) return;
-      refunding.value = true;
+      if (!res.confirm) {
+        refunding.value = false;
+        return;
+      }
       try {
-        await requestRegistrationRefund(detail.value.registration.id);
+        assertActionContext(context);
+        await requestRegistrationRefund(context.registrationId);
+        assertActionContext(context);
         uni.showToast({ title: "已提交退款申请" });
         await load();
       } catch (error: any) {
-        uni.showToast({ title: reviewSafeText(error.message || "申请失败"), icon: "none" });
+        showActionError(error, "退款申请失败");
       } finally {
         refunding.value = false;
       }
-    }
+    },
+    fail: () => { refunding.value = false; }
   });
 }
 
 async function showCode(scroll = true) {
+  const context = actionContext();
+  if (!context) return;
+  const serial = ++codeRequestSerial;
+  actionError.value = "";
   try {
-    const data = await request<any>(`/public/me/registrations/${detail.value.registration.id}/check-in-code`);
+    const data = await request<any>(`/public/me/registrations/${context.registrationId}/check-in-code`);
+    if (serial !== codeRequestSerial) return;
+    assertActionContext(context);
     code.value = data.code;
-    await generateCheckInQr(code.value, Number(detail.value.registration.id));
+    await generateCheckInQr(code.value, context.registrationId);
+    if (serial !== codeRequestSerial) return;
+    assertActionContext(context);
     if (scroll) scrollToCode();
   } catch (error: any) {
-    uni.showToast({ title: reviewSafeText(error.message), icon: "none" });
+    if (serial === codeRequestSerial) showActionError(error, "签到码加载失败");
   }
 }
 
@@ -289,16 +385,22 @@ function copyCode() {
 }
 
 async function payOrder(provider: "wechat" | "alipay" | "balance") {
-  if (!detail.value?.order || paying.value) return;
+  if (!detail.value?.order || paymentBusy.value) return;
+  const context = actionContext();
+  if (!context?.orderId) return;
   paying.value = provider;
+  actionError.value = "";
   try {
+    assertActionContext(context);
     if (provider === "balance") {
-      await request<any>(`/public/orders/${detail.value.order.id}/pay/balance`, { method: "POST" });
+      await request<any>(`/public/orders/${context.orderId}/pay/balance`, { method: "POST" });
+      assertActionContext(context);
       uni.showToast({ title: "余额支付成功" });
       await load();
       return;
     }
-    const pay = await request<any>(`/public/orders/${detail.value.order.id}/pay/${provider}`, { method: "POST", data: { paymentScene: preferredPaymentScene(provider) } });
+    const pay = await request<any>(`/public/orders/${context.orderId}/pay/${provider}`, { method: "POST", data: { paymentScene: preferredPaymentScene(provider) } });
+    assertActionContext(context);
     if (pay.mode === "sandbox") {
       await request(`/payment/${provider}/callback`, {
         method: "POST",
@@ -338,10 +440,48 @@ async function payOrder(provider: "wechat" | "alipay" | "balance") {
     }
     await load();
   } catch (error: any) {
-    uni.showToast({ title: reviewSafeText(error.message || "支付失败"), icon: "none" });
+    showActionError(error, "支付失败");
   } finally {
     paying.value = "";
   }
+}
+
+async function refreshPaymentStatus() {
+  if (!detail.value?.registration?.id || paymentBusy.value) return;
+  const context = actionContext();
+  if (!context) return;
+  paymentChecking.value = true;
+  actionError.value = "";
+  try {
+    assertActionContext(context);
+    const result = await request<any>(`/public/me/registrations/${context.registrationId}/payment-status`);
+    assertActionContext(context);
+    uni.showToast({ title: result.status === "success" ? "支付已确认" : result.status === "closed" ? "订单已关闭" : "仍在等待支付", icon: "none" });
+    await load();
+  } catch (error: any) { showActionError(error, "查单失败"); }
+  finally { paymentChecking.value = false; }
+}
+
+function closePendingPayment() {
+  if (!detail.value?.registration?.id || paymentBusy.value) return;
+  const context = actionContext();
+  if (!context) return;
+  paymentClosing.value = true;
+  actionError.value = "";
+  uni.showModal({ title: "关闭待支付订单", content: "关闭后本次报名会取消并释放名额，已使用的积分将返还。确认继续？", confirmText: "确认关闭", confirmColor: "#b42318", success: async (result) => {
+    if (!result.confirm) {
+      paymentClosing.value = false;
+      return;
+    }
+    try {
+      assertActionContext(context);
+      await request(`/public/me/registrations/${context.registrationId}/payment-close`, { method: "POST" });
+      assertActionContext(context);
+      uni.showToast({ title: "订单已关闭", icon: "success" });
+      await load();
+    } catch (error: any) { showActionError(error, "关闭失败"); }
+    finally { paymentClosing.value = false; }
+  }, fail: () => { paymentClosing.value = false; }});
 }
 
 function preferredPaymentScene(provider: "wechat" | "alipay" | "balance") {
@@ -378,15 +518,17 @@ function goReview() {
   uni.navigateTo({ url: withTenantCode(`/pages/user/review?id=${detail.value.registration.id}`) });
 }
 
-function goPublish() {
+async function goPublish() {
+  await loadFeatureGates(true);
+  if (!isLinkAllowedByFeature("/pages/community/publish")) {
+    showFeatureDisabledDialog("/pages/community/publish");
+    return;
+  }
   const activityId = detail.value?.registration?.activity?.id || "";
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activityId}`) });
 }
 
-onMounted(() => {
-  load();
-  loadDecoration();
-});
+onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFeatureGates(true)]); });
 </script>
 
 <template>
@@ -398,6 +540,7 @@ onMounted(() => {
       <view class="button secondary retry" @click="load">重新加载</view>
     </view>
     <template v-else-if="detail">
+      <view v-if="actionError" class="card action-error" role="alert" aria-live="assertive"><text>{{ actionError }}</text><view class="action-error-close" role="button" tabindex="0" @click="actionError = ''">关闭</view></view>
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
 
       <view class="registration-hero" :class="statusClass(detail.registration.status as RegistrationStatus)">
@@ -472,10 +615,12 @@ onMounted(() => {
         <view v-if="detail.order.status === OrderStatus.PendingPayment && detail.order.paymentMethod !== 'offline'" class="notice">请选择当前订单对应的支付方式完成付款。余额不足时可联系后台充值后再支付。</view>
         <view v-if="detail.order.status === OrderStatus.PendingPayment && detail.order.paymentMethod === 'offline'" class="notice">{{ paymentInstructions() }}</view>
         <view v-if="detail.order.status === OrderStatus.PendingPayment && Number(detail.order.amount) > 0" class="pay-actions">
-          <view v-if="detail.order.paymentMethod === 'wechat' && canPay('wechat')" class="button" :class="{ disabled: Boolean(paying) }" @click="payOrder('wechat')">{{ paying === "wechat" ? "微信支付中..." : "微信支付" }}</view>
-          <view v-if="detail.order.paymentMethod === 'alipay' && canPay('alipay')" class="button" :class="{ disabled: Boolean(paying) }" @click="payOrder('alipay')">{{ paying === "alipay" ? "支付宝支付中..." : "支付宝" }}</view>
-          <view v-if="detail.order.paymentMethod === 'balance' && canPay('balance')" class="button secondary" :class="{ disabled: Boolean(paying) }" @click="payOrder('balance')">{{ paying === "balance" ? "余额支付中..." : "余额支付" }}</view>
+          <view v-if="detail.order.paymentMethod === 'wechat' && canPay('wechat')" class="button" :class="{ disabled: paymentBusy }" @click="payOrder('wechat')">{{ paying === "wechat" ? "微信支付中..." : "微信支付" }}</view>
+          <view v-if="detail.order.paymentMethod === 'alipay' && canPay('alipay')" class="button" :class="{ disabled: paymentBusy }" @click="payOrder('alipay')">{{ paying === "alipay" ? "支付宝支付中..." : "支付宝" }}</view>
+          <view v-if="detail.order.paymentMethod === 'balance' && canPay('balance')" class="button secondary" :class="{ disabled: paymentBusy }" @click="payOrder('balance')">{{ paying === "balance" ? "余额支付中..." : "余额支付" }}</view>
           <view v-if="detail.order.paymentMethod === 'offline'" class="button secondary disabled">等待后台确认收款</view>
+          <view class="button secondary" :class="{ disabled: paymentBusy }" @click="refreshPaymentStatus">{{ paymentChecking ? "查询中..." : "刷新支付状态" }}</view>
+          <view class="button secondary danger-button" :class="{ disabled: paymentBusy }" @click="closePendingPayment">{{ paymentClosing ? "关闭中..." : "关闭订单" }}</view>
         </view>
         <view v-if="charityRefund?.enabled" class="charity-refund-box">
           <view class="charity-refund-title">公益退款规则</view>
@@ -518,9 +663,10 @@ onMounted(() => {
       </view>
 
       <view v-if="canShowCheckInCode" class="button" @click="showCode(true)">{{ code ? "刷新签到二维码" : "查看签到二维码" }}</view>
+      <view v-if="canShowCheckInCode" class="button secondary" @click="addCalendarReminder">添加到日历</view>
       <view v-if="canShowCheckInCode" class="button secondary" @click="goReview">评价活动</view>
-      <view v-if="canShareActivityPost" class="button secondary share-button" @click="goPublish">分享活动心得</view>
-      <view v-if="canCancel()" class="button secondary danger-button" @click="cancel">取消报名</view>
+      <view v-if="canShareActivityPost && communityPublishAvailable" class="button secondary share-button" @click="goPublish">分享活动心得</view>
+      <view v-if="canCancel()" class="button secondary danger-button" :class="{ disabled: cancelling }" @click="cancel">{{ cancelling ? "取消中..." : "取消报名" }}</view>
 
       <view v-if="groupDialogVisible" class="group-dialog-mask" @click="groupDialogVisible = false">
         <view class="group-dialog" @click.stop>
@@ -537,8 +683,10 @@ onMounted(() => {
 </template>
 
 <style scoped>
-.registration { padding-bottom: 36rpx; }
-.registration.has-custom-nav { padding-bottom: 160rpx; }
+.registration { min-height:100vh; box-sizing:border-box; padding-bottom:calc(36rpx + env(safe-area-inset-bottom)); }
+.registration.has-custom-nav { padding-bottom:calc(160rpx + env(safe-area-inset-bottom)); }
+.action-error { display:flex; align-items:center; justify-content:space-between; gap:18rpx; border:1rpx solid #fecaca; background:#fff7f7; color:#b42318; line-height:1.55; overflow-wrap:anywhere; }
+.action-error-close { flex:0 0 auto; padding:10rpx 18rpx; border-radius:8px; background:#b42318; color:#fff; font-weight:800; }
 .registration-hero {
   position: relative;
   overflow: hidden;
@@ -710,4 +858,5 @@ onMounted(() => {
 .dialog-title { color: var(--text-color, #111827); font-size: 34rpx; font-weight: 900; }
 .dialog-qr { display: block; width: 420rpx; max-width: 100%; margin: 26rpx auto 0; border-radius: var(--card-radius, 8px); border: 1px solid #e5e7eb; background: var(--card-bg, #fff); }
 .dialog-copy { margin-top: 18rpx; color: var(--muted-color, #667085); font-size: 26rpx; line-height: 1.6; }
+@media (min-width: 900px) { .registration { max-width:760px; margin:0 auto; } }
 </style>

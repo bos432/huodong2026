@@ -1,6 +1,7 @@
 import { Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import * as TencentCloud from "tencentcloud-sdk-nodejs";
+import nodemailer from "nodemailer";
 
 export interface NotificationDeliveryInput {
   channel: string;
@@ -38,6 +39,7 @@ export type NotificationProviderOverrides = {
 
 @Injectable()
 export class NotificationProviderService {
+  private wechatAccessToken: { value: string; expiresAt: number } | null = null;
   constructor(private readonly config: ConfigService) {}
 
   async deliver(input: NotificationDeliveryInput, overrides?: NotificationProviderOverrides): Promise<NotificationDeliveryResult> {
@@ -60,7 +62,7 @@ export class NotificationProviderService {
       this.statusFor("site", "site", true, []),
       this.statusFor("sms", smsProvider, this.channelEnabled("sms", overrides), this.missingSms(smsProvider, overrides?.sms)),
       this.statusFor("email", this.providerName("email"), this.channelEnabled("email"), this.missing(["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"])),
-      this.statusFor("wechat", this.providerName("wechat"), this.channelEnabled("wechat"), this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET"]))
+      this.statusFor("wechat", this.providerName("wechat"), this.channelEnabled("wechat"), this.providerName("wechat") === "mock-wechat" && this.canUseMockWechat() ? [] : this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_MESSAGE_TEMPLATE_ID"]))
     ];
   }
 
@@ -79,20 +81,70 @@ export class NotificationProviderService {
     return this.failed(provider, `不支持的短信服务商：${provider}`);
   }
 
-  private deliverEmail(input: NotificationDeliveryInput, provider: string) {
+  private async deliverEmail(input: NotificationDeliveryInput, provider: string): Promise<NotificationDeliveryResult> {
     if (!this.channelEnabled("email")) return this.notConfigured("email", provider);
     if (!input.to?.email) return this.failed(provider, "邮件收件人邮箱为空");
     const missing = this.missing(["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"]);
     if (missing.length) return this.failed(provider, `邮件服务缺少配置：${missing.join(", ")}`);
-    return this.mockSuccess(provider);
+    try {
+      const transport = nodemailer.createTransport({
+        host: this.config.get("SMTP_HOST"),
+        port: Number(this.config.get("SMTP_PORT", 465)),
+        secure: this.config.get("SMTP_SECURE", "true") === "true",
+        auth: { user: this.config.get("SMTP_USER"), pass: this.config.get("SMTP_PASSWORD") }
+      });
+      const info = await transport.sendMail({ from: this.config.get("SMTP_FROM"), to: input.to.email, subject: input.title, text: input.content });
+      return { status: "sent", provider, providerMessageId: info.messageId };
+    } catch (error: any) {
+      return this.failed(provider, error?.message || "邮件发送失败");
+    }
   }
 
-  private deliverWechat(input: NotificationDeliveryInput, provider: string) {
+  private async deliverWechat(input: NotificationDeliveryInput, provider: string): Promise<NotificationDeliveryResult> {
     if (!this.channelEnabled("wechat")) return this.notConfigured("wechat", provider);
     if (!input.to?.openid) return this.failed(provider, "微信订阅消息 openid 为空");
-    const missing = this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET"]);
+    if (provider === "mock-wechat") {
+      if (this.canUseMockWechat()) return this.mockSuccess(provider);
+      return this.failed(provider, "生产环境禁止 mock-wechat 假发送，请配置真实微信消息服务");
+    }
+    const missing = this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_MESSAGE_TEMPLATE_ID"]);
     if (missing.length) return this.failed(provider, `微信订阅消息缺少配置：${missing.join(", ")}`);
-    return this.mockSuccess(provider);
+    if (!["wechat-subscribe-message", "wechat-subscribe"].includes(provider)) return this.failed(provider, `不支持的微信消息服务商：${provider}`);
+    try {
+      const token = await this.getWechatAccessToken();
+      const titleKey = this.config.get("WECHAT_MESSAGE_TITLE_KEY", "thing1");
+      const contentKey = this.config.get("WECHAT_MESSAGE_CONTENT_KEY", "thing2");
+      const response = await fetch(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${encodeURIComponent(token)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          touser: input.to.openid,
+          template_id: this.config.get("WECHAT_MESSAGE_TEMPLATE_ID"),
+          page: this.config.get("WECHAT_MESSAGE_PAGE", "pages/index/index"),
+          miniprogram_state: this.config.get("WECHAT_MESSAGE_MINIPROGRAM_STATE", "formal"),
+          lang: "zh_CN",
+          data: { [titleKey]: { value: input.title.slice(0, 20) }, [contentKey]: { value: input.content.slice(0, 20) } }
+        })
+      });
+      const payload = await response.json().catch(() => null) as { errcode?: number; errmsg?: string; msgid?: string | number } | null;
+      if (!response.ok || Number(payload?.errcode || 0) !== 0) return this.failed(provider, payload?.errmsg || `微信消息请求失败：HTTP ${response.status}`);
+      return { status: "sent", provider, providerMessageId: String(payload?.msgid || `wechat_${Date.now()}`) };
+    } catch (error: any) {
+      return this.failed(provider, error?.message || "微信订阅消息发送失败");
+    }
+  }
+
+  private async getWechatAccessToken() {
+    if (this.wechatAccessToken && this.wechatAccessToken.expiresAt > Date.now() + 60000) return this.wechatAccessToken.value;
+    const url = new URL("https://api.weixin.qq.com/cgi-bin/token");
+    url.searchParams.set("grant_type", "client_credential");
+    url.searchParams.set("appid", String(this.config.get("WECHAT_APP_ID") || ""));
+    url.searchParams.set("secret", String(this.config.get("WECHAT_APP_SECRET") || ""));
+    const response = await fetch(url);
+    const payload = await response.json().catch(() => null) as { access_token?: string; expires_in?: number; errcode?: number; errmsg?: string } | null;
+    if (!response.ok || !payload?.access_token) throw new Error(payload?.errmsg || `微信 access_token 获取失败：HTTP ${response.status}`);
+    this.wechatAccessToken = { value: payload.access_token, expiresAt: Date.now() + Math.max(Number(payload.expires_in || 7200) - 120, 60) * 1000 };
+    return payload.access_token;
   }
 
   private mockSuccess(provider: string): NotificationDeliveryResult {
@@ -124,8 +176,8 @@ export class NotificationProviderService {
       if (overrides?.sms) return this.truthy(overrides.sms.enabled);
       return this.config.get("SMS_PROVIDER_ENABLED", "false") === "true";
     }
-    if (channel === "email") return this.config.get("EMAIL_PROVIDER_ENABLED", "mock") !== "false";
-    if (channel === "wechat") return this.config.get("WECHAT_MESSAGE_PROVIDER_ENABLED", "mock") !== "false";
+    if (channel === "email") return this.config.get("EMAIL_PROVIDER_ENABLED", "false") !== "false";
+    if (channel === "wechat") return this.config.get("WECHAT_MESSAGE_PROVIDER_ENABLED", "false") !== "false";
     return false;
   }
 
@@ -259,6 +311,10 @@ export class NotificationProviderService {
 
   private canUseMockSms() {
     return this.config.get("NODE_ENV") !== "production" || this.config.get("SMS_MOCK_ALLOWED") === "true" || this.config.get("H5_AUTH_MODE") === "dev";
+  }
+
+  private canUseMockWechat() {
+    return this.config.get("NODE_ENV") !== "production" || this.config.get("WECHAT_MESSAGE_MOCK_ALLOWED") === "true";
   }
 
   private truthy(value: unknown) {

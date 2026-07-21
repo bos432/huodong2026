@@ -6,6 +6,11 @@ export class CourseLesson {
   @Column() chapterId!: number;
   @Column() title!: string;
   @Column({ type: "varchar", length: 500, nullable: true }) videoUrl!: string | null;
+  @Column({ type: "varchar", length: 24, default: "video" }) contentType!: "video" | "audio" | "article" | "attachment";
+  @Column({ type: "varchar", length: 500, nullable: true }) audioUrl!: string | null;
+  @Column({ type: "varchar", length: 500, nullable: true }) attachmentUrl!: string | null;
+  @Column({ type: "varchar", length: 160, nullable: true }) attachmentName!: string | null;
+  @Column({ type: "varchar", length: 24, default: "published" }) status!: "draft" | "published";
   @Column({ type: "varchar", length: 20, nullable: true }) duration!: string | null;
   @Column({ default: false }) isFree!: boolean;
   @Column({ default: 0 }) sortOrder!: number;

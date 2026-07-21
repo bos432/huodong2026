@@ -21,6 +21,14 @@ function checkSourceIncludesAll(source, needles, label) {
 const packageJson = JSON.parse(read("package.json"));
 const adminController = read("apps/api/src/modules/admin/admin.controller.ts");
 const adminService = read("apps/api/src/modules/admin/admin.service.ts");
+const publicService = read("apps/api/src/modules/public/public.service.ts");
+const publicCoursesController = read("apps/api/src/modules/courses/public-courses.controller.ts");
+const coursesService = read("apps/api/src/modules/courses/courses.service.ts");
+const mallPublicController = read("apps/api/src/modules/mall/mall-public.controller.ts");
+const mallService = read("apps/api/src/modules/mall/mall.service.ts");
+const uploadSecurity = read("apps/api/src/shared/upload-security.ts");
+const uploadMalwareScan = read("apps/api/src/shared/upload-malware-scan.ts");
+const objectStorageService = read("apps/api/src/shared/object-storage.service.ts");
 const mainTs = read("apps/api/src/main.ts");
 const configValidation = read("apps/api/src/shared/config-validation.ts");
 const activitiesView = read("apps/admin/src/views/Activities.vue");
@@ -47,25 +55,128 @@ checkSourceIncludesAll(adminController, [
   '"application/pdf": ".pdf"',
   '@Post("uploads/images")',
   '@Post("uploads/settlement-proofs")',
-  'destination: join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "images")',
-  'destination: join(process.cwd(), process.env.UPLOAD_DIR || "uploads", "settlement-proofs")',
+  '@Post("uploads/private-settlement-proofs")',
+  '@Get("private-settlement-proofs/:token/download")',
   "limits: { fileSize: 5 * 1024 * 1024 }",
   "limits: { fileSize: 10 * 1024 * 1024 }",
   "Boolean(IMAGE_EXTENSION_BY_MIME[file.mimetype])",
   "Boolean(SETTLEMENT_PROOF_EXTENSION_BY_MIME[file.mimetype])",
-  "this.service.uploadedImage(file)",
-  "this.service.uploadedSettlementProof(file)"
+  "this.service.uploadedImage(file, admin)",
+  "this.service.uploadedSettlementProof(file, admin)"
 ], "admin upload controller");
 
 checkSourceIncludesAll(adminService, [
   "uploadedImage(file?",
   "uploadedSettlementProof(file?",
-  "/uploads/images/",
-  "/uploads/settlement-proofs/",
-  "PUBLIC_API_ORIGIN",
+  "uploadedPrivateSettlementProof(file?",
+  'storePrivateDocument(validated, "settlement-proofs")',
+  'purpose: "settlement_proof"',
+  "readPrivateSettlementProof(token",
+  "validatedUploadFile(file",
+  "images-t${admin?.tenantId",
+  "settlement-proofs-t${admin?.tenantId",
   "originalName",
   "mimetype"
 ], "admin upload service");
+
+checkSourceIncludesAll(agentSettlementsView, [
+  '/api/admin/uploads/private-settlement-proofs',
+  "/admin/private-settlement-proofs/${privateMatch[1]}/download",
+  "await downloadFile("
+], "private settlement proof admin view");
+
+checkSourceIncludesAll(uploadSecurity, [
+  "detectSupportedUploadMime",
+  "validatedUploadFile",
+  "detectedMime !== declaredMime",
+  'return "image/jpeg"',
+  'return "image/png"',
+  'return "image/webp"',
+  'return "image/gif"',
+  'return "application/pdf"',
+  "safeUploadOriginalName"
+], "shared upload signature security");
+
+checkSourceIncludesAll(uploadMalwareScan, [
+  "assertUploadMalwareSafe",
+  "UPLOAD_MALWARE_SCAN_MODE",
+  "CLAMAV_HOST",
+  "CLAMAV_PORT",
+  "zINSTREAM",
+  "UnsupportedMediaTypeException",
+  "ServiceUnavailableException",
+  'mode === "required"'
+], "upload malware scanning adapter");
+
+for (const [source, label] of [[adminService, "admin uploads"], [publicService, "member uploads"], [coursesService, "course uploads"], [publicCoursesController, "community uploads"], [mallPublicController, "merchant application uploads"], [mallService, "merchant payment credential uploads"]]) {
+  checkSourceIncludes(source, "assertUploadMalwareSafe", label);
+}
+
+checkSourceIncludesAll(uploadSecurity, [
+  "validatedCourseResourceFile",
+  'return "video/mp4"',
+  'return "video/webm"',
+  'return "audio/mpeg"',
+  'return "audio/wav"',
+  'return "audio/ogg"',
+  'return "application/zip"',
+  'return "application/msword"',
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+], "course resource signature security");
+
+checkSourceIncludesAll(coursesService, [
+  "validatedCourseResourceFile(file, resourceType)",
+  'storePrivateDocument(validated, "course-resources")',
+  'purpose: "course_resource"',
+  "contextId: course.id",
+  "private-course-resource://${token}",
+  "课程资源内容与格式不匹配"
+], "course resource upload service");
+
+checkSourceIncludesAll(publicCoursesController, [
+  '@Get("course-resources/:token")',
+  "payload.expiresAt < Date.now()",
+  'res.setHeader("Accept-Ranges", "bytes")',
+  'res.setHeader("Content-Range"',
+  "courseResourceAccessUrl",
+  "expiresAt: Date.now() + 15 * 60 * 1000",
+  "privateDocumentExists(stored.reference)"
+], "private course resource delivery");
+
+checkSourceIncludesAll(publicService, [
+  "uploadMyAvatar(user",
+  "uploadMallReviewImage(user",
+  "uploadMallRefundImage(user",
+  "uploadRegistrationAttachment(user",
+  "validatedUploadFile(file",
+  "avatars-t${tenant?.id",
+  "mall-reviews-t${tenant?.id",
+  "mall-refunds-t${tenant?.id",
+  'storePrivateDocument(validated, "registration-attachments")',
+  'purpose: "registration_attachment"',
+  "verifyPrivateAssetToken(token, this.privateAssetSecret())",
+  "readMyRegistrationAttachment"
+], "member upload security");
+
+checkSourceIncludesAll(publicCoursesController, [
+  "uploadCommunityPostImage",
+  "validatedUploadFile(file, COMMUNITY_IMAGE_MIMES)",
+  "community-posts-t${tenant?.id"
+], "community upload security");
+
+checkSourceIncludesAll(mallPublicController, [
+  "uploadMerchantApplicationFile",
+  "validatedUploadFile(file, MERCHANT_APPLICATION_FILE_MIMES)",
+  "merchant-applications-t${tenant?.id"
+], "merchant application upload security");
+
+checkSourceIncludesAll(objectStorageService, [
+  "normalizeObjectStorageConfig",
+  "objectStorageMissingFields",
+  "文件存储尚未配置完整",
+  "文件存储服务暂时不可用",
+  "文件访问域名尚未配置"
+], "object storage safe failure handling");
 
 checkSourceIncludesAll(mainTs, [
   "useStaticAssets",
@@ -102,7 +213,7 @@ checkSourceIncludesAll(agentSettlementsView, [
   "beforeProofUpload",
   '["image/jpeg", "image/png", "image/webp", "image/gif", "application/pdf"]',
   "10 * 1024 * 1024",
-  '/api/admin/uploads/settlement-proofs',
+  '/api/admin/uploads/private-settlement-proofs',
   "handleProofSuccess",
   "paidProofUrl",
   "originalName"

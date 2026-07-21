@@ -1,12 +1,12 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcryptjs";
 import { createHmac } from "crypto";
-import { DataSource } from "typeorm";
-import { In, MoreThan, Repository } from "typeorm";
+import { DataSource, EntityManager } from "typeorm";
+import { In, IsNull, MoreThan, Repository } from "typeorm";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityCategory } from "../../entities/activity-category.entity";
 import { Activity } from "../../entities/activity.entity";
@@ -18,17 +18,28 @@ import { Announcement } from "../../entities/announcement.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { Coupon } from "../../entities/coupon.entity";
+import { CouponClaim } from "../../entities/coupon-claim.entity";
+import { CouponUsage } from "../../entities/coupon-usage.entity";
 import { ConversionEvent, ConversionEventType } from "../../entities/conversion-event.entity";
 import { Course } from "../../entities/course.entity";
 import { CourseChapter } from "../../entities/course-chapter.entity";
 import { CourseLesson } from "../../entities/course-lesson.entity";
 import { CourseOrder, CourseOrderStatus } from "../../entities/course-order.entity";
+import { CourseRefund } from "../../entities/course-refund.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
+import { InviteCode } from "../../entities/invite-code.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
+import { HomepagePublication } from "../../entities/homepage-publication.entity";
+import { homepagePublicationScopeKey, homepageSectionIsPublicCandidate } from "../../shared/homepage-publication";
+import { contentAudienceMatches } from "../../shared/content-audience";
+import { marketingPopupEventCounter } from "../../shared/marketing-popup-event";
+import { ecosystemBusinessKey } from "../../shared/ecosystem-crm-policy";
 import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
 import { MemberProfile } from "../../entities/member-profile.entity";
+import { MallCoupon } from "../../entities/mall-coupon.entity";
+import { MallCouponClaim } from "../../entities/mall-coupon-claim.entity";
 import { MarketingPopup } from "../../entities/marketing-popup.entity";
 import { AdCampaign } from "../../entities/ad-campaign.entity";
 import { AdDailyStat } from "../../entities/ad-daily-stat.entity";
@@ -37,10 +48,14 @@ import { OperationSetting } from "../../entities/operation-setting.entity";
 import { PaymentCallbackLog } from "../../entities/payment-callback-log.entity";
 import { PaymentTransaction } from "../../entities/payment-transaction.entity";
 import { Refund } from "../../entities/refund.entity";
+import { RedemptionCode } from "../../entities/redemption-code.entity";
+import { RedemptionCodeUsage } from "../../entities/redemption-code-usage.entity";
 import { Registration } from "../../entities/registration.entity";
 import { Tenant } from "../../entities/tenant.entity";
 import { TenantRegionHitLog } from "../../entities/tenant-region-hit-log.entity";
 import { TenantRegion, TenantRegionBoundaryPoint } from "../../entities/tenant-region.entity";
+import { decryptStoredSecret, encryptStoredSecret } from "../../shared/secret-storage";
+import { maskPhone } from "../../shared/data-masking";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
@@ -49,22 +64,50 @@ import { UserFavorite } from "../../entities/user-favorite.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
 import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
+import { VolunteerAttendanceRecord } from "../../entities/volunteer-attendance-record.entity";
+import { VolunteerBadgeAward } from "../../entities/volunteer-badge-award.entity";
+import { VolunteerHourAdjustment } from "../../entities/volunteer-hour-adjustment.entity";
 import { VolunteerServiceRecord } from "../../entities/volunteer-service-record.entity";
 import { VolunteerTaskApplication } from "../../entities/volunteer-task-application.entity";
 import { VolunteerTask } from "../../entities/volunteer-task.entity";
+import { VolunteerTrainingRecord } from "../../entities/volunteer-training-record.entity";
+import { VolunteerServiceProof } from "../../entities/volunteer-service-proof.entity";
+import { certificateVerificationView } from "../../shared/certificate-verification";
+import { renderCertificateSvg } from "../../shared/certificate-svg";
+import { canTransitionVolunteerApplication, nextVolunteerNo, verifyVolunteerAttendanceToken, volunteerBusinessKey, volunteerHoursFromAttendance, volunteerPhoneHash, volunteerQualificationEffective } from "../../shared/volunteer-governance";
 import { Waitlist, WaitlistStatus } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
-import { ActivityStatus, OrderStatus, PaymentMethod, RegistrationAnswer, RegistrationStatus } from "../../shared/domain";
+import { ActivityStatus, FieldType, OrderStatus, PaymentMethod, RegistrationAnswer, RegistrationStatus } from "../../shared/domain";
+import { fenToYuan, sameMoneyAmount, yuanToFen } from "../../shared/money";
 import { defaultFeatureGates, type FeatureGateKey, normalizeFeatureGates, normalizeLaunchConfig } from "../../shared/launch-config";
 import { assertTenantOwnedResourceAccess, normalizeTenantCode, normalizeTenantHost } from "../../shared/tenant-scope";
+import { validatedUploadFile } from "../../shared/upload-security";
+import { claimPrivateDocument, privateDocumentExists, readPrivateDocument, storePrivateDocument } from "../../shared/private-document";
+import { createPrivateAssetToken, verifyPrivateAssetToken } from "../../shared/private-asset-token";
+import { assertUploadMalwareSafe, uploadMalwareScanConfig } from "../../shared/upload-malware-scan";
 import { defaultHomepageSections, normalizePageKey } from "../homepage-defaults";
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
+import { MemberPointsService } from "../member-points/member-points.service";
 import { CharityFundService } from "../charity-fund.service";
-import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerTaskApplyDto, WechatLoginDto, WechatPhoneDto } from "./dto";
-import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
+import { CredentialTemplateService } from "../credential-templates/credential-template.service";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerAttendanceSubmitDto, VolunteerServiceConfirmDto, VolunteerTaskApplyDto, VolunteerTaskCancelDto, WechatLoginDto, WechatPhoneDto } from "./dto";
 
-export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
+const PUBLIC_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
+const PUBLIC_ATTACHMENT_MIMES = new Set([...PUBLIC_IMAGE_MIMES, "application/pdf"]);
+import { PaymentProviderService, RealPaymentCallbackContext, SupportedPaymentProvider } from "./payment-provider.service";
+import { tenantEntitlementFeatureForGate, tenantFeatureAccess } from "../admin/tenant-subscription";
+import { ObjectStorageService } from "../../shared/object-storage.service";
+import { resolveTicketPrice } from "./ticket-pricing";
+import { couponLimitError, redemptionLimitError } from "../../shared/promotion-limits";
+import { mallCouponClaimError } from "../../shared/mall-review-marketing-governance";
+import { memberCanAccessCourse } from "../../shared/course-access-mode";
+import { validateRegistrationEligibility } from "./registration-eligibility";
+import { growthFromPointLog, levelExpiry, manualLevelOverrideActive, memberLevelScopeKey, memberLevelSnapshot, resolveGrowthLevel } from "../../shared/member-level-engine";
+import { checkInNonce, createCheckInTicket } from "../../shared/check-in-ticket";
+import { analyticsDateText } from "../../shared/analytics-metrics";
+
+export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null; userId?: number | null };
 type PublicTrackingContext = { channelCode?: string | null; source?: string | null; inviteCode?: string | null; clientIp?: string | null; userAgent?: string | null };
 type TenantLocationTrackingContext = { source?: string | null; clientIp?: string | null; userAgent?: string | null };
 
@@ -111,20 +154,29 @@ export class PublicService {
     @InjectRepository(CourseChapter) private readonly courseChapters: Repository<CourseChapter>,
     @InjectRepository(CourseLesson) private readonly courseLessons: Repository<CourseLesson>,
     @InjectRepository(CourseOrder) private readonly courseOrders: Repository<CourseOrder>,
+    @InjectRepository(CourseRefund) private readonly courseRefunds: Repository<CourseRefund>,
     @InjectRepository(UserLearning) private readonly userLearning: Repository<UserLearning>,
     @InjectRepository(Certificate) private readonly certificates: Repository<Certificate>,
     @InjectRepository(CommunityPost) private readonly communityPosts: Repository<CommunityPost>,
     @InjectRepository(UserFavorite) private readonly userFavorites: Repository<UserFavorite>,
     @InjectRepository(VolunteerProfile) private readonly volunteerProfiles: Repository<VolunteerProfile>,
+    @InjectRepository(VolunteerTrainingRecord) private readonly volunteerTrainingRecords: Repository<VolunteerTrainingRecord>,
+    @InjectRepository(VolunteerBadgeAward) private readonly volunteerBadgeAwards: Repository<VolunteerBadgeAward>,
     @InjectRepository(VolunteerTask) private readonly volunteerTasksRepo: Repository<VolunteerTask>,
     @InjectRepository(VolunteerTaskApplication) private readonly volunteerTaskApplicationsRepo: Repository<VolunteerTaskApplication>,
+    @InjectRepository(VolunteerAttendanceRecord) private readonly volunteerAttendanceRecords: Repository<VolunteerAttendanceRecord>,
     @InjectRepository(VolunteerServiceRecord) private readonly volunteerServiceRecords: Repository<VolunteerServiceRecord>,
+    @InjectRepository(VolunteerHourAdjustment) private readonly volunteerHourAdjustments: Repository<VolunteerHourAdjustment>,
+    @InjectRepository(VolunteerServiceProof) private readonly volunteerServiceProofs: Repository<VolunteerServiceProof>,
     private readonly notificationProvider: NotificationProviderService,
     private readonly paymentProvider: PaymentProviderService,
     private readonly refundCompletion: RefundCompletionService,
+    private readonly memberPoints: MemberPointsService,
     private readonly charityFund: CharityFundService,
     private readonly dataSource: DataSource,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly objectStorage: ObjectStorageService,
+    private readonly credentialTemplates: CredentialTemplateService
   ) {}
 
   async h5Code(dto: H5CodeDto, clientIp?: string | null) {
@@ -233,10 +285,15 @@ export class PublicService {
     };
   }
 
-  async myProfile(user: User) {
+  async myProfile(user: User, context?: PublicTenantContext) {
     const fresh = await this.users.findOneBy({ id: user.id });
     if (!fresh) throw new UnauthorizedException("登录已失效，请重新登录");
-    const profile = await this.memberProfiles.findOne({ where: { user: { id: fresh.id } } });
+    const tenant = await this.resolveTenantContext(context);
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    let profile = await this.memberProfiles.findOne({ where: { user: { id: fresh.id }, tenantScopeKey } });
+    if (!profile) profile = await this.refreshMemberProfile(fresh, tenant);
+    const levels = await this.memberLevels.find({ where: { enabled: true, tenantScopeKey: memberLevelScopeKey(tenant) }, order: { minGrowth: "ASC" } });
+    const nextLevel = levels.find(level => level.minGrowth > Number(profile?.growthValue || 0)) || null;
     return {
       id: fresh.id,
       phone: fresh.phone,
@@ -247,8 +304,11 @@ export class PublicService {
       wechatBound: Boolean(fresh.openid),
       wechatAppId: fresh.wechatAppId,
       hasPassword: Boolean(fresh.passwordHash),
-      memberLevel: profile?.level ? { id: profile.level.id, name: profile.level.name } : null,
-      points: profile?.points || 0
+      memberLevel: profile?.level ? { ...memberLevelSnapshot(profile.level), ...(profile.levelSnapshot || {}), id: profile.level.id, expiresAt: profile.levelExpiresAt } : null,
+      points: profile?.points || 0,
+      growthValue: profile?.growthValue || 0,
+      nextLevel: nextLevel ? { id: nextLevel.id, name: nextLevel.name, minGrowth: nextLevel.minGrowth, remainingGrowth: Math.max(nextLevel.minGrowth - Number(profile?.growthValue || 0), 0) } : null,
+      memberScope: tenant ? { tenantId: tenant.id, tenantCode: tenant.code, tenantName: tenant.name } : { tenantId: null, tenantCode: null, tenantName: "平台" }
     };
   }
 
@@ -256,14 +316,48 @@ export class PublicService {
     const tenant = await this.resolveTenantContext(context);
     const course = await this.courses.findOne({ where: this.tenantCourseWhere({ id: courseId, status: "published" }, tenant) });
     if (!course) throw new NotFoundException("内容不存在或未发布");
+    const clientOrderKey = String(dto.clientOrderKey || "").trim().slice(0, 120) || null;
+    if (clientOrderKey) {
+      const idempotentOrder = await this.courseOrders.findOne({ where: { user: { id: user.id }, clientOrderKey } });
+      if (idempotentOrder) {
+        if (idempotentOrder.course.id !== course.id) throw new ConflictException("课程订单业务键已被其他课程使用");
+        return { owned: await this.hasCourseAccess(user.id, course.id), order: this.publicCourseOrder(idempotentOrder), course: this.publicCourse(course), idempotent: true };
+      }
+    }
     if (await this.hasCourseAccess(user.id, course.id)) {
       return { owned: true, order: null, course: this.publicCourse(course) };
     }
 
-    const amount = Number(course.price || 0);
+    if (course.accessMode === "redeem") throw new BadRequestException("该课程仅支持兑换码加入，请在个人中心输入课程兑换码");
+    const memberProfile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey: memberLevelScopeKey(tenant) } });
+    const currentMemberLevelSnapshot = memberProfile?.levelSnapshot || memberLevelSnapshot(memberProfile?.level);
+    let entitlementSource = "purchase";
+    if (course.accessMode === "member") {
+      const levelSnapshot = memberProfile?.levelSnapshot as Record<string, unknown> | null | undefined;
+      const allowed = memberCanAccessCourse({ accessMode: course.accessMode, requiredLevelSort: course.requiredMemberLevel?.sortOrder, memberLevelSort: Number(levelSnapshot?.sortOrder ?? memberProfile?.level?.sortOrder ?? 0), benefits: Array.isArray(levelSnapshot?.benefits) ? levelSnapshot.benefits as any[] : memberProfile?.level?.benefits });
+      if (!allowed) throw new ForbiddenException(course.requiredMemberLevel ? `该课程仅限「${course.requiredMemberLevel.name}」及以上会员` : "当前会员等级未包含该课程权益");
+      entitlementSource = "member";
+    }
+
+    const amount = course.accessMode === "member" ? 0 : Number(course.price || 0);
     const paymentMethod = amount > 0 ? dto.paymentMethod || PaymentMethod.Offline : PaymentMethod.Free;
+    const courseOrderSnapshot = {
+      amount: amount.toFixed(2),
+      paymentMethod,
+      courseId: course.id,
+      courseTitle: course.title,
+      tenantId: course.tenant?.id || null,
+      entitlementSource,
+      accessMode: course.accessMode,
+      requiredMemberLevelId: course.requiredMemberLevel?.id || null,
+      requiredMemberLevel: memberLevelSnapshot(course.requiredMemberLevel),
+      memberLevel: currentMemberLevelSnapshot,
+      clientOrderKey
+    };
     if (amount <= 0) {
-      const order = await this.courseOrders.save(this.courseOrders.create({
+      let order: CourseOrder;
+      try {
+        order = await this.courseOrders.save(this.courseOrders.create({
         orderNo: this.generateCourseOrderNo(),
         user,
         course,
@@ -274,13 +368,21 @@ export class PublicService {
         paidAt: new Date(),
         expiresAt: null,
         closedAt: null,
-        closeReason: null
-      }));
+        closeReason: null,
+        clientOrderKey,
+        businessSnapshot: courseOrderSnapshot
+        }));
+      } catch (error: any) {
+        if (!clientOrderKey || !["ER_DUP_ENTRY", "23505"].includes(String(error?.code || ""))) throw error;
+        const existingOrder = await this.courseOrders.findOne({ where: { user: { id: user.id }, clientOrderKey } });
+        if (!existingOrder) throw error;
+        return { owned: await this.hasCourseAccess(user.id, course.id), order: this.publicCourseOrder(existingOrder), course: this.publicCourse(course), idempotent: true };
+      }
       await this.grantCourseAccess(user, course);
       return { owned: true, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
     }
-    if (paymentMethod !== PaymentMethod.Offline) throw new BadRequestException("在线支付暂未接入，请选择线下收款");
-    await this.assertPaymentMethodEnabled(PaymentMethod.Offline, tenant);
+    if (![PaymentMethod.Wechat, PaymentMethod.Alipay, PaymentMethod.Balance, PaymentMethod.Offline].includes(paymentMethod)) throw new BadRequestException("当前课程不支持该支付方式");
+    await this.assertPaymentMethodEnabled(paymentMethod, tenant);
 
     const existing = await this.courseOrders.findOne({
       where: { user: { id: user.id }, course: { id: course.id }, status: CourseOrderStatus.PendingPayment },
@@ -288,19 +390,30 @@ export class PublicService {
     });
     if (existing && !this.isExpiredCourseOrder(existing)) return { owned: false, order: this.publicCourseOrder(existing), course: this.publicCourse(course) };
 
-    const order = await this.courseOrders.save(this.courseOrders.create({
-      orderNo: this.generateCourseOrderNo(),
-      user,
-      course,
-      amount: amount.toFixed(2),
-      paymentMethod,
-      status: CourseOrderStatus.PendingPayment,
-      transactionNo: null,
-      paidAt: null,
-      expiresAt: this.paymentExpiresAt(amount),
-      closedAt: null,
-      closeReason: null
-    }));
+    let order: CourseOrder;
+    try {
+      order = await this.courseOrders.save(this.courseOrders.create({
+        orderNo: this.generateCourseOrderNo(),
+        user,
+        course,
+        amount: amount.toFixed(2),
+        paymentMethod,
+        status: CourseOrderStatus.PendingPayment,
+        transactionNo: null,
+        paidAt: null,
+        expiresAt: this.paymentExpiresAt(amount),
+        closedAt: null,
+        closeReason: null,
+        clientOrderKey,
+        businessSnapshot: courseOrderSnapshot
+      }));
+    } catch (error: any) {
+      if (!clientOrderKey || !["ER_DUP_ENTRY", "23505"].includes(String(error?.code || ""))) throw error;
+      const existingOrder = await this.courseOrders.findOne({ where: { user: { id: user.id }, clientOrderKey } });
+      if (!existingOrder) throw error;
+      if (existingOrder.course.id !== course.id) throw new ConflictException("课程订单业务键已被其他课程使用");
+      return { owned: await this.hasCourseAccess(user.id, course.id), order: this.publicCourseOrder(existingOrder), course: this.publicCourse(course), idempotent: true };
+    }
     return { owned: false, order: this.publicCourseOrder(order), course: this.publicCourse(course) };
   }
 
@@ -330,19 +443,171 @@ export class PublicService {
       await this.courseOrders.save(order);
       throw new BadRequestException("内容订单已超时，请重新下单");
     }
-    order.status = CourseOrderStatus.Paid;
-    order.transactionNo = dto.transactionNo || `COURSE-MOCK-${Date.now()}`;
-    order.paidAt = new Date();
-    const saved = await this.courseOrders.save(order);
-    await this.grantCourseAccess(user, order.course);
+    const saved = await this.applySuccessfulCoursePayment(order, dto.transactionNo || `COURSE-MOCK-${Date.now()}`);
     return { order: this.publicCourseOrder(saved), course: this.publicCourse(saved.course), owned: true };
+  }
+
+  async createCourseProviderPayment(orderId: number, provider: SupportedPaymentProvider, dto: ProviderPayDto, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
+    if (!order) throw new NotFoundException("内容订单不存在");
+    this.assertCourseTenantAccess(order.course, tenant);
+    if (order.status === CourseOrderStatus.Paid) return { alreadyPaid: true, order: this.publicCourseOrder(order) };
+    if (order.status !== CourseOrderStatus.PendingPayment) throw new BadRequestException("当前内容订单不可支付");
+    if (this.isExpiredCourseOrder(order)) {
+      await this.closeCourseOrder(order, "内容订单超时关闭");
+      throw new BadRequestException("内容订单已超时，请重新下单");
+    }
+    if (order.paymentMethod !== provider) throw new BadRequestException("内容订单支付方式不匹配");
+    const paymentDto = provider === "wechat" && dto.paymentScene === "jsapi" && !dto.openId && user.openid ? { ...dto, openId: user.openid } : dto;
+    return this.paymentProvider.createPayment(provider, this.courseOrderPaymentView(order), paymentDto, {
+      notifyUrl: this.coursePaymentNotifyUrl(provider),
+      callbackPath: `/payment/course/${provider}/callback`
+    });
+  }
+
+  async payCourseOrderWithBalance(orderId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
+    if (!order) throw new NotFoundException("内容订单不存在");
+    this.assertCourseTenantAccess(order.course, tenant);
+    await this.assertPaymentMethodEnabled(PaymentMethod.Balance, tenant);
+    if (order.paymentMethod !== PaymentMethod.Balance) throw new BadRequestException("内容订单支付方式不匹配");
+    const idempotencyKey = `course_balance_pay:${order.id}`;
+    if (order.status === CourseOrderStatus.Paid) {
+      const existing = await this.walletTransactions.findOne({ where: { idempotencyKey }, loadEagerRelations: false });
+      return { order: this.publicCourseOrder(order), walletTransaction: this.publicWalletTransaction(existing), owned: true, idempotent: true };
+    }
+    if (order.status !== CourseOrderStatus.PendingPayment) throw new BadRequestException("当前内容订单不能使用余额支付");
+    if (this.isExpiredCourseOrder(order)) {
+      await this.closeCourseOrder(order, "内容订单超时关闭");
+      throw new BadRequestException("内容订单已超时，请重新下单");
+    }
+
+    const result = await this.dataSource.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(CourseOrder);
+      const walletRepo = manager.getRepository(UserWallet);
+      const walletTxRepo = manager.getRepository(WalletTransaction);
+      const paymentTxRepo = manager.getRepository(PaymentTransaction);
+      const learningRepo = manager.getRepository(UserLearning);
+      const locked = await orderRepo.findOne({ where: { id: order.id }, relations: ["user", "course", "course.tenant"], loadEagerRelations: false, lock: { mode: "pessimistic_write" } });
+      if (!locked) throw new NotFoundException("内容订单不存在");
+      if (locked.status === CourseOrderStatus.Paid) return { order: locked, walletTransaction: await walletTxRepo.findOne({ where: { idempotencyKey }, loadEagerRelations: false }), idempotent: true };
+      if (locked.status !== CourseOrderStatus.PendingPayment || locked.paymentMethod !== PaymentMethod.Balance) throw new BadRequestException("当前内容订单不能使用余额支付");
+      if (this.isExpiredCourseOrder(locked)) throw new BadRequestException("内容订单已超时，请重新下单");
+
+      const tenantScopeKey = this.walletTenantScopeKey(locked.course.tenant);
+      let wallet = await walletRepo.findOne({ where: { user: { id: user.id }, tenantScopeKey }, lock: { mode: "pessimistic_write" } });
+      if (!wallet) wallet = await walletRepo.save(walletRepo.create({ user, tenant: locked.course.tenant, tenantScopeKey }));
+      const amountFen = Number(locked.amountFen || yuanToFen(locked.amount));
+      const cashBeforeFen = yuanToFen(wallet.availableBalance || 0);
+      const giftBeforeFen = yuanToFen(wallet.giftBalance || 0);
+      if (cashBeforeFen + giftBeforeFen < amountFen) throw new BadRequestException("余额不足，请选择其他支付方式或联系后台充值");
+      const giftUsedFen = Math.min(giftBeforeFen, amountFen);
+      const cashUsedFen = amountFen - giftUsedFen;
+      const cashAfterFen = cashBeforeFen - cashUsedFen;
+      const giftAfterFen = giftBeforeFen - giftUsedFen;
+      wallet.availableBalance = fenToYuan(cashAfterFen);
+      wallet.giftBalance = fenToYuan(giftAfterFen);
+      wallet.totalSpent = (Number(wallet.totalSpent || 0) + amountFen / 100).toFixed(2);
+      await walletRepo.save(wallet);
+      const walletTransaction = await walletTxRepo.save(walletTxRepo.create({
+        wallet,
+        user,
+        tenant: locked.course.tenant,
+        order: null,
+        transactionNo: `COURSEBAL${Date.now()}${locked.id}`,
+        direction: "debit",
+        type: "balance_pay",
+        amount: fenToYuan(amountFen),
+        balanceBefore: fenToYuan(cashBeforeFen),
+        balanceAfter: fenToYuan(cashAfterFen),
+        frozenBefore: wallet.frozenBalance || "0.00",
+        frozenAfter: wallet.frozenBalance || "0.00",
+        giftBefore: fenToYuan(giftBeforeFen),
+        giftAfter: fenToYuan(giftAfterFen),
+        frozenGiftBefore: wallet.frozenGiftBalance || "0.00",
+        frozenGiftAfter: wallet.frozenGiftBalance || "0.00",
+        operator: "user",
+        remark: `课程订单余额支付：${locked.orderNo}`,
+        idempotencyKey
+      }));
+      locked.status = CourseOrderStatus.Paid;
+      locked.transactionNo = walletTransaction.transactionNo;
+      locked.paidAt = new Date();
+      locked.expiresAt = null;
+      const savedOrder = await orderRepo.save(locked);
+      await paymentTxRepo.save(paymentTxRepo.create({ order: null, tenant: locked.course.tenant, transactionNo: walletTransaction.transactionNo, provider: "balance", paymentMethod: PaymentMethod.Balance, amount: savedOrder.amount, businessType: "course", businessOrderNo: savedOrder.orderNo, businessSnapshot: { courseId: locked.course.id, courseTitle: locked.course.title, orderNo: savedOrder.orderNo, amount: savedOrder.amount, paymentMethod: PaymentMethod.Balance }, status: "success", reconciliationStatus: "matched", remark: "课程余额支付" }));
+      let learning = await learningRepo.findOne({ where: { userId: user.id, courseId: locked.course.id, lessonId: 0 } });
+      if (!learning) learning = learningRepo.create({ userId: user.id, courseId: locked.course.id, lessonId: 0, progress: 0, completedAt: null });
+      await learningRepo.save(learning);
+      return { order: savedOrder, walletTransaction, idempotent: false };
+    });
+    return { order: this.publicCourseOrder(result.order), walletTransaction: this.publicWalletTransaction(result.walletTransaction), owned: true, idempotent: result.idempotent };
+  }
+
+  async courseProviderPaymentCallback(provider: SupportedPaymentProvider, dto: ProviderPaymentCallbackDto | Record<string, unknown>, rawContext?: Omit<RealPaymentCallbackContext, "body">) {
+    const realProvider = await this.paymentProvider.usesRealProvider(provider);
+    const context = { body: dto as Record<string, unknown>, headers: rawContext?.headers, rawBody: rawContext?.rawBody };
+    const extractedOrderNo = realProvider ? await this.paymentProvider.extractRealCallbackOrderNo(provider, context) : null;
+    const preloaded = extractedOrderNo ? await this.courseOrders.findOne({ where: { orderNo: extractedOrderNo } }) : null;
+    if (realProvider && !preloaded) throw new NotFoundException("内容订单不存在");
+    const callback = realProvider
+      ? await this.paymentProvider.parseRealPaymentCallbackForOrder(provider, this.courseOrderPaymentView(preloaded!), context)
+      : this.paymentProvider.parsePaymentCallback(provider, dto as ProviderPaymentCallbackDto);
+    if (!callback.signatureValid) throw new BadRequestException("内容支付回调签名验证失败");
+    if (extractedOrderNo && callback.orderNo !== extractedOrderNo) throw new BadRequestException("内容支付回调订单号不一致");
+    const order = preloaded || await this.courseOrders.findOne({ where: { orderNo: callback.orderNo } });
+    if (!order) throw new NotFoundException("内容订单不存在");
+    if (order.paymentMethod !== provider) throw new BadRequestException("内容订单支付方式不匹配");
+    if (!sameMoneyAmount(order.amount, callback.amount)) throw new BadRequestException("内容支付回调金额与订单金额不一致");
+    const saved = await this.applySuccessfulCoursePayment(order, callback.transactionNo);
+    return { success: true, idempotent: order.status === CourseOrderStatus.Paid, order: this.publicCourseOrder(saved) };
+  }
+
+  async queryCourseOrderPayment(orderId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
+    if (!order) throw new NotFoundException("内容订单不存在");
+    this.assertCourseTenantAccess(order.course, tenant);
+    if (![PaymentMethod.Wechat, PaymentMethod.Alipay].includes(order.paymentMethod)) {
+      return { provider: order.paymentMethod, mode: "local", orderNo: order.orderNo, transactionNo: order.transactionNo, amount: order.amount, status: order.status === CourseOrderStatus.Paid ? "success" : order.status === CourseOrderStatus.Closed ? "closed" : "pending", localStatus: order.status };
+    }
+    const result = await this.paymentProvider.queryPayment(order.paymentMethod as SupportedPaymentProvider, this.courseOrderPaymentView(order));
+    if (result.status === "success" && order.status === CourseOrderStatus.PendingPayment) {
+      if (!sameMoneyAmount(order.amount, result.amount)) throw new BadRequestException("支付渠道金额与内容订单金额不一致，请联系管理员处理");
+      await this.applySuccessfulCoursePayment(order, result.transactionNo || `QUERY_${order.orderNo}`);
+    }
+    const fresh = await this.courseOrders.findOneByOrFail({ id: order.id });
+    return { ...result, localStatus: fresh.status, owned: fresh.status === CourseOrderStatus.Paid };
+  }
+
+  async closeCourseOrderPayment(orderId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const order = await this.courseOrders.findOne({ where: { id: orderId, user: { id: user.id } } });
+    if (!order) throw new NotFoundException("内容订单不存在");
+    this.assertCourseTenantAccess(order.course, tenant);
+    if (order.status === CourseOrderStatus.Paid) throw new BadRequestException("内容订单已支付，不能关闭");
+    if (order.status === CourseOrderStatus.Closed) return { status: "already_closed", order: this.publicCourseOrder(order) };
+    let providerResult: Record<string, unknown> = { provider: order.paymentMethod, mode: "local", orderNo: order.orderNo, status: "closed" };
+    if ([PaymentMethod.Wechat, PaymentMethod.Alipay].includes(order.paymentMethod)) {
+      const result = await this.paymentProvider.closePayment(order.paymentMethod as SupportedPaymentProvider, this.courseOrderPaymentView(order));
+      if (result.status === "paid") throw new BadRequestException("支付渠道显示内容订单已支付，请先刷新支付状态");
+      providerResult = result;
+    }
+    const saved = await this.closeCourseOrder(order, "用户关闭内容支付订单");
+    return { ...providerResult, order: this.publicCourseOrder(saved) };
   }
 
   async myCourses(user: User, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     const rows = await this.userLearning.find({ where: { userId: user.id, lessonId: 0 }, order: { updatedAt: "DESC" } });
     if (!rows.length) return [];
-    const courses = await this.courses.find({ where: this.tenantCourseWhere({ id: In(rows.map((row) => row.courseId)) }, tenant) });
+    const courseIds = rows.map((row) => row.courseId);
+    const courses = await this.courses.find({ where: this.tenantCourseWhere({ id: In(courseIds) }, tenant) });
+    const lessonLearning = await this.userLearning.createQueryBuilder("learning").where("learning.userId = :userId", { userId: user.id }).andWhere("learning.courseId IN (:...courseIds)", { courseIds }).andWhere("learning.lessonId > 0").orderBy("learning.updatedAt", "DESC").getMany();
+    const lessonIds = Array.from(new Set(lessonLearning.map((row) => row.lessonId)));
+    const lessons = lessonIds.length ? await this.courseLessons.find({ where: { id: In(lessonIds) } }) : [];
     return rows
       .map((row) => {
         const course = courses.find((item) => item.id === row.courseId);
@@ -353,55 +618,54 @@ export class PublicService {
             id: row.id,
             progress: Number(row.progress || 0),
             completedAt: row.completedAt,
-            updatedAt: row.updatedAt
+            updatedAt: row.updatedAt,
+            recentLesson: (() => { const latest = lessonLearning.find((item) => item.courseId === row.courseId); const lesson = latest ? lessons.find((item) => item.id === latest.lessonId) : null; return latest && lesson ? { id: lesson.id, title: lesson.title, progress: Number(latest.progress || 0), updatedAt: latest.updatedAt } : null; })(),
+            completionThreshold: Number(course.completionThreshold || 100)
           }
         };
       })
       .filter(Boolean);
   }
 
-  async myCertificates(user: User) {
-    const rows = await this.certificates.find({ where: { userId: user.id }, order: { issuedAt: "DESC" } });
+  async myCertificates(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const rows = await this.certificates.find({ where: { userId: user.id, tenantId: tenant?.id ?? IsNull() }, loadEagerRelations: false, order: { issuedAt: "DESC" } });
     return rows.map((row) => this.publicCertificate(row, false));
   }
 
   async verifyCertificate(certificateNo: string) {
     const no = String(certificateNo || "").trim();
     if (!no) throw new BadRequestException("请输入证书编号");
-    const certificate = await this.certificates.findOne({ where: { certificateNo: no } });
+    const certificate = await this.certificates.findOne({ where: { certificateNo: no }, loadEagerRelations: false });
     if (!certificate) throw new NotFoundException("证书不存在");
-    return this.publicCertificate(certificate, true);
+    const holder = certificate.holderName ? null : await this.users.findOne({ where: { id: certificate.userId } });
+    const template = await this.credentialTemplates.ensureCertificateSnapshot(certificate);
+    const fullName = certificate.holderName || holder?.nickname || holder?.phone || null;
+    const result = certificateVerificationView(certificate, fullName);
+    result.holderName = template.config.publicHolderMode === "full" ? fullName : template.config.publicHolderMode === "hidden" ? null : result.holderName;
+    return result;
   }
 
-  async myCertificateDownload(user: User, id: number) {
-    const certificate = await this.certificates.findOne({ where: { id, userId: user.id } });
+  async certificateImage(certificateNo: string) {
+    const no = String(certificateNo || "").trim();
+    if (!no) throw new BadRequestException("请输入证书编号");
+    const certificate = await this.certificates.findOne({ where: { certificateNo: no }, loadEagerRelations: false });
+    if (!certificate) throw new NotFoundException("证书不存在");
+    const holder = certificate.holderName ? null : await this.users.findOne({ where: { id: certificate.userId } });
+    const template = await this.credentialTemplates.ensureCertificateSnapshot(certificate);
+    const fullName = certificate.holderName || holder?.nickname || holder?.phone || null;
+    const verification = certificateVerificationView(certificate, fullName);
+    const displayName = template.config.publicHolderMode === "full" ? fullName : template.config.publicHolderMode === "hidden" ? "获证人" : verification.holderName;
+    return renderCertificateSvg({ certificate, displayName: displayName || (certificate.status === "revoked" ? "已撤销" : "获证人"), template: template.config });
+  }
+
+  async myCertificateDownload(user: User, id: number, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const certificate = await this.certificates.findOne({ where: { id, userId: user.id, tenantId: tenant?.id ?? IsNull() }, loadEagerRelations: false });
     if (!certificate) throw new NotFoundException("证书不存在");
     const displayName = certificate.holderName || user.nickname || user.phone || `用户${user.id}`;
-    const issuedAt = certificate.issuedAt ? new Date(certificate.issuedAt) : new Date();
-    const issuedDate = Number.isNaN(issuedAt.getTime()) ? "" : issuedAt.toLocaleDateString("zh-CN");
-    const safeTitle = this.escapeSvg(certificate.name);
-    const safeName = this.escapeSvg(displayName);
-    const safeDate = this.escapeSvg(issuedDate);
-    const safeNo = this.escapeSvg(certificate.certificateNo || `MP-CERT-${certificate.id}`);
-    const safeHours = this.escapeSvg(Number(certificate.serviceHours || 0).toFixed(1));
-    const safeStatus = this.escapeSvg(certificate.status === "revoked" ? "已撤销" : "有效");
-    const svg = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="840" viewBox="0 0 1200 840">
-  <rect width="1200" height="840" fill="#fbf7ef"/>
-  <rect x="54" y="54" width="1092" height="732" rx="26" fill="#fffdf8" stroke="#9f6b43" stroke-width="6"/>
-  <rect x="84" y="84" width="1032" height="672" rx="18" fill="none" stroke="#d8b98c" stroke-width="2"/>
-  <text x="600" y="172" text-anchor="middle" fill="#214b4e" font-size="42" font-weight="700">慢π</text>
-  <text x="600" y="250" text-anchor="middle" fill="#8b4a3e" font-size="58" font-weight="800">志愿服务证书</text>
-  <text x="600" y="344" text-anchor="middle" fill="#263d3c" font-size="34">授予</text>
-  <text x="600" y="420" text-anchor="middle" fill="#101828" font-size="52" font-weight="800">${safeName}</text>
-  <text x="600" y="506" text-anchor="middle" fill="#475467" font-size="30">感谢你参与公益服务与城市共建</text>
-  <text x="600" y="566" text-anchor="middle" fill="#8b4a3e" font-size="34" font-weight="700">${safeTitle}</text>
-  <text x="600" y="612" text-anchor="middle" fill="#475467" font-size="24">服务时长：${safeHours} 小时 · 状态：${safeStatus}</text>
-  <line x1="370" y1="646" x2="830" y2="646" stroke="#d8b98c" stroke-width="2"/>
-  <text x="600" y="696" text-anchor="middle" fill="#667085" font-size="26">发放日期：${safeDate}</text>
-  <text x="600" y="732" text-anchor="middle" fill="#667085" font-size="22">证书编号：${safeNo}</text>
-</svg>`;
-    return { filename: `${certificate.name || "certificate"}.svg`, svg };
+    const template = await this.credentialTemplates.ensureCertificateSnapshot(certificate);
+    return renderCertificateSvg({ certificate, displayName, template: template.config });
   }
 
   private publicCertificate(certificate: Certificate, masked: boolean) {
@@ -414,7 +678,11 @@ export class PublicService {
       serviceHours: Number(certificate.serviceHours || 0),
       level: certificate.level,
       imageUrl: certificate.imageUrl,
+      previewUrl: certificate.certificateNo ? `/api/public/certificates/${encodeURIComponent(certificate.certificateNo)}/image` : null,
       threshold: certificate.threshold,
+      courseId: certificate.courseId,
+      tenantId: certificate.tenantId,
+      businessSnapshot: certificate.businessSnapshot,
       status: certificate.status || "active",
       issuedAt: certificate.issuedAt,
       revokedAt: certificate.revokedAt,
@@ -430,33 +698,47 @@ export class PublicService {
     return `${name[0]}*${name[name.length - 1]}`;
   }
 
-  async myFavoriteCourses(user: User) {
+  async myFavoriteCourses(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
     const rows = await this.userFavorites.find({ where: { userId: user.id }, order: { createdAt: "DESC" } });
     if (!rows.length) return [];
-    const courses = await this.courses.find({ where: { id: In(rows.map((row) => row.courseId)), status: "published" } });
+    const courses = await this.courses.find({ where: this.tenantCourseWhere({ id: In(rows.map((row) => row.courseId)), status: "published" }, tenant) });
     return rows.map((row) => courses.find((course) => course.id === row.courseId)).filter(Boolean);
   }
 
-  async favoriteCourseState(courseId: number, user: User) {
-    const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
+  async favoriteCourseState(courseId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const course = await this.courses.findOne({ where: this.tenantCourseWhere({ id: courseId, status: "published" }, tenant) });
     if (!course) throw new NotFoundException("内容不存在或未发布");
     const count = await this.userFavorites.count({ where: { userId: user.id, courseId } });
     return { courseId, favorited: count > 0 };
   }
 
-  async toggleFavoriteCourse(courseId: number, user: User) {
-    const course = await this.courses.findOne({ where: { id: courseId, status: "published" } });
-    if (!course) throw new NotFoundException("内容不存在或未发布");
-    const row = await this.userFavorites.findOne({ where: { userId: user.id, courseId } });
-    if (row) {
-      await this.userFavorites.delete(row.id);
-      return { courseId, favorited: false };
-    }
-    await this.userFavorites.save(this.userFavorites.create({ userId: user.id, courseId }));
-    return { courseId, favorited: true };
+  async toggleFavoriteCourse(courseId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    return this.dataSource.transaction(async (manager) => {
+      const courseRepo = manager.getRepository(Course);
+      const favoriteRepo = manager.getRepository(UserFavorite);
+      const course = await courseRepo.findOne({
+        where: this.tenantCourseWhere({ id: courseId, status: "published" }, tenant),
+        lock: { mode: "pessimistic_write" }
+      });
+      if (!course) throw new NotFoundException("内容不存在或未发布");
+      const row = await favoriteRepo.findOne({ where: { userId: user.id, courseId }, lock: { mode: "pessimistic_write" } });
+      if (row) {
+        await favoriteRepo.delete(row.id);
+        return { courseId, favorited: false };
+      }
+      try {
+        await favoriteRepo.save(favoriteRepo.create({ userId: user.id, courseId }));
+      } catch (error: any) {
+        if (!this.isDuplicateKeyError(error)) throw error;
+      }
+      return { courseId, favorited: true };
+    });
   }
 
-  async updateMyProfile(user: User, dto: UpdateProfileDto) {
+  async updateMyProfile(user: User, dto: UpdateProfileDto, context?: PublicTenantContext) {
     const row = await this.users.findOneBy({ id: user.id });
     if (!row) throw new UnauthorizedException("登录已失效，请重新登录");
     const nickname = dto.nickname === undefined ? row.nickname : String(dto.nickname || "").trim();
@@ -465,7 +747,7 @@ export class PublicService {
     if (avatarUrl && avatarUrl.length > 500) throw new BadRequestException("头像地址过长");
     row.nickname = nickname || null;
     row.avatarUrl = avatarUrl || null;
-    return this.myProfile(await this.users.save(row));
+    return this.myProfile(await this.users.save(row), context);
   }
 
   async updateMyPassword(user: User, dto: UpdatePasswordDto) {
@@ -482,7 +764,7 @@ export class PublicService {
     return this.h5Code({ phone: dto.phone }, clientIp);
   }
 
-  async updateMyPhone(user: User, dto: UpdatePhoneDto) {
+  async updateMyPhone(user: User, dto: UpdatePhoneDto, context?: PublicTenantContext) {
     const phone = this.normalizePhone(dto.phone);
     this.verifyH5Token(phone, dto.verificationCode, dto.verificationToken);
     const row = await this.users.findOneBy({ id: user.id });
@@ -492,10 +774,10 @@ export class PublicService {
     row.phone = phone;
     if (!row.nickname) row.nickname = `本地用户${phone.slice(-4)}`;
     const saved = await this.users.save(row);
-    return this.myProfile(saved);
+    return this.myProfile(saved, context);
   }
 
-  async bindWechatPhone(user: User, dto: WechatPhoneDto) {
+  async bindWechatPhone(user: User, dto: WechatPhoneDto, context?: PublicTenantContext) {
     const code = String(dto.code || "").trim();
     if (!code) throw new BadRequestException("缺少微信手机号授权 code");
     const phone = await this.resolveWechatPhoneNumber(code, dto.appId);
@@ -511,32 +793,60 @@ export class PublicService {
     row.lastLoginAt = new Date();
     const saved = await this.users.save(row);
     await this.refreshMemberProfile(saved);
-    return this.myProfile(saved);
+    return this.myProfile(saved, context);
   }
 
-  async uploadMyAvatar(user: User, file?: Express.Multer.File) {
+  async uploadMyAvatar(user: User, file?: Express.Multer.File, context?: PublicTenantContext) {
     if (!file) throw new BadRequestException("请上传头像图片");
-    const publicBase = this.config.get<string>("PUBLIC_API_ORIGIN", "").replace(/\/$/, "");
-    const urlPath = `/uploads/avatars/${file.filename}`;
+    const validated = validatedUploadFile(file, PUBLIC_IMAGE_MIMES);
+    if (!validated) throw new BadRequestException("头像文件内容与格式不匹配，仅支持 JPG、PNG 或 WebP 图片");
+    await assertUploadMalwareSafe(validated.buffer, uploadMalwareScanConfig(this.config));
+    const tenant = await this.resolveTenantContext(context);
+    const stored = await this.objectStorage.store(validated, `avatars-t${tenant?.id || "platform"}-u${user.id}`);
     const row = await this.users.findOneBy({ id: user.id });
     if (!row) throw new UnauthorizedException("登录已失效，请重新登录");
-    row.avatarUrl = publicBase ? `${publicBase}${urlPath}` : urlPath;
+    row.avatarUrl = stored.url;
     await this.users.save(row);
-    return { url: row.avatarUrl, path: urlPath, filename: file.filename, size: file.size, mimetype: file.mimetype };
+    return { url: stored.url, size: validated.size, mimetype: validated.mimetype };
   }
 
-  uploadMallReviewImage(file?: Express.Multer.File) {
+  async uploadMallReviewImage(user: User, file?: Express.Multer.File, context?: PublicTenantContext) {
     if (!file) throw new BadRequestException("请上传评价图片，支持 JPG/PNG/WebP，单张不超过 5MB");
-    const publicBase = this.config.get<string>("PUBLIC_API_ORIGIN", "").replace(/\/$/, "");
-    const path = `/uploads/mall-reviews/${file.filename}`;
-    return { url: publicBase ? `${publicBase}${path}` : path, path, filename: file.filename, size: file.size, mimetype: file.mimetype };
+    const validated = validatedUploadFile(file, PUBLIC_IMAGE_MIMES);
+    if (!validated) throw new BadRequestException("评价图片内容与格式不匹配，仅支持 JPG、PNG 或 WebP 图片");
+    await assertUploadMalwareSafe(validated.buffer, uploadMalwareScanConfig(this.config));
+    const tenant = await this.resolveTenantContext(context);
+    const stored = await this.objectStorage.store(validated, `mall-reviews-t${tenant?.id || "platform"}-u${user.id}`);
+    return { url: stored.url, size: validated.size, mimetype: validated.mimetype };
   }
 
-  uploadMallRefundImage(file?: Express.Multer.File) {
+  async uploadMallRefundImage(user: User, file?: Express.Multer.File, context?: PublicTenantContext) {
     if (!file) throw new BadRequestException("请上传售后凭证图片，支持 JPG/PNG/WebP，单张不超过 5MB");
-    const publicBase = this.config.get<string>("PUBLIC_API_ORIGIN", "").replace(/\/$/, "");
-    const path = `/uploads/mall-refunds/${file.filename}`;
-    return { url: publicBase ? `${publicBase}${path}` : path, path, filename: file.filename, size: file.size, mimetype: file.mimetype };
+    const validated = validatedUploadFile(file, PUBLIC_IMAGE_MIMES);
+    if (!validated) throw new BadRequestException("售后凭证内容与格式不匹配，仅支持 JPG、PNG 或 WebP 图片");
+    await assertUploadMalwareSafe(validated.buffer, uploadMalwareScanConfig(this.config));
+    const tenant = await this.resolveTenantContext(context);
+    const stored = await this.objectStorage.store(validated, `mall-refunds-t${tenant?.id || "platform"}-u${user.id}`);
+    return { url: stored.url, size: validated.size, mimetype: validated.mimetype };
+  }
+
+  async uploadRegistrationAttachment(user: User, file?: Express.Multer.File, context?: PublicTenantContext) {
+    if (!file) throw new BadRequestException("请上传 JPG、PNG、WebP 或 PDF 文件，大小不超过 10MB");
+    const validated = validatedUploadFile(file, PUBLIC_ATTACHMENT_MIMES);
+    if (!validated) throw new BadRequestException("报名附件内容与格式不匹配，仅支持 JPG、PNG、WebP 或 PDF 文件");
+    await assertUploadMalwareSafe(validated.buffer, uploadMalwareScanConfig(this.config));
+    const tenant = await this.resolveTenantContext(context);
+    const reference = storePrivateDocument(validated, "registration-attachments");
+    const token = createPrivateAssetToken({ v: 1, purpose: "registration_attachment", reference, tenantId: tenant?.id || null, ownerUserId: user.id, originalName: validated.originalname, mimetype: validated.mimetype, size: validated.size }, this.privateAssetSecret());
+    return { url: `/api/public/me/registration-attachments/${token}/download`, originalName: validated.originalname, size: validated.size, mimetype: validated.mimetype, private: true };
+  }
+
+  async readMyRegistrationAttachment(token: string, user: User, context?: PublicTenantContext) {
+    const payload = verifyPrivateAssetToken(token, this.privateAssetSecret());
+    if (!payload || payload.purpose !== "registration_attachment" || payload.ownerUserId !== user.id) throw new NotFoundException("报名附件不存在");
+    const tenant = await this.resolveTenantContext(context);
+    if ((payload.tenantId || null) !== (tenant?.id || null) || !privateDocumentExists(payload.reference)) throw new NotFoundException("报名附件不存在");
+    return { buffer: readPrivateDocument(payload.reference), originalName: payload.originalName, mimetype: payload.mimetype };
   }
 
   async wechatLogin(dto: WechatLoginDto) {
@@ -596,7 +906,10 @@ export class PublicService {
       defaultTenant,
       policy: {
         precedence: ["route", "manual", "location", "server_default", "build_default", "first_enabled"],
-        serverDefaultTenantCode: defaultTenant?.code || null
+        serverDefaultTenantCode: defaultTenant?.code || null,
+        selectionPersistence: "device",
+        assetScope: "tenant",
+        assetScopeMessage: "报名、订单、钱包、积分、课程和优惠权益按当前城市商家分别展示，切换不会删除原城市数据"
       }
     };
   }
@@ -610,6 +923,9 @@ export class PublicService {
       .createQueryBuilder("region")
       .leftJoinAndSelect("region.tenant", "tenant")
       .where("region.enabled = :enabled", { enabled: true })
+      .andWhere("region.authorizationStatus = :authorizationStatus", { authorizationStatus: "approved" })
+      .andWhere("(region.validFrom IS NULL OR region.validFrom <= CURRENT_DATE())")
+      .andWhere("(region.validUntil IS NULL OR region.validUntil >= CURRENT_DATE())")
       .andWhere("tenant.enabled = :tenantEnabled", { tenantEnabled: true })
       .orderBy("region.priority", "DESC")
       .addOrderBy("region.id", "ASC")
@@ -643,18 +959,30 @@ export class PublicService {
   async operationSetting(context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     const setting = await this.ensureOperationSetting(tenant);
-    return this.publicOperationSetting(setting, await this.platformOperationSetting(setting));
+    const result = this.publicOperationSetting(setting, await this.platformOperationSetting(setting));
+    const launchConfig = (result as Record<string, any>).launchConfig;
+    if (tenant && launchConfig?.featureGates) {
+      for (const key of Object.keys(defaultFeatureGates) as FeatureGateKey[]) {
+        const entitlementFeature = tenantEntitlementFeatureForGate(key);
+        if (entitlementFeature && !tenantFeatureAccess(tenant.settings as any, entitlementFeature).allowed) launchConfig.featureGates[key] = false;
+      }
+    }
+    return result;
   }
 
   async isFeatureGateEnabled(context: PublicTenantContext | undefined, key: FeatureGateKey) {
     const tenant = await this.resolveTenantContext(context);
     const setting = await this.ensureOperationSetting(tenant);
     const launchConfig = this.publicLaunchConfig(setting.launchConfig, (await this.platformOperationSetting(setting))?.launchConfig);
-    return launchConfig.featureGates[key] !== false;
+    if (launchConfig.featureGates[key] === false) return false;
+    const entitlementFeature = tenantEntitlementFeatureForGate(key);
+    if (!tenant || !entitlementFeature) return true;
+    return tenantFeatureAccess(tenant.settings as any, entitlementFeature).allowed;
   }
 
   async assertFeatureGateEnabled(context: PublicTenantContext | undefined, key: FeatureGateKey, message = "功能暂未开放") {
     if (!(await this.isFeatureGateEnabled(context, key))) throw new NotFoundException(message);
+    return this.resolveTenantContext(context);
   }
 
   async marketingPopup(context?: PublicTenantContext, pageKey = "home", platform = "h5") {
@@ -673,21 +1001,36 @@ export class PublicService {
     if (tenant) builder.andWhere("popup.tenantId = :tenantId", { tenantId: tenant.id });
     else builder.andWhere("popup.tenantId IS NULL");
     const rows = await builder.getMany();
-    const row = rows.find((item) => this.marketingPopupMatches(item.platforms, platform) && this.marketingPopupMatches(item.placements, pageKey));
+    const memberLevelId = await this.publicAudienceMemberLevelId(context?.userId, tenant?.id);
+    const row = rows.find((item) => this.marketingPopupMatches(item.platforms, platform) && this.marketingPopupMatches(item.placements, pageKey) && contentAudienceMatches(item.audience, context?.userId, memberLevelId));
     return row ? this.publicMarketingPopup(row) : null;
   }
 
-  async recordMarketingPopupEvent(id: number, event: string) {
-    const row = await this.marketingPopups.findOneBy({ id });
-    if (!row) return { ok: true };
-    if (event === "click") row.clickCount += 1;
-    else if (event === "close") row.closeCount += 1;
-    else row.impressionCount += 1;
-    await this.marketingPopups.save(row);
-    return { ok: true };
+  async recordMarketingPopupEvent(id: number, event: string, pageKey: string, platform: string, context?: PublicTenantContext) {
+    if (!["impression", "click", "close"].includes(event)) throw new BadRequestException("不支持的营销弹窗事件");
+    if (!["home", "mall_home", "activity_list", "activity_detail", "course_home", "course_detail", "mall_product_detail", "community_home", "user_my"].includes(pageKey)) throw new BadRequestException("不支持的营销弹窗页面");
+    if (!["h5", "mp-weixin"].includes(platform)) throw new BadRequestException("不支持的营销弹窗平台");
+    const tenant = await this.resolveTenantContext(context);
+    const memberLevelId = await this.publicAudienceMemberLevelId(context?.userId, tenant?.id);
+    const now = new Date();
+    const counter = marketingPopupEventCounter(event);
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(MarketingPopup);
+      const builder = repository.createQueryBuilder("popup").leftJoinAndSelect("popup.tenant", "tenant").where("popup.id = :id", { id }).setLock("pessimistic_write");
+      if (tenant) builder.andWhere("popup.tenantId = :tenantId", { tenantId: tenant.id });
+      else builder.andWhere("popup.tenantId IS NULL");
+      const row = await builder.getOne();
+      if (!row || !row.enabled || row.startAt && row.startAt > now || row.endAt && row.endAt < now) return { ok: true, ignored: true };
+      if (!this.marketingPopupMatches(row.platforms, platform) || !this.marketingPopupMatches(row.placements, pageKey)) return { ok: true, ignored: true };
+      if (!contentAudienceMatches(row.audience, context?.userId, memberLevelId)) return { ok: true, ignored: true };
+      row[counter] = Number(row[counter] || 0) + 1;
+      await repository.save(row);
+      return { ok: true };
+    });
   }
 
   async adSlot(context?: PublicTenantContext, pageKey = "home", slotKey = "home_top_banner", platform = "h5") {
+    if (!(await this.isFeatureGateEnabled(context, "adCenter"))) return null;
     const tenant = await this.resolveTenantContext(context);
     const now = new Date();
     const builder = this.adCampaigns
@@ -706,14 +1049,43 @@ export class PublicService {
     if (tenant) builder.andWhere("campaign.tenantId = :tenantId", { tenantId: tenant.id });
     else builder.andWhere("campaign.tenantId IS NULL");
     const rows = await builder.getMany();
-    const row = rows.find((item) => this.adCampaignMatches(item, pageKey, platform));
+    const memberLevelId = await this.publicAudienceMemberLevelId(context?.userId, tenant?.id);
+    let row: AdCampaign | undefined;
+    for (const item of rows) {
+      if (!this.adCampaignMatches(item, pageKey, platform) || !contentAudienceMatches(item.audience, context?.userId, memberLevelId)) continue;
+      const stat = await this.adDailyStats.createQueryBuilder("stat").where("stat.campaignId = :campaignId", { campaignId: item.id }).andWhere("stat.statDate = :statDate", { statDate: this.todayDateText() }).getOne();
+      if (!this.adBudgetExceeded(item, stat)) { row = item; break; }
+    }
     return row ? this.publicAdCampaign(row) : null;
   }
 
-  async recordAdSlotEvent(id: number, event: string, platform = "h5") {
-    const row = await this.adCampaigns.findOne({ where: { id }, relations: ["tenant", "advertiser", "contract"] });
-    if (!row) return { ok: true };
+  async recordAdSlotEvent(id: number, event: string, platform = "h5", context?: PublicTenantContext) {
+    if (!(await this.isFeatureGateEnabled(context, "adCenter"))) return { ok: true, ignored: true };
+    const tenant = await this.resolveTenantContext(context);
+    return this.dataSource.transaction(async (manager) => {
+    const campaignRepo = manager.getRepository(AdCampaign);
+    const statRepo = manager.getRepository(AdDailyStat);
+    const campaignQuery = campaignRepo.createQueryBuilder("campaign").setLock("pessimistic_write").leftJoinAndSelect("campaign.tenant", "tenant").leftJoinAndSelect("campaign.advertiser", "advertiser").leftJoinAndSelect("campaign.contract", "contract").where("campaign.id = :id", { id });
+    if (tenant) campaignQuery.andWhere("campaign.tenantId = :tenantId", { tenantId: tenant.id });
+    else campaignQuery.andWhere("campaign.tenantId IS NULL");
+    const row = await campaignQuery.getOne();
+    if (!row) return { ok: true, ignored: true };
+    const now = new Date();
+    if (!row.enabled || (row.startAt && row.startAt > now) || (row.endAt && row.endAt < now)) return { ok: true, ignored: true };
     const normalizedEvent = this.normalizeAdEvent(event);
+    const statDate = this.todayDateText();
+    let stat = await statRepo
+      .createQueryBuilder("stat")
+      .leftJoinAndSelect("stat.campaign", "campaign")
+      .where("stat.campaignId = :campaignId", { campaignId: row.id })
+      .andWhere("stat.statDate = :statDate", { statDate })
+      .andWhere("stat.platform = :platform", { platform })
+      .getOne();
+    if (this.adBudgetExceeded(row, stat)) {
+      row.enabled = false;
+      await campaignRepo.save(row);
+      return { ok: true, ignored: true, disabled: true };
+    }
     const spentDelta = this.adEventSpentDelta(row, normalizedEvent);
     if (normalizedEvent === "impression") row.impressionCount = Number(row.impressionCount || 0) + 1;
     else if (normalizedEvent === "click") row.clickCount = Number(row.clickCount || 0) + 1;
@@ -723,17 +1095,8 @@ export class PublicService {
     else if (normalizedEvent === "error") row.errorCount = Number(row.errorCount || 0) + 1;
     else if (normalizedEvent === "reward") row.rewardCount = Number(row.rewardCount || 0) + 1;
     row.spentAmount = this.adRoundMoney(this.adMoney(row.spentAmount) + spentDelta).toFixed(2);
-
-    const statDate = this.todayDateText();
-    let stat = await this.adDailyStats
-      .createQueryBuilder("stat")
-      .leftJoinAndSelect("stat.campaign", "campaign")
-      .where("stat.campaignId = :campaignId", { campaignId: row.id })
-      .andWhere("stat.statDate = :statDate", { statDate })
-      .andWhere("stat.platform = :platform", { platform })
-      .getOne();
     if (!stat) {
-      stat = this.adDailyStats.create({
+      stat = statRepo.create({
         tenant: row.tenant,
         advertiser: row.advertiser,
         contract: row.contract,
@@ -764,9 +1127,10 @@ export class PublicService {
     stat.spentAmount = this.adRoundMoney(this.adMoney(stat.spentAmount) + spentDelta).toFixed(2);
 
     if (this.adBudgetExceeded(row, stat)) row.enabled = false;
-    await this.adDailyStats.save(stat);
-    await this.adCampaigns.save(row);
+    await statRepo.save(stat);
+    await campaignRepo.save(row);
     return { ok: true, disabled: !row.enabled };
+    });
   }
 
   charitySummary() {
@@ -794,6 +1158,10 @@ export class PublicService {
   }
 
   async submitAmbassadorApplication(dto: AmbassadorApplicationDto) {
+    let businessKey: string;
+    try { businessKey = ecosystemBusinessKey(dto.businessKey, "申请业务键"); } catch (error: any) { throw new BadRequestException(error.message); }
+    const replay = await this.ambassadorApplications.findOne({ where: { businessKey } });
+    if (replay) return { id: replay.id, status: replay.status, kind: replay.kind, submittedAt: replay.createdAt, replayed: true };
     const phone = this.normalizePhone(dto.phone);
     const name = String(dto.name || "").trim();
     const city = String(dto.city || "").trim();
@@ -802,42 +1170,74 @@ export class PublicService {
     const wechat = String(dto.wechat || "").trim();
     const source = this.cleanTrackingText(dto.source, 80) || null;
     const channelCode = this.cleanTrackingText(dto.channelCode, 80) || null;
+    const kind = dto.kind || (["dean_recruit", "partner_apply", "brand_story_contact"].includes(String(source || "")) ? "partner" : "ambassador");
     if (!name) throw new BadRequestException("请填写姓名");
     if (!city) throw new BadRequestException("请填写城市");
     if (!expertise) throw new BadRequestException("请填写擅长领域");
     if (!experience) throw new BadRequestException("请填写经验介绍");
     if (!wechat) throw new BadRequestException("请填写微信号");
-    const row = this.ambassadorApplications.create({ name, phone, city, expertise, experience, wechat, source, channelCode, status: "pending" });
-    const saved = await this.ambassadorApplications.save(row);
-    return { id: saved.id, status: saved.status, submittedAt: saved.createdAt };
+    const recentCount = await this.ambassadorApplications.count({ where: { phone, kind, createdAt: MoreThan(new Date(Date.now() - 24 * 60 * 60 * 1000)) } });
+    if (recentCount >= 3) throw new BadRequestException("同一手机号 24 小时内最多提交 3 次同类招募申请");
+    const row = this.ambassadorApplications.create({
+      businessKey, kind, name, phone, city,
+      province: this.cleanTrackingText(dto.province, 80) || null,
+      district: this.cleanTrackingText(dto.district, 80) || null,
+      organizationName: this.cleanTrackingText(dto.organizationName, 160) || null,
+      cooperationIntent: this.cleanTrackingText(dto.cooperationIntent, 160) || null,
+      expertise, experience, wechat, source, channelCode, assignee: null, ownerAdmin: null, priority: "normal",
+      cityResourceScore: 0, communityScore: 0, contentScore: 0, charityScore: 0, deliveryScore: 0,
+      nextFollowAt: null, status: "pending", remark: null, remarkEncrypted: null, reviewedBy: null, reviewedAt: null,
+      convertedTenant: null, convertedMerchant: null, conversionBusinessKey: null, convertedAt: null
+    });
+    try {
+      const saved = await this.ambassadorApplications.save(row);
+      return { id: saved.id, status: saved.status, kind: saved.kind, submittedAt: saved.createdAt };
+    } catch (error: any) {
+      const duplicate = error?.code === "ER_DUP_ENTRY" || error?.errno === 1062 || error?.driverError?.code === "ER_DUP_ENTRY" || error?.driverError?.errno === 1062;
+      if (!duplicate) throw error;
+      const existing = await this.ambassadorApplications.findOne({ where: { businessKey } });
+      if (!existing) throw new BadRequestException("申请编号冲突，请重新提交");
+      return { id: existing.id, status: existing.status, kind: existing.kind, submittedAt: existing.createdAt, replayed: true };
+    }
   }
 
-  async volunteerTasks(city?: string) {
-    const builder = this.volunteerTasksRepo.createQueryBuilder("task").where("task.status = :status", { status: "open" }).orderBy("task.startAt", "ASC").addOrderBy("task.id", "DESC").take(100);
+  async volunteerTasks(city?: string, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const now = new Date();
+    const builder = this.volunteerTasksRepo.createQueryBuilder("task")
+      .select("task.id", "id").addSelect("task.taskNo", "taskNo").addSelect("task.title", "title").addSelect("task.type", "type")
+      .addSelect("task.city", "city").addSelect("task.address", "address").addSelect("task.startAt", "startAt").addSelect("task.endAt", "endAt")
+      .addSelect("task.recruitmentStartsAt", "recruitmentStartsAt").addSelect("task.recruitmentEndsAt", "recruitmentEndsAt")
+      .addSelect("task.quota", "quota").addSelect("task.waitlistEnabled", "waitlistEnabled").addSelect("task.requiredSkills", "requiredSkills")
+      .addSelect("task.qualificationRequired", "qualificationRequired").addSelect("task.minimumTrainingHours", "minimumTrainingHours")
+      .addSelect("task.cancellationDeadlineHours", "cancellationDeadlineHours").addSelect("task.checkInOpensMinutesBefore", "checkInOpensMinutesBefore")
+      .addSelect("task.checkOutClosesMinutesAfter", "checkOutClosesMinutesAfter").addSelect("task.latitude", "latitude").addSelect("task.longitude", "longitude")
+      .addSelect("task.status", "status").addSelect("task.requirement", "requirement").addSelect("task.description", "description")
+      .where("task.status = :status", { status: "open" }).andWhere("(task.recruitmentStartsAt IS NULL OR task.recruitmentStartsAt <= :now)", { now }).andWhere("(task.recruitmentEndsAt IS NULL OR task.recruitmentEndsAt >= :now)", { now }).orderBy("task.startAt", "ASC").addOrderBy("task.id", "DESC").take(100);
+    if (tenant) builder.andWhere("task.tenantId = :tenantId", { tenantId: tenant.id });
+    else builder.andWhere("task.tenantId IS NULL");
     if (city?.trim()) builder.andWhere("task.city LIKE :city", { city: `%${city.trim()}%` });
-    const rows = await builder.getMany();
-    return rows.map((task) => ({ ...task, appliedCount: 0 }));
+    const rows = await builder.getRawMany<any>();
+    return Promise.all(rows.map(async (task) => {
+      const [admittedCount, waitlistCount] = await Promise.all([
+        this.volunteerTaskApplicationsRepo.createQueryBuilder("application").where("application.taskId = :taskId", { taskId: task.id }).andWhere("application.status IN (:...statuses)", { statuses: ["admitted", "checked_in", "completed"] }).getCount(),
+        this.volunteerTaskApplicationsRepo.createQueryBuilder("application").where("application.taskId = :taskId", { taskId: task.id }).andWhere("application.status = :status", { status: "waitlisted" }).getCount()
+      ]);
+      return { ...task, id: Number(task.id), quota: Number(task.quota), waitlistEnabled: Boolean(task.waitlistEnabled), qualificationRequired: Boolean(task.qualificationRequired), requiredSkills: task.requiredSkills || [], admittedCount, waitlistCount, remainingQuota: Math.max(Number(task.quota) - admittedCount, 0) };
+    }));
   }
 
-  async applyVolunteer(dto: VolunteerApplyDto, user?: User | null) {
+  async applyVolunteer(dto: VolunteerApplyDto, user?: User | null, context?: PublicTenantContext) {
+    await this.resolveTenantContext(context);
     const phone = this.normalizePhone(dto.phone);
     const name = String(dto.name || "").trim();
     const city = String(dto.city || "").trim();
     if (!name) throw new BadRequestException("请填写姓名");
     if (!city) throw new BadRequestException("请填写城市");
-    let profile = await this.volunteerProfiles.findOne({ where: { phone } });
-    if (!profile) {
-      profile = this.volunteerProfiles.create({ user: user || null, name, phone, city, expertise: this.cleanTrackingText(dto.expertise, 160) || null, availableTime: this.cleanTrackingText(dto.availableTime, 160) || null, serviceIntent: this.cleanTrackingText(dto.serviceIntent, 160) || null, status: "pending", level: "participant", serviceHours: "0.00", remark: this.cleanTrackingText(dto.message, 500) || null });
-    } else {
-      profile.user = profile.user || user || null;
-      profile.name = name;
-      profile.city = city;
-      profile.expertise = this.cleanTrackingText(dto.expertise, 160) || profile.expertise;
-      profile.availableTime = this.cleanTrackingText(dto.availableTime, 160) || profile.availableTime;
-      profile.serviceIntent = this.cleanTrackingText(dto.serviceIntent, 160) || profile.serviceIntent;
-      profile.remark = this.cleanTrackingText(dto.message, 500) || profile.remark;
-    }
-    const savedProfile = await this.volunteerProfiles.save(profile);
+    const businessKey = this.parseVolunteerBusinessKey(dto.businessKey || `volunteer:profile:${user?.id || volunteerPhoneHash(phone)}:${uuidv4()}`, "申请业务键");
+    const replay = await this.volunteerProfiles.createQueryBuilder("profile").select("profile.id", "id").addSelect("profile.status", "status").addSelect("profile.createdAt", "createdAt").where("profile.applicationBusinessKey = :businessKey", { businessKey }).getRawOne<any>();
+    if (replay) return { id: replay.id, applicationId: replay.application?.id || null, status: replay.status, submittedAt: replay.createdAt, replayed: true };
+    const savedProfile = await this.upsertVolunteerProfile(dto, user || null, businessKey);
     const application = await this.ambassadorApplications.save(this.ambassadorApplications.create({
       name,
       phone,
@@ -854,34 +1254,310 @@ export class PublicService {
     return { id: savedProfile.id, applicationId: application.id, status: savedProfile.status, submittedAt: savedProfile.createdAt };
   }
 
-  async applyVolunteerTask(taskId: number, dto: VolunteerTaskApplyDto, user?: User | null) {
-    const task = await this.volunteerTasksRepo.findOne({ where: { id: taskId, status: "open" } });
-    if (!task) throw new NotFoundException("志愿任务不存在或暂未开放");
+  async applyVolunteerTask(taskId: number, dto: VolunteerTaskApplyDto, user?: User | null, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
     const phone = this.normalizePhone(dto.phone);
     const name = String(dto.name || "").trim();
     const city = String(dto.city || "").trim();
     if (!name) throw new BadRequestException("请填写姓名");
     if (!city) throw new BadRequestException("请填写城市");
-    let profile = await this.volunteerProfiles.findOne({ where: { phone } });
-    if (!profile) {
-      profile = await this.volunteerProfiles.save(this.volunteerProfiles.create({ user: user || null, name, phone, city, expertise: task.type, availableTime: null, serviceIntent: task.title, status: "pending", level: "participant", serviceHours: "0.00", remark: this.cleanTrackingText(dto.message, 500) || null }));
+    const businessKey = this.parseVolunteerBusinessKey(dto.businessKey || `volunteer:task:${taskId}:${user?.id || volunteerPhoneHash(phone)}:${uuidv4()}`, "报名业务键");
+    const replay = await this.volunteerTaskApplicationsRepo.createQueryBuilder("application")
+      .select("application.id", "id").addSelect("application.status", "status").addSelect("application.waitlistPosition", "waitlistPosition")
+      .addSelect("application.createdAt", "createdAt").addSelect("task.tenantId", "tenantId")
+      .leftJoin("application.task", "task").where("application.businessKey = :businessKey", { businessKey }).getRawOne<any>();
+    if (replay) {
+      if (Number(replay.tenantId || 0) !== Number(tenant?.id || 0)) throw new NotFoundException("志愿任务报名不存在");
+      return { id: replay.id, status: replay.status, waitlistPosition: replay.waitlistPosition, submittedAt: replay.createdAt, replayed: true };
     }
-    const existing = await this.volunteerTaskApplicationsRepo.findOne({ where: { task: { id: task.id }, phone, status: "pending" } });
-    if (existing) return { id: existing.id, status: existing.status, submittedAt: existing.createdAt };
-    const application = await this.volunteerTaskApplicationsRepo.save(this.volunteerTaskApplicationsRepo.create({ task, profile, user: user || null, name, phone, city, status: "pending", message: this.cleanTrackingText(dto.message, 500) || null }));
-    return { id: application.id, status: application.status, submittedAt: application.createdAt };
+    const accessBuilder = this.volunteerTasksRepo.createQueryBuilder("task").select("task.id", "id").addSelect("task.status", "status").where("task.id = :taskId", { taskId });
+    if (tenant) accessBuilder.andWhere("task.tenantId = :tenantId", { tenantId: tenant.id });
+    else accessBuilder.andWhere("task.tenantId IS NULL");
+    const accessibleTask = await accessBuilder.getRawOne<{ id: number; status: string }>();
+    if (!accessibleTask || accessibleTask.status !== "open") throw new NotFoundException("志愿任务不存在或暂未开放");
+    const profile = await this.upsertVolunteerProfile({ name, phone, city, message: dto.message }, user || null, `volunteer:profile-from-task:${businessKey}`);
+    return this.dataSource.transaction(async (manager) => {
+      const taskRepo = manager.getRepository(VolunteerTask);
+      const applicationRepo = manager.getRepository(VolunteerTaskApplication);
+      const taskBuilder = taskRepo.createQueryBuilder("task").setLock("pessimistic_write").where("task.id = :taskId", { taskId });
+      if (tenant) taskBuilder.andWhere("task.tenantId = :tenantId", { tenantId: tenant.id });
+      else taskBuilder.andWhere("task.tenantId IS NULL");
+      const task = await taskBuilder.getOne();
+      if (!task || task.status !== "open") throw new NotFoundException("志愿任务不存在或暂未开放");
+      const now = new Date();
+      if (task.recruitmentStartsAt && task.recruitmentStartsAt > now) throw new BadRequestException("任务报名尚未开始");
+      if (task.recruitmentEndsAt && task.recruitmentEndsAt < now) throw new BadRequestException("任务报名已截止");
+      if (task.qualificationRequired && !volunteerQualificationEffective({ status: profile.qualificationStatus, expiresAt: profile.qualificationExpiresAt }, now)) throw new BadRequestException("该任务要求有效志愿服务资格");
+      const requiredSkills = task.requiredSkills || [];
+      if (requiredSkills.length && !requiredSkills.every((skill) => (profile.skills || []).includes(skill))) throw new BadRequestException(`该任务要求技能：${requiredSkills.join("、")}`);
+      if (Number(task.minimumTrainingHours || 0) > 0) {
+        const training = await manager.getRepository(VolunteerTrainingRecord).createQueryBuilder("training").select("COALESCE(SUM(training.trainingHours), 0)", "hours").where("training.profileId = :profileId", { profileId: profile.id }).andWhere("training.status = 'approved'").andWhere("(training.expiresAt IS NULL OR training.expiresAt >= :now)", { now }).getRawOne<{ hours: string }>();
+        if (Number(training?.hours || 0) < Number(task.minimumTrainingHours)) throw new BadRequestException(`该任务要求至少 ${Number(task.minimumTrainingHours)} 小时有效培训`);
+      }
+      const identityKey = `volunteer:task:${task.id}:profile:${profile.id}`;
+      const existing = await applicationRepo.createQueryBuilder("application").select("application.id", "id").addSelect("application.status", "status").addSelect("application.waitlistPosition", "waitlistPosition").addSelect("application.createdAt", "createdAt").where("application.applicationIdentityKey = :identityKey", { identityKey }).getRawOne<any>();
+      if (existing) return { id: existing.id, status: existing.status, waitlistPosition: existing.waitlistPosition, submittedAt: existing.createdAt, replayed: true };
+      const admittedCount = await applicationRepo.createQueryBuilder("application").where("application.taskId = :taskId", { taskId: task.id }).andWhere("application.status IN (:...statuses)", { statuses: ["admitted", "checked_in", "completed"] }).getCount();
+      const status = admittedCount >= task.quota ? "waitlisted" : "pending";
+      if (status === "waitlisted" && !task.waitlistEnabled) throw new BadRequestException("该志愿任务名额已满");
+      const waitlistPosition = status === "waitlisted" ? await applicationRepo.createQueryBuilder("application").where("application.taskId = :taskId", { taskId: task.id }).andWhere("application.status = :status", { status: "waitlisted" }).getCount() + 1 : null;
+      const message = this.cleanTrackingText(dto.message, 500) || null;
+      const application = await applicationRepo.save(applicationRepo.create({ task, profile, user: user || null, businessKey, applicationIdentityKey: identityKey, name, phone: maskPhone(phone), phoneMasked: maskPhone(phone), phoneLookupHash: volunteerPhoneHash(phone), city, status, message: null, messageEncrypted: encryptStoredSecret(message), remark: null, remarkEncrypted: null, waitlistPosition, admittedAt: null, cancelledAt: null, cancellationReason: null, replacedBy: null, checkedInAt: null, completedAt: null }));
+      return { id: application.id, status: application.status, waitlistPosition: application.waitlistPosition, submittedAt: application.createdAt };
+    });
   }
 
-  async myVolunteer(user: User) {
-    const where: any[] = [{ user: { id: user.id } }];
-    if (user.phone) where.push({ phone: user.phone });
-    const profile = await this.volunteerProfiles.findOne({ where });
+  async myVolunteer(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const profileBuilder = this.volunteerProfiles.createQueryBuilder("profile").where("profile.userId = :userId", { userId: user.id });
+    if (user.phone) profileBuilder.orWhere("profile.phoneLookupHash = :phoneHash OR profile.phone = :phone", { phoneHash: volunteerPhoneHash(user.phone), phone: user.phone });
+    const profile = await profileBuilder.getOne();
     if (!profile) return { profile: null, applications: [], records: [] };
-    const [applications, records] = await Promise.all([
-      this.volunteerTaskApplicationsRepo.find({ where: { profile: { id: profile.id } }, order: { createdAt: "DESC" } }),
-      this.volunteerServiceRecords.find({ where: { profile: { id: profile.id } }, order: { createdAt: "DESC" } })
+    const applicationBuilder = this.volunteerTaskApplicationsRepo.createQueryBuilder("application").leftJoinAndSelect("application.task", "task").where("application.profileId = :profileId", { profileId: profile.id }).orderBy("application.createdAt", "DESC");
+    const recordBuilder = this.volunteerServiceRecords.createQueryBuilder("record").leftJoinAndSelect("record.task", "task").leftJoinAndSelect("record.application", "application").where("record.profileId = :profileId", { profileId: profile.id }).orderBy("record.createdAt", "DESC");
+    const attendanceBuilder = this.volunteerAttendanceRecords.createQueryBuilder("attendance").leftJoinAndSelect("attendance.application", "application").leftJoinAndSelect("application.task", "task").where("application.profileId = :profileId", { profileId: profile.id }).orderBy("attendance.occurredAt", "DESC");
+    if (tenant) {
+      applicationBuilder.andWhere("task.tenantId = :tenantId", { tenantId: tenant.id });
+      recordBuilder.andWhere("task.tenantId = :tenantId", { tenantId: tenant.id });
+      attendanceBuilder.andWhere("task.tenantId = :tenantId", { tenantId: tenant.id });
+    } else {
+      applicationBuilder.andWhere("task.tenantId IS NULL");
+      recordBuilder.andWhere("task.tenantId IS NULL");
+      attendanceBuilder.andWhere("task.tenantId IS NULL");
+    }
+    const [applications, records, trainingRecords, attendanceRecords, adjustments, badges, proofs] = await Promise.all([
+      applicationBuilder.getMany(),
+      recordBuilder.getMany(),
+      this.volunteerTrainingRecords.createQueryBuilder("training").where("training.profileId = :profileId", { profileId: profile.id }).orderBy("training.createdAt", "DESC").getMany(),
+      attendanceBuilder.getMany(),
+      this.volunteerHourAdjustments.createQueryBuilder("adjustment").where("adjustment.profileId = :profileId", { profileId: profile.id }).orderBy("adjustment.createdAt", "DESC").getMany(),
+      this.volunteerBadgeAwards.createQueryBuilder("award").leftJoinAndSelect("award.definition", "definition").where("award.profileId = :profileId", { profileId: profile.id }).orderBy("award.awardedAt", "DESC").getMany(),
+      this.volunteerServiceProofs.createQueryBuilder("proof").where("proof.profileId = :profileId", { profileId: profile.id }).orderBy("proof.issuedAt", "DESC").getMany()
     ]);
-    return { profile, applications, records };
+    return {
+      profile: this.publicVolunteerProfile(profile),
+      applications: applications.map((row) => this.publicVolunteerApplication(row)),
+      records: records.map((row) => this.publicVolunteerServiceRecord(row)),
+      trainingRecords: trainingRecords.map((row) => ({ id: row.id, title: row.title, provider: row.provider, trainingHours: row.trainingHours, completedAt: row.completedAt, expiresAt: row.expiresAt, status: row.status })),
+      attendanceRecords: attendanceRecords.map((row) => ({ id: row.id, applicationId: row.application.id, action: row.action, method: row.method, occurredAt: row.occurredAt, status: row.status })),
+      adjustments: adjustments.map((row) => ({ id: row.id, deltaHours: row.deltaHours, action: row.action, createdAt: row.createdAt })),
+      badges: badges.filter((row) => row.status === "active").map((row) => ({ id: row.id, code: row.definition.code, name: row.definition.name, description: row.definition.description, iconUrl: row.definition.iconUrl, awardedAt: row.awardedAt })),
+      proofs: proofs.map((row) => ({ proofNo: row.proofNo, title: row.title, hours: row.hours, status: row.status, issuedAt: row.issuedAt, snapshot: row.status === "active" ? row.snapshot : null }))
+    };
+  }
+
+  async verifyVolunteerProof(proofNo: string) {
+    const no = String(proofNo || "").trim();
+    if (!no) throw new BadRequestException("请输入证明编号");
+    const proof = await this.volunteerServiceProofs.createQueryBuilder("proof").leftJoinAndSelect("proof.profile", "profile").where("proof.proofNo = :proofNo", { proofNo: no }).getOne();
+    if (!proof) throw new NotFoundException("证明不存在");
+    const name = String(proof.profile.name || "");
+    const active = proof.status === "active";
+    const holderName = active ? (name.length <= 1 ? "*" : `${name.slice(0, 1)}${"*".repeat(Math.max(name.length - 2, 1))}${name.slice(-1)}`) : null;
+    return { proofNo: proof.proofNo, title: active ? proof.title : null, hours: active ? proof.hours : null, status: proof.status, issuedAt: proof.issuedAt, holderName, snapshot: active ? { taskTitle: proof.snapshot?.taskTitle || null, serviceTitle: proof.snapshot?.serviceTitle || proof.title, hours: proof.snapshot?.hours || proof.hours, serviceDate: proof.snapshot?.serviceDate || null } : null, verify: { valid: active, revoked: !active } };
+  }
+
+  async cancelVolunteerTaskApplication(id: number, dto: VolunteerTaskCancelDto, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const businessKey = this.parseVolunteerBusinessKey(dto.businessKey, "取消业务键");
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(VolunteerTaskApplication);
+      const row = await repo.createQueryBuilder("application").leftJoinAndSelect("application.task", "task").leftJoinAndSelect("task.tenant", "taskTenant").leftJoinAndSelect("application.user", "user").setLock("pessimistic_write").where("application.id = :id", { id }).getOne();
+      if (!row || row.user?.id !== user.id) throw new NotFoundException("志愿任务报名不存在");
+      assertTenantOwnedResourceAccess(row.task, tenant, "志愿任务报名不存在");
+      if (row.cancellationReason?.startsWith(`${businessKey}:`)) return this.publicVolunteerApplication(row);
+      if (!canTransitionVolunteerApplication(row.status, "cancelled")) throw new BadRequestException("当前报名状态不能取消");
+      const deadline = row.task.startAt ? new Date(row.task.startAt.getTime() - Math.max(row.task.cancellationDeadlineHours, 0) * 3_600_000) : null;
+      if (deadline && deadline < new Date()) throw new BadRequestException("已超过任务取消截止时间，请联系运营人员处理");
+      const released = ["admitted", "checked_in"].includes(row.status);
+      row.status = "cancelled";
+      row.cancelledAt = new Date();
+      row.cancellationReason = `${businessKey}:${this.cleanTrackingText(dto.reason, 400)}`;
+      await repo.save(row);
+      if (released) await this.promoteVolunteerWaitlist(manager, row.task.id);
+      return this.publicVolunteerApplication(row);
+    });
+  }
+
+  async submitVolunteerAttendance(id: number, dto: VolunteerAttendanceSubmitDto, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const businessKey = this.parseVolunteerBusinessKey(dto.businessKey, "签到业务键");
+    let payload;
+    try { payload = verifyVolunteerAttendanceToken(dto.token); } catch (error: any) { throw new BadRequestException(error.message); }
+    if (payload.applicationId !== id) throw new BadRequestException("签到凭证与报名记录不匹配");
+    return this.dataSource.transaction(async (manager) => {
+      const attendanceRepo = manager.getRepository(VolunteerAttendanceRecord);
+      const applicationRepo = manager.getRepository(VolunteerTaskApplication);
+      const application = await applicationRepo.createQueryBuilder("application").leftJoinAndSelect("application.task", "task").leftJoinAndSelect("task.tenant", "taskTenant").leftJoinAndSelect("application.user", "user").leftJoinAndSelect("application.profile", "profile").setLock("pessimistic_write").where("application.id = :id", { id }).getOne();
+      if (!application || application.user?.id !== user.id) throw new NotFoundException("志愿任务报名不存在");
+      assertTenantOwnedResourceAccess(application.task, tenant, "志愿任务报名不存在");
+      const replay = await attendanceRepo.findOne({ where: { businessKey, application: { id } } });
+      if (replay) return replay;
+      const now = new Date();
+      this.assertVolunteerAttendanceWindow(application.task, payload.action, now);
+      const expectedStatus = payload.action === "check_in" ? "admitted" : "checked_in";
+      if (application.status !== expectedStatus) throw new BadRequestException(payload.action === "check_in" ? "当前状态不能签到" : "请先完成签到");
+      const duplicate = await attendanceRepo.findOne({ where: { application: { id }, action: payload.action } });
+      if (duplicate) return duplicate;
+      const record = await attendanceRepo.save(attendanceRepo.create({ businessKey, application, action: payload.action, method: "signed_token", tokenNonce: payload.nonce, occurredAt: now, locationSnapshot: dto.latitude === undefined && dto.longitude === undefined ? null : { latitude: dto.latitude, longitude: dto.longitude }, evidenceEncrypted: null, recordedByUser: user, recordedByAdmin: null, status: "valid", reversalReasonEncrypted: null }));
+      if (payload.action === "check_in") {
+        application.status = "checked_in";
+        application.checkedInAt = now;
+      } else {
+        const checkIn = await attendanceRepo.findOne({ where: { application: { id }, action: "check_in", status: "valid" } });
+        if (!checkIn) throw new BadRequestException("缺少有效签到记录");
+        const hours = volunteerHoursFromAttendance(checkIn.occurredAt, now);
+        const serviceRepo = manager.getRepository(VolunteerServiceRecord);
+        const recordKey = `volunteer:service:application:${application.id}`;
+        let serviceRecord = await serviceRepo.findOne({ where: { applicationRecordKey: recordKey } });
+        if (!serviceRecord) serviceRecord = await serviceRepo.save(serviceRepo.create({ businessKey: `volunteer:service:${businessKey}`, applicationRecordKey: recordKey, profile: application.profile!, task: application.task, application, hours: "0.00", submittedHours: hours.toFixed(2), confirmedHours: "0.00", status: "pending_volunteer", title: application.task.title, proofUrl: null, proofEncrypted: null, feedback: null, feedbackEncrypted: null, volunteerConfirmedBy: null, volunteerConfirmedAt: null, volunteerConfirmationKey: null, supervisorConfirmedBy: null, supervisorConfirmedAt: null, supervisorConfirmationKey: null, rejectionReasonEncrypted: null }));
+        application.completedAt = now;
+        await serviceRepo.save(serviceRecord);
+      }
+      await applicationRepo.save(application);
+      return record;
+    });
+  }
+
+  async confirmVolunteerServiceRecord(id: number, dto: VolunteerServiceConfirmDto, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const businessKey = this.parseVolunteerBusinessKey(dto.businessKey, "工时确认业务键");
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(VolunteerServiceRecord);
+      const row = await repo.createQueryBuilder("record").leftJoinAndSelect("record.task", "task").leftJoinAndSelect("task.tenant", "taskTenant").leftJoinAndSelect("record.application", "application").leftJoinAndSelect("application.user", "user").setLock("pessimistic_write").where("record.id = :id", { id }).getOne();
+      if (!row || row.application?.user?.id !== user.id) throw new NotFoundException("志愿服务记录不存在");
+      if (!row.task) throw new NotFoundException("志愿服务记录不存在");
+      assertTenantOwnedResourceAccess(row.task, tenant, "志愿服务记录不存在");
+      if (row.volunteerConfirmationKey === businessKey) return this.publicVolunteerServiceRecord(row);
+      if (row.status !== "pending_volunteer") throw new BadRequestException("当前服务记录无需志愿者确认");
+      const hours = dto.hours === undefined ? Number(row.submittedHours) : Number(dto.hours);
+      if (!Number.isFinite(hours) || hours <= 0 || hours > 24) throw new BadRequestException("确认工时必须大于 0 且不超过 24 小时");
+      row.submittedHours = hours.toFixed(2);
+      row.volunteerConfirmedBy = user;
+      row.volunteerConfirmedAt = new Date();
+      row.volunteerConfirmationKey = businessKey;
+      row.status = "pending_supervisor";
+      return this.publicVolunteerServiceRecord(await repo.save(row));
+    });
+  }
+
+  private async upsertVolunteerProfile(dto: Pick<VolunteerApplyDto, "name" | "phone" | "city"> & Partial<VolunteerApplyDto>, user: User | null, businessKey: string) {
+    const phone = this.normalizePhone(dto.phone);
+    const phoneHash = volunteerPhoneHash(phone);
+    const name = this.cleanTrackingText(dto.name, 40);
+    const city = this.cleanTrackingText(dto.city, 80);
+    const profileBuilder = this.volunteerProfiles.createQueryBuilder("profile");
+    if (user) profileBuilder.where("profile.userId = :userId OR profile.phoneLookupHash = :phoneHash OR profile.phone = :phone", { userId: user.id, phoneHash, phone });
+    else profileBuilder.where("profile.phoneLookupHash = :phoneHash OR profile.phone = :phone", { phoneHash, phone });
+    let profile = await profileBuilder.getOne();
+    const message = this.cleanTrackingText(dto.message, 500) || null;
+    const expertise = this.cleanTrackingText(dto.expertise, 160) || null;
+    const normalizedSkills = Array.from(new Set((dto.skills || (expertise ? expertise.split(/[、,，/]/) : [])).map((item) => this.cleanTrackingText(item, 40)).filter(Boolean))).slice(0, 20);
+    if (!profile) profile = this.volunteerProfiles.create({
+      profileNo: nextVolunteerNo("VLP"), applicationBusinessKey: businessKey, user, application: null, name, phone: maskPhone(phone), phoneMasked: maskPhone(phone), phoneLookupHash: phoneHash, phoneEncrypted: encryptStoredSecret(phone), city,
+      expertise, skills: normalizedSkills, availableTime: this.cleanTrackingText(dto.availableTime, 160) || null, availability: dto.availability || null, serviceIntent: this.cleanTrackingText(dto.serviceIntent, 160) || null,
+      status: "pending", level: "participant", identityStatus: "pending", identityVerifiedAt: null, qualificationStatus: "unqualified", qualificationExpiresAt: null, emergencyContactEncrypted: dto.emergencyContact ? encryptStoredSecret(JSON.stringify(dto.emergencyContact)) : null,
+      serviceHours: "0.00", remark: null, remarkEncrypted: encryptStoredSecret(message), statusReason: null
+    });
+    else {
+      if (user) profile.user = user;
+      profile.profileNo = profile.profileNo || nextVolunteerNo("VLP");
+      if (!profile.applicationBusinessKey || profile.applicationBusinessKey.startsWith("legacy-")) profile.applicationBusinessKey = businessKey;
+      profile.name = name;
+      profile.phone = maskPhone(phone);
+      profile.phoneMasked = maskPhone(phone);
+      profile.phoneLookupHash = phoneHash;
+      profile.phoneEncrypted = encryptStoredSecret(phone);
+      profile.city = city;
+      profile.expertise = expertise || profile.expertise;
+      profile.skills = normalizedSkills.length ? normalizedSkills : profile.skills;
+      profile.availableTime = this.cleanTrackingText(dto.availableTime, 160) || profile.availableTime;
+      profile.availability = dto.availability || profile.availability;
+      profile.serviceIntent = this.cleanTrackingText(dto.serviceIntent, 160) || profile.serviceIntent;
+      profile.remark = null;
+      profile.remarkEncrypted = message ? encryptStoredSecret(message) : profile.remarkEncrypted;
+      profile.emergencyContactEncrypted = dto.emergencyContact ? encryptStoredSecret(JSON.stringify(dto.emergencyContact)) : profile.emergencyContactEncrypted;
+    }
+    try { return await this.volunteerProfiles.save(profile); } catch (error: any) {
+      const duplicate = error?.code === "ER_DUP_ENTRY" || error?.errno === 1062 || error?.driverError?.code === "ER_DUP_ENTRY" || error?.driverError?.errno === 1062;
+      if (!duplicate) throw error;
+      const replay = await this.volunteerProfiles.createQueryBuilder("profile").where("profile.applicationBusinessKey = :businessKey OR profile.phoneLookupHash = :phoneHash", { businessKey, phoneHash }).getOne();
+      if (!replay) throw new BadRequestException("志愿者档案冲突，请重新提交");
+      return replay;
+    }
+  }
+
+  private publicVolunteerProfile(profile: VolunteerProfile) {
+    return { id: profile.id, profileNo: profile.profileNo, name: profile.name, phone: profile.phoneMasked || maskPhone(profile.phone), city: profile.city, expertise: profile.expertise, skills: profile.skills || [], availableTime: profile.availableTime, availability: profile.availability, serviceIntent: profile.serviceIntent, status: profile.status, level: profile.level, identityStatus: profile.identityStatus, qualificationStatus: profile.qualificationStatus, qualificationExpiresAt: profile.qualificationExpiresAt, serviceHours: profile.serviceHours, createdAt: profile.createdAt, updatedAt: profile.updatedAt };
+  }
+
+  private publicVolunteerTask(task?: VolunteerTask | null) {
+    if (!task) return null;
+    return {
+      id: task.id,
+      taskNo: task.taskNo,
+      title: task.title,
+      type: task.type,
+      city: task.city,
+      address: task.address,
+      startAt: task.startAt,
+      endAt: task.endAt,
+      recruitmentStartsAt: task.recruitmentStartsAt,
+      recruitmentEndsAt: task.recruitmentEndsAt,
+      quota: task.quota,
+      waitlistEnabled: task.waitlistEnabled,
+      requiredSkills: task.requiredSkills || [],
+      qualificationRequired: task.qualificationRequired,
+      minimumTrainingHours: task.minimumTrainingHours,
+      cancellationDeadlineHours: task.cancellationDeadlineHours,
+      checkInOpensMinutesBefore: task.checkInOpensMinutesBefore,
+      checkOutClosesMinutesAfter: task.checkOutClosesMinutesAfter,
+      latitude: task.latitude,
+      longitude: task.longitude,
+      status: task.status,
+      requirement: task.requirement,
+      description: task.description,
+      createdAt: task.createdAt,
+      updatedAt: task.updatedAt
+    };
+  }
+
+  private publicVolunteerApplication(row: VolunteerTaskApplication) {
+    return { id: row.id, task: this.publicVolunteerTask(row.task), name: row.name, phone: row.phoneMasked || maskPhone(row.phone), city: row.city, status: row.status, message: decryptStoredSecret(row.messageEncrypted) || row.message || null, waitlistPosition: row.waitlistPosition, admittedAt: row.admittedAt, cancelledAt: row.cancelledAt, cancellationReason: row.cancellationReason ? row.cancellationReason.split(":").slice(3).join(":") : null, checkedInAt: row.checkedInAt, completedAt: row.completedAt, createdAt: row.createdAt, updatedAt: row.updatedAt };
+  }
+
+  private publicVolunteerServiceRecord(row: VolunteerServiceRecord) {
+    return { id: row.id, task: this.publicVolunteerTask(row.task), applicationId: row.application?.id || null, title: row.title, submittedHours: row.submittedHours, confirmedHours: row.confirmedHours, hours: row.confirmedHours || row.hours, status: row.status, feedback: decryptStoredSecret(row.feedbackEncrypted) || row.feedback || null, volunteerConfirmedAt: row.volunteerConfirmedAt, supervisorConfirmedAt: row.supervisorConfirmedAt, createdAt: row.createdAt, updatedAt: row.updatedAt };
+  }
+
+  private async promoteVolunteerWaitlist(manager: EntityManager, taskId: number) {
+    const repo = manager.getRepository(VolunteerTaskApplication);
+    const task = await manager.getRepository(VolunteerTask).findOne({ where: { id: taskId } });
+    if (!task) return null;
+    const admittedCount = await repo.count({ where: { task: { id: taskId }, status: In(["admitted", "checked_in", "completed"]) as any } });
+    if (admittedCount >= task.quota) return null;
+    const next = await repo.createQueryBuilder("application").setLock("pessimistic_write").where("application.taskId = :taskId", { taskId }).andWhere("application.status = 'waitlisted'").orderBy("application.waitlistPosition", "ASC").addOrderBy("application.createdAt", "ASC").getOne();
+    if (!next) return null;
+    next.status = "admitted";
+    next.admittedAt = new Date();
+    next.waitlistPosition = null;
+    return repo.save(next);
+  }
+
+  private assertVolunteerAttendanceWindow(task: VolunteerTask, action: "check_in" | "check_out", now: Date) {
+    if (action === "check_in" && task.startAt) {
+      const opensAt = new Date(task.startAt.getTime() - Math.max(task.checkInOpensMinutesBefore, 0) * 60_000);
+      if (now < opensAt) throw new BadRequestException("签到尚未开放");
+      if (task.endAt && now > task.endAt) throw new BadRequestException("签到已结束");
+    }
+    if (action === "check_out") {
+      if (task.startAt && now < task.startAt) throw new BadRequestException("任务尚未开始，不能签退");
+      if (task.endAt && now > new Date(task.endAt.getTime() + Math.max(task.checkOutClosesMinutesAfter, 0) * 60_000)) throw new BadRequestException("签退窗口已关闭");
+    }
+  }
+
+  private parseVolunteerBusinessKey(value: unknown, label: string) {
+    try { return volunteerBusinessKey(value, label); } catch (error: any) { throw new BadRequestException(error.message); }
   }
 
   myCharity(user: User) {
@@ -890,6 +1566,18 @@ export class PublicService {
 
   myCharityTransactions(user: User, page?: number, pageSize?: number) {
     return this.charityFund.userTransactions(user, page, pageSize);
+  }
+
+  myCharityContributionCertificate(user: User, transactionId: number) {
+    return this.charityFund.userContributionCertificate(user, transactionId);
+  }
+
+  verifyCharityContributionCertificate(certificateNo: string) {
+    return this.charityFund.verifyContributionCertificate(certificateNo);
+  }
+
+  charityContributionCertificateImage(certificateNo: string) {
+    return this.charityFund.contributionCertificateImage(certificateNo);
   }
 
   async activitiesList(options: { categoryId?: number; status?: string; featured?: boolean; page?: number; pageSize?: number; keyword?: string }, context?: PublicTenantContext) {
@@ -934,27 +1622,27 @@ export class PublicService {
     const sectionsBuilder = this.homepageSections
       .createQueryBuilder("section")
       .leftJoin("section.tenant", "tenant")
-      .where("section.enabled = :enabled", { enabled: true })
-      .andWhere("section.pageKey = :pageKey", { pageKey: normalizedPageKey })
+      .where("section.pageKey = :pageKey", { pageKey: normalizedPageKey })
       .andWhere("(section.tenantId IS NULL OR tenant.enabled = :tenantEnabled)", { tenantEnabled: true })
       .orderBy("section.sortOrder", "ASC")
       .addOrderBy("section.id", "ASC");
     if (tenant) sectionsBuilder.andWhere("section.tenantId = :tenantId", { tenantId: tenant.id });
     else sectionsBuilder.andWhere("section.tenantId IS NULL");
-    const sections = await sectionsBuilder.getMany();
+    const sections = (await sectionsBuilder.getMany()).filter(homepageSectionIsPublicCandidate);
+    const publication = await this.dataSource.getRepository(HomepagePublication).findOne({ where: { tenantScopeKey: homepagePublicationScopeKey(tenant?.id), pageKey: normalizedPageKey } });
     const configuredCount = await this.homepageConfiguredCount(normalizedPageKey, scopedTenantId);
-    let source = sections;
+    let source = publication ? (publication.sections || []).filter(homepageSectionIsPublicCandidate).map((item, index) => this.homepageSections.create({ ...item, id: -(10000 + index), tenant, pageKey: normalizedPageKey, config: item.config || {}, layout: item.layout || {} })) : sections;
     let fallback = false;
     if (!source.length && tenant && configuredCount === 0) {
       fallback = true;
       source = await this.homepageSections
         .createQueryBuilder("section")
-        .where("section.enabled = :enabled", { enabled: true })
-        .andWhere("section.pageKey = :pageKey", { pageKey: normalizedPageKey })
+        .where("section.pageKey = :pageKey", { pageKey: normalizedPageKey })
         .andWhere("section.tenantId IS NULL")
         .orderBy("section.sortOrder", "ASC")
         .addOrderBy("section.id", "ASC")
         .getMany();
+      source = source.filter(homepageSectionIsPublicCandidate);
       const platformConfiguredCount = await this.homepageConfiguredCount(normalizedPageKey, null);
       if (!source.length && platformConfiguredCount > 0) fallback = true;
       if (!source.length && platformConfiguredCount === 0) {
@@ -965,7 +1653,7 @@ export class PublicService {
       source = defaultHomepageSections(normalizedPageKey).filter((item) => item.enabled).map((item, index) => this.homepageSections.create({ ...item, id: -(index + 1), pageKey: normalizedPageKey }));
     }
     const [announcements, categories, latest, featured, testimonials] = await Promise.all([
-      this.homepageAnnouncements(10, true, tenant),
+      this.homepageAnnouncements(10, true, tenant, context?.userId),
       this.categoriesList(tenant ? { tenantId: tenant.id } : context),
       this.activitiesList({ pageSize: 20 }, tenant ? { tenantId: tenant.id } : context),
       this.activitiesList({ featured: true, pageSize: 12 }, tenant ? { tenantId: tenant.id } : context),
@@ -1000,16 +1688,29 @@ export class PublicService {
     return builder.getCount();
   }
 
-  private async homepageAnnouncements(limit: number, pinnedFirst: boolean, tenant?: Tenant | null) {
+  private async homepageAnnouncements(limit: number, pinnedFirst: boolean, tenant?: Tenant | null, userId?: number | null) {
     const builder = this.announcements
       .createQueryBuilder("announcement")
       .leftJoin("announcement.tenant", "tenant")
       .where("announcement.enabled = :enabled", { enabled: true })
+      .andWhere("(announcement.publishAt IS NULL OR announcement.publishAt <= :now)", { now: new Date() })
+      .andWhere("(announcement.endAt IS NULL OR announcement.endAt >= :now)", { now: new Date() })
       .andWhere("(announcement.tenantId IS NULL OR tenant.enabled = :tenantEnabled)", { tenantEnabled: true });
     if (tenant) builder.andWhere("announcement.tenantId = :tenantId", { tenantId: tenant.id });
     if (pinnedFirst) builder.orderBy("announcement.pinned", "DESC").addOrderBy("announcement.publishAt", "DESC").addOrderBy("announcement.createdAt", "DESC");
     else builder.orderBy("announcement.publishAt", "DESC").addOrderBy("announcement.createdAt", "DESC");
-    return builder.take(Math.min(Math.max(limit, 1), 20)).getMany();
+    const rows = await builder.take(Math.min(Math.max(limit * 3, 1), 60)).getMany();
+    const memberLevelId = await this.publicAudienceMemberLevelId(userId, tenant?.id);
+    return rows.filter((row) => contentAudienceMatches(row.audience, userId, memberLevelId)).slice(0, Math.min(Math.max(limit, 1), 20));
+  }
+
+  private async publicAudienceMemberLevelId(userId?: number | null, tenantId?: number | null) {
+    if (!userId) return null;
+    const builder = this.memberProfiles.createQueryBuilder("profile").leftJoinAndSelect("profile.level", "level").where("profile.userId = :userId", { userId });
+    if (tenantId) builder.andWhere("profile.tenantId = :tenantId", { tenantId });
+    else builder.andWhere("profile.tenantId IS NULL");
+    const profile = await builder.getOne();
+    return profile?.level?.id || null;
   }
 
   private async homepageTestimonials(tenant?: Tenant | null) {
@@ -1081,6 +1782,9 @@ export class PublicService {
       boundaryPoints: region.boundaryPoints || null,
       exclusive: region.exclusive,
       priority: region.priority,
+      authorizationStatus: region.authorizationStatus,
+      validFrom: region.validFrom,
+      validUntil: region.validUntil,
       distanceMeters: distanceMeters ?? null
     };
   }
@@ -1173,14 +1877,14 @@ export class PublicService {
       this.memberAccessSnapshot(activity, userId),
       this.ensureOperationSetting(activity.tenant || null)
     ]);
-    return { ...(await this.withPublicStats(activity)), ticketTypes, memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
+    return { ...(await this.withPublicStats(activity)), ticketTypes: ticketTypes.map((item) => this.publicTicketType(item)), memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
   }
 
   async quote(activityId: number, dto: QuoteDto, user: User, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(activityId, { status: ActivityStatus.Open });
     if (!activity) throw new NotFoundException("活动不存在或未开放");
     await this.assertPublicTenantAccess(activity, context);
-    return this.calculateQuote(activity, { ...dto, userId: user.id });
+    return this.publicQuote(await this.calculateQuote(activity, { ...dto, userId: user.id }));
   }
 
   async register(activityId: number, dto: RegisterDto, user: User, context?: PublicTenantContext) {
@@ -1197,11 +1901,18 @@ export class PublicService {
     const existingWaitlist = await this.waitlists.findOne({ where: { activity: { id: activityId }, user: { id: user.id }, status: WaitlistStatus.Waiting } });
     if (existingWaitlist) throw new BadRequestException("你已在该活动候补名单中");
 
-    this.validateAnswers(activity.fields, dto.answers);
+    await this.validateAnswers(activity.fields, dto.answers, user, tenant);
+    const eligibilityError = validateRegistrationEligibility({ rules: activity.eligibilityRules || null, answers: dto.answers, phone: user.phone, privacyAccepted: dto.privacyAccepted, companions: dto.companions });
+    if (eligibilityError) throw new BadRequestException(eligibilityError);
+    const maxRegistrations = Number(activity.eligibilityRules?.maxRegistrationsPerUser || 0);
+    if (maxRegistrations > 0) {
+      const historicalCount = await this.registrations.createQueryBuilder("registration").where("registration.activityId = :activityId", { activityId }).andWhere("registration.userId = :userId", { userId: user.id }).andWhere("registration.status != :cancelled", { cancelled: RegistrationStatus.Cancelled }).getCount();
+      if (historicalCount >= maxRegistrations) throw new BadRequestException(`每人最多报名 ${maxRegistrations} 次`);
+    }
     const stats = await this.withPublicStats(activity);
     if (stats.remainingSeats <= 0) {
       const waitlist = await this.waitlists.save(this.waitlists.create({ activity, user, answers: dto.answers, status: WaitlistStatus.Waiting, remark: "活动满员自动候补" }));
-      return { waitlist, registration: null, order: null, waitlisted: true };
+      return { waitlist: this.publicWaitlist(waitlist), registration: null, order: null, waitlisted: true };
     }
 
     const quote = await this.calculateQuote(activity, { ...dto, userId: user.id });
@@ -1211,21 +1922,73 @@ export class PublicService {
     if (price > 0 && paymentMethod === PaymentMethod.Balance) await this.assertSufficientBalance(user, activity.tenant, price);
     const status = price > 0 ? RegistrationStatus.PendingPayment : activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
     const channel = await this.resolveActivityChannel(activity, dto.channelCode, dto.source);
-    const registration = await this.registrations.save(this.registrations.create({ activity, tenant: activity.tenant, user, channel, status, answers: dto.answers, checkInCode: uuidv4() }));
-    const order = await this.orders.save(this.orders.create({ orderNo: `OD${Date.now()}${registration.id}`, registration, tenant: activity.tenant, agent: activity.agent, amount: quote.payableAmount, originalAmount: quote.originalAmount, discountAmount: quote.discountAmount, memberDiscountAmount: quote.memberDiscountAmount, pointsUsed: quote.pointsUsed, pointsDiscountAmount: quote.pointsDiscountAmount, paymentMethod, status: price > 0 ? OrderStatus.PendingPayment : OrderStatus.Paid, paidAt: price > 0 ? null : new Date(), expiresAt: this.paymentExpiresAt(price), ticketType: quote.ticketType, coupon: quote.coupon, memberLevel: quote.memberLevel }));
-    await this.recordConversionEvent("register", { activity, user, registration, order, channel, amount: quote.payableAmount, source: dto.source, idempotencyKey: `register:${registration.id}` });
-    if (quote.coupon) await this.coupons.increment({ id: quote.coupon.id }, "usedCount", 1);
-    if (quote.pointsUsed > 0) await this.awardPoints(user, -quote.pointsUsed, "points_redeem", order.id, "报名积分抵扣");
+    const attributionSource = this.cleanTrackingText(dto.source || channel?.source || (dto.inviteCode ? "invite" : "direct"), 80) || "direct";
+    const { registration, order } = await this.dataSource.transaction(async (manager) => {
+      const activityRepo = manager.getRepository(Activity);
+      const ticketRepo = manager.getRepository(TicketType);
+      const registrationRepo = manager.getRepository(Registration);
+      const orderRepo = manager.getRepository(Order);
+      const couponRepo = manager.getRepository(Coupon);
+      const couponClaimRepo = manager.getRepository(CouponClaim);
+      const couponUsageRepo = manager.getRepository(CouponUsage);
+      const lockedActivity = await activityRepo.findOne({ where: { id: activity.id }, lock: { mode: "pessimistic_write" } });
+      if (!lockedActivity || lockedActivity.status !== ActivityStatus.Open) throw new BadRequestException("活动暂不可报名");
+      let couponClaim: CouponClaim | null = null;
+      if (quote.coupon) {
+        const lockedCoupon = await couponRepo.findOne({ where: { id: quote.coupon.id }, lock: { mode: "pessimistic_write" } });
+        if (!lockedCoupon) throw new BadRequestException("优惠码不存在");
+        this.validateCoupon(lockedCoupon, lockedActivity, Number(quote.originalAmount) - Number(quote.memberDiscountAmount));
+        const usedByUser = await couponUsageRepo.count({ where: { coupon: { id: lockedCoupon.id }, user: { id: user.id }, status: "used" } });
+        couponClaim = await couponClaimRepo.findOne({ where: { coupon: { id: lockedCoupon.id }, user: { id: user.id } }, lock: { mode: "pessimistic_write" } });
+        const limitError = couponLimitError({ usageLimit: lockedCoupon.usageLimit, usedCount: lockedCoupon.usedCount, perUserLimit: lockedCoupon.perUserLimit, usedByUser, claimRequired: lockedCoupon.claimMode === "claim", claimedCount: couponClaim?.claimedCount || 0, claimUsedCount: couponClaim?.usedCount || 0 });
+        if (limitError) throw new BadRequestException(limitError);
+        quote.coupon = lockedCoupon;
+      }
+      const activeStatuses = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
+      const duplicate = await registrationRepo.findOne({ where: { activity: { id: activity.id }, user: { id: user.id }, status: In(activeStatuses) } });
+      if (duplicate) throw new BadRequestException("你已报名该活动");
+      const used = await registrationRepo.count({ where: { activity: { id: activity.id }, status: In(activeStatuses) } });
+      if (used >= lockedActivity.capacity) throw new BadRequestException("活动名额已满，请加入候补");
+      let lockedTicket: TicketType | null = null;
+      if (quote.ticketType) {
+        lockedTicket = await ticketRepo.findOne({ where: { id: quote.ticketType.id }, lock: { mode: "pessimistic_write" } });
+        if (!lockedTicket || !lockedTicket.enabled) throw new BadRequestException("票种不可用");
+        const sold = await orderRepo.createQueryBuilder("order").where("order.ticketTypeId = :ticketTypeId", { ticketTypeId: lockedTicket.id }).andWhere("order.status IN (:...statuses)", { statuses: [OrderStatus.PendingPayment, OrderStatus.Paid, OrderStatus.PartiallyRefunded] }).getCount();
+        if (lockedTicket.capacity !== null && sold >= lockedTicket.capacity) throw new BadRequestException("该票种已售罄");
+        const lockedPricing = resolveTicketPrice({ basePrice: Number(lockedTicket.price), soldCount: sold, now: new Date(), isMember: Boolean(quote.memberLevel), memberPrice: lockedTicket.memberPrice === null ? null : Number(lockedTicket.memberPrice), earlyBirdPrice: lockedTicket.earlyBirdPrice === null ? null : Number(lockedTicket.earlyBirdPrice), earlyBirdEndsAt: lockedTicket.earlyBirdEndsAt, tierPrices: lockedTicket.tierPrices });
+        if (Math.abs(lockedPricing.price - Number(quote.originalAmount)) > 0.001) throw new BadRequestException("票价已变化，请重新确认订单");
+        const userCount = await orderRepo.createQueryBuilder("order").leftJoin("order.registration", "registration").where("order.ticketTypeId = :ticketTypeId", { ticketTypeId: lockedTicket.id }).andWhere("registration.userId = :userId", { userId: user.id }).andWhere("order.status IN (:...statuses)", { statuses: [OrderStatus.PendingPayment, OrderStatus.Paid, OrderStatus.PartiallyRefunded] }).getCount();
+        if (userCount >= Number(lockedTicket.perUserLimit || 1)) throw new BadRequestException("已达到该票种每人限购数量");
+      }
+      const savedRegistration = await registrationRepo.save(registrationRepo.create({ activity: lockedActivity, tenant: lockedActivity.tenant, user, channel, attributionSource, attributionChannelCode: channel?.code || null, attributionChannelName: channel?.name || null, attributionProvince: lockedActivity.locationProvince || null, attributionCity: lockedActivity.locationCity || null, attributionDistrict: lockedActivity.locationDistrict || null, attributionCapturedAt: new Date(), status, answers: dto.answers, formSchemaVersion: Number(lockedActivity.formSchemaVersion || 1), formSnapshot: (activity.fields || []).map((field) => ({ id: field.id, label: field.label, type: field.type, required: field.required, options: field.options || [], sortOrder: field.sortOrder })), companions: dto.companions?.length ? dto.companions.map((item) => ({ name: String(item.name || "").trim(), phone: item.phone?.trim() || undefined, idCard: item.idCard?.trim() || undefined })) : null, privacyConsentAt: dto.privacyAccepted ? new Date() : null, checkInCode: uuidv4() }));
+      const savedOrder = await orderRepo.save(orderRepo.create({ orderNo: `OD${Date.now()}${savedRegistration.id}`, registration: savedRegistration, tenant: lockedActivity.tenant, agent: lockedActivity.agent, amount: quote.payableAmount, originalAmount: quote.originalAmount, discountAmount: quote.discountAmount, memberDiscountAmount: quote.memberDiscountAmount, pointsUsed: quote.pointsUsed, pointsDiscountAmount: quote.pointsDiscountAmount, paymentMethod, status: price > 0 ? OrderStatus.PendingPayment : OrderStatus.Paid, paidAt: price > 0 ? null : new Date(), expiresAt: this.paymentExpiresAt(price), ticketType: lockedTicket, coupon: quote.coupon, memberLevel: quote.memberLevel, businessSnapshot: { amount: quote.payableAmount, originalAmount: quote.originalAmount, discountAmount: quote.discountAmount, memberDiscountAmount: quote.memberDiscountAmount, pointsDiscountAmount: quote.pointsDiscountAmount, pointsUsed: quote.pointsUsed, paymentMethod, ticketTypeId: lockedTicket?.id || null, couponId: quote.coupon?.id || null, ticketPricingRule: quote.ticketPricingRule, memberLevel: quote.memberLevelSnapshot } }));
+      if (quote.coupon) {
+        quote.coupon.usedCount += 1;
+        await couponRepo.save(quote.coupon);
+        await couponUsageRepo.save(couponUsageRepo.create({ tenant: lockedActivity.tenant, coupon: quote.coupon, order: savedOrder, user, discountAmount: quote.couponDiscountAmount, status: "used", releasedAt: null, releaseReason: null }));
+        if (couponClaim) { couponClaim.usedCount += 1; await couponClaimRepo.save(couponClaim); }
+      }
+      return { registration: savedRegistration, order: savedOrder };
+    });
+    let attributedInvite: InviteCode | null = null;
+    const inviteText = this.cleanTrackingText(dto.inviteCode, 32);
+    if (inviteText) {
+      attributedInvite = await this.dataSource.getRepository(InviteCode).findOne({ where: { code: inviteText, activity: { id: activity.id } } });
+      if (attributedInvite) { attributedInvite.registrationCount += 1; await this.dataSource.getRepository(InviteCode).save(attributedInvite); }
+    }
+    await this.recordConversionEvent("register", { activity, user, registration, order, channel, amount: quote.payableAmount, source: attributionSource, idempotencyKey: `register:${registration.id}`, payload: { inviteCode: attributedInvite?.code || null, inviterUserId: attributedInvite?.user?.id || null } });
+    if (order.status === OrderStatus.Paid) await this.recordConversionEvent("pay", { activity, user, registration, order, channel, amount: order.amount, source: attributionSource, idempotencyKey: `pay:${order.id}`, payload: { paymentProvider: "free" } });
+    if (quote.pointsUsed > 0) await this.awardPoints(user, -quote.pointsUsed, "points_redeem", order.id, "报名积分抵扣", activity.tenant || null);
     if (price > 0 && paymentMethod === PaymentMethod.Balance) {
       try {
         const balanceResult = await this.payWithBalance(order.id, user, context);
-        return { registration: balanceResult.order.registration, order: balanceResult.order, walletTransaction: (balanceResult as any).walletTransaction, waitlisted: false };
+        return { registration: balanceResult.order.registration, order: balanceResult.order, walletTransaction: balanceResult.walletTransaction, waitlisted: false };
       } catch (error) {
         await this.rollbackPendingRegistration(order, quote.coupon, quote.pointsUsed, "余额支付失败，报名已取消");
         throw error;
       }
     }
-    return { registration, order, waitlisted: false };
+    return { registration: this.publicRegistration(registration), order: this.publicOrder(order), waitlisted: false };
   }
 
   async mockPay(orderId: number, dto: MockPayDto, user: User, context?: PublicTenantContext) {
@@ -1234,7 +1997,7 @@ export class PublicService {
     if (!order) throw new NotFoundException("订单不存在");
     await this.assertOrderTenantAccess(order, context);
     this.assertOrderUserAccess(order, user);
-    return this.applySuccessfulPayment(order, dto.transactionNo || `MOCK${Date.now()}${order.id}`, "mock", "本地 mock 支付");
+    return this.publicPaymentResult(await this.applySuccessfulPayment(order, dto.transactionNo || `MOCK${Date.now()}${order.id}`, "mock", "本地 mock 支付"));
   }
 
   async mockPaymentCallback(dto: MockPaymentCallbackDto) {
@@ -1245,7 +2008,7 @@ export class PublicService {
       await this.finishPaymentCallbackLog(callbackLog, "failed", "订单不存在", null);
       throw new NotFoundException("订单不存在");
     }
-    if (Math.abs(Number(order.amount) - Number(dto.amount)) > 0.001) {
+    if (!sameMoneyAmount(order.amount, dto.amount)) {
       await this.recordPaymentDiscrepancy(order, dto.transactionNo, dto.provider || "mock-callback", dto.amount, "amount_mismatch", "回调金额与订单金额不一致");
       await this.finishPaymentCallbackLog(callbackLog, "failed", "回调金额与订单金额不一致", order);
       throw new BadRequestException("回调金额与订单金额不一致，已记录对账差异");
@@ -1253,7 +2016,7 @@ export class PublicService {
     try {
       const result = await this.applySuccessfulPayment(order, dto.transactionNo, dto.provider || "mock-callback", "mock 支付回调");
       await this.finishPaymentCallbackLog(callbackLog, result.idempotent ? "idempotent" : "success", result.idempotent ? "重复回调，已按幂等处理" : "支付回调处理成功", result.order);
-      return result;
+      return this.publicPaymentResult(result);
     } catch (error: any) {
       await this.finishPaymentCallbackLog(callbackLog, "failed", error.message || "支付回调处理失败", order);
       throw error;
@@ -1285,8 +2048,8 @@ export class PublicService {
     await this.assertPaymentMethodEnabled(PaymentMethod.Balance, order.tenant);
     if (order.paymentMethod !== PaymentMethod.Balance) throw new BadRequestException("订单支付方式不匹配，请重新报名或联系主办方处理");
     if (order.status === OrderStatus.Paid) {
-      const existing = await this.walletTransactions.findOne({ where: { idempotencyKey: `balance_pay:${order.id}` } });
-      return { order, walletTransaction: existing, idempotent: true };
+      const existing = await this.walletTransactions.findOne({ where: { idempotencyKey: `balance_pay:${order.id}` }, loadEagerRelations: false });
+      return { order: this.publicOrder(order), walletTransaction: this.publicWalletTransaction(existing), idempotent: true };
     }
     if (order.status !== OrderStatus.PendingPayment) throw new BadRequestException("当前订单不能使用余额支付");
     if (this.isExpiredPendingOrder(order)) {
@@ -1295,7 +2058,7 @@ export class PublicService {
     }
 
     const amount = Number(order.amount);
-    if (amount <= 0) return this.applySuccessfulPayment(order, `FREE${Date.now()}${order.id}`, "balance", "零元订单确认", PaymentMethod.Free);
+    if (amount <= 0) return this.publicPaymentResult(await this.applySuccessfulPayment(order, `FREE${Date.now()}${order.id}`, "balance", "零元订单确认", PaymentMethod.Free));
     const tenant = order.tenant || null;
     const tenantScopeKey = this.walletTenantScopeKey(tenant);
     const result = await this.dataSource.transaction(async (manager) => {
@@ -1307,15 +2070,21 @@ export class PublicService {
       const lockedOrder = await orderRepo.findOne({ where: { id: order.id }, lock: { mode: "pessimistic_write" } });
       if (!lockedOrder) throw new NotFoundException("订单不存在");
       if (lockedOrder.status === OrderStatus.Paid) {
-        return { order: lockedOrder, walletTransaction: await walletTxRepo.findOne({ where: { idempotencyKey: `balance_pay:${lockedOrder.id}` } }), idempotent: true };
+        return { order: lockedOrder, walletTransaction: await walletTxRepo.findOne({ where: { idempotencyKey: `balance_pay:${lockedOrder.id}` }, loadEagerRelations: false }), idempotent: true };
       }
       if (lockedOrder.status !== OrderStatus.PendingPayment) throw new BadRequestException("当前订单不能使用余额支付");
       let wallet = await walletRepo.findOne({ where: { user: { id: user.id }, tenantScopeKey }, lock: { mode: "pessimistic_write" } });
       if (!wallet) wallet = await walletRepo.save(walletRepo.create({ user, tenant, tenantScopeKey }));
-      const before = Number(wallet.availableBalance);
-      if (before + 0.0001 < amount) throw new BadRequestException("余额不足，请选择微信支付或联系后台充值");
-      const after = before - amount;
-      wallet.availableBalance = after.toFixed(2);
+      const amountFen = yuanToFen(amount);
+      const beforeFen = yuanToFen(wallet.availableBalance || 0);
+      const giftBeforeFen = yuanToFen(wallet.giftBalance || 0);
+      if (beforeFen + giftBeforeFen < amountFen) throw new BadRequestException("余额不足，请选择微信支付或联系后台充值");
+      const giftUsedFen = Math.min(giftBeforeFen, amountFen);
+      const cashUsedFen = amountFen - giftUsedFen;
+      const afterFen = beforeFen - cashUsedFen;
+      const giftAfterFen = giftBeforeFen - giftUsedFen;
+      wallet.availableBalance = fenToYuan(afterFen);
+      wallet.giftBalance = fenToYuan(giftAfterFen);
       wallet.totalSpent = (Number(wallet.totalSpent) + amount).toFixed(2);
       await walletRepo.save(wallet);
       const walletTransaction = await walletTxRepo.save(walletTxRepo.create({
@@ -1327,8 +2096,14 @@ export class PublicService {
         direction: "debit",
         type: "balance_pay",
         amount: amount.toFixed(2),
-        balanceBefore: before.toFixed(2),
-        balanceAfter: after.toFixed(2),
+        balanceBefore: fenToYuan(beforeFen),
+        balanceAfter: fenToYuan(afterFen),
+        frozenBefore: wallet.frozenBalance || "0.00",
+        frozenAfter: wallet.frozenBalance || "0.00",
+        giftBefore: fenToYuan(giftBeforeFen),
+        giftAfter: fenToYuan(giftAfterFen),
+        frozenGiftBefore: wallet.frozenGiftBalance || "0.00",
+        frozenGiftAfter: wallet.frozenGiftBalance || "0.00",
         operator: "user",
         remark: "用户余额支付活动订单",
         idempotencyKey: `balance_pay:${lockedOrder.id}`
@@ -1355,9 +2130,9 @@ export class PublicService {
       }
       return { order: savedOrder, walletTransaction, idempotent: false };
     });
-    if (!result.idempotent && Number(result.order.amount) > 0) await this.awardPoints(user, Math.floor(Number(result.order.amount)), "order_paid", result.order.id, "活动消费积分");
+    if (!result.idempotent && Number(result.order.amount) > 0) await this.memberPoints.awardEvent({ user, tenant: result.order.tenant || result.order.registration.activity?.tenant || null, eventType: "activity_order_paid", amountFen: Number(result.order.amountFen || yuanToFen(result.order.amount)), sourceType: "order_paid", sourceId: result.order.id, remark: "活动消费积分" });
     if (!result.idempotent) await this.charityFund.recordOrderAccrual(result.order, "balance");
-    return result;
+    return { order: this.publicOrder(result.order), walletTransaction: this.publicWalletTransaction(result.walletTransaction), idempotent: result.idempotent };
   }
 
   async providerPaymentCallback(provider: SupportedPaymentProvider, dto: ProviderPaymentCallbackDto | Record<string, unknown>, rawContext?: Omit<RealPaymentCallbackContext, "body">) {
@@ -1387,7 +2162,7 @@ export class PublicService {
       await this.finishPaymentCallbackLog(callbackLog, "failed", "订单不存在", null);
       throw new NotFoundException("订单不存在");
     }
-    if (Math.abs(Number(order.amount) - Number(callback.amount)) > 0.001) {
+    if (!sameMoneyAmount(order.amount, callback.amount)) {
       await this.recordPaymentDiscrepancy(order, callback.transactionNo, provider, Number(callback.amount), "amount_mismatch", `${provider} 回调金额与订单金额不一致`);
       await this.finishPaymentCallbackLog(callbackLog, "failed", "回调金额与订单金额不一致", order);
       throw new BadRequestException("回调金额与订单金额不一致，已记录对账差异");
@@ -1395,7 +2170,7 @@ export class PublicService {
     try {
       const result = await this.applySuccessfulPayment(order, callback.transactionNo, provider, `${provider} 沙箱支付回调`, provider);
       await this.finishPaymentCallbackLog(callbackLog, result.idempotent ? "idempotent" : "success", result.idempotent ? "重复回调，已按幂等处理" : "支付回调处理成功", result.order);
-      return result;
+      return this.publicPaymentResult(result);
     } catch (error: any) {
       await this.finishPaymentCallbackLog(callbackLog, "failed", error.message || "支付回调处理失败", order);
       throw error;
@@ -1470,9 +2245,27 @@ export class PublicService {
     const rows = await builder.getMany();
     if (!rows.length) return [];
     const orders = await this.orders.find({ where: rows.map((registration) => ({ registration: { id: registration.id } })) });
+    const refundRows = orders.length ? await this.refunds.createQueryBuilder("refund")
+      .select("refund.id", "id")
+      .addSelect("refund.orderId", "orderId")
+      .addSelect("refund.refundNo", "refundNo")
+      .addSelect("refund.amount", "amount")
+      .addSelect("refund.status", "status")
+      .addSelect("refund.reviewRemark", "reviewRemark")
+      .addSelect("refund.createdAt", "createdAt")
+      .where("refund.orderId IN (:...orderIds)", { orderIds: orders.map((order) => order.id) })
+      .orderBy("refund.createdAt", "DESC")
+      .addOrderBy("refund.id", "DESC")
+      .getRawMany<{ id: string; orderId: string; refundNo: string; amount: string; status: string; reviewRemark: string | null; createdAt: Date }>() : [];
+    const latestRefundByOrder = new Map<number, any>();
+    for (const refund of refundRows) {
+      const orderId = Number(refund.orderId);
+      if (!latestRefundByOrder.has(orderId)) latestRefundByOrder.set(orderId, { ...refund, id: Number(refund.id), orderId });
+    }
     return rows.map((registration) => ({
       ...this.publicRegistration(registration),
-      order: this.publicOrderSummary(orders.find((order) => order.registration.id === registration.id) || null)
+      order: this.publicOrderSummary(orders.find((order) => order.registration.id === registration.id) || null),
+      latestRefund: latestRefundByOrder.get(orders.find((order) => order.registration.id === registration.id)?.id || 0) || null
     }));
   }
 
@@ -1484,10 +2277,33 @@ export class PublicService {
       take: 100
     });
     const scopedOrders = tenant ? orders.filter((order) => order.course?.tenant?.id === tenant.id) : orders;
+    const refundRows = scopedOrders.length ? await this.courseRefunds.createQueryBuilder("refund")
+      .select("refund.id", "id")
+      .addSelect("refund.orderId", "orderId")
+      .addSelect("refund.refundNo", "refundNo")
+      .addSelect("refund.amountFen", "amountFen")
+      .addSelect("refund.status", "status")
+      .addSelect("refund.reviewRemark", "reviewRemark")
+      .addSelect("refund.failureReason", "failureReason")
+      .addSelect("refund.createdAt", "createdAt")
+      .where("refund.orderId IN (:...orderIds)", { orderIds: scopedOrders.map((order) => order.id) })
+      .orderBy("refund.createdAt", "DESC")
+      .addOrderBy("refund.id", "DESC")
+      .getRawMany<{ id: string; orderId: string; refundNo: string; amountFen: string; status: string; reviewRemark: string | null; failureReason: string | null; createdAt: Date }>() : [];
+    const latestRefundByOrder = new Map<number, any>();
+    const completedRefundFenByOrder = new Map<number, number>();
+    for (const refund of refundRows) {
+      const orderId = Number(refund.orderId);
+      if (!latestRefundByOrder.has(orderId)) latestRefundByOrder.set(orderId, { ...refund, id: Number(refund.id), orderId, amountFen: Number(refund.amountFen) });
+      if (refund.status === "completed") completedRefundFenByOrder.set(orderId, Number(completedRefundFenByOrder.get(orderId) || 0) + Number(refund.amountFen || 0));
+    }
     return Promise.all(scopedOrders.map(async (order) => ({
       ...this.publicCourseOrder(order),
       course: this.publicCourse(order.course),
-      owned: await this.hasCourseAccess(user.id, order.course.id)
+      owned: await this.hasCourseAccess(user.id, order.course.id),
+      latestRefund: latestRefundByOrder.get(order.id) || null,
+      refundedAmountFen: Number(completedRefundFenByOrder.get(order.id) || 0),
+      refundableAmountFen: Math.max(Number(order.amountFen || 0) - Number(completedRefundFenByOrder.get(order.id) || 0), 0)
     })));
   }
 
@@ -1495,7 +2311,7 @@ export class PublicService {
     const tenant = await this.resolveWalletTenantContext(context);
     const tenantScopeKey = this.walletTenantScopeKey(tenant);
     const wallet = await this.userWallets.findOne({ where: { user: { id: user.id }, tenantScopeKey } });
-    return wallet || { user, tenant, tenantScopeKey, availableBalance: "0.00", frozenBalance: "0.00", totalRecharge: "0.00", totalSpent: "0.00" };
+    return this.publicWallet(wallet, tenant);
   }
 
   async myWalletTransactions(user: User, context?: PublicTenantContext) {
@@ -1510,7 +2326,7 @@ export class PublicService {
       .take(100);
     if (tenant) builder.andWhere("tx.tenantId = :tenantId", { tenantId: tenant.id });
     else builder.andWhere("tx.tenantId IS NULL");
-    return builder.getMany();
+    return (await builder.getMany()).map((transaction) => this.publicWalletTransaction(transaction));
   }
 
   private async resolveWalletTenantContext(context?: PublicTenantContext) {
@@ -1532,8 +2348,8 @@ export class PublicService {
     order.registration.cancelReason = reason;
     await this.orders.save(order);
     await this.registrations.save(order.registration);
-    if (coupon) await this.coupons.decrement({ id: coupon.id }, "usedCount", 1);
-    if (pointsUsed > 0) await this.awardPoints(order.registration.user, pointsUsed, "points_return", order.id, reason);
+    if (coupon) await this.releaseActivityCouponUsage(order, reason);
+    if (pointsUsed > 0) await this.awardPoints(order.registration.user, pointsUsed, "points_return", order.id, reason, order.tenant || order.registration.activity?.tenant || null);
   }
 
   async registrationDetail(id: number, userId: number, context?: PublicTenantContext) {
@@ -1545,7 +2361,7 @@ export class PublicService {
     const charityRefund = order ? await this.registrationCharityRefundView(order, refunds) : null;
     const groupVisible = ![RegistrationStatus.Cancelled, RegistrationStatus.Rejected].includes(registration.status);
     const groupQrCodeUrl = groupVisible ? registration.activity.groupQrCodeUrl || operationSetting.defaultGroupQrCodeUrl || null : null;
-    return { registration: this.publicRegistration(registration), order: order ? this.publicOrder(order) : null, refunds, charityRefund, operationSetting: this.publicOperationSetting(operationSetting), groupQrCodeUrl };
+    return { registration: this.publicRegistration(registration), order: order ? this.publicOrder(order) : null, refunds: refunds.map((refund) => this.publicRefund(refund)), charityRefund, operationSetting: this.publicOperationSetting(operationSetting), groupQrCodeUrl };
   }
 
   async requestRegistrationRefund(id: number, user: User, context?: PublicTenantContext) {
@@ -1554,30 +2370,41 @@ export class PublicService {
     await this.assertRegistrationTenantAccess(registration, context);
     const order = await this.findRegistrationOrder(id);
     if (!order) throw new NotFoundException("订单不存在");
-    if (![OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status)) throw new BadRequestException("当前订单不能申请退款");
-    if (registration.status === RegistrationStatus.CheckedIn) throw new BadRequestException("已签到报名不能在线申请退款");
+    return this.dataSource.transaction(async (manager) => {
+      const orderRepo = manager.getRepository(Order);
+      const refundRepo = manager.getRepository(Refund);
+      const lockedOrder = await orderRepo.findOne({ where: { id: order.id }, lock: { mode: "pessimistic_write" } });
+      if (!lockedOrder) throw new NotFoundException("订单不存在");
+      this.assertOrderUserAccess(lockedOrder, user);
+      if (![OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(lockedOrder.status)) throw new BadRequestException("当前订单不能申请退款");
+      if (lockedOrder.registration.status === RegistrationStatus.CheckedIn) throw new BadRequestException("已签到报名不能在线申请退款");
 
-    const refunds = await this.findOrderRefunds(order.id, ["pending", "processing", "completed"]);
-    if (refunds.some((item) => ["pending", "processing"].includes(item.status))) throw new BadRequestException("已有退款申请处理中，请勿重复提交");
+      const refunds = await refundRepo.createQueryBuilder("refund")
+        .where("refund.orderId = :orderId", { orderId: lockedOrder.id })
+        .andWhere("refund.status IN (:...statuses)", { statuses: ["pending", "processing", "completed"] })
+        .orderBy("refund.createdAt", "DESC")
+        .getMany();
+      const pendingRefund = refunds.find((item) => ["pending", "processing"].includes(item.status));
+      const preview = await this.charityFund.previewRetainedActivityRefund(lockedOrder);
+      if (pendingRefund) return { refund: this.publicRefund(pendingRefund), order: this.publicOrder(lockedOrder), charityRefund: { ...preview, canRequest: false, pendingRefund: this.publicRefund(pendingRefund) }, idempotent: true };
+      if (!preview.enabled) throw new BadRequestException("当前订单暂不支持公益退款申请");
+      const completedAmount = refunds.filter((item) => item.status === "completed").reduce((sum, item) => sum + Number(item.amount), 0);
+      const availableAmount = Math.max(Number(lockedOrder.amount || 0) - completedAmount, 0);
+      const amount = Math.min(Number(preview.refundAmount || 0), availableAmount);
+      if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException("当前订单暂无可退金额");
 
-    const preview = await this.charityFund.previewRetainedActivityRefund(order);
-    if (!preview.enabled) throw new BadRequestException("当前订单暂不支持公益退款申请");
-    const completedAmount = refunds.filter((item) => item.status === "completed").reduce((sum, item) => sum + Number(item.amount), 0);
-    const availableAmount = Math.max(Number(order.amount || 0) - completedAmount, 0);
-    const amount = Math.min(Number(preview.refundAmount || 0), availableAmount);
-    if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException("当前订单暂无可退金额");
-
-    const refundNo = `URF${Date.now()}${order.id}`;
-    const refund = await this.refunds.save(this.refunds.create({
-      order,
-      tenant: order.tenant || null,
-      refundNo,
-      amount: amount.toFixed(2),
-      status: "pending",
-      operator: `user:${user.id}`,
-      reason: `[charity_retained] 用户申请活动公益退款，公益金保留 ${preview.charityAmount} 元`
-    }));
-    return { refund, order: this.publicOrder(order), charityRefund: { ...preview, canRequest: false, pendingRefund: refund } };
+      const refundNo = `URF${Date.now()}${lockedOrder.id}`;
+      const refund = await refundRepo.save(refundRepo.create({
+        order: lockedOrder,
+        tenant: lockedOrder.tenant || null,
+        refundNo,
+        amount: amount.toFixed(2),
+        status: "pending",
+        operator: `user:${user.id}`,
+        reason: `[charity_retained] 用户申请活动公益退款，公益金保留 ${preview.charityAmount} 元`
+      }));
+      return { refund: this.publicRefund(refund), order: this.publicOrder(lockedOrder), charityRefund: { ...preview, canRequest: false, pendingRefund: this.publicRefund(refund) }, idempotent: false };
+    });
   }
 
   async cancelRegistration(id: number, userId: number, context?: PublicTenantContext) {
@@ -1594,7 +2421,9 @@ export class PublicService {
       await this.orders.save(order);
       await this.refundRedeemedPoints(order, "用户取消报名返还积分");
     }
-    return this.registrations.save(registration);
+    const saved = await this.registrations.save(registration);
+    await this.recordConversionEvent("cancel", { activity: saved.activity, user: saved.user, registration: saved, channel: saved.channel || null, order, source: "member", idempotencyKey: `cancel:${saved.id}`, payload: { reason: saved.cancelReason } });
+    return this.publicRegistration(saved);
   }
 
   async checkInCode(id: number, userId: number, context?: PublicTenantContext) {
@@ -1602,7 +2431,9 @@ export class PublicService {
     if (!registration) throw new NotFoundException("报名记录不存在");
     await this.assertRegistrationTenantAccess(registration, context);
     if (![RegistrationStatus.Approved, RegistrationStatus.CheckedIn].includes(registration.status)) throw new BadRequestException("报名成功后才会生成签到码");
-    return { code: registration.checkInCode };
+    const secret = this.config.get<string>("CHECKIN_SIGNING_SECRET") || this.config.get<string>("JWT_SECRET", "dev-secret-change-me");
+    const expiresAt = new Date(registration.activity.endTime ? new Date(registration.activity.endTime).getTime() + 24 * 60 * 60 * 1000 : Date.now() + 30 * 24 * 60 * 60 * 1000);
+    return { code: createCheckInTicket({ registrationId: registration.id, activityId: registration.activity.id, expiresAt, nonce: checkInNonce(registration.checkInCode, secret) }, secret), expiresAt: expiresAt.toISOString(), activityId: registration.activity.id, registrationId: registration.id };
   }
 
   private findUserRegistration(id: number, userId: number) {
@@ -1612,6 +2443,7 @@ export class PublicService {
       .leftJoinAndSelect("registration.tenant", "tenant")
       .leftJoinAndSelect("activity.tenant", "activityTenant")
       .leftJoinAndSelect("registration.user", "user")
+      .leftJoinAndSelect("registration.channel", "channel")
       .where("registration.id = :id", { id })
       .andWhere("user.id = :userId", { userId })
       .getOne();
@@ -1648,7 +2480,34 @@ export class PublicService {
     return tenant || registration.tenant || registration.activity?.tenant || null;
   }
 
-  private validateAnswers(fields: any[], answers: RegistrationAnswer[]) {
+  private async validateAnswers(fields: any[], answers: RegistrationAnswer[], user: User, tenant: Tenant | null) {
+    const expected = new Map(fields.map((field) => [Number(field.id), field]));
+    const seen = new Set<number>();
+    for (const answer of answers || []) {
+      const field = expected.get(Number(answer.fieldId));
+      if (!field || seen.has(Number(answer.fieldId))) throw new BadRequestException("报名表单字段无效，请刷新后重试");
+      seen.add(Number(answer.fieldId));
+      if (answer.type !== field.type) throw new BadRequestException(`字段「${field.label}」类型不匹配，请刷新后重试`);
+      const values = Array.isArray(answer.value) ? answer.value.map(String) : [String(answer.value ?? "").trim()];
+      if ([FieldType.SingleChoice, FieldType.MultipleChoice].includes(field.type)) {
+        const allowed = new Set((field.options || []).flatMap((item: any) => [String(item.label || ""), String(item.value || "")]).filter(Boolean));
+        if (values.some((value) => value && !allowed.has(value))) throw new BadRequestException(`字段「${field.label}」包含无效选项`);
+      }
+      const value = values[0] || "";
+      if (value && field.type === FieldType.Phone && !/^1\d{10}$/.test(value)) throw new BadRequestException(`请输入正确的${field.label}`);
+      if (value && field.type === FieldType.Email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) throw new BadRequestException(`请输入正确的${field.label}`);
+      if (value && field.type === FieldType.Number && !Number.isFinite(Number(value))) throw new BadRequestException(`${field.label}必须是数字`);
+      if (value && field.type === FieldType.Date && !/^\d{4}-\d{2}-\d{2}$/.test(value)) throw new BadRequestException(`${field.label}日期格式无效`);
+      if (value && field.type === FieldType.DateTime && !/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}/.test(value)) throw new BadRequestException(`${field.label}日期时间格式无效`);
+      if (value && field.type === FieldType.Attachment) {
+        const token = value.match(/^\/api\/public\/me\/registration-attachments\/([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)\/download$/)?.[1];
+        if (token) {
+          const payload = verifyPrivateAssetToken(token, this.privateAssetSecret());
+          if (!payload || payload.purpose !== "registration_attachment" || payload.ownerUserId !== user.id || (payload.tenantId || null) !== (tenant?.id || null) || !privateDocumentExists(payload.reference)) throw new BadRequestException(`${field.label}附件无效或不属于当前账号`);
+          claimPrivateDocument(payload.reference);
+        } else if (!/^(https?:\/\/|\/uploads\/)/i.test(value)) throw new BadRequestException(`${field.label}附件地址无效`);
+      }
+    }
     for (const field of fields) {
       const answer = answers.find((item) => item.fieldId === field.id);
       if (field.required && (!answer || answer.value === "" || (Array.isArray(answer.value) && answer.value.length === 0))) throw new BadRequestException(`请填写${field.label}`);
@@ -1676,7 +2535,7 @@ export class PublicService {
     return {
       ...preview,
       canRequest,
-      pendingRefund: activeRefund,
+      pendingRefund: this.publicRefund(activeRefund),
       completedRefundAmount: completedAmount.toFixed(2),
       availableRefundAmount: availableAmount.toFixed(2),
       actualRefundAmount: Math.min(Number(preview.refundAmount || 0), availableAmount).toFixed(2)
@@ -1710,7 +2569,23 @@ export class PublicService {
   }
 
   private userLoginResponse(user: User) {
-    return { user, userAccessToken: this.signUserAccessToken(user) };
+    return {
+      user: {
+        id: user.id,
+        nickname: user.nickname,
+        avatarUrl: user.avatarUrl,
+        phone: user.phone,
+        sourceChannel: user.sourceChannel,
+        lastLoginChannel: user.lastLoginChannel,
+        wechatBound: Boolean(user.openid),
+        wechatAppId: user.wechatAppId
+      },
+      userAccessToken: this.signUserAccessToken(user)
+    };
+  }
+
+  private privateAssetSecret() {
+    return this.config.get<string>("PRIVATE_ASSET_SIGNING_SECRET") || this.config.get<string>("JWT_SECRET", "dev-secret-change-me");
   }
 
   private signUserAccessToken(user: User) {
@@ -1819,9 +2694,19 @@ export class PublicService {
     const ipHourlyLimit = Math.max(Number(this.config.get("H5_CODE_IP_HOURLY_LIMIT", 60)), 1);
     const sentStatuses: Array<"sent"> = ["sent"];
 
-    const latest = await this.h5AuthCodeLogs.findOne({ where: { phone, status: In(sentStatuses) }, order: { createdAt: "DESC" } });
-    if (latest && cooldownSeconds > 0 && latest.createdAt.getTime() > now - cooldownSeconds * 1000) {
-      const waitSeconds = Math.max(Math.ceil((latest.createdAt.getTime() + cooldownSeconds * 1000 - now) / 1000), 1);
+    // Keep the cooldown predicate in parameterized SQL so ORM date mapping cannot bypass it.
+    const latestRows: Array<{ createdAt: Date | string }> = cooldownSeconds > 0
+      ? await this.dataSource.query(
+          `SELECT createdAt FROM h5_auth_code_logs WHERE phone = ? AND status = ? AND createdAt > NOW() - INTERVAL ${cooldownSeconds} SECOND ORDER BY createdAt DESC LIMIT 1`,
+          [phone, "sent"]
+        )
+      : [];
+    const latest = latestRows[0] || null;
+    if (latest) {
+      const createdAtMs = latest.createdAt instanceof Date ? latest.createdAt.getTime() : new Date(String(latest.createdAt)).getTime();
+      const waitSeconds = Number.isFinite(createdAtMs)
+        ? Math.max(Math.ceil((createdAtMs + cooldownSeconds * 1000 - now) / 1000), 1)
+        : cooldownSeconds;
       await this.recordH5CodeLog({ phone, clientIp, mode, status: "rate_limited", message: `cooldown:${waitSeconds}s`, expiresAt: null });
       throw new BadRequestException(`验证码发送过于频繁，请 ${waitSeconds} 秒后再试`);
     }
@@ -1867,7 +2752,7 @@ export class PublicService {
         enabled: setting.smsProviderEnabled,
         provider: setting.smsProvider,
         accessKeyId: setting.smsAccessKeyId,
-        accessKeySecret: setting.smsAccessKeySecret,
+        accessKeySecret: decryptStoredSecret(setting.smsAccessKeySecret),
         signName: setting.smsSignName,
         templateId: setting.smsTemplateId,
         appId: setting.smsSdkAppId
@@ -1912,10 +2797,25 @@ export class PublicService {
   private async calculateQuote(activity: Activity, dto: QuoteDto) {
     const ticketType = dto.ticketTypeId ? await this.ticketTypes.findOne({ where: { id: dto.ticketTypeId } }) : null;
     if (dto.ticketTypeId && (!ticketType || ticketType.activity.id !== activity.id || !ticketType.enabled)) throw new BadRequestException("票种不可用");
-    const original = ticketType ? Number(ticketType.price) : Number(activity.price);
-    const memberProfile = dto.userId ? await this.memberProfiles.findOne({ where: { user: { id: dto.userId } } }) : null;
+    const memberProfile = dto.userId ? await this.memberProfiles.findOne({ where: { user: { id: dto.userId }, tenantScopeKey: activity.tenant ? `tenant:${activity.tenant.id}` : "platform" } }) : null;
     const memberLevel = memberProfile?.level && memberProfile.level.enabled ? memberProfile.level : null;
-    const memberDiscount = memberLevel ? Math.max(original - original * Number(memberLevel.discountRate), 0) : 0;
+    const memberLevelSnapshotData = memberProfile?.levelSnapshot as Record<string, unknown> | null | undefined;
+    const now = new Date();
+    let soldCount = 0;
+    if (ticketType) {
+      if (ticketType.saleStartsAt && now < ticketType.saleStartsAt) throw new BadRequestException("该票种尚未开售");
+      if (ticketType.saleEndsAt && now > ticketType.saleEndsAt) throw new BadRequestException("该票种已停止销售");
+      soldCount = await this.orders.createQueryBuilder("order").where("order.ticketTypeId = :ticketTypeId", { ticketTypeId: ticketType.id }).andWhere("order.status IN (:...statuses)", { statuses: [OrderStatus.PendingPayment, OrderStatus.Paid, OrderStatus.PartiallyRefunded] }).getCount();
+      if (ticketType.capacity !== null && soldCount >= ticketType.capacity) throw new BadRequestException("该票种已售罄");
+      if (dto.userId) {
+        const userCount = await this.orders.createQueryBuilder("order").leftJoin("order.registration", "registration").where("order.ticketTypeId = :ticketTypeId", { ticketTypeId: ticketType.id }).andWhere("registration.userId = :userId", { userId: dto.userId }).andWhere("order.status IN (:...statuses)", { statuses: [OrderStatus.PendingPayment, OrderStatus.Paid, OrderStatus.PartiallyRefunded] }).getCount();
+        if (userCount >= Number(ticketType.perUserLimit || 1)) throw new BadRequestException("已达到该票种每人限购数量");
+      }
+    }
+    const pricing = ticketType ? resolveTicketPrice({ basePrice: Number(ticketType.price), soldCount, now, isMember: Boolean(memberLevel), memberPrice: ticketType.memberPrice === null ? null : Number(ticketType.memberPrice), earlyBirdPrice: ticketType.earlyBirdPrice === null ? null : Number(ticketType.earlyBirdPrice), earlyBirdEndsAt: ticketType.earlyBirdEndsAt, tierPrices: ticketType.tierPrices }) : { price: Number(activity.price), rule: "activity_base" };
+    const original = pricing.price;
+    const memberDiscountRate = Number(memberLevelSnapshotData?.discountRate ?? memberLevel?.discountRate ?? 1);
+    const memberDiscount = memberLevel && pricing.rule !== "member" ? Math.max(original - original * memberDiscountRate, 0) : 0;
     const afterMember = Math.max(original - memberDiscount, 0);
     const couponCode = dto.couponCode?.trim().toUpperCase();
     const coupon = couponCode
@@ -1945,8 +2845,10 @@ export class PublicService {
       availablePoints,
       payableAmount: payable.toFixed(2),
       ticketType,
+      ticketPricingRule: pricing.rule,
       coupon,
-      memberLevel
+      memberLevel,
+      memberLevelSnapshot: memberLevelSnapshotData || memberLevelSnapshot(memberLevel)
     };
   }
 
@@ -1964,7 +2866,7 @@ export class PublicService {
   private async applySuccessfulPayment(order: Order, transactionNo: string, provider: string, remark: string, paymentMethod?: PaymentMethod | string) {
     this.assertOrderTenantEnabled(order);
     const existingTransaction = await this.paymentTransactions.findOne({ where: { transactionNo } });
-    if (existingTransaction) return { order: existingTransaction.order, transaction: existingTransaction, idempotent: true };
+    if (existingTransaction) return { order: existingTransaction.order || order, transaction: existingTransaction, idempotent: true };
     const orderTransaction = await this.paymentTransactions.findOne({ where: { order: { id: order.id } } });
     if (order.status === OrderStatus.Paid && orderTransaction) return { order, transaction: orderTransaction, idempotent: true };
     if (order.status !== OrderStatus.PendingPayment && order.status !== OrderStatus.Paid) throw new BadRequestException("当前订单不能支付");
@@ -1992,12 +2894,12 @@ export class PublicService {
         remark
       })
     );
-    if (Number(savedOrder.amount) > 0) await this.awardPoints(savedOrder.registration.user, Math.floor(Number(savedOrder.amount)), "order_paid", savedOrder.id, "活动消费积分");
+    if (Number(savedOrder.amount) > 0) await this.memberPoints.awardEvent({ user: savedOrder.registration.user, tenant: savedOrder.tenant || savedOrder.registration.activity?.tenant || null, eventType: "activity_order_paid", amountFen: Number(savedOrder.amountFen || yuanToFen(savedOrder.amount)), sourceType: "order_paid", sourceId: savedOrder.id, remark: "活动消费积分" });
     if (savedOrder.registration.status === RegistrationStatus.PendingPayment) {
       savedOrder.registration.status = savedOrder.registration.activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
       await this.registrations.save(savedOrder.registration);
     }
-    await this.recordConversionEvent("pay", { activity: savedOrder.registration.activity, user: savedOrder.registration.user, registration: savedOrder.registration, order: savedOrder, channel: savedOrder.registration.channel || null, amount: savedOrder.amount, source: provider, idempotencyKey: `pay:${savedOrder.id}` });
+    await this.recordConversionEvent("pay", { activity: savedOrder.registration.activity, user: savedOrder.registration.user, registration: savedOrder.registration, order: savedOrder, channel: savedOrder.registration.channel || null, amount: savedOrder.amount, source: savedOrder.registration.attributionSource || provider, idempotencyKey: `pay:${savedOrder.id}`, payload: { paymentProvider: provider } });
     await this.charityFund.recordOrderAccrual(savedOrder, provider);
     return { order: savedOrder, transaction, idempotent: false };
   }
@@ -2006,13 +2908,10 @@ export class PublicService {
     const channel = await this.resolveActivityChannel(activity, tracking?.channelCode, tracking?.source);
     const source = this.cleanTrackingText(tracking?.source || channel?.source || tracking?.inviteCode || "direct", 80);
     const visitorKey = user?.id ? `u${user.id}` : this.cleanTrackingText(tracking?.clientIp || "anonymous", 40);
-    const day = new Date().toISOString().slice(0, 10);
+    const day = analyticsDateText(new Date());
     const channelKey = channel?.id || "none";
     const idempotencyKey = `view:${activity.id}:${visitorKey}:${day}:${channelKey}`;
-    const exists = await this.conversionEventExists(idempotencyKey);
-    if (exists) return;
-    await this.activityViewLogs.save(this.activityViewLogs.create({ activity, user, channel, source }));
-    await this.recordConversionEvent("view", {
+    const event = await this.recordConversionEvent("view", {
       activity,
       user,
       channel,
@@ -2022,6 +2921,8 @@ export class PublicService {
       userAgent: tracking?.userAgent,
       payload: { inviteCode: tracking?.inviteCode || null }
     });
+    if (!event) return;
+    await this.activityViewLogs.save(this.activityViewLogs.create({ activity, user, channel, source }));
   }
 
   private async resolveActivityChannel(activity: Activity, channelCode?: string | null, source?: string | null) {
@@ -2046,40 +2947,40 @@ export class PublicService {
   }
 
   private async recordConversionEvent(type: ConversionEventType, input: { activity?: Activity | null; user?: User | null; registration?: Registration | null; order?: Order | null; channel?: ActivityChannel | null; amount?: string | number | null; source?: string | null; idempotencyKey?: string | null; clientIp?: string | null; userAgent?: string | null; payload?: Record<string, unknown> | null }) {
-    if (input.idempotencyKey && await this.conversionEventExists(input.idempotencyKey)) return null;
-    return this.conversionEvents.save(this.conversionEvents.create({
+    const registration = input.registration || input.order?.registration || null;
+    const activity = input.activity || registration?.activity || null;
+    const channel = input.channel || registration?.channel || null;
+    const ticketType = input.order?.ticketType || null;
+    const result = await this.conversionEvents.createQueryBuilder().insert().values({
       type,
-      tenant: input.activity?.tenant || input.order?.tenant || input.registration?.tenant || input.channel?.tenant || null,
-      activity: input.activity || input.registration?.activity || input.order?.registration?.activity || null,
-      user: input.user || input.registration?.user || input.order?.registration?.user || null,
-      registration: input.registration || input.order?.registration || null,
-      order: input.order || null,
-      channel: input.channel || input.registration?.channel || null,
+      tenant: this.relationId(activity?.tenant || input.order?.tenant || registration?.tenant || channel?.tenant || null),
+      activity: this.relationId(activity),
+      user: this.relationId(input.user || registration?.user || null),
+      registration: this.relationId(registration),
+      order: this.relationId(input.order || null),
+      channel: this.relationId(channel),
+      ticketTypeIdSnapshot: ticketType?.id || null,
+      ticketTypeNameSnapshot: ticketType?.name || null,
+      channelCodeSnapshot: registration?.attributionChannelCode || channel?.code || null,
+      channelNameSnapshot: registration?.attributionChannelName || channel?.name || null,
+      provinceSnapshot: registration?.attributionProvince || activity?.locationProvince || null,
+      citySnapshot: registration?.attributionCity || activity?.locationCity || null,
+      districtSnapshot: registration?.attributionDistrict || activity?.locationDistrict || null,
       amount: Number(input.amount || 0).toFixed(2),
-      source: this.cleanTrackingText(input.source, 80) || null,
+      source: this.cleanTrackingText(registration?.attributionSource || input.source, 80) || null,
       idempotencyKey: input.idempotencyKey || null,
       clientIp: this.cleanTrackingText(input.clientIp, 80) || null,
       userAgent: this.cleanTrackingText(input.userAgent, 255) || null,
       payload: input.payload || null
-    }));
+    } as any).orIgnore().updateEntity(false).execute();
+    const id = Number(result.identifiers[0]?.id || result.raw?.insertId || 0);
+    return id ? { id } : null;
   }
 
-  private async conversionEventExists(idempotencyKey: string) {
-    const count = await this.conversionEvents.createQueryBuilder("event").where("event.idempotencyKey = :idempotencyKey", { idempotencyKey }).getCount();
-    return count > 0;
-  }
+  private relationId<T extends { id: number }>(entity: T | null | undefined) { return entity ? ({ id: entity.id } as T) : null; }
 
   private cleanTrackingText(value: unknown, max = 80) {
     return String(value || "").trim().replace(/[^\w\u4e00-\u9fa5:.-]/g, "").slice(0, max);
-  }
-
-  private escapeSvg(value: unknown) {
-    return String(value || "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 
   private async recordPaymentDiscrepancy(order: Order, transactionNo: string, provider: string, amount: number, discrepancyType: string, remark: string) {
@@ -2259,50 +3160,57 @@ export class PublicService {
     return order;
   }
 
-  private async awardPoints(user: User, points: number, sourceType: string, sourceId: string | number, remark: string) {
-    const key = String(sourceId);
-    const exists = await this.memberPointLogs.findOne({ where: { sourceType, sourceId: key } });
-    if (exists) return exists;
-    const log = await this.memberPointLogs.save(this.memberPointLogs.create({ user, points, type: points >= 0 ? "earn" : "deduct", sourceType, sourceId: key, remark }));
-    await this.refreshMemberProfile(user);
-    return log;
+  private async awardPoints(user: User, points: number, sourceType: string, sourceId: string | number, remark: string, tenant: Tenant | null = null) {
+    const result = await this.memberPoints.post({ user, tenant, points, sourceType, sourceId, remark, negativePolicy: sourceType.includes("refund") ? "debt" : "reject" });
+    await this.refreshMemberProfile(user, tenant);
+    return result.log;
   }
 
   private async refundRedeemedPoints(order: Order, remark: string) {
     if (!order.pointsUsed || order.pointsUsed <= 0 || order.pointsRefundedAt) return null;
-    await this.awardPoints(order.registration.user, order.pointsUsed, "points_return", order.id, remark);
+    await this.awardPoints(order.registration.user, order.pointsUsed, "points_return", order.id, remark, order.tenant || order.registration.activity?.tenant || null);
     order.pointsRefundedAt = new Date();
     await this.orders.save(order);
     return order;
   }
 
-  private async refreshMemberProfile(user: User) {
-    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id } } });
-    if (!profile) profile = this.memberProfiles.create({ user, level: null });
-    const [registrationCount, pointSum, paidAmount] = await Promise.all([
-      this.registrations.count({ where: { user: { id: user.id } } }),
-      this.memberPointLogs.createQueryBuilder("p").select("COALESCE(SUM(p.points), 0)", "sum").where("p.userId = :userId", { userId: user.id }).getRawOne<{ sum: string }>(),
-      this.orders.createQueryBuilder("o").leftJoin("o.registration", "r").select("COALESCE(SUM(o.amount), 0)", "sum").where("r.userId = :userId", { userId: user.id }).andWhere("o.status IN (:...statuses)", { statuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] }).getRawOne<{ sum: string }>()
+  private async refreshMemberProfile(user: User, tenant: Tenant | null = null) {
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey } });
+    if (!profile) profile = this.memberProfiles.create({ user, tenant, tenantScopeKey, level: null, growthValue: 0, growthCycleStartedAt: null, levelStartedAt: null, levelExpiresAt: null, levelSource: "growth" });
+    const tenantFilter = tenant ? " = :memberTenantId" : " IS NULL";
+    const [registrationCount, pointSum, growthSum, paidAmount] = await Promise.all([
+      this.registrations.createQueryBuilder("r").where("r.userId = :userId", { userId: user.id }).andWhere(`r.tenantId${tenantFilter}`, { memberTenantId: tenant?.id }).getCount(),
+      this.memberPointLogs.createQueryBuilder("p").select("COALESCE(SUM(p.points), 0)", "sum").where("p.userId = :userId", { userId: user.id }).andWhere("p.tenantScopeKey = :tenantScopeKey", { tenantScopeKey }).andWhere("p.reversedAt IS NULL").andWhere("(p.expiresAt IS NULL OR p.expiresAt > :now)", { now: new Date() }).getRawOne<{ sum: string }>(),
+      this.memberPointLogs.createQueryBuilder("p").select("COALESCE(SUM(p.growthValue), 0)", "sum").where("p.userId = :userId", { userId: user.id }).andWhere("p.tenantScopeKey = :tenantScopeKey", { tenantScopeKey }).andWhere("p.reversedAt IS NULL").andWhere("(:growthCycle IS NULL OR p.createdAt >= :growthCycle)", { growthCycle: profile.growthCycleStartedAt }).getRawOne<{ sum: string }>(),
+      this.orders.createQueryBuilder("o").leftJoin("o.registration", "r").select("COALESCE(SUM(o.amount), 0)", "sum").where("r.userId = :userId", { userId: user.id }).andWhere(`o.tenantId${tenantFilter}`, { memberTenantId: tenant?.id }).andWhere("o.status IN (:...statuses)", { statuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] }).getRawOne<{ sum: string }>()
     ]);
     profile.points = Number(pointSum?.sum || 0);
+    profile.growthValue = Number(growthSum?.sum || 0);
     profile.totalSpent = Number(paidAmount?.sum || 0).toFixed(2);
     profile.registrationCount = registrationCount;
-    profile.level = await this.resolveMemberLevel(profile.points);
+    if (!manualLevelOverrideActive(profile.levelSource, profile.levelExpiresAt)) {
+      const previousLevelId = profile.level?.id || null;
+      profile.level = await this.resolveMemberLevel(profile.growthValue, tenant);
+      if ((profile.level?.id || null) !== previousLevelId) { profile.levelStartedAt = new Date(); profile.levelExpiresAt = levelExpiry(profile.level, profile.levelStartedAt); profile.levelSource = "growth"; profile.levelSnapshot = memberLevelSnapshot(profile.level); }
+    }
     profile.lastActiveAt = new Date();
     return this.memberProfiles.save(profile);
   }
 
-  private async resolveMemberLevel(points: number) {
-    const levels = await this.memberLevels.find({ where: { enabled: true }, order: { minPoints: "DESC" } });
-    return levels.find((level) => points >= level.minPoints) || null;
+  private async resolveMemberLevel(growthValue: number, tenant: Tenant | null) {
+    const levels = await this.memberLevels.find({ where: { enabled: true, tenantScopeKey: memberLevelScopeKey(tenant) }, order: { minGrowth: "DESC" } });
+    return resolveGrowthLevel(levels, growthValue) as MemberLevel | null;
   }
 
   private async ensureActivityMemberAccess(activity: Activity, user: User) {
     const requiredLevel = this.effectiveRequiredMemberLevel(activity);
     if (!requiredLevel) return;
-    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id } } });
-    if (!profile) profile = await this.refreshMemberProfile(user);
-    if (!profile.level || profile.level.minPoints < requiredLevel.minPoints) {
+    const tenantScopeKey = activity.tenant ? `tenant:${activity.tenant.id}` : "platform";
+    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey } });
+    if (!profile) profile = await this.refreshMemberProfile(user, activity.tenant || null);
+    const currentMinGrowth = Number((profile.levelSnapshot as Record<string, unknown> | null)?.minGrowth ?? profile.level?.minGrowth ?? -1);
+    if (!profile.level || currentMinGrowth < requiredLevel.minGrowth) {
       const message = this.isPriorityBookingActive(activity)
         ? `优先报名截止前仅限${requiredLevel.name}及以上会员报名`
         : `该活动仅限${requiredLevel.name}及以上会员报名`;
@@ -2313,22 +3221,23 @@ export class PublicService {
   private async memberAccessSnapshot(activity: Activity, userId?: number) {
     const requiredLevel = this.effectiveRequiredMemberLevel(activity);
     const priorityActive = this.isPriorityBookingActive(activity);
-    if (!requiredLevel) return { requiredLevel: null, currentLevel: null, eligible: true, message: "不限会员等级", priorityActive: false, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+    if (!requiredLevel) return { requiredLevel: null, currentLevel: null, eligible: true, message: "不限会员等级", priorityActive: false, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     if (!userId) {
-      return { requiredLevel, currentLevel: null, eligible: false, message: priorityActive ? `优先报名截止前仅限${requiredLevel.name}及以上会员报名` : `该活动仅限${requiredLevel.name}及以上会员报名`, priorityActive, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+      return { requiredLevel: this.publicMemberLevel(requiredLevel), currentLevel: null, eligible: false, message: priorityActive ? `优先报名截止前仅限${requiredLevel.name}及以上会员报名` : `该活动仅限${requiredLevel.name}及以上会员报名`, priorityActive, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     }
     const user = await this.users.findOneBy({ id: userId });
-    if (!user) return { requiredLevel, currentLevel: null, eligible: false, message: "用户不存在", priorityActive, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
-    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id } } });
-    if (!profile) profile = await this.refreshMemberProfile(user);
+    if (!user) return { requiredLevel: this.publicMemberLevel(requiredLevel), currentLevel: null, eligible: false, message: "用户不存在", priorityActive, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+    const tenantScopeKey = activity.tenant ? `tenant:${activity.tenant.id}` : "platform";
+    let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey } });
+    if (!profile) profile = await this.refreshMemberProfile(user, activity.tenant || null);
     const currentLevel = profile.level || null;
-    const eligible = Boolean(currentLevel && currentLevel.minPoints >= requiredLevel.minPoints);
+    const eligible = Boolean(currentLevel && currentLevel.minGrowth >= requiredLevel.minGrowth);
     return {
-      requiredLevel,
-      currentLevel,
+      requiredLevel: this.publicMemberLevel(requiredLevel),
+      currentLevel: this.publicMemberLevel(currentLevel),
       eligible,
       priorityActive,
-      priorityMemberLevel: activity.priorityMemberLevel,
+      priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel),
       priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt,
       message: eligible ? (priorityActive ? "已满足优先报名资格" : "已满足会员报名门槛") : priorityActive ? `优先报名截止前仅限${requiredLevel.name}及以上会员报名` : `该活动仅限${requiredLevel.name}及以上会员报名`
     };
@@ -2371,11 +3280,24 @@ export class PublicService {
   }
 
   private publicRegistration(registration: Registration) {
-    return { ...registration, activity: this.publicActivity(registration.activity) };
+    return {
+      id: registration.id,
+      activity: this.publicActivity(registration.activity),
+      status: registration.status,
+      answers: registration.answers || [],
+      formSchemaVersion: registration.formSchemaVersion,
+      formSnapshot: registration.formSnapshot || [],
+      companions: registration.companions || [],
+      privacyConsentAt: registration.privacyConsentAt,
+      reviewRemark: registration.reviewRemark,
+      cancelReason: registration.cancelReason,
+      createdAt: registration.createdAt,
+      updatedAt: registration.updatedAt
+    };
   }
 
   private publicOrder(order: Order) {
-    return { ...order, registration: this.publicRegistration(order.registration) };
+    return { ...this.publicOrderSummary(order), registration: this.publicRegistration(order.registration) };
   }
 
   private publicOrderSummary(order?: Order | null) {
@@ -2384,6 +3306,7 @@ export class PublicService {
       id: order.id,
       orderNo: order.orderNo,
       amount: order.amount,
+      amountFen: Number(order.amountFen || 0),
       originalAmount: order.originalAmount,
       discountAmount: order.discountAmount,
       memberDiscountAmount: order.memberDiscountAmount,
@@ -2398,9 +3321,164 @@ export class PublicService {
       closeReason: order.closeReason,
       createdAt: order.createdAt,
       updatedAt: order.updatedAt,
-      ticketType: order.ticketType,
-      coupon: order.coupon,
-      memberLevel: order.memberLevel
+      ticketType: this.publicTicketType(order.ticketType),
+      coupon: this.publicCoupon(order.coupon),
+      memberLevel: this.publicMemberLevel(order.memberLevel)
+    };
+  }
+
+  private publicRefund(refund?: Refund | null) {
+    if (!refund) return null;
+    return {
+      id: refund.id,
+      refundNo: refund.refundNo,
+      amount: refund.amount,
+      amountFen: Number(refund.amountFen || 0),
+      status: refund.status,
+      reason: refund.reason,
+      reviewRemark: refund.reviewRemark,
+      reviewedAt: refund.reviewedAt,
+      completedAt: refund.completedAt,
+      providerRefundStatus: refund.providerRefundStatus,
+      providerRefundFailureReason: refund.providerRefundFailureReason,
+      createdAt: refund.createdAt
+    };
+  }
+
+  private publicTicketType(ticketType?: TicketType | null) {
+    if (!ticketType) return null;
+    return {
+      id: ticketType.id,
+      name: ticketType.name,
+      price: ticketType.price,
+      capacity: ticketType.capacity,
+      perUserLimit: ticketType.perUserLimit,
+      saleStartsAt: ticketType.saleStartsAt,
+      saleEndsAt: ticketType.saleEndsAt,
+      earlyBirdPrice: ticketType.earlyBirdPrice,
+      earlyBirdEndsAt: ticketType.earlyBirdEndsAt,
+      memberPrice: ticketType.memberPrice,
+      tierPrices: ticketType.tierPrices || [],
+      enabled: ticketType.enabled
+    };
+  }
+
+  private publicCoupon(coupon?: Coupon | null) {
+    if (!coupon) return null;
+    return {
+      id: coupon.id,
+      code: coupon.code,
+      name: coupon.name,
+      discountType: coupon.discountType,
+      discountValue: coupon.discountValue,
+      minAmount: coupon.minAmount,
+      claimMode: coupon.claimMode,
+      perUserLimit: coupon.perUserLimit,
+      startsAt: coupon.startsAt,
+      endsAt: coupon.endsAt
+    };
+  }
+
+  private publicMemberLevel(level?: MemberLevel | null) {
+    if (!level) return null;
+    return { id: level.id, name: level.name, minPoints: level.minPoints, minGrowth: level.minGrowth, priorityBooking: level.priorityBooking, sortOrder: level.sortOrder };
+  }
+
+  private publicWallet(wallet?: UserWallet | null, tenant?: Tenant | null) {
+    return {
+      id: wallet?.id || null,
+      tenant: this.publicHomepageTenant(wallet?.tenant || tenant || null),
+      availableBalance: wallet?.availableBalance || "0.00",
+      frozenBalance: wallet?.frozenBalance || "0.00",
+      giftBalance: wallet?.giftBalance || "0.00",
+      frozenGiftBalance: wallet?.frozenGiftBalance || "0.00",
+      totalRecharge: wallet?.totalRecharge || "0.00",
+      totalSpent: wallet?.totalSpent || "0.00",
+      createdAt: wallet?.createdAt || null,
+      updatedAt: wallet?.updatedAt || null
+    };
+  }
+
+  private publicWalletTransaction(transaction?: WalletTransaction | null) {
+    if (!transaction) return null;
+    return {
+      id: transaction.id,
+      transactionNo: transaction.transactionNo,
+      direction: transaction.direction,
+      type: transaction.type,
+      amount: transaction.amount,
+      balanceBefore: transaction.balanceBefore,
+      balanceAfter: transaction.balanceAfter,
+      frozenBefore: transaction.frozenBefore,
+      frozenAfter: transaction.frozenAfter,
+      giftBefore: transaction.giftBefore,
+      giftAfter: transaction.giftAfter,
+      frozenGiftBefore: transaction.frozenGiftBefore,
+      frozenGiftAfter: transaction.frozenGiftAfter,
+      status: transaction.status,
+      remark: transaction.remark,
+      createdAt: transaction.createdAt
+    };
+  }
+
+  private publicPaymentResult(result: { order: Order; transaction?: PaymentTransaction | null; idempotent: boolean }) {
+    return {
+      order: this.publicOrder(result.order),
+      transaction: result.transaction ? {
+        id: result.transaction.id,
+        transactionNo: result.transaction.transactionNo,
+        provider: result.transaction.provider,
+        paymentMethod: result.transaction.paymentMethod,
+        amount: result.transaction.amount,
+        amountFen: Number(result.transaction.amountFen || 0),
+        status: result.transaction.status,
+        createdAt: result.transaction.createdAt
+      } : null,
+      walletTransaction: null,
+      idempotent: result.idempotent
+    };
+  }
+
+  private publicCouponClaim(claim?: CouponClaim | null) {
+    if (!claim) return null;
+    return {
+      id: claim.id,
+      coupon: this.publicCoupon(claim.coupon),
+      claimedCount: claim.claimedCount,
+      usedCount: claim.usedCount,
+      createdAt: claim.createdAt,
+      updatedAt: claim.updatedAt
+    };
+  }
+
+  private publicWaitlist(waitlist?: Waitlist | null) {
+    if (!waitlist) return null;
+    return {
+      id: waitlist.id,
+      activity: this.publicActivity(waitlist.activity),
+      status: waitlist.status,
+      answers: waitlist.answers || [],
+      remark: waitlist.remark,
+      promotedRegistration: waitlist.promotedRegistration ? this.publicRegistration(waitlist.promotedRegistration) : null,
+      createdAt: waitlist.createdAt,
+      updatedAt: waitlist.updatedAt
+    };
+  }
+
+  private publicQuote(quote: any) {
+    return {
+      originalAmount: quote.originalAmount,
+      discountAmount: quote.discountAmount,
+      memberDiscountAmount: quote.memberDiscountAmount,
+      couponDiscountAmount: quote.couponDiscountAmount,
+      pointsUsed: quote.pointsUsed,
+      pointsDiscountAmount: quote.pointsDiscountAmount,
+      availablePoints: quote.availablePoints,
+      payableAmount: quote.payableAmount,
+      ticketType: this.publicTicketType(quote.ticketType),
+      ticketPricingRule: quote.ticketPricingRule,
+      coupon: this.publicCoupon(quote.coupon),
+      memberLevel: this.publicMemberLevel(quote.memberLevel)
     };
   }
 
@@ -2439,7 +3517,9 @@ export class PublicService {
   private async grantCourseAccess(user: User, course: Course) {
     let row = await this.userLearning.findOne({ where: { userId: user.id, courseId: course.id, lessonId: 0 } });
     if (!row) row = this.userLearning.create({ userId: user.id, courseId: course.id, lessonId: 0, progress: 0, completedAt: null });
-    return this.userLearning.save(row);
+    const saved = await this.userLearning.save(row);
+    await this.refreshMemberProfile(user, course.tenant || null);
+    return saved;
   }
 
   private tenantCourseWhere<T extends Record<string, unknown>>(where: T, tenant?: Tenant | null) {
@@ -2451,8 +3531,52 @@ export class PublicService {
   }
 
   private publicActivity(activity: Activity) {
-    const { groupQrCodeUrl: _groupQrCodeUrl, ...publicActivity } = activity as Activity & { groupQrCodeUrl?: string | null };
-    return publicActivity;
+    const rules = activity.eligibilityRules || null;
+    return {
+      id: activity.id,
+      title: activity.title,
+      tenant: this.publicHomepageTenant(activity.tenant),
+      coverUrl: activity.coverUrl,
+      shareTitle: activity.shareTitle,
+      shareDescription: activity.shareDescription,
+      shareImageUrl: activity.shareImageUrl,
+      description: activity.description,
+      notice: activity.notice,
+      location: activity.location,
+      locationProvince: activity.locationProvince,
+      locationCity: activity.locationCity,
+      locationDistrict: activity.locationDistrict,
+      locationLatitude: activity.locationLatitude,
+      locationLongitude: activity.locationLongitude,
+      locationMapUrl: activity.locationMapUrl,
+      startTime: activity.startTime,
+      endTime: activity.endTime,
+      registrationDeadline: activity.registrationDeadline,
+      capacity: activity.capacity,
+      price: activity.price,
+      status: activity.status,
+      cancelledAt: activity.cancelledAt,
+      cancellationReason: activity.cancellationReason,
+      featured: activity.featured,
+      requireReview: activity.requireReview,
+      allowCancel: activity.allowCancel,
+      category: activity.category ? { id: activity.category.id, name: activity.category.name, iconUrl: activity.category.iconUrl, coverUrl: activity.category.coverUrl } : null,
+      agent: activity.agent ? { id: activity.agent.id, name: activity.agent.name, region: activity.agent.region } : null,
+      minMemberLevel: this.publicMemberLevel(activity.minMemberLevel),
+      priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel),
+      priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt,
+      fields: (activity.fields || []).map((field) => ({ id: field.id, label: field.label, type: field.type, required: field.required, options: field.options || [], sortOrder: field.sortOrder })),
+      formSchemaVersion: activity.formSchemaVersion,
+      eligibilityRules: rules ? {
+        minAge: rules.minAge,
+        maxAge: rules.maxAge,
+        allowedRegions: rules.allowedRegions || [],
+        maxRegistrationsPerUser: rules.maxRegistrationsPerUser,
+        requirePrivacyConsent: rules.requirePrivacyConsent,
+        allowCompanions: rules.allowCompanions,
+        maxCompanions: rules.maxCompanions
+      } : null
+    };
   }
 
   private hasGroupQrCode(activity: Activity, setting?: OperationSetting | null) {
@@ -2460,10 +3584,202 @@ export class PublicService {
   }
 
   private publicOperationSetting(setting: OperationSetting, platformSetting?: OperationSetting | null) {
-    const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl, smsProviderEnabled: _smsProviderEnabled, smsProvider: _smsProvider, smsAccessKeyId: _smsAccessKeyId, smsAccessKeySecret: _smsAccessKeySecret, smsSignName: _smsSignName, smsTemplateId: _smsTemplateId, smsSdkAppId: _smsSdkAppId, launchConfig: _launchConfig, ...publicSetting } = setting as OperationSetting & { defaultGroupQrCodeUrl?: string | null };
-    publicSetting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
-    (publicSetting as Record<string, unknown>).launchConfig = this.publicLaunchConfig(setting.launchConfig, platformSetting?.launchConfig);
-    return publicSetting;
+    return {
+      offlinePaymentInstructions: setting.offlinePaymentInstructions,
+      paymentMethods: this.normalizePaymentMethods(setting.paymentMethods),
+      registrationEnabled: setting.registrationEnabled,
+      registrationDisabledMessage: setting.registrationDisabledMessage,
+      customerServiceName: setting.customerServiceName,
+      customerServicePhone: setting.customerServicePhone,
+      customerServiceWechat: setting.customerServiceWechat,
+      pageTheme: setting.pageTheme || {},
+      launchConfig: this.publicLaunchConfig(setting.launchConfig, platformSetting?.launchConfig),
+      refundInstructions: setting.refundInstructions,
+      invoiceInstructions: setting.invoiceInstructions,
+      userAgreementUrl: setting.userAgreementUrl,
+      privacyPolicyUrl: setting.privacyPolicyUrl,
+      merchantAgreementUrl: setting.merchantAgreementUrl
+    };
+  }
+
+  async availableActivityCoupons(user: User, context?: PublicTenantContext, activityId?: number) {
+    const tenant = await this.resolveTenantContext(context);
+    const now = new Date();
+    const builder = this.coupons.createQueryBuilder("coupon").leftJoinAndSelect("coupon.activity", "activity").leftJoinAndSelect("coupon.tenant", "tenant").where("coupon.enabled = :enabled", { enabled: true }).andWhere("coupon.claimMode = :claimMode", { claimMode: "claim" }).andWhere("(coupon.startsAt IS NULL OR coupon.startsAt <= :now)", { now }).andWhere("(coupon.endsAt IS NULL OR coupon.endsAt >= :now)").andWhere("(coupon.usageLimit IS NULL OR coupon.claimedCount < coupon.usageLimit)");
+    if (tenant) builder.andWhere("coupon.tenantId = :tenantId", { tenantId: tenant.id }); else builder.andWhere("coupon.tenantId IS NULL");
+    if (activityId) builder.andWhere("(coupon.activityId IS NULL OR coupon.activityId = :activityId)", { activityId });
+    const coupons = await builder.orderBy("coupon.createdAt", "DESC").take(100).getMany();
+    const claims = coupons.length ? await this.dataSource.getRepository(CouponClaim).find({ where: { user: { id: user.id }, coupon: { id: In(coupons.map(item => item.id)) } } }) : [];
+    const claimMap = new Map(claims.map(claim => [claim.coupon.id, claim]));
+    return coupons.map((coupon) => {
+      const claim = claimMap.get(coupon.id) || null;
+      return { ...this.publicCoupon(coupon), claim: this.publicCouponClaim(claim), remainingUses: Math.max((claim?.claimedCount || 0) - (claim?.usedCount || 0), 0) };
+    });
+  }
+
+  async claimActivityCoupon(couponId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    return this.dataSource.transaction(async manager => {
+      const couponRepo = manager.getRepository(Coupon); const claimRepo = manager.getRepository(CouponClaim);
+      const coupon = await couponRepo.findOne({ where: { id: couponId }, lock: { mode: "pessimistic_write" } });
+      if (!coupon || coupon.claimMode !== "claim" || !coupon.enabled) throw new NotFoundException("可领取优惠券不存在");
+      if ((coupon.tenant?.id || null) !== (tenant?.id || null)) throw new NotFoundException("可领取优惠券不存在");
+      const now = Date.now();
+      if (coupon.startsAt && coupon.startsAt.getTime() > now) throw new BadRequestException("优惠券尚未开始领取");
+      if (coupon.endsAt && coupon.endsAt.getTime() < now) throw new BadRequestException("优惠券已过期");
+      if (coupon.usageLimit !== null && coupon.claimedCount >= coupon.usageLimit) throw new BadRequestException("优惠券已领完");
+      let claim = await claimRepo.findOne({ where: { coupon: { id: coupon.id }, user: { id: user.id } }, lock: { mode: "pessimistic_write" } });
+      if (claim && claim.claimedCount >= Math.max(coupon.perUserLimit || 1, 1)) throw new BadRequestException("已达到每人领取上限");
+      if (!claim) claim = claimRepo.create({ tenant: coupon.tenant, coupon, user, claimedCount: 0, usedCount: 0 });
+      claim.claimedCount += 1; coupon.claimedCount += 1;
+      await couponRepo.save(coupon);
+      return this.publicCouponClaim(await claimRepo.save(claim));
+    });
+  }
+
+  async redeemCode(codeInput: string, user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const codeText = String(codeInput || "").trim().toUpperCase();
+    if (!codeText) throw new BadRequestException("请输入兑换码");
+    const result = await this.dataSource.transaction(async manager => {
+      const codeRepo = manager.getRepository(RedemptionCode); const usageRepo = manager.getRepository(RedemptionCodeUsage);
+      const codeBuilder = codeRepo.createQueryBuilder("code").leftJoinAndSelect("code.tenant", "tenant").where("code.code = :code", { code: codeText }).setLock("pessimistic_write");
+      if (tenant?.id) codeBuilder.andWhere("code.tenantId = :tenantId", { tenantId: tenant.id }); else codeBuilder.andWhere("code.tenantId IS NULL");
+      const code = await codeBuilder.getOne();
+      if (!code || !code.enabled) throw new NotFoundException("兑换码不存在");
+      const now = Date.now();
+      if (code.startsAt && code.startsAt.getTime() > now) throw new BadRequestException("兑换码尚未生效");
+      if (code.endsAt && code.endsAt.getTime() < now) throw new BadRequestException("兑换码已过期");
+      let usage = await usageRepo.findOne({ where: { redemptionCode: { id: code.id }, user: { id: user.id } }, lock: { mode: "pessimistic_write" } });
+      const redemptionError = redemptionLimitError({ usageLimit: code.usageLimit, usedCount: code.usedCount, perUserLimit: code.perUserLimit, usedByUser: usage?.usedCount || 0 });
+      if (redemptionError) throw new BadRequestException(redemptionError);
+      if (!usage) usage = usageRepo.create({ tenant, redemptionCode: code, user, usedCount: 0 });
+      let benefit: Record<string, unknown>;
+      if (code.targetType === "activity_coupon") {
+        const coupon = await manager.getRepository(Coupon).findOne({ where: { id: Number(code.targetId) }, lock: { mode: "pessimistic_write" } });
+        if (!coupon || !coupon.enabled || (coupon.tenant?.id || null) !== (tenant?.id || null)) throw new BadRequestException("兑换目标活动券不存在或已停用");
+        if (coupon.startsAt && coupon.startsAt.getTime() > now) throw new BadRequestException("兑换目标活动券尚未生效");
+        if (coupon.endsAt && coupon.endsAt.getTime() < now) throw new BadRequestException("兑换目标活动券已过期");
+        if (coupon.usageLimit !== null && coupon.claimedCount >= coupon.usageLimit) throw new BadRequestException("兑换目标活动券已领完");
+        let claim = await manager.getRepository(CouponClaim).findOne({ where: { coupon: { id: coupon.id }, user: { id: user.id } }, lock: { mode: "pessimistic_write" } });
+        if (claim && claim.claimedCount >= Math.max(coupon.perUserLimit || 1, 1)) throw new BadRequestException("已达到目标活动券每人领取上限");
+        if (!claim) claim = manager.getRepository(CouponClaim).create({ tenant, coupon, user, claimedCount: 0, usedCount: 0 });
+        claim.claimedCount += 1; coupon.claimedCount += 1; await manager.getRepository(Coupon).save(coupon); await manager.getRepository(CouponClaim).save(claim);
+        benefit = { type: code.targetType, couponId: coupon.id, couponName: coupon.name };
+      } else if (code.targetType === "mall_coupon") {
+        const coupon = await manager.getRepository(MallCoupon).findOne({ where: { id: Number(code.targetId) }, lock: { mode: "pessimistic_write" } });
+        if (!coupon || !coupon.enabled || coupon.tenant.id !== tenant?.id) throw new BadRequestException("兑换目标商城券不存在或已停用");
+        if (coupon.startsAt && coupon.startsAt.getTime() > now) throw new BadRequestException("兑换目标商城券尚未生效");
+        if (coupon.endsAt && coupon.endsAt.getTime() < now) throw new BadRequestException("兑换目标商城券已过期");
+        let claim = await manager.getRepository(MallCouponClaim).findOne({ where: { coupon: { id: coupon.id }, user: { id: user.id } }, lock: { mode: "pessimistic_write" } });
+        const claimError = mallCouponClaimError({ issuanceLimit: coupon.issuanceLimit, claimedCount: coupon.claimedCount, hasClaim: false });
+        if (claimError) throw new BadRequestException(claimError);
+        if (coupon.perUserLimit > 0 && Number(claim?.claimedCount || 0) >= coupon.perUserLimit) throw new BadRequestException("已达到目标商城券每人领取上限");
+        if (!claim) claim = manager.getRepository(MallCouponClaim).create({ tenant: coupon.tenant, merchant: coupon.merchant, coupon, user, claimedCount: 0, usedCount: 0 });
+        claim.claimedCount += 1; coupon.claimedCount += 1; await manager.getRepository(MallCoupon).save(coupon); await manager.getRepository(MallCouponClaim).save(claim);
+        benefit = { type: code.targetType, couponId: coupon.id, couponName: coupon.name };
+      } else if (code.targetType === "course_access") {
+        const course = await manager.getRepository(Course).findOne({ where: { id: Number(code.targetId) } });
+        if (!course || (course.tenant?.id || null) !== (tenant?.id || null)) throw new BadRequestException("兑换目标课程不存在");
+        let learning = await manager.getRepository(UserLearning).findOne({ where: { userId: user.id, courseId: course.id, lessonId: 0 }, lock: { mode: "pessimistic_write" } });
+        if (learning) throw new BadRequestException("已拥有该课程学习权限");
+        if (!learning) learning = manager.getRepository(UserLearning).create({ userId: user.id, courseId: course.id, lessonId: 0, progress: 0, completedAt: null });
+        await manager.getRepository(UserLearning).save(learning);
+        benefit = { type: code.targetType, courseId: course.id, courseTitle: course.title };
+      } else {
+        const points = Math.max(Number(code.points || 0), 1);
+        await manager.getRepository(MemberPointLog).save(manager.getRepository(MemberPointLog).create({ user, tenant, tenantScopeKey: tenant ? `tenant:${tenant.id}` : "platform", points, growthValue: 0, expiresAt: null, reversedAt: null, type: "earn", sourceType: "redemption_code", sourceId: `${code.id}:${usage.usedCount + 1}:${user.id}`, remark: `兑换码：${code.name}` }));
+        benefit = { type: "points", points };
+      }
+      usage.usedCount += 1; code.usedCount += 1; await usageRepo.save(usage); await codeRepo.save(code);
+      return { code: code.code, name: code.name, benefit };
+    });
+    if (result.benefit.type === "points") await this.refreshMemberProfile(user, tenant);
+    return result;
+  }
+
+  private async releaseActivityCouponUsage(order: Order, reason: string) {
+    await this.dataSource.transaction(async manager => {
+      const usageRepo = manager.getRepository(CouponUsage);
+      const usage = await usageRepo.findOne({ where: { order: { id: order.id } }, lock: { mode: "pessimistic_write" } });
+      if (!usage || usage.status === "released") return;
+      usage.status = "released"; usage.releasedAt = new Date(); usage.releaseReason = reason;
+      await usageRepo.save(usage);
+      const couponRepo = manager.getRepository(Coupon);
+      const coupon = await couponRepo.findOne({ where: { id: usage.coupon.id }, lock: { mode: "pessimistic_write" } });
+      if (coupon && coupon.usedCount > 0) { coupon.usedCount -= 1; await couponRepo.save(coupon); }
+      const claimRepo = manager.getRepository(CouponClaim);
+      const claim = await claimRepo.findOne({ where: { coupon: { id: usage.coupon.id }, user: { id: usage.user.id } }, lock: { mode: "pessimistic_write" } });
+      if (claim && claim.usedCount > 0) { claim.usedCount -= 1; await claimRepo.save(claim); }
+    });
+  }
+
+  private courseOrderPaymentView(order: CourseOrder): Order {
+    return { id: order.id, orderNo: order.orderNo, amount: order.amount, status: order.status, transactionNo: order.transactionNo, tenant: order.course.tenant, registration: { activity: { title: `课程 ${order.course.title}` } } } as unknown as Order;
+  }
+
+  private coursePaymentNotifyUrl(provider: SupportedPaymentProvider) {
+    const key = provider === "wechat" ? "WECHAT_PAY_NOTIFY_URL" : "ALIPAY_NOTIFY_URL";
+    const configured = String(this.config.get(key, "") || "").trim();
+    if (!configured) return null;
+    return configured.replace(/\/payment\/(?:wechat|alipay)\/callback(?:\?.*)?$/, `/payment/course/${provider}/callback`);
+  }
+
+  private async applySuccessfulCoursePayment(order: CourseOrder, transactionNo: string) {
+    return this.dataSource.transaction(async (manager) => {
+      const repo = manager.getRepository(CourseOrder);
+      const locked = await repo.findOne({ where: { id: order.id }, relations: ["user", "course", "course.tenant"], loadEagerRelations: false, lock: { mode: "pessimistic_write" } });
+      if (!locked) throw new NotFoundException("内容订单不存在");
+      if (locked.status === CourseOrderStatus.Paid) return locked;
+      if (locked.status !== CourseOrderStatus.PendingPayment) throw new BadRequestException("当前内容订单不可支付");
+      locked.status = CourseOrderStatus.Paid;
+      locked.transactionNo = transactionNo;
+      locked.paidAt = new Date();
+      locked.expiresAt = null;
+      const saved = await repo.save(locked);
+      const paymentRepo = manager.getRepository(PaymentTransaction);
+      const existingPayment = await paymentRepo.findOne({ where: { transactionNo } });
+      if (!existingPayment) await paymentRepo.save(paymentRepo.create({ order: null, tenant: locked.course.tenant, transactionNo, provider: locked.paymentMethod === PaymentMethod.Alipay ? "alipay" : locked.paymentMethod === PaymentMethod.Wechat ? "wechat" : "mock", paymentMethod: locked.paymentMethod, amount: locked.amount, businessType: "course", businessOrderNo: locked.orderNo, businessSnapshot: { courseId: locked.course.id, courseTitle: locked.course.title, orderNo: locked.orderNo, amount: locked.amount, paymentMethod: locked.paymentMethod }, status: "success", reconciliationStatus: "matched", remark: "课程支付" }));
+      const learningRepo = manager.getRepository(UserLearning);
+      let learning = await learningRepo.findOne({ where: { userId: locked.user.id, courseId: locked.course.id, lessonId: 0 } });
+      if (!learning) learning = learningRepo.create({ userId: locked.user.id, courseId: locked.course.id, lessonId: 0, progress: 0, completedAt: null });
+      await learningRepo.save(learning);
+      return saved;
+    });
+  }
+
+  private async closeCourseOrder(order: CourseOrder, reason: string) {
+    order.status = CourseOrderStatus.Closed;
+    order.closedAt = new Date();
+    order.closeReason = reason;
+    order.expiresAt = null;
+    return this.courseOrders.save(order);
+  }
+
+  async queryRegistrationPayment(registrationId: number, user: User, context?: PublicTenantContext) {
+    const order = await this.orders.findOne({ where: { registration: { id: registrationId } } });
+    if (!order) throw new NotFoundException("订单不存在");
+    await this.assertOrderTenantAccess(order, context);
+    this.assertOrderUserAccess(order, user);
+    if (this.isExpiredPendingOrder(order)) await this.closeExpiredOrder(order, "订单超时未付款，查单时自动关闭");
+    if (![PaymentMethod.Wechat, PaymentMethod.Alipay].includes(order.paymentMethod)) return { provider: order.paymentMethod, mode: "local", orderNo: order.orderNo, transactionNo: order.transactionNo, amount: order.amount, amountFen: Number(order.amountFen || 0), status: order.status === OrderStatus.Paid ? "success" : [OrderStatus.Closed, OrderStatus.Cancelled].includes(order.status) ? "closed" : "pending", localOrder: this.publicOrder(order) };
+    const provider = order.paymentMethod as SupportedPaymentProvider;
+    const result = await this.paymentProvider.queryPayment(provider, order);
+    return { ...result, amountFen: Number(order.amountFen || 0), localOrder: this.publicOrder(order) };
+  }
+
+  async closeRegistrationPayment(registrationId: number, user: User, context?: PublicTenantContext) {
+    const order = await this.orders.findOne({ where: { registration: { id: registrationId } } });
+    if (!order) throw new NotFoundException("订单不存在");
+    await this.assertOrderTenantAccess(order, context);
+    this.assertOrderUserAccess(order, user);
+    if (order.status === OrderStatus.Paid) throw new BadRequestException("订单已付款，不能关闭支付");
+    if ([OrderStatus.Closed, OrderStatus.Cancelled].includes(order.status)) return { order: this.publicOrder(order), idempotent: true };
+    if (order.status !== OrderStatus.PendingPayment) throw new BadRequestException("当前订单不能关闭支付");
+    let providerResult: unknown = null;
+    if ([PaymentMethod.Wechat, PaymentMethod.Alipay].includes(order.paymentMethod)) providerResult = await this.paymentProvider.closePayment(order.paymentMethod as SupportedPaymentProvider, order);
+    const saved = await this.closeExpiredOrder(order, "用户主动关闭待支付订单");
+    return { order: this.publicOrder(saved), providerResult, idempotent: false };
   }
 
   private async platformOperationSetting(setting?: OperationSetting | null) {
@@ -2707,6 +4023,10 @@ export class PublicService {
     if ("items" in fallback) merged.items = this.normalizeStringArray(merged.items, fallback.items as string[]);
     if ("flowItems" in fallback) merged.flowItems = this.normalizeStringArray(merged.flowItems, fallback.flowItems as string[]);
     return merged;
+  }
+
+  private isDuplicateKeyError(error: any) {
+    return error?.code === "ER_DUP_ENTRY" || error?.errno === 1062 || error?.driverError?.code === "ER_DUP_ENTRY" || error?.driverError?.errno === 1062;
   }
 }
 

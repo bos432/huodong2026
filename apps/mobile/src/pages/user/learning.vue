@@ -1,7 +1,7 @@
 <template>
   <view class="container user-subpage has-custom-nav">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">‹ 返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">‹ 返回</view>
       <text class="nav-title">浏览记录</text>
       <view class="nav-placeholder"></view>
     </view>
@@ -9,6 +9,11 @@
       <view class="hero-kicker">浏览足迹</view>
       <view class="hero-title">每一次进步都算数</view>
       <view class="hero-desc">查看最近内容进度和最后浏览时间。</view>
+    </view>
+    <view v-if="loading" class="state-card" aria-live="polite">学习记录加载中...</view>
+    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive">
+      <text>{{ loadError }}</text>
+      <button class="state-retry" :disabled="loading" aria-label="重新加载学习足迹" @click="loadRecords">重新加载</button>
     </view>
     <view v-for="r in records" :key="r.id" class="record-card">
       <view class="record-row">
@@ -21,7 +26,7 @@
         </view>
       </view>
     </view>
-    <view v-if="!loading && !records.length" class="empty-card">
+    <view v-if="!loading && !loadError && !records.length" class="empty-card">
       <view class="empty-icon">时</view>
       <view class="empty-title">暂无浏览记录</view>
       <view class="empty-desc">完成一次内容观看后，进度会在这里展示。</view>
@@ -30,26 +35,35 @@
   </view>
 </template>
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, request } from "../../api";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
 
 const loading = ref(true);
+const loadError = ref("");
 const records = ref<any[]>([]);
+const loadedTenantCode = ref("");
+const loadGuard = createTenantLoadGuard();
 
 function formatTime(value?: string) {
   if (!value) return "暂无浏览时间";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-CN", { hour12: false });
+  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", hour12:false, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }).replaceAll("/", "-");
 }
 
 async function loadRecords() {
+  const token = loadGuard.begin();
+  if (loadedTenantCode.value && loadedTenantCode.value !== token.tenantCode) records.value = [];
   loading.value = true;
+  loadError.value = "";
   try {
     await ensureUser();
     const rows = await request<any[]>("/public/me/courses");
+    if (!loadGuard.isCurrent(token)) return;
     records.value = (Array.isArray(rows) ? rows : []).map((course) => ({
       id: course.learning?.id || course.id,
       title: reviewSafeText(course.title || "未命名内容"),
@@ -57,15 +71,17 @@ async function loadRecords() {
       time: formatTime(course.learning?.updatedAt),
       progress: Number(course.learning?.progress || 0)
     }));
-  } catch {
-    records.value = [];
+    loadedTenantCode.value = token.tenantCode;
+  } catch (error: any) {
+    if (!loadGuard.isCurrent(token)) return;
+    if (!String(error?.message || "").includes("请先完成")) loadError.value = reviewSafeText(error?.message || "学习记录加载失败，请稍后重试。");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
 function goBack() { uni.navigateBack(); }
-onMounted(loadRecords);
+onShow(loadRecords);
 </script>
 <style scoped>
 .user-subpage {
@@ -231,4 +247,9 @@ onMounted(loadRecords);
   font-size: 24rpx;
   line-height: 1.6;
 }
+.state-card { display:grid; gap:10rpx; margin-top:18rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }
+.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.state-retry { width:max-content; min-height:60rpx; margin:0; padding:0; border:0; background:transparent; color:#C43D3D; font-size:24rpx; font-weight:900; }
+.state-retry::after { border:0; }
+@media (min-width: 900px) { .user-subpage { max-width:760px; margin:0 auto; } }
 </style>

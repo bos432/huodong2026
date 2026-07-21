@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { activityStatusText, type ActivityStatus } from "@activity/shared";
 import { adminActivityPreviewUrl, clearMobileAdminSession, getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
@@ -8,11 +9,17 @@ const loading = ref(true);
 const bootstrap = ref<any>(null);
 const dashboard = ref<any>(null);
 const activities = ref<any[]>([]);
+const dashboardError = ref("");
+const activitiesError = ref("");
+const pageError = ref("");
+let loadSerial = 0;
 const session = computed(() => getMobileAdminSession());
 const canWrite = computed(() => Boolean(bootstrap.value?.permissions?.canWriteActivities));
 const canViewRegistrations = computed(() => Boolean(bootstrap.value?.permissions?.canViewRegistrations));
 const canViewOrders = computed(() => Boolean(bootstrap.value?.permissions?.canViewOrders));
 const canCheckIn = computed(() => Boolean(bootstrap.value?.permissions?.canCheckIn));
+const canViewAnalytics = computed(() => Boolean(bootstrap.value?.permissions?.canViewAnalytics));
+const canViewFinanceRisks = computed(() => Boolean(bootstrap.value?.permissions?.canViewFinanceRisks));
 
 function statusText(status: ActivityStatus) {
   return activityStatusText[status] || status;
@@ -59,25 +66,47 @@ function logout() {
 
 async function load() {
   requireMobileAdmin();
+  const serial = ++loadSerial;
   loading.value = true;
+  pageError.value = "";
+  dashboardError.value = "";
+  activitiesError.value = "";
   try {
-    const [boot, dash, list] = await Promise.all([
-      mobileAdminRequest<any>("/admin/mobile/bootstrap"),
-      mobileAdminRequest<any>("/admin/dashboard").catch(() => null),
-      mobileAdminRequest<any>("/admin/activities?page=1&pageSize=5").catch(() => ({ items: [] }))
-    ]);
+    const boot = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
+    if (serial !== loadSerial) return;
     bootstrap.value = boot;
-    dashboard.value = dash;
-    activities.value = list.items || [];
+    const [dashResult, listResult] = await Promise.allSettled([
+      mobileAdminRequest<any>("/admin/dashboard"),
+      mobileAdminRequest<any>("/admin/activities?page=1&pageSize=5")
+    ]);
+    if (serial !== loadSerial) return;
+    if (dashResult.status === "fulfilled") dashboard.value = dashResult.value;
+    else {
+      dashboardError.value = dashResult.reason?.message || "经营概览加载失败";
+    }
+    if (listResult.status === "fulfilled") activities.value = listResult.value?.items || [];
+    else {
+      activitiesError.value = listResult.reason?.message || "最近活动加载失败";
+    }
   } catch (err: any) {
+    if (serial !== loadSerial) return;
+    pageError.value = err.message || "移动管理首页加载失败";
     uni.showToast({ title: err.message || "加载失败", icon: "none" });
-    if (err.statusCode === 401 || err.statusCode === 403) uni.redirectTo({ url: "/pages/admin/login" });
+    if (err.statusCode === 401) uni.redirectTo({ url: "/pages/admin/login" });
   } finally {
-    loading.value = false;
+    if (serial === loadSerial) loading.value = false;
   }
 }
 
-onMounted(load);
+function goAnalytics() {
+  uni.navigateTo({ url: "/pages/admin/analytics" });
+}
+
+function goRiskAlerts() {
+  uni.navigateTo({ url: "/pages/admin/risk-alerts" });
+}
+
+onShow(load);
 </script>
 
 <template>
@@ -92,14 +121,16 @@ onMounted(load);
       <view class="logout" @click="logout">退出</view>
     </view>
 
-    <view v-if="loading" class="panel">加载中...</view>
+    <view v-if="pageError" class="error-panel" role="alert"><text>{{ pageError }}</text><view class="retry" @click="load">重试</view></view>
+    <view v-if="loading && !bootstrap" class="panel">加载中...</view>
     <template v-else>
       <view class="stats">
-        <view><text>{{ dashboard?.overview?.activityCount || 0 }}</text><text>活动总数</text></view>
-        <view><text>{{ dashboard?.todos?.pendingActivityCount || 0 }}</text><text>待审活动</text></view>
-        <view><text>{{ dashboard?.overview?.registrationCount || 0 }}</text><text>报名累计</text></view>
-        <view><text>{{ dashboard?.operations?.monthRegistrationCount || 0 }}</text><text>本月报名</text></view>
+        <view><text>{{ dashboard ? dashboard?.totals?.activityCount || 0 : "--" }}</text><text>活动总数</text></view>
+        <view><text>{{ dashboard ? dashboard?.todos?.pendingActivityCount || 0 : "--" }}</text><text>待审活动</text></view>
+        <view><text>{{ dashboard ? dashboard?.totals?.registrationCount || 0 : "--" }}</text><text>报名累计</text></view>
+        <view><text>{{ dashboard ? dashboard?.operations?.monthRegistrationCount || 0 : "--" }}</text><text>本月报名</text></view>
       </view>
+      <view v-if="dashboardError" class="error-panel"><text>{{ dashboardError }}</text><view class="retry" @click="load">重试</view></view>
 
       <view class="actions">
         <view class="action primary" :class="{ disabled: !canWrite }" @click="canWrite && goCreate()">发布活动</view>
@@ -107,6 +138,8 @@ onMounted(load);
         <view v-if="canViewRegistrations" class="action" @click="goRegistrations">报名审核</view>
         <view v-if="canCheckIn" class="action" @click="goCheckIn">签到核销</view>
         <view v-if="canViewOrders" class="action" @click="goOrders">订单查看</view>
+        <view v-if="canViewAnalytics" class="action" @click="goAnalytics">经营统计</view>
+        <view v-if="canViewFinanceRisks" class="action" @click="goRiskAlerts">资金异常</view>
       </view>
 
       <view v-if="!canWrite" class="notice">当前账号可查看活动，但没有手机端创建和编辑权限。</view>
@@ -115,6 +148,7 @@ onMounted(load);
         <text>最近活动</text>
         <text class="section-more" @click="goList">全部活动 ›</text>
       </view>
+      <view v-if="activitiesError" class="error-panel"><text>{{ activitiesError }}</text><view class="retry" @click="load">重试</view></view>
       <view v-for="item in activities" :key="item.id" class="activity" @click="canWrite ? goEdit(item.id) : previewActivity(item)">
         <view>
           <view class="name">{{ item.title }}</view>
@@ -123,7 +157,7 @@ onMounted(load);
         </view>
         <view class="pill">{{ statusText(item.status) }}</view>
       </view>
-      <view v-if="!activities.length" class="panel">暂无活动</view>
+      <view v-if="!activities.length && !activitiesError" class="panel">暂无活动</view>
       <AdminBottomNav current="home" :permissions="bootstrap?.permissions" />
     </template>
   </view>
@@ -154,4 +188,6 @@ onMounted(load);
 .meta { margin-top: 8rpx; color: #7a5b52; font-size: 23rpx; }
 .link { margin-top: 10rpx; color: #0f766e; font-size: 23rpx; font-weight: 900; }
 .pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 999px; background: #e6f2ef; color: #0f766e; font-size: 22rpx; font-weight: 950; }
+.error-panel { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin:18rpx 0; padding:20rpx; border-radius:24rpx; background:#fff1f3; color:#b42318; font-size:24rpx; }.retry { flex:0 0 auto; padding:10rpx 18rpx; border-radius:16rpx; background:#b42318; color:#fff; font-weight:800; }
+@media (min-width: 900px) { .admin-page { max-width:760px; margin:0 auto; } }
 </style>

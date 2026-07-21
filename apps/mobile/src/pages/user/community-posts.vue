@@ -23,6 +23,12 @@
       <view class="empty-title">正在加载</view>
       <view class="empty-desc">正在同步你的心得记录。</view>
     </view>
+    <view v-else-if="loadError" class="empty-card error-card" role="alert" aria-live="assertive">
+      <view class="empty-title">心得记录加载失败</view>
+      <view class="empty-desc">{{ loadError }}</view>
+      <view class="primary-action retry-action" @click="loadPosts">重新加载</view>
+    </view>
+    <view v-if="actionError" class="empty-card error-card compact-error" role="alert" aria-live="assertive">{{ actionError }}</view>
 
     <view v-for="post in filteredPosts" :key="post.id" class="post-card" @click="openPost(post)">
       <view class="post-head">
@@ -39,10 +45,13 @@
         <text v-if="post.status === 'approved'">分享 {{ post.shareCount || 0 }}</text>
       </view>
       <view v-if="post.status === 'rejected' && post.reviewRemark" class="review-remark">审核意见：{{ post.reviewRemark }}</view>
-      <view class="post-action">{{ actionText(post) }}</view>
+      <view class="post-actions">
+        <view class="post-action">{{ actionText(post) }}</view>
+        <view class="delete-action" :class="{ disabled: deletingId === post.id }" @click.stop="deletePost(post)">{{ deletingId === post.id ? "删除中" : "删除" }}</view>
+      </view>
     </view>
 
-    <view v-if="!loading && !filteredPosts.length" class="empty-card">
+    <view v-if="!loading && !loadError && !filteredPosts.length" class="empty-card">
       <view class="empty-icon">心</view>
       <view class="empty-title">{{ currentStatus === "all" ? "还没有心得" : "暂无对应状态" }}</view>
       <view class="empty-desc">参加活动并完成签到后，就可以上传照片和心得，审核通过后展示在共修动态里。</view>
@@ -57,11 +66,18 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { reviewSafeText } from "../../review-safe-text";
 
 const loading = ref(false);
+const loadError = ref("");
+const deletingId = ref(0);
+const actionError = ref("");
 const posts = ref<any[]>([]);
+const loadedTenantCode = ref("");
+const loadGuard = createTenantLoadGuard();
 const currentStatus = ref("all");
 const statusTabs = [
   { label: "全部", value: "all" },
@@ -76,16 +92,22 @@ const filteredPosts = computed(() => {
 });
 
 async function loadPosts() {
+  const loadToken = loadGuard.begin();
+  if (loadedTenantCode.value && loadedTenantCode.value !== loadToken.tenantCode) posts.value = [];
   loading.value = true;
+  loadError.value = "";
+  actionError.value = "";
   try {
     await ensureUser();
     const rows = await request<any[]>("/public/me/community/posts");
+    if (!loadGuard.isCurrent(loadToken)) return;
     posts.value = Array.isArray(rows) ? rows : [];
+    loadedTenantCode.value = loadToken.tenantCode;
   } catch (error: any) {
-    posts.value = [];
-    uni.showToast({ title: error.message || "加载心得失败", icon: "none" });
+    if (!loadGuard.isCurrent(loadToken)) return;
+    if (!String(error?.message || "").includes("请先完成")) loadError.value = reviewSafeText(error?.message || "心得记录加载失败，请稍后重试。");
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(loadToken)) loading.value = false;
   }
 }
 
@@ -110,7 +132,7 @@ function dateText(value?: string) {
   if (!value) return "";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toLocaleDateString("zh-CN");
+  return date.toLocaleDateString("zh-CN", { timeZone:"Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit" });
 }
 
 function openPost(post: any) {
@@ -120,6 +142,32 @@ function openPost(post: any) {
 
 function goPublish() {
   uni.navigateTo({ url: withTenantCode("/pages/community/publish") });
+}
+
+function deletePost(post: any) {
+  if (!post?.id || deletingId.value) return;
+  deletingId.value = post.id;
+  actionError.value = "";
+  const tenantCode = getCurrentTenantCode();
+  uni.showModal({
+    title: "删除心得",
+    content: "删除后将不再对外展示，确认继续？",
+    fail: () => { deletingId.value = 0; },
+    success: async (result) => {
+      if (!result.confirm) { deletingId.value = 0; return; }
+      try {
+        if (getCurrentTenantCode() !== tenantCode) throw new Error("当前城市已切换，请重新选择心得");
+        await request(`/public/me/community/posts/${post.id}`, { method: "DELETE" });
+        if (getCurrentTenantCode() !== tenantCode) return;
+        posts.value = posts.value.filter((item) => item.id !== post.id);
+        uni.showToast({ title: "已删除", icon: "success" });
+      } catch (error: any) {
+        actionError.value = reviewSafeText(error?.message || "心得删除失败");
+      } finally {
+        deletingId.value = 0;
+      }
+    }
+  });
 }
 
 function goBack() {
@@ -250,6 +298,13 @@ onShow(loadPosts);
   line-height: 1.55;
 }
 .post-action { margin-top: 16rpx; color: #c43d3d; font-size: 25rpx; font-weight: 900; }
+.post-actions { display:flex; align-items:center; justify-content:space-between; gap:20rpx; margin-top:16rpx; }
+.post-actions .post-action { margin-top:0; }
+.delete-action { color:#98a2b3; font-size:24rpx; font-weight:800; }
+.delete-action.disabled { opacity:.55; pointer-events:none; }
+.error-card { border-color:#fecaca; background:#fff7f7; }
+.compact-error { padding:20rpx 24rpx; text-align:left; color:#b42318; overflow-wrap:anywhere; }
+.retry-action { margin-left:auto; margin-right:auto; max-width:320rpx; }
 .empty-card { padding: 48rpx 28rpx; text-align: center; }
 .empty-icon {
   width: 84rpx;
@@ -286,4 +341,5 @@ onShow(loadPosts);
   z-index: 20;
   box-shadow: 0 14rpx 36rpx rgba(196, 61, 61, 0.24);
 }
+@media (min-width: 900px) { .user-subpage { max-width:760px; margin:0 auto; } }
 </style>

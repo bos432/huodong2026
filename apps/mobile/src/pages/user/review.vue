@@ -1,42 +1,76 @@
 <script setup lang="ts">
-import { onMounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { reviewSafeText } from "../../review-safe-text";
 
 const registrationId = ref(0);
 const userId = ref(0);
 const rating = ref(5);
 const content = ref("");
 const submitting = ref(false);
+const submitted = ref(false);
+const loading = ref(true);
+const loadError = ref("");
+const detail = ref<any>(null);
+const loadGuard = createTenantLoadGuard();
+const activityTitle = computed(() => detail.value?.registration?.activity?.title || "活动评价");
+const eligibilityError = computed(() => detail.value?.registration?.status === "checked_in" ? "" : "完成现场签到后才能评价这场活动。" );
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("review_page", "/pages/user/review");
 function handleRatingChange(event: any) {
   rating.value = Number(event.detail?.value || 1);
 }
 async function submit() {
+  if (submitting.value || submitted.value || loading.value || loadError.value || eligibilityError.value) return;
   if (!content.value.trim()) { uni.showToast({ title: "请填写评价内容", icon: "none" }); return; }
   submitting.value = true;
   try {
-    await request(`/public/registrations/${registrationId.value}/review`, { method: "POST", data: { rating: rating.value, content: content.value } });
+    await request(`/public/registrations/${registrationId.value}/review`, { method: "POST", data: { rating: rating.value, content: content.value.trim() } });
+    submitted.value = true;
     uni.showToast({ title: "评价已提交", icon: "success" });
     setTimeout(() => uni.navigateBack(), 800);
   } catch (error: any) {
     uni.showToast({ title: error.message, icon: "none" });
-  } finally { submitting.value = false; }
+  } finally { if (!submitted.value) submitting.value = false; }
 }
-onMounted(async () => {
-  userId.value = await ensureUser();
-  const pages = getCurrentPages();
-  registrationId.value = Number((pages[pages.length - 1] as any).options.id);
-  loadDecoration();
+
+async function load() {
+  const token = loadGuard.begin();
+  loading.value = true;
+  loadError.value = "";
+  detail.value = null;
+  try {
+    if (!registrationId.value) throw new Error("缺少报名记录ID");
+    userId.value = await ensureUser();
+    const result = await request<any>(`/public/me/registrations/${registrationId.value}`);
+    if (loadGuard.isCurrent(token)) detail.value = result;
+  } catch (error: any) {
+    if (loadGuard.isCurrent(token)) loadError.value = reviewSafeText(error?.message || "评价页面加载失败，请稍后重试。");
+  } finally {
+    if (loadGuard.isCurrent(token)) loading.value = false;
+  }
+}
+
+onLoad((options: any) => { registrationId.value = Number(options?.id || 0); });
+onShow(() => {
+  void load();
+  void loadDecoration();
 });
 </script>
 
 <template>
   <view class="container review-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantContextBadge :tenant="tenant" label="当前城市" hint="评价归属" />
+
+    <view v-if="loading" class="state-card">评价信息加载中...</view>
+    <view v-else-if="loadError" class="state-card error-state"><text>{{ loadError }}</text><view class="state-retry" @click="load">重新加载</view></view>
+
+    <template v-else-if="detail">
 
     <view class="review-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#4a6b8a') }">
       <view class="hero-mark">评</view>
@@ -50,13 +84,17 @@ onMounted(async () => {
 
     <view class="card review-card">
       <view class="card-kicker">活动反馈</view>
+      <view class="activity-name">{{ activityTitle }}</view>
+      <view v-if="eligibilityError" class="eligibility-warning">{{ eligibilityError }}</view>
       <view class="label">评分</view>
       <slider :value="rating" :min="1" :max="5" :step="1" show-value @change="handleRatingChange" />
       <view class="stars">{{ '★'.repeat(rating) }}{{ '☆'.repeat(5 - rating) }}</view>
       <view class="label">评价内容</view>
       <textarea v-model="content" class="textarea" placeholder="说说这场活动给你的感受" />
     </view>
-    <view class="button submit-button" @click="!submitting && submit()">{{ submitting ? '提交中...' : '提交评价' }}</view>
+    <view class="button submit-button" :class="{ disabled: submitting || submitted || !!eligibilityError }" @click="submit">{{ submitted ? '已提交' : submitting ? '提交中...' : '提交评价' }}</view>
+
+    </template>
 
     <AppBottomNav v-if="showBottomNav" :section="bottomNavSection" current-path="/pages/user/review" />
   </view>
@@ -64,6 +102,9 @@ onMounted(async () => {
 
 <style scoped>
 .review-page.has-custom-nav { padding-bottom: 160rpx; }
+.state-card { display:grid; gap:14rpx; margin-bottom:20rpx; padding:24rpx; border-radius:8px; background:#fff; color:#667085; font-size:25rpx; line-height:1.6; }
+.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.state-retry { width:max-content; color:#c43d3d; font-weight:900; }
 .review-hero {
   position: relative;
   overflow: hidden;
@@ -112,8 +153,11 @@ onMounted(async () => {
 .subtle { margin-top: 12rpx; font-size: 25rpx; line-height: 1.6; }
 .review-card { border-radius: 24rpx; box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
 .card-kicker { color: #4a6b8a; font-size: 24rpx; font-weight: 800; margin-bottom: 8rpx; }
+.activity-name { margin-top:12rpx; color:#333; font-size:30rpx; font-weight:900; line-height:1.5; }
+.eligibility-warning { margin-top:14rpx; padding:16rpx; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:24rpx; line-height:1.55; }
 .label { margin: 20rpx 0 12rpx; font-size: 28rpx; font-weight: 650; color: #333333; }
 .stars { color: #c43d3d; font-size: 38rpx; margin: 8rpx 0 22rpx; letter-spacing: 0; }
 .textarea { min-height: 220rpx; }
 .submit-button { margin-top: 20rpx; }
+.submit-button.disabled { opacity:.6; pointer-events:none; }
 </style>

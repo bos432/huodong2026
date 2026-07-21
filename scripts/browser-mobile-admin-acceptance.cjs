@@ -146,8 +146,16 @@ async function login(page) {
   await page.waitForFunction(() => window.location.hash === "#/pages/admin/home", null, { timeout: 15000 });
   await waitForText(page, ["手机管理", "发布活动", "活动管理"], "mobile admin logged in");
   await waitForText(page, "最近活动", "mobile admin home loaded");
+  const statCards = page.locator(".stats > *");
+  const statCount = await statCards.count();
+  if (statCount < 4) throw new Error(`mobile admin dashboard expected 4 stat cards, got ${statCount}`);
+  const activityCount = Number((await statCards.nth(0).innerText()).match(/\d+/)?.[0] || 0);
+  const registrationCount = Number((await statCards.nth(2).innerText()).match(/\d+/)?.[0] || 0);
+  const recentActivityCount = await page.locator(".activity").count();
+  if (recentActivityCount > 0 && activityCount <= 0) throw new Error("mobile admin dashboard activity count is zero while recent activities are visible");
+  if (registrationCount <= 0) throw new Error("mobile admin dashboard registration count did not load");
   await screenshot(page, "01-login-home.png");
-  record("手机管理端登录和工作台", "passed", { account: USERNAME, screenshot: "01-login-home.png" });
+  record("手机管理端登录和工作台", "passed", { account: USERNAME, activityCount, registrationCount, screenshot: "01-login-home.png" });
 }
 
 async function visitRoute(page, route, expected, shotName, checkName) {

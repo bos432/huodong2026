@@ -1,6 +1,8 @@
 import type { App as VueApp } from "vue";
 
 type ErrorContext = Record<string, unknown>;
+const STALE_CHUNK_RELOAD_KEY = "h5_stale_chunk_reload_at";
+const STALE_CHUNK_RELOAD_WINDOW_MS = 60_000;
 
 function safeJson(value: unknown) {
   try {
@@ -62,8 +64,32 @@ export function reportH5Error(scope: string, error: unknown, context?: ErrorCont
   console.error(`[H5] ${scope}: ${message}${contextText}${compactDetail(error, context)}`);
 }
 
+export function isStaleChunkError(error: unknown) {
+  const message = describeError(error, "").toLowerCase();
+  return [
+    "chunkloaderror",
+    "loading chunk",
+    "failed to fetch dynamically imported module",
+    "error loading dynamically imported module",
+    "importing a module script failed"
+  ].some((pattern) => message.includes(pattern));
+}
+
+function recoverStaleChunk(error: unknown) {
+  if (!isStaleChunkError(error) || typeof window === "undefined") return false;
+  const lastReloadAt = Number(window.sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY) || 0);
+  if (Date.now() - lastReloadAt < STALE_CHUNK_RELOAD_WINDOW_MS) return false;
+  const reloadAt = Date.now();
+  window.sessionStorage.setItem(STALE_CHUNK_RELOAD_KEY, String(reloadAt));
+  const url = new URL(window.location.href);
+  url.searchParams.set("__h5_reload", String(reloadAt));
+  window.location.replace(url.toString());
+  return true;
+}
+
 export function installH5ErrorReporting(app: VueApp) {
   app.config.errorHandler = (error, _instance, info) => {
+    if (recoverStaleChunk(error)) return;
     reportH5Error("vue error", error, { info });
   };
 
@@ -73,6 +99,10 @@ export function installH5ErrorReporting(app: VueApp) {
   target.__H5_ERROR_REPORTING_INSTALLED__ = true;
 
   target.addEventListener("error", (event) => {
+    if (recoverStaleChunk(event.error || event.message)) {
+      event.preventDefault();
+      return;
+    }
     reportH5Error("window error", event.error || event.message, {
       filename: event.filename,
       line: event.lineno,
@@ -81,6 +111,10 @@ export function installH5ErrorReporting(app: VueApp) {
   });
 
   target.addEventListener("unhandledrejection", (event) => {
+    if (recoverStaleChunk(event.reason)) {
+      event.preventDefault();
+      return;
+    }
     reportH5Error("unhandled promise rejection", event.reason);
   });
 }

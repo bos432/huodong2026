@@ -24,6 +24,18 @@ export class AdminMallMerchantAccess {
   @Column({ type: "boolean", default: true })
   enabled!: boolean;
 
+  @Column({ type: "json", nullable: true })
+  permissions!: string[] | null;
+
+  @Column({ type: "datetime", nullable: true })
+  validFrom!: Date | null;
+
+  @Column({ type: "datetime", nullable: true })
+  validUntil!: Date | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  disabledReason!: string | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 

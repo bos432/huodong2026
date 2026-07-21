@@ -1,0 +1,3 @@
+import{Column,CreateDateColumn,Entity,Index,PrimaryGeneratedColumn}from"typeorm";
+@Entity("community_notifications")@Index("IDX_community_notification_user_read",["userId","readAt"])
+export class CommunityNotification{@PrimaryGeneratedColumn()id!:number;@Column()userId!:number;@Column({type:"varchar",length:24})type!:"comment"|"reply"|"like"|"follow"|"mention";@Column({type:"int",nullable:true})postId!:number|null;@Column({type:"int",nullable:true})commentId!:number|null;@Column({type:"int",nullable:true})actorUserId!:number|null;@Column({type:"varchar",length:160})title!:string;@Column({type:"varchar",length:500})content!:string;@Column({type:"datetime",nullable:true})readAt!:Date|null;@CreateDateColumn()createdAt!:Date;}

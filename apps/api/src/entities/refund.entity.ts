@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn } from "typeorm";
+import { yuanToFen } from "../shared/money";
 import { Order } from "./order.entity";
 import { Tenant } from "./tenant.entity";
 
@@ -18,6 +19,8 @@ export class Refund {
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
   amount!: string;
+  @Column({ type: "bigint", default: 0 }) amountFen!: number;
+  @Column({ type: "json", nullable: true }) businessSnapshot!: Record<string, unknown> | null;
 
   @Column({ type: "varchar", length: 24, default: "pending" })
   status!: string;
@@ -63,4 +66,10 @@ export class Refund {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @BeforeInsert()
+  freezeBusinessMoney() {
+    this.amountFen = yuanToFen(this.amount);
+    this.businessSnapshot ||= { refundNo: this.refundNo, amount: this.amount, reason: this.reason, orderNo: this.order?.orderNo || null, orderAmount: this.order?.amount || null, paymentMethod: this.order?.paymentMethod || null, transactionNo: this.order?.transactionNo || null };
+  }
 }

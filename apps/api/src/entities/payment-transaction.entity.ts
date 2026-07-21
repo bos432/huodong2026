@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, Unique } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, Unique } from "typeorm";
+import { yuanToFen } from "../shared/money";
 import { Order } from "./order.entity";
 import { Tenant } from "./tenant.entity";
 
@@ -8,8 +9,8 @@ export class PaymentTransaction {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @ManyToOne(() => Order, { eager: true, onDelete: "CASCADE" })
-  order!: Order;
+  @ManyToOne(() => Order, { eager: true, nullable: true, onDelete: "CASCADE" })
+  order!: Order | null;
 
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
   tenant!: Tenant | null;
@@ -25,6 +26,18 @@ export class PaymentTransaction {
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
   amount!: string;
+
+  @Column({ type: "bigint", default: 0 })
+  amountFen!: number;
+
+  @Column({ type: "varchar", length: 40, default: "activity" })
+  businessType!: string;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  businessOrderNo!: string | null;
+
+  @Column({ type: "json", nullable: true })
+  businessSnapshot!: Record<string, unknown> | null;
 
   @Column({ type: "varchar", length: 24, default: "success" })
   status!: string;
@@ -49,4 +62,11 @@ export class PaymentTransaction {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @BeforeInsert()
+  freezeBusinessMoney() {
+    this.amountFen = yuanToFen(this.amount);
+    this.businessOrderNo ||= this.order?.orderNo || null;
+    this.businessSnapshot ||= { transactionNo: this.transactionNo, provider: this.provider, paymentMethod: this.paymentMethod, amount: this.amount, orderNo: this.businessOrderNo };
+  }
 }

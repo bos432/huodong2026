@@ -8,7 +8,7 @@ export class PublicV1Controller {
 
   @Get("announcements")
   announcements(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
-    return this.service.publicAnnouncements(this.tenantContext(req, tenantCode));
+    return this.service.publicAnnouncements(this.tenantContext(req, tenantCode), this.publicAuth.optionalUserIdFromAuthorization(req.headers?.authorization));
   }
 
   private tenantContext(req: any, tenantCode?: string) {
@@ -27,7 +27,7 @@ export class PublicV1Controller {
   }
 
   @Get("activities/:id/enhanced")
-  enhancedActivity(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Query("userId") userId?: string, @Query("source") source?: string, @Query("inviteCode") inviteCode?: string, @Query("channelCode") channelCode?: string, @Query("tenantCode") tenantCode?: string) {
+  enhancedActivity(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Query("source") source?: string, @Query("inviteCode") inviteCode?: string, @Query("channelCode") channelCode?: string, @Query("tenantCode") tenantCode?: string) {
     return this.service.enhancedActivity(id, this.publicAuth.optionalUserIdFromAuthorization(req.headers?.authorization), { source, inviteCode, channelCode, clientIp: this.clientIp(req) }, this.tenantContext(req, tenantCode));
   }
 
@@ -39,7 +39,12 @@ export class PublicV1Controller {
 
   @Post("activities/:id/track-share")
   trackShare(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Body() body: TrackShareInput & { tenantCode?: string }, @Query("tenantCode") tenantCode?: string) {
-    return this.service.trackShare(id, body, this.tenantContext(req, tenantCode || body.tenantCode));
+    return this.service.trackShare(id, {
+      code: body.code,
+      source: body.source,
+      scene: body.scene,
+      userId: this.publicAuth.optionalUserIdFromAuthorization(req.headers?.authorization)
+    }, this.tenantContext(req, tenantCode || body.tenantCode));
   }
 
   @Get("activities/:id/reviews")
@@ -51,5 +56,11 @@ export class PublicV1Controller {
   async createReview(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Body() body: ReviewInput & { tenantCode?: string }, @Query("tenantCode") tenantCode?: string) {
     const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.createReview(id, body, user, this.tenantContext(req, tenantCode || body.tenantCode));
+  }
+
+  @Post("reviews/:id/report")
+  async reportReview(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Body() body: { reason?: string; tenantCode?: string }, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.reportReview(id, body.reason || "", user, this.tenantContext(req, tenantCode || body.tenantCode));
   }
 }

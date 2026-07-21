@@ -26,14 +26,38 @@ const ACTIVITY_CAPACITY_BUFFER = 120;
 const permissions = [
   "dashboard.view",
   "analytics.view",
+  "analytics.export",
+  "analytics.manage",
+  "business_job.view",
+  "business_job.manage",
+  "support.view",
+  "support.manage",
+  "support.sensitive",
+  "ambassador.view",
+  "ambassador.manage",
+  "ambassador.sensitive",
+  "ambassador.export",
+  "partner.view",
+  "partner.manage",
+  "partner.sensitive",
+  "partner.export",
+  "tenant.view",
   "tenant.manage",
+  "tenant.permissions.manage",
+  "tenant.subscription.manage",
+  "tenant.export",
+  "tenant_region.view",
   "tenant_region.manage",
+  "tenant_region.approve",
   "admin.manage",
   "activity.manage",
   "activity.view",
   "category.manage",
   "ticket.manage",
   "coupon.manage",
+  "coupon.export",
+  "redemption_code.manage",
+  "redemption_code.export",
   "registration.manage",
   "registration.view",
   "registration.export",
@@ -61,21 +85,32 @@ const permissions = [
   "mall.statistics.view",
   "payment_account.view",
   "payment_account.manage",
+  "payment_account.sensitive",
   "agent_settlement.view",
   "agent_settlement.manage",
   "agent_settlement.pay",
   "agent_settlement.transfer",
+  "agent_settlement.sensitive",
   "agent_settlement.export",
   "member.manage",
   "member.view",
   "member.password",
+  "member.points.manage",
+  "member.lifecycle.manage",
+  "member.sensitive",
+  "member.export",
   "member_level.manage",
   "tag.manage",
   "notification.manage",
   "review.manage",
   "homepage.manage",
+  "marketing_popup.view",
   "marketing_popup.manage",
+  "ad_center.view",
   "ad_center.manage",
+  "ad_center.finance",
+  "ad_center.sensitive",
+  "ad_center.export",
   "announcement.manage",
   "operation_settings.manage",
   "tenant_profile.manage",
@@ -85,18 +120,83 @@ const permissions = [
   "forum.moderate",
   "checkin.manage",
   "logs.view",
+  "system.view",
   "system.manage",
+  "miniprogram_release.view",
   "miniprogram_release.manage"
 ];
 
 const accounts = [
   { username: "showcase_admin", role: "operator", permissions },
   { username: "showcase_ops", role: "operator", permissions: permissions.filter((item) => !item.startsWith("finance") && !item.startsWith("agent_settlement") && !item.startsWith("payment_account") && item !== "order.refund" && item !== "order.export") },
-  { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "mall.merchant.manage", "mall.merchant.view", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.export", "member.view", "upload.settlement_proof"] },
+  { username: "showcase_finance", role: "finance", permissions: ["dashboard.view", "analytics.view", "analytics.export", "business_job.view", "activity.view", "registration.view", "order.view", "order.manage", "order.refund", "order.export", "finance.view", "finance.manage", "finance.export", "finance.wallet_adjust", "mall.merchant.manage", "mall.merchant.view", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.transfer", "agent_settlement.sensitive", "agent_settlement.export", "member.view", "ad_center.view", "ad_center.finance", "ad_center.export", "upload.settlement_proof"] },
   { username: "showcase_checkin", role: "checkin_staff", permissions: ["dashboard.view", "activity.view", "registration.view", "checkin.manage"] },
   { username: "showcase_store_owner", role: "operator", permissions: ["dashboard.view", "mall.merchant.view", "mall.product.manage", "mall.review.manage", "mall.logistics.manage", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "upload.image", "tenant_profile.manage"] },
   { username: "showcase_store_finance", role: "finance", permissions: ["dashboard.view", "mall.merchant.view", "mall.order.view", "mall.order.manage", "mall.refund.manage", "mall.finance.view", "mall.payment.manage", "mall.settlement.manage", "mall.statistics.view", "upload.settlement_proof"] },
-  { username: "showcase_agent_owner", role: "finance", permissions: ["dashboard.view", "activity.view", "registration.view", "order.view", "finance.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.export", "mall.merchant.view", "mall.order.view", "mall.finance.view", "mall.statistics.view", "upload.settlement_proof"] }
+  { username: "showcase_agent_owner", role: "finance", permissions: ["dashboard.view", "activity.view", "registration.view", "order.view", "finance.view", "payment_account.view", "agent_settlement.view", "agent_settlement.manage", "agent_settlement.pay", "agent_settlement.sensitive", "agent_settlement.export", "mall.merchant.view", "mall.order.view", "mall.finance.view", "mall.statistics.view", "upload.settlement_proof"] },
+  { username: "showcase_payment_account_read", role: "finance", permissions: ["payment_account.view"] },
+  { username: "showcase_payment_account_manager", role: "finance", permissions: ["payment_account.manage"] },
+  { username: "showcase_payacct_sensitive", role: "finance", permissions: ["payment_account.sensitive"] },
+  { username: "showcase_settle_read", role: "finance", permissions: ["agent_settlement.view"] },
+  { username: "showcase_settle_manager", role: "finance", permissions: ["agent_settlement.manage"] },
+  { username: "showcase_settle_pay", role: "finance", permissions: ["agent_settlement.pay", "upload.settlement_proof"] },
+  { username: "showcase_settle_transfer", role: "finance", permissions: ["agent_settlement.transfer"] },
+  { username: "showcase_settle_sensitive", role: "finance", permissions: ["agent_settlement.sensitive"] },
+  { username: "showcase_settle_export", role: "finance", permissions: ["agent_settlement.export"] },
+  { username: "showcase_member_read", role: "operator", permissions: ["member.view"] },
+  { username: "showcase_member_manager", role: "operator", permissions: ["member.manage"] },
+  { username: "showcase_member_password", role: "operator", permissions: ["member.password"] },
+  { username: "showcase_member_points", role: "operator", permissions: ["member.points.manage"] },
+  { username: "showcase_member_lifecycle", role: "operator", permissions: ["member.lifecycle.manage"] },
+  { username: "showcase_member_sensitive", role: "operator", permissions: ["member.sensitive"] },
+  { username: "showcase_member_export", role: "operator", permissions: ["member.export"] },
+  { username: "showcase_mall_readonly", role: "finance", permissions: ["dashboard.view", "mall.merchant.view", "mall.order.view", "mall.finance.view", "mall.statistics.view"], merchantPermissions: ["order.view", "finance.view", "statistics.view"] },
+  { username: "showcase_mall_fulfillment", role: "operator", permissions: ["dashboard.view", "mall.merchant.view", "mall.order.view", "mall.order.manage"], merchantPermissions: ["order.view", "order.manage", "shipment.manage"] },
+  { username: "showcase_mall_refund_only", role: "finance", permissions: ["mall.refund.manage"], merchantPermissions: ["refund.manage", "order.view", "finance.view"] },
+  { username: "showcase_operation_settings_read", role: "operator", permissions: ["operation_settings.view"] },
+  { username: "showcase_operation_settings_only", role: "operator", permissions: ["operation_settings.manage"] },
+  { username: "showcase_tenant_profile_only", role: "operator", permissions: ["tenant_profile.manage"] },
+  { username: "showcase_business_job_readonly", role: "operator", permissions: ["business_job.view", "notification.view"] },
+  { username: "showcase_business_job_manager", role: "operator", permissions: ["business_job.view", "business_job.manage"] },
+  { username: "showcase_support", role: "operator", permissions: ["support.view", "support.manage", "support.sensitive"] },
+  { username: "showcase_support_readonly", role: "operator", permissions: ["support.view"] },
+  { username: "showcase_analytics_exporter", role: "finance", permissions: ["analytics.view", "analytics.export", "activity.view"] },
+  { username: "showcase_analytics_readonly", role: "finance", permissions: ["analytics.view"] },
+  { username: "showcase_ambassador_readonly", role: "operator", platform: true, permissions: ["ambassador.view"] },
+  { username: "showcase_ambassador_sensitive", role: "operator", platform: true, permissions: ["ambassador.view", "ambassador.sensitive"] },
+  { username: "showcase_ambassador_manager", role: "operator", platform: true, permissions: ["ambassador.view", "ambassador.manage", "ambassador.sensitive", "ambassador.export"] },
+  { username: "showcase_partner_readonly", role: "operator", platform: true, permissions: ["partner.view"] },
+  { username: "showcase_partner_sensitive", role: "operator", platform: true, permissions: ["partner.view", "partner.sensitive"] },
+  { username: "showcase_partner_manager", role: "operator", platform: true, permissions: ["partner.view", "partner.manage", "partner.sensitive", "partner.export"] },
+  { username: "showcase_system_settings_read", role: "operator", platform: true, permissions: ["system.view"] },
+  { username: "showcase_system_settings_manager", role: "operator", platform: true, permissions: ["system.manage"] },
+  { username: "showcase_miniprogram_read", role: "operator", platform: true, permissions: ["miniprogram_release.view"] },
+  { username: "showcase_miniprogram_manager", role: "operator", platform: true, permissions: ["miniprogram_release.manage"] },
+  { username: "showcase_region_log_read", role: "operator", platform: true, permissions: ["tenant_region_hit_log.view"] },
+  { username: "showcase_region_log_sensitive", role: "operator", platform: true, permissions: ["tenant_region_hit_log.sensitive"] },
+  { username: "showcase_region_log_export", role: "operator", platform: true, permissions: ["tenant_region_hit_log.export"] },
+  { username: "showcase_region_read", role: "operator", platform: true, permissions: ["tenant_region.view"] },
+  { username: "showcase_region_manager", role: "operator", platform: true, permissions: ["tenant_region.manage"] },
+  { username: "showcase_region_approve", role: "operator", platform: true, permissions: ["tenant_region.approve"] },
+  { username: "showcase_tenant_read", role: "operator", platform: true, permissions: ["dashboard.view", "activity.view", "tenant.view"] },
+  { username: "showcase_tenant_manager", role: "operator", platform: true, permissions: ["tenant.manage"] },
+  { username: "showcase_tenant_rights", role: "operator", platform: true, permissions: ["tenant.permissions.manage"] },
+  { username: "showcase_tenant_plan", role: "operator", platform: true, permissions: ["tenant.subscription.manage"] },
+  { username: "showcase_tenant_export", role: "operator", platform: true, permissions: ["tenant.export"] },
+  { username: "showcase_admin_read", role: "operator", platform: true, permissions: ["admin.view"] },
+  { username: "showcase_admin_manager", role: "operator", platform: true, permissions: ["admin.manage"] },
+  { username: "showcase_admin_security", role: "operator", platform: true, permissions: ["admin.security.manage"] },
+  { username: "showcase_staff_read", role: "operator", permissions: ["admin.view", "logs.view", "category.view", "ticket.view", "coupon.view", "redemption_code.view", "waitlist.view", "review.view", "tag.view", "notification.view", "announcement.view", "marketing_popup.view", "ad_center.view"] },
+  { username: "showcase_staff_manager", role: "operator", permissions: ["admin.manage", "logs.sensitive", "category.manage", "ticket.manage", "coupon.manage", "redemption_code.manage", "waitlist.manage", "review.manage", "tag.manage", "notification.manage", "announcement.manage", "marketing_popup.manage", "ad_center.manage", "ad_center.sensitive", "ad_center.export", "upload.image"] },
+  { username: "showcase_staff_security", role: "operator", permissions: ["admin.security.manage", "logs.export", "activity.manage", "coupon.export", "redemption_code.export", "waitlist.sensitive", "review.sensitive", "tag.sensitive", "notification.sensitive"] },
+  { username: "showcase_log_read", role: "operator", platform: true, permissions: ["logs.view"] },
+  { username: "showcase_log_sensitive", role: "operator", platform: true, permissions: ["logs.sensitive"] },
+  { username: "showcase_log_export", role: "operator", platform: true, permissions: ["logs.export"] },
+  { username: "showcase_security_log_read", role: "operator", platform: true, permissions: ["security_log.view"] },
+  { username: "showcase_security_log_sensitive", role: "operator", platform: true, permissions: ["security_log.sensitive"] },
+  { username: "showcase_security_log_export", role: "operator", platform: true, permissions: ["security_log.export"] },
+  { username: "showcase_category_read", role: "operator", platform: true, permissions: ["category.view"] },
+  { username: "showcase_category_manager", role: "operator", platform: true, permissions: ["category.manage"] }
 ];
 
 const activities = [
@@ -139,7 +239,7 @@ async function main() {
   await ensureOperationSettings(showcaseAdmin.token);
   await ensureHomepage(showcaseAdmin.token);
   await ensureMarketingPopup(showcaseAdmin.token, tenant.id);
-  await ensureAdCampaign(showcaseAdmin.token, tenant.id);
+  await ensureAdCampaign(platform.token, tenant.id);
   await ensureAnnouncements(showcaseAdmin.token, tenant.id);
   await ensureActivities(showcaseAdmin.token, tenant.id);
   await ensureCourses(showcaseAdmin.token, tenant.id);
@@ -149,7 +249,7 @@ async function main() {
 
   console.log("\n线上演示商家数据已准备完成。");
   console.log(`H5 演示入口：https://rd.chaimen666.com/?tenantCode=${TENANT_CODE}#/`);
-  console.log("后台账号：showcase_admin / showcase_ops / showcase_finance / showcase_checkin / showcase_store_owner / showcase_store_finance / showcase_agent_owner");
+  console.log(`后台账号：${accounts.map((item) => item.username).join(" / ")}`);
   console.log("演示用户手机号：13990000001 - 13990000005，密码使用 SHOWCASE_PASSWORD。");
 }
 
@@ -166,10 +266,15 @@ async function ensureTenant(token) {
       demoScenario: SCENARIO,
       h5Domain: "rd.chaimen666.com",
       brandLogoUrl: cover(0),
+      packagePlan: "city_partner",
+      packageExpiresAt: "2027-12-31",
+      packageSuspended: false,
+      packageReadOnly: false,
       activityPublishReviewRequired: false,
       registrationReviewEnabled: false,
       paymentAccountEditable: true,
-      mallEnabled: true
+      mallEnabled: true,
+      entitlements: { quotas: { adminUsers: 100 } }
     },
     remark: `demoScenario:${SCENARIO}`
   };
@@ -234,10 +339,11 @@ async function ensureTenantRegion(token, tenantId) {
 
 async function ensureAccounts(token, tenantId) {
   for (const account of accounts) {
-    const payload = { username: account.username, password: showcasePassword, role: account.role, tenantId, permissions: account.permissions };
+    const accountTenantId = account.platform ? null : tenantId;
+    const payload = { username: account.username, password: showcasePassword, role: account.role, tenantId: accountTenantId, permissions: account.permissions };
     const existing = await findAdminByUsername(token, account.username);
     if (existing) {
-      await api(`/admin/admins/${existing.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify({ role: account.role, tenantId, enabled: true, permissions: account.permissions }) });
+      await api(`/admin/admins/${existing.id}`, { method: "PATCH", headers: auth(token), body: JSON.stringify({ role: account.role, tenantId: accountTenantId, enabled: true, permissions: account.permissions }) });
       await api(`/admin/admins/${existing.id}/password`, { method: "POST", headers: auth(token), body: JSON.stringify({ password: showcasePassword }) });
     } else {
       await api("/admin/admins", { method: "POST", headers: auth(token), body: JSON.stringify(payload) });
@@ -272,13 +378,14 @@ async function ensureMallDefaultStore(token, tenantId) {
   let merchant = existing
     ? existing
     : await api("/admin/mall/merchants", { method: "POST", headers: auth(token), body: JSON.stringify({ ...payload, status: "disabled", mallEnabled: false }) });
-  for (const username of ["showcase_admin", "showcase_ops", "showcase_finance", "showcase_store_owner", "showcase_store_finance", "showcase_agent_owner"]) {
+  for (const account of accounts.filter((item) => item.permissions.includes("mall.merchant.view"))) {
+    const { username } = account;
     const admin = await findAdminByUsername(token, username);
     if (!admin) continue;
     await api("/admin/mall/merchant-access", {
       method: "POST",
       headers: auth(token),
-      body: JSON.stringify({ adminId: admin.id, merchantId: merchant.id, accessRole: username.includes("finance") ? "finance" : username.includes("agent") ? "viewer" : "manager", enabled: true })
+      body: JSON.stringify({ adminId: admin.id, merchantId: merchant.id, accessRole: username.includes("finance") || username.includes("readonly") ? "finance" : username.includes("agent") ? "viewer" : username.includes("fulfillment") ? "staff" : "manager", permissions: account.merchantPermissions, enabled: true })
     });
   }
   const mutablePayload = existing
@@ -852,7 +959,13 @@ async function ensureMembersAndWallets(tenantAdminToken, platformToken, tenantId
       await api(`/admin/users/${userId}/wallet/adjust`, {
         method: "POST",
         headers: auth(platformToken),
-        body: JSON.stringify({ tenantId, amount: 500, type: "recharge", remark: `demoScenario:${SCENARIO} 余额支付验收充值` })
+        body: JSON.stringify({
+          tenantId,
+          amount: 500,
+          type: "recharge",
+          idempotencyKey: `showcase-wallet:${SCENARIO}:${tenantId}:${user.key}`,
+          remark: `demoScenario:${SCENARIO} 余额支付验收充值`
+        })
       });
     }
   }

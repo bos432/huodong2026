@@ -8,6 +8,7 @@ import { canAccess, currentTenantName, currentTenantSettings, isPlatformAdmin } 
 const router = useRouter();
 const data = ref<any>();
 const loading = ref(false);
+const errorMessage = ref("");
 const mallMerchants = ref<MallMerchant[]>([]);
 const mallAnalytics = ref<any>({});
 const selectedMallMerchantId = ref<number>();
@@ -212,9 +213,12 @@ const mallQuickActions = computed(() =>
 
 async function load() {
   loading.value = true;
+  errorMessage.value = "";
   try {
     if (mallWorkbenchMode.value) await loadMallWorkbench();
     else data.value = await api.get("/admin/dashboard");
+  } catch (error: any) {
+    errorMessage.value = error.message || "数据看板加载失败";
   } finally {
     loading.value = false;
   }
@@ -347,6 +351,9 @@ onMounted(load);
         <el-button :loading="loading" @click="load">刷新</el-button>
       </div>
     </div>
+    <el-alert v-if="errorMessage" type="error" show-icon :closable="false" :title="errorMessage">
+      <template #default><el-button size="small" @click="load">重试</el-button></template>
+    </el-alert>
 
     <template v-if="mallWorkbenchMode">
       <el-alert v-if="!loading && !mallMerchants.length" type="warning" show-icon :closable="false" title="当前账号还没有可运营的商城店铺" description="请联系平台管理员在商城店铺中为此账号授权店铺后再进入工作台。" />
@@ -377,7 +384,7 @@ onMounted(load);
       </div>
 
       <div v-if="selectedMallMerchant" class="todo-grid">
-        <div v-for="item in mallTodoCards" :key="item.label" class="todo" :class="[item.tone, { clickable: item.path }]" @click="openMallTodo(item)">
+          <div v-for="item in mallTodoCards" :key="item.label" class="todo" :class="[item.tone, { clickable: item.path }]" :role="item.path ? 'button' : undefined" :tabindex="item.path ? 0 : undefined" @click="openMallTodo(item)" @keydown.enter.prevent="openMallTodo(item)" @keydown.space.prevent="openMallTodo(item)">
           <span>{{ item.label }}</span>
           <strong>{{ item.value }}</strong>
         </div>
@@ -467,14 +474,14 @@ onMounted(load);
     </div>
 
     <div v-if="!mallWorkbenchMode && data" class="todo-grid">
-      <div v-for="item in todoCards" :key="item.label" class="todo" :class="[item.tone, { clickable: item.path }]" @click="item.path && openTodo(item.path)">
+        <div v-for="item in todoCards" :key="item.label" class="todo" :class="[item.tone, { clickable: item.path }]" :role="item.path ? 'button' : undefined" :tabindex="item.path ? 0 : undefined" @click="item.path && openTodo(item.path)" @keydown.enter.prevent="item.path && openTodo(item.path)" @keydown.space.prevent="item.path && openTodo(item.path)">
         <span>{{ item.label }}</span>
         <strong>{{ item.value }}</strong>
       </div>
     </div>
 
     <div v-if="!mallWorkbenchMode && alertCards.length" class="alert-grid">
-      <div v-for="item in alertCards" :key="item.title" class="alert-card" :class="item.type" @click="item.path && openTodo(item.path)">
+        <div v-for="item in alertCards" :key="item.title" class="alert-card" :class="item.type" :role="item.path ? 'button' : undefined" :tabindex="item.path ? 0 : undefined" @click="item.path && openTodo(item.path)" @keydown.enter.prevent="item.path && openTodo(item.path)" @keydown.space.prevent="item.path && openTodo(item.path)">
         <div>
           <strong>{{ item.title }}</strong>
           <span>{{ item.message }}</span>

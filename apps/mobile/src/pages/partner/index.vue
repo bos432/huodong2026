@@ -1,17 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { getCurrentTenantCode, request } from "../../api";
+import { request } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const setting = ref<any>();
 const loading = ref(true);
-const mounted = ref(false);
-const lastLoadedTenantCode = ref("");
+const loadError = ref("");
+const loadGuard = createTenantLoadGuard();
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("partner_page", "/pages/partner/index");
 
 const contactText = computed(() => {
@@ -20,11 +21,17 @@ const contactText = computed(() => {
 });
 
 async function load() {
+  const token = loadGuard.begin();
   loading.value = true;
+  loadError.value = "";
+  setting.value = undefined;
   try {
-    setting.value = await request("/public/settings/operation");
+    const result = await request("/public/settings/operation");
+    if (loadGuard.isCurrent(token)) setting.value = result;
+  } catch (error: any) {
+    if (loadGuard.isCurrent(token)) loadError.value = error?.message || "合作联系方式加载失败，请稍后重试。";
   } finally {
-    loading.value = false;
+    if (loadGuard.isCurrent(token)) loading.value = false;
   }
 }
 
@@ -43,7 +50,6 @@ function callPhone() {
 }
 
 async function refreshTenantScopedPage() {
-  lastLoadedTenantCode.value = getCurrentTenantCode();
   await Promise.all([load(), loadDecoration()]);
 }
 
@@ -52,16 +58,9 @@ async function handleTenantChanged() {
   await refreshTenantScopedPage();
 }
 
-onMounted(() => {
-  mounted.value = true;
-  refreshTenantScopedPage();
-});
-
 onShow(() => {
-  if (!mounted.value) return;
-  if (getCurrentTenantCode() === lastLoadedTenantCode.value) return;
-  loadPageTheme();
-  refreshTenantScopedPage();
+  void loadPageTheme();
+  void refreshTenantScopedPage();
 });
 </script>
 
@@ -146,6 +145,7 @@ onShow(() => {
     <view class="section contact">
       <view class="section-title">联系合作</view>
       <view v-if="loading" class="contact-line">加载中...</view>
+      <view v-else-if="loadError" class="contact-error"><text>{{ loadError }}</text><view class="contact-retry" @click="load">重新加载</view></view>
       <template v-else>
         <view class="contact-line">{{ contactText }}</view>
         <view class="contact-actions">
@@ -205,4 +205,6 @@ onShow(() => {
 .step text { width: 48rpx; height: 48rpx; border-radius: 999px; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 24rpx; font-weight: 900; }
 .contact { margin-bottom: 30rpx; }
 .contact-line { color: #666666; font-size: 27rpx; line-height: 1.7; overflow-wrap: anywhere; }
+.contact-error { display:grid; gap:12rpx; padding:18rpx; border-radius:8px; background:#fff7f7; color:#b91c1c; font-size:25rpx; line-height:1.55; }
+.contact-retry { width:max-content; font-weight:900; }
 </style>

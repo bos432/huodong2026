@@ -2,6 +2,7 @@ import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, Up
 import { AdAdvertiser } from "./ad-advertiser.entity";
 import { AdContract } from "./ad-contract.entity";
 import { Tenant } from "./tenant.entity";
+import { ContentAudience } from "../shared/content-audience";
 
 @Entity("ad_campaigns")
 export class AdCampaign {
@@ -46,6 +47,9 @@ export class AdCampaign {
 
   @Column({ type: "json", nullable: true })
   platforms!: string[] | null;
+
+  @Column({ type: "json", nullable: true })
+  audience!: ContentAudience | null;
 
   @Column({ type: "varchar", length: 500, nullable: true })
   link!: string | null;

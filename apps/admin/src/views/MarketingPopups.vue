@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Delete, Edit, Plus, Refresh, Switch, Upload, View } from "@element-plus/icons-vue";
 import { api } from "../api";
-import { isPlatformAdmin } from "../permissions";
+import { hasPermission, isPlatformAdmin } from "../permissions";
 
 type PopupButton = { text: string; link: string; style: "primary" | "secondary" };
 type PopupRow = {
@@ -16,6 +16,7 @@ type PopupRow = {
   type: string;
   platforms: string[];
   placements: string[];
+  audience?: { mode?: string; memberLevelIds?: number[] } | null;
   buttons: PopupButton[];
   frequency: string;
   priority: number;
@@ -47,19 +48,28 @@ type EffectiveCheckResult = {
   publicPopup?: PopupRow | null;
   checks: EffectiveCheckItem[];
 };
+type PopupListResponse = { items: PopupRow[]; total: number; page: number; pageSize: number };
+type PopupOptions = {
+  tenants: any[];
+  memberLevels: any[];
+  types: Array<{ label: string; value: string }>;
+  platforms: Array<{ label: string; value: string }>;
+  placements: Array<{ label: string; value: string }>;
+  frequencies: Array<{ label: string; value: string }>;
+};
 
-const typeOptions = [
+const typeOptions = reactive([
   { label: "重要通知", value: "notice" },
   { label: "广告推广", value: "ad" },
   { label: "支付提醒", value: "payment" },
   { label: "五行暖金通知", value: "wuxing_gold" }
-];
-const platformOptions = [
+]);
+const platformOptions = reactive([
   { label: "全部", value: "all" },
   { label: "H5", value: "h5" },
   { label: "微信小程序", value: "mp-weixin" }
-];
-const placementOptions = [
+]);
+const placementOptions = reactive([
   { label: "全部页面", value: "all" },
   { label: "首页", value: "home" },
   { label: "商城首页", value: "mall_home" },
@@ -70,23 +80,30 @@ const placementOptions = [
   { label: "商城商品详情", value: "mall_product_detail" },
   { label: "共修首页", value: "community_home" },
   { label: "我的", value: "user_my" }
-];
-const frequencyOptions = [
+]);
+const frequencyOptions = reactive([
   { label: "每次进入", value: "every_visit" },
   { label: "每天一次", value: "once_per_day" },
   { label: "当前活动一次", value: "once_per_campaign" }
-];
+]);
 
 const rows = ref<PopupRow[]>([]);
 const tenants = ref<any[]>([]);
+const memberLevels = ref<any[]>([]);
 const loading = ref(false);
 const saving = ref(false);
+const uploading = ref(false);
+const actionKey = ref("");
+const listErrorMessage = ref("");
+const optionErrorMessage = ref("");
+const checkErrorMessage = ref("");
 const drawer = ref(false);
 const editingId = ref<number | null>(null);
 const checkDialog = ref(false);
 const checkLoading = ref(false);
 const checkResult = ref<EffectiveCheckResult | null>(null);
 const filters = reactive({ tenantId: undefined as number | undefined, keyword: "", enabled: "", platform: "", placement: "" });
+const pagination = reactive({ page: 1, pageSize: 20, total: 0 });
 const checkForm = reactive({ id: undefined as number | undefined, tenantId: undefined as number | undefined, pageKey: "home", platform: "h5" });
 const form = reactive({
   tenantId: undefined as number | undefined,
@@ -98,6 +115,8 @@ const form = reactive({
   type: "wuxing_gold",
   platforms: ["all"] as string[],
   placements: ["home"] as string[],
+  audienceMode: "all",
+  memberLevelIds: [] as number[],
   frequency: "once_per_day",
   priority: 0,
   enabled: true,
@@ -109,12 +128,62 @@ const form = reactive({
     { text: "查看详情", link: "/pages/index/index", style: "primary" }
   ] as PopupButton[]
 });
+type PopupTarget = { id: number | null; tenantId: number | null; scopeKey: string; listSequence: number };
+const formTarget = ref<PopupTarget | null>(null);
+let listLoadSequence = 0;
+let optionLoadSequence = 0;
+let checkLoadSequence = 0;
+const formMemberLevels = computed(() => !isPlatformAdmin()
+  ? memberLevels.value
+  : memberLevels.value.filter((level) => form.tenantId ? Number(level.tenantId || 0) === Number(form.tenantId) : !level.tenantId));
+watch(() => form.tenantId, () => {
+  const allowed = new Set(formMemberLevels.value.map((level) => Number(level.id)));
+  form.memberLevelIds = form.memberLevelIds.filter((id) => allowed.has(Number(id)));
+});
 
 const drawerTitle = computed(() => (editingId.value ? "编辑营销弹窗" : "新增营销弹窗"));
+const pageTitle = computed(() => (canWrite.value ? "营销弹窗管理" : "营销弹窗"));
+const canWrite = computed(() => hasPermission("marketing_popup.manage"));
+const canUpload = computed(() => hasPermission("upload.image"));
 const previewTypeClass = computed(() => `popup-preview-card ${form.type === "wuxing_gold" ? "wuxing" : form.type}`);
+const writeLocked = computed(() => saving.value || uploading.value || Boolean(actionKey.value));
+const scopeLocked = computed(() => writeLocked.value || drawer.value || checkDialog.value);
+
+function popupScopeKey() {
+  return JSON.stringify({ ...filters, page: pagination.page, pageSize: pagination.pageSize });
+}
+
+function capturePopupTarget(row?: PopupRow): PopupTarget {
+  return {
+    id: row?.id ? Number(row.id) : null,
+    tenantId: Number(row?.tenant?.id || form.tenantId || 0) || null,
+    scopeKey: popupScopeKey(),
+    listSequence: listLoadSequence
+  };
+}
+
+function assertPopupTarget(target: PopupTarget) {
+  if (target.scopeKey !== popupScopeKey() || target.listSequence !== listLoadSequence) {
+    throw new Error("弹窗列表或筛选范围已变化，请刷新后重新操作");
+  }
+  if (target.id === null) return undefined;
+  const current = rows.value.find((item) => Number(item.id) === target.id);
+  const currentTenantId = Number(current?.tenant?.id || 0) || null;
+  if (!current || currentTenantId !== target.tenantId) throw new Error("目标营销弹窗已不在当前列表，请刷新后重新操作");
+  return current;
+}
+
+function effectiveCheckKey() {
+  return JSON.stringify({ ...checkForm, listSequence: listLoadSequence });
+}
 
 async function load() {
+  const sequence = ++listLoadSequence;
+  const scopeKey = popupScopeKey();
   loading.value = true;
+  listErrorMessage.value = "";
+  rows.value = [];
+  pagination.total = 0;
   try {
     const params = new URLSearchParams();
     if (isPlatformAdmin() && filters.tenantId) params.set("tenantId", String(filters.tenantId));
@@ -122,16 +191,42 @@ async function load() {
     if (filters.enabled) params.set("enabled", filters.enabled);
     if (filters.platform) params.set("platform", filters.platform);
     if (filters.placement) params.set("placement", filters.placement);
-    rows.value = await api.get<any, PopupRow[]>("/admin/marketing-popups", { params });
+    params.set("page", String(pagination.page));
+    params.set("pageSize", String(pagination.pageSize));
+    const result = await api.get<any, PopupListResponse>("/admin/marketing-popups", { params });
+    if (sequence !== listLoadSequence || scopeKey !== popupScopeKey()) return;
+    rows.value = Array.isArray(result?.items) ? result.items : [];
+    pagination.total = Number(result.total || 0);
   } catch (error: any) {
-    ElMessage.error(error.message || "加载营销弹窗失败");
+    if (sequence !== listLoadSequence || scopeKey !== popupScopeKey()) return;
+    rows.value = [];
+    pagination.total = 0;
+    listErrorMessage.value = error.message || "加载营销弹窗失败";
   } finally {
-    loading.value = false;
+    if (sequence === listLoadSequence) loading.value = false;
   }
 }
 
 async function loadTenants() {
-  tenants.value = isPlatformAdmin() ? await api.get<any, any[]>("/admin/tenants") : [];
+  const sequence = ++optionLoadSequence;
+  optionErrorMessage.value = "";
+  tenants.value = [];
+  memberLevels.value = [];
+  try {
+    const result = await api.get<any, PopupOptions>("/admin/marketing-popups/options");
+    if (sequence !== optionLoadSequence) return;
+    tenants.value = Array.isArray(result?.tenants) ? result.tenants : [];
+    memberLevels.value = Array.isArray(result?.memberLevels) ? result.memberLevels : [];
+    if (result.types?.length) typeOptions.splice(0, typeOptions.length, ...result.types);
+    if (result.platforms?.length) platformOptions.splice(0, platformOptions.length, ...result.platforms);
+    if (result.placements?.length) placementOptions.splice(0, placementOptions.length, ...result.placements);
+    if (result.frequencies?.length) frequencyOptions.splice(0, frequencyOptions.length, ...result.frequencies);
+  } catch (error: any) {
+    if (sequence !== optionLoadSequence) return;
+    tenants.value = [];
+    memberLevels.value = [];
+    optionErrorMessage.value = error.message || "弹窗归属和会员等级加载失败";
+  }
 }
 
 function resetForm() {
@@ -145,6 +240,8 @@ function resetForm() {
     type: "wuxing_gold",
     platforms: ["all"],
     placements: ["home"],
+    audienceMode: "all",
+    memberLevelIds: [],
     frequency: "once_per_day",
     priority: 0,
     enabled: true,
@@ -159,13 +256,17 @@ function resetForm() {
 }
 
 function create() {
+  if (!canWrite.value) return;
   editingId.value = null;
+  formTarget.value = null;
   resetForm();
   drawer.value = true;
 }
 
 function edit(row: PopupRow) {
+  if (!canWrite.value) return;
   editingId.value = row.id;
+  formTarget.value = capturePopupTarget(row);
   Object.assign(form, {
     tenantId: row.tenant?.id || undefined,
     title: row.title || "",
@@ -176,6 +277,8 @@ function edit(row: PopupRow) {
     type: row.type || "notice",
     platforms: Array.isArray(row.platforms) && row.platforms.length ? [...row.platforms] : ["all"],
     placements: Array.isArray(row.placements) && row.placements.length ? [...row.placements] : ["home"],
+    audienceMode: row.audience?.mode || "all",
+    memberLevelIds: Array.isArray(row.audience?.memberLevelIds) ? [...row.audience.memberLevelIds] : [],
     frequency: row.frequency || "once_per_day",
     priority: Number(row.priority || 0),
     enabled: Boolean(row.enabled),
@@ -189,31 +292,50 @@ function edit(row: PopupRow) {
 
 function normalizeButtons(buttons: PopupButton[]) {
   const rows = Array.isArray(buttons) ? buttons.slice(0, 2) : [];
-  while (rows.length < 2) rows.push({ text: rows.length ? "查看详情" : "暂不查看", link: "", style: rows.length ? "primary" : "secondary" });
-  return rows.map((item, index) => ({ text: item.text || (index ? "查看详情" : "暂不查看"), link: item.link || "", style: item.style === "secondary" ? "secondary" : "primary" })) as PopupButton[];
+  while (rows.length < 2) rows.push({ text: "", link: "", style: "primary" });
+  return rows.map((item) => ({ text: item.text || "", link: item.link || "", style: item.style === "secondary" ? "secondary" : "primary" })) as PopupButton[];
 }
 
 async function submit() {
+  if (!canWrite.value) return;
+  if (saving.value || actionKey.value || uploading.value) return;
   if (!form.title.trim()) return ElMessage.warning("请填写弹窗标题");
   if (!form.platforms.length || !form.placements.length) return ElMessage.warning("请选择投放平台和页面");
+  if (form.startAt && form.endAt && form.startAt >= form.endAt) return ElMessage.warning("结束时间必须晚于开始时间");
+  if (form.audienceMode === "member_levels" && !form.memberLevelIds.length) return ElMessage.warning("请选择至少一个可见会员等级");
+  if (form.imageUrl.trim() && !usableImage(form.imageUrl.trim())) return ElMessage.warning("顶部图片只允许 HTTPS 或 /uploads/ 地址");
+  const targetsMiniProgram = form.platforms.includes("all") || form.platforms.includes("mp-weixin");
+  const invalidButton = form.buttons.find((item) => item.text.trim() && item.link.trim() && !usableLink(item.link.trim(), targetsMiniProgram ? "mp-weixin" : "h5"));
+  if (invalidButton) return ElMessage.warning(targetsMiniProgram ? "小程序投放按钮只允许站内 / 路径" : "按钮跳转只允许 HTTP(S) 或站内 / 路径");
+  let target: PopupTarget;
+  try {
+    target = formTarget.value || capturePopupTarget();
+    assertPopupTarget(target);
+  } catch (error: any) {
+    return ElMessage.error(error.message || "弹窗列表或筛选范围已变化，请刷新后重新操作");
+  }
+  const { audienceMode, memberLevelIds, ...baseForm } = form;
+  const payload = {
+    ...baseForm,
+    tenantId: isPlatformAdmin() ? target.tenantId : undefined,
+    title: form.title.trim(),
+    subtitle: form.subtitle.trim() || null,
+    content: form.content.trim() || null,
+    emphasis: form.emphasis.trim() || null,
+    imageUrl: form.imageUrl.trim() || null,
+    buttons: form.buttons.filter((item) => item.text.trim()).map((item) => ({ text: item.text.trim(), link: item.link.trim(), style: item.style })),
+    startAt: form.startAt || null,
+    endAt: form.endAt || null,
+    audience: { mode: audienceMode, memberLevelIds: audienceMode === "member_levels" ? memberLevelIds : [] }
+  };
   saving.value = true;
   try {
-    const payload = {
-      ...form,
-      tenantId: isPlatformAdmin() ? form.tenantId || null : undefined,
-      title: form.title.trim(),
-      subtitle: form.subtitle.trim() || null,
-      content: form.content.trim() || null,
-      emphasis: form.emphasis.trim() || null,
-      imageUrl: form.imageUrl.trim() || null,
-      buttons: form.buttons.filter((item) => item.text.trim()).map((item) => ({ text: item.text.trim(), link: item.link.trim(), style: item.style })),
-      startAt: form.startAt || null,
-      endAt: form.endAt || null
-    };
-    if (editingId.value) await api.patch(`/admin/marketing-popups/${editingId.value}`, payload);
+    assertPopupTarget(target);
+    if (target.id) await api.patch(`/admin/marketing-popups/${target.id}`, payload);
     else await api.post("/admin/marketing-popups", payload);
     ElMessage.success("营销弹窗已保存");
     drawer.value = false;
+    formTarget.value = null;
     await load();
   } catch (error: any) {
     ElMessage.error(error.message || "保存营销弹窗失败");
@@ -223,16 +345,33 @@ async function submit() {
 }
 
 async function quickToggle(row: PopupRow) {
+  if (!canWrite.value || actionKey.value || saving.value) return;
+  let target: PopupTarget;
   try {
-    await api.patch(`/admin/marketing-popups/${row.id}`, rowPayload(row, { enabled: !row.enabled }));
-    ElMessage.success(row.enabled ? "已停用" : "已启用");
+    target = capturePopupTarget(row);
+    assertPopupTarget(target);
+  } catch (error: any) {
+    return ElMessage.error(error.message || "弹窗列表或筛选范围已变化，请刷新后重新操作");
+  }
+  actionKey.value = `toggle:${row.id}`;
+  try {
+    if (row.enabled) {
+      await ElMessageBox.confirm(`确认停用「${row.title}」？停用后前台将不再展示。`, "停用营销弹窗", { type: "warning", confirmButtonText: "确认停用", cancelButtonText: "取消" });
+    }
+    const current = assertPopupTarget(target) as PopupRow;
+    await api.patch(`/admin/marketing-popups/${row.id}`, rowPayload(current, { enabled: !current.enabled }));
+    ElMessage.success(current.enabled ? "已停用" : "已启用");
     await load();
   } catch (error: any) {
+    if (isDialogCancel(error)) return;
     ElMessage.error(error.message || "更新弹窗失败");
+  } finally {
+    actionKey.value = "";
   }
 }
 
 function openEffectiveCheck(row?: PopupRow) {
+  if (checkLoading.value) return;
   checkForm.id = row?.id;
   checkForm.tenantId = row?.tenant?.id || (isPlatformAdmin() ? filters.tenantId : undefined);
   checkForm.pageKey = filters.placement || firstSpecific(row?.placements) || "home";
@@ -243,18 +382,27 @@ function openEffectiveCheck(row?: PopupRow) {
 }
 
 async function runEffectiveCheck() {
+  if (checkLoading.value) return;
+  const sequence = ++checkLoadSequence;
+  const checkKey = effectiveCheckKey();
   checkLoading.value = true;
+  checkErrorMessage.value = "";
+  checkResult.value = null;
   try {
     const params = new URLSearchParams();
     if (checkForm.id) params.set("id", String(checkForm.id));
     if (isPlatformAdmin() && checkForm.tenantId) params.set("tenantId", String(checkForm.tenantId));
     params.set("pageKey", checkForm.pageKey);
     params.set("platform", checkForm.platform);
-    checkResult.value = await api.get<any, EffectiveCheckResult>("/admin/marketing-popups/effective-check", { params });
+    const result = await api.get<any, EffectiveCheckResult>("/admin/marketing-popups/effective-check", { params });
+    if (sequence !== checkLoadSequence || checkKey !== effectiveCheckKey()) return;
+    checkResult.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "生效检测失败");
+    if (sequence !== checkLoadSequence || checkKey !== effectiveCheckKey()) return;
+    checkResult.value = null;
+    checkErrorMessage.value = error.message || "生效检测失败";
   } finally {
-    checkLoading.value = false;
+    if (sequence === checkLoadSequence) checkLoading.value = false;
   }
 }
 
@@ -278,25 +426,66 @@ function clearPopupFrequencyCache() {
 }
 
 async function remove(row: PopupRow) {
-  await ElMessageBox.confirm(`确认删除「${row.title}」？删除后前台不再展示。`, "删除营销弹窗", { type: "warning" });
+  if (!canWrite.value || actionKey.value || saving.value) return;
+  let target: PopupTarget;
   try {
+    target = capturePopupTarget(row);
+    assertPopupTarget(target);
+  } catch (error: any) {
+    return ElMessage.error(error.message || "弹窗列表或筛选范围已变化，请刷新后重新操作");
+  }
+  actionKey.value = `delete:${row.id}`;
+  try {
+    await ElMessageBox.confirm(`确认删除「${row.title}」？删除后前台不再展示。`, "删除营销弹窗", { type: "warning", confirmButtonText: "确认删除", cancelButtonText: "取消" });
+    assertPopupTarget(target);
     await api.delete(`/admin/marketing-popups/${row.id}`);
     ElMessage.success("营销弹窗已删除");
     await load();
   } catch (error: any) {
+    if (isDialogCancel(error)) return;
     ElMessage.error(error.message || "删除弹窗失败");
+  } finally {
+    actionKey.value = "";
   }
 }
 
+function applyFilters() {
+  pagination.page = 1;
+  void load();
+}
+
+function changePage(page: number) {
+  pagination.page = page;
+  void load();
+}
+
+function changePageSize(pageSize: number) {
+  pagination.pageSize = pageSize;
+  pagination.page = 1;
+  void load();
+}
+
 async function uploadImage(file: File) {
+  if (!canWrite.value || !canUpload.value || uploading.value || saving.value) return false;
+  if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
+    ElMessage.error("请上传 JPG、PNG、WebP 或 GIF 图片");
+    return false;
+  }
+  if (file.size > 5 * 1024 * 1024) {
+    ElMessage.error("图片不能超过 5MB");
+    return false;
+  }
   const data = new FormData();
   data.append("file", file);
+  uploading.value = true;
   try {
     const result = await api.post<any, any>("/admin/uploads/images", data, { headers: { "Content-Type": "multipart/form-data" } });
     form.imageUrl = result.url;
     ElMessage.success("图片已上传");
   } catch (error: any) {
     ElMessage.error(error.message || "上传图片失败");
+  } finally {
+    uploading.value = false;
   }
   return false;
 }
@@ -312,6 +501,7 @@ function rowPayload(row: PopupRow, patch: Partial<PopupRow>) {
     type: row.type,
     platforms: row.platforms || ["all"],
     placements: row.placements || ["home"],
+    audience: row.audience || { mode: "all", memberLevelIds: [] },
     buttons: row.buttons || [],
     frequency: row.frequency,
     priority: row.priority,
@@ -333,6 +523,11 @@ function labels(options: Array<{ label: string; value: string }>, value: string[
 
 function tenantDisplayName(row: PopupRow) {
   return row.tenant?.name || row.tenant?.code || "平台/未归属";
+}
+
+function audienceLabel(row: PopupRow) {
+  const labels: Record<string, string> = { all: "全部用户", guest: "游客", authenticated: "已登录会员", member_levels: "指定等级" };
+  return labels[String(row.audience?.mode || "all")] || "全部用户";
 }
 
 function statusText(row: PopupRow) {
@@ -364,9 +559,13 @@ function usableImage(value: string) {
 
 function usableLink(value: string, platform: string) {
   if (!value) return true;
-  if (value.startsWith("/")) return true;
+  if (value.startsWith("/") && !value.startsWith("//")) return true;
   if (platform === "mp-weixin") return false;
   return value.startsWith("https://") || value.startsWith("http://");
+}
+
+function isDialogCancel(error: any) {
+  return error === "cancel" || error === "close" || error?.message === "cancel" || error?.message === "close";
 }
 
 function formatTime(value?: string | null) {
@@ -392,29 +591,36 @@ onMounted(async () => {
 <template>
   <div class="page">
     <div class="toolbar">
-      <h2>营销弹窗</h2>
+      <h2>{{ pageTitle }}</h2>
       <div class="toolbar-actions">
-        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width: 220px" @change="load">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width: 220px" :disabled="scopeLocked" @change="applyFilters">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name || tenant.code}（${tenant.code}）`" :value="tenant.id" />
         </el-select>
-        <el-input v-model="filters.keyword" clearable placeholder="搜索标题/内容" style="width: 180px" @keyup.enter="load" />
-        <el-select v-model="filters.enabled" clearable placeholder="全部状态" style="width: 120px" @change="load">
+        <el-input v-model="filters.keyword" clearable placeholder="搜索标题/内容" style="width: 180px" :disabled="scopeLocked" @keyup.enter="applyFilters" />
+        <el-select v-model="filters.enabled" clearable placeholder="全部状态" style="width: 120px" :disabled="scopeLocked" @change="applyFilters">
           <el-option label="启用" value="true" />
           <el-option label="停用" value="false" />
         </el-select>
-        <el-select v-model="filters.platform" clearable placeholder="投放平台" style="width: 140px" @change="load">
+        <el-select v-model="filters.platform" clearable placeholder="投放平台" style="width: 140px" :disabled="scopeLocked" @change="applyFilters">
           <el-option v-for="item in platformOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-select v-model="filters.placement" clearable placeholder="投放页面" style="width: 140px" @change="load">
+        <el-select v-model="filters.placement" clearable placeholder="投放页面" style="width: 140px" :disabled="scopeLocked" @change="applyFilters">
           <el-option v-for="item in placementOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
-        <el-button :icon="View" @click="openEffectiveCheck()">生效检测</el-button>
-        <el-button type="primary" :icon="Plus" @click="create">新增弹窗</el-button>
-        <el-button :icon="Refresh" @click="load">刷新</el-button>
+        <el-button :icon="View" :disabled="scopeLocked" @click="openEffectiveCheck()">生效检测</el-button>
+        <el-button v-if="canWrite" type="primary" :icon="Plus" :disabled="scopeLocked" @click="create">新增弹窗</el-button>
+        <el-button :icon="Refresh" :loading="loading" :disabled="scopeLocked" @click="load">刷新</el-button>
       </div>
     </div>
 
     <el-alert class="scope-alert" type="info" show-icon :closable="false" title="营销弹窗用于广告、重要通知、支付提醒等投放。H5 保存后立即生效，小程序端需发布包含弹窗组件的新版本后读取线上配置。" />
+    <el-alert v-if="!canWrite" class="scope-alert" type="info" show-icon :closable="false" title="当前账号为只读权限，可查看、筛选和执行生效检测，不能新增、编辑、启停或删除营销弹窗。" />
+    <el-alert v-if="optionErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="optionErrorMessage">
+      <template #default><el-button size="small" @click="loadTenants">重试弹窗选项</el-button></template>
+    </el-alert>
+    <el-alert v-if="listErrorMessage" class="scope-alert" type="error" show-icon :closable="false" :title="listErrorMessage">
+      <template #default><el-button size="small" :loading="loading" @click="load">重试弹窗列表</el-button></template>
+    </el-alert>
 
     <div class="table-card">
       <el-table v-loading="loading" :data="rows" stripe empty-text="暂无营销弹窗">
@@ -438,6 +644,7 @@ onMounted(async () => {
             <div class="muted-line">优先级 {{ row.priority }}</div>
           </template>
         </el-table-column>
+        <el-table-column label="受众" width="120"><template #default="{ row }">{{ audienceLabel(row) }}</template></el-table-column>
         <el-table-column label="时间" width="210">
           <template #default="{ row }">
             <div>{{ formatTime(row.startAt) }}</div>
@@ -453,22 +660,34 @@ onMounted(async () => {
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><el-tag :type="statusType(row)">{{ statusText(row) }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="290" fixed="right">
+        <el-table-column label="操作" :width="canWrite ? 290 : 100" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" :icon="View" @click="openEffectiveCheck(row)">检测</el-button>
-            <el-button size="small" :icon="Edit" @click="edit(row)">编辑</el-button>
-            <el-button size="small" :type="row.enabled ? 'warning' : 'success'" :icon="Switch" @click="quickToggle(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
-            <el-button size="small" type="danger" :icon="Delete" @click="remove(row)">删除</el-button>
+            <el-button size="small" :icon="View" :disabled="Boolean(actionKey) || checkLoading" @click="openEffectiveCheck(row)">检测</el-button>
+            <el-button v-if="canWrite" size="small" :icon="Edit" :disabled="writeLocked || loading" @click="edit(row)">编辑</el-button>
+            <el-button v-if="canWrite" size="small" :type="row.enabled ? 'warning' : 'success'" :icon="Switch" :loading="actionKey === `toggle:${row.id}`" :disabled="Boolean(actionKey) || saving" @click="quickToggle(row)">{{ row.enabled ? "停用" : "启用" }}</el-button>
+            <el-button v-if="canWrite" size="small" type="danger" :icon="Delete" :loading="actionKey === `delete:${row.id}`" :disabled="Boolean(actionKey) || saving" @click="remove(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
+      <el-pagination
+        class="pagination"
+        background
+        layout="total, sizes, prev, pager, next"
+        :total="pagination.total"
+        :current-page="pagination.page"
+        :page-size="pagination.pageSize"
+        :page-sizes="[10, 20, 50, 100]"
+        :disabled="scopeLocked"
+        @current-change="changePage"
+        @size-change="changePageSize"
+      />
     </div>
 
-    <el-drawer v-model="drawer" :title="drawerTitle" size="980px">
+    <el-drawer v-model="drawer" :title="drawerTitle" size="min(980px, 100vw)">
       <div class="popup-editor">
-        <el-form label-position="top" class="popup-form">
+        <el-form label-position="top" class="popup-form" :disabled="writeLocked">
           <el-form-item v-if="isPlatformAdmin()" label="弹窗归属">
-            <el-select v-model="form.tenantId" clearable filterable placeholder="平台全局 / 未归属">
+            <el-select v-model="form.tenantId" clearable filterable placeholder="平台全局 / 未归属" :disabled="Boolean(editingId)">
               <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name || tenant.code}（${tenant.code}）`" :value="tenant.id" />
             </el-select>
           </el-form-item>
@@ -482,6 +701,10 @@ onMounted(async () => {
               <el-input-number v-model="form.priority" :min="-9999" :max="9999" controls-position="right" />
             </el-form-item>
           </div>
+          <div class="form-grid">
+            <el-form-item label="展示人群"><el-select v-model="form.audienceMode"><el-option label="全部用户" value="all" /><el-option label="仅游客" value="guest" /><el-option label="仅已登录会员" value="authenticated" /><el-option label="指定会员等级" value="member_levels" /></el-select></el-form-item>
+            <el-form-item v-if="form.audienceMode === 'member_levels'" label="会员等级"><el-select v-model="form.memberLevelIds" multiple filterable placeholder="请选择可见等级"><el-option v-for="level in formMemberLevels" :key="level.id" :label="level.name" :value="level.id" /></el-select></el-form-item>
+          </div>
           <el-form-item label="标题"><el-input v-model="form.title" maxlength="120" show-word-limit /></el-form-item>
           <el-form-item label="副标题"><el-input v-model="form.subtitle" maxlength="160" show-word-limit /></el-form-item>
           <el-form-item label="重点文案"><el-input v-model="form.emphasis" maxlength="180" show-word-limit placeholder="例如：要关 WiFi、关蓝牙、关定位" /></el-form-item>
@@ -489,8 +712,8 @@ onMounted(async () => {
           <el-form-item label="顶部图片">
             <div class="upload-line">
               <el-input v-model="form.imageUrl" placeholder="https:// 或 /uploads 图片地址" />
-              <el-upload :show-file-list="false" :before-upload="uploadImage">
-                <el-button :icon="Upload">上传</el-button>
+              <el-upload v-if="canUpload" :show-file-list="false" :disabled="uploading || saving" :before-upload="uploadImage">
+                <el-button :icon="Upload" :loading="uploading" :disabled="uploading || saving">上传</el-button>
               </el-upload>
             </div>
           </el-form-item>
@@ -559,22 +782,21 @@ onMounted(async () => {
         </section>
       </div>
       <template #footer>
-        <el-button @click="drawer = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="submit">保存弹窗</el-button>
+        <el-button :disabled="writeLocked" @click="drawer = false">取消</el-button>
+        <el-button type="primary" :loading="saving" :disabled="uploading || Boolean(actionKey)" @click="submit">保存弹窗</el-button>
       </template>
     </el-drawer>
 
-    <el-dialog v-model="checkDialog" title="营销弹窗生效检测" width="860px">
+    <el-dialog v-model="checkDialog" title="营销弹窗生效检测" width="min(860px, 95vw)">
       <div class="check-panel">
         <div class="check-form">
-          <el-select v-if="isPlatformAdmin()" v-model="checkForm.tenantId" clearable filterable placeholder="平台全局 / 选择商家">
+          <el-select v-if="isPlatformAdmin()" v-model="checkForm.tenantId" clearable filterable placeholder="平台全局 / 选择商家" :disabled="checkLoading">
             <el-option v-for="tenant in tenants" :key="tenant.id" :label="`${tenant.name || tenant.code}（${tenant.code}）`" :value="tenant.id" />
           </el-select>
-          <el-select v-model="checkForm.pageKey" placeholder="检测页面">
+          <el-select v-model="checkForm.pageKey" placeholder="检测页面" :disabled="checkLoading">
             <el-option v-for="item in placementOptions.filter((item) => item.value !== 'all')" :key="item.value" :label="item.label" :value="item.value" />
-            <el-option label="商城商品详情" value="mall_product_detail" />
           </el-select>
-          <el-select v-model="checkForm.platform" placeholder="检测平台">
+          <el-select v-model="checkForm.platform" placeholder="检测平台" :disabled="checkLoading">
             <el-option label="H5" value="h5" />
             <el-option label="微信小程序" value="mp-weixin" />
           </el-select>
@@ -582,6 +804,16 @@ onMounted(async () => {
           <el-button @click="openFrontendPreview">前台预览</el-button>
           <el-button @click="clearPopupFrequencyCache">清频次缓存</el-button>
         </div>
+
+        <el-alert
+          v-if="checkErrorMessage"
+          type="error"
+          show-icon
+          :closable="false"
+          :title="checkErrorMessage"
+        >
+          <template #default><el-button size="small" :loading="checkLoading" @click="runEffectiveCheck">重新检测</el-button></template>
+        </el-alert>
 
         <el-alert
           v-if="checkResult"
@@ -647,8 +879,17 @@ onMounted(async () => {
 .check-form .el-select { width: 180px; }
 .reason-list { display: flex; flex-wrap: wrap; gap: 6px; }
 .warning-list { margin-top: 6px; }
+.pagination { margin-top: 16px; justify-content: flex-end; }
 @media (max-width: 1100px) {
   .popup-editor { grid-template-columns: 1fr; }
   .preview-phone { width: 100%; max-width: 360px; }
+}
+@media (max-width: 760px) {
+  .form-grid { grid-template-columns: 1fr; gap: 0; }
+  .button-row { grid-template-columns: 1fr; }
+  .button-row .el-select { width: 100% !important; }
+  .check-form { align-items: stretch; }
+  .check-form .el-select { width: 100%; }
+  .pagination { justify-content: flex-start; overflow-x: auto; }
 }
 </style>

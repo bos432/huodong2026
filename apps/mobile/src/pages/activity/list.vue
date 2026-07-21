@@ -4,6 +4,7 @@ import { onReachBottom, onShow } from "@dcloudio/uni-app";
 import { consumeActivityListIntent, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -16,12 +17,15 @@ const keyword = ref("");
 const loading = ref(true);
 const loadingMore = ref(false);
 const error = ref("");
+const categoryError = ref("");
 const page = ref(1);
 const pageSize = 8;
 const total = ref(0);
 const hasMore = ref(false);
 const mounted = ref(false);
 const lastLoadedTenantCode = ref("");
+const pageLoadGuard = createTenantLoadGuard();
+const categoryLoadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_list", "/pages/activity/list");
 const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero") return false;
@@ -64,11 +68,16 @@ function formatTime(value: string) {
   if (!value) return "-";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${month}-${day} ${hour}:${minute}`;
+  const parts = new Intl.DateTimeFormat("zh-CN", {
+    timeZone: "Asia/Shanghai",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23"
+  }).formatToParts(date);
+  const part = (type: string) => parts.find((item) => item.type === type)?.value || "";
+  return `${part("month")}-${part("day")} ${part("hour")}:${part("minute")}`;
 }
 
 function clearKeyword() {
@@ -98,28 +107,33 @@ function buildQuery(nextPage: number) {
 
 async function loadPage(nextPage: number, append = false) {
   if (append && (!hasMore.value || loadingMore.value)) return;
+  const loadToken = pageLoadGuard.begin();
   if (append) loadingMore.value = true;
   else loading.value = true;
   error.value = "";
   try {
     const result = await request<any>(buildQuery(nextPage));
+    if (!pageLoadGuard.isCurrent(loadToken)) return;
     const items = Array.isArray(result) ? result : result.items || [];
     rows.value = append ? rows.value.concat(items) : items;
     total.value = Array.isArray(result) ? items.length : result.total || 0;
     page.value = Array.isArray(result) ? nextPage : result.page || nextPage;
     hasMore.value = Array.isArray(result) ? false : Boolean(result.hasMore);
   } catch (err: any) {
+    if (!pageLoadGuard.isCurrent(loadToken)) return;
     error.value = err.message || "加载失败";
   } finally {
-    loading.value = false;
-    loadingMore.value = false;
+    if (pageLoadGuard.isCurrent(loadToken)) {
+      loading.value = false;
+      loadingMore.value = false;
+    }
   }
 }
 
 function loadFirstPage() {
   page.value = 1;
   hasMore.value = false;
-  loadPage(1);
+  return loadPage(1);
 }
 
 function loadMore() {
@@ -155,27 +169,40 @@ function applyIntent() {
 }
 
 async function loadCategories() {
+  const loadToken = categoryLoadGuard.begin();
+  categoryError.value = "";
   try {
-    categories.value = await request<any[]>("/public/categories");
-  } catch {
-    categories.value = [];
+    const items = await request<any[]>("/public/categories");
+    if (categoryLoadGuard.isCurrent(loadToken)) categories.value = items;
+  } catch (err: any) {
+    if (categoryLoadGuard.isCurrent(loadToken)) {
+      categories.value = [];
+      categoryError.value = err?.message || "活动分类加载失败，可重新同步分类。";
+    }
   }
 }
 
 async function reloadCurrentTenant(resetFilters = false) {
-  lastLoadedTenantCode.value = getCurrentTenantCode();
+  const tenantCode = getCurrentTenantCode();
+  lastLoadedTenantCode.value = tenantCode;
+  pageLoadGuard.invalidate();
+  rows.value = [];
+  total.value = 0;
+  page.value = 1;
+  hasMore.value = false;
+  error.value = "";
+  loading.value = true;
   if (resetFilters) {
     activeCategoryId.value = "all";
     activeStatus.value = "all";
     keyword.value = "";
   }
-  await Promise.all([loadCategories(), loadDecoration()]);
-  loadFirstPage();
+  await Promise.all([loadCategories(), loadDecoration(), loadFirstPage()]);
+  if (getCurrentTenantCode() !== tenantCode) return;
 }
 
 async function handleTenantChanged() {
-  await loadPageTheme();
-  await reloadCurrentTenant(true);
+  await Promise.all([loadPageTheme(), reloadCurrentTenant(true)]);
 }
 
 onMounted(() => {
@@ -183,9 +210,7 @@ onMounted(() => {
   lastLoadedTenantCode.value = getCurrentTenantCode();
   applyRouteQuery();
   applyIntent();
-  loadCategories();
-  loadFirstPage();
-  loadDecoration();
+  void reloadCurrentTenant(false);
 });
 
 onShow(() => {
@@ -193,10 +218,10 @@ onShow(() => {
   const changedTenant = getCurrentTenantCode() !== lastLoadedTenantCode.value;
   const hasIntent = applyIntent();
   if (changedTenant) {
-    loadPageTheme();
-    reloadCurrentTenant(!hasIntent);
+    void loadPageTheme();
+    void reloadCurrentTenant(!hasIntent);
   }
-  else if (hasIntent) loadFirstPage();
+  else if (hasIntent) void loadFirstPage();
 });
 
 onReachBottom(loadMore);
@@ -231,19 +256,24 @@ onReachBottom(loadMore);
 
       <view class="search-box">
         <text class="search-icon">🔍</text>
-        <input v-model="keyword" class="search-input" placeholder="搜索活动、地点、分类" confirm-type="search" @confirm="loadFirstPage" />
-        <text v-if="keyword" class="clear" @click="clearKeyword">清空</text>
+        <input v-model="keyword" class="search-input" aria-label="搜索活动、地点或分类" placeholder="搜索活动、地点、分类" confirm-type="search" @confirm="loadFirstPage" />
+        <text v-if="keyword" class="clear" role="button" tabindex="0" aria-label="清空活动搜索词" @click="clearKeyword" @keyup.enter="clearKeyword" @keyup.space.prevent="clearKeyword">清空</text>
       </view>
 
-      <scroll-view class="category-tabs" scroll-x :show-scrollbar="false">
+      <view v-if="categoryError" class="filter-error" role="alert" aria-live="assertive">
+        <text>{{ categoryError }}</text>
+        <text class="filter-retry" role="button" tabindex="0" aria-label="重新加载活动分类" @click="loadCategories" @keyup.enter="loadCategories" @keyup.space.prevent="loadCategories">重新同步</text>
+      </view>
+
+      <scroll-view class="category-tabs" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类筛选">
         <view class="tabs-track">
-          <view class="category-chip" :class="{ active: activeCategoryId === 'all' }" @click="selectCategory('all')">全部</view>
-          <view v-for="c in categories" :key="c.id" class="category-chip" :class="{ active: activeCategoryId === c.id }" @click="selectCategory(c.id)">{{ c.name }}</view>
+          <view class="category-chip" :class="{ active: activeCategoryId === 'all' }" role="tab" tabindex="0" :aria-selected="activeCategoryId === 'all'" @click="selectCategory('all')" @keyup.enter="selectCategory('all')" @keyup.space.prevent="selectCategory('all')">全部</view>
+          <view v-for="c in categories" :key="c.id" class="category-chip" :class="{ active: activeCategoryId === c.id }" role="tab" tabindex="0" :aria-selected="activeCategoryId === c.id" @click="selectCategory(c.id)" @keyup.enter="selectCategory(c.id)" @keyup.space.prevent="selectCategory(c.id)">{{ c.name }}</view>
         </view>
       </scroll-view>
 
-      <view class="status-tabs">
-        <view v-for="tab in statusTabs" :key="tab.value" class="status-tab" :class="{ active: activeStatus === tab.value }" @click="selectStatus(tab.value)">
+      <view class="status-tabs" role="tablist" aria-label="活动状态筛选">
+        <view v-for="tab in statusTabs" :key="tab.value" class="status-tab" :class="{ active: activeStatus === tab.value }" role="tab" tabindex="0" :aria-selected="activeStatus === tab.value" @click="selectStatus(tab.value)" @keyup.enter="selectStatus(tab.value)" @keyup.space.prevent="selectStatus(tab.value)">
           {{ tab.label }}
         </view>
       </view>
@@ -256,10 +286,10 @@ onReachBottom(loadMore);
       </view>
     </view>
 
-    <view v-if="loading" class="card state-card">加载中...</view>
-    <view v-else-if="error" class="card state-card">
+    <view v-if="loading" class="card state-card" role="status" aria-live="polite">加载中...</view>
+    <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
       <view>{{ error }}</view>
-      <view class="button secondary retry-button" @click="loadFirstPage">重试</view>
+      <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载活动列表" @click="loadFirstPage" @keyup.enter="loadFirstPage" @keyup.space.prevent="loadFirstPage">重试</view>
     </view>
     <view v-else-if="!rows.length" class="card empty-state-card">
       <text class="empty-icon">🪷</text>
@@ -268,7 +298,7 @@ onReachBottom(loadMore);
     </view>
 
     <view v-else class="activity-feed">
-      <view v-for="item in rows" :key="item.id" class="activity-card" @click="goDetail(item.id)">
+      <view v-for="item in rows" :key="item.id" class="activity-card" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
         <view class="activity-cover">
           <image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" />
           <view v-else class="cover-fallback">
@@ -315,7 +345,7 @@ onReachBottom(loadMore);
         </view>
       </view>
 
-      <view v-if="hasMore" class="button block load-more" :class="{ disabled: loadingMore }" @click="loadMore">
+      <view v-if="hasMore" class="button block load-more" :class="{ disabled: loadingMore }" role="button" tabindex="0" :aria-disabled="loadingMore" :aria-busy="loadingMore" aria-label="加载更多活动" @click="loadMore" @keyup.enter="loadMore" @keyup.space.prevent="loadMore">
         {{ loadingMore ? "加载中..." : "加载更多" }}
       </view>
       <view v-else class="no-more">没有更多活动了</view>
@@ -385,6 +415,8 @@ onReachBottom(loadMore);
 .search-input { min-width: 0; height: 84rpx; font-size: 28rpx; color: var(--text-color, #333333); }
 .clear { color: #c43d3d; font-size: 24rpx; font-weight: 600; }
 .category-tabs { width: 100%; margin-top: 18rpx; white-space: nowrap; }
+.filter-error { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-top:16rpx; padding:14rpx 16rpx; border-radius:8px; background:#fff7f7; color:#b91c1c; font-size:23rpx; line-height:1.5; }
+.filter-retry { flex:0 0 auto; color:#c43d3d; font-weight:700; }
 .tabs-track { display: inline-flex; gap: 12rpx; padding-right: 20rpx; }
 .category-chip {
   flex: 0 0 auto;
@@ -425,6 +457,11 @@ onReachBottom(loadMore);
   background: var(--card-bg, #ffffff);
   box-shadow: 0 8rpx 28rpx rgba(51, 51, 51, 0.06);
 }
+.activity-card:focus-visible,
+.category-chip:focus-visible,
+.status-tab:focus-visible,
+.clear:focus-visible,
+.filter-retry:focus-visible { outline: 3rpx solid #0f766e; outline-offset: 4rpx; }
 .activity-cover { position: relative; height: 320rpx; background: linear-gradient(135deg, #eadfd0, #d7d0ca); }
 .activity-cover image,
 .cover-fallback { width: 100%; height: 100%; display: block; }

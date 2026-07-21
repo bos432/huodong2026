@@ -1,7 +1,7 @@
 <template>
   <view class="container user-subpage has-custom-nav">
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">‹ 返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">‹ 返回</view>
       <text class="nav-title">我的内容</text>
       <view class="nav-placeholder"></view>
     </view>
@@ -11,9 +11,11 @@
       <view class="hero-desc">查看已加入内容，按进度继续观看。</view>
     </view>
     <view class="my-tabs">
-      <view v-for="t in tabs" :key="t.key" class="my-tab" :class="{active:activeTab===t.key}" @click="activeTab=t.key">{{ t.label }}</view>
+      <view v-for="t in tabs" :key="t.key" class="my-tab" :class="{active:activeTab===t.key}" role="tab" tabindex="0" :aria-selected="activeTab===t.key" :aria-label="`查看${t.label}内容`" @click="activeTab=t.key" @keyup.enter="activeTab=t.key" @keyup.space.prevent="activeTab=t.key">{{ t.label }}</view>
     </view>
-    <view v-for="c in visibleCourses" :key="c.id" class="my-course-item" @click="goCourse(c)">
+    <view v-if="loading" class="state-card">我的课程加载中...</view>
+    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载我的课程" @click="loadCourses" @keyup.enter="loadCourses" @keyup.space.prevent="loadCourses">重新加载</view></view>
+    <view v-for="c in visibleCourses" :key="c.id" class="my-course-item" role="button" tabindex="0" :aria-label="`打开${c.title}`" @click="goCourse(c)" @keyup.enter="goCourse(c)" @keyup.space.prevent="goCourse(c)">
       <view class="course-row">
         <view class="course-cover" :style="{ background: c.color }">
           <image v-if="c.coverUrl" class="course-cover-img" :src="c.coverUrl" mode="aspectFill" />
@@ -23,22 +25,30 @@
           <text class="course-title">{{ c.title }}</text>
           <view class="progress-bar"><view class="progress-fill" :style="{width:c.progress+'%'}"></view></view>
           <text class="course-progress">进度 {{ c.progress }}%</text>
+          <text v-if="c.recentLesson" class="recent-lesson">最近：{{ c.recentLesson.title }} · {{ c.recentLesson.progress }}%</text>
         </view>
       </view>
     </view>
-    <empty-state v-if="!visibleCourses.length" icon="📖" text="暂无进行中的内容" />
+    <empty-state v-if="!loading && !loadError && !visibleCourses.length" icon="📖" text="暂无进行中的内容" />
     <TabBar current="courses" />
   </view>
 </template>
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { reviewSafeText } from "../../review-safe-text";
 import { normalizeCourse, type CourseCard } from "../../course-data";
 import TabBar from "../../components/TabBar.vue";
 
 const activeTab = ref("all");
 const tabs = [{key:"all",label:"全部"},{key:"ongoing",label:"进行中"},{key:"done",label:"已完成"}];
-const courses = ref<CourseCard[]>([]);
+const courses = ref<Array<CourseCard & { recentLesson?: { title:string; progress:number } | null }>>([]);
+const loading = ref(false);
+const loadError = ref("");
+const loadedTenantCode = ref("");
+const loadGuard = createTenantLoadGuard();
 const visibleCourses = computed(() => courses.value.filter((course) => {
   if (activeTab.value === "ongoing") return Number(course.progress || 0) < 100;
   if (activeTab.value === "done") return Number(course.progress || 0) >= 100;
@@ -46,27 +56,37 @@ const visibleCourses = computed(() => courses.value.filter((course) => {
 }));
 
 async function loadCourses() {
+  const loadToken = loadGuard.begin();
+  if (loadedTenantCode.value && loadedTenantCode.value !== loadToken.tenantCode) courses.value = [];
+  loading.value = true;
+  loadError.value = "";
   try {
     await ensureUser();
     const rows = await request<any[]>("/public/me/courses");
+    if (!loadGuard.isCurrent(loadToken)) return;
     courses.value = (Array.isArray(rows) ? rows : []).map((row, index) => ({
       ...normalizeCourse(row, index),
-      progress: Number(row.learning?.progress || 0)
+      progress: Number(row.learning?.progress || 0), recentLesson: row.learning?.recentLesson || null
     }));
-  } catch {
-    courses.value = [];
+    loadedTenantCode.value = loadToken.tenantCode;
+  } catch (error: any) {
+    if (!loadGuard.isCurrent(loadToken)) return;
+    if (!String(error?.message || "").includes("请先完成")) loadError.value = reviewSafeText(error?.message || "我的课程加载失败，请稍后重试。");
+  } finally {
+    if (loadGuard.isCurrent(loadToken)) loading.value = false;
   }
 }
 
 function goBack() { uni.navigateBack(); }
-function goCourse(c:any) { uni.navigateTo({ url: withTenantCode("/pages/course/detail?id="+c.id) }); }
+function goCourse(c:any) { uni.navigateTo({ url: withTenantCode(`/pages/course/player?id=${c.id}${c.recentLesson?.id ? `&lessonId=${c.recentLesson.id}` : ""}`) }); }
 
-onMounted(loadCourses);
+onShow(loadCourses);
 </script>
 <style scoped>
 .user-subpage {
   min-height: 100vh;
-  padding-bottom: 160rpx;
+  box-sizing:border-box;
+  padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
   background:
     linear-gradient(180deg, #f7efe3 0%, #fbf7ef 40%, #f4eadc 100%);
 }
@@ -219,4 +239,9 @@ onMounted(loadCourses);
   color: #8f8172;
   font-size: 24rpx;
 }
+.recent-lesson { display:block; margin-top:6rpx; color:#4a6b8a; font-size:23rpx; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.state-card { display:grid; gap:10rpx; margin-bottom:18rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }
+.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.state-retry { width:max-content; color:#C43D3D; font-weight:900; }
+@media (min-width: 900px) { .user-subpage { max-width:760px; margin:0 auto; } }
 </style>

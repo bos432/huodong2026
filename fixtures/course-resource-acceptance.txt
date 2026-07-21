@@ -1,0 +1,3 @@
+Course private resource acceptance fixture.
+This file verifies encrypted storage, signed delivery, byte ranges, and tenant access.
+2026-07-17

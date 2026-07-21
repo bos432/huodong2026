@@ -4,8 +4,8 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
-import { conservativeFeatureGates, defaultFeatureGates, featureGateItems, normalizeFeatureGates, writeStoredFeatureGates, type FeatureGateKey } from "../feature-gates";
-import { currentTenantSettings, isPlatformAdmin } from "../permissions";
+import { conservativeFeatureGates, defaultFeatureGates, featureGateDependencies, featureGateItems, normalizeFeatureGates, writeStoredFeatureGates, type FeatureGateKey } from "../feature-gates";
+import { currentTenantSettings, hasPermission, isPlatformScopedAdmin } from "../permissions";
 
 type CheckStatus = "ok" | "warning" | "error";
 
@@ -127,7 +127,25 @@ const defaultPageTheme = {
 
 const router = useRouter();
 const activeTab = ref("operation");
-const canManagePlatformSettings = computed(() => isPlatformAdmin());
+const operationSection = ref("registration");
+const operationSectionOptions = [
+  { label: "报名与功能", value: "registration" },
+  { label: "支付与客服", value: "payment" },
+  { label: "短信服务", value: "sms" },
+  { label: "品牌主题", value: "theme" },
+  { label: "协议隐私", value: "agreements" }
+];
+const canManagePlatformSettings = computed(() => isPlatformScopedAdmin());
+const canEditSettings = computed(() => canManagePlatformSettings.value ? hasPermission("system.manage") : hasPermission("operation_settings.manage"));
+const canManageCategories = computed(() => hasPermission("category.manage"));
+const canManageHomepage = computed(() => hasPermission("homepage.manage"));
+const canManageTenants = computed(() => hasPermission("tenant.manage"));
+const canViewAdmins = computed(() => hasPermission("admin.view"));
+const canViewLogs = computed(() => hasPermission("logs.view"));
+const canViewSecurityLogs = computed(() => hasPermission("security_log.view"));
+const canManageSystem = computed(() => hasPermission("system.manage"));
+const canUploadImages = computed(() => canEditSettings.value && hasPermission("upload.image"));
+const hasManagementLinks = computed(() => canManageCategories.value || canManageHomepage.value || canManageTenants.value || canViewAdmins.value || canViewLogs.value || canViewSecurityLogs.value || canManageSystem.value);
 const tenantSettings = ref(currentTenantSettings());
 const paymentSettingsEditable = computed(() => canManagePlatformSettings.value || tenantSettings.value.paymentAccountEditable);
 const paymentSettingsReadonlyReason = computed(() =>
@@ -136,11 +154,18 @@ const paymentSettingsReadonlyReason = computed(() =>
 const loadingOperation = ref(false);
 const savingOperation = ref(false);
 const testingSms = ref(false);
+const checkingConnectivity = ref(false);
+const operationLoadError = ref("");
+const operationSaveError = ref("");
+const connectivityError = ref("");
+const connectivityReport = ref<any | null>(null);
 const loadingConfig = ref(false);
+const configLoadError = ref("");
 const report = ref<ConfigInspection | null>(null);
 const adminVersion = ref<StaticVersion | null>(null);
 const h5Version = ref<StaticVersion | null>(null);
 const tenantOptions = ref<TenantOption[]>([]);
+const operationBusy = computed(() => loadingOperation.value || savingOperation.value || testingSms.value || checkingConnectivity.value);
 const paymentReadiness = computed(() => [
   { key: "free", label: "免费报名", status: "已可用", type: "success", note: "适合免费活动，后端可直接完成报名。" },
   { key: "balance", label: "余额支付", status: "已可用", type: "success", note: "使用用户余额扣款，适合测试和会员账户场景。" },
@@ -172,6 +197,9 @@ const form = reactive({
   pageTheme: { ...defaultPageTheme },
   refundInstructions: "",
   invoiceInstructions: "",
+  userAgreementUrl: "",
+  privacyPolicyUrl: "",
+  merchantAgreementUrl: "",
   smsProviderEnabled: false,
   smsProvider: "luosimao-sms",
   smsAccessKeyId: "",
@@ -182,6 +210,8 @@ const form = reactive({
 });
 
 const smsTestForm = reactive({ phone: "" });
+const smsSecretConfigured = ref(false);
+const clearSmsSecretRequested = ref(false);
 
 const deployment = reactive({
   appVersion: "0.1.0",
@@ -211,6 +241,13 @@ const deployment = reactive({
   accessLogEnabled: true,
   accessLogSkipHealth: true,
   uploadDir: "uploads",
+  storageProvider: "local",
+  storageEndpoint: "",
+  storageRegion: "",
+  storageBucket: "",
+  storageAccessKeyId: "",
+  storageAccessKeySecret: "",
+  storagePublicBaseUrl: "",
   backupDir: "backups/mysql",
   backupRetentionDays: 30,
   h5AuthMode: "sms",
@@ -293,6 +330,31 @@ function featureGateTagType(key: FeatureGateKey) {
   return deployment.featureGates[key] ? "success" : "info";
 }
 
+function featureGateLabel(key: FeatureGateKey) {
+  return featureGateItems.find((item) => item.key === key)?.label || key;
+}
+
+function featureGateDependencyLabel(key: FeatureGateKey) {
+  const dependency = featureGateDependencies[key];
+  return dependency ? featureGateLabel(dependency) : "";
+}
+
+function handleFeatureGateChanged(key: FeatureGateKey, enabled: boolean) {
+  const dependency = featureGateDependencies[key];
+  if (enabled && dependency && !deployment.featureGates[dependency]) {
+    deployment.featureGates[dependency] = true;
+    ElMessage.info(`已同步开启“${featureGateLabel(dependency)}”`);
+  }
+  if (!enabled) {
+    const disabledChildren = (Object.entries(featureGateDependencies) as Array<[FeatureGateKey, FeatureGateKey]>)
+      .filter(([, parent]) => parent === key)
+      .map(([child]) => child)
+      .filter((child) => deployment.featureGates[child]);
+    for (const child of disabledChildren) deployment.featureGates[child] = false;
+    if (disabledChildren.length) ElMessage.info(`已同步关闭：${disabledChildren.map(featureGateLabel).join("、")}`);
+  }
+}
+
 const domainBatch = reactive({
   mode: "single" as DomainBatchMode,
   primaryDomain: "",
@@ -350,6 +412,13 @@ const generatedEnv = computed(() => {
     envLine("PUBLIC_ADMIN_ORIGIN", deployment.adminOrigin),
     envLine("PUBLIC_API_ORIGIN", deployment.apiOrigin),
     envLine("UPLOAD_DIR", deployment.uploadDir),
+    envLine("STORAGE_PROVIDER", deployment.storageProvider),
+    envLine("STORAGE_ENDPOINT", deployment.storageEndpoint),
+    envLine("STORAGE_REGION", deployment.storageRegion),
+    envLine("STORAGE_BUCKET", deployment.storageBucket),
+    envLine("STORAGE_ACCESS_KEY_ID", deployment.storageAccessKeyId),
+    envLine("STORAGE_ACCESS_KEY_SECRET", deployment.storageAccessKeySecret),
+    envLine("STORAGE_PUBLIC_BASE_URL", deployment.storagePublicBaseUrl),
     envLine("H5_AUTH_MODE", deployment.h5AuthMode),
     envLine("SMS_PROVIDER_ENABLED", boolValue(deployment.smsEnabled)),
     envLine("SMS_PROVIDER", deployment.smsProvider),
@@ -619,6 +688,10 @@ const uploadHeaders = () => {
 };
 
 function beforeImageUpload(file: File) {
+  if (!canUploadImages.value) {
+    ElMessage.error("当前账号无图片上传权限");
+    return false;
+  }
   const allowed = ["image/jpeg", "image/png", "image/webp", "image/gif"];
   if (!allowed.includes(file.type)) {
     ElMessage.error("请上传 JPG、PNG、WebP 或 GIF 图片");
@@ -1419,10 +1492,14 @@ function operationPayload() {
     pageTheme: { ...form.pageTheme },
     refundInstructions: form.refundInstructions,
     invoiceInstructions: form.invoiceInstructions,
+    userAgreementUrl: form.userAgreementUrl,
+    privacyPolicyUrl: form.privacyPolicyUrl,
+    merchantAgreementUrl: form.merchantAgreementUrl,
     smsProviderEnabled: form.smsProviderEnabled,
     smsProvider: form.smsProvider,
     smsAccessKeyId: form.smsAccessKeyId,
     smsAccessKeySecret: form.smsAccessKeySecret,
+    clearSmsAccessKeySecret: clearSmsSecretRequested.value,
     smsSignName: form.smsSignName,
     smsTemplateId: form.smsTemplateId,
     smsSdkAppId: form.smsSdkAppId
@@ -1431,12 +1508,14 @@ function operationPayload() {
   return payload;
 }
 
-async function loadOperation() {
+async function loadOperation(force = false) {
+  if (operationBusy.value && !force) return;
   loadingOperation.value = true;
+  operationLoadError.value = "";
   try {
     const [data, tenants] = await Promise.all([
       api.get<any, any>("/admin/settings/operation"),
-      canManagePlatformSettings.value ? api.get<any, TenantOption[]>("/admin/tenants").catch(() => []) : Promise.resolve([])
+      canManagePlatformSettings.value && canManageTenants.value ? api.get<any, TenantOption[]>("/admin/tenants") : Promise.resolve([])
     ]);
     tenantOptions.value = (tenants || []).filter((tenant) => tenant.enabled && tenant.code !== "platform" && !String(tenant.code || "").startsWith("demo-"));
     Object.assign(form, {
@@ -1452,6 +1531,9 @@ async function loadOperation() {
       pageTheme: { ...defaultPageTheme, ...(data.pageTheme || {}) },
       refundInstructions: data.refundInstructions || "",
       invoiceInstructions: data.invoiceInstructions || "",
+      userAgreementUrl: data.userAgreementUrl || "",
+      privacyPolicyUrl: data.privacyPolicyUrl || "",
+      merchantAgreementUrl: data.merchantAgreementUrl || "",
       smsProviderEnabled: Boolean(data.smsProviderEnabled),
       smsProvider: data.smsProvider || "luosimao-sms",
       smsAccessKeyId: data.smsAccessKeyId || "",
@@ -1460,6 +1542,8 @@ async function loadOperation() {
       smsTemplateId: data.smsTemplateId || "",
       smsSdkAppId: data.smsSdkAppId || ""
     });
+    smsSecretConfigured.value = Boolean(data.smsAccessKeySecretConfigured);
+    clearSmsSecretRequested.value = false;
     if (canManagePlatformSettings.value) {
       applyDeploymentConfig({
         smsEnabled: Boolean(data.smsProviderEnabled),
@@ -1472,38 +1556,46 @@ async function loadOperation() {
       });
       applyDeploymentConfig(data.launchConfig || {});
     }
+  } catch (error: any) {
+    operationLoadError.value = error.message || "加载配置失败";
   } finally {
     loadingOperation.value = false;
   }
 }
 
 async function sendTestSms() {
+  if (!canEditSettings.value || operationBusy.value) return;
   if (!/^1\d{10}$/.test(smsTestForm.phone.trim())) return ElMessage.error("请输入正确的测试手机号");
   testingSms.value = true;
+  operationSaveError.value = "";
   try {
     const result = await api.post<any, any>("/admin/settings/sms/test", { phone: smsTestForm.phone.trim() });
     ElMessage.success(`测试短信已发送：${result.providerMessageId || result.provider || "已提交"}`);
   } catch (error: any) {
-    ElMessage.error(error.message || "测试短信发送失败");
+    operationSaveError.value = error.message || "测试短信发送失败";
+    ElMessage.error(operationSaveError.value);
   } finally {
     testingSms.value = false;
   }
 }
 
 async function saveOperation() {
+  if (!canEditSettings.value || operationBusy.value) return;
   if (!form.registrationEnabled && !form.registrationDisabledMessage.trim()) return ElMessage.error("请填写暂停报名提示");
   if (paymentSettingsEditable.value && !form.offlinePaymentInstructions.trim()) return ElMessage.error("请填写线下付款说明");
   if (paymentSettingsEditable.value && !form.refundInstructions.trim()) return ElMessage.error("请填写退款说明");
   savingOperation.value = true;
+  operationSaveError.value = "";
   try {
     const payload = canManagePlatformSettings.value ? { ...operationPayload(), launchConfig: deploymentPayload() } : operationPayload();
     await api.post("/admin/settings/operation", payload);
     if (canManagePlatformSettings.value) writeStoredFeatureGates(deployment.featureGates);
     ElMessage.success("系统设置已保存");
-    await loadOperation();
+    await loadOperation(true);
     if (canManagePlatformSettings.value) await loadConfig();
   } catch (error: any) {
-    ElMessage.error(error.message || "保存失败");
+    operationSaveError.value = error.message || "保存失败";
+    ElMessage.error(operationSaveError.value);
   } finally {
     savingOperation.value = false;
   }
@@ -1526,6 +1618,7 @@ async function refreshTenantSettings() {
 async function loadConfig() {
   if (!canManagePlatformSettings.value) return;
   loadingConfig.value = true;
+  configLoadError.value = "";
   try {
     await Promise.all([
       api.get<any, ConfigInspection>("/admin/system/config-check").then((row) => { report.value = row; }),
@@ -1533,7 +1626,8 @@ async function loadConfig() {
       loadStaticVersion("/version.json").then((row) => { h5Version.value = row; })
     ]);
   } catch (error: any) {
-    ElMessage.error(error.message || "加载上线体检失败");
+    configLoadError.value = error.message || "加载上线体检失败";
+    ElMessage.error(configLoadError.value);
   } finally {
     loadingConfig.value = false;
   }
@@ -1553,10 +1647,26 @@ function go(path: string) {
   router.push(path);
 }
 
+async function runConnectivityCheck() {
+  if (!canEditSettings.value || operationBusy.value) return;
+  checkingConnectivity.value = true;
+  connectivityError.value = "";
+  try {
+    connectivityReport.value = await api.post<any, any>("/admin/settings/connectivity-check");
+    const errors = Number(connectivityReport.value?.summary?.error || 0);
+    ElMessage[errors ? "warning" : "success"](errors ? `检测完成，发现 ${errors} 项异常` : "配置连通性检测通过");
+  } catch (error: any) {
+    connectivityError.value = error.message || "配置连通性检测失败";
+    ElMessage.error(connectivityError.value);
+  } finally {
+    checkingConnectivity.value = false;
+  }
+}
+
 onMounted(async () => {
   await refreshTenantSettings();
-  loadOperation();
-  if (canManagePlatformSettings.value) loadConfig();
+  await loadOperation();
+  if (canManagePlatformSettings.value) await loadConfig();
 });
 </script>
 
@@ -1570,8 +1680,36 @@ onMounted(async () => {
         </p>
       </div>
       <div class="toolbar-actions">
-        <el-button @click="loadOperation">刷新设置</el-button>
-        <el-button type="primary" :loading="savingOperation" @click="saveOperation">保存设置</el-button>
+        <el-button :loading="loadingOperation" :disabled="operationBusy && !loadingOperation" @click="loadOperation()">刷新设置</el-button>
+        <el-button v-if="canEditSettings" :loading="checkingConnectivity" :disabled="operationBusy && !checkingConnectivity" @click="runConnectivityCheck">检测连通性</el-button>
+        <el-button v-if="canEditSettings" type="primary" :loading="savingOperation" :disabled="operationBusy && !savingOperation" @click="saveOperation">保存设置</el-button>
+      </div>
+    </div>
+
+    <el-alert v-if="!canEditSettings" type="info" title="当前账号为只读权限，可查看配置与体检结果，不能保存、测试通道或修改部署参数。" show-icon :closable="false" class="panel-alert" />
+    <div v-if="operationLoadError" class="error-recovery">
+      <el-alert type="error" :title="operationLoadError" show-icon :closable="false" />
+      <el-button :loading="loadingOperation" @click="loadOperation()">重试加载</el-button>
+    </div>
+    <div v-if="operationSaveError" class="error-recovery">
+      <el-alert type="error" :title="operationSaveError" show-icon :closable="false" />
+      <el-button v-if="canEditSettings" :loading="savingOperation" @click="saveOperation">重试保存</el-button>
+    </div>
+    <div v-if="connectivityError" class="error-recovery">
+      <el-alert type="error" :title="connectivityError" show-icon :closable="false" />
+      <el-button v-if="canEditSettings" :loading="checkingConnectivity" @click="runConnectivityCheck">重试检测</el-button>
+    </div>
+
+    <div v-if="connectivityReport" class="table-card connectivity-report">
+      <div class="readiness-head">
+        <strong>最近一次连通性检测</strong>
+        <el-tag :type="connectivityReport.status === 'ok' ? 'success' : connectivityReport.status === 'warning' ? 'warning' : 'danger'">{{ connectivityReport.status === "ok" ? "通过" : connectivityReport.status === "warning" ? "需确认" : "存在异常" }}</el-tag>
+      </div>
+      <div class="connectivity-grid">
+        <div v-for="item in connectivityReport.checks" :key="item.key" class="readiness-card">
+          <div class="readiness-head"><strong>{{ item.label }}</strong><el-tag :type="item.status === 'ok' ? 'success' : item.status === 'disabled' ? 'info' : item.status === 'warning' ? 'warning' : 'danger'">{{ item.status }}</el-tag></div>
+          <p>{{ item.message }}</p><span v-if="item.latencyMs !== undefined">耗时 {{ item.latencyMs }} ms</span>
+        </div>
       </div>
     </div>
 
@@ -1593,7 +1731,9 @@ onMounted(async () => {
             :closable="false"
             class="panel-alert"
           />
-          <el-form label-width="128px" class="setting-form">
+          <el-segmented v-model="operationSection" class="operation-sections" :options="operationSectionOptions" />
+          <el-form label-width="128px" class="setting-form" :disabled="!canEditSettings || operationBusy">
+            <template v-if="operationSection === 'registration'">
             <el-form-item label="报名通道">
               <div class="switch-row">
                 <el-switch v-model="form.registrationEnabled" active-text="允许新报名" inactive-text="暂停新报名" />
@@ -1609,9 +1749,10 @@ onMounted(async () => {
               <el-divider content-position="left">入口城市</el-divider>
               <el-form-item label="默认入口城市">
                 <div class="entry-tenant-field">
-                  <el-select v-model="form.defaultTenantCode" clearable filterable placeholder="请选择小程序默认打开的城市/商家" style="width: 360px">
+                  <el-select v-if="canManageTenants" v-model="form.defaultTenantCode" clearable filterable placeholder="请选择小程序默认打开的城市/商家" style="width: 360px">
                     <el-option v-for="tenant in tenantOptions" :key="tenant.code" :label="tenantOptionLabel(tenant)" :value="tenant.code" />
                   </el-select>
+                  <el-input v-else v-model="form.defaultTenantCode" clearable placeholder="请输入默认商家编码" style="width: 360px" />
                   <el-tag v-if="form.defaultTenantCode" type="success" effect="plain">用户首次进入默认展示</el-tag>
                   <span class="form-tip">用户手动切换、分享链接和定位命中仍然优先。</span>
                 </div>
@@ -1620,8 +1761,8 @@ onMounted(async () => {
               <el-form-item label="当前模式">
                 <div class="delivery-mode-panel">
                   <el-radio-group v-model="deployment.deliveryMode">
-                    <el-radio-button label="production">正式运营</el-radio-button>
-                    <el-radio-button label="review">微信过审</el-radio-button>
+                    <el-radio-button value="production">正式运营</el-radio-button>
+                    <el-radio-button value="review">微信过审</el-radio-button>
                   </el-radio-group>
                   <el-switch v-model="deployment.reviewSafeMode" active-text="启用过审隐藏" inactive-text="展示完整功能" />
                   <el-tag :type="deployment.reviewSafeMode ? 'warning' : 'success'" effect="plain">
@@ -1634,7 +1775,7 @@ onMounted(async () => {
               </el-form-item>
               <el-form-item label="功能开放">
                 <div class="feature-gate-panel">
-                  <div class="feature-gate-actions">
+                  <div v-if="canEditSettings" class="feature-gate-actions">
                     <el-button size="small" @click="applyFeatureGatePreset('activity')">基础活动 + 心得</el-button>
                     <el-button size="small" @click="applyFeatureGatePreset('open')">全部开放</el-button>
                     <el-tag type="success" effect="plain">已开放 {{ openFeatureGateCount }} / {{ featureGateItems.length }}</el-tag>
@@ -1645,9 +1786,10 @@ onMounted(async () => {
                       <div>
                         <strong>{{ item.label }}</strong>
                         <span>{{ item.description }}</span>
+                        <span v-if="featureGateDependencyLabel(item.key)" class="feature-gate-dependency">开启时会自动开启“{{ featureGateDependencyLabel(item.key) }}”；关闭父功能时会同步关闭本功能。</span>
                       </div>
                       <div class="feature-gate-switch">
-                        <el-switch v-model="deployment.featureGates[item.key]" />
+                        <el-switch v-model="deployment.featureGates[item.key]" @change="(enabled: boolean) => handleFeatureGateChanged(item.key, enabled)" />
                         <el-tag :type="featureGateTagType(item.key)" effect="plain">{{ deployment.featureGates[item.key] ? "用户可见" : "暂不开放" }}</el-tag>
                       </div>
                     </div>
@@ -1655,17 +1797,19 @@ onMounted(async () => {
                 </div>
               </el-form-item>
             </template>
+            </template>
+            <template v-if="operationSection === 'payment'">
             <el-form-item label="线下付款说明" required>
-              <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit :disabled="!paymentSettingsEditable" />
+              <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit :disabled="!canEditSettings || !paymentSettingsEditable" />
             </el-form-item>
             <el-form-item label="支付方式">
               <div class="payment-methods-block">
                 <div class="payment-methods">
-                  <el-checkbox v-model="form.paymentMethods.free" :disabled="!paymentSettingsEditable">免费报名</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.wechat" :disabled="!paymentSettingsEditable">微信支付</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.alipay" :disabled="!paymentSettingsEditable">支付宝</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.balance" :disabled="!paymentSettingsEditable">余额支付</el-checkbox>
-                  <el-checkbox v-model="form.paymentMethods.offline" :disabled="!paymentSettingsEditable">线下收款 / 人工确认</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.free" :disabled="!canEditSettings || !paymentSettingsEditable">免费报名</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.wechat" :disabled="!canEditSettings || !paymentSettingsEditable">微信支付</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.alipay" :disabled="!canEditSettings || !paymentSettingsEditable">支付宝</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.balance" :disabled="!canEditSettings || !paymentSettingsEditable">余额支付</el-checkbox>
+                  <el-checkbox v-model="form.paymentMethods.offline" :disabled="!canEditSettings || !paymentSettingsEditable">线下收款 / 人工确认</el-checkbox>
                 </div>
                 <div class="payment-readiness">
                   <div v-for="item in paymentReadiness" :key="item.key" class="payment-readiness-card">
@@ -1691,12 +1835,14 @@ onMounted(async () => {
             <el-form-item label="默认入群二维码">
               <div class="qr-field">
                 <el-input v-model="form.defaultGroupQrCodeUrl" placeholder="活动未单独配置时使用；报名成功后在报名详情页显示，公开活动页不展示二维码" />
-                <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleDefaultGroupQrSuccess" :on-error="handleUploadError">
+                <el-upload v-if="canUploadImages" action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleDefaultGroupQrSuccess" :on-error="handleUploadError">
                   <el-button :icon="UploadFilled">上传二维码</el-button>
                 </el-upload>
                 <img v-if="form.defaultGroupQrCodeUrl" class="qr-preview" :src="form.defaultGroupQrCodeUrl" alt="默认入群二维码预览" />
               </div>
             </el-form-item>
+            </template>
+            <template v-if="operationSection === 'sms'">
             <el-divider content-position="left">短信验证码服务</el-divider>
             <el-form-item label="短信服务">
               <div class="switch-row">
@@ -1713,7 +1859,12 @@ onMounted(async () => {
               <el-input v-model="form.smsAccessKeyId" placeholder="螺丝帽可留空；腾讯云填 SecretId" maxlength="120" autocomplete="off" />
             </el-form-item>
             <el-form-item label="短信 Secret/API Key">
-              <el-input v-model="form.smsAccessKeySecret" placeholder="螺丝帽填完整 API Key，例如 key-xxxx；腾讯云填 SecretKey" show-password maxlength="200" autocomplete="new-password" />
+              <div class="sms-test-row">
+                <el-input v-model="form.smsAccessKeySecret" placeholder="输入新密钥；留空或保持掩码不会覆盖已有值" show-password maxlength="500" autocomplete="new-password" @input="clearSmsSecretRequested = false" />
+                <el-tag :type="smsSecretConfigured && !clearSmsSecretRequested ? 'success' : 'info'">{{ smsSecretConfigured && !clearSmsSecretRequested ? "已安全配置" : "未配置" }}</el-tag>
+                <el-button v-if="canEditSettings && smsSecretConfigured && !clearSmsSecretRequested" type="danger" plain @click="clearSmsSecretRequested = true; form.smsAccessKeySecret = ''">清除密钥</el-button>
+                <el-button v-if="canEditSettings && clearSmsSecretRequested" @click="clearSmsSecretRequested = false; form.smsAccessKeySecret = '********'">撤销清除</el-button>
+              </div>
             </el-form-item>
             <el-form-item label="短信签名">
               <el-input v-model="form.smsSignName" placeholder="填写已审核签名，不带【】" maxlength="100" />
@@ -1727,10 +1878,12 @@ onMounted(async () => {
             <el-form-item label="测试短信">
               <div class="sms-test-row">
                 <el-input v-model="smsTestForm.phone" placeholder="输入手机号发送测试验证码" maxlength="11" />
-                <el-button type="primary" plain :loading="testingSms" @click="sendTestSms">发送测试短信</el-button>
-                <el-button text @click="go('/h5-code-logs')">查看验证码日志</el-button>
+                <el-button v-if="canEditSettings" type="primary" plain :loading="testingSms" @click="sendTestSms">发送测试短信</el-button>
+                <el-button v-if="canViewSecurityLogs" text @click="go('/h5-code-logs')">查看验证码日志</el-button>
               </div>
             </el-form-item>
+            </template>
+            <template v-if="operationSection === 'theme'">
             <el-form-item label="H5 页面主题">
               <div class="theme-panel">
                 <div class="theme-controls">
@@ -1746,10 +1899,10 @@ onMounted(async () => {
                     </div>
                     <div class="theme-upload">
                       <el-input v-model="form.pageTheme.brandLogoUrl" placeholder="Logo 图片地址，建议正方形透明 PNG" />
-                      <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleBrandLogoSuccess" :on-error="handleUploadError">
+                      <el-upload v-if="canUploadImages" action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleBrandLogoSuccess" :on-error="handleUploadError">
                         <el-button :icon="UploadFilled">上传 Logo</el-button>
                       </el-upload>
-                      <el-button v-if="form.pageTheme.brandLogoUrl" @click="form.pageTheme.brandLogoUrl = ''">移除</el-button>
+                      <el-button v-if="canEditSettings && form.pageTheme.brandLogoUrl" @click="form.pageTheme.brandLogoUrl = ''">移除</el-button>
                     </div>
                     <img v-if="form.pageTheme.brandLogoUrl" class="brand-logo-preview" :src="form.pageTheme.brandLogoUrl" alt="品牌 Logo 预览" />
                   </div>
@@ -1763,10 +1916,10 @@ onMounted(async () => {
                   </div>
                   <div class="theme-upload">
                     <el-input v-model="form.pageTheme.backgroundImage" placeholder="背景图地址，留空则只使用底色" />
-                    <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleThemeBackgroundSuccess" :on-error="handleUploadError">
+                    <el-upload v-if="canUploadImages" action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeImageUpload" :on-success="handleThemeBackgroundSuccess" :on-error="handleUploadError">
                       <el-button :icon="UploadFilled">上传背景图</el-button>
                     </el-upload>
-                    <el-button v-if="form.pageTheme.backgroundImage" @click="form.pageTheme.backgroundImage = ''">移除</el-button>
+                    <el-button v-if="canEditSettings && form.pageTheme.backgroundImage" @click="form.pageTheme.backgroundImage = ''">移除</el-button>
                   </div>
                   <div class="theme-sliders">
                     <div>
@@ -1779,7 +1932,7 @@ onMounted(async () => {
                     </div>
                     <div>
                       <span>卡片圆角</span>
-                      <el-input-number v-model="form.pageTheme.cardRadius" :min="0" :max="24" controls-position="right" />
+                      <el-input-number v-model="form.pageTheme.cardRadius" :min="0" :max="24" controls-position="right" :disabled="!canEditSettings || operationBusy" />
                     </div>
                   </div>
                 </div>
@@ -1788,17 +1941,26 @@ onMounted(async () => {
                     <img v-if="form.pageTheme.brandLogoUrl" class="theme-logo" :src="form.pageTheme.brandLogoUrl" alt="Logo" />
                     <strong>{{ form.pageTheme.brandName || "慢π" }}</strong>
                     <span>{{ form.pageTheme.brandSlogan || "页面背景、卡片透明度和文字颜色会同步到 H5 主要页面。" }}</span>
-                    <button :style="{ background: form.pageTheme.primaryColor }">立即报名</button>
+                    <button disabled :style="{ background: form.pageTheme.primaryColor }">立即报名</button>
                   </div>
                 </div>
               </div>
             </el-form-item>
+            </template>
+            <template v-if="operationSection === 'payment'">
             <el-form-item label="退款说明" required>
-              <el-input v-model="form.refundInstructions" type="textarea" :rows="4" maxlength="1000" show-word-limit :disabled="!paymentSettingsEditable" />
+              <el-input v-model="form.refundInstructions" type="textarea" :rows="4" maxlength="1000" show-word-limit :disabled="!canEditSettings || !paymentSettingsEditable" />
             </el-form-item>
             <el-form-item label="发票说明">
-              <el-input v-model="form.invoiceInstructions" type="textarea" :rows="3" maxlength="1000" show-word-limit :disabled="!paymentSettingsEditable" />
+              <el-input v-model="form.invoiceInstructions" type="textarea" :rows="3" maxlength="1000" show-word-limit :disabled="!canEditSettings || !paymentSettingsEditable" />
             </el-form-item>
+            </template>
+            <template v-if="operationSection === 'agreements'">
+            <el-divider content-position="left">协议与隐私</el-divider>
+            <el-form-item label="用户协议"><el-input v-model="form.userAgreementUrl" placeholder="https://example.com/user-agreement" /></el-form-item>
+            <el-form-item label="隐私政策"><el-input v-model="form.privacyPolicyUrl" placeholder="https://example.com/privacy-policy" /></el-form-item>
+            <el-form-item label="商户服务协议"><el-input v-model="form.merchantAgreementUrl" placeholder="https://example.com/merchant-agreement" /></el-form-item>
+            </template>
           </el-form>
         </div>
       </el-tab-pane>
@@ -1811,6 +1973,7 @@ onMounted(async () => {
           :closable="false"
           class="panel-alert"
         />
+        <fieldset class="settings-fieldset" :disabled="!canEditSettings || operationBusy">
         <div class="deploy-layout">
           <div class="deploy-form">
             <div class="table-card deploy-card domain-batch-card">
@@ -1820,8 +1983,8 @@ onMounted(async () => {
                   <p class="form-tip">后台只负责填充配置、生成命令和做可访问性检测；DNS、SSL、Nginx 和 PM2 重启仍需在服务器执行。</p>
                 </div>
                 <div class="preview-actions">
-                  <el-button @click="fillDomainBatchFromDeployment">从当前配置回填</el-button>
-                  <el-button type="primary" @click="applyDomainBatch">套用到全站</el-button>
+                  <el-button v-if="canEditSettings" @click="fillDomainBatchFromDeployment">从当前配置回填</el-button>
+                  <el-button v-if="canEditSettings" type="primary" @click="applyDomainBatch">套用到全站</el-button>
                 </div>
               </div>
               <el-alert
@@ -1833,11 +1996,11 @@ onMounted(async () => {
               />
               <div class="domain-batch-grid">
                 <div class="domain-batch-controls">
-                  <el-form label-width="104px">
+                <el-form label-width="104px" :disabled="!canEditSettings || operationBusy">
                     <el-form-item label="部署模式">
                       <el-radio-group v-model="domainBatch.mode">
-                        <el-radio-button label="single">同域名部署</el-radio-button>
-                        <el-radio-button label="split">拆分域名</el-radio-button>
+                        <el-radio-button value="single">同域名部署</el-radio-button>
+                        <el-radio-button value="split">拆分域名</el-radio-button>
                       </el-radio-group>
                     </el-form-item>
                     <template v-if="domainBatch.mode === 'single'">
@@ -2059,7 +2222,7 @@ onMounted(async () => {
             <div class="table-card deploy-card">
               <div class="card-title-row">
                 <div class="card-title">数据库与安全密钥</div>
-                <el-button type="primary" plain @click="fillSecrets">生成随机密钥</el-button>
+                <el-button v-if="canEditSettings" type="primary" plain @click="fillSecrets">生成随机密钥</el-button>
               </div>
               <div class="security-readiness">
                 <div v-for="item in securityReadiness" :key="item.key" class="security-card">
@@ -2112,6 +2275,13 @@ onMounted(async () => {
                 </div>
               </div>
               <div class="deploy-grid">
+                <el-form-item label="存储服务商"><el-select v-model="deployment.storageProvider"><el-option label="本地存储" value="local" /><el-option label="阿里云 OSS" value="aliyun-oss" /><el-option label="腾讯云 COS" value="tencent-cos" /><el-option label="S3 兼容存储" value="s3" /></el-select></el-form-item>
+                <el-form-item label="存储 Endpoint"><el-input v-model="deployment.storageEndpoint" placeholder="https://oss-cn-hangzhou.aliyuncs.com" /></el-form-item>
+                <el-form-item label="存储 Region"><el-input v-model="deployment.storageRegion" placeholder="cn-hangzhou" /></el-form-item>
+                <el-form-item label="存储 Bucket"><el-input v-model="deployment.storageBucket" /></el-form-item>
+                <el-form-item label="存储 AccessKey"><el-input v-model="deployment.storageAccessKeyId" /></el-form-item>
+                <el-form-item label="存储 Secret"><el-input v-model="deployment.storageAccessKeySecret" show-password /></el-form-item>
+                <el-form-item label="文件公开域名"><el-input v-model="deployment.storagePublicBaseUrl" placeholder="https://static.example.com" /></el-form-item>
                 <el-form-item label="登录模式"><el-input v-model="deployment.h5AuthMode" /></el-form-item>
                 <el-form-item label="短信启用"><el-switch v-model="deployment.smsEnabled" /></el-form-item>
                 <el-form-item label="短信服务商"><el-input v-model="deployment.smsProvider" placeholder="luosimao-sms / tencent-cloud-sms" /></el-form-item>
@@ -2123,7 +2293,7 @@ onMounted(async () => {
                 <el-form-item label="邮件启用"><el-switch v-model="deployment.emailEnabled" /></el-form-item>
                 <el-form-item label="邮件服务商"><el-input v-model="deployment.emailProvider" /></el-form-item>
                 <el-form-item label="SMTP 主机"><el-input v-model="deployment.smtpHost" /></el-form-item>
-                <el-form-item label="SMTP 端口"><el-input-number v-model="deployment.smtpPort" :min="1" /></el-form-item>
+                <el-form-item label="SMTP 端口"><el-input-number v-model="deployment.smtpPort" :min="1" :disabled="!canEditSettings || operationBusy" /></el-form-item>
                 <el-form-item label="SMTP 用户"><el-input v-model="deployment.smtpUser" /></el-form-item>
                 <el-form-item label="SMTP 密码"><el-input v-model="deployment.smtpPassword" show-password /></el-form-item>
                 <el-form-item label="发件人"><el-input v-model="deployment.smtpFrom" /></el-form-item>
@@ -2145,18 +2315,18 @@ onMounted(async () => {
                 <el-form-item label="店铺直收"><el-switch v-model="deployment.mallMerchantDirectPaymentImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="预发通过"><el-switch v-model="deployment.realPaymentPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
                 <el-form-item label="验收文件"><el-input v-model="deployment.realPaymentPreflightResultFile" /></el-form-item>
-                <el-form-item label="有效期"><el-input-number v-model="deployment.realPaymentPreflightMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
+                <el-form-item label="有效期"><el-input-number v-model="deployment.realPaymentPreflightMaxAgeHours" :min="1" :disabled="!canEditSettings || operationBusy" /><span class="unit">小时</span></el-form-item>
                 <el-form-item label="多机构隔离"><el-switch v-model="deployment.multiTenantEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
                 <el-form-item label="机构模型"><el-switch v-model="deployment.multiTenantSchemaImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="后台过滤"><el-switch v-model="deployment.multiTenantAccessFilterImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="公开端边界"><el-switch v-model="deployment.multiTenantPublicBoundaryImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="机构预发"><el-switch v-model="deployment.multiTenantPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
                 <el-form-item label="机构验收文件"><el-input v-model="deployment.multiTenantPreflightResultFile" /></el-form-item>
-                <el-form-item label="机构有效期"><el-input-number v-model="deployment.multiTenantPreflightMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
+                <el-form-item label="机构有效期"><el-input-number v-model="deployment.multiTenantPreflightMaxAgeHours" :min="1" :disabled="!canEditSettings || operationBusy" /><span class="unit">小时</span></el-form-item>
                 <el-form-item label="多商户商城"><el-switch v-model="deployment.mallMultiMerchantEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
                 <el-form-item label="商城预发"><el-switch v-model="deployment.mallMultiMerchantPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
                 <el-form-item label="商城验收文件"><el-input v-model="deployment.mallMultiMerchantSmokeResultFile" /></el-form-item>
-                <el-form-item label="商城有效期"><el-input-number v-model="deployment.mallMultiMerchantSmokeMaxAgeHours" :min="1" /><span class="unit">小时</span></el-form-item>
+                <el-form-item label="商城有效期"><el-input-number v-model="deployment.mallMultiMerchantSmokeMaxAgeHours" :min="1" :disabled="!canEditSettings || operationBusy" /><span class="unit">小时</span></el-form-item>
                 <el-form-item label="微信支付"><el-switch v-model="deployment.wechatPayEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
                 <el-form-item label="微信 AppId"><el-input v-model="deployment.wechatPayAppId" /></el-form-item>
                 <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" /></el-form-item>
@@ -2175,11 +2345,11 @@ onMounted(async () => {
                 <el-form-item label="支付宝公钥证书"><el-input v-model="deployment.alipayPublicCertPath" /></el-form-item>
                 <el-form-item label="支付宝根证书"><el-input v-model="deployment.alipayRootCertPath" /></el-form-item>
                 <el-form-item label="支付宝回调 URL"><el-input v-model="deployment.alipayNotifyUrl" /></el-form-item>
-                <el-form-item label="付款超时"><el-input-number v-model="deployment.offlinePaymentExpireMinutes" :min="1" /><span class="unit">分钟</span></el-form-item>
+                <el-form-item label="付款超时"><el-input-number v-model="deployment.offlinePaymentExpireMinutes" :min="1" :disabled="!canEditSettings || operationBusy" /><span class="unit">分钟</span></el-form-item>
                 <el-form-item label="关单任务"><el-switch v-model="deployment.orderCloseWorkerEnabled" /></el-form-item>
-                <el-form-item label="关单间隔"><el-input-number v-model="deployment.orderCloseWorkerIntervalSeconds" :min="30" /><span class="unit">秒</span></el-form-item>
+                <el-form-item label="关单间隔"><el-input-number v-model="deployment.orderCloseWorkerIntervalSeconds" :min="30" :disabled="!canEditSettings || operationBusy" /><span class="unit">秒</span></el-form-item>
                 <el-form-item label="备份目录"><el-input v-model="deployment.backupDir" /></el-form-item>
-                <el-form-item label="保留天数"><el-input-number v-model="deployment.backupRetentionDays" :min="1" /></el-form-item>
+                <el-form-item label="保留天数"><el-input-number v-model="deployment.backupRetentionDays" :min="1" :disabled="!canEditSettings || operationBusy" /></el-form-item>
               </div>
             </div>
           </div>
@@ -2195,9 +2365,14 @@ onMounted(async () => {
             <el-input class="env-textarea" type="textarea" :rows="32" :model-value="generatedEnv" readonly />
           </div>
         </div>
+        </fieldset>
       </el-tab-pane>
 
       <el-tab-pane v-if="canManagePlatformSettings" label="配置体检" name="config">
+        <div v-if="configLoadError" class="error-recovery">
+          <el-alert type="error" :title="configLoadError" show-icon :closable="false" />
+          <el-button :loading="loadingConfig" @click="loadConfig">重试体检</el-button>
+        </div>
         <div class="summary-grid" v-if="report">
           <div class="summary-card">
             <span>运行环境</span>
@@ -2237,41 +2412,41 @@ onMounted(async () => {
         </div>
       </el-tab-pane>
 
-      <el-tab-pane label="管理入口" name="links">
+      <el-tab-pane v-if="hasManagementLinks" label="管理入口" name="links">
         <div class="link-grid">
-          <div v-if="!canManagePlatformSettings" class="link-card" @click="go('/categories')">
+          <div v-if="!canManagePlatformSettings && canManageCategories" class="link-card" role="button" tabindex="0" @click="go('/categories')" @keydown.enter.prevent="go('/categories')" @keydown.space.prevent="go('/categories')">
             <strong>分类管理</strong>
             <span>维护活动分类和前台筛选。</span>
           </div>
-          <div v-if="!canManagePlatformSettings" class="link-card" @click="go('/homepage-builder')">
+          <div v-if="!canManagePlatformSettings && canManageHomepage" class="link-card" role="button" tabindex="0" @click="go('/homepage-builder')" @keydown.enter.prevent="go('/homepage-builder')" @keydown.space.prevent="go('/homepage-builder')">
             <strong>首页装修</strong>
             <span>配置 H5 首页模块、图片广告和运营内容。</span>
           </div>
-          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/tenants')">
+          <div v-if="canManagePlatformSettings && canManageTenants" class="link-card" role="button" tabindex="0" @click="go('/tenants')" @keydown.enter.prevent="go('/tenants')" @keydown.space.prevent="go('/tenants')">
             <strong>商家/代理管理</strong>
             <span>开通商家、停用商家和配置审核权限。</span>
           </div>
-          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/config-check')">
+          <div v-if="canManagePlatformSettings && canManageSystem" class="link-card" role="button" tabindex="0" @click="go('/config-check')" @keydown.enter.prevent="go('/config-check')" @keydown.space.prevent="go('/config-check')">
             <strong>上线体检</strong>
             <span>检查生产配置、真实支付、多租户和发布标识。</span>
           </div>
-          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/ops-routine')">
+          <div v-if="canManagePlatformSettings && canManageSystem" class="link-card" role="button" tabindex="0" @click="go('/ops-routine')" @keydown.enter.prevent="go('/ops-routine')" @keydown.space.prevent="go('/ops-routine')">
             <strong>运营巡检</strong>
             <span>按日、周、月跟进平台上线后的巡检事项。</span>
           </div>
-          <div class="link-card" @click="go('/admins')">
+          <div v-if="canViewAdmins" class="link-card" role="button" tabindex="0" @click="go('/admins')" @keydown.enter.prevent="go('/admins')" @keydown.space.prevent="go('/admins')">
             <strong>{{ canManagePlatformSettings ? "商家账号" : "员工账号" }}</strong>
             <span>{{ canManagePlatformSettings ? "给平台或商家创建后台账号、重置密码、启停账号。" : "创建本商家的运营、财务、签到账号。" }}</span>
           </div>
-          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/admin-login-logs')">
+          <div v-if="canManagePlatformSettings && canViewSecurityLogs" class="link-card" role="button" tabindex="0" @click="go('/admin-login-logs')" @keydown.enter.prevent="go('/admin-login-logs')" @keydown.space.prevent="go('/admin-login-logs')">
             <strong>登录日志</strong>
             <span>查看后台登录成功、失败和限流记录。</span>
           </div>
-          <div v-if="canManagePlatformSettings" class="link-card" @click="go('/h5-code-logs')">
+          <div v-if="canManagePlatformSettings && canViewSecurityLogs" class="link-card" role="button" tabindex="0" @click="go('/h5-code-logs')" @keydown.enter.prevent="go('/h5-code-logs')" @keydown.space.prevent="go('/h5-code-logs')">
             <strong>验证码日志</strong>
             <span>查看 H5 手机号验证码发送和失败记录。</span>
           </div>
-          <div class="link-card" @click="go('/operation-logs')">
+          <div v-if="canViewLogs" class="link-card" role="button" tabindex="0" @click="go('/operation-logs')" @keydown.enter.prevent="go('/operation-logs')" @keydown.space.prevent="go('/operation-logs')">
             <strong>操作日志</strong>
             <span>追踪收款、退款、签到和设置修改。</span>
           </div>
@@ -2301,10 +2476,15 @@ onMounted(async () => {
 .feature-gate-card div:first-child { display: grid; gap: 5px; min-width: 0; }
 .feature-gate-card strong { color: #111827; font-size: 13px; }
 .feature-gate-card span { color: #64748b; font-size: 12px; line-height: 1.45; }
+.feature-gate-card .feature-gate-dependency { color: #9a3412; font-weight: 700; }
 .feature-gate-switch { display: grid; justify-items: center; gap: 8px; min-width: 92px; }
 .subtitle { margin: 6px 0 0; color: #64748b; font-size: 14px; }
 .system-tabs { margin-top: 12px; }
+.operation-sections { max-width: 760px; margin-bottom: 20px; }
 .panel-alert { margin-bottom: 16px; }
+.error-recovery { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+.error-recovery .el-alert { flex: 1; min-width: 0; }
+.settings-fieldset { min-width: 0; margin: 0; padding: 0; border: 0; }
 .setting-form { max-width: 980px; }
 .qr-field { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
 .qr-preview { grid-column: 1 / -1; width: 180px; aspect-ratio: 1 / 1; object-fit: contain; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
@@ -2393,6 +2573,8 @@ onMounted(async () => {
 .deploy-grid :deep(.el-form-item) { margin-bottom: 14px; }
 .deploy-grid :deep(.el-form-item__label) { color: #475569; font-weight: 600; }
 .notification-readiness, .rollout-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.connectivity-report { margin-bottom: 16px; }
+.connectivity-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
 .readiness-card { border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px; background: #f8fafc; display: grid; gap: 8px; }
 .readiness-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
 .readiness-head strong { color: #111827; font-size: 14px; }
@@ -2419,7 +2601,7 @@ onMounted(async () => {
 .link-card strong { color: #111827; font-size: 16px; }
 .link-card span { color: #64748b; line-height: 1.5; }
 @media (max-width: 1100px) {
-  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .payment-readiness, .feature-gate-grid, .feature-gate-card, .static-version-grid, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .theme-panel, .theme-grid, .theme-upload, .sms-test-row, .theme-sliders > div, .domain-batch-grid, .domain-check-grid, .domain-command-grid, .domain-preview-row, .wechat-link-row { grid-template-columns: 1fr; }
+  .summary-grid, .link-grid, .deploy-layout, .deploy-grid, .payment-readiness, .feature-gate-grid, .feature-gate-card, .static-version-grid, .release-readiness, .domain-readiness, .security-readiness, .notification-readiness, .rollout-readiness, .connectivity-grid, .theme-panel, .theme-grid, .theme-upload, .sms-test-row, .theme-sliders > div, .domain-batch-grid, .domain-check-grid, .domain-command-grid, .domain-preview-row, .wechat-link-row { grid-template-columns: 1fr; }
   .env-preview { position: static; }
 }
 </style>

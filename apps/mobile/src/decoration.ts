@@ -1,5 +1,6 @@
 import { computed, ref } from "vue";
 import { request, setActivityListIntentFromUrl, withTenantCode } from "./api";
+import { createTenantLoadGuard } from "./tenant-load-guard";
 import { filterDecorationSectionsByFeature, filterNavigationItemsByFeature, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "./feature-gates";
 import { reviewSafeData } from "./review-safe-text";
 import type { HomepagePayload, HomepageSectionView } from "@activity/shared";
@@ -104,6 +105,7 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   const tenant = ref<HomepagePayload["tenant"] | null>(null);
   const loadFailed = ref(false);
   const decorationLoaded = ref(false);
+  const loadGuard = createTenantLoadGuard();
 
   const bottomNavSection = computed(() => {
     const section = sections.value.find((item) => item.type === "bottom_nav") || (loadFailed.value || decorationLoaded.value ? defaultBottomNavSection : null);
@@ -123,16 +125,20 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)));
 
   async function loadDecoration() {
+    const loadToken = loadGuard.begin();
     try {
       loadFailed.value = false;
       await loadFeatureGates(true);
+      if (!loadGuard.isCurrent(loadToken)) return;
       const endpoint = pageKey === "home" ? "/public/homepage" : `/public/page-decoration?pageKey=${encodeURIComponent(pageKey)}`;
       const payload = reviewSafeData(await request<HomepagePayload>(endpoint));
+      if (!loadGuard.isCurrent(loadToken)) return;
       const pageSections = normalizeDecorationSections(payload.sections || []);
       if (pageKey === "home") {
         sections.value = pageSections;
       } else {
         const homePayload = reviewSafeData(await request<HomepagePayload>("/public/homepage").catch(() => null));
+        if (!loadGuard.isCurrent(loadToken)) return;
         const homeSections = normalizeDecorationSections(homePayload?.sections || []);
         const localSections = payload.fallback ? pageSections.filter((item) => !globalSingletonTypes.includes(item.type)) : pageSections;
         const inherited = homeSections.filter((item) => globalSingletonTypes.includes(item.type) && !localSections.some((pageItem) => pageItem.type === item.type));
@@ -141,6 +147,7 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
       tenant.value = payload.tenant || null;
       decorationLoaded.value = true;
     } catch {
+      if (!loadGuard.isCurrent(loadToken)) return;
       sections.value = [];
       tenant.value = null;
       loadFailed.value = true;

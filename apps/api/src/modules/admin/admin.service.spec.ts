@@ -8,7 +8,7 @@ import { financeDailyReport, financeRiskAlerts } from "./finance-operations";
 import { paymentStatementOrderWhere } from "./payment-statement-import";
 import { tenantOperationHealth } from "./tenant-health";
 import { tenantRegionShapesConflict } from "./tenant-region-geometry";
-import { tenantPackagePermissionTemplate, tenantRenewalReminder, tenantSubscriptionStatus, tenantSubscriptionWriteRestriction } from "./tenant-subscription";
+import { tenantEntitlementFeatureForAdminPath, tenantEntitlementFeatureForGate, tenantFeatureAccess, tenantPackagePermissionTemplate, tenantQuotaAccess, tenantRenewalReminder, tenantSubscriptionStatus, tenantSubscriptionWriteRestriction } from "./tenant-subscription";
 
 function config(values: Record<string, string>) {
   return {
@@ -228,13 +228,27 @@ describe("tenant subscription status", () => {
     });
   });
 
-  it("blocks merchant operation writes after package expiry", () => {
+  it("moves expired packages into read-only after the grace period", () => {
     const restriction = tenantSubscriptionWriteRestriction({ packagePlan: "standard", packageExpiresAt: "2026-06-01" }, new Date("2026-06-20T08:00:00.000Z"));
 
     expect(restriction).toMatchObject({
-      status: { status: "expired", label: "已到期" },
-      message: "商家套餐已到期，续费或延长到期日后才能继续运营写入"
+      status: { status: "read_only", label: "只读", writable: false },
+      message: "商家套餐处于只读期，续费或恢复后才能继续运营写入"
     });
+  });
+
+  it("keeps writes available during the package grace period", () => {
+    const status = tenantSubscriptionStatus({ packagePlan: "standard", packageExpiresAt: "2026-06-10" }, new Date("2026-06-20T08:00:00.000Z"));
+    expect(status).toMatchObject({ status: "grace_period", label: "宽限期", daysPastDue: 10, writable: true, gracePeriodDays: 15 });
+    expect(tenantSubscriptionWriteRestriction({ packagePlan: "standard", packageExpiresAt: "2026-06-10" }, new Date("2026-06-20T08:00:00.000Z"))).toBeNull();
+  });
+
+  it("suspends packages after the read-only retention period", () => {
+    expect(tenantSubscriptionStatus({ packagePlan: "trial", packageExpiresAt: "2026-01-01" }, new Date("2026-06-20T08:00:00.000Z"))).toMatchObject({ status: "suspended", label: "已暂停", writable: false });
+  });
+
+  it("supports an explicit platform suspension", () => {
+    expect(tenantSubscriptionStatus({ packagePlan: "core_partner", packageSuspended: true }, new Date("2026-06-20T08:00:00.000Z"))).toMatchObject({ status: "suspended", label: "已暂停", writable: false });
   });
 
   it("allows merchant operation writes while package is only expiring soon", () => {
@@ -269,10 +283,40 @@ describe("tenant subscription status", () => {
     });
   });
 
-  it("builds urgent renewal reminder for expired packages", () => {
+  it("exposes server-authoritative feature entitlements for each package", () => {
+    expect(tenantFeatureAccess({ packagePlan: "trial" }, "mall")).toMatchObject({ allowed: false, feature: "mall" });
+    expect(tenantFeatureAccess({ packagePlan: "city_partner" }, "volunteers")).toMatchObject({ allowed: true, feature: "volunteers" });
+  });
+
+  it("supports explicit tenant entitlement overrides without changing package defaults", () => {
+    expect(tenantFeatureAccess({ packagePlan: "trial", entitlements: { features: { mall: true } as any } }, "mall").allowed).toBe(true);
+    expect(tenantFeatureAccess({ packagePlan: "trial" }, "mall").allowed).toBe(false);
+  });
+
+  it("enforces finite quotas and treats null quotas as unlimited", () => {
+    expect(tenantQuotaAccess({ packagePlan: "trial" }, "adminUsers", 3)).toMatchObject({ allowed: false, limit: 3, nextUsage: 4 });
+    expect(tenantQuotaAccess({ packagePlan: "custom" }, "adminUsers", 100000)).toMatchObject({ allowed: true, limit: null });
+  });
+
+  it("maps public launch gates to package entitlement features", () => {
+    expect(tenantEntitlementFeatureForGate("communityPublish")).toBe("community");
+    expect(tenantEntitlementFeatureForGate("volunteer")).toBe("volunteers");
+    expect(tenantEntitlementFeatureForGate("adCenter")).toBe("ads");
+    expect(tenantEntitlementFeatureForGate("unknown")).toBeNull();
+  });
+
+  it("maps admin module routes to package entitlement features", () => {
+    expect(tenantEntitlementFeatureForAdminPath("mall/products")).toBe("mall");
+    expect(tenantEntitlementFeatureForAdminPath("community/activities")).toBe("community");
+    expect(tenantEntitlementFeatureForAdminPath("forum/topics/1/pin")).toBe("forum");
+    expect(tenantEntitlementFeatureForAdminPath("charity/projects")).toBe("charity");
+    expect(tenantEntitlementFeatureForAdminPath("activities/1")).toBeNull();
+  });
+
+  it("builds urgent renewal reminder for read-only packages", () => {
     expect(tenantRenewalReminder({ packagePlan: "standard", packageExpiresAt: "2026-06-01" }, new Date("2026-06-20T08:00:00.000Z"))).toMatchObject({
       level: "urgent",
-      label: "已到期",
+      label: "只读",
       actionRequired: true,
       dueDate: "2026-06-01"
     });
@@ -376,6 +420,14 @@ describe("tenant region polygon conflict guard", () => {
     const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
     expect(source).toContain('if (input.id) candidates.andWhere("region.id <> :id", { id: input.id });');
   });
+
+  it("rechecks exclusive conflicts before approving a pending region", () => {
+    const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+    const approval = source.slice(source.indexOf("async approveTenantRegion("), source.indexOf("async bulkImportTenantRegions("));
+    expect(approval).toContain('if (dto.status === "approved")');
+    expect(approval).toContain("this.findTenantRegionConflict");
+    expect(approval).toContain("不能批准");
+  });
 });
 
 describe("tenant region hit log summary guard", () => {
@@ -392,5 +444,113 @@ describe("tenant region hit log summary guard", () => {
     expect(serviceSource).toContain("COALESCE(tenant.id, regionTenant.id)");
     expect(dtoSource).toContain("startDate?: string");
     expect(dtoSource).toContain("endDate?: string");
+  });
+});
+
+describe("check-in overview query guard", () => {
+  it("uses the joined alias for pending rows and excludes revoked check-ins from live statistics", () => {
+    const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+    const method = source.slice(source.indexOf("async checkInOverview("), source.indexOf("async approveRegistration("));
+
+    expect(method).not.toContain('builder.andWhere("checkIn.revokedAt IS NULL")');
+    expect(method).toContain('.andWhere("linkedCheckIn.id IS NULL")');
+    expect(method.match(/\.andWhere\("checkIn\.revokedAt IS NULL"\)/g)).toHaveLength(2);
+  });
+});
+
+describe("mobile financial write concurrency guard", () => {
+  const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+
+  it("locks registration review and offline payment state transitions", () => {
+    const reviewMethods = source.slice(source.indexOf("async approveRegistration("), source.indexOf("async cancelRegistration("));
+    const offlinePayment = source.slice(source.indexOf("async confirmOfflinePayment("), source.indexOf("async updateOrderRemark("));
+
+    expect(reviewMethods.match(/pessimistic_write/g)?.length).toBeGreaterThanOrEqual(4);
+    expect(reviewMethods).toContain("this.assertActivityAccess(registration.activity, admin)");
+    expect(offlinePayment).toContain('lock: { mode: "pessimistic_write" }');
+    expect(offlinePayment).toContain("manager.getRepository(PaymentTransaction)");
+    expect(offlinePayment).toContain("manager.getRepository(Registration).save(registration)");
+  });
+
+  it("locks refund rejection and treats an already rejected row as an idempotent replay", () => {
+    const rejectRefund = source.slice(source.indexOf("async rejectRefund("), source.indexOf("async scanProviderRefunds("));
+
+    expect(rejectRefund).toContain('lock: { mode: "pessimistic_write" }');
+    expect(rejectRefund).toContain('refund.status === "rejected"');
+    expect(rejectRefund).toContain("if (!result.claimed) return result.saved");
+  });
+});
+
+describe("charity refund relation loading guard", () => {
+  it("does not expand circular eager order and refund relations for ledger idempotency lookups", () => {
+    const source = readFileSync("src/modules/charity-fund.service.ts", "utf8");
+    const reversal = source.slice(source.indexOf("async recordRefundReversal("), source.indexOf("private async recordRefundRetention("));
+    const append = source.slice(source.indexOf("private async appendLedgerEntry("), source.indexOf("private async summary("));
+
+    expect(reversal.match(/loadEagerRelations: false/g)).toHaveLength(2);
+    expect(append.match(/loadEagerRelations: false/g)).toHaveLength(2);
+  });
+});
+
+describe("volunteer overview relation loading guard", () => {
+  it("loads only the relations used by the overview instead of expanding circular eager graphs", () => {
+    const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+    const method = source.slice(source.indexOf("async volunteerOverview("), source.indexOf("async volunteerProfilesList("));
+
+    expect(method).toContain('createQueryBuilder("profile")');
+    expect(method).toContain('createQueryBuilder("application")');
+    expect(method).toContain('createQueryBuilder("record")');
+    expect(method).toContain('createQueryBuilder("certificate")');
+    expect(method).toContain('createQueryBuilder("task")');
+    expect(method).not.toContain(".find({");
+  });
+
+  it("keeps volunteer write replay lookups off circular eager relation graphs", () => {
+    const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+    const governance = source.slice(source.indexOf("async saveVolunteerTask("), source.indexOf("async volunteerServiceRecordsList("));
+
+    expect(governance).toContain("loadEagerRelations: false");
+    expect(governance).toContain("this.volunteerServiceRecordQuery(serviceRepo)");
+    expect(governance).toContain("this.volunteerServiceRecordQuery(repo)");
+    expect(governance).not.toContain("repo.findOne({ where: { lastActionBusinessKey: businessKey } });");
+    expect(governance).not.toContain("serviceRepo.findOne({ where: { applicationRecordKey: recordKey } })");
+    expect(governance).not.toContain("repo.findOne({ where: { supervisorConfirmationKey: businessKey } })");
+  });
+});
+
+describe("forum reply submission response guard", () => {
+  it("returns moderation status and stable reply depth without exposing internal relations", () => {
+    const source = readFileSync("src/modules/courses/public-courses.controller.ts", "utf8");
+    const view = source.slice(source.indexOf("private forumReplyView("), source.indexOf("private requiredText("));
+
+    expect(view).toContain("status: reply.status");
+    expect(view).toContain("depth: reply.depth");
+    expect(view).not.toContain("tenant:");
+    expect(view).not.toContain("userId:");
+    expect(view).not.toContain("reviewRemark:");
+  });
+});
+
+describe("member point ledger visibility guard", () => {
+  it("queries the tenant ledger by trusted scope instead of business source allowlists", () => {
+    const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+    const method = source.slice(source.indexOf("private visiblePointLogsForUser("), source.indexOf("private memberTimeline("));
+
+    expect(method).toContain("where: { user: { id: userId }, tenantScopeKey }");
+    expect(method).toContain('relations: ["relatedLog"]');
+    expect(method).not.toContain("sourcePairs");
+    expect(method).not.toContain("startsWith");
+  });
+});
+
+describe("production demo seed guard", () => {
+  it("keeps required defaults but skips sample categories and activities in production", () => {
+    const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+    const method = source.slice(source.indexOf("private async ensureDevSeed()"), source.indexOf("private async createSeedActivity("));
+
+    expect(method.indexOf("ensureMemberLevelSeeds")).toBeLessThan(method.indexOf('=== "production"'));
+    expect(method.indexOf("ensureHomepageSeeds")).toBeLessThan(method.indexOf('=== "production"'));
+    expect(method.indexOf('=== "production"')).toBeLessThan(method.indexOf('const names = ["沙龙", "读书", "共创"]'));
+    expect(method.indexOf('=== "production"')).toBeLessThan(method.indexOf('title: "Weekend Reading: Courage"'));
   });
 });

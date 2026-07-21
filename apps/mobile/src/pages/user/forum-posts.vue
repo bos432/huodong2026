@@ -1,7 +1,18 @@
 <template>
-  <view class="container my-forum-page">
+  <view class="container my-forum-page has-custom-nav">
+    <view class="custom-nav">
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">‹ 返回</view>
+      <text class="nav-title">我的论坛</text>
+      <view class="nav-action" role="button" tabindex="0" aria-label="刷新论坛记录" @click="load" @keyup.enter="load" @keyup.space.prevent="load">刷新</view>
+    </view>
     <view class="tab-row">
-      <view v-for="item in tabs" :key="item.key" class="tab-pill" :class="{ active: activeTab === item.key }" @click="activeTab = item.key">{{ item.label }}</view>
+      <view v-for="item in tabs" :key="item.key" class="tab-pill" :class="{ active: activeTab === item.key }" role="tab" tabindex="0" :aria-selected="activeTab === item.key" :aria-label="`查看我的${item.label}`" @click="activeTab = item.key" @keyup.enter="activeTab = item.key" @keyup.space.prevent="activeTab = item.key">{{ item.label }}</view>
+    </view>
+
+    <view v-if="loading" class="state-card">论坛记录加载中...</view>
+    <view v-else-if="activeTabFailed" class="state-card error-state" role="alert" aria-live="assertive">
+      <text>{{ loadWarning }}</text>
+      <view class="state-retry" @click="load">重新加载</view>
     </view>
 
     <view v-if="activeTab === 'topics'">
@@ -17,7 +28,7 @@
           <text>收藏 {{ item.favoriteCount || 0 }}</text>
         </view>
       </view>
-      <view v-if="!topics.length" class="empty-card">暂无我的帖子</view>
+      <view v-if="!loading && !activeTabFailed && !topics.length" class="empty-card">暂无我的帖子</view>
     </view>
 
     <view v-if="activeTab === 'replies'">
@@ -29,7 +40,7 @@
           <text>{{ formatTime(item.createdAt) }}</text>
         </view>
       </view>
-      <view v-if="!replies.length" class="empty-card">暂无我的回复</view>
+      <view v-if="!loading && !activeTabFailed && !replies.length" class="empty-card">暂无我的回复</view>
     </view>
 
     <view v-if="activeTab === 'favorites'">
@@ -42,15 +53,20 @@
           <text>{{ formatTime(item.createdAt) }}</text>
         </view>
       </view>
-      <view v-if="!favorites.length" class="empty-card">暂无我的收藏</view>
+      <view v-if="!loading && !activeTabFailed && !favorites.length" class="empty-card">暂无我的收藏</view>
     </view>
+    <TabBar current="user" />
   </view>
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { reviewSafeText } from "../../review-safe-text";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import TabBar from "../../components/TabBar.vue";
 
 const tabs = [
   { key: "topics", label: "帖子" },
@@ -61,22 +77,60 @@ const activeTab = ref<"topics" | "replies" | "favorites">("topics");
 const topics = ref<any[]>([]);
 const replies = ref<any[]>([]);
 const favorites = ref<any[]>([]);
+const loading = ref(false);
+const loadWarning = ref("");
+const failedTabs = ref<string[]>([]);
+const loadedTenantCode = ref("");
+const loadGuard = createTenantLoadGuard();
+const activeTabFailed = computed(() => failedTabs.value.includes(activeTab.value));
 
-onShow(load);
+onShow(async () => {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
+  await load();
+});
 
 async function load() {
+  const loadToken = loadGuard.begin();
+  const sameTenant = loadedTenantCode.value === loadToken.tenantCode;
+  if (loadedTenantCode.value && !sameTenant) {
+    topics.value = [];
+    replies.value = [];
+    favorites.value = [];
+  }
+  loading.value = true;
+  loadWarning.value = "";
+  failedTabs.value = [];
   try {
     await ensureUser();
-    const [topicRows, replyRows, favoriteRows] = await Promise.all([
+    const results = await Promise.allSettled([
       request<any[]>("/public/me/forum/topics"),
       request<any[]>("/public/me/forum/replies"),
       request<any[]>("/public/me/forum/favorites")
     ]);
-    topics.value = topicRows || [];
-    replies.value = replyRows || [];
-    favorites.value = favoriteRows || [];
+    if (!loadGuard.isCurrent(loadToken)) return;
+    const targets = [topics, replies, favorites];
+    const keys = ["topics", "replies", "favorites"];
+    const labels = ["帖子", "回复", "收藏"];
+    const failures: string[] = [];
+    results.forEach((result, index) => {
+      if (result.status === "fulfilled") targets[index].value = result.value || [];
+      else {
+        if (!sameTenant) targets[index].value = [];
+        failedTabs.value.push(keys[index]);
+        failures.push(labels[index]);
+      }
+    });
+    loadWarning.value = failures.length ? `${failures.join("、")}记录同步失败，请重新加载。` : "";
+    loadedTenantCode.value = loadToken.tenantCode;
   } catch (error: any) {
-    if (error?.message) uni.showToast({ title: error.message, icon: "none" });
+    if (!loadGuard.isCurrent(loadToken)) return;
+    if (!String(error?.message || "").includes("请先完成")) {
+      failedTabs.value = ["topics", "replies", "favorites"];
+      loadWarning.value = reviewSafeText(error?.message || "论坛记录加载失败，请稍后重试。");
+    }
+  } finally {
+    if (loadGuard.isCurrent(loadToken)) loading.value = false;
   }
 }
 
@@ -92,14 +146,24 @@ function goTopic(topic: any) {
   uni.navigateTo({ url: withTenantCode(`/pages/forum/detail?id=${topic.id}`) });
 }
 
+function goBack() {
+  uni.navigateBack();
+}
+
 function formatTime(value?: string) {
   if (!value) return "";
-  return String(value).replace("T", " ").slice(0, 16);
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
+  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false });
 }
 </script>
 
 <style scoped>
-.my-forum-page { padding-bottom:80rpx; }
+.my-forum-page { min-height:100vh; box-sizing:border-box; }
+.custom-nav { display:flex; align-items:center; padding:18rpx 0 20rpx; }
+.nav-back, .nav-action { width:130rpx; color:#4A6B8A; font-size:28rpx; font-weight:800; }
+.nav-action { text-align:right; }
+.nav-title { flex:1; color:#263d3c; font-size:32rpx; font-weight:900; text-align:center; }
 .tab-row { display:flex; gap:12rpx; margin-bottom:18rpx; }
 .tab-pill { flex:1; height:64rpx; display:flex; align-items:center; justify-content:center; border-radius:999px; background:#fff; color:#667085; font-size:25rpx; font-weight:900; }
 .tab-pill.active { background:#C43D3D; color:#fff; }
@@ -112,4 +176,8 @@ function formatTime(value?: string) {
 .status.approved { background:#dcfce7; color:#15803d; }
 .status.rejected, .status.hidden { background:#fee2e2; color:#b91c1c; }
 .empty-card { padding:36rpx 24rpx; border-radius:20rpx; background:#fff7ec; color:#8a6b58; text-align:center; font-size:26rpx; }
+.state-card { display:grid; gap:10rpx; margin-bottom:18rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }
+.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.state-retry { width:max-content; color:#C43D3D; font-weight:900; }
+@media (min-width: 900px) { .my-forum-page { max-width:760px; margin:0 auto; } }
 </style>

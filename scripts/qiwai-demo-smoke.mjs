@@ -389,7 +389,7 @@ async function generateOrReuseSettlement(financeToken, payload, label) {
     const match = String(error.message).match(/已有结算单：([A-Za-z0-9_-]+)/);
     if (!match) throw error;
     const list = await api("/admin/agent-settlements", { headers: auth(financeToken) });
-    const existing = list.find((item) => item.settlementNo === match[1]);
+    const existing = list.items.find((item) => item.settlementNo === match[1]);
     assert(existing?.id, `${label} existing settlement should be visible after duplicate-period guard`);
     return existing;
   }
@@ -439,8 +439,8 @@ async function verifySettlementFlow(primaryFlow, boundaryFlow) {
   assert(boundarySettlement.id && boundarySettlement.settlementNo, "boundary settlement should be generated");
 
   const list = await api("/admin/agent-settlements", { headers: auth(primaryFlow.financeToken) });
-  assert(list.some((item) => item.id === settlement.id), "finance list should include own settlement");
-  assert(!list.some((item) => item.id === boundarySettlement.id), "finance list should not include other city settlement");
+  assert(list.items.some((item) => item.id === settlement.id), "finance list should include own settlement");
+  assert(!list.items.some((item) => item.id === boundarySettlement.id), "finance list should not include other city settlement");
   await expectApiFailure(`/admin/agent-settlements/${boundarySettlement.id}/details`, { headers: auth(primaryFlow.financeToken) }, "cross-city settlement details");
 
   settlement = await ensureSubmittedSettlement(settlement, primaryFlow.financeToken);

@@ -9,6 +9,7 @@ import { User } from "./user.entity";
 export type ConversionEventType = "view" | "share_visit" | "register" | "pay" | "check_in" | "review" | "cancel" | "refund";
 
 @Entity("conversion_events")
+@Index("UQ_conversion_events_idempotency_key", ["idempotencyKey"], { unique: true })
 export class ConversionEvent {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -30,6 +31,27 @@ export class ConversionEvent {
 
   @ManyToOne(() => Order, { eager: true, nullable: true, onDelete: "SET NULL" })
   order!: Order | null;
+
+  @Column({ type: "int", nullable: true })
+  ticketTypeIdSnapshot!: number | null;
+
+  @Column({ type: "varchar", length: 100, nullable: true })
+  ticketTypeNameSnapshot!: string | null;
+
+  @Column({ type: "varchar", length: 48, nullable: true })
+  channelCodeSnapshot!: string | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  channelNameSnapshot!: string | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  provinceSnapshot!: string | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  citySnapshot!: string | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  districtSnapshot!: string | null;
 
   @Index()
   @Column({ type: "varchar", length: 32 })

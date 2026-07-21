@@ -30,20 +30,23 @@ function duplicateKeys(keys) {
 
 const exampleKeys = envKeys(read("deploy/.env.production.example"));
 const productionKeys = fs.existsSync("deploy/.env.production") ? envKeys(read("deploy/.env.production")) : [];
+const templateOnly = process.env.PREFLIGHT_ALLOW_ENV_TEMPLATE_ONLY === "true";
 const initScript = read("scripts/init-production-env.mjs");
 const preflight = read("scripts/preflight.mjs");
 const doctor = read("scripts/doctor.mjs");
 const checklist = read("docs/launch-checklist.md");
 const progress = read("docs/project-progress.md");
 
-check(productionKeys.length > 0, "deploy/.env.production must exist before release readiness checks.");
+check(productionKeys.length > 0 || templateOnly, "deploy/.env.production must exist before release readiness checks.");
 
-for (const key of exampleKeys) {
-  check(productionKeys.includes(key), `deploy/.env.production must include ${key} from deploy/.env.production.example.`);
-}
+if (!templateOnly || productionKeys.length) {
+  for (const key of exampleKeys) {
+    check(productionKeys.includes(key), `deploy/.env.production must include ${key} from deploy/.env.production.example.`);
+  }
 
-for (const key of productionKeys) {
-  check(exampleKeys.includes(key), `deploy/.env.production contains ${key}, but deploy/.env.production.example does not document it.`);
+  for (const key of productionKeys) {
+    check(exampleKeys.includes(key), `deploy/.env.production contains ${key}, but deploy/.env.production.example does not document it.`);
+  }
 }
 
 for (const key of duplicateKeys(exampleKeys)) {

@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
 import { Tenant } from "./tenant.entity";
 
 @Entity("agents")
@@ -11,6 +11,10 @@ export class Agent {
 
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
   tenant!: Tenant | null;
+
+  @Index()
+  @ManyToOne(() => Agent, { nullable: true, onDelete: "SET NULL" })
+  parentAgent!: Agent | null;
 
   @Column({ type: "varchar", length: 80, nullable: true })
   region!: string | null;

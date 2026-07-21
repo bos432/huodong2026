@@ -224,6 +224,8 @@ mysqldump -h <db-host> -P 3306 -u <db-user> -p --single-transaction --routines -
 
 先确认迁移连接的是生产库，不是本地开发库。
 
+钱包和公益账本 migration 会创建哈希链 trigger。使用项目内置 MySQL 时，`docker-compose.yml` 已启用 `log_bin_trust_function_creators=1`；使用云数据库或外部 MySQL 时，迁移前必须让 DBA 开启等效参数，或为专用迁移账号授予创建触发器所需权限。
+
 ```bash
 npm --prefix apps/api run migration:show
 npm --prefix apps/api run migration:run

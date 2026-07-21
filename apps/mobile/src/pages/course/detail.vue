@@ -2,15 +2,15 @@
   <view class="container course-detail-page">
     <SplashAd />
     <view class="custom-nav">
-      <view class="nav-back" @click="goBack">返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
       <view class="nav-title">内容详情</view>
-      <view class="nav-share" @click="share">分享</view>
+      <view class="nav-share" role="button" tabindex="0" aria-label="分享课程" @click="share" @keyup.enter="share" @keyup.space.prevent="share">分享</view>
     </view>
 
     <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="error" class="card state-card">
+    <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
       <view>{{ error }}</view>
-      <view class="button secondary retry-button" @click="loadCourse">重试</view>
+      <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载课程详情" @click="loadCourse" @keyup.enter="loadCourse" @keyup.space.prevent="loadCourse">重试</view>
     </view>
 
     <template v-else-if="course">
@@ -45,7 +45,8 @@
           :key="tab.key"
           class="detail-tab"
           :class="{ active: activeTab === tab.key }"
-          @click="activeTab = tab.key"
+          role="tab" tabindex="0" :aria-selected="activeTab === tab.key"
+          @click="activeTab = tab.key" @keyup.enter="activeTab = tab.key" @keyup.space.prevent="activeTab = tab.key"
         >{{ tab.label }}</view>
       </view>
 
@@ -70,6 +71,10 @@
       </view>
 
       <view v-if="activeTab === 'reviews'" class="card tab-card">
+        <view v-if="reviewsError" class="reviews-error">
+          <text>{{ reviewsError }}</text>
+          <text class="retry-text" role="button" tabindex="0" aria-label="重新加载课程评价" @click="loadReviews" @keyup.enter="loadReviews" @keyup.space.prevent="loadReviews">重新加载评价</text>
+        </view>
         <view v-for="(rv, ri) in reviews" :key="ri" class="review-item">
           <view class="row review-author">
             <image class="avatar-sm" :src="rv.avatar" mode="aspectFill" />
@@ -79,17 +84,19 @@
             </view>
           </view>
           <text class="review-content">{{ rv.content }}</text>
+          <text v-if="rv.reply" class="review-reply">讲师回复：{{ rv.reply }}</text>
           <text class="subtle review-time">{{ rv.time }}</text>
         </view>
+        <EmptyState v-if="!reviewsLoading && !reviewsError && !reviews.length" icon="评" text="暂无已通过审核的课程评价" />
       </view>
 
       <view class="bottom-actions">
-        <view class="bottom-action" @click="toggleFavorite">
-          <text class="favorite-icon">{{ isFav ? "❤️" : "🤍" }}</text>
+        <view class="bottom-action" role="button" tabindex="0" :aria-disabled="favoriteLoading" aria-label="收藏课程" :class="{ disabled: favoriteLoading }" @click="toggleFavorite" @keyup.enter="toggleFavorite" @keyup.space.prevent="toggleFavorite">
+          <text class="favorite-icon">{{ favoriteLoading ? "处理中" : (isFav ? "❤️" : "🤍") }}</text>
           <text class="subtle">收藏</text>
         </view>
-        <view class="button buy-button" @click="buyCourse">
-          {{ Number(course.price) > 0 ? `立即加入 ${priceText(course.price)}` : "免费加入" }}
+        <view class="button buy-button" role="button" tabindex="0" :aria-disabled="joining" :aria-busy="joining" aria-label="加入或继续课程" :class="{ disabled: joining }" @click="buyCourse" @keyup.enter="buyCourse" @keyup.space.prevent="buyCourse">
+          {{ joining ? "处理中..." : course.owned ? "继续观看" : course.accessMode === 'member' ? '使用会员权益加入' : course.accessMode === 'redeem' ? '使用兑换码加入' : Number(course.price) > 0 ? `立即加入 ${priceText(course.price)}` : "免费加入" }}
         </view>
       </view>
     </template>
@@ -105,14 +112,16 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from "vue";
-import { ensureUser, fetchMyProfile, request, withTenantCode } from "../../api";
+import { computed, ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
+import { ensureUser, fetchMyProfile, getCurrentTenantCode, getUserToken, request, withTenantCode } from "../../api";
 import { priceText } from "../../course-data";
 import { reviewSafeText } from "../../review-safe-text";
 import EmptyState from "../../components/EmptyState.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const activeTab = ref("detail");
 const isFav = ref(false);
@@ -120,8 +129,16 @@ const loading = ref(true);
 const error = ref("");
 const rawCourse = ref<any>();
 const joining = ref(false);
+const favoriteLoading = ref(false);
+const reviewsLoading = ref(false);
+const reviewsError = ref("");
+const reviews = ref<any[]>([]);
 const phoneBindVisible = ref(false);
 const pendingPhoneAction = ref<"" | "buy">("");
+const clientOrderKey = ref(`course_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`);
+const courseLoadGuard = createTenantLoadGuard();
+const reviewsLoadGuard = createTenantLoadGuard();
+const favoriteActionGuard = createTenantLoadGuard();
 
 const tabs = [
   { key: "detail", label: "详情" },
@@ -149,7 +166,9 @@ const course = computed(() => {
     rating: Number(row.rating || 0).toFixed(1),
     reviewCount: Number(row.reviewCount || 0),
     tag: reviewSafeText(tags[0] || (price === 0 ? "限时免费" : "")),
-    description: reviewSafeText(row.description || "")
+    description: reviewSafeText(row.description || ""),
+    accessMode: row.accessMode || "price",
+    owned: Boolean(row.owned)
   };
 });
 const chapters = computed(() => (rawCourse.value?.chapters || []).map((chapter: any) => ({
@@ -158,11 +177,6 @@ const chapters = computed(() => (rawCourse.value?.chapters || []).map((chapter: 
   lessons: (chapter.lessons || []).map((lesson: any) => ({ ...lesson, title: reviewSafeText(lesson.title || "") }))
 })));
 
-const reviews = [
-  { avatar: "/static/avatar1.png", nickname: "学而时习", rating: 5, content: "内容扎实，适合系统了解。", time: "3天前" },
-  { avatar: "/static/avatar2.png", nickname: "书道中人", rating: 4, content: "目录清晰，后续期待更多小节。", time: "1周前" }
-];
-
 function currentCourseId() {
   const pages = getCurrentPages();
   const options = (pages[pages.length - 1] as any)?.options || {};
@@ -170,25 +184,66 @@ function currentCourseId() {
 }
 
 async function loadCourse() {
+  const token = courseLoadGuard.begin();
   loading.value = true;
   error.value = "";
+  reviewsError.value = "";
   try {
     const id = currentCourseId();
     if (!id) throw new Error("缺少内容ID");
-    const data = await request<any>(`/public/courses/${id}`);
+    const [courseResult, reviewResult] = await Promise.allSettled([
+      request<any>(`/public/courses/${id}`),
+      request<any[]>(`/public/courses/${id}/reviews`)
+    ]);
+    if (!courseLoadGuard.isCurrent(token)) return;
+    if (courseResult.status === "rejected") throw courseResult.reason;
+    const data = courseResult.value;
     if (!data) throw new Error("内容不存在或未发布");
     rawCourse.value = data;
-    try {
-      await ensureUser();
+    if (reviewResult.status === "fulfilled") applyReviews(reviewResult.value);
+    else reviewsError.value = (reviewResult.reason as any)?.message || "课程评价加载失败，请稍后重试。";
+    if (getUserToken()) {
+      try {
       const favorite = await request<any>(`/public/me/course-favorites/${id}`);
-      isFav.value = Boolean(favorite?.favorited);
-    } catch {
+      if (courseLoadGuard.isCurrent(token)) isFav.value = Boolean(favorite?.favorited);
+      } catch {
+        if (courseLoadGuard.isCurrent(token)) isFav.value = false;
+      }
+    } else {
       isFav.value = false;
     }
   } catch (err: any) {
-    error.value = reviewSafeText(err.message || "内容加载失败");
+    if (courseLoadGuard.isCurrent(token)) error.value = reviewSafeText(err.message || "内容加载失败");
   } finally {
-    loading.value = false;
+    if (courseLoadGuard.isCurrent(token)) loading.value = false;
+  }
+}
+
+function applyReviews(rows: any[]) {
+  reviews.value = (Array.isArray(rows) ? rows : []).map((row, index) => ({
+    id: row.id,
+    avatar: `/static/avatar${(index % 3) + 1}.png`,
+    nickname: reviewSafeText(row.authorName || `学员 ${String(row.id || index + 1).slice(-4)}`),
+    rating: Math.min(Math.max(Number(row.rating || 0), 0), 5),
+    content: reviewSafeText(row.content || ""),
+    time: row.createdAt ? String(row.createdAt).replace("T", " ").slice(0, 16) : "",
+    reply: reviewSafeText(row.reply || "")
+  }));
+}
+
+async function loadReviews() {
+  if (!course.value || reviewsLoading.value) return;
+  const token = reviewsLoadGuard.begin();
+  const courseId = Number(course.value.id);
+  reviewsLoading.value = true;
+  reviewsError.value = "";
+  try {
+    const rows = await request<any[]>(`/public/courses/${courseId}/reviews`);
+    if (reviewsLoadGuard.isCurrent(token) && Number(course.value?.id) === courseId) applyReviews(rows);
+  } catch (error: any) {
+    if (reviewsLoadGuard.isCurrent(token)) reviewsError.value = reviewSafeText(error?.message || "课程评价加载失败，请稍后重试。");
+  } finally {
+    if (reviewsLoadGuard.isCurrent(token)) reviewsLoading.value = false;
   }
 }
 
@@ -208,33 +263,48 @@ function share() {
   uni.showToast({ title: "请使用系统分享", icon: "none" });
 }
 async function toggleFavorite() {
-  if (!course.value) return;
+  if (!course.value || favoriteLoading.value) return;
+  const token = favoriteActionGuard.begin();
+  const courseId = Number(course.value.id);
+  favoriteLoading.value = true;
   try {
     await ensureUser();
-    const result = await request<any>(`/public/me/course-favorites/${course.value.id}`, { method: "POST" });
+    const result = await request<any>(`/public/me/course-favorites/${courseId}`, { method: "POST" });
+    if (!favoriteActionGuard.isCurrent(token) || Number(course.value?.id) !== courseId) return;
     isFav.value = Boolean(result?.favorited);
     uni.showToast({ title: isFav.value ? "已收藏内容" : "已取消收藏", icon: "none" });
   } catch (err: any) {
-    uni.showToast({ title: reviewSafeText(err.message || "收藏失败"), icon: "none" });
+    if (favoriteActionGuard.isCurrent(token)) uni.showToast({ title: reviewSafeText(err.message || "收藏失败"), icon: "none" });
+  } finally {
+    if (favoriteActionGuard.isCurrent(token)) favoriteLoading.value = false;
   }
 }
 async function buyCourse() {
   if (!course.value) return;
-  if (Number(course.value.price) > 0) {
-    if (!(await requirePhoneBound("buy"))) return;
-    uni.navigateTo({ url: withTenantCode(`/pages/order/confirm?id=${course.value.id}`) });
-  } else {
-    if (joining.value) return;
-    joining.value = true;
-    try {
+  if (course.value.owned) {
+    uni.navigateTo({ url: withTenantCode(`/pages/course/player?id=${course.value.id}`) });
+    return;
+  }
+  if (course.value.accessMode === "redeem") { uni.showToast({ title:"请在个人中心输入课程兑换码", icon:"none" }); return; }
+  if (joining.value) return;
+  const tenantCode = getCurrentTenantCode();
+  const courseId = Number(course.value.id);
+  joining.value = true;
+  try {
+    if (Number(course.value.price) > 0 && course.value.accessMode !== "member") {
       if (!(await requirePhoneBound("buy"))) return;
-      await request(`/public/courses/${course.value.id}/orders`, { method: "POST", data: {} });
-      uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&mode=free&id=${course.value.id}`) });
-    } catch (err: any) {
-      uni.showToast({ title: reviewSafeText(err.message || "加入内容失败"), icon: "none" });
-    } finally {
-      joining.value = false;
+      if (getCurrentTenantCode() === tenantCode) uni.navigateTo({ url: withTenantCode(`/pages/order/confirm?id=${courseId}`) });
+    } else {
+      if (!(await requirePhoneBound("buy"))) return;
+      const result = await request<any>(`/public/courses/${courseId}/orders`, { method: "POST", data: { clientOrderKey: clientOrderKey.value } });
+      if (getCurrentTenantCode() !== tenantCode || Number(course.value?.id) !== courseId) return;
+      const orderId = Number(result?.order?.id || 0);
+      uni.navigateTo({ url: withTenantCode(`/pages/order/payment?status=success&mode=free&id=${courseId}${orderId ? `&orderId=${orderId}` : ""}`) });
     }
+  } catch (err: any) {
+    uni.showToast({ title: reviewSafeText(err.message || "加入内容失败"), icon: "none" });
+  } finally {
+    if (getCurrentTenantCode() === tenantCode) joining.value = false;
   }
 }
 
@@ -259,11 +329,11 @@ function handlePhoneBound() {
   if (action === "buy") buyCourse();
 }
 
-onMounted(loadCourse);
+onShow(() => { void loadCourse(); });
 </script>
 
 <style scoped>
-.course-detail-page { padding-bottom: 150rpx; }
+.course-detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(24rpx + env(safe-area-inset-top)) 24rpx calc(150rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
 .custom-nav {
   display: flex;
   align-items: center;
@@ -354,6 +424,7 @@ onMounted(loadCourse);
 .review-name { display: block; color: #333333; font-size: 28rpx; font-weight: 800; }
 .review-stars { display: block; margin-top: 4rpx; font-size:22rpx; color:#c43d3d; letter-spacing: 0; }
 .review-content { display:block; margin-top:8rpx; color:#666666; font-size: 27rpx; line-height: 1.6; }
+.review-reply { display:block; margin-top:8rpx; padding:12rpx 14rpx; border-radius:8px; background:#f8fafc; color:#475467; font-size:24rpx; line-height:1.55; }
 .review-time { display:block; margin-top:4rpx; }
 .bottom-actions {
   position: fixed;
@@ -375,4 +446,7 @@ onMounted(loadCourse);
 }
 .favorite-icon { font-size:36rpx; }
 .buy-button { flex:1; margin-left:24rpx; }
+.disabled { opacity:.6; pointer-events:none; }
+.reviews-error { display:grid; gap:8rpx; margin-bottom:16rpx; padding:16rpx; border-radius:8px; border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; font-size:24rpx; }
+.retry-text { color:#C43D3D; font-weight:900; }
 </style>

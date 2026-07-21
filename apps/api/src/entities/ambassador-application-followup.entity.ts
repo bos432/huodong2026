@@ -7,6 +7,9 @@ export class AmbassadorApplicationFollowup {
   @PrimaryGeneratedColumn()
   id!: number;
 
+  @Column({ type: "varchar", length: 160, nullable: true, unique: true })
+  businessKey!: string | null;
+
   @ManyToOne(() => AmbassadorApplication, { eager: true, onDelete: "CASCADE" })
   application!: AmbassadorApplication;
 
@@ -21,6 +24,15 @@ export class AmbassadorApplicationFollowup {
 
   @Column({ type: "text" })
   content!: string;
+
+  @Column({ type: "text", nullable: true })
+  contentEncrypted!: string | null;
+
+  @Column({ type: "varchar", length: 24, nullable: true })
+  fromStatus!: string | null;
+
+  @Column({ type: "varchar", length: 24, nullable: true })
+  toStatus!: string | null;
 
   @Column({ type: "datetime", nullable: true })
   nextFollowAt!: Date | null;

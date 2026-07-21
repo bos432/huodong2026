@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { yuanToFen } from "../shared/money";
 import { PaymentMethod } from "../shared/domain";
 import { Course } from "./course.entity";
 import { User } from "./user.entity";
@@ -6,9 +7,12 @@ import { User } from "./user.entity";
 export enum CourseOrderStatus {
   PendingPayment = "pending_payment",
   Paid = "paid",
+  PartiallyRefunded = "partially_refunded",
+  Refunded = "refunded",
   Closed = "closed"
 }
 
+@Index("UQ_course_orders_user_client_key", ["user", "clientOrderKey"], { unique: true })
 @Entity("course_orders")
 export class CourseOrder {
   @PrimaryGeneratedColumn()
@@ -25,6 +29,15 @@ export class CourseOrder {
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
   amount!: string;
+
+  @Column({ type: "bigint", default: 0 })
+  amountFen!: number;
+
+  @Column({ type: "json", nullable: true })
+  businessSnapshot!: Record<string, unknown> | null;
+
+  @Column({ type: "varchar", length: 120, nullable: true })
+  clientOrderKey!: string | null;
 
   @Column({ type: "enum", enum: PaymentMethod })
   paymentMethod!: PaymentMethod;
@@ -52,4 +65,10 @@ export class CourseOrder {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @BeforeInsert()
+  freezeBusinessMoney() {
+    this.amountFen = yuanToFen(this.amount);
+    this.businessSnapshot ||= { amount: this.amount, paymentMethod: this.paymentMethod, courseId: this.course?.id || null, courseTitle: this.course?.title || null, clientOrderKey: this.clientOrderKey || null };
+  }
 }

@@ -39,6 +39,10 @@ const launchChecklist = read("docs/launch-checklist.md");
 const runbook = read("docs/production-runbook.md");
 const localAcceptance = read("docs/local-acceptance-test-plan.md");
 const progress = read("docs/project-progress.md");
+const publicOperationSettingMethod = publicService.slice(
+  publicService.indexOf("private publicOperationSetting"),
+  publicService.indexOf("async availableActivityCoupons")
+);
 
 checkSourceIncludes(packageJson.scripts?.["test:preflight-guards"] || "", "node scripts/preflight-operation-setting-guard.mjs", "package preflight guards script");
 
@@ -110,15 +114,26 @@ checkSourceIncludesAll(publicService, [
   "defaultGroupQrCodeUrl",
   "pageTheme",
   "refundInstructions",
-  "invoiceInstructions",
-  "const { defaultGroupQrCodeUrl: _defaultGroupQrCodeUrl",
-  "return publicSetting"
+  "invoiceInstructions"
 ], "public operation setting service");
+
+checkSourceIncludesAll(publicOperationSettingMethod, [
+  "registrationEnabled: setting.registrationEnabled",
+  "offlinePaymentInstructions: setting.offlinePaymentInstructions",
+  "customerServiceName: setting.customerServiceName",
+  "pageTheme: setting.pageTheme || {}",
+  "launchConfig: this.publicLaunchConfig",
+  "refundInstructions: setting.refundInstructions"
+], "public operation setting allowlist");
+check(!publicOperationSettingMethod.includes("...setting"), "public operation setting must use an explicit field allowlist.");
+for (const field of ["defaultGroupQrCodeUrl", "smsAccessKeyId", "smsAccessKeySecret", "smsTemplateId", "tenant"]) {
+  check(!publicOperationSettingMethod.includes(`${field}: setting.${field}`), `public operation setting must not expose ${field}.`);
+}
 
 checkSourceIncludesAll(adminRouter, [
   "SystemSettings",
   'path: "system-settings"',
-  "permissions.superAdmin",
+  'roles: ["system.view", "operation_settings.view"]',
   'path: "operation-settings", redirect: "/system-settings"'
 ], "admin operation setting route");
 

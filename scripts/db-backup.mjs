@@ -31,7 +31,11 @@ function runDump(env, outputFile) {
   const args = ["--single-transaction", "--routines", "--triggers", "--events", "--default-character-set=utf8mb4", "-u", username, database];
   const command = useDocker ? "docker" : (process.platform === "win32" ? "mysqldump.exe" : "mysqldump");
   const fullArgs = useDocker
-    ? ["exec", "-i", "-e", `MYSQL_PWD=${password}`, env.MYSQL_CONTAINER || "activity-mysql", "mysqldump", ...args]
+    ? [
+        "exec", "-i", "-e", `BACKUP_DATABASE=${database}`,
+        env.MYSQL_CONTAINER || "activity-mysql", "sh", "-lc",
+        'export MYSQL_PWD="${MYSQL_PASSWORD:-$MYSQL_ROOT_PASSWORD}"; exec mysqldump --single-transaction --routines --triggers --events --default-character-set=utf8mb4 -u "${MYSQL_USER:-root}" "${BACKUP_DATABASE:-${MYSQL_DATABASE:-activity_registration}}"'
+      ]
     : ["-h", env.DB_HOST || "127.0.0.1", "-P", String(env.DB_PORT || 3306), ...args];
 
   return new Promise((resolve, reject) => {

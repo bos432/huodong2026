@@ -1,4 +1,4 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn, VersionColumn } from "typeorm";
 import { MallMerchant } from "./mall-merchant.entity";
 import { Tenant } from "./tenant.entity";
 
@@ -13,6 +13,10 @@ export class MallSettlement {
   @Index({ unique: true })
   @Column({ type: "varchar", length: 64 })
   settlementNo!: string;
+
+  @Index({ unique: true })
+  @Column({ type: "varchar", length: 160 })
+  businessKey!: string;
 
   @ManyToOne(() => Tenant, { eager: true, nullable: false, onDelete: "CASCADE" })
   tenant!: Tenant;
@@ -47,20 +51,59 @@ export class MallSettlement {
   @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
   payableAmount!: string;
 
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
+  netAmount!: string;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
+  platformCollectedAmount!: string;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
+  merchantDirectAmount!: string;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
+  commissionAmount!: string;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
+  commissionClawbackAmount!: string;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
+  adjustmentAmount!: string;
+
+  @Column({ type: "int", default: 0 })
+  lineCount!: number;
+
+  @Column({ type: "varchar", length: 32, default: "settlement_v2" })
+  calculationVersion!: string;
+
+  @Column({ type: "datetime", nullable: true })
+  lockedAt!: Date | null;
+
   @Column({ type: "json", nullable: true })
   snapshot!: Record<string, unknown> | null;
 
   @Column({ type: "varchar", length: 80, nullable: true })
   generatedBy!: string | null;
 
+  @Column({ type: "int", nullable: true })
+  generatedByAdminId!: number | null;
+
   @Column({ type: "varchar", length: 80, nullable: true })
   reviewedBy!: string | null;
+
+  @Column({ type: "int", nullable: true })
+  reviewedByAdminId!: number | null;
+
+  @Column({ type: "varchar", length: 500, nullable: true })
+  reviewRemark!: string | null;
 
   @Column({ type: "datetime", nullable: true })
   reviewedAt!: Date | null;
 
   @Column({ type: "varchar", length: 80, nullable: true })
   paidBy!: string | null;
+
+  @Column({ type: "int", nullable: true })
+  paidByAdminId!: number | null;
 
   @Column({ type: "datetime", nullable: true })
   paidAt!: Date | null;
@@ -71,6 +114,12 @@ export class MallSettlement {
   @Column({ type: "varchar", length: 500, nullable: true })
   paidProofUrl!: string | null;
 
+  @Column({ type: "varchar", length: 500, nullable: true })
+  paidRemark!: string | null;
+
+  @Column({ type: "json", nullable: true })
+  paymentAccountSnapshot!: Record<string, unknown> | null;
+
   @Column({ type: "text", nullable: true })
   remark!: string | null;
 
@@ -79,4 +128,7 @@ export class MallSettlement {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @VersionColumn()
+  version!: number;
 }

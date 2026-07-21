@@ -1,5 +1,6 @@
-import { Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, RelationId, UpdateDateColumn } from "typeorm";
+import { BeforeInsert, Column, CreateDateColumn, Entity, Index, JoinColumn, ManyToOne, PrimaryGeneratedColumn, RelationId, UpdateDateColumn } from "typeorm";
 import { PaymentMethod } from "../shared/domain";
+import { yuanToFen } from "../shared/money";
 import { MallCheckoutGroup } from "./mall-checkout-group.entity";
 import { MallCoupon } from "./mall-coupon.entity";
 import { MallMerchant } from "./mall-merchant.entity";
@@ -7,13 +8,21 @@ import { Tenant } from "./tenant.entity";
 import { User } from "./user.entity";
 
 export type MallOrderStatus = "pending_payment" | "pending_confirm" | "paid" | "shipped" | "completed" | "refund_pending" | "refunded" | "closed";
+export type MallOrderFulfillmentStatus = "unshipped" | "partial_shipped" | "shipped" | "received" | "cancelled";
 
 @Entity("mall_orders")
+@Index("UQ_mall_orders_order_no", ["orderNo"], { unique: true })
+@Index("UQ_mall_orders_tenant_user_client_key", ["tenant", "user", "clientOrderKey"], { unique: true })
+@Index("IDX_mall_orders_tenant_status_created", ["tenant", "status", "createdAt"])
+@Index("IDX_mall_orders_tenant_user_created", ["tenant", "user", "createdAt"])
+@Index("IDX_mall_orders_merchant_status_created", ["merchant", "status", "createdAt"])
+@Index("IDX_mall_orders_checkout_group", ["checkoutGroup"])
+@Index("IDX_mall_orders_status_expires", ["status", "expiresAt"])
+@Index("IDX_mall_orders_transaction_no", ["transactionNo"])
 export class MallOrder {
   @PrimaryGeneratedColumn()
   id!: number;
 
-  @Index({ unique: true })
   @Column({ type: "varchar", length: 64 })
   orderNo!: string;
 
@@ -31,6 +40,9 @@ export class MallOrder {
 
   @Column({ type: "decimal", precision: 10, scale: 2 })
   amount!: string;
+
+  @Column({ type: "bigint", default: 0 }) amountFen!: number;
+  @Column({ type: "json", nullable: true }) businessSnapshot!: Record<string, unknown> | null;
 
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   goodsAmount!: string;
@@ -60,15 +72,26 @@ export class MallOrder {
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   freightAmount!: string;
 
+  @Column({ type: "json", nullable: true })
+  allocationSnapshot!: Record<string, unknown> | null;
+
   @Column({ type: "varchar", length: 24 })
   paymentMethod!: PaymentMethod;
 
   @Column({ type: "varchar", length: 80, nullable: true })
   clientOrderKey!: string | null;
 
-  @Index()
   @Column({ type: "varchar", length: 32 })
   status!: MallOrderStatus;
+
+  @Column({ type: "varchar", length: 24, default: "unshipped" })
+  fulfillmentStatus!: MallOrderFulfillmentStatus;
+
+  @Column({ type: "int", default: 0 })
+  totalQuantity!: number;
+
+  @Column({ type: "int", default: 0 })
+  shippedQuantity!: number;
 
   @Column({ type: "varchar", length: 128, nullable: true })
   transactionNo!: string | null;
@@ -117,4 +140,10 @@ export class MallOrder {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @BeforeInsert()
+  freezeBusinessMoney() {
+    this.amountFen = yuanToFen(this.amount);
+    this.businessSnapshot ||= { amount: this.amount, goodsAmount: this.goodsAmount, discountAmount: this.discountAmount, freightAmount: this.freightAmount, pointsDiscountAmount: this.pointsDiscountAmount, pointsUsed: this.pointsUsed, paymentMethod: this.paymentMethod, couponSnapshot: this.couponSnapshot, promotionSnapshot: this.promotionSnapshot, addressSnapshot: this.addressSnapshot, allocationSnapshot: this.allocationSnapshot, merchantId: this.merchant?.id || null, checkoutGroupId: this.checkoutGroup?.id || null };
+  }
 }

@@ -6,7 +6,7 @@
         <p>把商家和代理授权为独立店铺。商品、订单、营销、物流和支付配置都会按店铺隔离。</p>
       </div>
       <div class="header-actions">
-        <el-select v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width:220px" @change="reload">
+        <el-select v-if="isPlatformAdmin()" v-model="filters.tenantId" clearable filterable placeholder="全部商家" style="width:220px" @change="reload">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
         </el-select>
         <el-select v-model="filters.status" clearable placeholder="全部状态" style="width:140px" @change="loadMerchants">
@@ -21,8 +21,10 @@
           <el-option label="售后异常" value="risk" />
         </el-select>
         <el-input v-model="filters.keyword" clearable placeholder="店铺/编码/地区/代理" style="width:240px" @keyup.enter="loadMerchants" @clear="loadMerchants" />
-        <el-button @click="reload">刷新</el-button>
-        <el-button :loading="readinessLoading" @click="loadPaymentReadiness">刷新支付状态</el-button>
+        <el-button :loading="loading" :disabled="loading" @click="reload">刷新</el-button>
+        <el-button v-if="canViewFinance" :loading="readinessLoading" @click="loadPaymentReadiness">刷新支付状态</el-button>
+        <el-button type="success" plain @click="openApplications">入驻申请</el-button>
+        <el-button type="warning" plain :loading="governanceRunning" @click="runGovernanceLifecycle">到期扫描</el-button>
         <el-button type="warning" plain @click="exportLaunchChecklist">导出上线清单</el-button>
         <el-button type="primary" @click="openCreate">新增店铺</el-button>
       </div>
@@ -35,6 +37,9 @@
       class="scope-hint"
       title="多商户商城以“店铺”为经营主体：商家默认店铺承接历史商城数据，代理店铺用于代理自营商品、独立履约和后续结算。"
     />
+    <el-alert v-if="optionError" class="page-error" type="error" show-icon :closable="false" title="店铺筛选选项同步失败" aria-live="assertive"><template #default><p>{{ optionError }}</p><el-button size="small" :disabled="loading" @click="reload">重新同步选项</el-button></template></el-alert>
+    <el-alert v-if="merchantError" class="page-error" type="error" show-icon :closable="false" title="商城店铺加载失败" aria-live="assertive"><template #default><p>{{ merchantError }}</p><el-button size="small" :loading="loading" :disabled="loading" @click="loadMerchants">重新加载店铺</el-button></template></el-alert>
+    <el-alert v-if="readinessError" class="page-error" type="warning" show-icon :closable="false" title="部分支付状态未同步" aria-live="polite"><template #default><p>{{ readinessError }}</p><el-button size="small" :loading="readinessLoading" :disabled="readinessLoading" @click="loadPaymentReadiness">重新检测支付状态</el-button></template></el-alert>
 
     <div class="launch-summary">
       <button v-for="item in launchSummaryCards" :key="item.value || 'all'" type="button" :class="{ active: filters.launchStatus === item.value }" @click="filters.launchStatus = item.value">
@@ -59,8 +64,10 @@
       <el-table-column label="所属商家" min-width="180"><template #default="{ row }">{{ row.tenant?.name || row.tenant?.code || "-" }}</template></el-table-column>
       <el-table-column label="代理" min-width="160"><template #default="{ row }">{{ row.agent?.name || "商家默认店铺" }}</template></el-table-column>
       <el-table-column label="商城" width="100"><template #default="{ row }"><el-tag :type="row.mallEnabled ? 'success' : 'warning'">{{ row.mallEnabled ? "已开通" : "未开通" }}</el-tag></template></el-table-column>
+      <el-table-column label="入驻治理" min-width="150"><template #default="{ row }"><el-tag :type="onboardingTag(row.onboardingStatus)">{{ onboardingText(row.onboardingStatus) }}</el-tag><small class="governance-fee">{{ rateText(row.serviceFeeBps) }} 服务费</small></template></el-table-column>
       <el-table-column label="商品审核" width="110"><template #default="{ row }">{{ row.productAuditRequired ? "需要审核" : "免审核" }}</template></el-table-column>
       <el-table-column label="收款模式" width="130"><template #default="{ row }">{{ paymentModeText(row.paymentMode) }}</template></el-table-column>
+      <el-table-column label="运费" width="140"><template #default="{ row }">{{ freightText(row) }}</template></el-table-column>
       <el-table-column label="上线状态" min-width="230">
         <template #default="{ row }">
           <el-tooltip placement="top" :content="operationReadinessTip(row)" :disabled="!operationReadinessTip(row)">
@@ -101,13 +108,14 @@
         </template>
       </el-table-column>
       <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === "active" ? "启用" : "停用" }}</el-tag></template></el-table-column>
-      <el-table-column label="联系人" min-width="160"><template #default="{ row }">{{ row.contactName || "-" }} {{ row.contactPhone || "" }}</template></el-table-column>
-      <el-table-column label="操作" width="310" fixed="right">
+      <el-table-column label="联系人" min-width="160"><template #default="{ row }">{{ row.contactName || "-" }} {{ maskPhone(row.contactPhone) }}</template></el-table-column>
+      <el-table-column label="操作" width="390" fixed="right">
         <template #default="{ row }">
           <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="primary" plain @click="goProducts(row)">商品</el-button>
-          <el-button size="small" type="warning" plain @click="openPayment(row)">收款</el-button>
+          <el-button v-if="canManageProducts" size="small" type="primary" plain @click="goProducts(row)">商品</el-button>
+          <el-button v-if="canManagePayments" size="small" type="warning" plain @click="openPayment(row)">收款</el-button>
           <el-button size="small" type="success" plain @click="openAccess(row)">授权</el-button>
+          <el-button size="small" type="info" plain @click="openGovernance(row)">资质/合同</el-button>
         </template>
       </el-table-column>
     </el-table>
@@ -138,8 +146,8 @@
         </el-form-item>
         <el-form-item label="店铺类型" required>
           <el-radio-group v-model="form.ownerType">
-            <el-radio-button label="tenant">商家店铺</el-radio-button>
-            <el-radio-button label="agent">代理店铺</el-radio-button>
+            <el-radio-button value="tenant">商家店铺</el-radio-button>
+            <el-radio-button value="agent">代理店铺</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item v-if="form.ownerType === 'agent'" label="代理" required>
@@ -160,15 +168,24 @@
         </el-form-item>
         <el-form-item label="收款模式">
           <el-radio-group v-model="form.paymentMode">
-            <el-radio-button label="platform_collect">平台代收</el-radio-button>
-            <el-radio-button label="merchant_direct">商户直收</el-radio-button>
+            <el-radio-button value="platform_collect">平台代收</el-radio-button>
+            <el-radio-button value="merchant_direct">商户直收</el-radio-button>
           </el-radio-group>
           <span class="form-hint">商户直收需先完成店铺支付配置和上线验收。</span>
         </el-form-item>
+        <el-form-item label="运费规则">
+          <el-switch v-model="form.freightEnabled" active-text="启用运费" inactive-text="免运费" />
+          <el-input-number v-model="form.baseFreight" :min="0" :precision="2" :step="1" :disabled="!form.freightEnabled" style="margin-left:12px" />
+          <span class="form-hint">基础运费（元）</span>
+        </el-form-item>
+        <el-form-item label="包邮门槛">
+          <el-input-number v-model="form.freeShippingThreshold" :min="0" :precision="2" :step="10" :disabled="!form.freightEnabled" />
+          <span class="form-hint">元；填 0 表示不按金额包邮。</span>
+        </el-form-item>
         <el-form-item label="状态">
           <el-radio-group v-model="form.status">
-            <el-radio-button label="active">启用</el-radio-button>
-            <el-radio-button label="disabled">停用</el-radio-button>
+            <el-radio-button value="active">启用</el-radio-button>
+            <el-radio-button value="disabled">停用</el-radio-button>
           </el-radio-group>
         </el-form-item>
         <el-form-item label="备注"><el-input v-model="form.remark" type="textarea" :rows="3" /></el-form-item>
@@ -187,6 +204,7 @@
         class="scope-hint"
         title="授权后，该后台账号可以在商城商品、订单、售后、物流、营销、财务页面管理此店铺；是否能看到菜单还取决于账号本身的细粒度权限。"
       />
+      <el-alert v-if="accessError" class="dialog-error" type="error" show-icon :closable="false" title="店铺授权数据加载失败" aria-live="assertive"><template #default><p>{{ accessError }}</p><el-button size="small" :loading="accessLoading" @click="reloadAccessDialog">重试授权数据</el-button></template></el-alert>
       <div class="access-form">
         <el-select v-model="accessForm.adminId" filterable placeholder="选择后台账号">
           <el-option v-for="admin in adminRows" :key="admin.id" :label="adminLabel(admin)" :value="admin.id" />
@@ -196,6 +214,10 @@
           <el-option label="运营" value="operator" />
           <el-option label="财务" value="finance" />
           <el-option label="物流" value="logistics" />
+        </el-select>
+        <el-date-picker v-model="accessForm.validUntil" type="datetime" clearable placeholder="授权到期时间" />
+        <el-select v-model="accessForm.permissions" multiple collapse-tags placeholder="细分权限" style="min-width:260px">
+          <el-option v-for="item in accessPermissionOptions" :key="item.value" :label="item.label" :value="item.value" />
         </el-select>
         <el-switch v-model="accessForm.enabled" active-text="启用" inactive-text="停用" />
         <el-button type="primary" :loading="accessSaving" @click="saveAccess">{{ accessForm.id ? "保存授权" : "新增授权" }}</el-button>
@@ -210,6 +232,7 @@
         </el-table-column>
         <el-table-column label="授权角色" width="120"><template #default="{ row }">{{ accessRoleText(row.accessRole) }}</template></el-table-column>
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.enabled ? 'success' : 'info'">{{ row.enabled ? "启用" : "停用" }}</el-tag></template></el-table-column>
+        <el-table-column label="有效期" min-width="180"><template #default="{ row }">{{ row.validUntil ? formatTime(row.validUntil) : '长期' }}</template></el-table-column>
         <el-table-column label="授权时间" width="180"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="操作" width="190" fixed="right">
           <template #default="{ row }">
@@ -220,6 +243,34 @@
       </el-table>
     </el-dialog>
 
+    <el-dialog v-model="applicationDialogVisible" title="商户入驻申请" width="1100px" destroy-on-close>
+      <div class="access-form"><el-select v-model="applicationStatus" clearable placeholder="全部状态" @change="loadApplications"><el-option label="待审核" value="pending" /><el-option label="已通过" value="approved" /><el-option label="已驳回" value="rejected" /></el-select><el-button @click="loadApplications">刷新</el-button></div>
+      <el-alert v-if="applicationError" class="dialog-error" type="error" show-icon :closable="false" title="入驻申请加载失败" aria-live="assertive"><template #default><p>{{ applicationError }}</p><el-button size="small" :loading="applicationLoading" @click="loadApplications">重新加载申请</el-button></template></el-alert>
+      <el-table v-loading="applicationLoading" :data="applications" stripe empty-text="暂无入驻申请">
+        <el-table-column prop="id" label="ID" width="70" />
+        <el-table-column label="店铺/主体" min-width="250"><template #default="{row}"><strong>{{ row.desiredName }}</strong><small>{{ row.legalName }} · {{ row.unifiedSocialCreditCode }}</small></template></el-table-column>
+        <el-table-column label="联系人" min-width="150"><template #default="{row}">{{ row.contactName }} {{ maskPhone(row.contactPhone) }}</template></el-table-column>
+        <el-table-column label="申请用户" width="120"><template #default="{row}">#{{ row.applicantUserId }}</template></el-table-column>
+        <el-table-column label="状态" width="100"><template #default="{row}"><el-tag :type="row.status === 'pending' ? 'warning' : row.status === 'approved' ? 'success' : 'danger'">{{ applicationStatusText(row.status) }}</el-tag></template></el-table-column>
+        <el-table-column prop="reviewRemark" label="审核说明" min-width="180" show-overflow-tooltip />
+        <el-table-column label="操作" width="180"><template #default="{row}"><el-button v-if="row.status === 'pending'" size="small" type="success" @click="reviewApplication(row, 'approved')">通过</el-button><el-button v-if="row.status === 'pending'" size="small" type="danger" @click="reviewApplication(row, 'rejected')">驳回</el-button><el-button size="small" text type="primary" @click="openFile(row.businessLicenseUrl)">执照</el-button></template></el-table-column>
+      </el-table>
+    </el-dialog>
+
+    <el-dialog v-model="governanceDialogVisible" :title="`资质与合同：${governanceMerchant?.name || ''}`" width="1050px" destroy-on-close>
+      <el-alert v-if="governanceError" class="dialog-error" type="error" show-icon :closable="false" title="资质或合同数据未完全同步" aria-live="assertive"><template #default><p>{{ governanceError }}</p><el-button size="small" @click="loadGovernanceRows">重新加载治理数据</el-button></template></el-alert>
+      <el-tabs v-model="governanceTab">
+        <el-tab-pane label="资质证照" name="qualifications">
+          <div class="governance-form"><el-input v-model="qualificationForm.type" placeholder="资质类型" /><el-input v-model="qualificationForm.name" placeholder="资质名称" /><el-input v-model="qualificationForm.certificateNo" placeholder="证照号" /><el-input v-model="qualificationForm.fileUrlsText" placeholder="文件 URL，多个逗号分隔" /><el-date-picker v-model="qualificationForm.validUntil" type="date" clearable placeholder="到期日期" /><el-button type="primary" @click="saveQualification">提交资质</el-button></div>
+          <el-table :data="qualifications" stripe><el-table-column prop="name" label="资质" min-width="180" /><el-table-column prop="certificateNo" label="证照号" min-width="150" /><el-table-column prop="validUntil" label="到期日" width="120" /><el-table-column label="状态" width="100"><template #default="{row}">{{ qualificationStatusText(row.status) }}</template></el-table-column><el-table-column label="操作" width="190"><template #default="{row}"><el-button v-if="row.status === 'pending'" size="small" type="success" @click="reviewQualification(row, 'approved')">通过</el-button><el-button v-if="row.status === 'pending'" size="small" type="danger" @click="reviewQualification(row, 'rejected')">驳回</el-button><el-button v-if="row.fileUrls?.[0]" size="small" text @click="openFile(row.fileUrls[0])">查看</el-button></template></el-table-column></el-table>
+        </el-tab-pane>
+        <el-tab-pane label="合同与费率" name="contracts">
+          <div class="contract-form"><el-input v-model="contractForm.contractNo" placeholder="合同编号" /><el-input-number v-model="contractForm.version" :min="1" /><el-input v-model="contractForm.name" placeholder="合同名称" /><el-input v-model="contractForm.fileUrl" placeholder="合同 URL" /><el-date-picker v-model="contractForm.period" type="daterange" value-format="YYYY-MM-DD" start-placeholder="开始" end-placeholder="结束" /><el-input-number v-model="contractForm.platformCommissionBps" :min="0" :max="10000" /><el-input-number v-model="contractForm.serviceFeeBps" :min="0" :max="10000" /><el-input-number v-model="contractForm.settlementCycleDays" :min="1" :max="365" /><el-button type="primary" @click="saveContract">新建合同</el-button></div>
+          <el-table :data="contracts" stripe><el-table-column label="合同" min-width="220"><template #default="{row}"><strong>{{ row.name }}</strong><small>{{ row.contractNo }} v{{ row.version }}</small></template></el-table-column><el-table-column label="有效期" min-width="190"><template #default="{row}">{{ row.startsAt }} 至 {{ row.endsAt }}</template></el-table-column><el-table-column label="费率" min-width="170"><template #default="{row}">佣金 {{ rateText(row.platformCommissionBps) }} / 服务费 {{ rateText(row.serviceFeeBps) }}</template></el-table-column><el-table-column prop="settlementCycleDays" label="结算周期(天)" width="120" /><el-table-column prop="status" label="状态" width="100" /><el-table-column label="操作" width="150"><template #default="{row}"><el-button v-if="row.status === 'draft'" size="small" type="success" @click="activateContract(row)">启用</el-button><el-button size="small" text @click="openFile(row.fileUrl)">查看合同</el-button></template></el-table-column></el-table>
+        </el-tab-pane>
+      </el-tabs>
+    </el-dialog>
+
     <el-dialog v-model="paymentDialogVisible" :title="`店铺收款账户：${paymentMerchant?.name || ''}`" width="900px" destroy-on-close>
       <el-alert
         type="warning"
@@ -228,6 +279,7 @@
         class="scope-hint"
         title="商户直收会优先使用这里的店铺收款账户；真实支付开启前，请用小额订单完成下单、回调、退款和对账留档。"
       />
+      <el-alert v-if="paymentError" class="dialog-error" type="error" show-icon :closable="false" title="店铺收款账户加载失败" aria-live="assertive"><template #default><p>{{ paymentError }}</p><el-button size="small" :loading="paymentLoading" @click="loadPaymentAccounts">重新加载收款账户</el-button></template></el-alert>
       <div class="payment-layout">
         <el-table v-loading="paymentLoading" :data="paymentRows" stripe empty-text="暂无店铺收款账户">
           <el-table-column label="渠道" width="110"><template #default="{ row }">{{ providerLabel(row.provider) }}</template></el-table-column>
@@ -276,6 +328,8 @@ import { useRouter } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
 import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
+import { currentTenantId, hasPermission, isPlatformAdmin } from "../permissions";
+import { maskPhone } from "../privacy";
 
 type Tenant = { id: number; name?: string; code?: string; enabled?: boolean };
 type Agent = { id: number; name?: string; region?: string; enabled?: boolean; tenant?: Tenant | null };
@@ -287,6 +341,12 @@ type Merchant = {
   tenant?: Tenant | null;
   agent?: Agent | null;
   status: "active" | "disabled";
+  onboardingStatus?: "legacy_approved" | "pending" | "approved" | "rejected" | "suspended" | "expired";
+  contractRequired?: boolean;
+  platformCommissionBps?: number;
+  serviceFeeBps?: number;
+  settlementCycleDays?: number;
+  suspensionReason?: string | null;
   mallEnabled: boolean;
   productAuditRequired: boolean;
   paymentMode: "platform_collect" | "merchant_direct";
@@ -296,6 +356,7 @@ type Merchant = {
   logoUrl?: string | null;
   notice?: string | null;
   remark?: string | null;
+  freightConfig?: { enabled?: boolean; baseFreightFen?: number; freeThresholdFen?: number } | null;
   operationSummary?: {
     productCount?: number;
     publishedProductCount?: number;
@@ -328,15 +389,35 @@ type MerchantPaymentAccount = {
 
 const router = useRouter();
 const loading = ref(false);
+const merchantError = ref("");
+const tenantError = ref("");
+const agentError = ref("");
+const readinessError = ref("");
+const accessAdminError = ref("");
+const accessRowsError = ref("");
+const applicationError = ref("");
+const qualificationError = ref("");
+const contractError = ref("");
+const paymentError = ref("");
+let merchantLoadSequence = 0;
+let readinessLoadSequence = 0;
+let applicationLoadSequence = 0;
 const saving = ref(false);
 const accessLoading = ref(false);
 const accessSaving = ref(false);
 const readinessLoading = ref(false);
 const paymentLoading = ref(false);
 const paymentSaving = ref(false);
+const governanceRunning = ref(false);
+const canManageProducts = computed(() => hasPermission("mall.product.manage"));
+const canManagePayments = computed(() => hasPermission("mall.payment.manage"));
+const canViewFinance = computed(() => hasPermission("mall.finance.view"));
+const applicationLoading = ref(false);
 const dialogVisible = ref(false);
 const accessDialogVisible = ref(false);
 const paymentDialogVisible = ref(false);
+const applicationDialogVisible = ref(false);
+const governanceDialogVisible = ref(false);
 const rows = ref<Merchant[]>([]);
 const paymentReadiness = ref<Record<number, PaymentReadiness>>({});
 const paymentRows = ref<MerchantPaymentAccount[]>([]);
@@ -344,9 +425,15 @@ const tenants = ref<Tenant[]>([]);
 const agents = ref<Agent[]>([]);
 const adminRows = ref<any[]>([]);
 const accessRows = ref<any[]>([]);
+const applications = ref<any[]>([]);
+const qualifications = ref<any[]>([]);
+const contracts = ref<any[]>([]);
 const accessMerchant = ref<Merchant | null>(null);
 const paymentMerchant = ref<Merchant | null>(null);
-const filters = reactive({ tenantId: Number(localStorage.getItem("admin_selected_tenant_id") || 0) || undefined as number | undefined, status: "", launchStatus: "", keyword: "" });
+const governanceMerchant = ref<Merchant | null>(null);
+const governanceTab = ref("qualifications");
+const applicationStatus = ref("pending");
+const filters = reactive({ tenantId: (isPlatformAdmin() ? Number(localStorage.getItem("admin_selected_tenant_id") || 0) : currentTenantId()) || undefined as number | undefined, status: "", launchStatus: "", keyword: "" });
 const form = reactive({
   id: 0,
   tenantId: undefined as number | undefined,
@@ -363,10 +450,21 @@ const form = reactive({
   contactPhone: "",
   logoUrl: "",
   notice: "",
-  remark: ""
+  remark: "",
+  freightEnabled: true,
+  baseFreight: 0,
+  freeShippingThreshold: 0
 });
-const accessForm = reactive({ id: 0, adminId: undefined as number | undefined, accessRole: "manager", enabled: true });
+const accessForm = reactive({ id: 0, adminId: undefined as number | undefined, accessRole: "manager", enabled: true, validUntil: null as Date | null, permissions: [] as string[] });
 const paymentForm = reactive({ id: 0, provider: "wechat" as "wechat" | "alipay", merchantName: "", merchantNo: "", enabled: true, configText: "" });
+const qualificationForm = reactive({ type: "business_license", name: "", certificateNo: "", fileUrlsText: "", validUntil: null as Date | null });
+const contractForm = reactive({ contractNo: "", version: 1, name: "", fileUrl: "", period: [] as string[], platformCommissionBps: 0, serviceFeeBps: 0, settlementCycleDays: 30 });
+const accessPermissionOptions = [
+  { label: "店铺配置", value: "merchant.manage" }, { label: "商品管理", value: "product.manage" }, { label: "订单查看", value: "order.view" },
+  { label: "订单管理", value: "order.manage" }, { label: "物流查看", value: "shipment.view" }, { label: "发货物流", value: "shipment.manage" },
+  { label: "售后查看", value: "refund.view" }, { label: "售后处理", value: "refund.manage" }, { label: "评价处理", value: "review.manage" },
+  { label: "营销管理", value: "marketing.manage" }, { label: "财务查看", value: "finance.view" }, { label: "结算查看", value: "settlement.view" }
+];
 
 const paymentRequirements: Record<MerchantPaymentAccount["provider"], string[]> = {
   wechat: ["WECHAT_PAY_APP_ID", "WECHAT_PAY_MCH_ID", "WECHAT_PAY_API_V3_KEY", "WECHAT_PAY_PRIVATE_KEY_PATH", "WECHAT_PAY_CERT_SERIAL_NO", "WECHAT_PAY_PLATFORM_CERT_PATH"],
@@ -388,6 +486,9 @@ const launchSummaryCards = computed(() => {
     { label: "售后异常", value: "risk", count: counts.risk }
   ];
 });
+const optionError = computed(() => [tenantError.value, agentError.value].filter(Boolean).join("；"));
+const accessError = computed(() => [accessAdminError.value, accessRowsError.value].filter(Boolean).join("；"));
+const governanceError = computed(() => [qualificationError.value, contractError.value].filter(Boolean).join("；"));
 
 function tenantLabel(tenant: Tenant) {
   return `${tenant.name || tenant.code || "未命名商家"}${tenant.code ? `（${tenant.code}）` : ""}`;
@@ -715,7 +816,8 @@ async function handleReadinessAction(row: Merchant) {
     return;
   }
   if (first.includes("支付状态")) {
-    await loadPaymentReadiness();
+    if (canViewFinance.value) await loadPaymentReadiness();
+    else paymentReadiness.value = {};
     ElMessage.success("支付状态已刷新，请查看最新上线状态");
     return;
   }
@@ -738,49 +840,108 @@ function adminLabel(admin: any) {
 function accessRoleText(value: string) {
   return ({ manager: "店长", operator: "运营", finance: "财务", logistics: "物流" } as any)[value] || value || "店长";
 }
+function freightText(row: Merchant) {
+  const config = row.freightConfig || {};
+  if (config.enabled === false || !Number(config.baseFreightFen || 0)) return "免运费";
+  const base = Number(config.baseFreightFen || 0) / 100;
+  const threshold = Number(config.freeThresholdFen || 0) / 100;
+  return threshold > 0 ? `¥${base.toFixed(2)} / 满¥${threshold.toFixed(2)}包邮` : `¥${base.toFixed(2)}`;
+}
+
+function onboardingText(value?: string) {
+  return ({ legacy_approved: "历史店铺", pending: "待审核", approved: "已通过", rejected: "已驳回", suspended: "已暂停", expired: "已到期" } as any)[value || "legacy_approved"] || value || "历史店铺";
+}
+
+function onboardingTag(value?: string) {
+  if (value === "approved" || value === "legacy_approved") return "success";
+  if (value === "pending") return "warning";
+  return "danger";
+}
+
+function rateText(value?: number) { return `${(Number(value || 0) / 100).toFixed(2)}%`; }
+function applicationStatusText(value: string) { return value === "approved" ? "已通过" : value === "rejected" ? "已驳回" : value === "withdrawn" ? "已撤回" : "待审核"; }
+function qualificationStatusText(value: string) { return value === "approved" ? "已通过" : value === "rejected" ? "已驳回" : value === "expired" ? "已到期" : "待审核"; }
+function openFile(url?: string) { if (url) window.open(url, "_blank", "noopener,noreferrer"); }
 
 function formatTime(value: any) {
   return value ? new Date(value).toLocaleString("zh-CN", { hour12: false }) : "-";
 }
 
 async function loadTenants() {
-  tenants.value = await api.get<any, Tenant[]>("/admin/tenants");
+  tenantError.value = "";
+  tenants.value = [];
+  if (!isPlatformAdmin()) return;
+  try {
+    const result = await api.get<any, Tenant[]>("/admin/tenants");
+    if (!Array.isArray(result)) throw new Error("商家选项响应格式无效");
+    tenants.value = result;
+  } catch (error: any) {
+    tenantError.value = error.message || "加载商家选项失败";
+  }
 }
 
 async function loadAgents() {
-  agents.value = await api.get<any, Agent[]>("/admin/agents", { params: { includeDisabled: true, tenantId: form.tenantId || filters.tenantId || undefined } });
+  agentError.value = "";
+  agents.value = [];
+  try {
+    const result = await api.get<any, Agent[] | { items?: Agent[] }>("/admin/agents", { params: { includeDisabled: true, tenantId: form.tenantId || filters.tenantId || undefined, page: 1, pageSize: 100 } });
+    const items = Array.isArray(result) ? result : result?.items;
+    if (!Array.isArray(items)) throw new Error("代理选项响应格式无效");
+    agents.value = items;
+  } catch (error: any) {
+    agentError.value = error.message || "加载代理选项失败";
+  }
 }
 
 async function loadMerchants() {
+  const sequence = ++merchantLoadSequence;
   loading.value = true;
+  merchantError.value = "";
+  rows.value = [];
+  paymentReadiness.value = {};
   try {
-    rows.value = await api.get<any, Merchant[]>("/admin/mall/merchants", { params: { tenantId: filters.tenantId || undefined, status: filters.status || undefined, keyword: filters.keyword.trim() || undefined } });
+    const result = await api.get<any, Merchant[]>("/admin/mall/merchants", { params: { tenantId: filters.tenantId || undefined, status: filters.status || undefined, keyword: filters.keyword.trim() || undefined } });
+    if (sequence !== merchantLoadSequence) return;
+    if (!Array.isArray(result)) throw new Error("商城店铺响应格式无效");
+    rows.value = result;
     await loadPaymentReadiness();
   } catch (error: any) {
-    ElMessage.error(error.message || "加载商城店铺失败");
+    if (sequence !== merchantLoadSequence) return;
+    rows.value = [];
+    paymentReadiness.value = {};
+    merchantError.value = error.message || "加载商城店铺失败";
   } finally {
-    loading.value = false;
+    if (sequence === merchantLoadSequence) loading.value = false;
   }
 }
 
 async function loadPaymentReadiness() {
-  if (!rows.value.length) {
-    paymentReadiness.value = {};
+  const sequence = ++readinessLoadSequence;
+  const merchantRows = [...rows.value];
+  readinessError.value = "";
+  paymentReadiness.value = {};
+  if (!canViewFinance.value) {
     return;
   }
+  if (!merchantRows.length) return;
   readinessLoading.value = true;
   const next: Record<number, PaymentReadiness> = {};
+  const failures: string[] = [];
   try {
-    await mapWithConcurrency(rows.value, 8, async (row) => {
+    await mapWithConcurrency(merchantRows, 8, async (row) => {
       try {
         next[row.id] = await api.get<any, PaymentReadiness>("/admin/mall/payment-readiness", { params: { merchantId: row.id } });
       } catch (error: any) {
-        next[row.id] = { status: "not_ready", statusText: "读取失败", collectionMode: row.paymentMode, issues: [error.message || "支付状态读取失败，请确认当前账号有商城财务/支付配置权限"] };
+        const message = error.message || "支付状态读取失败，请确认当前账号有商城财务/支付配置权限";
+        failures.push(`${row.name || row.code}：${message}`);
+        next[row.id] = { status: "not_ready", statusText: "读取失败", collectionMode: row.paymentMode, issues: [message] };
       }
     });
+    if (sequence !== readinessLoadSequence) return;
     paymentReadiness.value = next;
+    if (failures.length) readinessError.value = `${failures.length}/${merchantRows.length} 个店铺的支付状态读取失败，失败店铺已明确标记为“读取失败”。${failures.slice(0, 3).join("；")}${failures.length > 3 ? "；其余失败请重试后查看" : ""}`;
   } finally {
-    readinessLoading.value = false;
+    if (sequence === readinessLoadSequence) readinessLoading.value = false;
   }
 }
 
@@ -800,20 +961,41 @@ async function reload() {
 }
 
 async function loadAdminsForMerchant(row: Merchant) {
-  const result = await api.get<any, any>("/admin/admins", { params: { tenantId: row.tenant?.id, includeSmoke: "false", page: 1, pageSize: 200 } });
-  adminRows.value = result.items || [];
+  accessAdminError.value = "";
+  adminRows.value = [];
+  try {
+    const result = await api.get<any, any>("/admin/admins", { params: { tenantId: row.tenant?.id, includeSmoke: "false", page: 1, pageSize: 200 } });
+    if (accessMerchant.value?.id !== row.id) return;
+    if (!Array.isArray(result?.items)) throw new Error("后台账号响应格式无效");
+    adminRows.value = result.items;
+  } catch (error: any) {
+    if (accessMerchant.value?.id !== row.id) return;
+    accessAdminError.value = error.message || "加载可授权后台账号失败";
+  }
 }
 
 async function loadAccessRows() {
   if (!accessMerchant.value) return;
+  const merchantId = accessMerchant.value.id;
   accessLoading.value = true;
+  accessRowsError.value = "";
+  accessRows.value = [];
   try {
-    accessRows.value = await api.get<any, any[]>("/admin/mall/merchant-access", { params: { merchantId: accessMerchant.value.id } });
+    const result = await api.get<any, any[]>("/admin/mall/merchant-access", { params: { merchantId } });
+    if (accessMerchant.value?.id !== merchantId) return;
+    if (!Array.isArray(result)) throw new Error("店铺授权响应格式无效");
+    accessRows.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载店铺授权失败");
+    if (accessMerchant.value?.id !== merchantId) return;
+    accessRowsError.value = error.message || "加载店铺授权失败";
   } finally {
-    accessLoading.value = false;
+    if (accessMerchant.value?.id === merchantId) accessLoading.value = false;
   }
+}
+
+async function reloadAccessDialog() {
+  if (!accessMerchant.value) return;
+  await Promise.all([loadAdminsForMerchant(accessMerchant.value), loadAccessRows()]);
 }
 
 function resetForm() {
@@ -833,7 +1015,10 @@ function resetForm() {
     contactPhone: "",
     logoUrl: "",
     notice: "",
-    remark: ""
+    remark: "",
+    freightEnabled: true,
+    baseFreight: 0,
+    freeShippingThreshold: 0
   });
 }
 
@@ -872,7 +1057,7 @@ async function confirmMerchantOpenRisk() {
 }
 
 function resetAccessForm() {
-  Object.assign(accessForm, { id: 0, adminId: undefined, accessRole: "manager", enabled: true });
+  Object.assign(accessForm, { id: 0, adminId: undefined, accessRole: "manager", enabled: true, validUntil: null, permissions: [] });
 }
 
 function resetPaymentForm() {
@@ -881,6 +1066,131 @@ function resetPaymentForm() {
 
 function resetPaymentTemplate() {
   paymentForm.configText = paymentConfigTemplate(paymentForm.provider);
+}
+
+async function openApplications() {
+  applicationDialogVisible.value = true;
+  await loadApplications();
+}
+
+async function loadApplications() {
+  const sequence = ++applicationLoadSequence;
+  applicationLoading.value = true;
+  applicationError.value = "";
+  applications.value = [];
+  try {
+    const result = await api.get<any, any[]>("/admin/mall/merchant-applications", { params: { tenantId: filters.tenantId || undefined, status: applicationStatus.value || undefined } });
+    if (sequence !== applicationLoadSequence) return;
+    if (!Array.isArray(result)) throw new Error("入驻申请响应格式无效");
+    applications.value = result;
+  } catch (error: any) {
+    if (sequence !== applicationLoadSequence) return;
+    applicationError.value = error.message || "加载入驻申请失败";
+  } finally {
+    if (sequence === applicationLoadSequence) applicationLoading.value = false;
+  }
+}
+
+async function reviewApplication(row: any, status: "approved" | "rejected") {
+  try {
+    const result = await ElMessageBox.prompt("请填写审核说明", status === "approved" ? "通过入驻" : "驳回入驻", { inputType: "textarea" });
+    await api.post(`/admin/mall/merchant-applications/${row.id}/review`, { status, reviewRemark: result.value });
+    await Promise.all([loadApplications(), loadMerchants()]);
+    ElMessage.success("入驻申请已处理");
+  } catch (error: any) {
+    if (error !== "cancel") ElMessage.error(error.message || "处理入驻申请失败");
+  }
+}
+
+async function runGovernanceLifecycle() {
+  governanceRunning.value = true;
+  try {
+    const result = await api.post<any, any>("/admin/mall/merchant-governance/run", {});
+    await loadMerchants();
+    ElMessage.success(`扫描完成：合同到期 ${result.expiredContractCount || 0}，资质到期 ${result.expiredQualificationCount || 0}，授权到期 ${result.expiredAccessCount || 0}`);
+  } catch (error: any) {
+    ElMessage.error(error.message || "到期扫描失败");
+  } finally {
+    governanceRunning.value = false;
+  }
+}
+
+function resetGovernanceForms() {
+  Object.assign(qualificationForm, { type: "business_license", name: "", certificateNo: "", fileUrlsText: "", validUntil: null });
+  Object.assign(contractForm, { contractNo: "", version: 1, name: "", fileUrl: "", period: [], platformCommissionBps: 0, serviceFeeBps: 0, settlementCycleDays: 30 });
+}
+
+async function openGovernance(row: Merchant) {
+  governanceMerchant.value = row;
+  governanceTab.value = "qualifications";
+  resetGovernanceForms();
+  governanceDialogVisible.value = true;
+  await loadGovernanceRows();
+}
+
+async function loadGovernanceRows() {
+  if (!governanceMerchant.value) return;
+  const merchantId = governanceMerchant.value.id;
+  qualificationError.value = "";
+  contractError.value = "";
+  qualifications.value = [];
+  contracts.value = [];
+  const results = await Promise.allSettled([
+    api.get<any, any[]>("/admin/mall/merchant-qualifications", { params: { merchantId: governanceMerchant.value.id } }),
+    api.get<any, any[]>("/admin/mall/merchant-contracts", { params: { merchantId: governanceMerchant.value.id } })
+  ]);
+  if (governanceMerchant.value?.id !== merchantId) return;
+  const [qualificationResult, contractResult] = results;
+  if (qualificationResult.status === "fulfilled" && Array.isArray(qualificationResult.value)) qualifications.value = qualificationResult.value;
+  else qualificationError.value = qualificationResult.status === "rejected" ? qualificationResult.reason?.message || "加载资质证照失败" : "资质证照响应格式无效";
+  if (contractResult.status === "fulfilled" && Array.isArray(contractResult.value)) contracts.value = contractResult.value;
+  else contractError.value = contractResult.status === "rejected" ? contractResult.reason?.message || "加载合同列表失败" : "合同列表响应格式无效";
+}
+
+async function saveQualification() {
+  if (!governanceMerchant.value) return;
+  if (!qualificationForm.name.trim() || !qualificationForm.fileUrlsText.trim()) return ElMessage.warning("请填写资质名称和文件 URL");
+  try {
+    await api.post("/admin/mall/merchant-qualifications", { merchantId: governanceMerchant.value.id, type: qualificationForm.type.trim() || "other", name: qualificationForm.name.trim(), certificateNo: qualificationForm.certificateNo.trim() || undefined, fileUrls: qualificationForm.fileUrlsText.split(/[,\n，]+/).map((item) => item.trim()).filter(Boolean), validUntil: qualificationForm.validUntil ? formatDateOnly(qualificationForm.validUntil) : undefined });
+    resetGovernanceForms();
+    await loadGovernanceRows();
+    ElMessage.success("资质已提交审核");
+  } catch (error: any) { ElMessage.error(error.message || "保存资质失败"); }
+}
+
+async function reviewQualification(row: any, status: "approved" | "rejected") {
+  try {
+    const result = await ElMessageBox.prompt("请填写审核说明", status === "approved" ? "通过资质" : "驳回资质", { inputType: "textarea" });
+    await api.post(`/admin/mall/merchant-qualifications/${row.id}/review`, { status, reviewRemark: result.value });
+    await loadGovernanceRows();
+  } catch (error: any) { if (error !== "cancel") ElMessage.error(error.message || "审核资质失败"); }
+}
+
+async function saveContract() {
+  if (!governanceMerchant.value) return;
+  if (!contractForm.contractNo.trim() || !contractForm.name.trim() || !contractForm.fileUrl.trim() || contractForm.period.length !== 2) return ElMessage.warning("请完整填写合同信息");
+  try {
+    await api.post("/admin/mall/merchant-contracts", { merchantId: governanceMerchant.value.id, contractNo: contractForm.contractNo.trim(), version: contractForm.version, name: contractForm.name.trim(), fileUrl: contractForm.fileUrl.trim(), startsAt: contractForm.period[0], endsAt: contractForm.period[1], platformCommissionBps: contractForm.platformCommissionBps, serviceFeeBps: contractForm.serviceFeeBps, settlementCycleDays: contractForm.settlementCycleDays });
+    resetGovernanceForms();
+    await loadGovernanceRows();
+    ElMessage.success("合同草稿已创建");
+  } catch (error: any) { ElMessage.error(error.message || "保存合同失败"); }
+}
+
+async function activateContract(row: any) {
+  try {
+    await ElMessageBox.confirm("启用后将作为当前费率和结算周期，原生效合同会自动终止。", "启用合同", { type: "warning" });
+    await api.post(`/admin/mall/merchant-contracts/${row.id}/activate`, {});
+    await Promise.all([loadGovernanceRows(), loadMerchants()]);
+    ElMessage.success("合同已生效");
+  } catch (error: any) { if (error !== "cancel") ElMessage.error(error.message || "启用合同失败"); }
+}
+
+function formatDateOnly(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 async function openCreate() {
@@ -906,7 +1216,10 @@ async function openEdit(row: Merchant) {
     contactPhone: row.contactPhone || "",
     logoUrl: row.logoUrl || "",
     notice: row.notice || "",
-    remark: row.remark || ""
+    remark: row.remark || "",
+    freightEnabled: row.freightConfig?.enabled !== false,
+    baseFreight: Number(row.freightConfig?.baseFreightFen || 0) / 100,
+    freeShippingThreshold: Number(row.freightConfig?.freeThresholdFen || 0) / 100
   });
   await loadAgents();
   dialogVisible.value = true;
@@ -916,10 +1229,11 @@ async function openAccess(row: Merchant) {
   accessMerchant.value = row;
   resetAccessForm();
   accessDialogVisible.value = true;
-  await Promise.all([loadAdminsForMerchant(row), loadAccessRows()]);
+  await reloadAccessDialog();
 }
 
 async function openPayment(row: Merchant) {
+  if (!canManagePayments.value) return ElMessage.error("当前账号无商城支付配置权限");
   paymentMerchant.value = row;
   resetPaymentForm();
   paymentDialogVisible.value = true;
@@ -955,7 +1269,10 @@ async function saveMerchant() {
       contactPhone: form.contactPhone.trim() || undefined,
       logoUrl: form.logoUrl.trim() || undefined,
       notice: form.notice.trim() || undefined,
-      remark: form.remark.trim() || undefined
+      remark: form.remark.trim() || undefined,
+      freightEnabled: form.freightEnabled,
+      baseFreight: Number(form.baseFreight || 0),
+      freeShippingThreshold: Number(form.freeShippingThreshold || 0)
     };
     if (form.id) await api.patch(`/admin/mall/merchants/${form.id}`, payload);
     else await api.post("/admin/mall/merchants", payload);
@@ -974,7 +1291,9 @@ function editAccess(row: any) {
     id: row.id,
     adminId: row.admin?.id,
     accessRole: row.accessRole || "manager",
-    enabled: row.enabled !== false
+    enabled: row.enabled !== false,
+    validUntil: row.validUntil ? new Date(row.validUntil) : null,
+    permissions: Array.isArray(row.permissions) ? [...row.permissions] : []
   });
 }
 
@@ -983,7 +1302,7 @@ async function saveAccess() {
   if (!accessForm.adminId) return ElMessage.warning("请选择要授权的后台账号");
   accessSaving.value = true;
   try {
-    const payload = { adminId: accessForm.adminId, merchantId: accessMerchant.value.id, accessRole: accessForm.accessRole, enabled: accessForm.enabled };
+    const payload = { adminId: accessForm.adminId, merchantId: accessMerchant.value.id, accessRole: accessForm.accessRole, enabled: accessForm.enabled, validUntil: accessForm.validUntil?.toISOString(), permissions: accessForm.permissions };
     if (accessForm.id) await api.patch(`/admin/mall/merchant-access/${accessForm.id}`, payload);
     else await api.post("/admin/mall/merchant-access", payload);
     ElMessage.success("店铺授权已保存");
@@ -998,7 +1317,7 @@ async function saveAccess() {
 
 async function toggleAccess(row: any) {
   try {
-    await api.patch(`/admin/mall/merchant-access/${row.id}`, { adminId: row.admin?.id, merchantId: row.merchant?.id || accessMerchant.value?.id, accessRole: row.accessRole || "manager", enabled: !row.enabled });
+    await api.patch(`/admin/mall/merchant-access/${row.id}`, { adminId: row.admin?.id, merchantId: row.merchant?.id || accessMerchant.value?.id, accessRole: row.accessRole || "manager", enabled: !row.enabled, validUntil: row.validUntil || undefined, permissions: row.permissions || [] });
     ElMessage.success(row.enabled ? "店铺授权已停用" : "店铺授权已启用");
     await loadAccessRows();
   } catch (error: any) {
@@ -1008,13 +1327,20 @@ async function toggleAccess(row: any) {
 
 async function loadPaymentAccounts() {
   if (!paymentMerchant.value) return;
+  const merchantId = paymentMerchant.value.id;
   paymentLoading.value = true;
+  paymentError.value = "";
+  paymentRows.value = [];
   try {
-    paymentRows.value = await api.get<any, MerchantPaymentAccount[]>("/admin/mall/merchant-payment-accounts", { params: { merchantId: paymentMerchant.value.id } });
+    const result = await api.get<any, MerchantPaymentAccount[]>("/admin/mall/merchant-payment-accounts", { params: { merchantId } });
+    if (paymentMerchant.value?.id !== merchantId) return;
+    if (!Array.isArray(result)) throw new Error("店铺收款账户响应格式无效");
+    paymentRows.value = result;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载店铺收款账户失败");
+    if (paymentMerchant.value?.id !== merchantId) return;
+    paymentError.value = error.message || "加载店铺收款账户失败";
   } finally {
-    paymentLoading.value = false;
+    if (paymentMerchant.value?.id === merchantId) paymentLoading.value = false;
   }
 }
 
@@ -1030,6 +1356,7 @@ function editPaymentAccount(row: MerchantPaymentAccount) {
 }
 
 async function savePaymentAccount() {
+  if (!canManagePayments.value) return ElMessage.error("当前账号无商城支付配置权限");
   if (!paymentMerchant.value) return;
   const parsed = parsePaymentConfig();
   if (!parsed.ok) return ElMessage.warning(parsed.error);
@@ -1097,6 +1424,9 @@ onMounted(async () => {
 .page-header p { margin: 0; color: #64748b; }
 .header-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .scope-hint { margin-top: -4px; }
+.page-error, .dialog-error { overflow-wrap: anywhere; }
+.page-error p, .dialog-error p { margin: 0 0 8px; line-height: 1.6; }
+.dialog-error { margin: 14px 0; }
 .merchant-open-risk-alert { margin-bottom: 14px; }
 .launch-summary { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 10px; }
 .launch-summary button { text-align: left; border: 1px solid #e5e7eb; background: #fff; border-radius: 14px; padding: 12px 14px; cursor: pointer; transition: .18s ease; }
@@ -1108,6 +1438,9 @@ onMounted(async () => {
 .logo-placeholder { display: grid; place-items: center; background: #fff7ed; color: #c2410c; font-weight: 800; }
 .merchant-cell strong { display: block; }
 .merchant-cell small { display: block; margin-top: 4px; color: #64748b; }
+.governance-fee { display:block; margin-top:5px; color:#64748b; }
+.governance-form { display:grid; grid-template-columns: 130px 160px 140px minmax(220px,1fr) 170px auto; gap:10px; margin-bottom:14px; align-items:center; }
+.contract-form { display:grid; grid-template-columns: 150px 90px 160px minmax(180px,1fr) 250px 120px 120px 110px auto; gap:10px; margin-bottom:14px; align-items:center; }
 .payment-cell { display: grid; gap: 4px; align-items: start; }
 .payment-cell small { color: #64748b; font-size: 12px; line-height: 1.35; }
 .operation-cell { display: grid; gap: 4px; align-items: start; }
@@ -1123,4 +1456,11 @@ onMounted(async () => {
 .form-hint { margin-left: 10px; color: #64748b; font-size: 12px; }
 .access-form { display: grid; grid-template-columns: minmax(220px, 1fr) 140px 120px auto auto; gap: 10px; align-items: center; margin: 14px 0; }
 @media (max-width: 900px) { .access-form, .payment-layout, .launch-summary { grid-template-columns: 1fr; } }
+@media (max-width: 640px) {
+  .page-header { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .page-header > div:first-child { min-width: 0; }
+  .header-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .header-actions :deep(.el-select), .header-actions :deep(.el-input) { grid-column: 1 / -1; width: 100% !important; }
+  .header-actions :deep(.el-button) { width: 100%; margin-left: 0; }
+}
 </style>

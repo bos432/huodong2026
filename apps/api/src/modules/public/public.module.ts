@@ -14,18 +14,23 @@ import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-sett
 import { Announcement } from "../../entities/announcement.entity";
 import { AdminUser } from "../../entities/admin-user.entity";
 import { Coupon } from "../../entities/coupon.entity";
+import { CouponClaim } from "../../entities/coupon-claim.entity";
+import { CouponUsage } from "../../entities/coupon-usage.entity";
 import { ConversionEvent } from "../../entities/conversion-event.entity";
 import { Course } from "../../entities/course.entity";
 import { CourseChapter } from "../../entities/course-chapter.entity";
 import { CourseLesson } from "../../entities/course-lesson.entity";
 import { CourseOrder } from "../../entities/course-order.entity";
+import { CourseRefund } from "../../entities/course-refund.entity";
 import { H5AuthCodeLog } from "../../entities/h5-auth-code-log.entity";
 import { HomepageSection } from "../../entities/homepage-section.entity";
 import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
 import { CheckIn } from "../../entities/check-in.entity";
 import { CharityFundSetting } from "../../entities/charity-fund-setting.entity";
+import { CharityFundAccount } from "../../entities/charity-fund-account.entity";
 import { CharityFundTransaction } from "../../entities/charity-fund-transaction.entity";
 import { CharityProjectDisbursement } from "../../entities/charity-project-disbursement.entity";
+import { CharityProjectEvent } from "../../entities/charity-project-event.entity";
 import { CharityProject } from "../../entities/charity-project.entity";
 import { CharityProjectUpdate } from "../../entities/charity-project-update.entity";
 import { MemberLevel } from "../../entities/member-level.entity";
@@ -53,20 +58,30 @@ import { UserWallet } from "../../entities/user-wallet.entity";
 import { Waitlist } from "../../entities/waitlist.entity";
 import { WalletTransaction } from "../../entities/wallet-transaction.entity";
 import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
+import { VolunteerAttendanceRecord } from "../../entities/volunteer-attendance-record.entity";
+import { VolunteerBadgeAward } from "../../entities/volunteer-badge-award.entity";
+import { VolunteerBadgeDefinition } from "../../entities/volunteer-badge-definition.entity";
+import { VolunteerHourAdjustment } from "../../entities/volunteer-hour-adjustment.entity";
 import { VolunteerServiceRecord } from "../../entities/volunteer-service-record.entity";
 import { VolunteerTaskApplication } from "../../entities/volunteer-task-application.entity";
 import { VolunteerTask } from "../../entities/volunteer-task.entity";
+import { VolunteerTrainingRecord } from "../../entities/volunteer-training-record.entity";
+import { VolunteerServiceProof } from "../../entities/volunteer-service-proof.entity";
 import { PaymentController, PublicController } from "./public.controller";
 import { PaymentProviderService } from "./payment-provider.service";
 import { PublicService } from "./public.service";
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { RefundCompletionService } from "../refund-completion.service";
 import { CharityFundService } from "../charity-fund.service";
+import { ObjectStorageService } from "../../shared/object-storage.service";
+import { AidModule } from "../aid/aid.module";
+import { MemberPointsModule } from "../member-points/member-points.module";
+import { CredentialTemplateModule } from "../credential-templates/credential-template.module";
 
 @Module({
-  imports: [TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, MarketingPopup, AdCampaign, AdDailyStat, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, MiniprogramReleaseSetting, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectUpdate, VolunteerProfile, VolunteerTask, VolunteerTaskApplication, VolunteerServiceRecord, Course, CourseChapter, CourseLesson, CourseOrder, UserLearning, UserFavorite, Certificate, CommunityPost])],
+  imports: [AidModule, MemberPointsModule, CredentialTemplateModule, TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, MarketingPopup, AdCampaign, AdDailyStat, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, MiniprogramReleaseSetting, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundAccount, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectEvent, CharityProjectUpdate, VolunteerProfile, VolunteerTrainingRecord, VolunteerBadgeDefinition, VolunteerBadgeAward, VolunteerTask, VolunteerTaskApplication, VolunteerAttendanceRecord, VolunteerServiceRecord, VolunteerHourAdjustment, VolunteerServiceProof, Course, CourseChapter, CourseLesson, CourseOrder, CourseRefund, UserLearning, UserFavorite, Certificate, CommunityPost])],
   controllers: [PublicController, PaymentController],
-  providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService],
-  exports: [PublicService, PaymentProviderService]
+  providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
+  exports: [PublicService, PaymentProviderService, ObjectStorageService]
 })
 export class PublicModule {}

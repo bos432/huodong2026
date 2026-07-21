@@ -51,6 +51,12 @@ export class MallOrderItem {
   @Column({ type: "decimal", precision: 10, scale: 2 })
   totalAmount!: string;
 
+  @Column({ type: "json", nullable: true })
+  productSnapshot!: Record<string, unknown> | null;
+
+  @Column({ type: "json", nullable: true })
+  skuSnapshot!: Record<string, unknown> | null;
+
   @CreateDateColumn()
   createdAt!: Date;
 }

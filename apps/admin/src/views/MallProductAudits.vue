@@ -6,13 +6,13 @@
         <p>平台审核商家/代理店铺提交的商品。通过后前台展示，驳回后退回草稿，店铺可修改后重新提交。</p>
       </div>
       <div class="header-actions">
-        <el-select v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" @change="handleTenantChange">
+        <el-select v-model="filters.tenantId" clearable filterable placeholder="全部商家/代理" style="width:220px" :disabled="actionProductId !== null" @change="handleTenantChange">
           <el-option v-for="tenant in tenants" :key="tenant.id" :label="tenantLabel(tenant)" :value="tenant.id" />
         </el-select>
-        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部店铺" style="width:260px" @change="handleMerchantChange">
+        <el-select v-model="filters.merchantId" clearable filterable placeholder="全部店铺" style="width:260px" :disabled="actionProductId !== null" @change="handleMerchantChange">
           <el-option v-for="merchant in merchants" :key="merchant.id" :label="merchantLabel(merchant)" :value="merchant.id" />
         </el-select>
-        <el-input v-model="filters.keyword" clearable placeholder="商品名/品牌名" style="width:220px" @keyup.enter="loadAudits" @clear="loadAudits" />
+        <el-input v-model="filters.keyword" clearable placeholder="商品名/品牌名" style="width:220px" :disabled="actionProductId !== null" @keyup.enter="loadAudits" @clear="loadAudits" />
         <el-button :loading="loadingAny" @click="loadAudits">刷新审核</el-button>
       </div>
     </div>
@@ -26,6 +26,9 @@
       title="商品审核店铺链接不可用"
       :description="deepLinkWarning"
     />
+    <el-alert v-else-if="scopeError" class="scope-alert" type="error" show-icon :closable="false" title="商品审核范围加载失败" aria-live="assertive">
+      <template #default><p>{{ scopeError }}</p><el-button size="small" :loading="loadingAny" @click="reloadAll">重新加载</el-button></template>
+    </el-alert>
     <el-alert
       v-else-if="!selectedMerchant"
       class="scope-alert"
@@ -71,6 +74,9 @@
           <small>共 {{ total }} 条；审核时重点看商品描述、价格、规格、库存、配送和售后说明</small>
         </div>
       </template>
+      <el-alert v-if="auditError" class="audit-error" type="error" show-icon :closable="false" title="待审核商品加载失败" aria-live="assertive">
+        <template #default><p>{{ auditError }}</p><el-button size="small" :loading="loading" @click="loadAudits">重新加载审核列表</el-button></template>
+      </el-alert>
       <el-table v-loading="loading" :data="products" stripe empty-text="暂无待审核商品">
         <el-table-column label="商品" min-width="300">
           <template #default="{ row }">
@@ -116,9 +122,9 @@
         <el-table-column label="提交时间" width="170"><template #default="{ row }">{{ formatTime(row.updatedAt || row.createdAt) }}</template></el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
-            <el-button size="small" type="success" @click.stop="approveProduct(row)">通过</el-button>
-            <el-button size="small" type="danger" plain @click.stop="rejectProduct(row)">驳回</el-button>
-            <el-button size="small" @click.stop="openProductManage(row)">商品管理</el-button>
+            <el-button size="small" type="success" :loading="actionProductId === row.id" :disabled="actionProductId !== null" @click.stop="approveProduct(row)">通过</el-button>
+            <el-button size="small" type="danger" plain :disabled="actionProductId !== null" @click.stop="rejectProduct(row)">驳回</el-button>
+            <el-button size="small" :disabled="actionProductId !== null" @click.stop="openProductManage(row)">商品管理</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -157,6 +163,12 @@ const total = ref(0);
 const loading = ref(false);
 const merchantLoading = ref(false);
 const deepLinkWarning = ref("");
+const scopeError = ref("");
+const auditError = ref("");
+const actionProductId = ref<number | null>(null);
+let tenantLoadSequence = 0;
+let merchantLoadSequence = 0;
+let auditLoadSequence = 0;
 const filters = reactive({
   tenantId: routeTenantId(),
   merchantId: routeMerchantId(),
@@ -213,6 +225,15 @@ function currentMallParams(extra: Record<string, any> = {}) {
   };
 }
 
+function requestErrorText(error: unknown, fallback: string) {
+  return error instanceof Error && error.message ? error.message : fallback;
+}
+
+function currentAuditScopeMatches(tenantId: number, merchantId: number) {
+  const currentTenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
+  return currentTenantId === tenantId && Number(filters.merchantId || 0) === merchantId;
+}
+
 async function syncRouteQuery() {
   const query: Record<string, string> = {};
   if (filters.tenantId) query.tenantId = String(filters.tenantId);
@@ -226,14 +247,43 @@ function clearAudits() {
   total.value = 0;
 }
 
+function invalidateAuditScope() {
+  merchantLoadSequence += 1;
+  auditLoadSequence += 1;
+  clearAudits();
+  auditError.value = "";
+  loading.value = false;
+}
+
 async function loadTenants() {
-  tenants.value = await api.get<any, any[]>("/admin/tenants");
+  const sequence = ++tenantLoadSequence;
+  tenants.value = [];
+  scopeError.value = "";
+  try {
+    const result = await api.get<any, any[]>("/admin/tenants");
+    if (sequence !== tenantLoadSequence) return false;
+    if (!Array.isArray(result)) throw new Error("商家选项响应格式无效");
+    tenants.value = result;
+    return true;
+  } catch (error: unknown) {
+    if (sequence !== tenantLoadSequence) return false;
+    scopeError.value = requestErrorText(error, "加载商家列表失败");
+    return false;
+  }
 }
 
 async function loadMerchants() {
+  const sequence = ++merchantLoadSequence;
+  const tenantId = Number(filters.tenantId || 0);
   merchantLoading.value = true;
+  scopeError.value = "";
+  merchants.value = [];
+  clearAudits();
   try {
-    merchants.value = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: filters.tenantId || undefined, enabled: "true" } });
+    const result = await api.get<any, Merchant[]>("/admin/mall/accessible-merchants", { params: { tenantId: filters.tenantId || undefined, enabled: "true" } });
+    if (sequence !== merchantLoadSequence || Number(filters.tenantId || 0) !== tenantId) return false;
+    if (!Array.isArray(result)) throw new Error("可审核店铺响应格式无效");
+    merchants.value = result;
     const requestedMerchantId = routeMerchantId();
     deepLinkWarning.value = "";
     if (requestedMerchantId && merchants.value.some((merchant) => merchant.id === requestedMerchantId)) filters.merchantId = requestedMerchantId;
@@ -244,17 +294,23 @@ async function loadMerchants() {
       return false;
     } else if (filters.merchantId && !merchants.value.some((merchant) => merchant.id === filters.merchantId)) filters.merchantId = undefined;
     return true;
-  } catch (error: any) {
-    ElMessage.error(error.message || "加载可审核店铺失败");
+  } catch (error: unknown) {
+    if (sequence !== merchantLoadSequence || Number(filters.tenantId || 0) !== tenantId) return false;
+    scopeError.value = requestErrorText(error, "加载可审核店铺失败");
     return false;
   } finally {
-    merchantLoading.value = false;
+    if (sequence === merchantLoadSequence) merchantLoading.value = false;
   }
 }
 
 async function loadAudits() {
   if (deepLinkWarning.value) return;
+  const sequence = ++auditLoadSequence;
+  const tenantId = Number(filters.tenantId || selectedMerchant.value?.tenant?.id || 0);
+  const merchantId = Number(filters.merchantId || 0);
   loading.value = true;
+  auditError.value = "";
+  clearAudits();
   try {
     const result = await api.get<any, any>("/admin/mall/product-audits", {
       params: currentMallParams({
@@ -263,17 +319,29 @@ async function loadAudits() {
         pageSize: filters.pageSize
       })
     });
-    products.value = result.items || [];
-    total.value = result.total || 0;
+    if (sequence !== auditLoadSequence || !currentAuditScopeMatches(tenantId, merchantId)) return;
+    if (!result || typeof result !== "object" || !Array.isArray(result.items)) throw new Error("待审核商品响应格式无效");
+    products.value = result.items;
+    total.value = Number(result.total || result.items.length);
     await syncRouteQuery();
-  } catch (error: any) {
-    ElMessage.error(error.message || "加载商城商品审核失败");
+  } catch (error: unknown) {
+    if (sequence !== auditLoadSequence || !currentAuditScopeMatches(tenantId, merchantId)) return;
+    auditError.value = requestErrorText(error, "加载商城商品审核失败");
   } finally {
-    loading.value = false;
+    if (sequence === auditLoadSequence) loading.value = false;
   }
 }
 
+async function reloadAll() {
+  if (loadingAny.value) return;
+  const tenantsReady = await loadTenants();
+  if (!tenantsReady) return;
+  const merchantsReady = await loadMerchants();
+  if (merchantsReady) await loadAudits();
+}
+
 async function handleTenantChange() {
+  invalidateAuditScope();
   filters.merchantId = undefined;
   filters.page = 1;
   await syncRouteQuery();
@@ -282,6 +350,7 @@ async function handleTenantChange() {
 }
 
 async function handleMerchantChange() {
+  invalidateAuditScope();
   deepLinkWarning.value = "";
   filters.page = 1;
   await syncRouteQuery();
@@ -327,26 +396,48 @@ async function copyWorkbenchLink() {
 }
 
 async function approveProduct(row: any) {
+  if (actionProductId.value !== null) return;
+  const productId = Number(row.id);
+  const tenantId = Number(row.tenant?.id || 0);
+  const merchantId = Number(row.merchant?.id || 0);
+  const contextSequence = auditLoadSequence;
+  actionProductId.value = productId;
   try {
     await ElMessageBox.confirm(`确认通过商品「${row.title}」的上架审核？通过后会在 H5/小程序公开展示。`, "通过商品审核", { confirmButtonText: "通过", cancelButtonText: "取消", type: "success" });
-    await api.post(`/admin/mall/products/${row.id}/approve`);
+    const current = products.value.find((item) => Number(item.id) === productId);
+    if (contextSequence !== auditLoadSequence || Number(current?.tenant?.id || 0) !== tenantId || Number(current?.merchant?.id || 0) !== merchantId) return ElMessage.warning("审核列表已变化，请重新选择商品");
+    await api.post(`/admin/mall/products/${row.id}/approve`, { remark: "审核通过" });
+    if (actionProductId.value !== productId || contextSequence !== auditLoadSequence) return;
     ElMessage.success("商品审核已通过，前台将按店铺和商品可见性展示。");
     await loadAudits();
   } catch (error: any) {
     if (error === "cancel" || error === "close") return;
     ElMessage.error(error.message || "商品审核通过失败");
+  } finally {
+    actionProductId.value = null;
   }
 }
 
 async function rejectProduct(row: any) {
+  if (actionProductId.value !== null) return;
+  const productId = Number(row.id);
+  const tenantId = Number(row.tenant?.id || 0);
+  const merchantId = Number(row.merchant?.id || 0);
+  const contextSequence = auditLoadSequence;
+  actionProductId.value = productId;
   try {
-    await ElMessageBox.confirm(`确认驳回商品「${row.title}」？商品会退回草稿，店铺可修改后重新提交。`, "驳回商品审核", { confirmButtonText: "驳回", cancelButtonText: "取消", type: "warning" });
-    await api.post(`/admin/mall/products/${row.id}/reject`);
+    const result = await ElMessageBox.prompt(`请填写商品「${row.title}」的驳回原因。商品会退回草稿，店铺可修改后重新提交。`, "驳回商品审核", { confirmButtonText: "驳回", cancelButtonText: "取消", type: "warning", inputType: "textarea", inputValidator: (value) => String(value || "").trim() ? true : "驳回原因不能为空" });
+    const current = products.value.find((item) => Number(item.id) === productId);
+    if (contextSequence !== auditLoadSequence || Number(current?.tenant?.id || 0) !== tenantId || Number(current?.merchant?.id || 0) !== merchantId) return ElMessage.warning("审核列表已变化，请重新选择商品");
+    await api.post(`/admin/mall/products/${row.id}/reject`, { remark: result.value.trim() });
+    if (actionProductId.value !== productId || contextSequence !== auditLoadSequence) return;
     ElMessage.success("商品已驳回为草稿");
     await loadAudits();
   } catch (error: any) {
     if (error === "cancel" || error === "close") return;
     ElMessage.error(error.message || "商品审核驳回失败");
+  } finally {
+    actionProductId.value = null;
   }
 }
 
@@ -359,17 +450,20 @@ function formatTime(value: any) {
 }
 
 onMounted(async () => {
-  await loadTenants();
-  const ok = await loadMerchants();
-  if (ok) await loadAudits();
+  await reloadAll();
 });
 
 watch(() => [route.query.tenantId, route.query.merchantId, route.query.keyword], async () => {
   const nextTenantId = routeTenantId();
   const nextMerchantId = routeMerchantId();
   const nextKeyword = routeKeyword();
-  if (nextKeyword !== filters.keyword) filters.keyword = nextKeyword;
-  if (nextTenantId !== filters.tenantId) {
+  const tenantChanged = nextTenantId !== filters.tenantId;
+  const merchantChanged = nextMerchantId !== filters.merchantId;
+  const keywordChanged = nextKeyword !== filters.keyword;
+  if (!tenantChanged && !merchantChanged && !keywordChanged) return;
+  invalidateAuditScope();
+  filters.keyword = nextKeyword;
+  if (tenantChanged) {
     filters.tenantId = nextTenantId;
     filters.merchantId = nextMerchantId;
     filters.page = 1;
@@ -377,15 +471,23 @@ watch(() => [route.query.tenantId, route.query.merchantId, route.query.keyword],
     if (ok) await loadAudits();
     return;
   }
-  if (nextMerchantId && nextMerchantId !== filters.merchantId && merchants.value.some((item) => item.id === nextMerchantId)) {
+  if (merchantChanged && nextMerchantId && merchants.value.some((item) => item.id === nextMerchantId)) {
     deepLinkWarning.value = "";
     filters.merchantId = nextMerchantId;
     filters.page = 1;
     await loadAudits();
-  } else if (nextMerchantId && nextMerchantId !== filters.merchantId) {
+  } else if (merchantChanged && nextMerchantId) {
     filters.merchantId = undefined;
     deepLinkWarning.value = merchantLinkWarning(nextMerchantId);
     clearAudits();
+  } else if (merchantChanged) {
+    deepLinkWarning.value = "";
+    filters.merchantId = undefined;
+    filters.page = 1;
+    await loadAudits();
+  } else if (keywordChanged) {
+    filters.page = 1;
+    await loadAudits();
   }
 });
 </script>
@@ -397,6 +499,8 @@ watch(() => [route.query.tenantId, route.query.merchantId, route.query.keyword],
 .page-header p { margin: 0; color: #64748b; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; gap: 8px; flex-wrap: wrap; }
 .scope-alert { margin-bottom: 2px; }
+.audit-error { margin-bottom: 12px; }
+.scope-alert p, .audit-error p { margin: 0 0 8px; overflow-wrap: anywhere; }
 .merchant-card { border-color: #fde68a; background: linear-gradient(135deg, #fffbeb 0%, #fff 72%); }
 .merchant-card :deep(.el-card__body) { display: grid; grid-template-columns: 1fr auto; gap: 12px; align-items: center; }
 .merchant-card strong { color: #0f172a; }
@@ -421,8 +525,14 @@ watch(() => [route.query.tenantId, route.query.merchantId, route.query.keyword],
 }
 @media (max-width: 720px) {
   .mall-product-audits-page { padding: 14px; }
+  .page-header { grid-template-columns: minmax(0, 1fr); }
+  .page-header > div:first-child, .page-header h2, .page-header p { min-width: 0; overflow-wrap: anywhere; }
+  .header-actions { width: 100%; align-items: stretch; flex-direction: column; }
+  .header-actions :deep(.el-select), .header-actions :deep(.el-input), .header-actions > .el-button { width: 100% !important; margin-left: 0; }
   .summary-grid { grid-template-columns: 1fr; }
   .merchant-card :deep(.el-card__body) { grid-template-columns: 1fr; }
   .merchant-tags, .merchant-actions { justify-content: flex-start; }
+  .merchant-actions > .el-button { margin-left: 0; }
+  .section-header { align-items: flex-start; flex-direction: column; }
 }
 </style>

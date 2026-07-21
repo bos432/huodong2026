@@ -48,8 +48,11 @@
 - 在真实手机微信内执行 [慢π微信分享与海报真机验收清单](wechat-share-poster-acceptance.md)，确认活动分享、心得发布、海报生成、长按保存、二维码扫码回流和朋友圈传播均通过。
 - 按 [小程序上传发布说明](小程序上传发布说明.md) 的“体验版验收记录表”复验小程序登录、首页装修、弹窗、广告和跳转限制；后台“系统设置 / 部署配置 / 小程序体验版验收”可复制验收模板。
 - 执行 `npm --prefix apps/api run migration:show`，确认待执行迁移符合预期。
+- 钱包和公益账本 migration 会创建哈希链 trigger；项目内置 MySQL 已启用 `log_bin_trust_function_creators=1`。使用云数据库或外部 MySQL 时，必须由 DBA 开启等效参数，或使用具备创建触发器权限的专用迁移账号。
 - 生产数据库备份后执行 `npm --prefix apps/api run migration:run`。
+- 本地 Docker 和生产 Docker 均保持 `DB_SYNCHRONIZE=false`；migration 执行完成后启动或重建 API 容器时也不得临时开启 TypeORM 自动同步。
 - 发布静态包前建议设置 `STRICT_RELEASE_VERSION=true` 再执行 `npm run publish:webroot`；如需灰度允许差异，至少确认发布脚本的版本不一致警告已经写入验收报告。
+- 在本地或预发发布窗口执行 `npm run drill:rollback:static`，确认 H5/后台故障候选可被 Nginx HTTP 探针识别，恢复后入口哈希、版本文件、首屏资产和 API readiness 全部通过；保留 `deploy/static-rollback-drill-result.json`。
 - 执行 `docker compose --env-file deploy/.env.production up -d --build`。
 - 访问 `/api/health`，确认 API 和数据库均为 `up`。
 - 访问 `/api/health`，确认 `release.version` 和 `release.commit` 与发布记录一致。
@@ -98,7 +101,7 @@
 - 后台订单确认线下收款后，报名状态正确流转。
 - 待付款订单显示付款截止时间，H5 报名详情页也能看到付款截止提示。
 - 后台订单管理页点击“关闭过期订单”后，超时待付款订单变为已关闭，报名变为已取消，名额释放。
-- 如启用 `ORDER_CLOSE_WORKER_ENABLED=true`，需确认 worker 间隔和关闭结果符合预期。
+- 如启用 `ORDER_CLOSE_WORKER_ENABLED=true`，需确认活动订单与商城订单 worker 间隔和关闭结果符合预期；商城还需核对 `MALL_PENDING_ORDER_BATCH_SIZE`、`MALL_PENDING_ORDER_MAX_BATCHES`，确保单轮容量覆盖业务峰值且 `hasMore=false`。
 - 后台创建活动票种，H5 活动详情可读取票种。
 - 后台票种管理页可按活动筛选、创建、编辑并启停票种。
 - 后台创建优惠码，H5 报价接口能正确计算原价、优惠金额和实付金额。
@@ -187,8 +190,10 @@
 
 - 配置 MySQL 自动备份，至少每日一次。
 - 执行 `npm run db:backup`，确认生成 `.sql.gz` 备份文件。
+- 执行 `npm run private-data:backup`，确认生成包含援助材料和私有凭证的 `.tar.gz` 备份文件。
 - 执行 `npm run db:prune-backups`，确认过期备份清理策略符合预期。
 - 在测试库用 `RESTORE_CONFIRM=activity_registration BACKUP_FILE=... npm run db:restore` 做一次恢复演练。
+- 停止测试环境 API 后，用 `PRIVATE_DATA_RESTORE_CONFIRM=private-data PRIVATE_DATA_BACKUP_FILE=... npm run private-data:restore` 做私有数据恢复演练，并抽查援助材料可下载。
 - 备份文件保存到独立磁盘或对象存储。
 - 每月至少做一次恢复演练。
 - 上线前保留一次空库初始化备份。

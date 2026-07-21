@@ -46,6 +46,9 @@ export type ProviderPaymentCreateOptions = {
   runtimeConfig?: PaymentProviderRuntimeConfig | null;
 };
 
+export type ProviderPaymentQueryResult = { provider: SupportedPaymentProvider; mode: PaymentMode; orderNo: string; transactionNo: string | null; amount: string; status: "pending" | "success" | "closed" | "failed"; raw?: Record<string, unknown> };
+export type ProviderPaymentCloseResult = { provider: SupportedPaymentProvider; mode: PaymentMode; orderNo: string; status: "closed" | "already_closed" | "paid"; raw?: Record<string, unknown> };
+
 export type ProviderRefundRequest = {
   provider: SupportedPaymentProvider;
   order: Order;
@@ -94,6 +97,7 @@ export type ProviderStatementFetchRequest = {
   statementDate: string;
   agentId?: number | null;
   tenantId?: number | null;
+  runtimeConfig?: PaymentProviderRuntimeConfig | null;
 };
 
 export type ProviderStatementItem = {
@@ -117,6 +121,8 @@ export type ProviderStatementFetchResult = {
 
 export type PaymentProviderAdapter = {
   createPayment(order: Order, dto: ProviderPayDto, options?: ProviderPaymentCreateOptions): Promise<ProviderPaymentResult> | ProviderPaymentResult;
+  queryPayment(order: Order): Promise<ProviderPaymentQueryResult> | ProviderPaymentQueryResult;
+  closePayment(order: Order): Promise<ProviderPaymentCloseResult> | ProviderPaymentCloseResult;
   parseCallback(context: RealPaymentCallbackContext): Promise<NormalizedPaymentCallback> | NormalizedPaymentCallback;
   requestRefund(request: ProviderRefundRequest): Promise<ProviderRefundResult> | ProviderRefundResult;
   queryRefund(request: ProviderRefundQueryRequest): Promise<ProviderRefundQueryResult> | ProviderRefundQueryResult;
@@ -147,6 +153,24 @@ export class PaymentProviderService {
   async createPayment(provider: SupportedPaymentProvider, order: Order, dto: ProviderPayDto, options?: ProviderPaymentCreateOptions): Promise<ProviderPaymentResult> {
     if (await this.isRealProviderEnabled(provider)) return this.createRealPayment(provider, order, dto, options);
     return this.createSandboxPayment(provider, order, dto, options);
+  }
+
+  async queryPayment(provider: SupportedPaymentProvider, order: Order, runtimeConfig?: PaymentProviderRuntimeConfig | null): Promise<ProviderPaymentQueryResult> {
+    if (await this.isRealProviderEnabled(provider)) {
+      await this.assertRealProviderReady(provider, `${provider} real payment query`);
+      return this.realAdapter(provider, runtimeConfig || await this.runtimeConfigForOrder(provider, order)).queryPayment(order);
+    }
+    this.assertSandboxAllowed(`${provider} sandbox payment query`);
+    return { provider, mode: "sandbox", orderNo: order.orderNo, transactionNo: order.transactionNo, amount: Number(order.amount).toFixed(2), status: order.status === "paid" ? "success" : ["closed", "cancelled"].includes(order.status) ? "closed" : "pending", raw: { localStatus: order.status } };
+  }
+
+  async closePayment(provider: SupportedPaymentProvider, order: Order, runtimeConfig?: PaymentProviderRuntimeConfig | null): Promise<ProviderPaymentCloseResult> {
+    if (await this.isRealProviderEnabled(provider)) {
+      await this.assertRealProviderReady(provider, `${provider} real payment close`);
+      return this.realAdapter(provider, runtimeConfig || await this.runtimeConfigForOrder(provider, order)).closePayment(order);
+    }
+    this.assertSandboxAllowed(`${provider} sandbox payment close`);
+    return { provider, mode: "sandbox", orderNo: order.orderNo, status: order.status === "paid" ? "paid" : ["closed", "cancelled"].includes(order.status) ? "already_closed" : "closed", raw: { localStatus: order.status } };
   }
 
   parsePaymentCallback(provider: SupportedPaymentProvider, dto: ProviderPaymentCallbackDto): NormalizedPaymentCallback {
@@ -210,7 +234,7 @@ export class PaymentProviderService {
 
   async fetchStatement(request: ProviderStatementFetchRequest): Promise<ProviderStatementFetchResult> {
     await this.assertRealProviderReady(request.provider, `${request.provider} real payment statement`);
-    const runtimeConfig = await this.runtimeConfigForProvider(request.provider, request.agentId || null, request.tenantId || null);
+    const runtimeConfig = request.runtimeConfig || await this.runtimeConfigForProvider(request.provider, request.agentId || null, request.tenantId || null);
     const adapter = this.realAdapter(request.provider, runtimeConfig);
     return adapter.fetchStatement(request);
   }

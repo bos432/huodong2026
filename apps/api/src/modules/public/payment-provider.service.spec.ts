@@ -7,6 +7,7 @@ import { deflateRawSync, gzipSync } from "zlib";
 import { describe, expect, it } from "vitest";
 import { PaymentProviderService } from "./payment-provider.service";
 import { buildAlipayPaymentRequestDraft, buildAlipayRefundQueryRequestDraft, buildAlipayRefundRequestDraft, buildAlipaySignedPaymentResult, buildAlipayStatementDownloadUrlRequestDraft, buildWechatPaymentRequestDraft, buildWechatRefundQueryRequestDraft, buildWechatRefundRequestDraft, buildWechatStatementDownloadUrlRequestDraft, downloadProviderStatementText, executeRealPaymentHttpRequestDraft, normalizeAlipayPaymentCreatePayload, normalizeAlipayRefundNotificationPayload, normalizeAlipayRefundQueryPayload, normalizeAlipayRefundRequestPayload, normalizeAlipayStatementText, normalizeWechatPaymentCreatePayload, normalizeWechatRefundNotificationPayload, normalizeWechatRefundQueryPayload, normalizeWechatRefundRequestPayload, normalizeWechatStatementText, parseAlipayRefundNotification, parseWechatRefundNotification, statementDownloadUrl, unwrapAlipayPaymentCreatePayload, unwrapAlipayRefundQueryPayload, unwrapAlipayRefundRequestPayload, unwrapAlipayStatementDownloadUrlPayload, verifyAlipayHttpResponse, verifyWechatHttpResponse } from "./real-payment-adapters";
+import { buildAlipayPaymentCloseRequestDraft, buildAlipayPaymentQueryRequestDraft, buildWechatPaymentCloseRequestDraft, buildWechatPaymentQueryRequestDraft, normalizeAlipayPaymentQueryPayload, normalizeWechatPaymentQueryPayload } from "./real-payment-adapters";
 
 function config(values: Record<string, string>) {
   return {
@@ -115,6 +116,27 @@ describe("payment provider service", () => {
     const provider = service({ NODE_ENV: "development", PAYMENT_SANDBOX_ENABLED: "true", REAL_PAYMENT_ENABLED: "false", WECHAT_PAY_ENABLED: "true" });
     const pay = await provider.createPayment("wechat", { id: 7, orderNo: "OD7", amount: "19" } as any, {});
     expect(pay).toMatchObject({ provider: "wechat", mode: "sandbox", orderNo: "OD7", amount: "19.00" });
+  });
+
+  it("queries and closes sandbox payments with normalized statuses", async () => {
+    const provider = service({ PAYMENT_SANDBOX_ENABLED: "true", REAL_PAYMENT_ENABLED: "false" });
+    await expect(provider.queryPayment("wechat", { orderNo: "OD7", amount: "19.00", status: "pending_payment", transactionNo: null } as any)).resolves.toMatchObject({ mode: "sandbox", status: "pending", amount: "19.00" });
+    await expect(provider.queryPayment("wechat", { orderNo: "OD8", amount: "19.00", status: "paid", transactionNo: "WX8" } as any)).resolves.toMatchObject({ status: "success", transactionNo: "WX8" });
+    await expect(provider.closePayment("wechat", { orderNo: "OD7", status: "pending_payment" } as any)).resolves.toMatchObject({ status: "closed" });
+    await expect(provider.closePayment("wechat", { orderNo: "OD8", status: "paid" } as any)).resolves.toMatchObject({ status: "paid" });
+  });
+
+  it("builds signed real payment query and close requests and normalizes provider states", () => {
+    const privateKey = keyPair.privateKey.export({ type: "pkcs8", format: "pem" }).toString();
+    const order = { orderNo: "OD7", amount: "19.90" } as any;
+    const wechatOptions = { mchId: "mch", certSerialNo: "serial", privateKey, timestamp: "1700000000", nonce: "nonce" };
+    expect(buildWechatPaymentQueryRequestDraft(order, wechatOptions)).toMatchObject({ method: "GET", path: "/v3/pay/transactions/out-trade-no/OD7?mchid=mch" });
+    expect(buildWechatPaymentCloseRequestDraft(order, wechatOptions)).toMatchObject({ method: "POST", path: "/v3/pay/transactions/out-trade-no/OD7/close" });
+    const alipayOptions = { appId: "app", privateKey, timestamp: "2026-07-13 03:00:00" };
+    expect(buildAlipayPaymentQueryRequestDraft(order, alipayOptions).body).toContain("alipay.trade.query");
+    expect(buildAlipayPaymentCloseRequestDraft(order, alipayOptions).body).toContain("alipay.trade.close");
+    expect(normalizeWechatPaymentQueryPayload(order, { trade_state: "SUCCESS", transaction_id: "WX7", amount: { total: 1990 } })).toMatchObject({ status: "success", amount: "19.90", transactionNo: "WX7" });
+    expect(normalizeAlipayPaymentQueryPayload(order, { trade_status: "WAIT_BUYER_PAY", total_amount: "19.90" })).toMatchObject({ status: "pending", amount: "19.90" });
   });
 
   const realWechatConfig = {

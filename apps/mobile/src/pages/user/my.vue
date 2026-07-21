@@ -11,7 +11,7 @@
       }"
     >
       <view class="member-card-top">
-        <image v-if="profile?.avatarUrl" class="avatar-lg" :src="profile.avatarUrl" mode="aspectFill" />
+        <image v-if="profile?.avatarUrl" class="avatar-lg" :src="profile.avatarUrl" mode="aspectFill" aria-label="会员头像" />
         <view v-else class="avatar-lg avatar-fallback">{{ displayName.slice(0, 1) }}</view>
         <view class="member-main">
           <view class="profile-greeting" :style="{ color: profileHeaderTextColor }">{{ myPageGreeting }}</view>
@@ -22,7 +22,7 @@
           </view>
           <text class="profile-expire">{{ profileIdentityText }}</text>
         </view>
-        <view class="profile-edit-btn" @click="goEdit">编辑</view>
+        <view class="profile-edit-btn" role="button" tabindex="0" aria-label="编辑会员资料" @click="goEdit" @keyup.enter="goEdit" @keyup.space.prevent="goEdit">编辑</view>
       </view>
       <view class="member-stats">
         <view v-for="item in memberStats" :key="item.label" class="member-stat">
@@ -31,20 +31,31 @@
         </view>
       </view>
       <view v-if="!isLoggedIn" class="member-actions single">
-        <view class="member-action primary" @click="goLogin">登录/注册</view>
+        <view class="member-action primary" role="button" tabindex="0" aria-label="登录或注册" @click="goLogin" @keyup.enter="goLogin" @keyup.space.prevent="goLogin">登录/注册</view>
       </view>
-      <view v-else-if="!profile?.phone || canCompleteWechatProfile" class="member-actions">
-        <view v-if="!profile?.phone" class="member-action primary" @click="openPhoneBindPanel">绑定手机号</view>
-        <view v-if="canCompleteWechatProfile" class="member-action" @click="openWechatProfilePanel()">完善头像昵称</view>
+      <view v-else-if="!loadingProfile && !profileError && (!profile?.phone || canCompleteWechatProfile)" class="member-actions">
+        <view v-if="!profile?.phone" class="member-action primary" role="button" tabindex="0" aria-label="绑定手机号" @click="openPhoneBindPanel" @keyup.enter="openPhoneBindPanel" @keyup.space.prevent="openPhoneBindPanel">绑定手机号</view>
+        <view v-if="canCompleteWechatProfile" class="member-action" role="button" tabindex="0" aria-label="完善头像昵称" @click="openWechatProfilePanel()" @keyup.enter="openWechatProfilePanel()" @keyup.space.prevent="openWechatProfilePanel()">完善头像昵称</view>
       </view>
+    </view>
+
+    <view v-if="loadingProfile && !profile" class="profile-state-card" role="status" aria-live="polite">会员资料加载中...</view>
+    <view v-else-if="profileError" class="profile-state-card error-state" role="alert" aria-live="assertive">
+      <text>{{ profileError }}</text>
+      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载会员资料" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新加载</view>
     </view>
 
     <AdSlotRenderer slot-key="user_my_banner" page-key="user_my" />
 
+    <view v-if="assetWarning" class="profile-state-card warning-state" role="status" aria-live="polite">
+      <text>{{ assetWarning }}</text>
+      <view class="state-retry" role="button" tabindex="0" aria-label="重新同步会员资产" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新同步资产</view>
+    </view>
+
     <!-- 核心入口宫格 -->
     <view class="card profile-grid-card">
       <view class="grid-2x4-profile">
-        <view v-for="item in gridItems" :key="item.label" class="grid-profile-item" @click="goGrid(item)">
+        <view v-for="item in gridItems" :key="item.label" class="grid-profile-item" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)">
           <view class="grid-profile-icon">{{ item.icon }}</view>
           <text class="grid-profile-label">{{ item.label }}</text>
         </view>
@@ -52,18 +63,18 @@
     </view>
 
     <!-- 公益基金 -->
-    <view v-if="featureGates.charity" class="card charity-card" @click="goCharity">
+    <view v-if="featureGates.charity" class="card charity-card" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity">
       <view class="row">
         <view>
           <text style="font-size:30rpx; font-weight:600; color:#333;">🌱 我的公益贡献</text>
-          <text style="font-size:24rpx; color:#999; display:block; margin-top:4rpx;">累计贡献 {{ money(charity?.totalAmount) }} 元</text>
+          <text style="font-size:24rpx; color:#999; display:block; margin-top:4rpx;">累计贡献 {{ charityAmountText }} 元</text>
         </view>
         <text class="subtle" style="color:#C43D3D;">查看详情 ›</text>
       </view>
     </view>
 
     <!-- 文化大使入口 -->
-    <view v-if="featureGates.ambassador" class="card ambassador-entry" @click="goAmbassador">
+    <view v-if="featureGates.ambassador" class="card ambassador-entry" role="button" tabindex="0" aria-label="加入文化大使" @click="goAmbassador" @keyup.enter="goAmbassador" @keyup.space.prevent="goAmbassador">
       <view class="row">
         <text style="font-size:30rpx; color:#C43D3D; font-weight:600;">🏮 加入文化大使</text>
         <text style="font-size:26rpx; color:#C43D3D;">立即申请 ›</text>
@@ -72,7 +83,7 @@
     </view>
 
     <!-- 用户心得入口 -->
-    <view v-if="featureGates.community" class="card community-post-entry" @click="goCommunityPosts">
+    <view v-if="featureGates.community" class="card community-post-entry" role="button" tabindex="0" aria-label="查看我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts">
       <view class="row">
         <view>
           <text class="entry-title">我的活动心得</text>
@@ -80,8 +91,16 @@
         </view>
         <text class="entry-arrow">去查看 ›</text>
       </view>
+      <view v-if="isLoggedIn" class="growth-panel">
+        <view class="growth-copy"><text>成长值 {{ profile?.growthValue || 0 }}</text><text v-if="profile?.nextLevel">距 {{ profile.nextLevel.name }} 还差 {{ profile.nextLevel.remainingGrowth }}</text><text v-else>已达当前最高等级</text></view>
+        <view class="growth-track"><view class="growth-fill" :style="{ width: profile?.nextLevel ? `${Math.min(100, Math.max(0, Number(profile?.growthValue || 0) / Number(profile.nextLevel.minGrowth || 1) * 100))}%` : '100%' }"></view></view>
+        <view v-if="profile?.memberLevel?.expiresAt" class="growth-expire">等级有效至 {{ String(profile.memberLevel.expiresAt).replace('T', ' ').slice(0, 10) }}</view>
+      </view>
     </view>
-    <view v-if="featureGates.forum" class="card forum-post-entry" @click="goForumPosts">
+    <view v-if="featureGates.community" class="card community-post-entry" role="button" tabindex="0" aria-label="查看收藏、关注与消息" @click="goCommunitySocial" @keyup.enter="goCommunitySocial" @keyup.space.prevent="goCommunitySocial"><view class="row"><view><text class="entry-title">收藏、关注与消息</text><text class="entry-copy">查看收藏动态、关注作者和互动提醒。</text></view><text>›</text></view></view>
+    <view v-if="featureGates.community || featureGates.forum" class="card community-post-entry" role="button" tabindex="0" aria-label="查看处罚与申诉" @click="goContentAppeals" @keyup.enter="goContentAppeals" @keyup.space.prevent="goContentAppeals"><view class="row"><view><text class="entry-title">处罚与申诉</text><text class="entry-copy">查看禁言、禁用记录和申诉处理进度。</text></view><text>›</text></view></view>
+    <view v-if="featureGates.mall" class="card community-post-entry" role="button" tabindex="0" aria-label="申请商户入驻" @click="goMerchantApply" @keyup.enter="goMerchantApply" @keyup.space.prevent="goMerchantApply"><view class="row"><view><text class="entry-title">商户入驻</text><text class="entry-copy">提交经营主体与资质，查看平台审核结果。</text></view><text>›</text></view></view>
+    <view v-if="featureGates.forum" class="card forum-post-entry" role="button" tabindex="0" aria-label="查看我的论坛" @click="goForumPosts" @keyup.enter="goForumPosts" @keyup.space.prevent="goForumPosts">
       <view class="row">
         <view>
           <text class="entry-title">我的论坛</text>
@@ -95,10 +114,10 @@
     <view class="card order-card">
       <view class="row" style="margin-bottom:16rpx;">
         <text style="font-size:30rpx; font-weight:600; color:#333;">我的订单</text>
-        <text class="subtle" style="color:#C43D3D;" @click="goOrders({ status: 'all' })">全部 ›</text>
+        <text class="subtle" role="button" tabindex="0" aria-label="查看全部订单" style="color:#C43D3D;" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">全部 ›</text>
       </view>
       <view class="order-tabs">
-        <view v-for="tab in orderTabs" :key="tab.label" class="order-tab" @click="goOrders(tab)">
+        <view v-for="tab in orderTabs" :key="tab.label" class="order-tab" role="button" tabindex="0" :aria-label="`查看${tab.label}订单`" @click="goOrders(tab)" @keyup.enter="goOrders(tab)" @keyup.space.prevent="goOrders(tab)">
           <text style="font-size:36rpx;">{{ tab.icon }}</text>
           <text style="font-size:22rpx; color:#666;">{{ tab.label }}</text>
           <view v-if="tab.count" class="order-badge">{{ tab.count }}</view>
@@ -107,24 +126,30 @@
     </view>
 
     <!-- 余额资产入口 -->
-    <view class="card" style="margin-bottom:16rpx;" @click="goWallet">
+    <view class="card" role="button" tabindex="0" aria-label="查看余额资产明细" style="margin-bottom:16rpx;" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet">
       <view class="row">
         <text style="font-size:30rpx; font-weight:600; color:#333;">💰 余额资产</text>
         <text class="subtle" style="color:#C43D3D;">查看明细 ›</text>
       </view>
-      <text style="font-size:40rpx; color:#C43D3D; font-weight:700; margin-top:8rpx; display:block;">¥{{ money(wallet?.availableBalance) }}</text>
+      <text style="font-size:40rpx; color:#C43D3D; font-weight:700; margin-top:8rpx; display:block;">{{ walletBalanceText }}</text>
+    </view>
+
+    <view v-if="isLoggedIn" class="card redemption-entry">
+      <view class="row"><view><text class="entry-title">兑换权益</text><text class="entry-copy">兑换活动券、商城券或会员积分</text></view></view>
+      <view class="redemption-row"><input v-model="redemptionCode" class="redemption-input" maxlength="64" cursor-spacing="24" confirm-type="done" aria-label="兑换码" placeholder="请输入兑换码" @confirm="redeemCode" /><view class="redemption-button" role="button" tabindex="0" :aria-disabled="redeeming" :aria-label="redeeming ? '兑换中' : '兑换'" :class="{ disabled: redeeming }" @click="redeemCode" @keyup.enter="redeemCode" @keyup.space.prevent="redeemCode">{{ redeeming ? "兑换中" : "兑换" }}</view></view>
+      <view v-if="redemptionError" class="redemption-error" role="alert" aria-live="assertive">{{ redemptionError }}</view>
     </view>
 
     <!-- 手机管理入口（有权限时） -->
-    <view v-if="adminAccess?.canAccess" class="card" style="margin-bottom:16rpx;" @click="goAdmin">
+    <view v-if="adminAccess?.canAccess" class="card" role="button" tabindex="0" aria-label="打开手机管理" style="margin-bottom:16rpx;" @click="goAdmin" @keyup.enter="goAdmin" @keyup.space.prevent="goAdmin">
       <view class="row">
         <text style="font-size:30rpx; font-weight:600; color:#333;">📱 手机管理</text>
         <text class="subtle">{{ adminAccess.tenantName || "平台" }} · 活动管理 · 报名审核</text>
       </view>
     </view>
 
-    <view v-if="isLoggedIn" class="logout-card" @click="logoutUser">
-      <text>退出当前账号</text>
+    <view v-if="isLoggedIn" class="logout-card" role="button" tabindex="0" aria-label="退出当前账号" :aria-busy="logoutConfirming" @click="logoutUser" @keyup.enter="logoutUser" @keyup.space.prevent="logoutUser">
+      <text>{{ logoutConfirming ? "确认中..." : "退出当前账号" }}</text>
     </view>
 
     <!-- #ifdef MP-WEIXIN -->
@@ -168,11 +193,12 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { clearUser, fetchMyProfile, getUserToken, request, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
+import { clearUser, getCurrentTenantCode, getUserId, getUserToken, request, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { featureGatesState, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import MarketingPopup from "../../components/MarketingPopup.vue";
@@ -188,6 +214,9 @@ const registrations = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
 const mallOrders = ref<any[]>([]);
 const loadingProfile = ref(false);
+const profileError = ref("");
+const assetWarning = ref("");
+const assetFailures = ref<string[]>([]);
 const wechatProfilePanelVisible = ref(false);
 const wechatProfileNickname = ref("");
 const wechatProfileAvatarPath = ref("");
@@ -195,6 +224,12 @@ const wechatProfilePanelMessage = ref("请选择头像和昵称后继续。");
 const syncingWechatProfile = ref(false);
 const requestingWechatProfile = ref(false);
 const phoneBindVisible = ref(false);
+const redemptionCode = ref("");
+const redeeming = ref(false);
+const redemptionError = ref("");
+const logoutConfirming = ref(false);
+const loadedContextKey = ref("");
+const profileLoadGuard = createTenantLoadGuard();
 const featureGates = featureGatesState;
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
@@ -214,20 +249,24 @@ const profileHeaderTextColor = computed(() => {
   return !textColor || (textColor === "#ffffff" && String(layout.heroBackgroundColor || "") === "#111827") ? warmHeaderTextColor : textColor;
 });
 const profileHeaderMutedColor = computed(() => String(myPageSection.value?.layout?.heroMutedTextColor || warmHeaderMutedColor));
-const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `平台用户${profile.value.id}` : loadingProfile.value ? "加载中..." : "未登录"));
-const memberLevelName = computed(() => profile.value?.memberLevel?.name || "普通会员");
+const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `平台用户${profile.value.id}` : loadingProfile.value ? "加载中..." : getUserToken() && profileError.value ? "资料同步失败" : "未登录"));
+const memberLevelName = computed(() => profile.value?.memberLevel?.name || (getUserToken() ? "普通会员" : "游客"));
 const profileIdentityText = computed(() => {
+  if (loadingProfile.value && !profile.value) return "正在同步会员资料";
+  if (getUserToken() && profileError.value && !profile.value) return "登录状态待同步";
   if (profile.value?.phone) return `手机号：${profile.value.phone}`;
   if (profile.value?.wechatBound) return "已登录 · 未绑定手机号";
   return "请先登录后查看权益";
 });
-const phoneStatusText = computed(() => profile.value?.phone ? "手机号已绑定" : "未绑定手机号");
+const phoneStatusText = computed(() => loadingProfile.value && !profile.value ? "资料同步中" : getUserToken() && profileError.value && !profile.value ? "状态未知" : profile.value?.phone ? "手机号已绑定" : "未绑定手机号");
 const memberStats = computed(() => [
-  { label: "积分", value: String(profile.value?.points || 0) },
-  { label: "余额", value: `¥${money(wallet.value?.availableBalance)}` },
-  { label: "报名", value: String(registrations.value.length) },
-  { label: "订单", value: String(registrations.value.length + courseOrders.value.length + mallOrders.value.length) }
+  { label: "积分", value: profile.value?.id ? String(profile.value?.points || 0) : "--" },
+  { label: "成长", value: profile.value?.id ? String(profile.value?.growthValue || 0) : "--" },
+  { label: "余额", value: !profile.value?.id || assetFailed("wallet") ? "--" : `¥${money(wallet.value?.availableBalance)}` },
+  { label: "报名", value: !profile.value?.id || assetFailed("registrations") ? "--" : String(registrations.value.length) }
 ]);
+const charityAmountText = computed(() => !profile.value?.id || assetFailed("charity") ? "--" : money(charity.value?.totalAmount));
+const walletBalanceText = computed(() => !profile.value?.id || assetFailed("wallet") ? "¥--" : `¥${money(wallet.value?.availableBalance)}`);
 function isDefaultWechatNicknameValue(value?: unknown) {
   const name = String(value || "").trim();
   const legacyDefaultNamePattern = new RegExp(`^${["微", "信", "用户"].join("")}([A-Z0-9]+)?$`, "i");
@@ -238,16 +277,73 @@ function shouldCompleteWechatProfile(row?: any) {
 }
 const isDefaultWechatNickname = computed(() => isDefaultWechatNicknameValue(profile.value?.nickname));
 const canCompleteWechatProfile = computed(() => shouldCompleteWechatProfile(profile.value));
-const pendingRegistrationCount = computed(() => registrations.value.filter((item) => item.status === "pending_payment").length + courseOrders.value.filter((item) => item.status === "pending_payment").length + mallOrders.value.filter((item) => ["pending_payment", "pending_confirm"].includes(item.status)).length);
-const learningCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) < 100).length);
-const completedCourseCount = computed(() => courses.value.filter((item) => Number(item.learning?.progress || 0) >= 100).length);
+const pendingOrderCount = computed(() => ["registrations", "courseOrders"].some(assetFailed) ? null
+  : registrations.value.filter((item) => item.status === "pending_payment" || ["pending", "processing"].includes(String(item.latestRefund?.status || ""))).length
+    + courseOrders.value.filter((item) => item.status === "pending_payment" || ["pending", "approved", "processing", "failed"].includes(String(item.latestRefund?.status || ""))).length);
+const learningCourseCount = computed(() => ["courses", "courseOrders"].some(assetFailed) ? null : courseOrders.value.filter(courseOrderIsLearning).length + learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) < 100).length);
+const completedOrderCount = computed(() => ["registrations", "courses", "courseOrders"].some(assetFailed) ? null
+  : registrations.value.filter(activityOrderIsCompleted).length
+    + courseOrders.value.filter(courseOrderIsCompleted).length
+    + learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) >= 100).length);
+
+type MemberSession = { tenantCode: string; userId: number; userToken: string };
+
+function memberSession(): MemberSession {
+  return { tenantCode: getCurrentTenantCode(), userId: getUserId(), userToken: getUserToken() };
+}
+
+function sessionKey(session = memberSession()) {
+  return `${session.tenantCode}:${session.userId || "guest"}:${session.userToken || "anonymous"}`;
+}
+
+function isCurrentSession(session: MemberSession) {
+  return getCurrentTenantCode() === session.tenantCode && getUserId() === session.userId && getUserToken() === session.userToken;
+}
+
+function learningOnlyCourses() {
+  return courses.value.filter((course) => !courseOrders.value.some((order) => Number(order.course?.id) === Number(course.id)));
+}
+
+function courseProgress(order: any) {
+  return Number(courses.value.find((course) => Number(course.id) === Number(order.course?.id))?.learning?.progress || 0);
+}
+
+function courseOrderIsLearning(order: any) {
+  const owned = order.owned === undefined ? order.status === "paid" : Boolean(order.owned);
+  const refundStatus = String(order.latestRefund?.status || "");
+  if (!owned || courseProgress(order) >= 100 || ["pending", "approved", "processing", "failed", "completed"].includes(refundStatus)) return false;
+  if (refundStatus === "rejected") return order.status === "partially_refunded";
+  return order.status !== "pending_payment";
+}
+
+function courseOrderIsCompleted(order: any) {
+  const owned = order.owned === undefined ? order.status === "paid" : Boolean(order.owned);
+  return order.latestRefund?.status === "completed" || owned && courseProgress(order) >= 100;
+}
+
+function activityOrderIsCompleted(item: any) {
+  const refundStatus = String(item.latestRefund?.status || "");
+  if (refundStatus) return refundStatus === "completed";
+  return ["approved", "checked_in", "paid", "completed"].includes(String(item.status || ""));
+}
 
 function money(value: string | number | undefined | null) {
   return Number(value || 0).toFixed(2);
 }
 
+function assetFailed(key: string) {
+  return assetFailures.value.includes(key);
+}
+
 async function loadProfile() {
+  const loadToken = profileLoadGuard.begin();
+  const requestedSession = memberSession();
+  const isCurrentLoad = () => profileLoadGuard.isCurrent(loadToken) && isCurrentSession(requestedSession);
+  if (loadedContextKey.value && loadedContextKey.value !== sessionKey(requestedSession)) resetUserState();
   loadingProfile.value = true;
+  profileError.value = "";
+  assetWarning.value = "";
+  assetFailures.value = [];
   try {
     if (!getUserToken()) {
       clearUser();
@@ -255,45 +351,76 @@ async function loadProfile() {
       return;
     }
     const gates = featureGatesState.value;
-    const [profileData, walletData, charityData, adminData, courseRows, registrationRows, courseOrderRows, mallOrderRows] = await Promise.all([
-      fetchMyProfile(),
-      request<any>("/public/me/wallet").catch(() => null),
-      gates.charity ? request<any>("/public/me/charity").catch(() => null) : Promise.resolve(null),
-      request<any>("/public/me/admin-access").catch(() => ({ canAccess: false })),
-      gates.courses ? request<any[]>("/public/me/courses").catch(() => []) : Promise.resolve([]),
-      request<any[]>("/public/me/registrations").catch(() => []),
-      gates.courses ? request<any[]>("/public/me/course-orders").catch(() => []) : Promise.resolve([]),
-      gates.mall ? request<any[]>("/public/me/mall/orders").catch(() => []) : Promise.resolve([])
+    if (!gates.charity) charity.value = null;
+    if (!gates.courses) {
+      courses.value = [];
+      courseOrders.value = [];
+    }
+    if (!gates.mall) mallOrders.value = [];
+    const results = await Promise.allSettled([
+      request<any>("/public/me/profile"),
+      request<any>("/public/me/wallet"),
+      gates.charity ? request<any>("/public/me/charity") : Promise.resolve(null),
+      request<any>("/public/me/admin-access"),
+      gates.courses ? request<any[]>("/public/me/courses") : Promise.resolve([]),
+      request<any[]>("/public/me/registrations"),
+      gates.courses ? request<any[]>("/public/me/course-orders") : Promise.resolve([]),
+      gates.mall ? request<any[]>("/public/me/mall/orders") : Promise.resolve([])
     ]);
-    profile.value = profileData;
-    wallet.value = walletData;
-    charity.value = charityData;
-    adminAccess.value = adminData;
-    courses.value = Array.isArray(courseRows) ? courseRows : [];
-    registrations.value = Array.isArray(registrationRows) ? registrationRows : [];
-    courseOrders.value = Array.isArray(courseOrderRows) ? courseOrderRows : [];
-    mallOrders.value = Array.isArray(mallOrderRows) ? mallOrderRows : [];
+    if (!isCurrentLoad()) return;
+    const profileResult = results[0];
+    if (profileResult.status === "rejected") throw profileResult.reason;
+    if (!profileResult.value || typeof profileResult.value !== "object" || !Number(profileResult.value.id)) throw new Error("会员资料格式异常，请重新加载");
+    profile.value = profileResult.value;
+    const failures: string[] = [];
+    const failedLabels: string[] = [];
+    const applyResult = <T,>(index: number, key: string, label: string, validate: (value: unknown) => boolean, apply: (value: T) => void, reset: () => void) => {
+      const result = results[index];
+      if (result.status === "fulfilled" && validate(result.value)) apply(result.value as T);
+      else {
+        reset();
+        failures.push(key);
+        failedLabels.push(label);
+      }
+    };
+    const isObject = (value: unknown) => Boolean(value && typeof value === "object" && !Array.isArray(value));
+    applyResult<any>(1, "wallet", "钱包", isObject, (value) => { wallet.value = value; }, () => { wallet.value = null; });
+    if (gates.charity) applyResult<any>(2, "charity", "公益贡献", isObject, (value) => { charity.value = value; }, () => { charity.value = null; });
+    applyResult<any>(3, "adminAccess", "管理权限", isObject, (value) => { adminAccess.value = value; }, () => { adminAccess.value = { canAccess: false }; });
+    if (gates.courses) applyResult<any[]>(4, "courses", "学习记录", Array.isArray, (value) => { courses.value = value; }, () => { courses.value = []; });
+    applyResult<any[]>(5, "registrations", "活动报名", Array.isArray, (value) => { registrations.value = value; }, () => { registrations.value = []; });
+    if (gates.courses) applyResult<any[]>(6, "courseOrders", "课程订单", Array.isArray, (value) => { courseOrders.value = value; }, () => { courseOrders.value = []; });
+    if (gates.mall) applyResult<any[]>(7, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
+    assetFailures.value = failures;
+    assetWarning.value = failedLabels.length ? `部分会员资产同步失败：${failedLabels.join("、")}。对应数值暂不作为真实数据展示。` : "";
+    loadedContextKey.value = sessionKey(requestedSession);
     wechatProfilePanelVisible.value = false;
   } catch (error: any) {
-    resetUserState();
+    if (!profileLoadGuard.isCurrent(loadToken)) return;
+    if (!isCurrentSession(requestedSession)) {
+      if (!getUserToken()) resetUserState();
+      return;
+    }
     const message = String(error?.message || "");
     if (message.includes("登录凭证无效") || message.includes("登录已过期") || message.includes("登录已失效") || message.includes("请先完成")) {
       clearUser();
+      resetUserState();
       return;
     }
-    if (!String(error?.message || "").includes("请先完成")) {
-      uni.showToast({ title: error.message || "加载用户失败", icon: "none" });
-    }
+    profileError.value = error?.message || "会员资料加载失败，请稍后重试。";
   } finally {
-    loadingProfile.value = false;
+    if (isCurrentLoad()) loadingProfile.value = false;
   }
 }
 
-onShow(async () => {
+onShow(() => {
   loadPageTheme();
-  await loadFeatureGates(true);
-  await loadDecoration();
-  loadProfile();
+  profileLoadGuard.invalidate();
+  const shownSession = memberSession();
+  if (loadedContextKey.value && loadedContextKey.value !== sessionKey(shownSession)) resetUserState();
+  void (async () => {
+    await Promise.allSettled([loadFeatureGates(true), loadDecoration(), loadProfile()]);
+  })();
 });
 
 const defaultGridItems = [
@@ -326,6 +453,28 @@ function gridItemTarget(item: any) {
   return String(item?.link || gridPageUrls[item?.page] || "");
 }
 
+async function redeemCode() {
+  const code = redemptionCode.value.trim();
+  if (!code || redeeming.value) return uni.showToast({ title: "请输入兑换码", icon: "none" });
+  const session = memberSession();
+  if (!session.userId || !session.userToken) return goLogin();
+  redeeming.value = true;
+  redemptionError.value = "";
+  try {
+    const result = await request<any>("/public/redemption-codes/redeem", { method: "POST", data: { code } });
+    if (!isCurrentSession(session)) return;
+    redemptionCode.value = "";
+    await loadProfile();
+    if (!isCurrentSession(session)) return;
+    const text = result?.benefit?.type === "points" ? `已获得 ${result.benefit.points} 积分` : `已获得${result?.benefit?.couponName || "优惠券"}`;
+    uni.showModal({ title: "兑换成功", content: text, showCancel: false });
+  } catch (error: any) {
+    if (isCurrentSession(session)) redemptionError.value = String(error?.message || "兑换失败");
+  } finally {
+    if (isCurrentSession(session)) redeeming.value = false;
+  }
+}
+
 const gridItems = computed(() => {
   const tools = myPageSection.value?.config?.tools;
   const rows = !Array.isArray(tools) || !tools.length ? defaultGridItems : tools.map((item: any) => ({
@@ -339,12 +488,13 @@ const gridItems = computed(() => {
 });
 
 const orderTabs = computed(() => {
-  const rows = [{ icon:"💳", label:"待付款", count: pendingRegistrationCount.value, status:"pending" }];
+  const rows = [{ icon:"💳", label:"待付款", count: pendingOrderCount.value, status:"pending" }];
   if (featureGatesState.value.courses) {
     rows.push({ icon:"📚", label:"待观看", count: learningCourseCount.value, status:"learning" });
-    rows.push({ icon:"✅", label:"已完成", count: completedCourseCount.value, status:"completed" });
+    rows.push({ icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" });
   }
-  rows.push({ icon:"📋", label:"全部", count: registrations.value.length + courses.value.length + mallOrders.value.length, status:"all" });
+  const allCount = ["registrations", "courses", "courseOrders"].some(assetFailed) ? null : registrations.value.length + courseOrders.value.length + learningOnlyCourses().length;
+  rows.push({ icon:"📋", label:"全部", count: allCount, status:"all" });
   return rows;
 });
 
@@ -409,6 +559,9 @@ function goCharity() { goDecoratedLink("/pages/charity/index"); }
 function goAmbassador() { goDecoratedLink("/pages/ambassador/index"); }
 function goWallet() { navigateProtected("/pages/user/wallet"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
+function goCommunitySocial() { navigateProtected("/pages/user/community-social"); }
+function goContentAppeals() { navigateProtected("/pages/user/content-appeals"); }
+function goMerchantApply() { navigateProtected("/pages/mall/merchant-apply"); }
 function goForumPosts() { navigateProtected("/pages/user/forum-posts"); }
 function goOrders(tab: any) {
   const status = tab?.status || "all";
@@ -424,10 +577,12 @@ function closePhoneBindPanel() {
 }
 async function handlePhoneBound(profileData: any) {
   phoneBindVisible.value = false;
+  if (Number(profileData?.id || 0) !== getUserId()) return;
   profile.value = profileData;
   await loadProfile();
 }
 function resetUserState() {
+  loadingProfile.value = false;
   profile.value = null;
   wallet.value = null;
   charity.value = null;
@@ -440,6 +595,14 @@ function resetUserState() {
   syncingWechatProfile.value = false;
   requestingWechatProfile.value = false;
   phoneBindVisible.value = false;
+  profileError.value = "";
+  assetWarning.value = "";
+  assetFailures.value = [];
+  redemptionCode.value = "";
+  redeeming.value = false;
+  redemptionError.value = "";
+  logoutConfirming.value = false;
+  loadedContextKey.value = "";
 }
 function inputValue(event: any) {
   return String(event?.detail?.value ?? event?.target?.value ?? "");
@@ -513,32 +676,43 @@ async function saveWechatProfilePanel() {
     uni.showToast({ title: "请选择头像并填写昵称", icon: "none" });
     return;
   }
+  const session = memberSession();
   syncingWechatProfile.value = true;
   try {
     if (avatarUrl && !isRemoteAvatar(avatarUrl)) {
       const uploaded = await uploadMyAvatar(avatarUrl);
+      if (!isCurrentSession(session)) return;
       avatarUrl = uploaded.url;
     }
-    profile.value = await updateMyProfile({ nickname, avatarUrl });
+    const updatedProfile = await updateMyProfile({ nickname, avatarUrl });
+    if (!isCurrentSession(session)) return;
+    profile.value = updatedProfile;
     wechatProfilePanelVisible.value = false;
     uni.showToast({ title: "资料已同步", icon: "success" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "同步失败", icon: "none" });
+    if (isCurrentSession(session)) uni.showToast({ title: error.message || "同步失败", icon: "none" });
   } finally {
     syncingWechatProfile.value = false;
   }
 }
 function logoutUser() {
+  if (logoutConfirming.value) return;
+  logoutConfirming.value = true;
   uni.showModal({
     title: "确认退出",
     content: "退出后需要重新登录才能查看报名、订单、内容和打卡记录。",
     confirmText: "退出登录",
     success(res) {
-      if (!res.confirm) return;
+      if (!res.confirm) {
+        logoutConfirming.value = false;
+        return;
+      }
+      profileLoadGuard.invalidate();
       clearUser();
       resetUserState();
       uni.showToast({ title: "已退出登录", icon: "none" });
-    }
+    },
+    fail() { logoutConfirming.value = false; }
   });
 }
 </script>
@@ -547,7 +721,12 @@ function logoutUser() {
 .profile-page {
   min-height: 100vh;
   background: var(--page-bg, #F5F0E8);
-  padding: 0 32rpx 0;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 0 32rpx calc(120rpx + env(safe-area-inset-bottom));
+  overflow-wrap: anywhere;
 }
 .member-card {
   margin: 0 -32rpx 18rpx;
@@ -593,6 +772,7 @@ function logoutUser() {
 }
 .member-stat text { color: var(--profile-header-muted, rgba(91, 47, 36, 0.68)); font-size: 22rpx; }
 .member-stat strong { color: var(--profile-header-text, #5B2F24); font-size: 27rpx; line-height: 1.2; }
+.growth-panel { margin-top: 18rpx; }.growth-copy { display: flex; justify-content: space-between; gap: 16rpx; color: var(--profile-header-muted, rgba(91,47,36,.68)); font-size: 21rpx; }.growth-track { height: 10rpx; margin-top: 10rpx; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.45); }.growth-fill { height: 100%; border-radius: inherit; background: var(--profile-header-text, #5B2F24); transition: width .25s ease; }.growth-expire { margin-top: 8rpx; color: var(--profile-header-muted, rgba(91,47,36,.68)); font-size: 20rpx; }
 .member-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -690,7 +870,7 @@ function logoutUser() {
   font-weight: 900;
   border: 1rpx solid rgba(139, 63, 50, 0.18);
 }
-.profile-edit-btn { position: absolute; bottom: 16rpx; right: 32rpx; }
+.profile-edit-btn { position: absolute; bottom: 16rpx; right: 32rpx; min-width: 72rpx; min-height: 56rpx; display: flex; align-items: center; justify-content: center; overflow-wrap: anywhere; }
 .profile-edit-text { color: var(--profile-header-text, #5B2F24); font-weight: 700; }
 .profile-grid-card { margin-bottom: 16rpx; }
 .charity-card { margin-bottom: 16rpx; }
@@ -711,6 +891,7 @@ function logoutUser() {
   color: #8f8172;
   font-size: 24rpx;
   line-height: 1.55;
+  overflow-wrap: anywhere;
 }
 .entry-arrow {
   flex-shrink: 0;
@@ -725,6 +906,8 @@ function logoutUser() {
   gap: 8rpx;
 }
 .order-tab {
+  min-width: 0;
+  min-height: 76rpx;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -825,4 +1008,14 @@ function logoutUser() {
 .auth-action.reject { background: #f3f4f6; color: #111827; }
 .auth-action.allow { background: #16a34a; color: #fff; }
 .auth-action[disabled] { opacity: .62; }
+.redemption-entry { margin-bottom: 16rpx; }
+.redemption-row { display: grid; grid-template-columns: 1fr 150rpx; gap: 12rpx; margin-top: 18rpx; }
+.redemption-input { height: 76rpx; min-width: 0; box-sizing: border-box; padding: 0 20rpx; border: 1rpx solid #ead8c5; border-radius: 12rpx; background: #fffaf3; font-size: 26rpx; overflow-wrap: anywhere; }
+.redemption-button { display: flex; align-items: center; justify-content: center; border-radius: 12rpx; background: #c43d3d; color: #fff; font-size: 26rpx; font-weight: 800; }
+.redemption-button.disabled { opacity: .6; }
+.redemption-error { margin-top:12rpx; color:#b91c1c; font-size:23rpx; line-height:1.45; }
+.profile-state-card { display:grid; gap:10rpx; margin:0 0 16rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }
+.profile-state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
+.profile-state-card.warning-state { border:1rpx solid #fed7aa; background:#fffaf0; color:#9a3412; }
+.state-retry { width:max-content; color:#C43D3D; font-weight:900; }
 </style>

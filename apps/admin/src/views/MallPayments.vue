@@ -6,8 +6,8 @@
         <p>商家/代理被平台授权店铺后，可在这里维护自己的微信或支付宝收款资料；平台可统一监管所有店铺配置。</p>
       </div>
       <div class="header-actions">
-        <el-input v-model="keyword" clearable placeholder="搜索店铺/编码/地区" style="width:240px" @keyup.enter="loadMerchants" @clear="loadMerchants" />
-        <el-button @click="loadMerchants">刷新店铺</el-button>
+        <el-input v-model="keyword" clearable placeholder="搜索店铺/编码/地区" style="width:240px" :disabled="writeLocked" @keyup.enter="loadMerchants" @clear="loadMerchants" />
+        <el-button :loading="loading" :disabled="writeLocked" @click="loadMerchants">刷新店铺</el-button>
       </div>
     </div>
 
@@ -21,6 +21,11 @@
       :description="deepLinkWarning"
     />
 
+    <el-alert v-if="merchantError" class="page-error" type="error" show-icon :closable="false" title="可配置店铺加载失败">
+      <p>{{ merchantError }}</p>
+      <el-button size="small" :loading="loading" :disabled="writeLocked" @click="loadMerchants">重试店铺列表</el-button>
+    </el-alert>
+
     <el-alert
       v-if="!loading && !merchants.length"
       type="warning"
@@ -33,7 +38,7 @@
     <div v-else class="payment-layout">
       <section class="merchant-panel">
         <div class="panel-title">选择店铺</div>
-        <el-select v-model="selectedMerchantId" filterable placeholder="请选择要配置收款的店铺" @change="selectMerchant">
+        <el-select v-model="selectedMerchantId" filterable placeholder="请选择要配置收款的店铺" :disabled="writeLocked" @change="selectMerchant">
           <el-option v-for="merchant in merchants" :key="merchant.id" :label="merchantOptionLabel(merchant)" :value="merchant.id" />
         </el-select>
         <el-skeleton v-if="loading" :rows="5" animated />
@@ -44,6 +49,7 @@
             class="merchant-card"
             :class="{ active: merchant.id === selectedMerchantId }"
             type="button"
+            :disabled="writeLocked"
             @click="selectMerchant(merchant.id)"
           >
             <strong>{{ merchant.name }}</strong>
@@ -67,7 +73,7 @@
               <p v-if="readinessTip" class="readiness-tip">{{ readinessTip }}</p>
             </div>
             <div class="selected-actions">
-              <el-button :loading="readinessLoading" @click="loadReadiness">刷新支付状态</el-button>
+              <el-button :loading="readinessLoading" :disabled="writeLocked" @click="loadReadiness">刷新支付状态</el-button>
               <el-button type="primary" plain @click="goMallPage('/mall-products')">商品管理</el-button>
               <el-button type="primary" plain @click="goMallPage('/mall-orders')">订单管理</el-button>
               <el-button type="warning" plain @click="goMallPage('/mall-refunds')">售后处理</el-button>
@@ -87,6 +93,10 @@
             title="当前店铺尚未开放商城"
             :description="selectedMerchantDisabledReason"
           />
+          <el-alert v-if="readinessError" class="section-error" type="error" show-icon :closable="false" title="支付状态加载失败">
+            <p>{{ readinessError }}</p>
+            <el-button size="small" :loading="readinessLoading" :disabled="writeLocked" @click="loadReadiness">重试支付状态</el-button>
+          </el-alert>
 
           <div class="acceptance-panel">
             <div class="acceptance-head">
@@ -95,7 +105,7 @@
                 <p>商户资料、证书密钥、回调地址、配置检测和真实小额验收统一在这里闭环。</p>
               </div>
               <div class="acceptance-actions">
-                <el-button :loading="acceptanceChecking || readinessLoading" @click="runPaymentConfigCheck">配置检测</el-button>
+                <el-button :loading="acceptanceChecking || readinessLoading" :disabled="writeLocked" @click="runPaymentConfigCheck">配置检测</el-button>
                 <el-tooltip :disabled="canRunTestPayment" :content="testPaymentDisabledReason" placement="top">
                   <span><el-button type="success" :disabled="!canRunTestPayment" @click="runTestPayment">测试支付</el-button></span>
                 </el-tooltip>
@@ -126,9 +136,13 @@
               <h3>收款账户</h3>
               <p>商户直收会优先使用店铺收款账户；平台代收店铺也可以先维护资料，等联调通过后再切换模式。</p>
             </div>
-            <el-button type="primary" :disabled="!!deepLinkWarning" @click="resetPaymentForm">新增账户</el-button>
+            <el-button type="primary" :disabled="!!deepLinkWarning || writeLocked" @click="resetPaymentForm">新增账户</el-button>
           </div>
 
+          <el-alert v-if="accountsError" class="section-error" type="error" show-icon :closable="false" title="收款账户加载失败">
+            <p>{{ accountsError }}</p>
+            <el-button size="small" :loading="paymentLoading" :disabled="writeLocked" @click="loadPaymentAccounts">重试收款账户</el-button>
+          </el-alert>
           <el-table v-loading="paymentLoading" :data="paymentRows" stripe empty-text="暂无店铺收款账户">
             <el-table-column label="渠道" width="110"><template #default="{ row }">{{ providerLabel(row.provider) }}</template></el-table-column>
             <el-table-column label="商户信息" min-width="220">
@@ -145,7 +159,7 @@
               </template>
             </el-table-column>
             <el-table-column label="操作" width="100" fixed="right">
-              <template #default="{ row }"><el-button size="small" :disabled="!!deepLinkWarning" @click="editPaymentAccount(row)">编辑</el-button></template>
+              <template #default="{ row }"><el-button size="small" :disabled="!!deepLinkWarning || writeLocked" @click="editPaymentAccount(row)">编辑</el-button></template>
             </el-table-column>
           </el-table>
 
@@ -198,9 +212,9 @@
                 <el-input v-model="paymentForm.configText" type="textarea" :rows="10" spellcheck="false" />
               </el-form-item>
               <div class="payment-actions">
-                <el-button @click="resetPaymentTemplate">套用模板</el-button>
-                <el-button v-if="paymentForm.id" @click="resetPaymentForm">取消编辑</el-button>
-                <el-button type="primary" :loading="paymentSaving" :disabled="!!deepLinkWarning" @click="savePaymentAccount">{{ paymentForm.id ? "保存账户" : "新增账户" }}</el-button>
+                <el-button :disabled="writeLocked" @click="resetPaymentTemplate">套用模板</el-button>
+                <el-button v-if="paymentForm.id" :disabled="writeLocked" @click="resetPaymentForm">取消编辑</el-button>
+                <el-button type="primary" :loading="paymentSaving" :disabled="!!deepLinkWarning || Boolean(credentialUploadingKey)" @click="savePaymentAccount">{{ paymentForm.id ? "保存账户" : "新增账户" }}</el-button>
               </div>
             </el-form>
           </el-card>
@@ -270,10 +284,17 @@ const credentialUploadingKey = ref("");
 const keyword = ref("");
 const selectedMerchantId = ref<number>();
 const deepLinkWarning = ref("");
+const merchantError = ref("");
+const readinessError = ref("");
+const accountsError = ref("");
 const merchants = ref<Merchant[]>([]);
 const paymentReadiness = ref<PaymentReadiness | null>(null);
 const paymentRows = ref<MerchantPaymentAccount[]>([]);
 const paymentForm = reactive({ id: 0, provider: "wechat" as "wechat" | "alipay", merchantName: "", merchantNo: "", enabled: true, configText: "" });
+let merchantLoadSequence = 0;
+let selectedDataSequence = 0;
+let readinessLoadSequence = 0;
+let accountLoadSequence = 0;
 
 const paymentRequirements: Record<MerchantPaymentAccount["provider"], string[]> = {
   wechat: ["WECHAT_PAY_APP_ID", "WECHAT_PAY_MCH_ID", "WECHAT_PAY_API_V3_KEY", "WECHAT_PAY_PRIVATE_KEY_PATH", "WECHAT_PAY_CERT_SERIAL_NO", "WECHAT_PAY_PLATFORM_CERT_PATH"],
@@ -307,6 +328,7 @@ function routeTenantId() {
 }
 
 const selectedMerchant = computed(() => merchants.value.find((item) => item.id === selectedMerchantId.value));
+const writeLocked = computed(() => paymentSaving.value || Boolean(credentialUploadingKey.value));
 const selectedMerchantOpen = computed(() => merchantOperational(selectedMerchant.value));
 const selectedMerchantDisabledReason = computed(() => merchantDisabledReason(selectedMerchant.value));
 const readinessLabel = computed(() => {
@@ -540,30 +562,59 @@ function handlePaymentCredentialError(error: any) {
   ElMessage.error(error?.message || "支付资料上传失败");
 }
 
+function clearSelectedMerchantData() {
+  selectedDataSequence += 1;
+  readinessLoadSequence += 1;
+  accountLoadSequence += 1;
+  readinessLoading.value = false;
+  paymentLoading.value = false;
+  paymentReadiness.value = null;
+  paymentRows.value = [];
+  readinessError.value = "";
+  accountsError.value = "";
+  resetPaymentForm();
+}
+
 async function loadMerchants() {
+  if (writeLocked.value) return;
+  const sequence = ++merchantLoadSequence;
+  const tenantId = routeTenantId() || Number(localStorage.getItem("admin_selected_tenant_id") || 0) || undefined;
+  const requestedMerchantId = routeMerchantId();
+  const previousMerchantId = selectedMerchantId.value;
   loading.value = true;
+  merchantError.value = "";
+  merchants.value = [];
+  selectedMerchantId.value = undefined;
+  clearSelectedMerchantData();
   try {
-    const tenantId = routeTenantId() || Number(localStorage.getItem("admin_selected_tenant_id") || 0) || undefined;
-    merchants.value = await api.get<any, Merchant[]>("/admin/mall/payment-merchants", { params: { tenantId, keyword: keyword.value.trim() || undefined } });
-    const requestedMerchantId = routeMerchantId();
+    const rows = await api.get<any, Merchant[]>("/admin/mall/payment-merchants", { params: { tenantId, keyword: keyword.value.trim() || undefined } });
+    if (sequence !== merchantLoadSequence) return;
+    merchants.value = Array.isArray(rows) ? rows : [];
     deepLinkWarning.value = "";
     if (requestedMerchantId && merchants.value.some((item) => item.id === requestedMerchantId)) {
       selectedMerchantId.value = requestedMerchantId;
     } else if (requestedMerchantId) {
       selectedMerchantId.value = undefined;
       deepLinkWarning.value = `当前链接指定的店铺 #${requestedMerchantId} 对当前账号不可见，或已被商家/关键词筛选条件过滤。为避免误操作，系统不会自动切换到其它店铺；请联系平台管理员确认店铺授权，或清空筛选后重试。`;
-    } else if (!selectedMerchantId.value || !merchants.value.some((item) => item.id === selectedMerchantId.value)) {
+    } else if (previousMerchantId && merchants.value.some((item) => item.id === previousMerchantId)) {
+      selectedMerchantId.value = previousMerchantId;
+    } else {
       selectedMerchantId.value = merchants.value[0]?.id;
     }
     await loadSelectedMerchantData();
   } catch (error: any) {
-    ElMessage.error(error.message || "加载商城店铺失败");
+    if (sequence !== merchantLoadSequence) return;
+    merchants.value = [];
+    selectedMerchantId.value = undefined;
+    clearSelectedMerchantData();
+    merchantError.value = error.message || "加载商城店铺失败";
   } finally {
-    loading.value = false;
+    if (sequence === merchantLoadSequence) loading.value = false;
   }
 }
 
 async function selectMerchant(id: number) {
+  if (writeLocked.value) return;
   deepLinkWarning.value = "";
   selectedMerchantId.value = id;
   syncMerchantRouteQuery();
@@ -581,30 +632,48 @@ function syncMerchantRouteQuery() {
 }
 
 async function loadSelectedMerchantData() {
+  const sequence = ++selectedDataSequence;
   paymentReadiness.value = null;
   paymentRows.value = [];
+  readinessError.value = "";
+  accountsError.value = "";
   resetPaymentForm();
   if (!selectedMerchantId.value) return;
-  await Promise.all([loadReadiness(), loadPaymentAccounts()]);
+  await Promise.allSettled([loadReadiness(), loadPaymentAccounts()]);
+  if (sequence !== selectedDataSequence) return;
 }
 
 async function loadReadiness() {
-  if (!selectedMerchantId.value) return;
+  const merchantId = selectedMerchantId.value;
+  if (!merchantId) return false;
+  const sequence = ++readinessLoadSequence;
   readinessLoading.value = true;
+  readinessError.value = "";
+  paymentReadiness.value = null;
   try {
-    paymentReadiness.value = await api.get<any, PaymentReadiness>("/admin/mall/payment-readiness", { params: { merchantId: selectedMerchantId.value } });
+    const result = await api.get<any, PaymentReadiness>("/admin/mall/payment-readiness", { params: { merchantId } });
+    if (sequence !== readinessLoadSequence || selectedMerchantId.value !== merchantId) return false;
+    paymentReadiness.value = result;
+    return true;
   } catch (error: any) {
-    paymentReadiness.value = { status: "not_ready", statusText: "读取失败", collectionMode: selectedMerchant.value?.paymentMode, issues: [error.message || "支付状态读取失败，请确认当前账号有商城支付配置权限"] };
+    if (sequence !== readinessLoadSequence || selectedMerchantId.value !== merchantId) return false;
+    const message = error.message || "支付状态读取失败，请确认当前账号有商城支付配置权限";
+    readinessError.value = message;
+    paymentReadiness.value = { status: "not_ready", statusText: "读取失败", collectionMode: selectedMerchant.value?.paymentMode, issues: [message] };
+    return false;
   } finally {
-    readinessLoading.value = false;
+    if (sequence === readinessLoadSequence) readinessLoading.value = false;
   }
 }
 
 async function runPaymentConfigCheck() {
   if (!requireSelectedMerchant()) return;
+  const merchantId = selectedMerchantId.value;
+  const sequence = selectedDataSequence;
   acceptanceChecking.value = true;
   try {
-    await Promise.all([loadReadiness(), loadPaymentAccounts()]);
+    await Promise.allSettled([loadReadiness(), loadPaymentAccounts()]);
+    if (sequence !== selectedDataSequence || selectedMerchantId.value !== merchantId) return ElMessage.error("当前店铺已变化，请重新执行配置检测");
     const issues = paymentReadiness.value?.issues?.filter(Boolean) || [];
     if (issues.length) ElMessage.warning(`配置检测未通过：${issues[0]}`);
     else ElMessage.success("配置检测通过，仍需小额真实支付验收后才能上线放量");
@@ -624,14 +693,24 @@ function runTestPayment() {
 }
 
 async function loadPaymentAccounts() {
-  if (!selectedMerchantId.value) return;
+  const merchantId = selectedMerchantId.value;
+  if (!merchantId) return false;
+  const sequence = ++accountLoadSequence;
   paymentLoading.value = true;
+  accountsError.value = "";
+  paymentRows.value = [];
   try {
-    paymentRows.value = await api.get<any, MerchantPaymentAccount[]>("/admin/mall/merchant-payment-accounts", { params: { merchantId: selectedMerchantId.value } });
+    const rows = await api.get<any, MerchantPaymentAccount[]>("/admin/mall/merchant-payment-accounts", { params: { merchantId } });
+    if (sequence !== accountLoadSequence || selectedMerchantId.value !== merchantId) return false;
+    paymentRows.value = Array.isArray(rows) ? rows : [];
+    return true;
   } catch (error: any) {
-    ElMessage.error(error.message || "加载店铺收款账户失败");
+    if (sequence !== accountLoadSequence || selectedMerchantId.value !== merchantId) return false;
+    paymentRows.value = [];
+    accountsError.value = error.message || "加载店铺收款账户失败";
+    return false;
   } finally {
-    paymentLoading.value = false;
+    if (sequence === accountLoadSequence) paymentLoading.value = false;
   }
 }
 
@@ -656,26 +735,31 @@ function editPaymentAccount(row: MerchantPaymentAccount) {
 }
 
 async function savePaymentAccount() {
+  if (paymentSaving.value) return;
   if (!requireSelectedMerchant()) return;
+  const merchantId = selectedMerchantId.value;
+  const formTarget = { id: paymentForm.id, provider: paymentForm.provider };
   const parsed = parsePaymentConfig();
   if (!parsed.ok) {
     ElMessage.error(parsed.error);
     return;
   }
+  if (!merchantId || (formTarget.id && !paymentRows.value.some((row) => row.id === formTarget.id && row.provider === formTarget.provider))) return ElMessage.error("收款账户目标已变化，请刷新后重新操作");
   paymentSaving.value = true;
   try {
     const payload = {
-      merchantId: selectedMerchantId.value,
+      merchantId,
       provider: paymentForm.provider,
       merchantName: paymentForm.merchantName.trim() || undefined,
       merchantNo: paymentForm.merchantNo.trim() || undefined,
       enabled: paymentForm.enabled,
       config: parsed.value
     };
+    if (selectedMerchantId.value !== merchantId || paymentForm.id !== formTarget.id || paymentForm.provider !== formTarget.provider) throw new Error("店铺或收款账户目标已变化，请重新操作");
     if (paymentForm.id) await api.patch(`/admin/mall/merchant-payment-accounts/${paymentForm.id}`, payload);
     else await api.post("/admin/mall/merchant-payment-accounts", payload);
     ElMessage.success("店铺收款账户已保存");
-    await Promise.all([loadPaymentAccounts(), loadReadiness()]);
+    await Promise.allSettled([loadPaymentAccounts(), loadReadiness()]);
     resetPaymentForm();
   } catch (error: any) {
     ElMessage.error(error.message || "保存店铺收款账户失败");
@@ -747,6 +831,8 @@ watch(() => [route.query.tenantId, route.query.merchantId], async () => {
 .page-header p { margin: 0; color: #667085; }
 .header-actions { display: flex; gap: 10px; flex-wrap: wrap; justify-content: flex-end; }
 .deep-link-alert { margin-bottom: 16px; }
+.page-error, .section-error { margin-bottom: 16px; }
+.page-error p, .section-error p { margin: 0 0 8px; }
 .merchant-disabled-alert { margin-bottom: 16px; }
 .payment-layout { display: grid; grid-template-columns: 320px minmax(0, 1fr); gap: 18px; }
 .merchant-panel, .config-panel { background: #fff; border: 1px solid #edf0f5; border-radius: 16px; padding: 16px; }
@@ -754,6 +840,7 @@ watch(() => [route.query.tenantId, route.query.merchantId], async () => {
 .merchant-list { display: grid; gap: 10px; margin-top: 14px; max-height: calc(100vh - 260px); overflow: auto; }
 .merchant-card { text-align: left; border: 1px solid #edf0f5; background: #fbfcff; border-radius: 14px; padding: 12px; cursor: pointer; }
 .merchant-card.active { border-color: #2f80ed; background: #eef6ff; box-shadow: 0 8px 24px rgba(47, 128, 237, 0.12); }
+.merchant-card:disabled { cursor: not-allowed; opacity: 0.65; }
 .merchant-card strong, .merchant-card span, .merchant-card small { display: block; }
 .merchant-card span { margin-top: 6px; color: #475467; }
 .merchant-card small { margin-top: 4px; color: #98a2b3; }

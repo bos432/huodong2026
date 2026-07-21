@@ -1,4 +1,5 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn, Unique } from "typeorm";
+import { BeforeInsert, BeforeUpdate, Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn, Unique } from "typeorm";
+import { yuanToFen } from "../shared/money";
 import { Tenant } from "./tenant.entity";
 import { User } from "./user.entity";
 
@@ -20,9 +21,17 @@ export class UserWallet {
 
   @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
   availableBalance!: string;
+  @Column({ type: "bigint", default: 0 }) availableBalanceFen!: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
   frozenBalance!: string;
+  @Column({ type: "bigint", default: 0 }) frozenBalanceFen!: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 }) giftBalance!: string;
+  @Column({ type: "bigint", default: 0 }) giftBalanceFen!: number;
+
+  @Column({ type: "decimal", precision: 12, scale: 2, default: 0 }) frozenGiftBalance!: string;
+  @Column({ type: "bigint", default: 0 }) frozenGiftBalanceFen!: number;
 
   @Column({ type: "decimal", precision: 12, scale: 2, default: 0 })
   totalRecharge!: string;
@@ -35,4 +44,13 @@ export class UserWallet {
 
   @UpdateDateColumn()
   updatedAt!: Date;
+
+  @BeforeInsert()
+  @BeforeUpdate()
+  syncMoneyInCents() {
+    this.availableBalanceFen = yuanToFen(this.availableBalance || 0);
+    this.frozenBalanceFen = yuanToFen(this.frozenBalance || 0);
+    this.giftBalanceFen = yuanToFen(this.giftBalance || 0);
+    this.frozenGiftBalanceFen = yuanToFen(this.frozenGiftBalance || 0);
+  }
 }

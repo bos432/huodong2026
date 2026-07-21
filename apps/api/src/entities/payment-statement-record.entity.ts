@@ -1,5 +1,6 @@
 import { Column, CreateDateColumn, Entity, ManyToOne, PrimaryGeneratedColumn, Unique } from "typeorm";
 import { Order } from "./order.entity";
+import { CourseOrder } from "./course-order.entity";
 import { Tenant } from "./tenant.entity";
 
 @Entity("payment_statement_records")
@@ -11,11 +12,17 @@ export class PaymentStatementRecord {
   @ManyToOne(() => Order, { eager: true, nullable: true, onDelete: "SET NULL" })
   order!: Order | null;
 
+  @ManyToOne(() => CourseOrder, { eager: false, nullable: true, onDelete: "SET NULL" })
+  courseOrder!: CourseOrder | null;
+
   @ManyToOne(() => Tenant, { eager: true, nullable: true, onDelete: "SET NULL" })
   tenant!: Tenant | null;
 
   @Column({ type: "varchar", length: 40 })
   provider!: string;
+
+  @Column({ type: "varchar", length: 40, default: "activity" })
+  businessType!: "activity" | "course";
 
   @Column({ type: "varchar", length: 128 })
   transactionNo!: string;

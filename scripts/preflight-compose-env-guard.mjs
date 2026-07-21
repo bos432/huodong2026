@@ -13,7 +13,10 @@ const backupOnlyKeys = new Set([
   "BACKUP_DIR",
   "BACKUP_RETENTION_DAYS",
   "BACKUP_USE_DOCKER",
-  "MYSQL_CONTAINER"
+  "MYSQL_CONTAINER",
+  "API_CONTAINER",
+  "PRIVATE_DATA_DIR",
+  "PRIVATE_DATA_BACKUP_DIR"
 ]);
 
 function read(file) {

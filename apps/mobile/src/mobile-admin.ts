@@ -85,7 +85,7 @@ export function mobileAdminRequest<T>(url: string, options: UniApp.RequestOption
           resolve(body.data as T);
           return;
         }
-        if (res.statusCode === 401 || res.statusCode === 403) clearMobileAdminSession();
+        if (res.statusCode === 401) clearMobileAdminSession();
         const requestId = body?.requestId || headerValue(res.header, "x-request-id");
         reject(new MobileAdminError(requestId ? `${body?.message || "请求失败"}（请求编号：${requestId}）` : body?.message || "请求失败", res.statusCode));
       },

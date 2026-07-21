@@ -1,4 +1,5 @@
 import { ConfigService } from "@nestjs/config";
+import { decryptStoredSecret, maskedStoredSecret, mergeStoredSecret } from "./secret-storage";
 
 type LaunchConfig = Record<string, unknown> | null | undefined;
 
@@ -57,6 +58,13 @@ const launchConfigEnvMap: Array<[string, string]> = [
   ["accessLogEnabled", "ACCESS_LOG_ENABLED"],
   ["accessLogSkipHealth", "ACCESS_LOG_SKIP_HEALTH"],
   ["uploadDir", "UPLOAD_DIR"],
+  ["storageProvider", "STORAGE_PROVIDER"],
+  ["storageEndpoint", "STORAGE_ENDPOINT"],
+  ["storageRegion", "STORAGE_REGION"],
+  ["storageBucket", "STORAGE_BUCKET"],
+  ["storageAccessKeyId", "STORAGE_ACCESS_KEY_ID"],
+  ["storageAccessKeySecret", "STORAGE_ACCESS_KEY_SECRET"],
+  ["storagePublicBaseUrl", "STORAGE_PUBLIC_BASE_URL"],
   ["h5AuthMode", "H5_AUTH_MODE"],
   ["smsEnabled", "SMS_PROVIDER_ENABLED"],
   ["smsProvider", "SMS_PROVIDER"],
@@ -123,6 +131,11 @@ const launchConfigEnvMap: Array<[string, string]> = [
   ["offlinePaymentExpireMinutes", "OFFLINE_PAYMENT_EXPIRE_MINUTES"],
   ["orderCloseWorkerEnabled", "ORDER_CLOSE_WORKER_ENABLED"],
   ["orderCloseWorkerIntervalSeconds", "ORDER_CLOSE_WORKER_INTERVAL_SECONDS"],
+  ["mallPendingPaymentExpireMinutes", "MALL_PENDING_PAYMENT_EXPIRE_MINUTES"],
+  ["mallPendingConfirmExpireMinutes", "MALL_PENDING_CONFIRM_EXPIRE_MINUTES"],
+  ["mallPendingOrderWorkerIntervalMinutes", "MALL_PENDING_ORDER_WORKER_INTERVAL_MINUTES"],
+  ["mallPendingOrderBatchSize", "MALL_PENDING_ORDER_BATCH_SIZE"],
+  ["mallPendingOrderMaxBatches", "MALL_PENDING_ORDER_MAX_BATCHES"],
   ["backupDir", "BACKUP_DIR"],
   ["backupRetentionDays", "BACKUP_RETENTION_DAYS"]
 ];
@@ -141,6 +154,11 @@ const launchConfigMetadataKeys = [
 const allowedLaunchConfigKeys = new Set([
   ...launchConfigEnvMap.map(([key]) => key),
   ...launchConfigMetadataKeys
+]);
+
+export const launchConfigSecretKeys = new Set([
+  "mysqlPassword", "mysqlRootPassword", "jwtSecret", "h5AuthSecret", "smsAccessKeySecret", "smtpPassword", "wechatAppSecret",
+  "paymentSandboxSecret", "wechatPaySandboxSecret", "alipayPaySandboxSecret", "wechatPayApiV3Key", "storageAccessKeySecret"
 ]);
 
 export function normalizeLaunchConfig(value: unknown): Record<string, unknown> {
@@ -182,7 +200,8 @@ export function launchConfigToEnv(value: LaunchConfig): Record<string, string> {
   const launchConfig = normalizeLaunchConfig(value);
   const env: Record<string, string> = {};
   for (const [field, envKey] of launchConfigEnvMap) {
-    const normalized = normalizeLaunchValue(launchConfig[field]);
+    const raw = launchConfigSecretKeys.has(field) ? decryptStoredSecret(String(launchConfig[field] || "")) : launchConfig[field];
+    const normalized = normalizeLaunchValue(raw);
     if (normalized !== undefined && normalized !== "") env[envKey] = normalized;
   }
   if (!env.CORS_ORIGIN) {
@@ -190,6 +209,24 @@ export function launchConfigToEnv(value: LaunchConfig): Record<string, string> {
     if (origins.length) env.CORS_ORIGIN = origins.join(",");
   }
   return env;
+}
+
+export function secureLaunchConfigForStorage(existing: LaunchConfig, incoming: unknown, clearKeys: string[] = []) {
+  const current = normalizeLaunchConfig(existing);
+  const next = normalizeLaunchConfig(incoming);
+  const clear = new Set(clearKeys.filter((key) => launchConfigSecretKeys.has(key)));
+  for (const key of launchConfigSecretKeys) {
+    const merged = mergeStoredSecret(typeof current[key] === "string" ? current[key] as string : null, typeof next[key] === "string" ? next[key] as string : null, clear.has(key));
+    if (merged) next[key] = merged;
+    else delete next[key];
+  }
+  return next;
+}
+
+export function maskLaunchConfigSecrets(value: LaunchConfig) {
+  const config = normalizeLaunchConfig(value);
+  for (const key of launchConfigSecretKeys) if (config[key]) config[key] = maskedStoredSecret(String(config[key]));
+  return config;
 }
 
 export function configWithLaunchOverrides(config: ConfigService, launchConfig: LaunchConfig): ConfigService {

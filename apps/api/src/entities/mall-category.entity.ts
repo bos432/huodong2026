@@ -1,8 +1,9 @@
-import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, UpdateDateColumn } from "typeorm";
+import { Column, CreateDateColumn, Entity, Index, ManyToOne, PrimaryGeneratedColumn, Unique, UpdateDateColumn } from "typeorm";
 import { MallMerchant } from "./mall-merchant.entity";
 import { Tenant } from "./tenant.entity";
 
 @Entity("mall_categories")
+@Unique("UQ_mall_category_tenant_scope_code", ["tenant", "scope", "code"])
 export class MallCategory {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -12,6 +13,15 @@ export class MallCategory {
 
   @ManyToOne(() => MallMerchant, { eager: true, nullable: true, onDelete: "SET NULL" })
   merchant!: MallMerchant | null;
+
+  @Column({ type: "varchar", length: 24, default: "merchant" })
+  scope!: "platform" | "merchant";
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  code!: string | null;
+
+  @ManyToOne(() => MallCategory, { eager: false, nullable: true, onDelete: "SET NULL" })
+  parent!: MallCategory | null;
 
   @Index()
   @Column({ type: "varchar", length: 80 })

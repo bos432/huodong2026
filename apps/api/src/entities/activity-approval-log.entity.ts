@@ -14,7 +14,7 @@ export class ActivityApprovalLog {
   tenant!: Tenant | null;
 
   @Column({ type: "varchar", length: 40 })
-  action!: "create" | "update" | "close" | "submit" | "approve" | "reject";
+  action!: "create" | "update" | "close" | "submit" | "approve" | "reject" | "withdraw" | "reopen" | "cancel" | "end" | "schedule" | "auto_publish" | "auto_end";
 
   @Column({ type: "varchar", length: 100, nullable: true })
   operator!: string | null;
