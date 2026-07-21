@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
-import { onReachBottom, onShow } from "@dcloudio/uni-app";
+import { onReachBottom, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { consumeActivityListIntent, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -27,6 +28,10 @@ const lastLoadedTenantCode = ref("");
 const pageLoadGuard = createTenantLoadGuard();
 const categoryLoadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_list", "/pages/activity/list");
+const shareOptions = { title: () => `${tenant.value?.name || "慢π"}活动列表`, path: "/pages/activity/list" };
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;

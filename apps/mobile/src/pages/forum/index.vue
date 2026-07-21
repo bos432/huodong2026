@@ -66,12 +66,13 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const categories = ref<any[]>([]);
 const topics = ref<any[]>([]);
@@ -83,6 +84,10 @@ const topicsError = ref("");
 const categoriesLoadGuard = createTenantLoadGuard();
 const topicsLoadGuard = createTenantLoadGuard();
 const canPost = computed(() => featureGatesState.value.forum !== false && featureGatesState.value.forumPost !== false);
+const shareOptions = { title: "慢π共修论坛", path: () => activeCategoryId.value ? `/pages/forum/index?categoryId=${activeCategoryId.value}` : "/pages/forum/index" };
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
   await loadFeatureGates(true);

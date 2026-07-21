@@ -93,13 +93,14 @@
 <script setup lang="ts">
 import QRCode from "qrcode";
 import { computed, nextTick, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 type CommunityComment = {
   id: number;
@@ -123,6 +124,14 @@ const commentsLoadGuard = createTenantLoadGuard();
 const { contentSections, loadDecoration } = usePageDecoration("community_detail", "/pages/community/detail");
 
 const post = computed<CommunityPost | null>(() => normalizeCommunityPosts(rawPost.value ? [rawPost.value] : [])[0] || null);
+const shareOptions = {
+  title: () => post.value?.activity?.title ? `慢π活动心得：${post.value.activity.title}` : "慢π共修动态",
+  path: () => post.value?.id ? `/pages/community/detail?id=${post.value.id}` : "/pages/community/index",
+  imageUrl: () => post.value?.images?.[0] || ""
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "动态详情") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;

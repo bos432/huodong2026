@@ -52,9 +52,10 @@
 
 <script setup lang="ts">
 import { ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { applyTenantBootstrapDefault, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 import { resolveTenantByCurrentLocation } from "../../tenant-location";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
@@ -70,6 +71,14 @@ const activitiesLoading = ref(false);
 const activitiesError = ref("");
 const loadedActivitiesTenantCode = ref("");
 const activityLoadGuard = createTenantLoadGuard();
+
+const shareOptions = {
+  title: () => `${pageBrand.name || "慢π"}活动报名`,
+  path: "/pages/index/index"
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
   await loadPageTheme();

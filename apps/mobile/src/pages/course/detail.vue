@@ -113,7 +113,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchMyProfile, getCurrentTenantCode, getUserToken, request, withTenantCode } from "../../api";
 import { priceText } from "../../course-data";
 import { reviewSafeText } from "../../review-safe-text";
@@ -122,6 +122,7 @@ import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const activeTab = ref("detail");
 const isFav = ref(false);
@@ -176,6 +177,14 @@ const chapters = computed(() => (rawCourse.value?.chapters || []).map((chapter: 
   title: reviewSafeText(chapter.title || ""),
   lessons: (chapter.lessons || []).map((lesson: any) => ({ ...lesson, title: reviewSafeText(lesson.title || "") }))
 })));
+const shareOptions = {
+  title: () => course.value?.title || "慢π专题内容",
+  path: () => course.value?.id ? `/pages/course/detail?id=${course.value.id}` : "/pages/courses/index",
+  imageUrl: () => course.value?.coverUrl || ""
+};
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 
 function currentCourseId() {
   const pages = getCurrentPages();

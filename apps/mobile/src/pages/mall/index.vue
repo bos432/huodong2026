@@ -137,13 +137,14 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import EmptyState from "../../components/EmptyState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TabBar from "../../components/TabBar.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const categories = ref<any[]>([]);
 const products = ref<any[]>([]);
@@ -165,6 +166,10 @@ const sortTabs = [
   { label: "热销", value: "hot" as const }
 ];
 const { contentSections, loadDecoration } = usePageDecoration("mall_home", "/pages/mall/index");
+const shareOptions = { title: "慢π商城", path: "/pages/mall/index" };
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "商城首页") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;

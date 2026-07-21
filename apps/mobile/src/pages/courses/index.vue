@@ -68,7 +68,7 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { getCurrentTenantCode, withTenantCode } from "../../api";
 import { fetchPublishedCourses, priceText } from "../../course-data";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
@@ -79,6 +79,7 @@ import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const categories = [
   { key: "all", label: "全部" },
@@ -105,6 +106,10 @@ const allCourses = ref<any[]>([]);
 const loadedTenantCode = ref("");
 const loadGuard = createTenantLoadGuard();
 const { contentSections, loadDecoration } = usePageDecoration("course_home", "/pages/courses/index");
+const shareOptions = { title: "慢π专题内容", path: "/pages/courses/index" };
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+onShow(showMiniProgramShareMenu);
 const decorationSections = computed(() => contentSections.value.filter((section) => {
   if (section.type === "hero" && section.title === "专题内容") return false;
   if (section.type === "rich_text" && section.title === "页面说明") return false;

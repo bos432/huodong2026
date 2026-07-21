@@ -13,6 +13,12 @@
     },
     "setting": {
       "urlCheck": false
+    },
+    "networkTimeout": {
+      "request": 60000,
+      "connectSocket": 60000,
+      "uploadFile": 120000,
+      "downloadFile": 120000
     }
   },
   "h5": {
