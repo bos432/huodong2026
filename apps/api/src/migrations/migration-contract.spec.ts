@@ -153,6 +153,9 @@ describe("migration contracts", () => {
     expect(migration).not.toMatch(/(?:r|refund|candidate)\.refundNo = (?:p|claw)\.sourceId/);
     expect(migration.match(/CAST\(earned\.sourceId AS UNSIGNED\) = (?:refund\.orderId|businessOrder\.id)/g)).toHaveLength(3);
     expect(migration).not.toMatch(/earned\.sourceId = CAST\(.+? AS CHAR\)/);
+    expect(migration).toContain("backfillPointBalanceSnapshots(queryRunner)");
+    expect(migration).toContain("ORDER BY tenantScopeKey, userId, createdAt, id");
+    expect(migration).not.toMatch(/\bOVER\s*\(/);
   });
 
   it("governs member tag scopes, idempotent snapshots, and immutable snapshot history", () => {

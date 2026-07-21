@@ -25,6 +25,20 @@ type HistoricalRefundClawbackRow = {
   priorClawbackPoints: number | string;
 };
 
+type PointBalanceRow = {
+  id: number;
+  tenantScopeKey: string;
+  userId: number;
+  points: number | string;
+  reversedAt: Date | string | null;
+};
+
+type PointBalanceSnapshot = {
+  id: number;
+  balanceBefore: number;
+  balanceAfter: number;
+};
+
 function cumulativeClawbackTarget(row: HistoricalRefundClawbackRow) {
   const earnedPoints = Math.max(Math.trunc(Number(row.earnedPoints || 0)), 0);
   const paidAmountFen = Math.max(Math.trunc(Number(row.paidAmountFen || 0)), 0);
@@ -73,6 +87,45 @@ async function repairHistoricalRefundClawbacks(queryRunner: QueryRunner, busines
         JSON_OBJECT('business', ?, 'orderId', ?, 'targetClawbackPoints', ?, 'priorClawbackPoints', ?, 'correctionPoints', ?),
         '历史退款积分累计比例校准', NOW(6))
     `, [row.userId, row.tenantId, row.tenantScopeKey, correctionPoints, correctionPoints, sourceType, sourceId, row.earnedLogId, business, row.orderId, target, prior, correctionPoints]);
+  }
+}
+
+async function backfillPointBalanceSnapshots(queryRunner: QueryRunner) {
+  const rows = await queryRunner.query(`
+    SELECT id, tenantScopeKey, userId, points, reversedAt
+    FROM member_point_logs
+    ORDER BY tenantScopeKey, userId, createdAt, id
+  `) as PointBalanceRow[];
+  let previousScope: string | null = null;
+  let previousUserId: number | null = null;
+  let runningBalance = 0;
+  const snapshots: PointBalanceSnapshot[] = [];
+
+  for (const row of rows) {
+    const userId = Number(row.userId);
+    if (row.tenantScopeKey !== previousScope || userId !== previousUserId) runningBalance = 0;
+    const balanceBefore = runningBalance;
+    if (row.reversedAt == null) runningBalance += Math.trunc(Number(row.points || 0));
+    snapshots.push({ id: Number(row.id), balanceBefore, balanceAfter: runningBalance });
+    previousScope = row.tenantScopeKey;
+    previousUserId = userId;
+  }
+
+  for (let offset = 0; offset < snapshots.length; offset += 500) {
+    const batch = snapshots.slice(offset, offset + 500);
+    const beforeCases = batch.map(() => "WHEN ? THEN ?").join(" ");
+    const afterCases = batch.map(() => "WHEN ? THEN ?").join(" ");
+    const idPlaceholders = batch.map(() => "?").join(", ");
+    await queryRunner.query(`
+      UPDATE member_point_logs
+      SET balanceBefore = CASE id ${beforeCases} ELSE balanceBefore END,
+          balanceAfter = CASE id ${afterCases} ELSE balanceAfter END
+      WHERE id IN (${idPlaceholders})
+    `, [
+      ...batch.flatMap((item) => [item.id, item.balanceBefore]),
+      ...batch.flatMap((item) => [item.id, item.balanceAfter]),
+      ...batch.map((item) => item.id)
+    ]);
   }
 }
 
@@ -195,21 +248,7 @@ export class MemberPointLedgerGovernance1783880000000 implements MigrationInterf
       SET profile.points = GREATEST(COALESCE(ledger.points, 0), 0), profile.growthValue = GREATEST(COALESCE(ledger.growthValue, 0), 0)
     `);
 
-    await queryRunner.query(`
-      UPDATE member_point_logs target
-      JOIN (
-        SELECT id, runningAfter - effectivePoints balanceBefore, runningAfter balanceAfter
-        FROM (
-          SELECT id, effectivePoints,
-            SUM(effectivePoints) OVER (PARTITION BY tenantScopeKey, userId ORDER BY createdAt, id ROWS UNBOUNDED PRECEDING) runningAfter
-          FROM (
-            SELECT id, tenantScopeKey, userId, createdAt, CASE WHEN reversedAt IS NULL THEN points ELSE 0 END effectivePoints
-            FROM member_point_logs
-          ) sourceRows
-        ) windowedRows
-      ) snapshots ON snapshots.id = target.id
-      SET target.balanceBefore = snapshots.balanceBefore, target.balanceAfter = snapshots.balanceAfter
-    `);
+    await backfillPointBalanceSnapshots(queryRunner);
   }
 
   async down(queryRunner: QueryRunner) {
