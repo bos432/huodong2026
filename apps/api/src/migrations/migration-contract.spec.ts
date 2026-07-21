@@ -151,6 +151,8 @@ describe("migration contracts", () => {
     );
     expect(normalizedRefundComparisons).toHaveLength(6);
     expect(migration).not.toMatch(/(?:r|refund|candidate)\.refundNo = (?:p|claw)\.sourceId/);
+    expect(migration.match(/CAST\(earned\.sourceId AS UNSIGNED\) = (?:refund\.orderId|businessOrder\.id)/g)).toHaveLength(3);
+    expect(migration).not.toMatch(/earned\.sourceId = CAST\(.+? AS CHAR\)/);
   });
 
   it("governs member tag scopes, idempotent snapshots, and immutable snapshot history", () => {
