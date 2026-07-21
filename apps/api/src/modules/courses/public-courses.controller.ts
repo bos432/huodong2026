@@ -221,6 +221,7 @@ export class PublicCoursesController {
 
   @Get("community/activities")
   async listActivities(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const tenant = await this.resolveTenant(req, tenantCode);
     const items = await this.communityActivities.find({ where: this.tenantWhere({ status: "published" }, tenant), order: { startTime: "ASC" }, take: 10 });
     return items.map((item) => this.publicCommunityActivity(item));
@@ -228,6 +229,7 @@ export class PublicCoursesController {
 
   @Get("community/posts")
   async listPosts(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("activityId") activityId?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.optionalUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const where: any = this.tenantWhere({ visible: true, status: "approved",deletedAt:IsNull() }, tenant);
@@ -242,6 +244,7 @@ export class PublicCoursesController {
 
   @Get("me/community/postable-activities")
   async listPostableActivities(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     return this.postableActivities(userId, tenant);
@@ -249,6 +252,7 @@ export class PublicCoursesController {
 
   @Get("me/community/posts")
   async listMyPosts(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const builder = this.communityPosts
@@ -312,6 +316,7 @@ export class PublicCoursesController {
   }))
   async uploadCommunityPostImage(@UploadedFile() file: Express.Multer.File, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const userId = this.requireUserId(req.headers?.authorization);
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     if (!file) throw new BadRequestException("请上传 JPG、PNG 或 WebP 图片");
     const validated = validatedUploadFile(file, COMMUNITY_IMAGE_MIMES);
     if (!validated) throw new BadRequestException("动态图片内容与格式不匹配，仅支持 JPG、PNG 或 WebP 图片");
@@ -453,6 +458,7 @@ export class PublicCoursesController {
 
   @Post("community/posts")
   async createParticipantPost(@Body() dto: { activityId?: number; content?: string; images?: string[]; city?: string; tags?: string[]; posterConfig?: Record<string, unknown> }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     await this.assertContentWriteAllowed(userId, tenant, "community");
@@ -486,6 +492,7 @@ export class PublicCoursesController {
 
   @Post("community/posts/:id/share")
   async recordPostShare(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
     if (!post) throw new NotFoundException("动态不存在或已下架");
@@ -526,6 +533,7 @@ export class PublicCoursesController {
 
   @Get("community/posts/:id")
   async getPost(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.optionalUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
@@ -536,6 +544,7 @@ export class PublicCoursesController {
 
   @Post("community/posts/:id/like")
   async togglePostLike(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
@@ -544,10 +553,11 @@ export class PublicCoursesController {
   }
 
   @Post("community/posts/:id/favorite")
-  async togglePostFavorite(@Param("id",ParseIntPipe) id:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);if(!(await this.findVisibleApprovedPost(id,tenant)))throw new NotFoundException("动态不存在或已下架");return this.dataSource.transaction(async manager=>{const postRepo=manager.getRepository(CommunityPost),repo=manager.getRepository(CommunityPostFavorite);const post=await postRepo.findOne({where:{id},lock:{mode:"pessimistic_write"}});if(!post)throw new NotFoundException("动态不存在");const row=await repo.findOne({where:{postId:id,userId},lock:{mode:"pessimistic_write"}});let favorited=false;if(row)await repo.delete(row.id);else{try{await repo.save(repo.create({postId:id,userId}));favorited=true;}catch(error:any){if(!this.isDuplicateKeyError(error))throw error;favorited=true;}}post.favoriteCount=await repo.count({where:{postId:id}});await postRepo.save(post);return{favorited,favoriteCount:post.favoriteCount};});}
+  async togglePostFavorite(@Param("id",ParseIntPipe) id:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);if(!(await this.findVisibleApprovedPost(id,tenant)))throw new NotFoundException("动态不存在或已下架");return this.dataSource.transaction(async manager=>{const postRepo=manager.getRepository(CommunityPost),repo=manager.getRepository(CommunityPostFavorite);const post=await postRepo.findOne({where:{id},lock:{mode:"pessimistic_write"}});if(!post)throw new NotFoundException("动态不存在");const row=await repo.findOne({where:{postId:id,userId},lock:{mode:"pessimistic_write"}});let favorited=false;if(row)await repo.delete(row.id);else{try{await repo.save(repo.create({postId:id,userId}));favorited=true;}catch(error:any){if(!this.isDuplicateKeyError(error))throw error;favorited=true;}}post.favoriteCount=await repo.count({where:{postId:id}});await postRepo.save(post);return{favorited,favoriteCount:post.favoriteCount};});}
 
   @Post("community/posts/:id/report")
   async reportCommunityPost(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const reporterId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
@@ -561,6 +571,7 @@ export class PublicCoursesController {
 
   @Post("community/comments/:id/report")
   async reportCommunityComment(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const reporterId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     const comment = await this.communityPostComments.findOneBy({ id, status: "approved", deletedAt: IsNull() });
@@ -574,15 +585,15 @@ export class PublicCoursesController {
   }
 
   @Post("community/users/:id/follow")
-  async toggleCommunityFollow(@Param("id",ParseIntPipe) followedUserId:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){const followerUserId=this.requireUserId(req.headers?.authorization);if(followerUserId===followedUserId)throw new BadRequestException("不能关注自己");const tenant=await this.resolveTenant(req,tenantCode);const visibleAuthorPost=await this.communityPosts.findOne({where:this.exactTenantWhere({userId:followedUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)});if(!visibleAuthorPost)throw new NotFoundException("用户在当前机构没有可见内容");const row=await this.communityUserFollows.findOneBy({followerUserId,followedUserId});if(row){await this.communityUserFollows.delete(row.id);return{following:false};}try{await this.communityUserFollows.save(this.communityUserFollows.create({followerUserId,followedUserId}));await this.communityNotifications.save(this.communityNotifications.create({userId:followedUserId,type:"follow",postId:null,commentId:null,actorUserId:followerUserId,title:"你有新的关注者",content:"你有一位新的社区关注者",readAt:null}));}catch(error:any){if(!this.isDuplicateKeyError(error))throw error;}return{following:true};}
+  async toggleCommunityFollow(@Param("id",ParseIntPipe) followedUserId:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const followerUserId=this.requireUserId(req.headers?.authorization);if(followerUserId===followedUserId)throw new BadRequestException("不能关注自己");const tenant=await this.resolveTenant(req,tenantCode);const visibleAuthorPost=await this.communityPosts.findOne({where:this.exactTenantWhere({userId:followedUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)});if(!visibleAuthorPost)throw new NotFoundException("用户在当前机构没有可见内容");const row=await this.communityUserFollows.findOneBy({followerUserId,followedUserId});if(row){await this.communityUserFollows.delete(row.id);return{following:false};}try{await this.communityUserFollows.save(this.communityUserFollows.create({followerUserId,followedUserId}));await this.communityNotifications.save(this.communityNotifications.create({userId:followedUserId,type:"follow",postId:null,commentId:null,actorUserId:followerUserId,title:"你有新的关注者",content:"你有一位新的社区关注者",readAt:null}));}catch(error:any){if(!this.isDuplicateKeyError(error))throw error;}return{following:true};}
 
   @Get("me/community/favorites")
-  async myCommunityFavorites(@Req() req:any,@Query("tenantCode") tenantCode?:string){const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityPostFavorites.find({where:{userId},order:{createdAt:"DESC"},take:100});if(!rows.length)return[];const posts=await this.communityPosts.find({where:this.exactTenantWhere({id:In(rows.map(row=>row.postId)),status:"approved",visible:true,deletedAt:IsNull()},tenant),order:{createdAt:"DESC"}});return posts.map(post=>this.postView(post,{liked:false,favorited:true}));}
+  async myCommunityFavorites(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityPostFavorites.find({where:{userId},order:{createdAt:"DESC"},take:100});if(!rows.length)return[];const posts=await this.communityPosts.find({where:this.exactTenantWhere({id:In(rows.map(row=>row.postId)),status:"approved",visible:true,deletedAt:IsNull()},tenant),order:{createdAt:"DESC"}});return posts.map(post=>this.postView(post,{liked:false,favorited:true}));}
 
   @Get("me/community/notifications")
-  async myCommunityNotifications(@Req() req:any,@Query("tenantCode") tenantCode?:string){const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityNotifications.find({where:{userId},order:{createdAt:"DESC"},take:100});const postIds=Array.from(new Set(rows.filter(row=>row.postId).map(row=>Number(row.postId))));const visiblePosts=postIds.length?await this.communityPosts.find({where:this.exactTenantWhere({id:In(postIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visiblePostIds=new Set(visiblePosts.map(post=>post.id));const actorIds=Array.from(new Set(rows.filter(row=>!row.postId&&row.actorUserId).map(row=>Number(row.actorUserId))));const visibleActors=actorIds.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(actorIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visibleActorIds=new Set(visibleActors.map(post=>post.userId));return rows.filter(row=>row.postId?visiblePostIds.has(row.postId):Boolean(row.actorUserId&&visibleActorIds.has(row.actorUserId))).map(row=>this.publicCommunityNotification(row));}
-  @Post("me/community/notifications/:id/read") async readCommunityNotification(@Param("id",ParseIntPipe) id:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const row=await this.communityNotifications.findOneBy({id,userId});if(!row)throw new NotFoundException("消息不存在");if(row.postId&&!(await this.communityPosts.findOne({where:this.exactTenantWhere({id:row.postId},tenant)})))throw new NotFoundException("消息不存在");if(!row.postId&&(!row.actorUserId||!(await this.communityPosts.findOne({where:this.exactTenantWhere({userId:row.actorUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)}))))throw new NotFoundException("消息不存在");row.readAt=row.readAt||new Date();return this.publicCommunityNotification(await this.communityNotifications.save(row));}
-  @Get("me/community/follows") async myCommunityFollows(@Req() req:any,@Query("tenantCode") tenantCode?:string){const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityUserFollows.find({where:{followerUserId:userId},order:{createdAt:"DESC"},take:200});const ids=Array.from(new Set(rows.map(row=>row.followedUserId)));const visiblePosts=ids.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(ids),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visibleIds=new Set(visiblePosts.map(post=>post.userId));const scopedRows=rows.filter(row=>visibleIds.has(row.followedUserId));const users=scopedRows.length?await this.dataSource.getRepository(User).find({where:{id:In(scopedRows.map(row=>row.followedUserId))}}):[];return scopedRows.map(row=>({id:row.id,followedName:users.find(user=>user.id===row.followedUserId)?.nickname||`用户${String(row.followedUserId).padStart(4,"0").slice(-4)}`,createdAt:row.createdAt}));}
+  async myCommunityNotifications(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityNotifications.find({where:{userId},order:{createdAt:"DESC"},take:100});const postIds=Array.from(new Set(rows.filter(row=>row.postId).map(row=>Number(row.postId))));const visiblePosts=postIds.length?await this.communityPosts.find({where:this.exactTenantWhere({id:In(postIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visiblePostIds=new Set(visiblePosts.map(post=>post.id));const actorIds=Array.from(new Set(rows.filter(row=>!row.postId&&row.actorUserId).map(row=>Number(row.actorUserId))));const visibleActors=actorIds.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(actorIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visibleActorIds=new Set(visibleActors.map(post=>post.userId));return rows.filter(row=>row.postId?visiblePostIds.has(row.postId):Boolean(row.actorUserId&&visibleActorIds.has(row.actorUserId))).map(row=>this.publicCommunityNotification(row));}
+  @Post("me/community/notifications/:id/read") async readCommunityNotification(@Param("id",ParseIntPipe) id:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const row=await this.communityNotifications.findOneBy({id,userId});if(!row)throw new NotFoundException("消息不存在");if(row.postId&&!(await this.communityPosts.findOne({where:this.exactTenantWhere({id:row.postId},tenant)})))throw new NotFoundException("消息不存在");if(!row.postId&&(!row.actorUserId||!(await this.communityPosts.findOne({where:this.exactTenantWhere({userId:row.actorUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)}))))throw new NotFoundException("消息不存在");row.readAt=row.readAt||new Date();return this.publicCommunityNotification(await this.communityNotifications.save(row));}
+  @Get("me/community/follows") async myCommunityFollows(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityUserFollows.find({where:{followerUserId:userId},order:{createdAt:"DESC"},take:200});const ids=Array.from(new Set(rows.map(row=>row.followedUserId)));const visiblePosts=ids.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(ids),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visibleIds=new Set(visiblePosts.map(post=>post.userId));const scopedRows=rows.filter(row=>visibleIds.has(row.followedUserId));const users=scopedRows.length?await this.dataSource.getRepository(User).find({where:{id:In(scopedRows.map(row=>row.followedUserId))}}):[];return scopedRows.map(row=>({id:row.id,followedName:users.find(user=>user.id===row.followedUserId)?.nickname||`用户${String(row.followedUserId).padStart(4,"0").slice(-4)}`,createdAt:row.createdAt}));}
 
   @Get("me/content/sanctions")
   async myContentSanctions(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
@@ -657,6 +668,7 @@ export class PublicCoursesController {
 
   @Get("community/posts/:id/comments")
   async listPostComments(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const tenant = await this.resolveTenant(req, tenantCode);
     const post = await this.findVisibleApprovedPost(id, tenant);
     if (!post) throw new NotFoundException("动态不存在或已下架");
@@ -667,6 +679,7 @@ export class PublicCoursesController {
 
   @Post("community/posts/:id/comments")
   async createPostComment(@Param("id", ParseIntPipe) id: number, @Body() dto: { content?: string; parentId?:number; mentionUserIds?:number[] }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
     await this.assertContentWriteAllowed(userId, tenant, "community");
@@ -1930,6 +1943,11 @@ export class PublicCoursesController {
 
   private assertCommunityEnabled(req: any, tenantCode?: string) {
     return this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "community", "共修暂未开放");
+  }
+
+  private async assertCommunityPublishEnabled(req: any, tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "communityPublish", "发布心得暂未开放");
   }
 
   private async assertForumPostEnabled(req: any, tenantCode?: string) {

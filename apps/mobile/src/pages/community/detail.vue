@@ -101,6 +101,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
+import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 
 type CommunityComment = {
   id: number;
@@ -674,7 +675,9 @@ function reload() {
   void loadDecoration();
 }
 
-onShow(() => {
+onShow(async () => {
+  await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
   void loadPost();
   void loadDecoration();
 });

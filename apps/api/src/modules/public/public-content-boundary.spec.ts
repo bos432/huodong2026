@@ -11,6 +11,25 @@ describe("public announcement and community asset boundaries", () => {
   const mallService = readFileSync("src/modules/mall/mall.service.ts", "utf8");
   const mobileMallCoupons = readFileSync("../mobile/src/pages/mall/coupons.vue", "utf8");
   const mobileMallCheckout = readFileSync("../mobile/src/pages/mall/checkout.vue", "utf8");
+  const mobileCommunityIndex = readFileSync("../mobile/src/pages/community/index.vue", "utf8");
+  const mobileCommunityDetail = readFileSync("../mobile/src/pages/community/detail.vue", "utf8");
+
+  it("enforces disabled community gates before exposing or loading community content", () => {
+    for (const [start, end] of [
+      ['@Get("community/activities")', '@Get("community/posts")'],
+      ['@Get("community/posts")', '@Get("me/community/postable-activities")'],
+      ['@Get("community/posts/:id")', '@Post("community/posts/:id/like")'],
+      ['@Get("community/posts/:id/comments")', '@Post("community/posts/:id/comments")']
+    ]) {
+      expect(coursesController.slice(coursesController.indexOf(start), coursesController.indexOf(end))).toContain("await this.assertCommunityEnabled(req, tenantCode)");
+    }
+    const createPost = coursesController.slice(coursesController.indexOf('@Post("community/posts")'), coursesController.indexOf('@Post("community/posts/:id/share")'));
+    expect(createPost).toContain("await this.assertCommunityPublishEnabled(req, tenantCode)");
+    for (const page of [mobileCommunityIndex, mobileCommunityDetail]) {
+      expect(page).toContain("await loadFeatureGates(true)");
+      expect(page).toContain("if (!guardCurrentPageFeature()) return");
+    }
+  });
 
   it("filters announcement schedule, tenant and audience on the server", () => {
     const method = v1Service.slice(v1Service.indexOf("async publicAnnouncements"), v1Service.indexOf("private publicAnnouncement"));

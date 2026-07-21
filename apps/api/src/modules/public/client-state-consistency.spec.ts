@@ -288,7 +288,7 @@ describe("mobile client state consistency", () => {
     expect(communityIndex).toContain("onShow(async () =>");
     expect(communityIndex).toContain("void loadActivities()");
     expect(communityIndex).toContain("void loadPosts()");
-    expect(communityDetail).toContain("onShow(() =>");
+    expect(communityDetail).toContain("onShow(async () =>");
     expect(communityDetail).toContain("void loadPost()");
     expect(charity).toContain("onShow(() =>");
     expect(mallDetail).toContain("onShow(reload)");

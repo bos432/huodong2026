@@ -138,13 +138,14 @@ import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
-import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
+import { featureGatesState, guardCurrentPageFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 onShow(async () => {
   loadRouteOptions();
   await loadFeatureGates(true);
+  if (!guardCurrentPageFeature()) return;
   loadPageTheme();
   void loadActivities();
   void loadPosts();
