@@ -3,9 +3,24 @@ import { createCipheriv, createDecipheriv, createHash, randomBytes } from "crypt
 const PREFIX = "enc:v1:";
 export const SECRET_MASK = "********";
 
-function encryptionKey() {
-  const material = process.env.CONFIG_ENCRYPTION_KEY || process.env.JWT_SECRET || "activity-local-config-key";
+function encryptionKey(material = process.env.CONFIG_ENCRYPTION_KEY || process.env.JWT_SECRET || "activity-local-config-key") {
   return createHash("sha256").update(material).digest();
+}
+
+function decryptWithConfiguredKeys<T>(decrypt: (key: Buffer) => T) {
+  const materials = [
+    process.env.CONFIG_ENCRYPTION_KEY || process.env.JWT_SECRET || "activity-local-config-key",
+    process.env.CONFIG_ENCRYPTION_LEGACY_KEY
+  ].filter((value, index, values): value is string => Boolean(value) && values.indexOf(value) === index);
+  let lastError: unknown;
+  for (const material of materials) {
+    try {
+      return decrypt(encryptionKey(material));
+    } catch (error) {
+      lastError = error;
+    }
+  }
+  throw lastError;
 }
 
 export function encryptSecretBuffer(value: Buffer) {
@@ -18,9 +33,11 @@ export function encryptSecretBuffer(value: Buffer) {
 export function decryptSecretBuffer(value: Buffer) {
   const payload = JSON.parse(value.toString("utf8")) as { version: number; iv: string; tag: string; data: string };
   if (payload.version !== 1) throw new Error("Unsupported encrypted credential version");
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(payload.iv, "base64"));
-  decipher.setAuthTag(Buffer.from(payload.tag, "base64"));
-  return Buffer.concat([decipher.update(Buffer.from(payload.data, "base64")), decipher.final()]);
+  return decryptWithConfiguredKeys((key) => {
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(payload.iv, "base64"));
+    decipher.setAuthTag(Buffer.from(payload.tag, "base64"));
+    return Buffer.concat([decipher.update(Buffer.from(payload.data, "base64")), decipher.final()]);
+  });
 }
 
 export function encryptStoredSecret(value?: string | null) {
@@ -38,9 +55,11 @@ export function decryptStoredSecret(value?: string | null) {
   if (!stored || !stored.startsWith(PREFIX)) return stored || null;
   const [ivText, tagText, encryptedText] = stored.slice(PREFIX.length).split(".");
   if (!ivText || !tagText || !encryptedText) throw new Error("Invalid encrypted configuration secret");
-  const decipher = createDecipheriv("aes-256-gcm", encryptionKey(), Buffer.from(ivText, "base64url"));
-  decipher.setAuthTag(Buffer.from(tagText, "base64url"));
-  return Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64url")), decipher.final()]).toString("utf8");
+  return decryptWithConfiguredKeys((key) => {
+    const decipher = createDecipheriv("aes-256-gcm", key, Buffer.from(ivText, "base64url"));
+    decipher.setAuthTag(Buffer.from(tagText, "base64url"));
+    return Buffer.concat([decipher.update(Buffer.from(encryptedText, "base64url")), decipher.final()]).toString("utf8");
+  });
 }
 
 export function maskedStoredSecret(value?: string | null) {
