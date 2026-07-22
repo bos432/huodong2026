@@ -14,6 +14,7 @@ type ReleaseStatus = "success" | "failed" | "processing";
 
 const SAFE_USER_LOCATION_DESC = "用于定位城市展示本地活动";
 const SAFE_MP_BOX_SIZING_SELECTOR = "view,text,image,button,input,textarea,scroll-view,swiper,swiper-item,navigator,form,label";
+const DIRECT_ACCOUNT_RELEASE_MESSAGE = "当前是普通小程序直连模式。微信 submit_audit、审核查询和 release 接口仅支持第三方平台代小程序调用；请登录微信公众平台，在“管理 -> 版本管理”中提交审核、查看状态并发布。";
 
 @Injectable()
 export class MiniprogramReleaseService {
@@ -72,30 +73,18 @@ export class MiniprogramReleaseService {
   }
 
   async submitAudit(admin?: AdminContext) {
-    return this.runAction("submit_audit", admin, async (setting) => {
-      const accessToken = await this.accessToken(setting);
-      const itemList = this.auditItemList(setting);
-      const payload = itemList.length ? { item_list: itemList } : {};
-      const result = await this.wechatPost(`https://api.weixin.qq.com/wxa/submit_audit?access_token=${encodeURIComponent(accessToken)}`, payload);
-      const auditId = result.auditid === undefined ? null : String(result.auditid);
-      return { auditId, detail: result };
-    });
+    void admin;
+    throw new BadRequestException(DIRECT_ACCOUNT_RELEASE_MESSAGE);
   }
 
   async latestAuditStatus(admin?: AdminContext) {
-    return this.runAction("audit_status", admin, async (setting) => {
-      const accessToken = await this.accessToken(setting);
-      const result = await this.wechatGet(`https://api.weixin.qq.com/wxa/get_latest_auditstatus?access_token=${encodeURIComponent(accessToken)}`);
-      return { auditId: result.auditid === undefined ? null : String(result.auditid), detail: result };
-    });
+    void admin;
+    throw new BadRequestException(DIRECT_ACCOUNT_RELEASE_MESSAGE);
   }
 
   async release(admin?: AdminContext) {
-    return this.runAction("release", admin, async (setting) => {
-      const accessToken = await this.accessToken(setting);
-      const result = await this.wechatPost(`https://api.weixin.qq.com/wxa/release?access_token=${encodeURIComponent(accessToken)}`, {});
-      return { detail: result };
-    });
+    void admin;
+    throw new BadRequestException(DIRECT_ACCOUNT_RELEASE_MESSAGE);
   }
 
   private async runAction(action: ReleaseAction, admin: AdminContext | undefined, runner: (setting: MiniprogramReleaseSetting) => Promise<Record<string, any>>) {
@@ -192,34 +181,6 @@ export class MiniprogramReleaseService {
     } catch {
       throw new BadRequestException("服务器未安装 miniprogram-ci，请先执行 npm --prefix apps/api install miniprogram-ci");
     }
-  }
-
-  private async accessToken(setting: MiniprogramReleaseSetting) {
-    if (!setting.appSecret) throw new BadRequestException("请先填写小程序 AppSecret，提审/发布需要调用微信接口");
-    const url = `https://api.weixin.qq.com/cgi-bin/token?grant_type=client_credential&appid=${encodeURIComponent(setting.appId)}&secret=${encodeURIComponent(setting.appSecret)}`;
-    const payload = await this.wechatGet(url);
-    const token = typeof payload.access_token === "string" ? payload.access_token : "";
-    if (!token) throw new BadRequestException(String(payload.errmsg || "获取微信 access_token 失败"));
-    return token;
-  }
-
-  private async wechatGet(url: string) {
-    const response = await fetch(url);
-    const payload = await response.json() as Record<string, any>;
-    this.assertWechatOk(payload);
-    return payload;
-  }
-
-  private async wechatPost(url: string, body: Record<string, any>) {
-    const response = await fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(body) });
-    const payload = await response.json() as Record<string, any>;
-    this.assertWechatOk(payload);
-    return payload;
-  }
-
-  private assertWechatOk(payload: Record<string, any>) {
-    const errcode = Number(payload.errcode || 0);
-    if (errcode !== 0) throw new BadRequestException(`微信接口错误 ${errcode}：${payload.errmsg || "未知错误"}`);
   }
 
   private privateKeyFile(setting: MiniprogramReleaseSetting) {
@@ -355,12 +316,6 @@ export class MiniprogramReleaseService {
 
   private releaseDescription(setting: MiniprogramReleaseSetting, dto?: MiniprogramReleaseVersionDto) {
     return String(dto?.description || setting.description || `小程序版本 ${this.releaseVersion(setting, dto)}`).trim().slice(0, 500);
-  }
-
-  private auditItemList(setting: MiniprogramReleaseSetting) {
-    const item = setting.auditItem;
-    const list = item && Array.isArray((item as any).item_list) ? (item as any).item_list : item && Object.keys(item).length ? [item] : [];
-    return list.filter(Boolean);
   }
 
   private nullableText(value?: string | null) {

@@ -58,7 +58,7 @@ const pageBusy = computed(() => loading.value || mutationBusy.value);
 
 const readiness = computed(() => [
   { label: "AppID", ok: Boolean(form.appId || setting.value?.appId), hint: "微信小程序后台的 AppID。" },
-  { label: "AppSecret", ok: Boolean(form.appSecret || setting.value?.hasAppSecret), hint: "提交审核、查询审核和发布需要调用微信接口。" },
+  { label: "AppSecret", ok: Boolean(form.appSecret || setting.value?.hasAppSecret), hint: "保留配置；普通小程序提审不通过此处调用。" },
   { label: "CI 私钥", ok: Boolean(form.privateKey || setting.value?.hasPrivateKey), hint: "微信公众平台下载代码上传密钥，并配置服务器 IP 白名单。" },
   { label: "版本号", ok: Boolean(form.version), hint: "上传体验版必须填写，例如 1.0.1。" },
   { label: "构建目录", ok: Boolean(form.projectPath), hint: "默认读取 apps/mobile/dist/build/mp-weixin，发布前先构建小程序。" }
@@ -75,9 +75,6 @@ const acceptanceChecklist = [
 
 const latestQrCode = computed(() => logs.value.find((item) => item.qrCodeUrl)?.qrCodeUrl || "");
 const latestUploadLog = computed(() => latestLog("upload"));
-const latestSubmitAuditLog = computed(() => latestLog("submit_audit"));
-const latestAuditStatusLog = computed(() => latestLog("audit_status"));
-const latestReleaseLog = computed(() => latestLog("release"));
 const releaseStages = computed(() => [
   {
     key: "upload",
@@ -89,23 +86,23 @@ const releaseStages = computed(() => [
   {
     key: "submit_audit",
     label: "2. 提交审核",
-    status: latestSubmitAuditLog.value?.status || "pending",
-    time: latestSubmitAuditLog.value?.createdAt,
-    detail: latestSubmitAuditLog.value?.auditId ? `审核单 ${latestSubmitAuditLog.value.auditId}` : "确认体验版可用后提交微信审核"
+    status: "manual",
+    time: undefined,
+    detail: "登录微信公众平台，在版本管理中提交审核"
   },
   {
     key: "audit_status",
     label: "3. 审核状态",
-    status: latestAuditStatusLog.value?.status || latestSubmitAuditLog.value?.status || "pending",
-    time: latestAuditStatusLog.value?.createdAt || latestSubmitAuditLog.value?.createdAt,
-    detail: latestAuditStatusLog.value?.errorMessage || "定期查询微信审核结果"
+    status: "manual",
+    time: undefined,
+    detail: "在微信公众平台查看审核进度和失败原因"
   },
   {
     key: "release",
     label: "4. 发布线上版",
-    status: latestReleaseLog.value?.status || "pending",
-    time: latestReleaseLog.value?.createdAt,
-    detail: latestReleaseLog.value?.status === "success" ? "线上版本已发布" : "审核通过后再发布线上版"
+    status: "manual",
+    time: undefined,
+    detail: "审核通过后在微信公众平台确认发布"
   }
 ]);
 
@@ -121,7 +118,8 @@ const statusTypes: Record<string, "success" | "danger" | "warning" | "info"> = {
   success: "success",
   failed: "danger",
   processing: "warning",
-  pending: "info"
+  pending: "info",
+  manual: "warning"
 };
 
 function latestLog(action: string) {
@@ -226,26 +224,19 @@ async function loadLogs(notify = true) {
   }
 }
 
-async function runAction(action: "upload" | "submit-audit" | "audit-status" | "release") {
+async function runAction(action: "upload") {
   if (!canManage.value || pageBusy.value) return;
-  if (action === "upload" && !form.version.trim()) return ElMessage.error("请先填写版本号并保存配置");
-  const confirmText: Record<string, string> = {
-    upload: "确认上传体验版？上传前请确保服务器已执行小程序构建。",
-    "submit-audit": "确认提交微信审核？提交后需等待微信审核结果。",
-    "audit-status": "确认查询最新审核状态？",
-    release: "确认发布线上版？该操作会把已审核版本发布给用户，请谨慎。"
-  };
+  if (!form.version.trim()) return ElMessage.error("请先填写版本号并保存配置");
   const confirmed = await ElMessageBox.confirm(
-    confirmText[action],
-    action === "release" ? "发布线上版" : "小程序发布管理",
-    action === "release" ? { type: "warning", confirmButtonText: "确认发布" } : { type: "info" }
+    "确认上传体验版？上传前请确保服务器已执行小程序构建。",
+    "小程序发布管理",
+    { type: "info" }
   ).then(() => true).catch(() => false);
   if (!confirmed) return;
   actionLoading.value = action;
   actionError.value = "";
   try {
-    const body = action === "upload" ? { version: form.version, description: form.description } : {};
-    await api.post(`/admin/miniprogram-release/${action}`, body);
+    await api.post("/admin/miniprogram-release/upload", { version: form.version, description: form.description });
     ElMessage.success("操作已完成，已写入发布记录");
     await loadLogs();
   } catch (error: any) {
@@ -274,7 +265,7 @@ onMounted(load);
     <div class="toolbar">
       <div>
         <h2>小程序发布管理</h2>
-        <p class="subtitle">上传体验版、提交微信审核、查询审核状态并发布线上版。</p>
+        <p class="subtitle">后台上传体验版，微信公众平台完成提交审核、状态查询和正式发布。</p>
       </div>
       <div class="actions">
         <el-button :loading="loading" :disabled="pageBusy" @click="load">刷新</el-button>
@@ -300,7 +291,7 @@ onMounted(load);
       :closable="false"
       show-icon
       title="上线前准备"
-      description="需要在微信公众平台下载代码上传密钥，并把服务器出口 IP 加入小程序代码上传 IP 白名单；提审/发布还需要 AppSecret。上传体验版前，请先在服务器构建 mp-weixin。"
+      description="需要在微信公众平台下载代码上传密钥，并把服务器出口 IP 加入小程序代码上传 IP 白名单。上传体验版前，请先在服务器构建 mp-weixin；普通小程序需到微信公众平台手动提审和发布。"
     />
 
     <div class="stage-grid">
@@ -310,7 +301,7 @@ onMounted(load);
           <span>{{ item.detail }}</span>
           <small>{{ formatTime(item.time) }}</small>
         </div>
-        <el-tag :type="statusTypes[item.status] || 'info'" effect="plain">{{ item.status === "pending" ? "待处理" : item.status }}</el-tag>
+        <el-tag :type="statusTypes[item.status] || 'info'" effect="plain">{{ item.status === "pending" ? "待处理" : item.status === "manual" ? "微信平台" : item.status }}</el-tag>
       </div>
     </div>
 
@@ -327,9 +318,9 @@ onMounted(load);
         <h3>发布配置</h3>
         <el-form label-width="120px" :disabled="!canManage || pageBusy">
           <el-form-item label="小程序 AppID"><el-input v-model="form.appId" placeholder="wx..." /></el-form-item>
-          <el-form-item label="AppSecret">
+          <el-form-item label="AppSecret（保留）">
             <el-input v-model="form.appSecret" show-password placeholder="留空表示不修改已保存 Secret" />
-            <div class="field-hint">当前：{{ setting?.hasAppSecret ? "已保存" : "未保存" }}</div>
+            <div class="field-hint">当前：{{ setting?.hasAppSecret ? "已保存" : "未保存" }}；普通小程序手动提审不依赖此项。</div>
           </el-form-item>
           <el-form-item label="CI 私钥">
             <el-input v-model="form.privateKey" type="textarea" :rows="6" placeholder="粘贴微信代码上传密钥，留空表示不修改已保存私钥" />
@@ -338,21 +329,20 @@ onMounted(load);
           <el-form-item label="版本号"><el-input v-model="form.version" placeholder="例如 1.0.1" /></el-form-item>
           <el-form-item label="版本描述"><el-input v-model="form.description" type="textarea" :rows="3" placeholder="本次更新说明" /></el-form-item>
           <el-form-item label="构建目录"><el-input v-model="form.projectPath" /></el-form-item>
-          <el-form-item label="审核类目 JSON">
+          <el-form-item label="第三方审核 JSON">
             <el-input v-model="form.auditItemText" type="textarea" :rows="8" spellcheck="false" />
-            <div class="field-hint">可填微信 submit_audit 的 item 或 item_list。不同小程序类目差异较大，首次建议按微信平台返回要求配置。</div>
+            <div class="field-hint">仅保留给未来接入微信第三方平台代开发模式；普通小程序无需填写。</div>
           </el-form-item>
         </el-form>
       </div>
 
       <div class="card action-card">
         <h3>发布操作</h3>
-        <el-alert class="action-hint" type="info" :closable="false" show-icon title="推荐顺序：保存配置 -> 上传体验版 -> 微信开发者工具/体验码验收 -> 提交审核 -> 查询状态 -> 审核通过后发布。" />
+        <el-alert class="action-hint" type="info" :closable="false" show-icon title="推荐顺序：保存配置 -> 上传体验版 -> 体验码验收 -> 打开微信公众平台 -> 提交审核 -> 审核通过后发布。" />
+        <el-alert class="action-hint" type="warning" :closable="false" show-icon title="普通小程序不能调用第三方平台专用的自动提审接口，审核与发布必须在微信公众平台完成。" />
         <div v-if="canManage" class="action-grid">
           <el-button type="primary" :loading="actionLoading === 'upload'" :disabled="pageBusy" @click="runAction('upload')">上传体验版</el-button>
-          <el-button type="warning" :loading="actionLoading === 'submit-audit'" :disabled="pageBusy" @click="runAction('submit-audit')">提交微信审核</el-button>
-          <el-button :loading="actionLoading === 'audit-status'" :disabled="pageBusy" @click="runAction('audit-status')">查询审核状态</el-button>
-          <el-button type="danger" :loading="actionLoading === 'release'" :disabled="pageBusy" @click="runAction('release')">发布线上版</el-button>
+          <a class="wechat-console-link" href="https://mp.weixin.qq.com/" target="_blank" rel="noopener noreferrer">打开微信公众平台</a>
         </div>
         <div class="qr-box">
           <template v-if="latestQrCode">
@@ -427,6 +417,8 @@ onMounted(load);
 .field-hint { margin-top: 6px; color: #64748b; font-size: 12px; line-height: 1.5; }
 .action-hint { margin-bottom: 12px; }
 .action-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
+.wechat-console-link { display: grid; min-height: 40px; place-items: center; border: 1px solid #d97706; border-radius: 4px; background: #d97706; color: #fff; font-size: 14px; text-decoration: none; }
+.wechat-console-link:hover { border-color: #b45309; background: #b45309; color: #fff; }
 .qr-box { min-height: 260px; display: grid; place-items: center; margin-top: 16px; padding: 16px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; }
 .qr-box img { width: 220px; height: 220px; object-fit: contain; background: #fff; border-radius: 8px; }
 .qr-box span { color: #64748b; font-size: 13px; }

@@ -44,4 +44,16 @@ describe("mini program release permission contract", () => {
     expect(service).toContain('if (key.toLowerCase() === "stack") continue');
     expect(service).toContain('result[key] = "********"');
   });
+
+  it("keeps ordinary mini program review and release on the official console", () => {
+    const service = read("apps/api/src/modules/admin/miniprogram-release.service.ts");
+    const page = read("apps/admin/src/views/MiniprogramRelease.vue");
+
+    expect(service).toContain("当前是普通小程序直连模式");
+    expect(service).not.toContain("https://api.weixin.qq.com/wxa/submit_audit");
+    expect(service).not.toContain("https://api.weixin.qq.com/wxa/release");
+    expect(page).toContain('href="https://mp.weixin.qq.com/"');
+    expect(page).not.toContain("runAction('submit-audit')");
+    expect(page).not.toContain("runAction('release')");
+  });
 });
