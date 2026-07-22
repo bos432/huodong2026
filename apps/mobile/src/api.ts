@@ -1,5 +1,5 @@
 import { API_BASE } from "./api-base";
-import { clientError } from "./error-reporting";
+import { clientError, describeError } from "./error-reporting";
 import { queryFromUrl, queryParam, stringifyQuery } from "./query";
 
 const DEV_PHONE = "13800000001";
@@ -8,6 +8,7 @@ const TENANT_CODE_SOURCE_STORAGE_KEY = "h5_tenant_code_source";
 const ACTIVITY_LIST_INTENT_STORAGE_KEY = "h5_activity_list_intent";
 const USER_TOKEN_STORAGE_KEY = "user_token";
 const DEVICE_ID_STORAGE_KEY = "mall_promotion_device_id";
+const DEFAULT_REQUEST_TIMEOUT_MS = 15_000;
 const HOME_PAGE_URL = "/pages/index/index";
 const LOGIN_PAGE_URL = "/pages/user/login";
 const GUEST_PAGE_URLS = new Set([HOME_PAGE_URL, LOGIN_PAGE_URL, "/pages/user/my"]);
@@ -227,6 +228,7 @@ export function request<T>(url: string, options: UniApp.RequestOptions = {}): Pr
       url: `${API_BASE}${requestUrl}`,
       method: options.method || "GET",
       data: options.data,
+      timeout: Number(options.timeout || DEFAULT_REQUEST_TIMEOUT_MS),
       header: { "Content-Type": "application/json", ...tenantHeader, ...authHeader, ...deviceHeader, ...(options.header || {}) },
       success(res) {
         const body = res.data as any;
@@ -238,6 +240,15 @@ export function request<T>(url: string, options: UniApp.RequestOptions = {}): Pr
         reject(new ApiClientError(body?.message || "请求失败", body?.requestId || headerValue(res.header, "x-request-id"), res.statusCode));
       },
       fail(error) {
+        const detail = describeError(error, "请求失败");
+        if (/url not in domain list|request:fail.*domain|合法域名/i.test(detail)) {
+          reject(new ApiClientError("小程序无法连接服务器：请在微信公众平台将 https://rd.chaimen666.com 配置为 request 合法域名"));
+          return;
+        }
+        if (/timeout|timed out|超时/i.test(detail)) {
+          reject(new ApiClientError("连接服务器超时，请检查网络或微信小程序 request 合法域名后重试"));
+          return;
+        }
         reject(clientError(error, "请求失败", { method: options.method || "GET", url: requestUrl }));
       }
     });

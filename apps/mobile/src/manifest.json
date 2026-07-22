@@ -15,7 +15,7 @@
       "urlCheck": false
     },
     "networkTimeout": {
-      "request": 60000,
+      "request": 15000,
       "connectSocket": 60000,
       "uploadFile": 120000,
       "downloadFile": 120000
