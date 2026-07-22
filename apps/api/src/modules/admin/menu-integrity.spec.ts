@@ -8,13 +8,24 @@ function readRepoFile(relativePath: string) {
   return fs.readFileSync(path.join(repoRoot, relativePath), "utf8");
 }
 
+function mobilePagePaths(source: string) {
+  const pagesJson = JSON.parse(source) as {
+    pages: Array<{ path: string }>;
+    subPackages?: Array<{ root: string; pages: Array<{ path: string }> }>;
+  };
+  return [
+    ...pagesJson.pages.map((page) => page.path),
+    ...(pagesJson.subPackages || []).flatMap((subpackage) => subpackage.pages.map((page) => `${subpackage.root}/${page.path}`))
+  ];
+}
+
 describe("admin and mobile menu integrity", () => {
   it("keeps the mobile refund workbench complete and permission guarded", () => {
     const pages = readRepoFile("apps/mobile/src/pages.json");
     const navigation = readRepoFile("apps/mobile/src/components/AdminBottomNav.vue");
     const refundPage = readRepoFile("apps/mobile/src/pages/admin/refunds.vue");
 
-    expect(pages).toContain('"path": "pages/admin/refunds"');
+    expect(mobilePagePaths(pages)).toContain("pages/admin/refunds");
     expect(navigation).toContain('permission: "canViewRefunds"');
     expect(refundPage).toContain('const canManageRefunds = computed(() => Boolean(bootstrap.value?.permissions?.canManageRefunds))');
     expect(refundPage).toContain('row.status === "pending"');
@@ -33,7 +44,7 @@ describe("admin and mobile menu integrity", () => {
     expect(service).toContain('const canViewAnalytics = hasPermission("analytics.view")');
     expect(service).toContain("canCheckIn, canViewAnalytics, canViewFinanceRisks, canManageFinanceRisks");
     expect(service).toContain('canSelectTenant: hasPermission("tenant.view")');
-    expect(pages).toContain('"path": "pages/admin/analytics"');
+    expect(mobilePagePaths(pages)).toContain("pages/admin/analytics");
     expect(navigation).toContain('permission: "canViewAnalytics"');
     expect(analyticsPage).toContain('/admin/analytics/overview?${query}');
     expect(analyticsPage).toContain('/admin/analytics/trends?${query}');
@@ -49,7 +60,7 @@ describe("admin and mobile menu integrity", () => {
 
     expect(service).toContain('const canViewFinanceRisks = hasPermission("finance.view")');
     expect(service).toContain('const canManageFinanceRisks = hasPermission("finance.manage")');
-    expect(pages).toContain('"path": "pages/admin/risk-alerts"');
+    expect(mobilePagePaths(pages)).toContain("pages/admin/risk-alerts");
     expect(analyticsPage).toContain('bootstrap?.permissions?.canViewFinanceRisks');
     expect(riskPage).toContain('/admin/finance/risk-alerts/scan');
     expect(riskPage).toContain('/admin/finance/risk-alerts/${rowSnapshot.id}/handle');
@@ -630,11 +641,12 @@ describe("admin and mobile menu integrity", () => {
   });
 
   it("keeps mobile pages.json paths backed by Vue files", () => {
-    const pagesJson = JSON.parse(readRepoFile("apps/mobile/src/pages.json")) as { pages: Array<{ path: string }> };
-    const missing = pagesJson.pages
-      .map((page) => `apps/mobile/src/${page.path}.vue`)
+    const pagePaths = mobilePagePaths(readRepoFile("apps/mobile/src/pages.json"));
+    const missing = pagePaths
+      .map((pagePath) => `apps/mobile/src/${pagePath}.vue`)
       .filter((relativePath) => !fs.existsSync(path.join(repoRoot, relativePath)));
 
     expect(missing).toEqual([]);
+    expect(new Set(pagePaths).size).toBe(pagePaths.length);
   });
 });

@@ -32,7 +32,11 @@ const mobileActivityDetail = read("apps/mobile/src/pages/activity/detail.vue");
 const mobileRegister = read("apps/mobile/src/pages/activity/register.vue");
 const mobileRegistration = read("apps/mobile/src/pages/user/registration.vue");
 const mobileService = read("apps/mobile/src/pages/service/index.vue");
-const mobilePages = read("apps/mobile/src/pages.json");
+const mobilePages = JSON.parse(read("apps/mobile/src/pages.json"));
+const mobilePagePaths = new Set([
+  ...mobilePages.pages.map((page) => page.path),
+  ...(mobilePages.subPackages || []).flatMap((subpackage) => subpackage.pages.map((page) => `${subpackage.root}/${page.path}`))
+]);
 const smoke = read("scripts/smoke.mjs");
 const tenantSmoke = read("scripts/tenant-smoke.mjs");
 const launchChecklist = read("docs/launch-checklist.md");
@@ -199,7 +203,7 @@ checkSourceIncludesAll(mobileService, [
   "customerServiceWechat"
 ], "mobile service center");
 
-checkSourceIncludes(mobilePages, "pages/service/index", "mobile pages");
+check(mobilePagePaths.has("pages/service/index"), "mobile pages must include pages/service/index.");
 
 checkSourceIncludesAll(smoke, [
   "/admin/settings/operation",

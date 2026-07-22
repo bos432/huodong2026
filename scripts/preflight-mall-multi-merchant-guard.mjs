@@ -37,7 +37,11 @@ const mallSettlementsView = read("apps/admin/src/views/MallSettlements.vue");
 const mallRefundsView = read("apps/admin/src/views/MallRefunds.vue");
 const mallFinanceView = read("apps/admin/src/views/MallFinance.vue");
 const mallOrdersView = read("apps/admin/src/views/MallOrders.vue");
-const mobilePages = read("apps/mobile/src/pages.json");
+const mobilePages = JSON.parse(read("apps/mobile/src/pages.json"));
+const mobilePagePaths = new Set([
+  ...mobilePages.pages.map((page) => page.path),
+  ...(mobilePages.subPackages || []).flatMap((subpackage) => subpackage.pages.map((page) => `${subpackage.root}/${page.path}`))
+]);
 const mobileMallIndex = read("apps/mobile/src/pages/mall/index.vue");
 const mobileMallDetail = read("apps/mobile/src/pages/mall/detail.vue");
 const mobileMerchantPage = read("apps/mobile/src/pages/mall/merchant.vue");
@@ -649,7 +653,7 @@ checkSourceIncludes(mallService, "checkoutGroup.groupNo LIKE :checkoutGroupNo", 
 checkSourceIncludes(mallService, "leftJoinAndSelect(\"order.checkoutGroup\", \"checkoutGroup\")", "mall finance queries checkout group join");
 checkSourceIncludes(mallService, "checkoutGroupNo: row.order?.checkoutGroup?.groupNo || \"\"", "mall finance exports checkout group column");
 
-checkSourceIncludes(mobilePages, "pages/mall/merchant", "mobile pages");
+check(mobilePagePaths.has("pages/mall/merchant"), "mobile pages must include pages/mall/merchant.");
 checkSourceIncludes(mobileMallIndex, "/public/mall/merchants", "mobile mall index");
 checkSourceIncludes(mobileMallIndex, "/pages/mall/merchant", "mobile mall index");
 checkSourceIncludes(mobileMallIndex, "/public/mall/flash-sales${activityScope}", "mobile mall index activity merchant scope");

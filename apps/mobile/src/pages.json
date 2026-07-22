@@ -2,74 +2,166 @@
   "pages": [
     { "path": "pages/index/index", "style": { "navigationBarTitleText": "慢π" } },
     { "path": "pages/courses/index", "style": { "navigationBarTitleText": "专题内容" } },
-    { "path": "pages/community/index", "style": { "navigationBarTitleText": "共修" } },
-    { "path": "pages/community/detail", "style": { "navigationBarTitleText": "动态详情" } },
-    { "path": "pages/community/publish", "style": { "navigationBarTitleText": "发布心得" } },
-    { "path": "pages/community/checkin", "style": { "navigationBarTitleText": "今日打卡" } },
-    { "path": "pages/community/program", "style": { "navigationBarTitleText": "共学计划" } },
-    { "path": "pages/forum/index", "style": { "navigationBarTitleText": "共修论坛" } },
-    { "path": "pages/forum/detail", "style": { "navigationBarTitleText": "帖子详情" } },
-    { "path": "pages/forum/publish", "style": { "navigationBarTitleText": "发布帖子" } },
-    { "path": "pages/course/detail", "style": { "navigationBarTitleText": "内容详情" } },
-    { "path": "pages/course/player", "style": { "navigationBarTitleText": "内容播放" } },
-    { "path": "pages/course/assessment", "style": { "navigationBarTitleText": "课程考核" } },
-    { "path": "pages/search/index", "style": { "navigationBarTitleText": "搜索" } },
-    { "path": "pages/order/confirm", "style": { "navigationBarTitleText": "确认订单" } },
-    { "path": "pages/order/payment", "style": { "navigationBarTitleText": "支付" } },
-    { "path": "pages/mall/index", "style": { "navigationBarTitleText": "慢π商城" } },
-    { "path": "pages/mall/merchant", "style": { "navigationBarTitleText": "店铺主页" } },
-    { "path": "pages/mall/merchant-apply", "style": { "navigationBarTitleText": "商户入驻" } },
-    { "path": "pages/mall/detail", "style": { "navigationBarTitleText": "商品详情" } },
-    { "path": "pages/mall/cart", "style": { "navigationBarTitleText": "购物车" } },
-    { "path": "pages/mall/addresses", "style": { "navigationBarTitleText": "收货地址" } },
-    { "path": "pages/mall/checkout", "style": { "navigationBarTitleText": "确认订单" } },
-    { "path": "pages/mall/logistics", "style": { "navigationBarTitleText": "物流详情" } },
-    { "path": "pages/mall/coupons", "style": { "navigationBarTitleText": "商城优惠券" } },
-    { "path": "pages/mall/favorites", "style": { "navigationBarTitleText": "商城收藏" } },
-    { "path": "pages/mall/history", "style": { "navigationBarTitleText": "浏览足迹" } },
-    { "path": "pages/brand/story", "style": { "navigationBarTitleText": "品牌故事" } },
-    { "path": "pages/recruit/dean", "style": { "navigationBarTitleText": "院长招募" } },
-    { "path": "pages/apply/ambassador", "style": { "navigationBarTitleText": "大使申请" } },
-    { "path": "pages/apply/aid", "style": { "navigationBarTitleText": "帮扶申请" } },
     { "path": "pages/activity/list", "style": { "navigationBarTitleText": "活动列表" } },
     { "path": "pages/activity/detail", "style": { "navigationBarTitleText": "活动详情" } },
-    { "path": "pages/activity/register", "style": { "navigationBarTitleText": "报名" } },
-    { "path": "pages/user/my", "style": { "navigationBarTitleText": "我的" } },
-    { "path": "pages/user/profile", "style": { "navigationBarTitleText": "账号资料" } },
-    { "path": "pages/user/security", "style": { "navigationBarTitleText": "账号安全" } },
-    { "path": "pages/user/wallet", "style": { "navigationBarTitleText": "余额明细" } },
-    { "path": "pages/user/login", "style": { "navigationBarTitleText": "登录" } },
-    { "path": "pages/user/orders", "style": { "navigationBarTitleText": "我的订单" } },
-    { "path": "pages/user/mall-orders", "style": { "navigationBarTitleText": "商城订单" } },
-    { "path": "pages/user/mall-order-detail", "style": { "navigationBarTitleText": "商城订单详情" } },
-    { "path": "pages/user/registration", "style": { "navigationBarTitleText": "报名详情" } },
-    { "path": "pages/user/review", "style": { "navigationBarTitleText": "活动评价" } },
-    { "path": "pages/user/courses", "style": { "navigationBarTitleText": "我的内容" } },
-    { "path": "pages/user/learning", "style": { "navigationBarTitleText": "浏览记录" } },
-    { "path": "pages/user/favorites", "style": { "navigationBarTitleText": "我的收藏" } },
-    { "path": "pages/user/community-posts", "style": { "navigationBarTitleText": "我的心得" } },
-    { "path": "pages/user/community-social", "style": { "navigationBarTitleText": "社区互动" } },
-    { "path": "pages/user/content-appeals", "style": { "navigationBarTitleText": "内容申诉" } },
-    { "path": "pages/user/forum-posts", "style": { "navigationBarTitleText": "我的论坛" } },
-    { "path": "pages/user/certificates", "style": { "navigationBarTitleText": "我的证书" } },
-    { "path": "pages/credential/verify", "style": { "navigationBarTitleText": "凭证验真" } },
-    { "path": "pages/user/settings", "style": { "navigationBarTitleText": "设置" } },
-    { "path": "pages/charity/index", "style": { "navigationBarTitleText": "公益池" } },
-    { "path": "pages/volunteer/index", "style": { "navigationBarTitleText": "志愿服务" } },
-    { "path": "pages/ambassador/index", "style": { "navigationBarTitleText": "慢π大使" } },
-    { "path": "pages/announcement/list", "style": { "navigationBarTitleText": "公告中心" } },
-    { "path": "pages/service/index", "style": { "navigationBarTitleText": "服务中心" } },
-    { "path": "pages/partner/index", "style": { "navigationBarTitleText": "城市合伙人" } },
-    { "path": "pages/admin/login", "style": { "navigationBarTitleText": "管理登录" } },
-    { "path": "pages/admin/home", "style": { "navigationBarTitleText": "手机管理" } },
-    { "path": "pages/admin/activity/list", "style": { "navigationBarTitleText": "活动管理" } },
-    { "path": "pages/admin/activity/edit", "style": { "navigationBarTitleText": "发布活动" } },
-    { "path": "pages/admin/activity/preview", "style": { "navigationBarTitleText": "活动预览" } },
-    { "path": "pages/admin/registrations", "style": { "navigationBarTitleText": "报名审核" } },
-    { "path": "pages/admin/orders", "style": { "navigationBarTitleText": "订单查看" } },
-    { "path": "pages/admin/refunds", "style": { "navigationBarTitleText": "退款审核" } },
-    { "path": "pages/admin/analytics", "style": { "navigationBarTitleText": "经营统计" } },
-    { "path": "pages/admin/risk-alerts", "style": { "navigationBarTitleText": "资金异常" } },
-    { "path": "pages/admin/check-in", "style": { "navigationBarTitleText": "签到核销" } }
+    { "path": "pages/activity/register", "style": { "navigationBarTitleText": "报名" } }
+  ],
+  "subPackages": [
+    {
+      "root": "pages/community",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "共修" } },
+        { "path": "detail", "style": { "navigationBarTitleText": "动态详情" } },
+        { "path": "publish", "style": { "navigationBarTitleText": "发布心得" } },
+        { "path": "checkin", "style": { "navigationBarTitleText": "今日打卡" } },
+        { "path": "program", "style": { "navigationBarTitleText": "共学计划" } }
+      ]
+    },
+    {
+      "root": "pages/forum",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "共修论坛" } },
+        { "path": "detail", "style": { "navigationBarTitleText": "帖子详情" } },
+        { "path": "publish", "style": { "navigationBarTitleText": "发布帖子" } }
+      ]
+    },
+    {
+      "root": "pages/course",
+      "pages": [
+        { "path": "detail", "style": { "navigationBarTitleText": "内容详情" } },
+        { "path": "player", "style": { "navigationBarTitleText": "内容播放" } },
+        { "path": "assessment", "style": { "navigationBarTitleText": "课程考核" } }
+      ]
+    },
+    {
+      "root": "pages/search",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "搜索" } }
+      ]
+    },
+    {
+      "root": "pages/order",
+      "pages": [
+        { "path": "confirm", "style": { "navigationBarTitleText": "确认订单" } },
+        { "path": "payment", "style": { "navigationBarTitleText": "支付" } }
+      ]
+    },
+    {
+      "root": "pages/mall",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "慢π商城" } },
+        { "path": "merchant", "style": { "navigationBarTitleText": "店铺主页" } },
+        { "path": "merchant-apply", "style": { "navigationBarTitleText": "商户入驻" } },
+        { "path": "detail", "style": { "navigationBarTitleText": "商品详情" } },
+        { "path": "cart", "style": { "navigationBarTitleText": "购物车" } },
+        { "path": "addresses", "style": { "navigationBarTitleText": "收货地址" } },
+        { "path": "checkout", "style": { "navigationBarTitleText": "确认订单" } },
+        { "path": "logistics", "style": { "navigationBarTitleText": "物流详情" } },
+        { "path": "coupons", "style": { "navigationBarTitleText": "商城优惠券" } },
+        { "path": "favorites", "style": { "navigationBarTitleText": "商城收藏" } },
+        { "path": "history", "style": { "navigationBarTitleText": "浏览足迹" } }
+      ]
+    },
+    {
+      "root": "pages/brand",
+      "pages": [
+        { "path": "story", "style": { "navigationBarTitleText": "品牌故事" } }
+      ]
+    },
+    {
+      "root": "pages/recruit",
+      "pages": [
+        { "path": "dean", "style": { "navigationBarTitleText": "院长招募" } }
+      ]
+    },
+    {
+      "root": "pages/apply",
+      "pages": [
+        { "path": "ambassador", "style": { "navigationBarTitleText": "大使申请" } },
+        { "path": "aid", "style": { "navigationBarTitleText": "帮扶申请" } }
+      ]
+    },
+    {
+      "root": "pages/user",
+      "pages": [
+        { "path": "my", "style": { "navigationBarTitleText": "我的" } },
+        { "path": "profile", "style": { "navigationBarTitleText": "账号资料" } },
+        { "path": "security", "style": { "navigationBarTitleText": "账号安全" } },
+        { "path": "wallet", "style": { "navigationBarTitleText": "余额明细" } },
+        { "path": "login", "style": { "navigationBarTitleText": "登录" } },
+        { "path": "orders", "style": { "navigationBarTitleText": "我的订单" } },
+        { "path": "mall-orders", "style": { "navigationBarTitleText": "商城订单" } },
+        { "path": "mall-order-detail", "style": { "navigationBarTitleText": "商城订单详情" } },
+        { "path": "registration", "style": { "navigationBarTitleText": "报名详情" } },
+        { "path": "review", "style": { "navigationBarTitleText": "活动评价" } },
+        { "path": "courses", "style": { "navigationBarTitleText": "我的内容" } },
+        { "path": "learning", "style": { "navigationBarTitleText": "浏览记录" } },
+        { "path": "favorites", "style": { "navigationBarTitleText": "我的收藏" } },
+        { "path": "community-posts", "style": { "navigationBarTitleText": "我的心得" } },
+        { "path": "community-social", "style": { "navigationBarTitleText": "社区互动" } },
+        { "path": "content-appeals", "style": { "navigationBarTitleText": "内容申诉" } },
+        { "path": "forum-posts", "style": { "navigationBarTitleText": "我的论坛" } },
+        { "path": "certificates", "style": { "navigationBarTitleText": "我的证书" } },
+        { "path": "settings", "style": { "navigationBarTitleText": "设置" } }
+      ]
+    },
+    {
+      "root": "pages/credential",
+      "pages": [
+        { "path": "verify", "style": { "navigationBarTitleText": "凭证验真" } }
+      ]
+    },
+    {
+      "root": "pages/charity",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "公益池" } }
+      ]
+    },
+    {
+      "root": "pages/volunteer",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "志愿服务" } }
+      ]
+    },
+    {
+      "root": "pages/ambassador",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "慢π大使" } }
+      ]
+    },
+    {
+      "root": "pages/announcement",
+      "pages": [
+        { "path": "list", "style": { "navigationBarTitleText": "公告中心" } }
+      ]
+    },
+    {
+      "root": "pages/service",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "服务中心" } }
+      ]
+    },
+    {
+      "root": "pages/partner",
+      "pages": [
+        { "path": "index", "style": { "navigationBarTitleText": "城市合伙人" } }
+      ]
+    },
+    {
+      "root": "pages/admin",
+      "pages": [
+        { "path": "login", "style": { "navigationBarTitleText": "管理登录" } },
+        { "path": "home", "style": { "navigationBarTitleText": "手机管理" } },
+        { "path": "activity/list", "style": { "navigationBarTitleText": "活动管理" } },
+        { "path": "activity/edit", "style": { "navigationBarTitleText": "发布活动" } },
+        { "path": "activity/preview", "style": { "navigationBarTitleText": "活动预览" } },
+        { "path": "registrations", "style": { "navigationBarTitleText": "报名审核" } },
+        { "path": "orders", "style": { "navigationBarTitleText": "订单查看" } },
+        { "path": "refunds", "style": { "navigationBarTitleText": "退款审核" } },
+        { "path": "analytics", "style": { "navigationBarTitleText": "经营统计" } },
+        { "path": "risk-alerts", "style": { "navigationBarTitleText": "资金异常" } },
+        { "path": "check-in", "style": { "navigationBarTitleText": "签到核销" } }
+      ]
+    }
   ]
 }
