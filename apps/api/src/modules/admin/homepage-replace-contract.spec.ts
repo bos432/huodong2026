@@ -78,4 +78,14 @@ describe("homepage transactional replacement contract", () => {
     expect(preview).toContain("width:357px");
     expect(preview).toContain("width:412px");
   });
+
+  it("makes inner-page bottom navigation conflicts recoverable", () => {
+    const builder = read("apps/admin/src/views/HomepageBuilder.vue");
+
+    expect(builder).toContain("setInnerPageBottomNav('show')");
+    expect(builder).toContain("setInnerPageBottomNav('recommended')");
+    expect(builder).toContain("setInnerPageBottomNav('hide')");
+    expect(builder).toContain("所有内页都隐藏了底部导航");
+    expect(builder).toContain("底部导航总模块开启后，仍需在这里决定各内页是否显示");
+  });
 });

@@ -196,6 +196,20 @@ const defaultLayout: Record<string, Record<string, any>> = {
   },
   inner_pages: { headerBackgroundColor: "#ffffff", headerTextColor: "#111827", headerSubtitleColor: "#667085", stickyFilterBackground: "#f4f6f8", actionBarBackgroundColor: "#ffffff" }
 };
+
+const recommendedBottomNavPageKeys = new Set([
+  "activity_list",
+  "announcement_list",
+  "service_center",
+  "registration_detail",
+  "review_page",
+  "partner_page",
+  "community_home",
+  "course_home",
+  "charity_page",
+  "mall_home",
+  "brand_story"
+]);
 type TemplateRow = { type: HomepageSectionType | string; title: string | null; subtitle?: string | null; config?: Record<string, any>; layout?: Record<string, any>; enabled?: boolean };
 const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow[] }> = [
   {
@@ -858,6 +872,12 @@ function buildHealthIssues() {
       const items = Array.isArray(config.items) ? config.items.filter((item: any) => item?.enabled !== false) : [];
       if (items.length > 5) addHealthIssue(issues, "error", "底部导航超过 5 项", "小程序和 H5 底部导航最多建议 5 项，请删除或停用多余入口。", row.id);
       if (!items.length) addHealthIssue(issues, "warning", "底部导航没有启用入口", "用户端底部会缺少主入口，请至少启用一个菜单。", row.id);
+    }
+    if (row.type === "inner_pages") {
+      const pages = Array.isArray(config.pages) ? config.pages : [];
+      if (pages.length && pages.every((item: any) => item?.showBottomNav === false)) {
+        addHealthIssue(issues, "warning", "所有内页都隐藏了底部导航", "底部导航总模块即使开启，这些内页也不会显示菜单。请使用推荐设置或逐页开启。", row.id);
+      }
     }
     if (row.type === "image_banner" && !bannerImages(config).length) {
       addHealthIssue(issues, "error", "图片广告缺少图片", "图片广告模块没有图片时前台会显示占位，不适合作为上线页面。", row.id);
@@ -2107,6 +2127,15 @@ function updateInnerPage(index: number, key: string, value: string | boolean) {
   syncJsonText();
 }
 
+function setInnerPageBottomNav(mode: "show" | "recommended" | "hide") {
+  const pages = Array.isArray(form.config.pages) ? form.config.pages : [];
+  form.config.pages = pages.map((item: any) => ({
+    ...item,
+    showBottomNav: mode === "show" || (mode === "recommended" && recommendedBottomNavPageKeys.has(String(item?.key || "")))
+  }));
+  syncJsonText();
+}
+
 function addInnerPage() {
   form.config.pages = [...(Array.isArray(form.config.pages) ? form.config.pages : []), { key: "custom_page", title: "新内页", subtitle: "", showBottomNav: true }];
   syncJsonText();
@@ -2799,6 +2828,12 @@ onMounted(async () => {
 
                 <template v-if="form.type === 'inner_pages'">
                   <el-divider>内页配置</el-divider>
+                  <el-alert class="editor-tip" type="warning" show-icon :closable="false" title="底部导航总模块开启后，仍需在这里决定各内页是否显示。登录、活动详情和报名确认推荐隐藏，其余常用内页推荐显示。" />
+                  <div class="inner-nav-actions">
+                    <el-button @click="setInnerPageBottomNav('show')">全部显示</el-button>
+                    <el-button type="primary" plain @click="setInnerPageBottomNav('recommended')">使用推荐设置</el-button>
+                    <el-button @click="setInnerPageBottomNav('hide')">全部隐藏</el-button>
+                  </div>
                   <div class="compact-editor">
                     <div v-for="(item, index) in (form.config.pages || [])" :key="index" class="inner-page-row compact-inner-row">
                       <el-input :model-value="item.key" placeholder="页面 key" @input="(value: string) => updateInnerPage(index, 'key', value)" />
@@ -3110,6 +3145,12 @@ onMounted(async () => {
         </template>
 
         <template v-if="form.type === 'inner_pages'">
+          <el-alert class="editor-tip" type="warning" show-icon :closable="false" title="底部导航总模块开启后，仍需在这里决定各内页是否显示。登录、活动详情和报名确认推荐隐藏，其余常用内页推荐显示。" />
+          <div class="inner-nav-actions">
+            <el-button @click="setInnerPageBottomNav('show')">全部显示</el-button>
+            <el-button type="primary" plain @click="setInnerPageBottomNav('recommended')">使用推荐设置</el-button>
+            <el-button @click="setInnerPageBottomNav('hide')">全部隐藏</el-button>
+          </div>
           <div class="quick-editor">
             <div v-for="(item, index) in (form.config.pages || [])" :key="index" class="inner-page-row">
               <el-input :model-value="item.key" placeholder="页面 key" @input="(value: string) => updateInnerPage(index, 'key', value)" />
@@ -3477,6 +3518,7 @@ onMounted(async () => {
 .drawer-preview-invalid { padding: 16px; border: 1px dashed #f97316; border-radius: 10px; background: #fff; color: #c2410c; font-weight: 700; }
 .drawer-bottom-nav { position: static; margin-top: 0; }
 .editor-tip { margin-bottom: 12px; }
+.inner-nav-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
 .quick-editor { display: grid; gap: 10px; margin-bottom: 18px; }
 .quick-row { display: grid; grid-template-columns: 120px 1fr 42px 34px; gap: 8px; align-items: center; }
 .quick-row.nav-row { grid-template-columns: 92px 72px 92px minmax(150px, 1fr) 112px minmax(170px, 1fr) 42px 58px 34px; }
