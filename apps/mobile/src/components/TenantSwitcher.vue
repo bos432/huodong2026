@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { getCurrentTenantCode, getUserToken, request, setCurrentTenantCode, setCurrentTenantCodeSource, type TenantBootstrap } from "../api";
+import { getCurrentRouteForTenant, getCurrentTenantCode, getUserToken, request, setCurrentTenantCode, setCurrentTenantCodeSource, type TenantBootstrap } from "../api";
 import type { HomepagePayload, PublicTenantView } from "@activity/shared";
 
 defineOptions({ name: "TenantSwitcher" });
@@ -10,7 +10,7 @@ const props = defineProps<{
   title?: string;
 }>();
 
-const emit = defineEmits<{
+defineEmits<{
   changed: [tenant: PublicTenantView];
 }>();
 
@@ -71,10 +71,11 @@ async function selectTenant(item: PublicTenantView) {
     const confirmed = await confirmTenantSwitch(assetScopeMessage.value);
     if (!confirmed) return;
   }
+  const nextRoute = getCurrentRouteForTenant(item.code);
   setCurrentTenantCode(item.code);
   setCurrentTenantCodeSource("manual");
   hide();
-  emit("changed", item);
+  uni.reLaunch({ url: nextRoute });
 }
 
 defineExpose({ show, loadTenantOptions });

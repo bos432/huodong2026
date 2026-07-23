@@ -81,14 +81,16 @@ onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
 onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
-  await loadPageTheme();
-  const beforeTenantCode = getCurrentTenantCode();
   await applyTenantBootstrapDefault();
-  await resolveTenantByCurrentLocation({ silent: true });
-  const changedByLocation = getCurrentTenantCode() !== beforeTenantCode || getCurrentTenantCode() !== lastLoadedTenantCode.value;
-  await Promise.allSettled([loadDecoration(), loadActivities()]);
+  await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()]);
   lastLoadedTenantCode.value = getCurrentTenantCode();
-  if (changedByLocation && beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
+  const beforeTenantCode = getCurrentTenantCode();
+  void resolveTenantByCurrentLocation({ silent: true }).then(async () => {
+    if (getCurrentTenantCode() === beforeTenantCode) return;
+    await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()]);
+    lastLoadedTenantCode.value = getCurrentTenantCode();
+    if (beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
+  });
 });
 
 async function handleTenantChanged() {

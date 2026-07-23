@@ -333,6 +333,15 @@ export function getCurrentRouteWithQuery() {
   return `/${page.route}${query ? `?${query}` : ""}`;
 }
 
+export function getCurrentRouteForTenant(tenantCode: string) {
+  const pages = getCurrentPages();
+  const page = pages[pages.length - 1] as any;
+  const route = page?.route ? `/${page.route}` : HOME_PAGE_URL;
+  const options = { ...(page?.options || {}), tenantCode: normalizeTenantCode(tenantCode) };
+  const query = stringifyQuery(options);
+  return `${route}${query ? `?${query}` : ""}`;
+}
+
 function routePath(url: string) {
   return String(url || "").split("?")[0] || HOME_PAGE_URL;
 }

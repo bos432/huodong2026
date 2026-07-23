@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from "vue";
+import { computed, onMounted } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import AppBottomNav from "./AppBottomNav.vue";
 import { usePageDecoration } from "../decoration";
@@ -15,6 +15,7 @@ const currentPath = computed(() => {
 });
 const { bottomNavSection, showBottomNav, loadDecoration } = usePageDecoration("home", currentPath.value);
 
+onMounted(loadDecoration);
 onShow(loadDecoration);
 </script>
 

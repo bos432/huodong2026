@@ -368,17 +368,9 @@ function formatTime(value: string) {
   if (!value) return "未设置";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  const parts = new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).formatToParts(date);
-  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value || "";
-  return `${part("year")}-${part("month")}-${part("day")} ${part("hour")}:${part("minute")}`;
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 }
 
 function goBack() {
