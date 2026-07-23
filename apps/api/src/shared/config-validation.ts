@@ -369,6 +369,10 @@ function addNumberCheck(checks: RuntimeConfigCheck[], key: string, label: string
 }
 
 function addWorkerCheck(checks: RuntimeConfigCheck[], config: ConfigService, strict: boolean) {
+  const businessWorkerEnabled = config.get("BUSINESS_JOB_WORKER_ENABLED", "true") === "true";
+  if (!businessWorkerEnabled) addCheck(checks, "BUSINESS_JOB_WORKER_ENABLED", "业务任务消费者", "warning", "业务任务消费者未启用，退款补偿、会员标签刷新和其他异步任务会持续积压。", "未启用");
+  else addNumberCheck(checks, "BUSINESS_JOB_WORKER_INTERVAL_SECONDS", "业务任务扫描间隔", Number(config.get("BUSINESS_JOB_WORKER_INTERVAL_SECONDS", 30)), 10, 3600, "秒");
+
   const enabled = config.get("ORDER_CLOSE_WORKER_ENABLED", "false") === "true";
   const interval = Number(config.get("ORDER_CLOSE_WORKER_INTERVAL_SECONDS", 300));
   if (!enabled) addCheck(checks, "ORDER_CLOSE_WORKER_ENABLED", "自动关单任务", "warning", "自动关单任务未启用，待付款订单不会自动关闭。", "未启用");

@@ -17,7 +17,7 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
   constructor(@InjectRepository(BusinessJob) private readonly jobs: Repository<BusinessJob>, private readonly dataSource: DataSource, private readonly config: ConfigService) {}
 
   onModuleInit() {
-    if (this.config.get("BUSINESS_JOB_WORKER_ENABLED", "false") !== "true") return;
+    if (this.config.get("BUSINESS_JOB_WORKER_ENABLED", "true") !== "true") return;
     const intervalSeconds = Math.max(10, Number(this.config.get("BUSINESS_JOB_WORKER_INTERVAL_SECONDS", 30)));
     const workerId = this.config.get("BUSINESS_JOB_WORKER_ID", `${process.pid}`);
     this.workerTimer = setInterval(() => this.runDue(workerId).catch((error) => this.logger.error("Business job worker scan failed", error)), intervalSeconds * 1000);

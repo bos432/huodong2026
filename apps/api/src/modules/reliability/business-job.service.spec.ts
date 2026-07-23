@@ -41,6 +41,15 @@ function pendingJob(overrides: Partial<BusinessJob> = {}) {
 }
 
 describe("BusinessJobService", () => {
+  it("starts the task worker by default when the deployment omits the flag", () => {
+    vi.useFakeTimers();
+    const { service } = createHarness();
+    service.onModuleInit();
+    expect((service as any).workerTimer).not.toBeNull();
+    service.onModuleDestroy();
+    vi.useRealTimers();
+  });
+
   it("returns the existing row for a repeated idempotency key", async () => {
     const existing = pendingJob();
     const { service, repository } = createHarness([existing]);

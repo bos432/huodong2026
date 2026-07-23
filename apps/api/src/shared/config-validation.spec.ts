@@ -31,6 +31,16 @@ describe("runtime config validation", () => {
     expect(item?.value).toBe("已关闭");
   });
 
+  it("enables the business task consumer by default and warns when explicitly disabled", () => {
+    const defaultReport = inspectRuntimeConfig(config({ NODE_ENV: "production" }));
+    expect(defaultReport.checks.find((check) => check.key === "BUSINESS_JOB_WORKER_INTERVAL_SECONDS")?.status).toBe("ok");
+
+    const disabledReport = inspectRuntimeConfig(config({ NODE_ENV: "production", BUSINESS_JOB_WORKER_ENABLED: "false" }));
+    const disabled = disabledReport.checks.find((check) => check.key === "BUSINESS_JOB_WORKER_ENABLED");
+    expect(disabled?.status).toBe("warning");
+    expect(disabled?.resolution).toBe("before_launch");
+  });
+
   it("marks database synchronize as an error when enabled in production", () => {
     const report = inspectRuntimeConfig(config({ NODE_ENV: "production", DB_SYNCHRONIZE: "true" }));
     const item = report.checks.find((check) => check.key === "DB_SYNCHRONIZE");
