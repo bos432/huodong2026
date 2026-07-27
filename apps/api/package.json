@@ -28,8 +28,10 @@
     "bcryptjs": "^2.4.3",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
+    "brace-expansion": "5.0.8",
     "dotenv": "16.4.5",
     "exceljs": "^4.4.0",
+    "glob": "13.0.6",
     "mysql2": "^3.11.5",
     "nodemailer": "^9.0.3",
     "passport": "^0.7.0",
@@ -38,7 +40,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "tencentcloud-sdk-nodejs": "^4.1.260",
-    "typeorm": "^0.3.31",
+    "typeorm": "0.3.31",
     "uuid": "^11.1.1"
   },
   "devDependencies": {
@@ -57,7 +59,15 @@
   },
   "overrides": {
     "exceljs": {
-      "uuid": "11.1.1"
+      "uuid": "11.1.1",
+      "archiver": "8.0.0",
+      "unzipper": "0.12.3"
+    },
+    "typeorm": {
+      "glob": "$glob"
+    },
+    "minimatch@10.2.5": {
+      "brace-expansion": "$brace-expansion"
     },
     "tencentcloud-sdk-nodejs": {
       "uuid": "11.1.1"
