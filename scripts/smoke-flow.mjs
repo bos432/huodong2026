@@ -32,6 +32,12 @@ function assert(condition, message) {
   if (!condition) throw new Error(message);
 }
 
+function listItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.items)) return payload.items;
+  throw new Error("List API returned an invalid payload");
+}
+
 function auth(token) {
   return { Authorization: `Bearer ${token}` };
 }
@@ -110,7 +116,7 @@ async function closeActivity(token, id) {
 }
 
 async function assertOperationLog(token, action, targetId, message) {
-  const logs = await api("/admin/operation-logs", { headers: auth(token) });
+  const logs = listItems(await api(`/admin/operation-logs?action=${encodeURIComponent(action)}&page=1&pageSize=100`, { headers: auth(token) }));
   assert(logs.some((item) => item.action === action && item.targetId === String(targetId)), message);
 }
 
@@ -164,7 +170,7 @@ async function runPaidFlow(token) {
   await api(`/admin/users/${user.id}/wallet/adjust`, {
     method: "POST",
     headers: auth(token),
-    body: JSON.stringify({ amount: 120, type: "recharge", remark: "flow smoke balance top-up" })
+    body: JSON.stringify({ amount: 120, type: "recharge", idempotencyKey: `smoke-flow-wallet-${now}`, remark: "flow smoke balance top-up" })
   });
   await assertOperationLog(token, "wallet.recharge", user.id, "Wallet recharge should be audited");
   const registrationResult = await api(`/public/activities/${activity.id}/register`, {
@@ -220,15 +226,14 @@ async function runWaitlistAndTagFlow(token) {
 
   const tag = await api("/admin/tags", { method: "POST", headers: auth(token), body: JSON.stringify({ userId: secondUser.id, name: "候补", color: "info", remark: "烟测候补用户" }) });
   assert(tag.id, "User tag should be created");
-  const tags = await api(`/admin/tags?userId=${secondUser.id}`, { headers: auth(token) });
+  const tags = listItems(await api(`/admin/tags?userId=${secondUser.id}`, { headers: auth(token) }));
   assert(tags.some((item) => item.name === "候补"), "User tag list should contain waitlist tag");
 
   await api(`/admin/registrations/${first.registration.id}/cancel`, { method: "POST", headers: auth(token), body: JSON.stringify({ reason: "烟测释放名额" }) });
-  const waitlists = await api(`/admin/waitlists?activityId=${activity.id}&status=waiting`, { headers: auth(token) });
-  assert(waitlists.length >= 1, "Waiting list should be queryable");
-  const promoted = await api(`/admin/waitlists/${waitlists[0].id}/promote`, { method: "POST", headers: auth(token), body: JSON.stringify({}) });
-  assert(promoted.status === "promoted", "Waitlist should be promoted");
-  await assertOperationLog(token, "waitlist.promote", waitlists[0].id, "Waitlist promotion should be audited");
+  const promotedWaitlists = listItems(await api(`/admin/waitlists?activityId=${activity.id}&status=promoted`, { headers: auth(token) }));
+  const promoted = promotedWaitlists.find((item) => item.id === waitlisted.waitlist.id);
+  assert(promoted?.status === "promoted", "First waiting user should be promoted automatically after a seat is released");
+  await assertOperationLog(token, "waitlist.promote", waitlisted.waitlist.id, "Waitlist promotion should be audited");
 
   const thirdUser = await createUser("06");
   const cancelledWaitlist = await api(`/public/activities/${activity.id}/register`, { method: "POST", headers: thirdUser.headers, body: JSON.stringify({ answers: answers(activity.fields, "取消候补") }) });
@@ -236,7 +241,7 @@ async function runWaitlistAndTagFlow(token) {
   await api(`/admin/waitlists/${cancelledWaitlist.waitlist.id}/cancel`, { method: "POST", headers: auth(token), body: JSON.stringify({ remark: "烟测取消候补" }) });
   await assertOperationLog(token, "waitlist.cancel", cancelledWaitlist.waitlist.id, "Waitlist cancellation should be audited");
   await closeActivity(token, activity.id);
-  console.log("OK waitlist and tags: full activity -> waitlist -> tag -> promote -> cancel");
+  console.log("OK waitlist and tags: full activity -> waitlist -> tag -> auto promote -> cancel");
 }
 
 async function main() {
