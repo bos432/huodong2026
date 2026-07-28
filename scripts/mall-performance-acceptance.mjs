@@ -10,6 +10,9 @@ const mysql = require("mysql2/promise");
 const API_BASE = (process.env.API_BASE || "http://127.0.0.1:18080/api").replace(/\/$/, "");
 const TENANT_CODE = process.env.PERF_TENANT_CODE || "qiwai-showcase";
 const USER_PASSWORD = process.env.PERF_USER_PASSWORD || "Qiwai123456";
+const ENABLE_MALL_GATE = process.env.PERF_ENABLE_MALL_GATE === "true";
+const PLATFORM_ADMIN_USERNAME = process.env.PERF_PLATFORM_ADMIN_USERNAME || "admin";
+const PLATFORM_ADMIN_PASSWORD = process.env.PERF_PLATFORM_ADMIN_PASSWORD || "Admin123456";
 const SINGLE_ORDERS = numberEnv("PERF_MALL_SINGLE_ORDERS", 100);
 const CROSS_GROUPS = numberEnv("PERF_MALL_CROSS_GROUPS", 50);
 const runId = Date.now();
@@ -72,6 +75,53 @@ async function jsonApi(pathname, options = {}) {
     throw error;
   }
   return body.data;
+}
+
+function operationPayload(setting) {
+  return {
+    registrationEnabled: Boolean(setting.registrationEnabled),
+    registrationDisabledMessage: setting.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
+    offlinePaymentInstructions: setting.offlinePaymentInstructions || "请联系运营人员确认线下付款方式。",
+    paymentMethods: setting.paymentMethods || { free: true, wechat: false, alipay: false, balance: true, offline: true },
+    customerServiceName: setting.customerServiceName || "",
+    customerServicePhone: setting.customerServicePhone || "",
+    customerServiceWechat: setting.customerServiceWechat || "",
+    defaultGroupQrCodeUrl: setting.defaultGroupQrCodeUrl || "",
+    pageTheme: setting.pageTheme || {},
+    refundInstructions: setting.refundInstructions || "请联系运营人员申请退款。",
+    invoiceInstructions: setting.invoiceInstructions || "",
+    userAgreementUrl: setting.userAgreementUrl || "",
+    privacyPolicyUrl: setting.privacyPolicyUrl || "",
+    merchantAgreementUrl: setting.merchantAgreementUrl || "",
+    smsProviderEnabled: Boolean(setting.smsProviderEnabled),
+    smsProvider: setting.smsProvider || "",
+    smsAccessKeyId: setting.smsAccessKeyId || "",
+    smsAccessKeySecret: setting.smsAccessKeySecret || "",
+    smsSignName: setting.smsSignName || "",
+    smsTemplateId: setting.smsTemplateId || "",
+    smsSdkAppId: setting.smsSdkAppId || "",
+    defaultTenantCode: setting.defaultTenantCode || "",
+    launchConfig: structuredClone(setting.launchConfig || {})
+  };
+}
+
+async function enableMallGateForAcceptance() {
+  const publicSetting = await jsonApi(`/public/settings/operation?tenantCode=${encodeURIComponent(TENANT_CODE)}`);
+  if (publicSetting?.launchConfig?.featureGates?.mall !== false) return null;
+  if (!ENABLE_MALL_GATE) {
+    throw new Error("商城功能开关未开启。仅限本地验收时使用 PERF_ENABLE_MALL_GATE=true 临时开启，脚本会在结束后恢复原配置。");
+  }
+  const login = await jsonApi("/admin/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ username: PLATFORM_ADMIN_USERNAME, password: PLATFORM_ADMIN_PASSWORD })
+  });
+  const headers = { Authorization: `Bearer ${login.token}` };
+  const setting = await jsonApi("/admin/settings/operation", { headers });
+  const originalPayload = operationPayload(setting);
+  const enabledPayload = structuredClone(originalPayload);
+  enabledPayload.launchConfig.featureGates = { ...(enabledPayload.launchConfig.featureGates || {}), mall: true };
+  await jsonApi("/admin/settings/operation", { method: "POST", headers, body: JSON.stringify(enabledPayload) });
+  return { headers, originalPayload };
 }
 
 async function measureAll(items, action) {
@@ -186,8 +236,10 @@ async function inventory(connection, skuIds) {
 const resultDirectory = path.resolve(`.local-logs/mall-performance-acceptance-${runId}`);
 const resultFile = path.join(resultDirectory, "result.json");
 let connection;
+let operationRestore;
 
 try {
+  operationRestore = await enableMallGateForAcceptance();
   connection = await mysql.createConnection({
     host: process.env.PERF_DB_HOST || "127.0.0.1",
     port: numberEnv("PERF_DB_PORT", 13306),
@@ -310,5 +362,9 @@ try {
   console.log(JSON.stringify({ ...evidence, retained: { phoneRange: evidence.retained.phoneRange, singleOrders: singleOrderIds.length, crossGroups: crossGroupIds.length, crossOrders: crossOrderIds.length }, resultFile }, null, 2));
   assert(evidence.passed, `mall performance acceptance failed: ${failures.join("; ")}`);
 } finally {
-  if (connection) await connection.end();
+  try {
+    if (operationRestore) await jsonApi("/admin/settings/operation", { method: "POST", headers: operationRestore.headers, body: JSON.stringify(operationRestore.originalPayload) });
+  } finally {
+    if (connection) await connection.end();
+  }
 }
