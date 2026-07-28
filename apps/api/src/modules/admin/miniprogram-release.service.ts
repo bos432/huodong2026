@@ -1,6 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
+import { spawn } from "child_process";
 import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { isAbsolute, join, resolve } from "path";
 import { Repository } from "typeorm";
@@ -58,8 +59,10 @@ export class MiniprogramReleaseService {
       const version = this.releaseVersion(setting, dto);
       const desc = this.releaseDescription(setting, dto);
       const privateKeyPath = this.privateKeyFile(setting);
+      const build = await this.buildProject();
       const projectPath = this.projectPath(setting);
       const projectCheck = this.prepareProjectFiles(projectPath, setting);
+      const artifactVersion = this.artifactVersion(projectPath);
       const project = new ci.Project({ appid: setting.appId, type: "miniProgram", projectPath, privateKeyPath, ignores: ["node_modules/**/*"] });
       const result = await ci.upload({ project, version, desc, setting: { es6: true, minify: true } });
       const preview = await ci.preview({ project, version, desc, qrcodeFormat: "image", qrcodeOutputDest: this.qrCodePath() });
@@ -67,7 +70,7 @@ export class MiniprogramReleaseService {
         version,
         description: desc,
         qrCodeUrl: this.qrCodeUrl(),
-        detail: { upload: this.safePayload(result), preview: this.safePayload(preview), projectPath, projectCheck }
+        detail: { build, artifactVersion, upload: this.safePayload(result), preview: this.safePayload(preview), projectPath, projectCheck }
       };
     });
   }
@@ -216,6 +219,54 @@ export class MiniprogramReleaseService {
       appMiniappJson: this.ensureMiniappAuthConfig(projectPath, identityServiceEnabled),
       projectConfig: this.ensureProjectConfigAppId(projectPath, setting.appId)
     };
+  }
+
+  private async buildProject() {
+    const root = this.projectRoot();
+    const script = join(root, "scripts", "build-mp-weixin.mjs");
+    if (!existsSync(script)) throw new BadRequestException(`小程序构建脚本不存在：${script}`);
+    return new Promise<Record<string, unknown>>((resolveBuild, rejectBuild) => {
+      const child = spawn(process.execPath, [script], { cwd: root, env: process.env, windowsHide: true, stdio: ["ignore", "pipe", "pipe"] });
+      let stdout = "";
+      let stderr = "";
+      let settled = false;
+      const append = (current: string, chunk: Buffer) => `${current}${chunk.toString("utf8")}`.slice(-10 * 1024 * 1024);
+      child.stdout.on("data", (chunk: Buffer) => { stdout = append(stdout, chunk); });
+      child.stderr.on("data", (chunk: Buffer) => { stderr = append(stderr, chunk); });
+      const timeout = setTimeout(() => {
+        if (settled) return;
+        settled = true;
+        child.kill();
+        rejectBuild(new BadRequestException("小程序构建超时，请检查服务器资源后重试"));
+      }, 5 * 60 * 1000);
+      child.on("error", (error) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        rejectBuild(new BadRequestException(`小程序构建失败：${error.message}`));
+      });
+      child.on("close", (code) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timeout);
+        if (code !== 0) {
+          const detail = String(stderr || stdout || "构建命令执行失败").trim().slice(-2000);
+          rejectBuild(new BadRequestException(`小程序构建失败：${detail}`));
+          return;
+        }
+        resolveBuild({
+          node: process.version,
+          commit: String(process.env.BUILD_COMMIT || "").trim() || null,
+          output: stdout.trim().slice(-2000) || null
+        });
+      });
+    });
+  }
+
+  private artifactVersion(projectPath: string) {
+    const file = join(projectPath, "version.json");
+    if (!existsSync(file)) throw new BadRequestException(`小程序构建版本文件不存在：${file}`);
+    return this.readJsonFile(file, "小程序构建版本文件");
   }
 
   private identityServiceEnabled() {

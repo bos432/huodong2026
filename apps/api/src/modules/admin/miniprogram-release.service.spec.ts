@@ -5,6 +5,18 @@ import { join } from "path";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
 describe("MiniprogramReleaseService", () => {
+  it("builds and versions the current mini program source before every upload", () => {
+    const serviceSource = readFileSync("src/modules/admin/miniprogram-release.service.ts", "utf8");
+    const buildScript = readFileSync("../../scripts/build-mp-weixin.mjs", "utf8");
+    const uploadSection = serviceSource.slice(serviceSource.indexOf("async uploadTrial"), serviceSource.indexOf("async submitAudit"));
+
+    expect(uploadSection.indexOf("await this.buildProject()")).toBeLessThan(uploadSection.indexOf("this.projectPath(setting)"));
+    expect(uploadSection).toContain("const artifactVersion = this.artifactVersion(projectPath)");
+    expect(uploadSection).toContain("detail: { build, artifactVersion,");
+    expect(serviceSource).toContain("spawn(process.execPath, [script]");
+    expect(buildScript).toContain('"apps/mobile/dist/build/mp-weixin", "mp-weixin"');
+  });
+
   it("bounds log limits and removes sensitive diagnostic fields", async () => {
     const logs = {
       find: vi.fn().mockResolvedValue([

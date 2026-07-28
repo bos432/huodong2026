@@ -36,12 +36,15 @@ function compatibleNode() {
   throw new Error(`Node ${process.version} is not supported by the uni-app mp-weixin build. Use Node 22/24 or set CODEX_MP_WEIXIN_NODE_DIR.`);
 }
 
+let buildNode = process.execPath;
 if (process.platform === "win32" && nodeMajor >= 25) {
-  const node = compatibleNode();
+  buildNode = compatibleNode();
   const uni = path.join(root, "apps", "mobile", "node_modules", "@dcloudio", "vite-plugin-uni", "bin", "uni.js");
-  run(node, [uni, "build", "-p", "mp-weixin"], { cwd: path.join(root, "apps", "mobile") });
-  run(node, [path.join(root, "scripts", "patch-mobile-mp-weixin-auth.mjs")]);
+  run(buildNode, [uni, "build", "-p", "mp-weixin"], { cwd: path.join(root, "apps", "mobile") });
+  run(buildNode, [path.join(root, "scripts", "patch-mobile-mp-weixin-auth.mjs")]);
 } else {
   const npm = process.platform === "win32" ? "npm.cmd" : "npm";
   run(npm, ["--prefix", "apps/mobile", "run", "build:mp-weixin"], { shell: process.platform === "win32" });
 }
+
+run(buildNode, [path.join(root, "scripts", "write-static-version.mjs"), "apps/mobile/dist/build/mp-weixin", "mp-weixin"]);

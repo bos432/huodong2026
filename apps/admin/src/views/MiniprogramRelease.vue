@@ -61,7 +61,7 @@ const readiness = computed(() => [
   { label: "AppSecret", ok: Boolean(form.appSecret || setting.value?.hasAppSecret), hint: "保留配置；普通小程序提审不通过此处调用。" },
   { label: "CI 私钥", ok: Boolean(form.privateKey || setting.value?.hasPrivateKey), hint: "微信公众平台下载代码上传密钥，并配置服务器 IP 白名单。" },
   { label: "版本号", ok: Boolean(form.version), hint: "上传体验版必须填写，例如 1.0.1。" },
-  { label: "构建目录", ok: Boolean(form.projectPath), hint: "默认读取 apps/mobile/dist/build/mp-weixin，发布前先构建小程序。" }
+  { label: "构建目录", ok: Boolean(form.projectPath), hint: "上传体验版时会先自动构建，再读取该目录。" }
 ]);
 
 const acceptanceChecklist = [
@@ -81,7 +81,7 @@ const releaseStages = computed(() => [
     label: "1. 上传体验版",
     status: latestUploadLog.value?.status || "pending",
     time: latestUploadLog.value?.createdAt,
-    detail: latestUploadLog.value?.version ? `版本 ${latestUploadLog.value.version}` : "先在服务器构建 mp-weixin，再上传体验版"
+    detail: latestUploadLog.value?.version ? `版本 ${latestUploadLog.value.version}` : "上传时自动构建并校验 mp-weixin"
   },
   {
     key: "submit_audit",
@@ -228,7 +228,7 @@ async function runAction(action: "upload") {
   if (!canManage.value || pageBusy.value) return;
   if (!form.version.trim()) return ElMessage.error("请先填写版本号并保存配置");
   const confirmed = await ElMessageBox.confirm(
-    "确认上传体验版？上传前请确保服务器已执行小程序构建。",
+    "确认上传体验版？系统会先构建最新小程序代码，成功后再上传。",
     "小程序发布管理",
     { type: "info" }
   ).then(() => true).catch(() => false);
@@ -291,7 +291,7 @@ onMounted(load);
       :closable="false"
       show-icon
       title="上线前准备"
-      description="需要在微信公众平台下载代码上传密钥，并把服务器出口 IP 加入小程序代码上传 IP 白名单。上传体验版前，请先在服务器构建 mp-weixin；普通小程序需到微信公众平台手动提审和发布。"
+      description="需要在微信公众平台下载代码上传密钥，并把服务器出口 IP 加入小程序代码上传 IP 白名单。上传体验版时系统会自动构建最新代码；普通小程序需到微信公众平台手动提审和发布。"
     />
 
     <div class="stage-grid">
