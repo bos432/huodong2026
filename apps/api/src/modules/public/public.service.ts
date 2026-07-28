@@ -2232,6 +2232,8 @@ export class PublicService {
   private async assertOrderTenantAccess(order: Order, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     this.assertOrderTenantEnabled(order);
+    // Platform orders remain accessible to their owner after the client selects a tenant.
+    if (!order.tenant?.id) return;
     assertTenantOwnedResourceAccess(order, tenant, "Order not found");
   }
 
@@ -2259,7 +2261,9 @@ export class PublicService {
       .andWhere("(registration.tenantId IS NULL OR tenant.enabled = :tenantEnabled)", { tenantEnabled: true })
       .andWhere("(activity.tenantId IS NULL OR activityTenant.enabled = :activityTenantEnabled)", { activityTenantEnabled: true })
       .orderBy("registration.createdAt", "DESC");
-    if (tenant) builder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId: tenant.id });
+    if (tenant) {
+      builder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId OR (registration.tenantId IS NULL AND activity.tenantId IS NULL))", { tenantId: tenant.id });
+    }
     const rows = await builder.getMany();
     if (!rows.length) return [];
     const orders = await this.orders.find({ where: rows.map((registration) => ({ registration: { id: registration.id } })) });
@@ -2498,7 +2502,9 @@ export class PublicService {
     const tenant = await this.resolveTenantContext(context);
     if (registration.tenant && !registration.tenant.enabled) throw new NotFoundException("Registration not found");
     if (registration.activity?.tenant && !registration.activity.tenant.enabled) throw new NotFoundException("Registration not found");
-    if (tenant && registration.tenant?.id !== tenant.id && registration.activity?.tenant?.id !== tenant.id) throw new NotFoundException("Registration not found");
+    const platformRegistration = !registration.tenant?.id && !registration.activity?.tenant?.id;
+    if (tenant && !platformRegistration && registration.tenant?.id !== tenant.id && registration.activity?.tenant?.id !== tenant.id) throw new NotFoundException("Registration not found");
+    if (platformRegistration) return null;
     return tenant || registration.tenant || registration.activity?.tenant || null;
   }
 

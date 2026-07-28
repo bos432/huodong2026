@@ -62,4 +62,12 @@ describe("member tenant context and login recovery", () => {
     expect(service).toContain('profile.growthValue = Number(growthSum?.sum || 0)');
     expect(service).toContain('andWhere("(:growthCycle IS NULL OR p.createdAt >= :growthCycle)"');
   });
+
+  it("keeps platform activity orders available without exposing another tenant's orders", () => {
+    expect(service).toContain('registration.tenantId = :tenantId OR activity.tenantId = :tenantId OR (registration.tenantId IS NULL AND activity.tenantId IS NULL)');
+    expect(service).toContain("const platformRegistration = !registration.tenant?.id && !registration.activity?.tenant?.id");
+    expect(service).toContain("if (tenant && !platformRegistration && registration.tenant?.id !== tenant.id && registration.activity?.tenant?.id !== tenant.id)");
+    expect(service).toContain("if (platformRegistration) return null;");
+    expect(service).toContain("if (!order.tenant?.id) return;");
+  });
 });
