@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -40,23 +40,40 @@ function adaptWxLogin() {
   return String(process.env.WECHAT_MINIAPP_ADAPT_WX_LOGIN || "false").toLowerCase() === "true";
 }
 
+function identityServiceEnabled() {
+  return String(process.env.WECHAT_MINIAPP_IDENTITY_SERVICE_ENABLED || "false").toLowerCase() === "true";
+}
+
 if (!existsSync(appJsonPath)) {
   throw new Error(`mp-weixin app.json not found: ${appJsonPath}. Run npm --prefix apps/mobile run build:mp-weixin first.`);
 }
 
 const appJsonBefore = readJson(appJsonPath);
 const appJson = structuredClone(appJsonBefore);
-objectValue(appJson, "miniApp").useAuthorizePage = true;
-writeJsonIfChanged(appJsonPath, appJsonBefore, appJson);
+const enabled = identityServiceEnabled();
 
-const appMiniappBefore = existsSync(appMiniappPath) ? readJson(appMiniappPath) : undefined;
-const appMiniapp = structuredClone(appMiniappBefore || {});
-const identity = objectValue(appMiniapp, "identityServiceConfig");
-identity.authorizeMiniprogramType = authorizeType();
-identity.miniprogramLoginPath = String(process.env.WECHAT_MINIAPP_LOGIN_PATH || "__default__");
-identity.adaptWxLogin = adaptWxLogin();
-writeJsonIfChanged(appMiniappPath, appMiniappBefore, appMiniapp);
+if (!enabled) {
+  const miniApp = appJson.miniApp;
+  if (miniApp && typeof miniApp === "object" && !Array.isArray(miniApp)) {
+    delete miniApp.useAuthorizePage;
+    if (Object.keys(miniApp).length === 0) delete appJson.miniApp;
+  }
+  writeJsonIfChanged(appJsonPath, appJsonBefore, appJson);
+  if (existsSync(appMiniappPath)) unlinkSync(appMiniappPath);
+  console.log("Prepared mp-weixin for standard wx.login mode (identity service disabled).");
+} else {
+  objectValue(appJson, "miniApp").useAuthorizePage = true;
+  writeJsonIfChanged(appJsonPath, appJsonBefore, appJson);
 
-console.log("Patched mp-weixin auth config:");
-console.log(`- ${appJsonPath}: miniApp.useAuthorizePage=true`);
-console.log(`- ${appMiniappPath}: authorizeMiniprogramType=${identity.authorizeMiniprogramType}, adaptWxLogin=${identity.adaptWxLogin}`);
+  const appMiniappBefore = existsSync(appMiniappPath) ? readJson(appMiniappPath) : undefined;
+  const appMiniapp = structuredClone(appMiniappBefore || {});
+  const identity = objectValue(appMiniapp, "identityServiceConfig");
+  identity.authorizeMiniprogramType = authorizeType();
+  identity.miniprogramLoginPath = String(process.env.WECHAT_MINIAPP_LOGIN_PATH || "__default__");
+  identity.adaptWxLogin = adaptWxLogin();
+  writeJsonIfChanged(appMiniappPath, appMiniappBefore, appMiniapp);
+
+  console.log("Patched mp-weixin identity service config:");
+  console.log(`- ${appJsonPath}: miniApp.useAuthorizePage=true`);
+  console.log(`- ${appMiniappPath}: authorizeMiniprogramType=${identity.authorizeMiniprogramType}, adaptWxLogin=${identity.adaptWxLogin}`);
+}

@@ -1,7 +1,7 @@
 import { BadRequestException, Injectable } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "fs";
+import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "fs";
 import { isAbsolute, join, resolve } from "path";
 import { Repository } from "typeorm";
 import { MiniprogramReleaseLog } from "../../entities/miniprogram-release-log.entity";
@@ -209,39 +209,55 @@ export class MiniprogramReleaseService {
   }
 
   private prepareProjectFiles(projectPath: string, setting: MiniprogramReleaseSetting) {
+    const identityServiceEnabled = this.identityServiceEnabled();
     return {
-      appJson: this.ensureSafeAppJson(projectPath),
+      appJson: this.ensureSafeAppJson(projectPath, identityServiceEnabled),
       appWxss: this.ensureSafeAppWxss(projectPath),
-      appMiniappJson: this.ensureMiniappAuthConfig(projectPath),
+      appMiniappJson: this.ensureMiniappAuthConfig(projectPath, identityServiceEnabled),
       projectConfig: this.ensureProjectConfigAppId(projectPath, setting.appId)
     };
   }
 
-  private ensureSafeAppJson(projectPath: string) {
+  private identityServiceEnabled() {
+    const value = this.config.get<string | boolean>("WECHAT_MINIAPP_IDENTITY_SERVICE_ENABLED", false);
+    return value === true || String(value).toLowerCase() === "true";
+  }
+
+  private ensureSafeAppJson(projectPath: string, identityServiceEnabled: boolean) {
     const file = join(projectPath, "app.json");
     if (!existsSync(file)) throw new BadRequestException(`小程序 app.json 不存在：${file}`);
     const json = this.readJsonFile(file, "小程序 app.json");
     const permission = this.objectValue(json, "permission");
     const userLocation = this.objectValue(permission, "scope.userLocation");
     const before = typeof userLocation.desc === "string" ? userLocation.desc : "";
-    const miniApp = this.objectValue(json, "miniApp");
-    const hadAuthorizePage = miniApp.useAuthorizePage === true;
     let fixed = false;
     if (before && before.length > 30) {
       userLocation.desc = SAFE_USER_LOCATION_DESC;
       fixed = true;
     }
-    if (!hadAuthorizePage) {
-      miniApp.useAuthorizePage = true;
+    const miniApp = json.miniApp && typeof json.miniApp === "object" && !Array.isArray(json.miniApp) ? json.miniApp : undefined;
+    if (identityServiceEnabled) {
+      const target = miniApp || this.objectValue(json, "miniApp");
+      if (target.useAuthorizePage !== true) {
+        target.useAuthorizePage = true;
+        fixed = true;
+      }
+    } else if (miniApp && "useAuthorizePage" in miniApp) {
+      delete miniApp.useAuthorizePage;
+      if (Object.keys(miniApp).length === 0) delete json.miniApp;
       fixed = true;
     }
     if (fixed) writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
-    return { path: file, userLocationDesc: userLocation.desc || before, fixed, previousLength: before.length, useAuthorizePage: true };
+    return { path: file, userLocationDesc: userLocation.desc || before, fixed, previousLength: before.length, useAuthorizePage: identityServiceEnabled };
   }
 
-  private ensureMiniappAuthConfig(projectPath: string) {
+  private ensureMiniappAuthConfig(projectPath: string, identityServiceEnabled: boolean) {
     const file = join(projectPath, "app.miniapp.json");
     const exists = existsSync(file);
+    if (!identityServiceEnabled) {
+      if (exists) unlinkSync(file);
+      return { path: file, exists, fixed: exists, enabled: false };
+    }
     const json = exists ? this.readJsonFile(file, "小程序 app.miniapp.json") : {};
     const identity = this.objectValue(json, "identityServiceConfig");
     const previous = { ...identity };
@@ -251,7 +267,7 @@ export class MiniprogramReleaseService {
     identity.adaptWxLogin = typeof identity.adaptWxLogin === "boolean" ? identity.adaptWxLogin : false;
     const changed = JSON.stringify(previous) !== JSON.stringify(identity) || !exists;
     if (changed) writeFileSync(file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
-    return { path: file, exists, fixed: changed, identityServiceConfig: identity };
+    return { path: file, exists, fixed: changed, enabled: true, identityServiceConfig: identity };
   }
 
   private ensureSafeAppWxss(projectPath: string) {
