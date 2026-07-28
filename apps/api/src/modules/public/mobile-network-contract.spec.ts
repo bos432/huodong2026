@@ -41,8 +41,11 @@ describe("mobile production network contract", () => {
 
     expect(home).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()])");
     expect(home).toContain("void resolveTenantByCurrentLocation({ silent: true }).then");
-    expect(tabBar).toContain("onMounted(loadDecoration)");
-    expect(tabBar).toContain("onShow(loadDecoration)");
+    expect(tabBar).toContain('import { applyTenantBootstrapDefault } from "../api"');
+    expect(tabBar).toContain("await applyTenantBootstrapDefault()");
+    expect(tabBar).toContain("if (serial !== refreshSerial) return");
+    expect(tabBar).toContain("onMounted(() => void refreshBottomNav())");
+    expect(tabBar).toContain("onShow(() => void refreshBottomNav())");
     expect(api).toContain("export function getCurrentRouteForTenant");
     expect(api).toContain("tenantCode: normalizeTenantCode(tenantCode)");
     expect(tenantSwitcher).toContain("const nextRoute = getCurrentRouteForTenant(item.code)");

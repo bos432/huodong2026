@@ -2,6 +2,7 @@
 import { computed, onMounted } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import AppBottomNav from "./AppBottomNav.vue";
+import { applyTenantBootstrapDefault } from "../api";
 import { usePageDecoration } from "../decoration";
 
 const props = defineProps<{ current: string }>();
@@ -14,9 +15,17 @@ const currentPath = computed(() => {
   return "/pages/index/index";
 });
 const { bottomNavSection, showBottomNav, loadDecoration } = usePageDecoration("home", currentPath.value);
+let refreshSerial = 0;
 
-onMounted(loadDecoration);
-onShow(loadDecoration);
+async function refreshBottomNav() {
+  const serial = ++refreshSerial;
+  await applyTenantBootstrapDefault();
+  if (serial !== refreshSerial) return;
+  await loadDecoration();
+}
+
+onMounted(() => void refreshBottomNav());
+onShow(() => void refreshBottomNav());
 </script>
 
 <template>
