@@ -106,6 +106,7 @@ import { validateRegistrationEligibility } from "./registration-eligibility";
 import { growthFromPointLog, levelExpiry, manualLevelOverrideActive, memberLevelScopeKey, memberLevelSnapshot, resolveGrowthLevel } from "../../shared/member-level-engine";
 import { checkInNonce, createCheckInTicket } from "../../shared/check-in-ticket";
 import { analyticsDateText } from "../../shared/analytics-metrics";
+import { buildMemberOrderOverview } from "./member-order-overview";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null; userId?: number | null };
 type PublicTrackingContext = { channelCode?: string | null; source?: string | null; inviteCode?: string | null; clientIp?: string | null; userAgent?: string | null };
@@ -601,6 +602,19 @@ export class PublicService {
 
   async myCourses(user: User, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
+    return this.myCoursesForTenant(user, tenant);
+  }
+
+  async myOrdersOverview(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    return buildMemberOrderOverview(user, tenant, {
+      registrations: (userId, scopedTenant) => this.myRegistrationsForTenant(userId, scopedTenant),
+      courses: (scopedUser, scopedTenant) => this.myCoursesForTenant(scopedUser, scopedTenant),
+      courseOrders: (scopedUser, scopedTenant) => this.myCourseOrdersForTenant(scopedUser, scopedTenant)
+    });
+  }
+
+  private async myCoursesForTenant(user: User, tenant: Tenant | null) {
     const rows = await this.userLearning.find({ where: { userId: user.id, lessonId: 0 }, order: { updatedAt: "DESC" } });
     if (!rows.length) return [];
     const courseIds = rows.map((row) => row.courseId);
@@ -2231,6 +2245,10 @@ export class PublicService {
 
   async myRegistrations(userId: number, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
+    return this.myRegistrationsForTenant(userId, tenant);
+  }
+
+  private async myRegistrationsForTenant(userId: number, tenant: Tenant | null) {
     const builder = this.registrations
       .createQueryBuilder("registration")
       .leftJoinAndSelect("registration.activity", "activity")
@@ -2271,6 +2289,10 @@ export class PublicService {
 
   async myCourseOrders(user: User, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
+    return this.myCourseOrdersForTenant(user, tenant);
+  }
+
+  private async myCourseOrdersForTenant(user: User, tenant: Tenant | null) {
     const orders = await this.courseOrders.find({
       where: { user: { id: user.id } },
       order: { createdAt: "DESC" },

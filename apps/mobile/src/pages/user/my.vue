@@ -199,7 +199,7 @@ import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { featureGatesState, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
-import { writeMemberOrderSnapshot } from "../../member-order-cache";
+import { loadMemberOrderOverview, type MemberOrderSession } from "../../member-order-overview";
 import TabBar from "../../components/TabBar.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import MarketingPopup from "../../components/MarketingPopup.vue";
@@ -287,9 +287,7 @@ const completedOrderCount = computed(() => ["registrations", "courses", "courseO
     + courseOrders.value.filter(courseOrderIsCompleted).length
     + learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) >= 100).length);
 
-type MemberSession = { tenantCode: string; userId: number; userToken: string };
-
-function memberSession(): MemberSession {
+function memberSession(): MemberOrderSession {
   return { tenantCode: getCurrentTenantCode(), userId: getUserId(), userToken: getUserToken() };
 }
 
@@ -297,7 +295,7 @@ function sessionKey(session = memberSession()) {
   return `${session.tenantCode}:${session.userId || "guest"}:${session.userToken || "anonymous"}`;
 }
 
-function isCurrentSession(session: MemberSession) {
+function isCurrentSession(session: MemberOrderSession) {
   return getCurrentTenantCode() === session.tenantCode && getUserId() === session.userId && getUserToken() === session.userToken;
 }
 
@@ -363,9 +361,7 @@ async function loadProfile() {
       request<any>("/public/me/wallet"),
       gates.charity ? request<any>("/public/me/charity") : Promise.resolve(null),
       request<any>("/public/me/admin-access"),
-      gates.courses ? request<any[]>("/public/me/courses") : Promise.resolve([]),
-      request<any[]>("/public/me/registrations"),
-      gates.courses ? request<any[]>("/public/me/course-orders") : Promise.resolve([]),
+      loadMemberOrderOverview(requestedSession),
       gates.mall ? request<any[]>("/public/me/mall/orders") : Promise.resolve([])
     ]);
     if (!isCurrentLoad()) return;
@@ -388,25 +384,22 @@ async function loadProfile() {
     applyResult<any>(1, "wallet", "钱包", isObject, (value) => { wallet.value = value; }, () => { wallet.value = null; });
     if (gates.charity) applyResult<any>(2, "charity", "公益贡献", isObject, (value) => { charity.value = value; }, () => { charity.value = null; });
     applyResult<any>(3, "adminAccess", "管理权限", isObject, (value) => { adminAccess.value = value; }, () => { adminAccess.value = { canAccess: false }; });
-    if (gates.courses) applyResult<any[]>(4, "courses", "学习记录", Array.isArray, (value) => { courses.value = value; }, () => { courses.value = []; });
-    applyResult<any[]>(5, "registrations", "活动报名", Array.isArray, (value) => { registrations.value = value; }, () => { registrations.value = []; });
-    if (gates.courses) applyResult<any[]>(6, "courseOrders", "课程订单", Array.isArray, (value) => { courseOrders.value = value; }, () => { courseOrders.value = []; });
-    if (gates.mall) applyResult<any[]>(7, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
+    const orderOverviewResult = results[4];
+    if (orderOverviewResult.status === "fulfilled") {
+      registrations.value = orderOverviewResult.value.registrations;
+      courses.value = gates.courses ? orderOverviewResult.value.courses : [];
+      courseOrders.value = gates.courses ? orderOverviewResult.value.courseOrders : [];
+    } else {
+      registrations.value = [];
+      courses.value = [];
+      courseOrders.value = [];
+      failures.push("registrations", "courses", "courseOrders");
+      failedLabels.push("报名与订单");
+    }
+    if (gates.mall) applyResult<any[]>(5, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
     assetFailures.value = failures;
     assetWarning.value = failedLabels.length ? `部分会员资产同步失败：${failedLabels.join("、")}。对应数值暂不作为真实数据展示。` : "";
     loadedContextKey.value = sessionKey(requestedSession);
-    const orderFailedLabels = [
-      failures.includes("registrations") ? "活动报名" : "",
-      failures.includes("courses") ? "学习记录" : "",
-      failures.includes("courseOrders") ? "课程订单" : ""
-    ].filter(Boolean);
-    writeMemberOrderSnapshot({
-      contextKey: loadedContextKey.value,
-      registrations: registrations.value,
-      courses: courses.value,
-      courseOrders: courseOrders.value,
-      warning: orderFailedLabels.length ? `部分订单同步失败：${orderFailedLabels.join("、")}。当前仅展示已成功同步的数据。` : ""
-    });
     wechatProfilePanelVisible.value = false;
   } catch (error: any) {
     if (!profileLoadGuard.isCurrent(loadToken)) return;

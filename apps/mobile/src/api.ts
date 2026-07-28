@@ -216,11 +216,15 @@ export function consumeActivityListIntent(): ActivityListIntent | null {
   return raw as ActivityListIntent;
 }
 
-export function request<T>(url: string, options: UniApp.RequestOptions = {}): Promise<T> {
-  const tenantCode = getCurrentTenantCode();
+export type ApiRequestOptions = UniApp.RequestOptions & { tenantCode?: string; userToken?: string };
+
+export function request<T>(url: string, options: ApiRequestOptions = {}): Promise<T> {
+  const tenantCode = options.tenantCode === undefined ? getCurrentTenantCode() : normalizeTenantCode(options.tenantCode);
   const requestUrl = appendTenantCode(url, tenantCode);
   const tenantHeader = tenantCode && isPublicApiUrl(url) ? { "x-tenant-code": tenantCode } : {};
-  const userToken = isPublicApiUrl(url) ? String(uni.getStorageSync(USER_TOKEN_STORAGE_KEY) || "") : "";
+  const userToken = isPublicApiUrl(url)
+    ? options.userToken === undefined ? String(uni.getStorageSync(USER_TOKEN_STORAGE_KEY) || "") : String(options.userToken || "")
+    : "";
   const authHeader = userToken ? { Authorization: `Bearer ${userToken}` } : {};
   const deviceHeader = isPublicApiUrl(url) ? { "x-device-id": getClientDeviceId() } : {};
   return new Promise((resolve, reject) => {

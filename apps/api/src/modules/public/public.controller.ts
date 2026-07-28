@@ -312,6 +312,12 @@ export class PublicController {
     return this.service.myProfile(user, this.tenantContext(req, tenantCode));
   }
 
+  @Get("me/orders-overview")
+  async myOrdersOverview(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myOrdersOverview(user, this.tenantContext(req, tenantCode));
+  }
+
   @Get("me/courses")
   async myCourses(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);

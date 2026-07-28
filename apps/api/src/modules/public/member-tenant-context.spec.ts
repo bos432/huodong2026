@@ -11,6 +11,7 @@ describe("member tenant context and login recovery", () => {
   const loginPage = readFileSync("../mobile/src/pages/user/login.vue", "utf8");
   const tenantLoadGuard = readFileSync("../mobile/src/tenant-load-guard.ts", "utf8");
   const mobileApi = readFileSync("../mobile/src/api.ts", "utf8");
+  const memberOrderOverview = readFileSync("../mobile/src/member-order-overview.ts", "utf8");
   const memberPages = ["my.vue", "orders.vue", "courses.vue", "wallet.vue", "certificates.vue", "mall-orders.vue"]
     .map((name) => readFileSync(`../mobile/src/pages/user/${name}`, "utf8"));
 
@@ -48,6 +49,10 @@ describe("member tenant context and login recovery", () => {
     expect(decoration).toContain("createTenantLoadGuard");
     expect(theme).toContain("tenantCode !== getCurrentTenantCode()");
     for (const page of memberPages) expect(page).toContain("createTenantLoadGuard");
+    expect(mobileApi).toContain("options.tenantCode === undefined ? getCurrentTenantCode()");
+    expect(memberOrderOverview).toContain("tenantCode: session.tenantCode");
+    expect(memberOrderOverview).toContain("userToken: session.userToken");
+    expect(memberOrderOverview).toContain("responseTenantCode !== session.tenantCode");
   });
 
   it("keeps public member refresh growth and business totals in the active tenant", () => {

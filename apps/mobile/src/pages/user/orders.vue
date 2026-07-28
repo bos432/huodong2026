@@ -50,7 +50,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, getUserId, getUserToken, request, withTenantCode } from "../../api";
-import { readMemberOrderSnapshot, writeMemberOrderSnapshot } from "../../member-order-cache";
+import { loadMemberOrderOverview, type MemberOrderSession } from "../../member-order-overview";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
 import TabBar from "../../components/TabBar.vue";
@@ -103,9 +103,7 @@ const loadGuard = createTenantLoadGuard();
 let orderLoadSerial = 0;
 let hasShown = false;
 
-type MemberSession = { tenantCode: string; userId: number; userToken: string };
-
-function memberSession(): MemberSession {
+function memberSession(): MemberOrderSession {
   return { tenantCode: getCurrentTenantCode(), userId: getUserId(), userToken: getUserToken() };
 }
 
@@ -113,7 +111,7 @@ function sessionKey(session = memberSession()) {
   return `${session.tenantCode}:${session.userId || "guest"}:${session.userToken || "anonymous"}`;
 }
 
-function isCurrentSession(session: MemberSession) {
+function isCurrentSession(session: MemberOrderSession) {
   return getCurrentTenantCode() === session.tenantCode && getUserId() === session.userId && getUserToken() === session.userToken;
 }
 
@@ -122,14 +120,6 @@ function clearOrderState() {
   courses.value = [];
   courseOrders.value = [];
   refundingOrderId.value = 0;
-}
-
-function applyOrderSnapshot(snapshot: NonNullable<ReturnType<typeof readMemberOrderSnapshot>>) {
-  registrations.value = [...snapshot.registrations];
-  courses.value = [...snapshot.courses];
-  courseOrders.value = [...snapshot.courseOrders];
-  loadWarning.value = snapshot.warning;
-  loadedContextKey.value = snapshot.contextKey;
 }
 
 const allOrders = computed<UiOrder[]>(() => {
@@ -176,35 +166,16 @@ async function loadOrders(preserveContent = false) {
     requestedSession = memberSession();
     const contextKey = sessionKey(requestedSession);
     if (loadedContextKey.value && loadedContextKey.value !== contextKey) clearOrderState();
-    const results = await Promise.allSettled([
-      request<any[]>("/public/me/registrations"),
-      request<any[]>("/public/me/courses"),
-      request<any[]>("/public/me/course-orders")
-    ]);
+    const overview = await loadMemberOrderOverview(requestedSession);
     if (!isCurrentLoad()) {
       if (isActiveLoad()) void loadOrders();
       return;
     }
-    const failures: string[] = [];
-    const readRows = (index: number, label: string) => {
-      const result = results[index];
-      if (result.status === "fulfilled" && Array.isArray(result.value)) return result.value;
-      failures.push(label);
-      return [];
-    };
-    const registrationRows = readRows(0, "活动报名");
-    const courseRows = readRows(1, "学习记录");
-    const courseOrderRows = readRows(2, "课程订单");
-    if (failures.length === results.length) {
-      const rejected = results.find((result) => result.status === "rejected") as PromiseRejectedResult | undefined;
-      throw rejected?.reason || new Error("订单数据格式异常，请重新加载");
-    }
-    registrations.value = registrationRows;
-    courses.value = courseRows;
-    courseOrders.value = courseOrderRows;
-    loadWarning.value = failures.length ? `部分订单同步失败：${failures.join("、")}。当前仅展示已成功同步的数据。` : "";
+    registrations.value = overview.registrations;
+    courses.value = overview.courses;
+    courseOrders.value = overview.courseOrders;
+    loadWarning.value = "";
     loadedContextKey.value = contextKey;
-    writeMemberOrderSnapshot({ contextKey, registrations: registrationRows, courses: courseRows, courseOrders: courseOrderRows, warning: loadWarning.value });
   } catch (error: any) {
     if (!isActiveLoad()) return;
     const message = reviewSafeText(error?.message || "订单加载失败");
@@ -465,8 +436,6 @@ function openOrder(item: UiOrder) {
 onShow(() => {
   readRouteStatus();
   const contextKey = sessionKey();
-  const cached = readMemberOrderSnapshot(contextKey);
-  if (cached && loadedContextKey.value !== contextKey) applyOrderSnapshot(cached);
   if (loadedContextKey.value === contextKey) {
     if (hasShown && !busy.value) void loadOrders(true);
     hasShown = true;
