@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 
 describe("mobile client state consistency", () => {
   const readPage = (path: string) => readFileSync(`../mobile/src/pages/${path}`, "utf8");
+  const memberOrderCache = readFileSync("../mobile/src/member-order-cache.ts", "utf8");
   const communityIndex = readPage("community/index.vue");
   const communityDetail = readPage("community/detail.vue");
   const forumIndex = readPage("forum/index.vue");
@@ -213,7 +214,8 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain("const serial = ++orderLoadSerial");
     expect(userOrders).toContain("const isActiveLoad = () => serial === orderLoadSerial");
     expect(userOrders).toContain("if (isActiveLoad()) void loadOrders()");
-    expect(userOrders).toContain("if (isActiveLoad()) loading.value = false");
+    expect(userOrders).toContain("if (isActiveLoad()) {");
+    expect(userOrders).toContain("syncing.value = false");
     expect(userOrders).not.toContain("if (isCurrentLoad()) loading.value = false");
     expect(userOrders).toContain("部分订单同步失败");
     expect(userOrders).toContain('order?.status === "partially_refunded" ? "部分退款" : "已退款"');
@@ -225,8 +227,14 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain('timeZone: "Asia/Shanghai"');
     expect(userOrders).toContain('role="tablist"');
     expect(userOrders).toContain('aria-label="重新加载我的订单"');
-    expect(userOrders).toContain(':aria-disabled="loading"');
-    expect(userOrders).toContain("if (loading.value) return");
+    expect(userOrders).toContain(':aria-disabled="busy"');
+    expect(userOrders).toContain('import { readMemberOrderSnapshot, writeMemberOrderSnapshot } from "../../member-order-cache"');
+    expect(userOrders).toContain("if (busy.value) return");
+    expect(userOrders).toContain("if (loadedContextKey.value === contextKey) {");
+    expect(userOrders).toContain("if (hasShown && !busy.value) void loadOrders(true)");
+    expect(userOrders).toContain("订单同步失败，当前继续展示最近数据");
+    expect(memberOrderCache).toContain("snapshot.contextKey !== contextKey");
+    expect(memberOrderCache).toContain("Date.now() - snapshot.loadedAt > MAX_AGE_MS");
     expect(userOrders).toContain('item.statusClass === "learning"');
     expect(userOrders).not.toContain('class="custom-nav"');
     expect(userOrders).toContain('class="orders-toolbar"');
@@ -244,6 +252,11 @@ describe("mobile client state consistency", () => {
     expect(userMy).toContain("会员资料格式异常");
     expect(userMy).toContain("applyResult<any[]>(7, \"mallOrders\", \"商城订单\", Array.isArray");
     expect(userMy).toContain("learningOnlyCourses()");
+    expect(userMy).toContain("writeMemberOrderSnapshot({");
+    expect(userMy).toContain('label:"待处理"');
+    expect(userMy).toContain("查看全部 ›");
+    expect(userMy).not.toContain('label:"全部"');
+    expect(userMy).toContain("gridTemplateColumns: `repeat(${orderTabs.length}, minmax(0, 1fr))`");
     expect(userMy).not.toContain('pendingRegistrationCount');
     expect(userMy).not.toContain('registrations.value.length + courses.value.length + mallOrders.value.length');
     expect(userMy).toContain("redemptionError.value");

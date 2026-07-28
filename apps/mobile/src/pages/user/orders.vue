@@ -2,7 +2,7 @@
   <view class="container orders-page has-custom-nav">
     <view class="orders-toolbar">
       <text class="orders-toolbar-label">订单状态</text>
-      <view class="refresh-action" :class="{ disabled: loading }" role="button" tabindex="0" aria-label="刷新我的订单" :aria-busy="loading" :aria-disabled="loading" @click="refreshOrders" @keyup.enter="refreshOrders" @keyup.space.prevent="refreshOrders">{{ loading ? "同步中" : "刷新" }}</view>
+      <view class="refresh-action" :class="{ disabled: busy }" role="button" tabindex="0" aria-label="刷新我的订单" :aria-busy="busy" :aria-disabled="busy" @click="refreshOrders" @keyup.enter="refreshOrders" @keyup.space.prevent="refreshOrders">{{ busy ? "同步中" : "刷新" }}</view>
     </view>
 
     <view class="order-tabs" role="tablist" aria-label="订单状态筛选">
@@ -13,7 +13,7 @@
     <view v-else-if="loadError" class="card error-card" role="alert" aria-live="assertive">
       <view class="title small">订单加载失败</view>
       <view class="subtle">{{ loadError }}</view>
-      <view class="button secondary retry" role="button" tabindex="0" aria-label="重新加载我的订单" @click="loadOrders" @keyup.enter="loadOrders" @keyup.space.prevent="loadOrders">重新加载</view>
+      <view class="button secondary retry" role="button" tabindex="0" aria-label="重新加载我的订单" @click="retryOrders" @keyup.enter="retryOrders" @keyup.space.prevent="retryOrders">重新加载</view>
     </view>
 
     <template v-else>
@@ -50,6 +50,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, getUserId, getUserToken, request, withTenantCode } from "../../api";
+import { readMemberOrderSnapshot, writeMemberOrderSnapshot } from "../../member-order-cache";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
 import TabBar from "../../components/TabBar.vue";
@@ -88,6 +89,8 @@ const tabs = [
 ] as const;
 const activeTab = ref<OrderTab>("all");
 const loading = ref(false);
+const syncing = ref(false);
+const busy = computed(() => loading.value || syncing.value);
 const loadError = ref("");
 const loadWarning = ref("");
 const actionError = ref("");
@@ -98,11 +101,16 @@ const refundingOrderId = ref(0);
 const loadedContextKey = ref("");
 const loadGuard = createTenantLoadGuard();
 let orderLoadSerial = 0;
+let hasShown = false;
 
 type MemberSession = { tenantCode: string; userId: number; userToken: string };
 
 function memberSession(): MemberSession {
   return { tenantCode: getCurrentTenantCode(), userId: getUserId(), userToken: getUserToken() };
+}
+
+function sessionKey(session = memberSession()) {
+  return `${session.tenantCode}:${session.userId || "guest"}:${session.userToken || "anonymous"}`;
 }
 
 function isCurrentSession(session: MemberSession) {
@@ -114,6 +122,14 @@ function clearOrderState() {
   courses.value = [];
   courseOrders.value = [];
   refundingOrderId.value = 0;
+}
+
+function applyOrderSnapshot(snapshot: NonNullable<ReturnType<typeof readMemberOrderSnapshot>>) {
+  registrations.value = [...snapshot.registrations];
+  courses.value = [...snapshot.courses];
+  courseOrders.value = [...snapshot.courseOrders];
+  loadWarning.value = snapshot.warning;
+  loadedContextKey.value = snapshot.contextKey;
 }
 
 const allOrders = computed<UiOrder[]>(() => {
@@ -138,15 +154,16 @@ function readRouteStatus() {
   if (["all", "pending", "learning", "completed"].includes(status)) activeTab.value = status as OrderTab;
 }
 
-async function loadOrders() {
+async function loadOrders(preserveContent = false) {
   const serial = ++orderLoadSerial;
   const loadToken = loadGuard.begin();
   let requestedSession = memberSession();
   const isActiveLoad = () => serial === orderLoadSerial;
   const isCurrentLoad = () => isActiveLoad() && loadGuard.isCurrent(loadToken) && isCurrentSession(requestedSession);
-  const initialContextKey = `${loadToken.tenantCode}:${requestedSession.userId || "guest"}`;
+  const initialContextKey = sessionKey(requestedSession);
   if (loadedContextKey.value && loadedContextKey.value !== initialContextKey) clearOrderState();
-  loading.value = true;
+  loading.value = !preserveContent;
+  syncing.value = preserveContent;
   loadError.value = "";
   loadWarning.value = "";
   actionError.value = "";
@@ -157,7 +174,7 @@ async function loadOrders() {
       return;
     }
     requestedSession = memberSession();
-    const contextKey = `${loadToken.tenantCode}:${requestedSession.userId}`;
+    const contextKey = sessionKey(requestedSession);
     if (loadedContextKey.value && loadedContextKey.value !== contextKey) clearOrderState();
     const results = await Promise.allSettled([
       request<any[]>("/public/me/registrations"),
@@ -187,17 +204,30 @@ async function loadOrders() {
     courseOrders.value = courseOrderRows;
     loadWarning.value = failures.length ? `部分订单同步失败：${failures.join("、")}。当前仅展示已成功同步的数据。` : "";
     loadedContextKey.value = contextKey;
+    writeMemberOrderSnapshot({ contextKey, registrations: registrationRows, courses: courseRows, courseOrders: courseOrderRows, warning: loadWarning.value });
   } catch (error: any) {
     if (!isActiveLoad()) return;
-    clearOrderState();
-    loadError.value = reviewSafeText(error?.message || "订单加载失败");
+    const message = reviewSafeText(error?.message || "订单加载失败");
+    if (preserveContent) loadWarning.value = `订单同步失败，当前继续展示最近数据：${message}`;
+    else {
+      clearOrderState();
+      loadError.value = message;
+    }
   } finally {
-    if (isActiveLoad()) loading.value = false;
+    if (isActiveLoad()) {
+      loading.value = false;
+      syncing.value = false;
+    }
   }
 }
 
 function refreshOrders() {
-  if (loading.value) return;
+  if (busy.value) return;
+  void loadOrders(allOrders.value.length > 0 || Boolean(loadedContextKey.value));
+}
+
+function retryOrders() {
+  if (busy.value) return;
   void loadOrders();
 }
 
@@ -434,6 +464,16 @@ function openOrder(item: UiOrder) {
 
 onShow(() => {
   readRouteStatus();
+  const contextKey = sessionKey();
+  const cached = readMemberOrderSnapshot(contextKey);
+  if (cached && loadedContextKey.value !== contextKey) applyOrderSnapshot(cached);
+  if (loadedContextKey.value === contextKey) {
+    if (hasShown && !busy.value) void loadOrders(true);
+    hasShown = true;
+    return;
+  }
+  hasShown = true;
+  if (busy.value) return;
   void loadOrders();
 });
 </script>

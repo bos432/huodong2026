@@ -114,9 +114,9 @@
     <view class="card order-card">
       <view class="row" style="margin-bottom:16rpx;">
         <text style="font-size:30rpx; font-weight:600; color:#333;">我的订单</text>
-        <text class="subtle" role="button" tabindex="0" aria-label="查看全部订单" style="color:#C43D3D;" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">全部 ›</text>
+        <text class="subtle" role="button" tabindex="0" aria-label="查看全部订单" style="color:#C43D3D;" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">查看全部 ›</text>
       </view>
-      <view class="order-tabs">
+      <view class="order-tabs" :style="{ gridTemplateColumns: `repeat(${orderTabs.length}, minmax(0, 1fr))` }">
         <view v-for="tab in orderTabs" :key="tab.label" class="order-tab" role="button" tabindex="0" :aria-label="`查看${tab.label}订单`" @click="goOrders(tab)" @keyup.enter="goOrders(tab)" @keyup.space.prevent="goOrders(tab)">
           <text style="font-size:36rpx;">{{ tab.icon }}</text>
           <text style="font-size:22rpx; color:#666;">{{ tab.label }}</text>
@@ -199,6 +199,7 @@ import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { featureGatesState, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { writeMemberOrderSnapshot } from "../../member-order-cache";
 import TabBar from "../../components/TabBar.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import MarketingPopup from "../../components/MarketingPopup.vue";
@@ -394,6 +395,18 @@ async function loadProfile() {
     assetFailures.value = failures;
     assetWarning.value = failedLabels.length ? `部分会员资产同步失败：${failedLabels.join("、")}。对应数值暂不作为真实数据展示。` : "";
     loadedContextKey.value = sessionKey(requestedSession);
+    const orderFailedLabels = [
+      failures.includes("registrations") ? "活动报名" : "",
+      failures.includes("courses") ? "学习记录" : "",
+      failures.includes("courseOrders") ? "课程订单" : ""
+    ].filter(Boolean);
+    writeMemberOrderSnapshot({
+      contextKey: loadedContextKey.value,
+      registrations: registrations.value,
+      courses: courses.value,
+      courseOrders: courseOrders.value,
+      warning: orderFailedLabels.length ? `部分订单同步失败：${orderFailedLabels.join("、")}。当前仅展示已成功同步的数据。` : ""
+    });
     wechatProfilePanelVisible.value = false;
   } catch (error: any) {
     if (!profileLoadGuard.isCurrent(loadToken)) return;
@@ -488,13 +501,11 @@ const gridItems = computed(() => {
 });
 
 const orderTabs = computed(() => {
-  const rows = [{ icon:"💳", label:"待付款", count: pendingOrderCount.value, status:"pending" }];
+  const rows = [{ icon:"💳", label:"待处理", count: pendingOrderCount.value, status:"pending" }];
   if (featureGatesState.value.courses) {
     rows.push({ icon:"📚", label:"待观看", count: learningCourseCount.value, status:"learning" });
     rows.push({ icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" });
   }
-  const allCount = ["registrations", "courses", "courseOrders"].some(assetFailed) ? null : registrations.value.length + courseOrders.value.length + learningOnlyCourses().length;
-  rows.push({ icon:"📋", label:"全部", count: allCount, status:"all" });
   return rows;
 });
 
@@ -902,7 +913,6 @@ function logoutUser() {
 .order-card { margin-bottom: 16rpx; }
 .order-tabs {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 8rpx;
 }
 .order-tab {
