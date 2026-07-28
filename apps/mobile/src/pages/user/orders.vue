@@ -1,9 +1,8 @@
 <template>
   <view class="container orders-page has-custom-nav">
-    <view class="custom-nav">
-      <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">‹ 返回</view>
-      <text class="title-md" style="flex:1; text-align:center;">我的订单</text>
-      <view class="nav-refresh" role="button" tabindex="0" aria-label="刷新我的订单" :aria-busy="loading" @click="loadOrders" @keyup.enter="loadOrders" @keyup.space.prevent="loadOrders">刷新</view>
+    <view class="orders-toolbar">
+      <text class="orders-toolbar-label">订单状态</text>
+      <view class="refresh-action" :class="{ disabled: loading }" role="button" tabindex="0" aria-label="刷新我的订单" :aria-busy="loading" @click="loadOrders" @keyup.enter="loadOrders" @keyup.space.prevent="loadOrders">{{ loading ? "同步中" : "刷新" }}</view>
     </view>
 
     <view class="order-tabs" role="tablist" aria-label="订单状态筛选">
@@ -141,6 +140,7 @@ function readRouteStatus() {
 async function loadOrders() {
   const loadToken = loadGuard.begin();
   let requestedSession = memberSession();
+  const isActiveLoad = () => loadGuard.isCurrent(loadToken);
   const isCurrentLoad = () => loadGuard.isCurrent(loadToken) && isCurrentSession(requestedSession);
   const initialContextKey = `${loadToken.tenantCode}:${requestedSession.userId || "guest"}`;
   if (loadedContextKey.value && loadedContextKey.value !== initialContextKey) clearOrderState();
@@ -180,11 +180,11 @@ async function loadOrders() {
     loadWarning.value = failures.length ? `部分订单同步失败：${failures.join("、")}。当前仅展示已成功同步的数据。` : "";
     loadedContextKey.value = contextKey;
   } catch (error: any) {
-    if (!isCurrentLoad()) return;
+    if (!isActiveLoad()) return;
     clearOrderState();
     loadError.value = reviewSafeText(error?.message || "订单加载失败");
   } finally {
-    if (isCurrentLoad()) loading.value = false;
+    if (isActiveLoad()) loading.value = false;
   }
 }
 
@@ -419,8 +419,6 @@ function openOrder(item: UiOrder) {
   }
 }
 
-function goBack() { uni.navigateBack(); }
-
 onShow(() => {
   readRouteStatus();
   void loadOrders();
@@ -429,11 +427,13 @@ onShow(() => {
 
 <style scoped>
 .orders-page { padding-bottom: 160rpx; }
-.custom-nav { display:flex; align-items:center; padding:16rpx 0; }
-.nav-back, .nav-refresh { font-size:28rpx; color:#4A6B8A; }
-.order-tabs { display:grid; grid-template-columns: repeat(4, 1fr); gap: 8rpx; margin-bottom: 18rpx; }
-.order-tab { padding: 14rpx 8rpx; border-radius: 999px; background: #F3ECE2; color: #7C6A58; text-align: center; font-size: 23rpx; font-weight: 800; }
-.order-tab.active { background: #C43D3D; color: #fff; }
+.orders-toolbar { display:flex; align-items:center; justify-content:space-between; min-height:64rpx; margin-bottom:12rpx; }
+.orders-toolbar-label { color:#222; font-size:30rpx; font-weight:900; }
+.refresh-action { min-width:88rpx; padding:10rpx 18rpx; border:1rpx solid #d9d3ca; border-radius:10rpx; background:#fff; color:#4A6B8A; text-align:center; font-size:24rpx; font-weight:700; }
+.refresh-action.disabled { color:#9ca3af; background:#f5f5f4; }
+.order-tabs { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #e8e0d6; border-radius:14rpx; background:#f3ece2; }
+.order-tab { min-width:0; padding:14rpx 4rpx; border-radius:10rpx; color:#6f6255; text-align:center; font-size:25rpx; font-weight:800; white-space:nowrap; }
+.order-tab.active { background:#C43D3D; color:#fff; box-shadow:0 4rpx 12rpx rgba(196, 61, 61, 0.18); }
 .order-card { margin-bottom: 16rpx; }
 .order-head { align-items: flex-start; gap: 16rpx; }
 .order-type { color: #C43D3D; font-size: 22rpx; font-weight: 900; }

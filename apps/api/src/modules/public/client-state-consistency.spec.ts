@@ -210,6 +210,9 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain("getUserId() === session.userId");
     expect(userOrders).toContain("getUserToken() === session.userToken");
     expect(userOrders).toContain("if (!isCurrentLoad()) return");
+    expect(userOrders).toContain("const isActiveLoad = () => loadGuard.isCurrent(loadToken)");
+    expect(userOrders).toContain("if (isActiveLoad()) loading.value = false");
+    expect(userOrders).not.toContain("if (isCurrentLoad()) loading.value = false");
     expect(userOrders).toContain("部分订单同步失败");
     expect(userOrders).toContain('order?.status === "partially_refunded" ? "部分退款" : "已退款"');
     expect(userOrders).toContain("最近一笔退款已完成");
@@ -221,6 +224,8 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain('role="tablist"');
     expect(userOrders).toContain('aria-label="重新加载我的订单"');
     expect(userOrders).toContain('item.statusClass === "learning"');
+    expect(userOrders).not.toContain('class="custom-nav"');
+    expect(userOrders).toContain('class="orders-toolbar"');
   });
 
   it("keeps the member center scoped and aligns asset counts with order filters", () => {
