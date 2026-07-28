@@ -209,8 +209,10 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain("Promise.allSettled");
     expect(userOrders).toContain("getUserId() === session.userId");
     expect(userOrders).toContain("getUserToken() === session.userToken");
-    expect(userOrders).toContain("if (!isCurrentLoad()) return");
-    expect(userOrders).toContain("const isActiveLoad = () => loadGuard.isCurrent(loadToken)");
+    expect(userOrders).toContain("if (!isCurrentLoad()) {");
+    expect(userOrders).toContain("const serial = ++orderLoadSerial");
+    expect(userOrders).toContain("const isActiveLoad = () => serial === orderLoadSerial");
+    expect(userOrders).toContain("if (isActiveLoad()) void loadOrders()");
     expect(userOrders).toContain("if (isActiveLoad()) loading.value = false");
     expect(userOrders).not.toContain("if (isCurrentLoad()) loading.value = false");
     expect(userOrders).toContain("部分订单同步失败");
@@ -223,6 +225,8 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain('timeZone: "Asia/Shanghai"');
     expect(userOrders).toContain('role="tablist"');
     expect(userOrders).toContain('aria-label="重新加载我的订单"');
+    expect(userOrders).toContain(':aria-disabled="loading"');
+    expect(userOrders).toContain("if (loading.value) return");
     expect(userOrders).toContain('item.statusClass === "learning"');
     expect(userOrders).not.toContain('class="custom-nav"');
     expect(userOrders).toContain('class="orders-toolbar"');

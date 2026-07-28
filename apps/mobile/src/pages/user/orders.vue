@@ -2,7 +2,7 @@
   <view class="container orders-page has-custom-nav">
     <view class="orders-toolbar">
       <text class="orders-toolbar-label">订单状态</text>
-      <view class="refresh-action" :class="{ disabled: loading }" role="button" tabindex="0" aria-label="刷新我的订单" :aria-busy="loading" @click="loadOrders" @keyup.enter="loadOrders" @keyup.space.prevent="loadOrders">{{ loading ? "同步中" : "刷新" }}</view>
+      <view class="refresh-action" :class="{ disabled: loading }" role="button" tabindex="0" aria-label="刷新我的订单" :aria-busy="loading" :aria-disabled="loading" @click="refreshOrders" @keyup.enter="refreshOrders" @keyup.space.prevent="refreshOrders">{{ loading ? "同步中" : "刷新" }}</view>
     </view>
 
     <view class="order-tabs" role="tablist" aria-label="订单状态筛选">
@@ -97,6 +97,7 @@ const courseOrders = ref<any[]>([]);
 const refundingOrderId = ref(0);
 const loadedContextKey = ref("");
 const loadGuard = createTenantLoadGuard();
+let orderLoadSerial = 0;
 
 type MemberSession = { tenantCode: string; userId: number; userToken: string };
 
@@ -138,10 +139,11 @@ function readRouteStatus() {
 }
 
 async function loadOrders() {
+  const serial = ++orderLoadSerial;
   const loadToken = loadGuard.begin();
   let requestedSession = memberSession();
-  const isActiveLoad = () => loadGuard.isCurrent(loadToken);
-  const isCurrentLoad = () => loadGuard.isCurrent(loadToken) && isCurrentSession(requestedSession);
+  const isActiveLoad = () => serial === orderLoadSerial;
+  const isCurrentLoad = () => isActiveLoad() && loadGuard.isCurrent(loadToken) && isCurrentSession(requestedSession);
   const initialContextKey = `${loadToken.tenantCode}:${requestedSession.userId || "guest"}`;
   if (loadedContextKey.value && loadedContextKey.value !== initialContextKey) clearOrderState();
   loading.value = true;
@@ -150,7 +152,10 @@ async function loadOrders() {
   actionError.value = "";
   try {
     await ensureUser();
-    if (!loadGuard.isCurrent(loadToken)) return;
+    if (!loadGuard.isCurrent(loadToken)) {
+      if (isActiveLoad()) void loadOrders();
+      return;
+    }
     requestedSession = memberSession();
     const contextKey = `${loadToken.tenantCode}:${requestedSession.userId}`;
     if (loadedContextKey.value && loadedContextKey.value !== contextKey) clearOrderState();
@@ -159,7 +164,10 @@ async function loadOrders() {
       request<any[]>("/public/me/courses"),
       request<any[]>("/public/me/course-orders")
     ]);
-    if (!isCurrentLoad()) return;
+    if (!isCurrentLoad()) {
+      if (isActiveLoad()) void loadOrders();
+      return;
+    }
     const failures: string[] = [];
     const readRows = (index: number, label: string) => {
       const result = results[index];
@@ -186,6 +194,11 @@ async function loadOrders() {
   } finally {
     if (isActiveLoad()) loading.value = false;
   }
+}
+
+function refreshOrders() {
+  if (loading.value) return;
+  void loadOrders();
 }
 
 function toActivityOrder(row: any): UiOrder {
