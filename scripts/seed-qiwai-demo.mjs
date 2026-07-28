@@ -163,6 +163,7 @@ async function ensureSchema(connection) {
 
 async function upsertTenant(connection, tenant) {
   const settings = JSON.stringify({
+    packagePlan: "city_partner",
     activityPublishReviewRequired: true,
     registrationReviewEnabled: true,
     paymentAccountEditable: true,

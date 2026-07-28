@@ -7926,6 +7926,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const savedOrder = result.savedOrder;
     if (Number(savedOrder.amount) > 0) await this.memberPoints.awardEvent({ user: savedOrder.registration.user, tenant: savedOrder.tenant || savedOrder.registration.activity?.tenant || null, eventType: "activity_order_paid", amountFen: Number(savedOrder.amountFen || yuanToFen(savedOrder.amount)), sourceType: "order_paid", sourceId: savedOrder.id, remark: "活动消费积分" });
     await this.charityFund.recordOrderAccrual(savedOrder, this.actorName(admin));
+    await this.recordAdminConversionEvent("pay", { activity: savedOrder.registration.activity, user: savedOrder.registration.user, registration: savedOrder.registration, order: savedOrder, channel: savedOrder.registration.channel || null, source: "admin", idempotencyKey: `pay:${savedOrder.id}` });
     await this.logOperation(admin, "order.confirm_offline_payment", "order", savedOrder.id, `确认线下收款：${savedOrder.orderNo}`, { amount: savedOrder.amount, remark: dto.remark || null });
     return savedOrder;
   }

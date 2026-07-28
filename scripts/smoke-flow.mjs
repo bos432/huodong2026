@@ -116,7 +116,7 @@ async function closeActivity(token, id) {
 }
 
 async function assertOperationLog(token, action, targetId, message) {
-  const logs = listItems(await api(`/admin/operation-logs?action=${encodeURIComponent(action)}&page=1&pageSize=100`, { headers: auth(token) }));
+  const logs = listItems(await api("/admin/operation-logs", { headers: auth(token) }));
   assert(logs.some((item) => item.action === action && item.targetId === String(targetId)), message);
 }
 

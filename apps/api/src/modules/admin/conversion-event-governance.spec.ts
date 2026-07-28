@@ -26,6 +26,8 @@ describe("conversion event governance", () => {
     expect(publicService).toContain(".orIgnore().updateEntity(false).execute()");
     expect(adminService).toContain(".orIgnore().updateEntity(false)\n      .execute()");
     expect(adminService).toContain('delete({ idempotencyKey: `check_in:${id}` })');
+    expect(adminService).toContain('recordAdminConversionEvent("pay", { activity: savedOrder.registration.activity');
+    expect(adminService).toContain('idempotencyKey: `pay:${savedOrder.id}`');
     expect(v1Service).toContain('recordConversionEvent("review"');
     expect(v1Service).toContain('recordConversionEvent("share_visit"');
     expect(refundService).toContain('idempotencyKey: `refund:${savedRefund.id}`');

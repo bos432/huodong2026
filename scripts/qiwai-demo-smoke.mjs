@@ -17,7 +17,7 @@ const tenants = [
     ops: "qiwai_hz_ops",
     finance: "qiwai_hz_finance",
     checkin: "qiwai_hz_checkin",
-    activities: ["东方哲学与节气文化体验沙龙", "硬笔书法 30 天入门公开课"]
+    activities: ["东方哲学与节气文化体验沙龙", "硬笔书法 30 天入门公开活动"]
   },
   {
     code: "qiwai-suzhou",
@@ -26,7 +26,7 @@ const tenants = [
     ops: "qiwai_sz_ops",
     finance: "qiwai_sz_finance",
     checkin: "qiwai_sz_checkin",
-    activities: ["国学经典导读体验课", "亲子沟通与家庭教育沙龙"]
+    activities: ["国学经典导读体验活动", "亲子沟通沙龙"]
   },
   {
     code: "qiwai-chengdu",
@@ -35,12 +35,18 @@ const tenants = [
     ops: "qiwai_cd_ops",
     finance: "qiwai_cd_finance",
     checkin: "qiwai_cd_checkin",
-    activities: ["节气养生与身心减压体验课", "私域运营与副业启动工作坊"]
+    activities: ["节气养生与身心减压体验活动", "私域运营与副业启动工作坊"]
   }
 ];
 
 function assert(condition, message) {
   if (!condition) throw new Error(message);
+}
+
+function listItems(payload) {
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.items)) return payload.items;
+  throw new Error("List API returned an invalid payload");
 }
 
 function auth(token) {
@@ -348,13 +354,13 @@ async function verifyTenantBusinessFlow(tenant, activityTitle) {
     body: JSON.stringify({ activityId: activity.id, name: tagName, color: "success", remark: "慢π样板验收活动批量标记" })
   });
   assert(bulkTag.createdCount >= 1 || bulkTag.skippedCount >= 1, `${tenant.code} activity bulk tag should affect users`);
-  const activityTags = await api(`/admin/tags?activityId=${activity.id}`, { headers: auth(ops.token) });
-  assert(activityTags.users?.some((item) => item.id === user.id), `${tenant.code} activity tag user list should include registered user`);
-  assert(activityTags.tags?.some((item) => item.name === tagName && item.user?.id === user.id), `${tenant.code} active user tag should be visible by activity`);
+  const activityTags = listItems(await api(`/admin/tags?activityId=${activity.id}&page=1&pageSize=100`, { headers: auth(ops.token) }));
+  assert(activityTags.some((item) => item.user?.id === user.id), `${tenant.code} activity tag user list should include registered user`);
+  assert(activityTags.some((item) => item.name === tagName && item.user?.id === user.id), `${tenant.code} active user tag should be visible by activity`);
 
   const memberDetail = await api(`/admin/members/${user.id}`, { headers: auth(ops.token) });
   assert(memberDetail.user?.id === user.id || memberDetail.profile?.user?.id === user.id || memberDetail.id === user.id, `${tenant.code} member detail should be readable`);
-  const activityMembers = await api(`/admin/members?activityId=${activity.id}`, { headers: auth(ops.token) });
+  const activityMembers = listItems(await api(`/admin/members?activityId=${activity.id}&page=1&pageSize=100`, { headers: auth(ops.token) }));
   assert(activityMembers.some((item) => item.user?.id === user.id && item.activity?.id === activity.id), `${tenant.code} activity member list should include registered user`);
 
   const recap = await api(`/admin/activities/${activity.id}/recap`, { headers: auth(ops.token) });
