@@ -50,7 +50,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, getUserId, getUserToken, request, withTenantCode } from "../../api";
-import { loadMemberOrderOverview, type MemberOrderSession } from "../../member-order-overview";
+import { loadMemberOrderOverview, readMemberOrderSnapshot, type MemberOrderSession } from "../../member-order-overview";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
 import TabBar from "../../components/TabBar.vue";
@@ -101,7 +101,6 @@ const refundingOrderId = ref(0);
 const loadedContextKey = ref("");
 const loadGuard = createTenantLoadGuard();
 let orderLoadSerial = 0;
-let hasShown = false;
 
 function memberSession(): MemberOrderSession {
   return { tenantCode: getCurrentTenantCode(), userId: getUserId(), userToken: getUserToken() };
@@ -120,6 +119,14 @@ function clearOrderState() {
   courses.value = [];
   courseOrders.value = [];
   refundingOrderId.value = 0;
+}
+
+function applyOrderSnapshot(snapshot: NonNullable<ReturnType<typeof readMemberOrderSnapshot>>) {
+  registrations.value = [...snapshot.registrations];
+  courses.value = [...snapshot.courses];
+  courseOrders.value = [...snapshot.courseOrders];
+  loadWarning.value = snapshot.warning;
+  loadedContextKey.value = snapshot.contextKey;
 }
 
 const allOrders = computed<UiOrder[]>(() => {
@@ -174,7 +181,7 @@ async function loadOrders(preserveContent = false) {
     registrations.value = overview.registrations;
     courses.value = overview.courses;
     courseOrders.value = overview.courseOrders;
-    loadWarning.value = "";
+    loadWarning.value = overview.warning;
     loadedContextKey.value = contextKey;
   } catch (error: any) {
     if (!isActiveLoad()) return;
@@ -435,13 +442,13 @@ function openOrder(item: UiOrder) {
 
 onShow(() => {
   readRouteStatus();
-  const contextKey = sessionKey();
+  const session = memberSession();
+  const contextKey = sessionKey(session);
+  const cached = readMemberOrderSnapshot(session);
+  if (cached && loadedContextKey.value !== contextKey) applyOrderSnapshot(cached);
   if (loadedContextKey.value === contextKey) {
-    if (hasShown && !busy.value) void loadOrders(true);
-    hasShown = true;
     return;
   }
-  hasShown = true;
   if (busy.value) return;
   void loadOrders();
 });

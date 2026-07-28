@@ -210,6 +210,7 @@ describe("mobile client state consistency", () => {
 
   it("keeps activity and course orders bound to one member session", () => {
     expect(userOrders).toContain("loadMemberOrderOverview(requestedSession)");
+    expect(userOrders).toContain("readMemberOrderSnapshot(session)");
     expect(userOrders).toContain("getUserId() === session.userId");
     expect(userOrders).toContain("getUserToken() === session.userToken");
     expect(userOrders).toContain("if (!isCurrentLoad()) {");
@@ -231,13 +232,13 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain(':aria-disabled="busy"');
     expect(userOrders).toContain("if (busy.value) return");
     expect(userOrders).toContain("if (loadedContextKey.value === contextKey) {");
-    expect(userOrders).toContain("if (hasShown && !busy.value) void loadOrders(true)");
+    expect(userOrders).not.toContain("if (!busy.value) void loadOrders(true)");
     expect(userOrders).toContain("订单同步失败，当前继续展示最近数据");
     expect(userOrders).not.toContain("member-order-cache");
-    expect(userOrders).not.toContain('request<any[]>("/public/me/registrations")');
-    expect(memberOrderOverview).toContain('request<MemberOrderOverview>("/public/me/orders-overview"');
-    expect(memberOrderOverview).toContain("overview?.context?.userId");
+    expect(memberOrderOverview).toContain('request<MemberOrderOverview>("/public/me/orders-overview", options)');
     expect(memberOrderOverview).toContain("responseTenantCode !== session.tenantCode");
+    expect(memberOrderOverview).toContain("readMemberOrderSnapshot");
+    expect(memberOrderOverview).toContain("部分订单同步失败");
     expect(memberOrderOverview).toContain("订单数据格式异常，请重新加载");
     expect(publicController).toContain('@Get("me/orders-overview")');
     expect(publicController).toContain("this.service.myOrdersOverview(user, this.tenantContext(req, tenantCode))");
@@ -263,10 +264,10 @@ describe("mobile client state consistency", () => {
     expect(userMy).toContain("会员资料格式异常");
     expect(userMy).toContain("loadMemberOrderOverview(requestedSession)");
     expect(userMy).toContain("orderOverviewResult.value.registrations");
+    expect(userMy).toContain("orderOverviewResult.value.failedSources");
     expect(userMy).toContain("applyResult<any[]>(5, \"mallOrders\", \"商城订单\", Array.isArray");
     expect(userMy).toContain("learningOnlyCourses()");
     expect(userMy).not.toContain("member-order-cache");
-    expect(userMy).not.toContain('request<any[]>("/public/me/registrations")');
     expect(userMy).toContain('label:"待处理"');
     expect(userMy).toContain("查看全部 ›");
     expect(userMy).not.toContain('label:"全部"');

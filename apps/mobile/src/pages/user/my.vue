@@ -389,6 +389,10 @@ async function loadProfile() {
       registrations.value = orderOverviewResult.value.registrations;
       courses.value = gates.courses ? orderOverviewResult.value.courses : [];
       courseOrders.value = gates.courses ? orderOverviewResult.value.courseOrders : [];
+      for (const source of orderOverviewResult.value.failedSources || []) {
+        failures.push(source);
+      }
+      if (orderOverviewResult.value.warning) failedLabels.push("报名与订单");
     } else {
       registrations.value = [];
       courses.value = [];

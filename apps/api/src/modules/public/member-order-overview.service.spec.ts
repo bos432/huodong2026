@@ -24,15 +24,30 @@ describe("member order overview service", () => {
       context: { userId: 42, tenantId: 3, tenantCode: "qiwai-showcase" },
       registrations: [{ id: 155 }],
       courses: [{ id: 20 }],
-      courseOrders: [{ id: 31 }]
+      courseOrders: [{ id: 31 }],
+      failedSources: []
     });
   });
 
-  it("rejects the whole overview instead of turning a failed source into an empty list", async () => {
+  it("preserves available order sources when one source fails", async () => {
     const { loaders, tenant } = loadersWithRows();
     loaders.registrations.mockRejectedValue(new Error("registration query failed"));
 
-    await expect(buildMemberOrderOverview({ id: 42 }, tenant, loaders))
-      .rejects.toThrow("registration query failed");
+    await expect(buildMemberOrderOverview({ id: 42 }, tenant, loaders)).resolves.toEqual({
+      context: { userId: 42, tenantId: 3, tenantCode: "qiwai-showcase" },
+      registrations: [],
+      courses: [{ id: 20 }],
+      courseOrders: [{ id: 31 }],
+      failedSources: ["registrations"]
+    });
+  });
+
+  it("fails visibly when every order source fails", async () => {
+    const { loaders, tenant } = loadersWithRows();
+    loaders.registrations.mockRejectedValue(new Error("registration query failed"));
+    loaders.courses.mockRejectedValue(new Error("course query failed"));
+    loaders.courseOrders.mockRejectedValue(new Error("course order query failed"));
+
+    await expect(buildMemberOrderOverview({ id: 42 }, tenant, loaders)).rejects.toThrow("registration query failed");
   });
 });
