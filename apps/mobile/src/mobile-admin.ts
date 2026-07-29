@@ -1,11 +1,12 @@
 import { API_BASE } from "./api-base";
-import { clientError } from "./error-reporting";
+import { clientError, describeError } from "./error-reporting";
 
 const ADMIN_TOKEN_KEY = "mobile_admin_token";
 const ADMIN_ROLE_KEY = "mobile_admin_role";
 const ADMIN_TENANT_ID_KEY = "mobile_admin_tenant_id";
 const ADMIN_TENANT_NAME_KEY = "mobile_admin_tenant_name";
 const ADMIN_TENANT_CODE_KEY = "mobile_admin_tenant_code";
+const MOBILE_ADMIN_REQUEST_TIMEOUT_MS = 15_000;
 
 export type MobileAdminSession = {
   token: string;
@@ -74,6 +75,7 @@ export function mobileAdminRequest<T>(url: string, options: UniApp.RequestOption
       url: `${API_BASE}${url}`,
       method: options.method || "GET",
       data: options.data,
+      timeout: Number(options.timeout || MOBILE_ADMIN_REQUEST_TIMEOUT_MS),
       header: {
         "Content-Type": "application/json",
         ...(session?.token ? { Authorization: `Bearer ${session.token}` } : {}),
@@ -85,11 +87,24 @@ export function mobileAdminRequest<T>(url: string, options: UniApp.RequestOption
           resolve(body.data as T);
           return;
         }
-        if (res.statusCode === 401) clearMobileAdminSession();
+        if (res.statusCode === 401) {
+          clearMobileAdminSession();
+          reject(new MobileAdminError("管理端登录已失效，请重新登录", res.statusCode));
+          return;
+        }
         const requestId = body?.requestId || headerValue(res.header, "x-request-id");
         reject(new MobileAdminError(requestId ? `${body?.message || "请求失败"}（请求编号：${requestId}）` : body?.message || "请求失败", res.statusCode));
       },
       fail(error) {
+        const detail = describeError(error, "请求失败");
+        if (/url not in domain list|request:fail.*domain|合法域名/i.test(detail)) {
+          reject(new MobileAdminError("小程序无法连接服务器：请在微信公众平台将 https://rd.chaimen666.com 配置为 request 合法域名"));
+          return;
+        }
+        if (/timeout|timed out|超时/i.test(detail)) {
+          reject(new MobileAdminError("管理端连接服务器超时，请检查网络后重试"));
+          return;
+        }
         reject(clientError(error, "请求失败", { method: options.method || "GET", url }));
       }
     });
