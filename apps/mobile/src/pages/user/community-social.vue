@@ -51,6 +51,7 @@ import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../..
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 const loading = ref(true);
 const tab = ref<"favorites" | "notifications" | "follows">("favorites");
@@ -128,9 +129,7 @@ async function openNotification(item: any) {
 }
 
 function formatTime(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value || "").replace("T", " ").slice(0, 16);
-  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", hour12:false, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }).replaceAll("/", "-");
+  return formatShanghaiDateTime(value, "");
 }
 
 function goBack() {

@@ -57,6 +57,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 import EmptyState from "../../components/EmptyState.vue";
 
 const orders = ref<any[]>([]);
@@ -104,7 +105,7 @@ function money(value: any) { return Number(value || 0).toFixed(2); }
 function statusText(value: string) { return ({ pending_payment: "待付款", pending_confirm: "待确认收款", paid: "待发货", shipped: "待收货", completed: "已完成", refund_pending: "售后中", refunded: "已退款", closed: "已关闭" } as any)[value] || value; }
 function paymentText(value: string) { return ({ balance: "余额支付", offline: "线下收款", wechat: "微信支付" } as any)[value] || value; }
 function refundText(value: string) { return ({ pending: "待审核", processing: "处理中", approved: "已通过", rejected: "已拒绝", failed: "处理异常" } as any)[value] || value; }
-function dateText(value: string) { return value ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)).replaceAll("/", "-") : ""; }
+function dateText(value: string) { return formatShanghaiDateTime(value, ""); }
 function merchantName(order: any) { return order?.merchant?.name || order?.tenant?.name || "商城店铺"; }
 function canRequestRefund(order: any) {
   return ["paid", "shipped", "completed"].includes(order?.status) && (!order?.refund || order.refund.status === "rejected");

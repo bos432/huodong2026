@@ -34,6 +34,8 @@ function node22() {
   throw new Error(`Mobile H5 builds require Node 22; current runtime is ${process.version}. Set CODEX_MOBILE_NODE_DIR to a Node 22 directory.`);
 }
 
+run(process.execPath, [path.join(root, "scripts", "check-mobile-runtime-compatibility.mjs")]);
+
 if (process.platform === "win32" && nodeMajor !== 22) {
   const node = node22();
   const scripts = path.join(root, "scripts");

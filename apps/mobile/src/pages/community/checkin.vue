@@ -57,6 +57,7 @@ import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { formatShanghaiChineseDate, formatShanghaiChineseMonth, shanghaiDateString } from "../../shanghai-date";
 const checkedIn = ref(false);
 const loading = ref(true);
 const submitting = ref(false);
@@ -74,21 +75,15 @@ const daysInMonth = computed(() => {
   return new Date(year, month, 0).getDate();
 });
 const dateTitle = computed(() => {
-  const date = new Date(`${today.value || localDateString()}T00:00:00+08:00`);
-  return date.toLocaleDateString("zh-CN", { year: "numeric", month: "long", day: "numeric", weekday: "long" });
+  return formatShanghaiChineseDate(today.value || localDateString());
 });
 const monthTitle = computed(() => {
-  const date = new Date(`${today.value || localDateString()}T00:00:00+08:00`);
-  return date.toLocaleDateString("zh-CN", { month: "long" });
+  return formatShanghaiChineseMonth(today.value || localDateString());
 });
 function goBack() { uni.navigateBack(); }
 
 function localDateString() {
-  const date = new Date();
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
+  return shanghaiDateString();
 }
 
 async function loadCheckin() {

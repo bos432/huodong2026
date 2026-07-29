@@ -9,6 +9,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 type WechatProfilePayload = {
   nickname?: string;
@@ -109,9 +110,7 @@ function startCooldown(seconds = 60) {
 }
 
 function formatExpiry(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value || "").replace("T", " ").slice(0, 16);
-  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", hour12:false, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }).replaceAll("/", "-");
+  return formatShanghaiDateTime(value, "");
 }
 
 async function sendCode() {

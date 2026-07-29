@@ -83,6 +83,7 @@ import { API_BASE } from "../../api-base";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 const showCatalog = ref(false);
 const loading = ref(true);
@@ -296,7 +297,7 @@ async function submitQuestion() {
     if (error?.message !== "cancel") interactionActionError.value = reviewSafeText(error?.message || "问题提交失败");
   } finally { interactionSubmitting.value = false; }
 }
-function formatTime(value:string){const date=new Date(value);if(Number.isNaN(date.getTime()))return String(value||"").replace("T"," ").slice(0,16);return date.toLocaleString("zh-CN",{timeZone:"Asia/Shanghai",hour12:false,year:"numeric",month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}).replaceAll("/","-");}
+function formatTime(value:string){return formatShanghaiDateTime(value, "");}
 
 onShow(loadCourse);
 </script>

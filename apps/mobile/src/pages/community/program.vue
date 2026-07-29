@@ -144,6 +144,7 @@ import { ensureUser, getCurrentTenantCode, request, uploadCommunityPostImage } f
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { shanghaiDateString } from "../../shanghai-date";
 
 type TaskAnswer = { content: string; images: string[]; locationName: string; latitude: number | null; longitude: number | null };
 
@@ -167,8 +168,7 @@ const joinHint = computed(() => {
 });
 
 function localDateString() {
-  const formatter = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" });
-  return formatter.format(new Date());
+  return shanghaiDateString();
 }
 
 function routeActivityId() {

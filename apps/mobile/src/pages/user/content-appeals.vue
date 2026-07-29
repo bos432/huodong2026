@@ -52,6 +52,7 @@ import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 const sanctions = ref<any[]>([]);
 const appeals = ref<any[]>([]);
@@ -136,19 +137,7 @@ function sanctionStatus(value: string) { return value === "active" ? "生效中"
 function appealStatus(value: string) { return value === "approved" ? "已通过" : value === "rejected" ? "已驳回" : "待处理"; }
 function scopeText(value: string) { return value === "community" ? "社区" : value === "forum" ? "论坛" : "全部"; }
 function formatTime(value: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime())
-    ? String(value).replace("T", " ").slice(0, 16)
-    : date.toLocaleString("zh-CN", {
-        timeZone: "Asia/Shanghai",
-        hour12: false,
-        year: "numeric",
-        month: "2-digit",
-        day: "2-digit",
-        hour: "2-digit",
-        minute: "2-digit"
-      }).replaceAll("/", "-");
+  return formatShanghaiDateTime(value, "");
 }
 function goBack() { uni.navigateBack(); }
 

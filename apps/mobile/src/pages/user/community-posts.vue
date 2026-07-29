@@ -70,6 +70,7 @@ import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../..
 import TabBar from "../../components/TabBar.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
+import { formatShanghaiDate } from "../../shanghai-date";
 
 const loading = ref(false);
 const loadError = ref("");
@@ -129,10 +130,7 @@ function actionText(post: any) {
 }
 
 function dateText(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).slice(0, 10);
-  return date.toLocaleDateString("zh-CN", { timeZone:"Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit" });
+  return formatShanghaiDate(value, "");
 }
 
 function openPost(post: any) {

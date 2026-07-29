@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin, type MobileAdminSession } from "../../mobile-admin";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
 type RiskAlert = {
@@ -160,10 +161,7 @@ function severityText(value: string) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).format(date).replace(/\//g, "-");
+  return formatShanghaiDateTime(value);
 }
 
 async function scan() {

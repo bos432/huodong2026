@@ -36,6 +36,8 @@ function compatibleNode() {
   throw new Error(`Node ${process.version} is not supported by the uni-app mp-weixin build. Use Node 22/24 or set CODEX_MP_WEIXIN_NODE_DIR.`);
 }
 
+run(process.execPath, [path.join(root, "scripts", "check-mobile-runtime-compatibility.mjs")]);
+
 let buildNode = process.execPath;
 if (process.platform === "win32" && nodeMajor >= 25) {
   buildNode = compatibleNode();

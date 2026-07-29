@@ -6,6 +6,7 @@ import { createTenantLoadGuard } from "../../tenant-load-guard";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 const wallet = ref<any | null>(null);
 const rows = ref<any[]>([]);
@@ -87,18 +88,7 @@ function money(value: string | number | undefined | null) {
 }
 
 function formatTime(value: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(date).replaceAll("/", "-");
+  return formatShanghaiDateTime(value);
 }
 
 function walletTypeText(type: string) {

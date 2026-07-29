@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin, type MobileAdminSession } from "../../mobile-admin";
+import { addShanghaiDays, shanghaiDateString } from "../../shanghai-date";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
 const bootstrap = ref<any>(null);
@@ -34,10 +35,8 @@ function isCurrentSession(session: MobileAdminSession) {
 }
 
 function shanghaiDateRange(days: number) {
-  const endText = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date());
-  const [year, month, day] = endText.split("-").map(Number);
-  const start = new Date(Date.UTC(year, month - 1, day - days + 1));
-  return { startDate: start.toISOString().slice(0, 10), endDate: endText };
+  const endDate = shanghaiDateString();
+  return { startDate: addShanghaiDays(endDate, 1 - days), endDate };
 }
 
 function queryString(days: number) {

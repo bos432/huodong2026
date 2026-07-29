@@ -56,6 +56,7 @@
 import { ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { request } from "../../api";
+import { formatShanghaiDate } from "../../shanghai-date";
 
 type VerifyMode = "certificate" | "proof" | "charity";
 const mode = ref<VerifyMode>("certificate");
@@ -82,9 +83,7 @@ function handleCodeInput() {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? String(value) : date.toLocaleDateString("zh-CN", { timeZone: "Asia/Shanghai" });
+  return formatShanghaiDate(value);
 }
 
 async function verify() {

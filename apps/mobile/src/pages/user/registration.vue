@@ -10,6 +10,7 @@ import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryEntries } from "../../query";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import { addActivityToCalendar } from "../../activity-calendar";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
@@ -104,10 +105,7 @@ function money(value: string | number | undefined) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.replace("T", " ").slice(0, 16);
-  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit", hour12:false });
+  return formatShanghaiDateTime(value);
 }
 
 function operationSetting() {

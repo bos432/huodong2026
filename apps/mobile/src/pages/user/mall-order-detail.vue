@@ -264,6 +264,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, uploadMallRefundImage, uploadMallReviewImage, withTenantCode } from "../../api";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 const orderId = ref(0);
 const order = ref<any | null>(null);
@@ -334,7 +335,7 @@ function refundSummaryText(value: any) {
   return value.reason || value.refundProgressText || value.userReviewRemark || "";
 }
 function reviewText(value: string) { return ({ pending: "待审核", approved: "已展示", rejected: "未通过" } as any)[value] || value; }
-function dateText(value: string) { return value ? new Intl.DateTimeFormat("zh-CN", { timeZone: "Asia/Shanghai", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(value)).replaceAll("/", "-") : ""; }
+function dateText(value: string) { return formatShanghaiDateTime(value, ""); }
 function merchantName(value: any) { return value?.merchant?.name || value?.tenant?.name || "商城店铺"; }
 function canSubmitRefund(value: any) {
   return ["paid", "shipped", "completed"].includes(value?.status) && (value?.items || []).some((item: any) => remainingAfterSaleQty(item) > 0);

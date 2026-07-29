@@ -54,6 +54,7 @@ import { ensureUser, getCurrentTenantCode, getUserToken, request } from "../../a
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
+import { formatShanghaiDate } from "../../shanghai-date";
 
 const loading = ref(true);
 const loadError = ref("");
@@ -66,10 +67,7 @@ const loadedTenantCode = ref("");
 const loadGuard = createTenantLoadGuard();
 
 function formatTime(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value);
-  return date.toLocaleDateString("zh-CN", { timeZone:"Asia/Shanghai", year:"numeric", month:"2-digit", day:"2-digit" });
+  return formatShanghaiDate(value, "");
 }
 
 async function loadCertificates() {

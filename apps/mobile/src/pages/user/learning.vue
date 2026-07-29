@@ -41,6 +41,7 @@ import { ensureUser, request } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 const loading = ref(true);
 const loadError = ref("");
@@ -49,10 +50,7 @@ const loadedTenantCode = ref("");
 const loadGuard = createTenantLoadGuard();
 
 function formatTime(value?: string) {
-  if (!value) return "暂无浏览时间";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value;
-  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", hour12:false, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }).replaceAll("/", "-");
+  return formatShanghaiDateTime(value, "暂无浏览时间");
 }
 
 async function loadRecords() {

@@ -74,6 +74,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { fetchMyProfile, getUserToken, request, uploadMallMerchantApplicationFile, withTenantCode } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 
 type QualificationFile = { type: string; name: string; url: string; number?: string; validUntil?: string };
 
@@ -107,17 +108,7 @@ function qualificationTypeText(type: string) {
 }
 
 function formatTime(value: unknown) {
-  const date = new Date(String(value || ""));
-  if (Number.isNaN(date.getTime())) return "-";
-  return new Intl.DateTimeFormat("zh-CN", {
-    timeZone: "Asia/Shanghai",
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false
-  }).format(date).replaceAll("/", "-");
+  return formatShanghaiDateTime(value);
 }
 
 function normalizeCreditCode(event: any) {

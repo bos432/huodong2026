@@ -4,6 +4,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { request } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
+import { formatShanghaiDateTime } from "../../shanghai-date";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import { markdownToRichTextHtml } from "@activity/shared";
@@ -18,10 +19,7 @@ const loadGuard = createTenantLoadGuard();
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("announcement_list", "/pages/announcement/list");
 
 function formatTime(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  return date.toLocaleString("zh-CN", { timeZone:"Asia/Shanghai", hour12:false, year:"numeric", month:"2-digit", day:"2-digit", hour:"2-digit", minute:"2-digit" }).replaceAll("/", "-");
+  return formatShanghaiDateTime(value, "");
 }
 
 function richContent(content: unknown) {
