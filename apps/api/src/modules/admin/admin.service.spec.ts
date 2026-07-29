@@ -484,6 +484,19 @@ describe("mobile financial write concurrency guard", () => {
   });
 });
 
+describe("refund list relation loading guard", () => {
+  it("uses a flat raw query so eager relations cannot exceed MySQL's join limit", () => {
+    const source = readFileSync("src/modules/admin/admin.service.ts", "utf8");
+    const listMethods = source.slice(source.indexOf("listRefunds(query"), source.indexOf("async exportFinance("));
+    const query = source.slice(source.indexOf("private refundsQuery()"), source.indexOf("private lockedRefund("));
+
+    expect(listMethods).toContain("getRawMany()");
+    expect(listMethods).toContain("refundListView");
+    expect(query).not.toContain("leftJoinAndSelect");
+    expect(query).toContain("private refundListSelect");
+  });
+});
+
 describe("charity refund relation loading guard", () => {
   it("does not expand circular eager order and refund relations for ledger idempotency lookups", () => {
     const source = readFileSync("src/modules/charity-fund.service.ts", "utf8");

@@ -190,6 +190,18 @@ import { canTransitionVolunteerApplication, createVolunteerAttendanceToken, next
 import { VolunteerAttendanceDto, VolunteerBadgeActionDto, VolunteerHourAdjustmentDto, VolunteerProofActionDto, VolunteerProofDto, VolunteerServiceActionDto, VolunteerTrainingActionDto, VolunteerTrainingRecordDto } from "./dto";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[]; requiredPermission?: string | null; dataScope?: Record<string, unknown>; clientIp?: string | null; userAgent?: string | null; requestId?: string | null };
+type RefundListItem = {
+  id: number; refundNo: string; amount: string; amountFen: number; status: string; operator: string | null; reason: string | null;
+  reviewedBy: string | null; reviewRemark: string | null; reviewedAt: Date | string | null; completedAt: Date | string | null;
+  providerRefundNo: string | null; providerRefundStatus: string | null; providerRefundSyncedAt: Date | string | null;
+  providerRefundFailureReason: string | null; providerRefundRetryCount: number; providerRefundNextQueryAt: Date | string | null; createdAt: Date | string;
+  tenant: { id: number; name: string } | null;
+  order: {
+    id: number; orderNo: string; amount: string; status: string; paymentMethod: string; transactionNo: string | null;
+    agent: { id: number; name: string } | null;
+    registration: { id: number; user: { id: number; phone: string | null; nickname: string | null } | null; activity: { id: number; title: string } | null } | null;
+  } | null;
+};
 type TenantPermissionSettings = { activityPublishReviewRequired: boolean; registrationReviewEnabled: boolean; paymentAccountEditable: boolean; mallEnabled: boolean; packagePlan: string; packageExpiresAt: string | null; packageSuspended: boolean; packageReadOnly: boolean; entitlements?: any };
 type MemberListQuery = {
   keyword?: string;
@@ -7194,7 +7206,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private refundListQuery(query: OrderQueryDto | RefundQueryDto, admin?: AdminContext) {
-    const builder = this.refundsQuery().setFindOptions({ loadEagerRelations: false }).orderBy("refund.createdAt", "DESC");
+    const builder = this.refundsQuery().orderBy("refund.createdAt", "DESC");
     if (query.status && ["pending", "submitting", "processing", "failed", "approved", "rejected", "completed"].includes(String(query.status))) builder.andWhere("refund.status = :refundStatus", { refundStatus: query.status });
     if (query.keyword?.trim()) {
       const keyword = `%${query.keyword.trim()}%`;
@@ -7208,13 +7220,17 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   listRefunds(query: OrderQueryDto | RefundQueryDto = {}, take = 200, admin?: AdminContext) {
-    return this.refundListQuery(query, admin).take(take).getMany();
+    return this.refundListSelect(this.refundListQuery(query, admin)).take(take).getRawMany().then((rows) => rows.map((row) => this.refundListView(row)));
   }
 
   async listRefundsPage(query: RefundQueryDto, admin?: AdminContext) {
     const { page, pageSize, offset } = normalizeRefundPagination(query.page, query.pageSize);
-    const [items, total] = await this.refundListQuery(query, admin).skip(offset).take(pageSize).getManyAndCount();
-    return { items, total, page, pageSize };
+    const builder = this.refundListQuery(query, admin);
+    const [rows, total] = await Promise.all([
+      this.refundListSelect(builder.clone()).skip(offset).take(pageSize).getRawMany(),
+      builder.clone().orderBy().getCount()
+    ]);
+    return { items: rows.map((row) => this.refundListView(row)), total, page, pageSize };
   }
 
   async exportFinance(query: OrderQueryDto = {}, admin?: AdminContext) {
@@ -7261,7 +7277,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       { header: "审核时间", key: "reviewedAt", width: 24 },
       { header: "完成时间", key: "completedAt", width: 24 }
     ];
-    refunds.forEach((item) => refundSheet.addRow({ refundNo: item.refundNo, orderNo: item.order.orderNo, activity: item.order.registration.activity.title, agent: item.order.agent?.name || "平台自营", amount: item.amount, status: item.status, operator: item.operator, reason: item.reason, reviewedBy: item.reviewedBy, reviewRemark: item.reviewRemark, providerRefundNo: item.providerRefundNo, providerRefundStatus: item.providerRefundStatus, providerRefundFailureReason: item.providerRefundFailureReason, providerRefundSyncedAt: item.providerRefundSyncedAt, providerRefundNextQueryAt: item.providerRefundNextQueryAt, createdAt: item.createdAt, reviewedAt: item.reviewedAt, completedAt: item.completedAt }));
+    refunds.forEach((item) => refundSheet.addRow({ refundNo: item.refundNo, orderNo: item.order?.orderNo || "-", activity: item.order?.registration?.activity?.title || "-", agent: item.order?.agent?.name || "平台自营", amount: item.amount, status: item.status, operator: item.operator, reason: item.reason, reviewedBy: item.reviewedBy, reviewRemark: item.reviewRemark, providerRefundNo: item.providerRefundNo, providerRefundStatus: item.providerRefundStatus, providerRefundFailureReason: item.providerRefundFailureReason, providerRefundSyncedAt: item.providerRefundSyncedAt, providerRefundNextQueryAt: item.providerRefundNextQueryAt, createdAt: item.createdAt, reviewedAt: item.reviewedAt, completedAt: item.completedAt }));
 
     const callbackSheet = workbook.addWorksheet("支付回调日志");
     callbackSheet.columns = [
@@ -12856,12 +12872,74 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private refundsQuery() {
     return this.refunds
       .createQueryBuilder("refund")
-      .setFindOptions({ loadEagerRelations: false })
-      .leftJoinAndSelect("refund.order", "order")
-      .leftJoinAndSelect("order.agent", "orderAgent")
-      .leftJoinAndSelect("order.registration", "registration")
-      .leftJoinAndSelect("registration.user", "user")
-      .leftJoinAndSelect("registration.activity", "activity");
+      .leftJoin("refund.order", "order")
+      .leftJoin("refund.tenant", "tenant")
+      .leftJoin("order.agent", "orderAgent")
+      .leftJoin("order.registration", "registration")
+      .leftJoin("registration.user", "user")
+      .leftJoin("registration.activity", "activity");
+  }
+
+  // Refund, order, and registration have eager relations. Return a flat query here so
+  // TypeORM cannot recursively expand that graph past MySQL's 61-table join limit.
+  private refundListSelect(builder: SelectQueryBuilder<Refund>) {
+    return builder
+      .select("refund.id", "refund_id")
+      .addSelect("refund.refundNo", "refund_refundNo")
+      .addSelect("refund.amount", "refund_amount")
+      .addSelect("refund.amountFen", "refund_amountFen")
+      .addSelect("refund.status", "refund_status")
+      .addSelect("refund.operator", "refund_operator")
+      .addSelect("refund.reason", "refund_reason")
+      .addSelect("refund.reviewedBy", "refund_reviewedBy")
+      .addSelect("refund.reviewRemark", "refund_reviewRemark")
+      .addSelect("refund.reviewedAt", "refund_reviewedAt")
+      .addSelect("refund.completedAt", "refund_completedAt")
+      .addSelect("refund.providerRefundNo", "refund_providerRefundNo")
+      .addSelect("refund.providerRefundStatus", "refund_providerRefundStatus")
+      .addSelect("refund.providerRefundSyncedAt", "refund_providerRefundSyncedAt")
+      .addSelect("refund.providerRefundFailureReason", "refund_providerRefundFailureReason")
+      .addSelect("refund.providerRefundRetryCount", "refund_providerRefundRetryCount")
+      .addSelect("refund.providerRefundNextQueryAt", "refund_providerRefundNextQueryAt")
+      .addSelect("refund.createdAt", "refund_createdAt")
+      .addSelect("tenant.id", "tenant_id")
+      .addSelect("tenant.name", "tenant_name")
+      .addSelect("order.id", "order_id")
+      .addSelect("order.orderNo", "order_orderNo")
+      .addSelect("order.amount", "order_amount")
+      .addSelect("order.status", "order_status")
+      .addSelect("order.paymentMethod", "order_paymentMethod")
+      .addSelect("order.transactionNo", "order_transactionNo")
+      .addSelect("orderAgent.id", "orderAgent_id")
+      .addSelect("orderAgent.name", "orderAgent_name")
+      .addSelect("registration.id", "registration_id")
+      .addSelect("user.id", "user_id")
+      .addSelect("user.phone", "user_phone")
+      .addSelect("user.nickname", "user_nickname")
+      .addSelect("activity.id", "activity_id")
+      .addSelect("activity.title", "activity_title");
+  }
+
+  private refundListView(row: Record<string, unknown>): RefundListItem {
+    const optional = (idKey: string, value: Record<string, unknown>) => row[idKey] == null ? null : value;
+    return {
+      id: Number(row.refund_id), refundNo: row.refund_refundNo, amount: row.refund_amount, amountFen: Number(row.refund_amountFen || 0), status: row.refund_status,
+      operator: row.refund_operator, reason: row.refund_reason, reviewedBy: row.refund_reviewedBy, reviewRemark: row.refund_reviewRemark,
+      reviewedAt: row.refund_reviewedAt, completedAt: row.refund_completedAt, providerRefundNo: row.refund_providerRefundNo,
+      providerRefundStatus: row.refund_providerRefundStatus, providerRefundSyncedAt: row.refund_providerRefundSyncedAt,
+      providerRefundFailureReason: row.refund_providerRefundFailureReason, providerRefundRetryCount: Number(row.refund_providerRefundRetryCount || 0),
+      providerRefundNextQueryAt: row.refund_providerRefundNextQueryAt, createdAt: row.refund_createdAt,
+      tenant: optional("tenant_id", { id: Number(row.tenant_id), name: row.tenant_name }),
+      order: optional("order_id", {
+        id: Number(row.order_id), orderNo: row.order_orderNo, amount: row.order_amount, status: row.order_status, paymentMethod: row.order_paymentMethod, transactionNo: row.order_transactionNo,
+        agent: optional("orderAgent_id", { id: Number(row.orderAgent_id), name: row.orderAgent_name }),
+        registration: optional("registration_id", {
+          id: Number(row.registration_id),
+          user: optional("user_id", { id: Number(row.user_id), phone: row.user_phone, nickname: row.user_nickname }),
+          activity: optional("activity_id", { id: Number(row.activity_id), title: row.activity_title })
+        })
+      })
+    } as unknown as RefundListItem;
   }
 
   private lockedRefund(repo: Repository<Refund>, id: number, includeOrder = false) {
