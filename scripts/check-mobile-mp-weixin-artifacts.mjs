@@ -15,6 +15,13 @@ function filesAt(directory) {
 
 if (!fs.existsSync(output)) throw new Error(`mp-weixin output does not exist: ${output}`);
 
+const retiredArtifacts = ["shanghai-date.js"];
+const stale = retiredArtifacts.filter((file) => fs.existsSync(path.join(output, file)));
+if (stale.length) {
+  console.error(`mp-weixin output contains stale retired artifacts: ${stale.join(", ")}`);
+  process.exit(1);
+}
+
 const missing = [];
 for (const file of filesAt(output)) {
   const content = fs.readFileSync(file, "utf8");

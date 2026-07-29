@@ -42,6 +42,7 @@ let buildNode = process.execPath;
 if (process.platform === "win32" && nodeMajor >= 25) {
   buildNode = compatibleNode();
   const uni = path.join(root, "apps", "mobile", "node_modules", "@dcloudio", "vite-plugin-uni", "bin", "uni.js");
+  run(buildNode, [path.join(root, "scripts", "clean-mobile-mp-weixin-dist.mjs")]);
   run(buildNode, [uni, "build", "-p", "mp-weixin"], { cwd: path.join(root, "apps", "mobile") });
   run(buildNode, [path.join(root, "scripts", "patch-mobile-mp-weixin-auth.mjs")]);
 } else {

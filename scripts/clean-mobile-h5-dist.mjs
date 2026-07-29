@@ -6,7 +6,9 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
 const scriptDir = dirname(fileURLToPath(import.meta.url));
-const h5Dist = resolve(scriptDir, "../apps/mobile/dist/build/h5");
+const outputName = String(process.env.MOBILE_BUILD_OUTPUT || "h5").trim();
+if (!/^[a-z0-9-]+$/i.test(outputName)) throw new Error(`Invalid mobile build output: ${outputName}`);
+const mobileDist = resolve(scriptDir, "../apps/mobile/dist/build", outputName);
 const execFileAsync = promisify(execFile);
 const permissionErrors = new Set(["EPERM", "EACCES"]);
 
@@ -108,12 +110,12 @@ async function removeEntry(path, knownDirectory = undefined) {
   }
 }
 
-if (existsSync(h5Dist)) {
-  for (const entry of await readdir(h5Dist, { withFileTypes: true })) {
-    await removeEntry(resolve(h5Dist, entry.name), entry.isDirectory());
+if (existsSync(mobileDist)) {
+  for (const entry of await readdir(mobileDist, { withFileTypes: true })) {
+    await removeEntry(resolve(mobileDist, entry.name), entry.isDirectory());
   }
 } else {
-  await mkdir(h5Dist, { recursive: true });
+  await mkdir(mobileDist, { recursive: true });
 }
 
-console.log(`Cleaned H5 build output: ${h5Dist}`);
+console.log(`Cleaned ${outputName} build output: ${mobileDist}`);
