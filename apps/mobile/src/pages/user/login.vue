@@ -9,7 +9,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 type WechatProfilePayload = {
   nickname?: string;

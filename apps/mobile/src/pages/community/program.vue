@@ -144,7 +144,7 @@ import { ensureUser, getCurrentTenantCode, request, uploadCommunityPostImage } f
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
-import { shanghaiDateString } from "../../shanghai-date";
+import { shanghaiDateString } from "../../tenant-load-guard";
 
 type TaskAnswer = { content: string; images: string[]; locationName: string; latitude: number | null; longitude: number | null };
 

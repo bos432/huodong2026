@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin, type MobileAdminSession } from "../../mobile-admin";
-import { addShanghaiDays, shanghaiDateString } from "../../shanghai-date";
+import { addShanghaiDays, shanghaiDateString } from "../../tenant-load-guard";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
 const bootstrap = ref<any>(null);

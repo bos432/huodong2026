@@ -51,7 +51,7 @@ import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../..
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 const loading = ref(true);
 const tab = ref<"favorites" | "notifications" | "follows">("favorites");

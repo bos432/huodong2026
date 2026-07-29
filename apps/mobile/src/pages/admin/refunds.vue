@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
 const rows = ref<any[]>([]);

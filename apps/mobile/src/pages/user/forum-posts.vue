@@ -66,7 +66,7 @@ import { ensureUser, request, withTenantCode } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 
 const tabs = [

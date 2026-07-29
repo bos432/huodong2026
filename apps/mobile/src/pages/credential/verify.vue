@@ -56,7 +56,7 @@
 import { ref } from "vue";
 import { onLoad } from "@dcloudio/uni-app";
 import { request } from "../../api";
-import { formatShanghaiDate } from "../../shanghai-date";
+import { formatShanghaiDate } from "../../tenant-load-guard";
 
 type VerifyMode = "certificate" | "proof" | "charity";
 const mode = ref<VerifyMode>("certificate");

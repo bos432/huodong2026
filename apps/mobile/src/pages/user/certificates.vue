@@ -54,7 +54,7 @@ import { ensureUser, getCurrentTenantCode, getUserToken, request } from "../../a
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
-import { formatShanghaiDate } from "../../shanghai-date";
+import { formatShanghaiDate } from "../../tenant-load-guard";
 
 const loading = ref(true);
 const loadError = ref("");

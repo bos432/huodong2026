@@ -83,8 +83,9 @@ describe("mobile client state consistency", () => {
   const serverMemberOrderOverview = readFileSync("src/modules/public/member-order-overview.ts", "utf8");
   const errorReporting = readFileSync("../mobile/src/error-reporting.ts", "utf8");
   const mobileAdminApi = readFileSync("../mobile/src/mobile-admin.ts", "utf8");
-  const shanghaiDate = readFileSync("../mobile/src/shanghai-date.ts", "utf8");
+  const mobileDate = readFileSync("../mobile/src/tenant-load-guard.ts", "utf8");
   const mobileRuntimeCompatibility = readFileSync("../../scripts/check-mobile-runtime-compatibility.mjs", "utf8");
+  const mobileMpWeixinArtifacts = readFileSync("../../scripts/check-mobile-mp-weixin-artifacts.mjs", "utf8");
 
   it("keeps ambassador and dean recruitment pages tenant-safe and retryable", () => {
     expect(ambassadorLanding).toContain("createTenantLoadGuard");
@@ -194,7 +195,7 @@ describe("mobile client state consistency", () => {
     expect(credentialVerify).toContain("const serial = ++verifySerial");
     expect(credentialVerify).toContain("serial !== verifySerial || mode.value !== requestedMode || code.value.trim() !== value");
     expect(credentialVerify).toContain("function handleCodeInput()");
-    expect(credentialVerify).toContain('from "../../shanghai-date"');
+    expect(credentialVerify).toContain('from "../../tenant-load-guard"');
     expect(credentialVerify).toContain('role="status" aria-live="polite"');
     expect(credentialVerify).toContain('role="alert" aria-live="assertive"');
   });
@@ -206,7 +207,7 @@ describe("mobile client state consistency", () => {
     expect(userWallet).toContain("getUserToken() === requestedUserToken");
     expect(userWallet).toContain("if (!isCurrentContext()) return");
     expect(userWallet).toContain("Array.isArray(transactions)");
-    expect(userWallet).toContain('from "../../shanghai-date"');
+    expect(userWallet).toContain('from "../../tenant-load-guard"');
     expect(userWallet).toContain('aria-label="重新加载余额信息"');
   });
 
@@ -228,7 +229,7 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain("已累计退款");
     expect(userOrders).toContain("assertContext()");
     expect(userOrders).toContain("订单退款状态或金额已变化");
-    expect(userOrders).toContain('from "../../shanghai-date"');
+    expect(userOrders).toContain('from "../../tenant-load-guard"');
     expect(userOrders).toContain('role="tablist"');
     expect(userOrders).toContain('aria-label="重新加载我的订单"');
     expect(userOrders).toContain(':aria-disabled="busy"');
@@ -289,7 +290,7 @@ describe("mobile client state consistency", () => {
     expect(mobileAdminAnalytics).toContain("sessionKey(current) === sessionKey(session)");
     expect(mobileAdminAnalytics).toContain("const requestedRangeDays = rangeDays.value");
     expect(mobileAdminAnalytics).toContain("loadedContextKey.value !== contextKey");
-    expect(mobileAdminAnalytics).toContain('from "../../shanghai-date"');
+    expect(mobileAdminAnalytics).toContain('from "../../tenant-load-guard"');
     expect(mobileAdminAnalytics).toContain("rangeDays.value !== requestedRangeDays");
     expect(mobileAdminAnalytics).toContain("经营统计数据格式异常");
     expect(mobileAdminAnalytics).toContain("趋势数据格式异常");
@@ -308,7 +309,7 @@ describe("mobile client state consistency", () => {
     expect(mobileAdminRiskAlerts).toContain("const requestedStatus = status.value");
     expect(mobileAdminRiskAlerts).toContain("loadedContextKey.value !== requestedContextKey");
     expect(mobileAdminRiskAlerts).toContain("资金异常数据格式异常");
-    expect(mobileAdminRiskAlerts).toContain('from "../../shanghai-date"');
+    expect(mobileAdminRiskAlerts).toContain('from "../../tenant-load-guard"');
     expect(mobileAdminRiskAlerts).toContain("currentRow.status !== rowSnapshot.status");
     expect(mobileAdminRiskAlerts).toContain("serial !== actionSerial || !isCurrentSession(session)");
     expect(mobileAdminRiskAlerts).toContain('aria-label="重新加载资金异常"');
@@ -492,7 +493,7 @@ describe("mobile client state consistency", () => {
       expect(page).toContain('aria-live="assertive"');
     }
     expect(communityProgram).toContain("loadedContextKey.value !== nextContextKey");
-    expect(communityProgram).toContain('from "../../shanghai-date"');
+    expect(communityProgram).toContain('from "../../tenant-load-guard"');
     expect(communityCheckin).toContain('loadError.value = reviewSafeText(error?.message || "今日打卡加载失败")');
   });
 
@@ -540,7 +541,7 @@ describe("mobile client state consistency", () => {
     expect(contentAppeals.indexOf("submitting.value = true")).toBeLessThan(contentAppeals.indexOf('request<any>("/public/me/content/appeals"'));
     expect(contentAppeals).toContain('actionError.value = reviewSafeText(error?.message || "申诉提交失败")');
     expect(contentAppeals).toContain("getCurrentTenantCode() !== tenantCode");
-    expect(contentAppeals).toContain('from "../../shanghai-date"');
+    expect(contentAppeals).toContain('from "../../tenant-load-guard"');
     expect(contentAppeals).toContain('formatShanghaiDateTime');
   });
 
@@ -555,7 +556,7 @@ describe("mobile client state consistency", () => {
     expect(announcementList).toContain("createTenantLoadGuard");
     expect(announcementList).toContain("loadGuard.isCurrent(token)");
     expect(announcementList).toContain("Promise.allSettled([load(), loadDecoration()])");
-    expect(announcementList).toContain('from "../../shanghai-date"');
+    expect(announcementList).toContain('from "../../tenant-load-guard"');
     expect(announcementList).toContain('aria-live="assertive"');
     expect(announcementList).toContain("onShow(async () =>");
   });
@@ -584,7 +585,7 @@ describe("mobile client state consistency", () => {
     expect(communitySocial).toContain("loadGuard.isCurrent(token)");
     expect(communitySocial).toContain("getCurrentTenantCode() !== tenantCode");
     expect(communitySocial).toContain("await loadFeatureGates(true)");
-    expect(communitySocial).toContain('from "../../shanghai-date"');
+    expect(communitySocial).toContain('from "../../tenant-load-guard"');
     expect(featureGates).toContain('"/pages/user/community-social"');
   });
 
@@ -611,7 +612,7 @@ describe("mobile client state consistency", () => {
       expect(page).toContain("loadGuard.isCurrent(token)");
       expect(page).toContain("onShow(");
     }
-    expect(learningHistory).toContain('from "../../shanghai-date"');
+    expect(learningHistory).toContain('from "../../tenant-load-guard"');
     expect(courseOrderConfirm).toContain("clientOrderKey.value = createClientOrderKey()");
     expect(courseOrderConfirm).toContain('const contextKey = `${token.tenantCode}:${id}`');
   });
@@ -639,7 +640,7 @@ describe("mobile client state consistency", () => {
     expect(coursePlayer).toContain('const contextKey = `${loadToken.tenantCode}:${id}`');
     expect(coursePlayer).toContain('const failedNames = ["考核", "公告", "答疑"]');
     expect(coursePlayer).toContain("getCurrentTenantCode() !== tenantCode");
-    expect(coursePlayer).toContain('from "../../shanghai-date"');
+    expect(coursePlayer).toContain('from "../../tenant-load-guard"');
   });
 
   it("refreshes mobile management lists and rejects stale dashboard responses", () => {
@@ -688,7 +689,7 @@ describe("mobile client state consistency", () => {
     expect(userCertificates).toContain("if (!sameTenant) volunteer.value = { badges: [], proofs: [] }");
     expect(userCertificates).toContain("downloadError.value = reviewSafeText");
     expect(userCertificates).toContain("getCurrentTenantCode() !== tenantCode");
-    expect(userCertificates).toContain('from "../../shanghai-date"');
+    expect(userCertificates).toContain('from "../../tenant-load-guard"');
     expect(userCertificates).toContain('c.imageUrl || c.previewUrl');
     expect(userCertificates).toContain('mode="aspectFit"');
   });
@@ -708,7 +709,7 @@ describe("mobile client state consistency", () => {
     expect(mobileAdminRefunds).toContain("const actionError = ref");
     expect(mobileAdminRefunds).toContain("currentSession.token !== session.token");
     expect(mobileAdminRefunds).toContain("currentSession.tenantId !== session.tenantId");
-    expect(mobileAdminRefunds).toContain('from "../../shanghai-date"');
+    expect(mobileAdminRefunds).toContain('from "../../tenant-load-guard"');
     expect(mobileAdminRefunds).toContain('role="alert"');
   });
 
@@ -723,7 +724,7 @@ describe("mobile client state consistency", () => {
     expect(userRegistrationDetail).toContain("codeRequestSerial");
     expect(userRegistrationDetail).toContain("Promise.allSettled([load(), loadDecoration(), loadFeatureGates(true)])");
     expect(userRegistrationDetail).toContain('role="alert"');
-    expect(userRegistrationDetail).toContain('from "../../shanghai-date"');
+    expect(userRegistrationDetail).toContain('from "../../tenant-load-guard"');
   });
 
   it("keeps personal course and forum assets tenant-safe and accessible", () => {
@@ -737,7 +738,7 @@ describe("mobile client state consistency", () => {
     }
     expect(userForumPosts).toContain("const sameTenant = loadedTenantCode.value === loadToken.tenantCode");
     expect(userForumPosts).toContain("if (!sameTenant) targets[index].value = []");
-    expect(userForumPosts).toContain('from "../../shanghai-date"');
+    expect(userForumPosts).toContain('from "../../tenant-load-guard"');
     expect(userForumPosts).toContain("await loadFeatureGates(true)");
     expect(userForumPosts).toContain("guardCurrentPageFeature()");
     expect(userForumPosts).toContain('<TabBar current="user" />');
@@ -758,7 +759,7 @@ describe("mobile client state consistency", () => {
     expect(mallOrders).toContain("activeAction.value = `${actionKey(order, \"cancel-order\")}:prompt`");
     expect(mallOrders).toContain('role="tablist"');
     expect(mallOrders).toContain('role="alert"');
-    expect(mallOrders).toContain('from "../../shanghai-date"');
+    expect(mallOrders).toContain('from "../../tenant-load-guard"');
 
     expect(mallOrderDetail).toContain("assertOrderActionContext(context)");
     expect(mallOrderDetail).toContain("const actionError = ref");
@@ -769,19 +770,20 @@ describe("mobile client state consistency", () => {
     expect(mallOrderDetail).toContain("payCheckoutGroupWechat");
     expect(mallOrderDetail).toContain("closeCheckoutGroupPayment");
     expect(mallOrderDetail).toContain('role="alert"');
-    expect(mallOrderDetail).toContain('from "../../shanghai-date"');
+    expect(mallOrderDetail).toContain('from "../../tenant-load-guard"');
   });
 
   it("uses a real-device-safe Shanghai date formatter across mobile pages", () => {
-    expect(shanghaiDate).toContain("const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000");
-    expect(shanghaiDate).toContain("export function formatShanghaiDateTime");
-    expect(shanghaiDate).toContain("export function formatShanghaiDate");
-    expect(shanghaiDate).not.toContain("Intl");
-    expect(shanghaiDate).not.toContain("toLocale");
+    expect(mobileDate).toContain("const SHANGHAI_OFFSET_MS = 8 * 60 * 60 * 1000");
+    expect(mobileDate).toContain("export function formatShanghaiDateTime");
+    expect(mobileDate).toContain("export function formatShanghaiDate");
+    expect(mobileDate).not.toContain("Intl");
+    expect(mobileDate).not.toContain("toLocale");
     expect(mobileRuntimeCompatibility).toContain('name: "Intl"');
     expect(mobileRuntimeCompatibility).toContain('name: "toLocale*"');
+    expect(mobileMpWeixinArtifacts).toContain("mp-weixin artifact dependency check failed");
     for (const page of [credentialVerify, userWallet, userOrders, mobileAdminAnalytics, mobileAdminRiskAlerts, communityProgram, contentAppeals, announcementList, communitySocial, learningHistory, coursePlayer, userCertificates, mobileAdminRefunds, userRegistrationDetail, userForumPosts, mallOrders, mallOrderDetail]) {
-      expect(page).toContain('from "../../shanghai-date"');
+      expect(page).toContain('from "../../tenant-load-guard"');
     }
   });
 });

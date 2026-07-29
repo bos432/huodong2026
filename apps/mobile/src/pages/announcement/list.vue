@@ -4,7 +4,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { request } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import { markdownToRichTextHtml } from "@activity/shared";

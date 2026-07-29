@@ -57,7 +57,7 @@ import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
-import { formatShanghaiChineseDate, formatShanghaiChineseMonth, shanghaiDateString } from "../../shanghai-date";
+import { formatShanghaiChineseDate, formatShanghaiChineseMonth, shanghaiDateString } from "../../tenant-load-guard";
 const checkedIn = ref(false);
 const loading = ref(true);
 const submitting = ref(false);

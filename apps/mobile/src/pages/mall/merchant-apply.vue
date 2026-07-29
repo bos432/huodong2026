@@ -74,7 +74,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { fetchMyProfile, getUserToken, request, uploadMallMerchantApplicationFile, withTenantCode } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 type QualificationFile = { type: string; name: string; url: string; number?: string; validUntil?: string };
 

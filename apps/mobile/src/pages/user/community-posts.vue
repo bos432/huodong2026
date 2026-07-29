@@ -70,7 +70,7 @@ import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../..
 import TabBar from "../../components/TabBar.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
-import { formatShanghaiDate } from "../../shanghai-date";
+import { formatShanghaiDate } from "../../tenant-load-guard";
 
 const loading = ref(false);
 const loadError = ref("");

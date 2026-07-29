@@ -57,7 +57,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
 
 const orders = ref<any[]>([]);

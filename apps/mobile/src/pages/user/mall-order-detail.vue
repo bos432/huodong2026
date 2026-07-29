@@ -264,7 +264,7 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, uploadMallRefundImage, uploadMallReviewImage, withTenantCode } from "../../api";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 const orderId = ref(0);
 const order = ref<any | null>(null);

@@ -52,7 +52,7 @@ import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 const sanctions = ref<any[]>([]);
 const appeals = ref<any[]>([]);

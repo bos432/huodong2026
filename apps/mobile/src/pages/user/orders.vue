@@ -55,7 +55,7 @@ import { createTenantLoadGuard } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 type OrderTab = "all" | "pending" | "upcoming" | "learning" | "completed";
 type UiOrder = {

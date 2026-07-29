@@ -50,3 +50,4 @@ if (process.platform === "win32" && nodeMajor >= 25) {
 }
 
 run(buildNode, [path.join(root, "scripts", "write-static-version.mjs"), "apps/mobile/dist/build/mp-weixin", "mp-weixin"]);
+run(buildNode, [path.join(root, "scripts", "check-mobile-mp-weixin-artifacts.mjs")]);

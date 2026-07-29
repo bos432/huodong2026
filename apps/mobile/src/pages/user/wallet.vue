@@ -6,7 +6,7 @@ import { createTenantLoadGuard } from "../../tenant-load-guard";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 const wallet = ref<any | null>(null);
 const rows = ref<any[]>([]);

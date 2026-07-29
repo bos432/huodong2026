@@ -10,7 +10,7 @@ import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryEntries } from "../../query";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import { addActivityToCalendar } from "../../activity-calendar";
 import { createTenantLoadGuard } from "../../tenant-load-guard";

@@ -83,7 +83,7 @@ import { API_BASE } from "../../api-base";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
-import { formatShanghaiDateTime } from "../../shanghai-date";
+import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
 const showCatalog = ref(false);
 const loading = ref(true);
