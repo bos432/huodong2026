@@ -147,6 +147,10 @@ function activities(section: HomepageSectionView) {
   return sectionRows(section, "activities");
 }
 
+function isHomeActivityFocus(section: HomepageSectionView) {
+  return section.pageKey === "home" && section.type === "featured_activities" && section.config?.display !== "list";
+}
+
 function posts(section: HomepageSectionView) {
   return sectionRows(section, "posts");
 }
@@ -246,6 +250,21 @@ function formatTime(value: string) {
       </view>
     </view>
 
+    <view v-else-if="isHomeActivityFocus(section) && activities(section).length" class="decor-activity-focus" :style="sectionStyle(section, '#eef7f4')" @click="goActivity(activities(section)[0].id)">
+      <view class="decor-focus-kicker">本周主推</view>
+      <image v-if="activities(section)[0].coverUrl" class="decor-focus-image" :src="activities(section)[0].coverUrl" mode="aspectFill" />
+      <view v-else class="decor-focus-image decor-focus-fallback">活动报名</view>
+      <view class="decor-focus-body">
+        <view class="decor-focus-date">{{ formatTime(activities(section)[0].startTime) }}</view>
+        <view class="decor-focus-title">{{ activities(section)[0].title }}</view>
+        <view class="decor-focus-meta">{{ activities(section)[0].location || "地点待确认" }} · 余 {{ activities(section)[0].remainingSeats }}</view>
+        <view class="decor-focus-footer">
+          <text class="decor-focus-price">{{ priceText(activities(section)[0].price) }}</text>
+          <text class="decor-focus-action">立即报名</text>
+        </view>
+      </view>
+    </view>
+
     <view v-else-if="['featured_activities', 'activity_feed'].includes(section.type) && activities(section).length" class="decor-card-block" :style="sectionStyle(section)">
       <view v-if="section.title" class="decor-section-title">{{ section.title }}</view>
       <view v-if="section.subtitle" class="decor-section-copy">{{ section.subtitle }}</view>
@@ -322,6 +341,17 @@ function formatTime(value: string) {
 .decor-banner-image, .decor-rich-image { width: 100%; border-radius: var(--decor-image-radius, 12px); }
 .decor-banner-swiper { width: 100%; height: 220rpx; border-radius: var(--decor-image-radius, 12px); overflow: hidden; }
 .decor-banner-swiper .decor-banner-image { width: 100%; height: 100%; display: block; border-radius: 0; }
+.decor-activity-focus { position: relative; overflow: hidden; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); box-shadow: 0 18rpx 42rpx rgba(15, 118, 110, 0.16); }
+.decor-focus-kicker { position: absolute; z-index: 1; top: 20rpx; left: 20rpx; padding: 8rpx 14rpx; border-radius: 8rpx; background: rgba(15, 118, 110, 0.9); color: #fff; font-size: 22rpx; font-weight: 900; }
+.decor-focus-image { width: 100%; height: 310rpx; display: block; background: #d8ebe5; }
+.decor-focus-fallback { display: flex; align-items: center; justify-content: center; color: #0f766e; font-size: 34rpx; font-weight: 900; }
+.decor-focus-body { padding: 22rpx 24rpx 24rpx; background: var(--decor-surface-color, #fff); }
+.decor-focus-date { color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 900; }
+.decor-focus-title { margin-top: 8rpx; color: var(--text-color, #111827); font-size: 32rpx; line-height: 1.35; font-weight: 900; }
+.decor-focus-meta { margin-top: 10rpx; overflow: hidden; color: var(--muted-color, #667085); font-size: 24rpx; text-overflow: ellipsis; white-space: nowrap; }
+.decor-focus-footer { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; margin-top: 18rpx; }
+.decor-focus-price { color: var(--decor-accent-color, #c43d3d); font-size: 30rpx; font-weight: 900; }
+.decor-focus-action { padding: 12rpx 18rpx; border-radius: 8rpx; background: var(--primary-color, #0f766e); color: #fff; font-size: 25rpx; font-weight: 900; }
 .decor-section-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; margin-bottom: 12rpx; }
 .decor-section-copy { margin: -4rpx 0 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.45; }
 .decor-rich-line { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.65; }

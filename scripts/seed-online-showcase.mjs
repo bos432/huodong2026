@@ -445,14 +445,14 @@ async function ensureHomepage(token) {
   const payloads = [
     {
       type: "hero",
-      title: "慢π演示中心",
-      subtitle: "一座可运营的线上慢π空间：活动报名、内容参与、共修打卡、动态互动和财务追溯完整闭环。",
+      title: "这周，去参加一场活动",
+      subtitle: "从时间、地点到名额，快速找到适合参与的城市活动。",
       sortOrder: 1,
       config: {
         eyebrow: "上线演示商家",
         backgroundImage: cover(4),
         backgroundColor: "linear-gradient(135deg, rgba(91,47,36,0.96), rgba(139,90,43,0.86))",
-        primaryButtonText: "查看近期活动",
+        primaryButtonText: "查看全部活动",
         primaryButtonLink: "/pages/activity/list",
         demoScenario: SCENARIO
       },
@@ -468,27 +468,23 @@ async function ensureHomepage(token) {
     },
     {
       type: "quick_nav",
-      title: "慢π服务",
-      subtitle: "从体验、参与到复购服务，用户路径一眼可见",
+      title: "活动服务",
+      subtitle: "从发现活动到查看报名记录，高频入口都在这里",
       sortOrder: 3,
       config: {
         items: [
-          { label: "品牌故事", icon: "品", color: "#8B5A2B", link: "/pages/brand/story" },
-          { label: "院长招募", icon: "院", color: "#7A4B24", link: "/pages/recruit/dean" },
-          { label: "大使申请", icon: "使", color: "#C43D3D", link: "/pages/apply/ambassador" },
-          { label: "帮扶申请", icon: "扶", color: "#5B8C5A", link: "/pages/apply/aid" },
-          { label: "活动报名", icon: "活", color: "#8B5A2B", link: "/pages/activity/list", action: "mainPage" },
-          { label: "专题内容", icon: "专", color: "#4A6B8A", link: "/pages/courses/index", action: "mainPage" },
-          { label: "共修打卡", icon: "修", color: "#5B8C5A", link: "/pages/community/checkin" },
-          { label: "慢π动态", icon: "动", color: "#B45309", link: "/pages/community/index", action: "mainPage" }
+          { label: "活动日历", icon: "历", color: "#8B5A2B", link: "/pages/activity/list", action: "mainPage" },
+          { label: "我的报名", icon: "报", color: "#4A6B8A", link: "/pages/user/my", action: "mainPage" },
+          { label: "志愿服务", icon: "愿", color: "#5B8C5A", link: "/pages/volunteer/index" },
+          { label: "公益项目", icon: "益", color: "#B45309", link: "/pages/charity/index", action: "mainPage" }
         ],
         demoScenario: SCENARIO
       },
       layout: { columns: 4, spacingBottom: 18 }
     },
-    { type: "featured_activities", title: "近期精选活动", subtitle: "免费体验活动负责获客，收费工作坊负责转化", sortOrder: 4, config: { source: "featured", limit: 6, demoScenario: SCENARIO }, layout: { display: "horizontal", spacingBottom: 18, borderRadius: 16 } },
+    { type: "featured_activities", title: "本周主推", subtitle: "时间、地点和剩余名额一眼确认，立即报名", sortOrder: 4, config: { source: "featured", limit: 6, display: "focus", demoScenario: SCENARIO }, layout: { display: "focus", spacingBottom: 18, borderRadius: 16 } },
     { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、亲子沟通、身心成长", sortOrder: 5, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12 } },
-    { type: "activity_feed", title: "全部演示活动", subtitle: "覆盖免费报名、收费报名、余额支付、退款和签到核销", sortOrder: 6, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list", borderRadius: 16 } },
+    { type: "activity_feed", title: "近期活动", subtitle: "更多时间与主题，随时浏览报名", sortOrder: 6, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list", borderRadius: 16 } },
     { type: "image_banner", title: "专题内容专区", subtitle: "体验活动与专题服务同步展示", sortOrder: 7, config: { imageUrl: cover(8), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, backgroundColor: "#F7E7D0", borderRadius: 16 } },
     { type: "rich_text", title: "运营闭环看板", subtitle: "用户路径与后台动作已经打通", sortOrder: 8, config: { content: "用户侧：浏览首页 -> 报名活动 -> 余额支付 -> 申请退款 -> 查看内容 -> 互动评论\n后台侧：发布内容 -> 确认收款 -> 审核退款 -> 核销签到 -> 审核评论 -> 查看财务流水", link: "/pages/community/index", demoScenario: SCENARIO }, layout: { spacingBottom: 18, backgroundColor: "#FFFCF6", borderRadius: 16 } },
     {

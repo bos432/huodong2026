@@ -141,14 +141,10 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
       sortOrder: 40,
       config: {
         items: [
-          { label: "品牌故事", icon: "品", color: "#8B5A2B", link: "/pages/brand/story" },
-          { label: "院长招募", icon: "院", color: "#7A4B24", link: "/pages/recruit/dean" },
-          { label: "大使申请", icon: "使", color: "#C43D3D", link: "/pages/apply/ambassador" },
-          { label: "帮扶申请", icon: "扶", color: "#5B8C5A", link: "/pages/apply/aid" },
-          { label: "全部活动", icon: "activity", color: "#0f766e", link: "/pages/activity/list" },
-          { label: "公告中心", icon: "notice", color: "#c2410c", link: "/pages/announcement/list" },
-          { label: "我的报名", icon: "ticket", color: "#4338ca", link: "/pages/user/my", action: "mainPage" },
-          { label: "服务中心", icon: "service", color: "#475467", link: "/pages/service/index" }
+          { label: "活动日历", icon: "历", color: "#0f766e", link: "/pages/activity/list", action: "mainPage" },
+          { label: "我的报名", icon: "报", color: "#4338ca", link: "/pages/user/my", action: "mainPage" },
+          { label: "志愿服务", icon: "愿", color: "#5B8C5A", link: "/pages/volunteer/index" },
+          { label: "公益项目", icon: "益", color: "#c2410c", link: "/pages/charity/index", action: "mainPage" }
         ]
       },
       layout: { columns: 4, spacingBottom: 18 }
@@ -156,8 +152,8 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
     {
       pageKey: "home",
       type: "category_grid",
-      title: "活动社区",
-      subtitle: "按兴趣快速进入活动池",
+      title: "按兴趣找活动",
+      subtitle: "从主题、时间和城市找到适合参与的活动",
       enabled: true,
       sortOrder: 50,
       config: { limit: 8, showCover: true },
@@ -166,18 +162,18 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
     {
       pageKey: "home",
       type: "featured_activities",
-      title: "精选活动",
-      subtitle: "主办方推荐，适合优先查看",
+      title: "本周主推",
+      subtitle: "时间、地点和名额一眼确认，立即报名",
       enabled: true,
       sortOrder: 60,
-      config: { source: "featured", limit: 6 },
+      config: { source: "featured", limit: 6, display: "focus" },
       layout: { display: "horizontal", spacingBottom: 18 }
     },
     {
       pageKey: "home",
       type: "activity_tabs",
-      title: null,
-      subtitle: null,
+      title: "按兴趣找活动",
+      subtitle: "热门主题与不同城市活动，快速筛选",
       enabled: true,
       sortOrder: 70,
       config: { includeHot: true, limit: 8 },
@@ -186,8 +182,8 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
     {
       pageKey: "home",
       type: "activity_feed",
-      title: null,
-      subtitle: null,
+      title: "近期活动",
+      subtitle: "更多时间与主题，随时浏览报名",
       enabled: true,
       sortOrder: 80,
       config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager" },

@@ -85,6 +85,10 @@ function sectionRows(section: HomepageSectionView, key: string) {
   return Array.isArray(value) && value.length ? value : key === "activities" ? sampleActivities : key === "posts" ? samplePosts : sampleCategories;
 }
 
+function isHomeActivityFocus(section: HomepageSectionView) {
+  return section.pageKey === "home" && section.type === "featured_activities" && section.config?.display !== "list";
+}
+
 function bannerImages(section: HomepageSectionView) {
   const config = (section.config || {}) as Record<string, any>;
   const rows = Array.isArray(config.images) ? config.images : [];
@@ -166,6 +170,18 @@ function select(section: HomepageSectionView) {
 
         <div v-else-if="section.type === 'activity_tabs'" class="decor-tabs" :style="sectionStyle(section, 'transparent')">
           <span>热门</span><span v-for="item in sectionRows(section, 'categories').slice(0, 4)" :key="item.id">{{ item.name }}</span>
+        </div>
+
+        <div v-else-if="isHomeActivityFocus(section)" class="activity-focus" :style="sectionStyle(section, '#eef7f4')">
+          <small>本周主推</small>
+          <img v-if="sectionRows(section, 'activities')[0]?.coverUrl" :src="sectionRows(section, 'activities')[0].coverUrl" alt="" />
+          <div v-else class="activity-focus-cover">活动报名</div>
+          <section>
+            <b>{{ sectionRows(section, 'activities')[0]?.startTime }}</b>
+            <h4>{{ sectionRows(section, 'activities')[0]?.title }}</h4>
+            <p>{{ sectionRows(section, 'activities')[0]?.location || "地点待确认" }} · 余 {{ sectionRows(section, 'activities')[0]?.remainingSeats }}</p>
+            <footer><strong>{{ Number(sectionRows(section, 'activities')[0]?.price) > 0 ? `¥${Number(sectionRows(section, 'activities')[0]?.price).toFixed(2)}` : "免费" }}</strong><span>立即报名</span></footer>
+          </section>
         </div>
 
         <div v-else-if="['featured_activities','activity_feed'].includes(section.type)" class="decor-card" :style="sectionStyle(section)">
@@ -253,6 +269,16 @@ function select(section: HomepageSectionView) {
 .decor-chips,.decor-tabs { display:flex; gap:6px; overflow:hidden; }
 .decor-chips span,.decor-tabs span { flex:0 0 auto; padding:6px 9px; border-radius:999px; background:var(--preview-chip,#fff7ec); color:var(--preview-primary,#0f766e); font-size:9px; font-weight:800; }
 .decor-tabs { margin-bottom:12px; padding:8px 4px; }
+.activity-focus { position:relative; overflow:hidden; margin-bottom:12px; text-align:left; }
+.activity-focus>small { position:absolute; z-index:1; top:10px; left:10px; padding:4px 7px; border-radius:6px; background:rgba(15,118,110,.9); color:#fff; font-size:8px; font-weight:900; }
+.activity-focus>img,.activity-focus-cover { width:100%; height:130px; display:grid; place-items:center; object-fit:cover; background:linear-gradient(135deg,#d8ebe5,#f3e2cb); color:#0f766e; font-size:17px; font-weight:900; }
+.activity-focus>section { padding:11px 12px 12px; background:#fff; }
+.activity-focus section>b { color:var(--preview-primary); font-size:9px; }
+.activity-focus h4 { margin:4px 0; color:#111827; font-size:14px; }
+.activity-focus p { margin:0; color:#667085; font-size:9px; }
+.activity-focus footer { display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
+.activity-focus footer strong { color:var(--preview-accent); font-size:13px; }
+.activity-focus footer span { padding:6px 8px; border-radius:6px; background:var(--preview-primary); color:#fff; font-size:9px; font-weight:900; }
 .activity-list,.post-list { display:grid; gap:8px; }
 .activity-list article { display:grid; grid-template-columns:66px 1fr; gap:9px; min-width:0; padding:7px; border:1px solid rgba(15,23,42,.06); border-radius:8px; background:#fff; }
 .activity-list img,.activity-cover { width:66px; height:58px; display:grid; place-items:center; border-radius:6px; object-fit:cover; background:linear-gradient(135deg,#d9e9e4,#f3e2cb); color:#5b2f24; font-family:"KaiTi",serif; font-size:22px; }

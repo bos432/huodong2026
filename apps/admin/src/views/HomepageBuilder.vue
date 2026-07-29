@@ -97,14 +97,14 @@ const defaultConfig: Record<string, Record<string, any>> = {
   announcement_bar: { limit: 5, pinnedFirst: true, link: "/pages/announcement/list" },
   quick_nav: {
     items: [
-      { label: "全部活动", icon: "activity", color: "#0f766e", link: "/pages/activity/list" },
-      { label: "公告中心", icon: "notice", color: "#c2410c", link: "/pages/announcement/list" },
-      { label: "我的报名", icon: "ticket", color: "#4338ca", link: "/pages/user/my", action: "mainPage" },
-      { label: "服务中心", icon: "service", color: "#475467", link: "/pages/service/index" }
+      { label: "活动日历", icon: "历", color: "#0f766e", link: "/pages/activity/list", action: "mainPage" },
+      { label: "我的报名", icon: "报", color: "#4338ca", link: "/pages/user/my", action: "mainPage" },
+      { label: "志愿服务", icon: "愿", color: "#5B8C5A", link: "/pages/volunteer/index" },
+      { label: "公益项目", icon: "益", color: "#c2410c", link: "/pages/charity/index", action: "mainPage" }
     ]
   },
   category_grid: { limit: 8, showCover: true },
-  featured_activities: { source: "featured", limit: 6 },
+  featured_activities: { source: "featured", limit: 6, display: "focus" },
   activity_tabs: { includeHot: true, limit: 8 },
   activity_feed: { source: "latest", limit: 10, pageSize: 4, pagination: "pager" },
   testimonial_feed: { source: "participant", limit: 3, link: "/pages/community/index" },
@@ -219,7 +219,7 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
       { type: "search_bar", title: null, config: { cityLabel: "本地", placeholder: "搜索活动、内容、好物" }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", borderRadius: 999, cardStyle: "outlined", spacingBottom: 10 } },
       { type: "hero", title: "慢π活动与内容", subtitle: "精选活动、专题内容、商城好物和社区动态，一站式完成浏览、报名、下单和会员服务。", config: { ...defaultConfig.hero, eyebrow: "上线运营简洁版", primaryButtonText: "查看精选活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" }, layout: { backgroundColor: "linear-gradient(135deg, #0f766e 0%, #4a6b8a 100%)", primaryColor: "#0f766e", accentColor: "#c43d3d", textColor: "#ffffff", mutedColor: "rgba(255,255,255,0.82)", borderRadius: 12, density: "comfortable", cardStyle: "soft" } },
       { type: "announcement_bar", title: "平台公告", config: { limit: 3, pinnedFirst: true, link: "/pages/announcement/list" }, layout: { backgroundColor: "#fff7ec", primaryColor: "#c43d3d", borderRadius: 8, spacingBottom: 10 } },
-      { type: "featured_activities", title: "精选活动", subtitle: "近期重点推荐，适合优先报名", config: { source: "featured", limit: 6 }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", cardStyle: "soft", borderRadius: 8 } },
+      { type: "featured_activities", title: "本周主推", subtitle: "时间、地点和名额一眼确认，立即报名", config: { source: "featured", limit: 6, display: "focus" }, layout: { backgroundColor: "#ffffff", primaryColor: "#0f766e", cardStyle: "soft", borderRadius: 8 } },
       { type: "image_banner", title: "商城与广告入口", config: { imageUrl: "", link: "/pages/mall/index", ratio: "3:1", fit: "cover" }, layout: { backgroundColor: "#f8fafc", primaryColor: "#c43d3d", borderRadius: 10, cardStyle: "outlined" } },
       { type: "course_recommendations", title: "专题入口", subtitle: "把活动体验延伸为持续参与", config: defaultConfig.course_recommendations, layout: { backgroundColor: "#ffffff", primaryColor: "#4a6b8a", borderRadius: 8, cardStyle: "soft" } },
       { type: "testimonial_feed", title: "动态与心得", subtitle: "查看参与者反馈和社区内容", config: { source: "participant", limit: 3, link: "/pages/community/index" }, layout: { backgroundColor: "#ffffff", primaryColor: "#8b5a2b", borderRadius: 8, cardStyle: "soft" } },
@@ -230,9 +230,11 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
     key: "activity_ops",
     label: "活动运营型",
     rows: [
-      { type: "hero", title: "近期活动与共修报名", subtitle: "筛选近期线下活动，报名、付款确认和签到都在这里完成。", config: { ...defaultConfig.hero, primaryButtonText: "浏览活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" } },
+      { type: "hero", title: "这周，去参加一场活动", subtitle: "从时间、地点到名额，快速找到适合参与的城市活动。", config: { ...defaultConfig.hero, primaryButtonText: "查看全部活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" } },
       { type: "quick_nav", title: null, config: defaultConfig.quick_nav },
-      { type: "featured_activities", title: "精选活动", subtitle: "主办方推荐，适合优先查看" },
+      { type: "featured_activities", title: "本周主推", subtitle: "优先展示最值得立即报名的一场活动", config: { source: "featured", limit: 6, display: "focus" } },
+      { type: "activity_tabs", title: "按兴趣找活动", subtitle: "今天、本周、周末和不同主题活动", config: { includeHot: true, limit: 8 } },
+      { type: "activity_feed", title: "近期活动", subtitle: "更多时间与主题，随时浏览报名", config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager" } },
       { type: "testimonial_feed", title: "参与者心得", subtitle: "真实活动反馈帮助新用户理解这里在发生什么" }
     ]
   },
