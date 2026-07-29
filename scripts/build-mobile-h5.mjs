@@ -6,14 +6,6 @@ import path from "node:path";
 const root = process.cwd();
 const nodeMajor = Number(process.versions.node.split(".")[0]);
 
-function gitText(args, fallback = "") {
-  const result = spawnSync("git", args, { cwd: root, encoding: "utf8", windowsHide: true });
-  return result.status === 0 ? String(result.stdout || "").trim() || fallback : fallback;
-}
-
-process.env.VITE_APP_VERSION ||= process.env.APP_VERSION || "0.1.0";
-process.env.VITE_BUILD_COMMIT ||= process.env.BUILD_COMMIT || gitText(["rev-parse", "--short=8", "HEAD"], "local");
-
 function run(command, args, options = {}) {
   const result = spawnSync(command, args, {
     cwd: root,

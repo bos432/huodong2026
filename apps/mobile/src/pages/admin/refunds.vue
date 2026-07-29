@@ -135,11 +135,11 @@ async function review(row: any, action: "approve" | "reject") {
         if (!session || !currentSession || currentSession.token !== session.token || currentSession.tenantId !== session.tenantId) throw new Error("管理账号或商家已切换，请重新选择退款单");
         await mobileAdminRequest(`/admin/refunds/${row.id}/${action}`, { method: "POST", data: { remark: remark || "手机端通过退款审核" } });
         uni.showToast({ title: action === "approve" ? "已通过" : "已拒绝", icon: "success" });
-        await load(true);
       } catch (error: any) {
         actionError.value = error.message || "退款处理失败";
       } finally {
         actionId.value = null;
+        await load(true);
       }
     },
     fail: () => { actionId.value = null; }
@@ -172,11 +172,11 @@ function retry(row: any) {
         if (!session || !currentSession || currentSession.token !== session.token || currentSession.tenantId !== session.tenantId) throw new Error("管理账号或商家已切换，请重新选择退款单");
         await mobileAdminRequest(`/admin/refunds/${row.id}/retry`, { method: "POST", data: { remark } });
         uni.showToast({ title: "已提交重试", icon: "success" });
-        await load(true);
       } catch (error: any) {
         actionError.value = error.message || "退款重试失败";
       } finally {
         actionId.value = null;
+        await load(true);
       }
     },
     fail: () => { actionId.value = null; }

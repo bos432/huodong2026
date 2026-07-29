@@ -7194,7 +7194,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private refundListQuery(query: OrderQueryDto | RefundQueryDto, admin?: AdminContext) {
-    const builder = this.refundsQuery().orderBy("refund.createdAt", "DESC");
+    const builder = this.refundsQuery().setFindOptions({ loadEagerRelations: false }).orderBy("refund.createdAt", "DESC");
     if (query.status && ["pending", "submitting", "processing", "failed", "approved", "rejected", "completed"].includes(String(query.status))) builder.andWhere("refund.status = :refundStatus", { refundStatus: query.status });
     if (query.keyword?.trim()) {
       const keyword = `%${query.keyword.trim()}%`;
@@ -8101,7 +8101,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async approveRefund(refundId: number, dto: ReviewDto, admin: AdminContext) {
     const claimed = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(Refund);
-      const locked = await repo.findOne({ where: { id: refundId }, lock: { mode: "pessimistic_write" } });
+      const locked = await this.lockedRefund(repo, refundId, true);
       if (!locked) throw new NotFoundException("退款申请不存在");
       this.assertTenantAccess(locked, admin);
       const claim = canClaimRefundReview(locked.status);
@@ -8179,7 +8179,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async rejectRefund(refundId: number, dto: ReviewDto, admin: AdminContext) {
     const result = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(Refund);
-      const refund = await repo.findOne({ where: { id: refundId }, lock: { mode: "pessimistic_write" } });
+      const refund = await this.lockedRefund(repo, refundId);
       if (!refund) throw new NotFoundException("退款申请不存在");
       this.assertTenantAccess(refund, admin);
       if (refund.status === "rejected") return { saved: refund, claimed: false };
@@ -8211,7 +8211,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     for (const row of staleSubmitting) {
       const marked = await this.dataSource.transaction(async (manager) => {
         const repo = manager.getRepository(Refund);
-        const locked = await repo.findOne({ where: { id: row.id }, lock: { mode: "pessimistic_write" } });
+        const locked = await this.lockedRefund(repo, row.id);
         if (!locked || locked.status !== "submitting") return false;
         locked.status = "failed";
         locked.providerRefundFailureReason = "退款渠道提交结果超时未知，系统使用原退款单号自动补偿重试";
@@ -8519,7 +8519,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async retryRefund(refundId: number, dto: ReviewDto, admin: AdminContext) {
     await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(Refund);
-      const refund = await repo.findOne({ where: { id: refundId }, lock: { mode: "pessimistic_write" } });
+      const refund = await this.lockedRefund(repo, refundId);
       if (!refund) throw new NotFoundException("退款申请不存在");
       this.assertTenantAccess(refund, admin);
       if (refund.status !== "failed") throw new BadRequestException("只有失败的退款可以重试");
@@ -12856,11 +12856,23 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private refundsQuery() {
     return this.refunds
       .createQueryBuilder("refund")
+      .setFindOptions({ loadEagerRelations: false })
       .leftJoinAndSelect("refund.order", "order")
       .leftJoinAndSelect("order.agent", "orderAgent")
       .leftJoinAndSelect("order.registration", "registration")
       .leftJoinAndSelect("registration.user", "user")
       .leftJoinAndSelect("registration.activity", "activity");
+  }
+
+  private lockedRefund(repo: Repository<Refund>, id: number, includeOrder = false) {
+    const builder = repo
+      .createQueryBuilder("refund")
+      .setFindOptions({ loadEagerRelations: false })
+      .leftJoinAndSelect("refund.tenant", "tenant")
+      .where("refund.id = :id", { id })
+      .setLock("pessimistic_write");
+    if (includeOrder) builder.leftJoinAndSelect("refund.order", "order");
+    return builder.getOne();
   }
 
   private callbackLogsQuery() {

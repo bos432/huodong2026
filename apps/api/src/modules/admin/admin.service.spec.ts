@@ -474,8 +474,11 @@ describe("mobile financial write concurrency guard", () => {
 
   it("locks refund rejection and treats an already rejected row as an idempotent replay", () => {
     const rejectRefund = source.slice(source.indexOf("async rejectRefund("), source.indexOf("async scanProviderRefunds("));
+    const lockedRefund = source.slice(source.indexOf("private lockedRefund("), source.indexOf("private callbackLogsQuery("));
 
-    expect(rejectRefund).toContain('lock: { mode: "pessimistic_write" }');
+    expect(rejectRefund).toContain("this.lockedRefund(repo, refundId)");
+    expect(lockedRefund).toContain('setLock("pessimistic_write")');
+    expect(lockedRefund).toContain("loadEagerRelations: false");
     expect(rejectRefund).toContain('refund.status === "rejected"');
     expect(rejectRefund).toContain("if (!result.claimed) return result.saved");
   });

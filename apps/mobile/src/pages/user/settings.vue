@@ -22,15 +22,17 @@
   </view>
 </template>
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { clearUser, ensureUser, withTenantCode } from "../../api";
+import { clearUser, ensureUser, request, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
 
 const activeAction = ref("");
-const appVersion = String(import.meta.env.VITE_APP_VERSION || "0.1.0").trim() || "0.1.0";
-const buildCommit = String(import.meta.env.VITE_BUILD_COMMIT || "").trim();
-const clientVersion = `v${appVersion}${buildCommit ? ` · ${buildCommit}` : ""}`;
+const miniprogramVersion = ref("");
+const clientVersion = computed(() => {
+  const version = miniprogramVersion.value.replace(/^v/i, "").trim();
+  return version ? `v${version}` : "未配置";
+});
 
 function goBack() { uni.navigateBack(); }
 function goSecurity() { uni.navigateTo({ url:withTenantCode("/pages/user/security") }); }
@@ -40,7 +42,16 @@ function goNotifications() { uni.navigateTo({ url:withTenantCode("/pages/user/co
 function showAbout() {
   if (activeAction.value) return;
   activeAction.value = "about";
-  uni.showModal({ title:"关于慢π", content:`慢π活动、课程、社区与公益服务平台。当前客户端版本 ${clientVersion}。`, showCancel:false, complete:() => { activeAction.value = ""; } });
+  uni.showModal({ title:"关于慢π", content:`慢π活动、课程、社区与公益服务平台。当前小程序版本 ${clientVersion.value}。`, showCancel:false, complete:() => { activeAction.value = ""; } });
+}
+
+async function loadMiniprogramVersion() {
+  try {
+    const setting = await request<{ miniprogramVersion?: string | null }>("/public/settings/operation");
+    miniprogramVersion.value = String(setting?.miniprogramVersion || "").trim();
+  } catch {
+    miniprogramVersion.value = "";
+  }
 }
 function logout() {
   if (activeAction.value) return;
@@ -57,7 +68,7 @@ function logout() {
   });
 }
 
-onShow(() => { void ensureUser(); });
+onShow(() => { void ensureUser(); void loadMiniprogramVersion(); });
 </script>
 <style scoped>
 .user-subpage {

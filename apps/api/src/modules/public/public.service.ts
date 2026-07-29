@@ -978,7 +978,14 @@ export class PublicService {
   async operationSetting(context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     const setting = await this.ensureOperationSetting(tenant);
-    const result = this.publicOperationSetting(setting, await this.platformOperationSetting(setting));
+    const [platformSetting, miniprogramRelease] = await Promise.all([
+      this.platformOperationSetting(setting),
+      this.miniprogramReleaseSettings.findOne({ where: {}, order: { id: "ASC" } })
+    ]);
+    const result = {
+      ...this.publicOperationSetting(setting, platformSetting),
+      miniprogramVersion: String(miniprogramRelease?.version || "").trim() || null
+    };
     const launchConfig = (result as Record<string, any>).launchConfig;
     if (tenant && launchConfig?.featureGates) {
       for (const key of Object.keys(defaultFeatureGates) as FeatureGateKey[]) {

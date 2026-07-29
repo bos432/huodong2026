@@ -556,6 +556,9 @@ describe("mobile client state consistency", () => {
     expect(userSettings).toContain('if (!r.confirm) { activeAction.value = ""; return; }');
     expect(userSettings).toContain('uni.reLaunch({ url:withTenantCode("/pages/user/my") })');
     expect(userSettings).toContain('role="button"');
+    expect(userSettings).toContain('request<{ miniprogramVersion?: string | null }>("/public/settings/operation")');
+    expect(userSettings).toContain("当前小程序版本 ${clientVersion.value}");
+    expect(publicService).toContain("miniprogramVersion: String(miniprogramRelease?.version || \"\").trim() || null");
   });
 
   it("refreshes announcements with tenant and schedule-safe presentation state", () => {
@@ -717,6 +720,9 @@ describe("mobile client state consistency", () => {
     expect(mobileAdminRefunds).toContain("currentSession.tenantId !== session.tenantId");
     expect(mobileAdminRefunds).toContain('from "../../tenant-load-guard"');
     expect(mobileAdminRefunds).toContain('role="alert"');
+    expect(mobileAdminRefunds).toContain('from "../../query"');
+    expect(mobileAdminRefunds).not.toContain("URLSearchParams");
+    expect(mobileAdminRefunds).toContain("finally {\n        actionId.value = null;\n        await load(true);");
   });
 
   it("binds registration detail reads and writes to one tenant registration context", () => {
