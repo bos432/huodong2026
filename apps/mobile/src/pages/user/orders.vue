@@ -56,7 +56,7 @@ import EmptyState from "../../components/EmptyState.vue";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
 
-type OrderTab = "all" | "pending" | "learning" | "completed";
+type OrderTab = "all" | "pending" | "upcoming" | "learning" | "completed";
 type UiOrder = {
   key: string;
   type: "activity" | "course";
@@ -84,7 +84,8 @@ type UiOrder = {
 const tabs = [
   { key: "all", label: "全部" },
   { key: "pending", label: "待处理" },
-  { key: "learning", label: "待观看" },
+  { key: "upcoming", label: "待参与" },
+  { key: "learning", label: "待学习" },
   { key: "completed", label: "已完成" }
 ] as const;
 const activeTab = ref<OrderTab>("all");
@@ -139,6 +140,7 @@ const allOrders = computed<UiOrder[]>(() => {
 });
 const visibleOrders = computed(() => allOrders.value.filter((item) => {
   if (activeTab.value === "pending") return item.statusClass === "pending";
+  if (activeTab.value === "upcoming") return item.type === "activity" && item.statusClass === "upcoming";
   if (activeTab.value === "learning") return item.type === "course" && item.statusClass === "learning" && item.owned && Number(item.progress || 0) < 100;
   if (activeTab.value === "completed") return item.statusClass === "done" || item.status.endsWith("refund_completed") || Number(item.progress || 0) >= 100;
   return true;
@@ -148,7 +150,7 @@ function readRouteStatus() {
   const pages = getCurrentPages();
   const options = (pages[pages.length - 1] as any)?.options || {};
   const status = String(options.status || "all");
-  if (["all", "pending", "learning", "completed"].includes(status)) activeTab.value = status as OrderTab;
+  if (["all", "pending", "upcoming", "learning", "completed"].includes(status)) activeTab.value = status as OrderTab;
 }
 
 async function loadOrders(preserveContent = false) {
@@ -287,8 +289,10 @@ function toLearningOrder(course: any): UiOrder {
 
 function statusClass(status: string) {
   if (status === "pending_payment") return "pending";
-  if (["approved", "checked_in", "paid", "completed"].includes(status)) return "done";
-  if (["pending_review", "learning"].includes(status)) return "learning";
+  if (status === "pending_review") return "pending";
+  if (status === "approved") return "upcoming";
+  if (["checked_in", "paid", "completed"].includes(status)) return "done";
+  if (status === "learning") return "learning";
   return "muted";
 }
 
@@ -296,7 +300,7 @@ function registrationStatusText(status: string) {
   const map: Record<string, string> = {
     pending_payment: "待付款/确认",
     pending_review: "待审核",
-    approved: "报名成功",
+    approved: "待参与",
     checked_in: "已签到",
     rejected: "已拒绝",
     cancelled: "已取消"
@@ -469,6 +473,7 @@ onShow(() => {
 .order-title { margin-top: 6rpx; color: #222; font-size: 30rpx; font-weight: 900; line-height: 1.35; }
 .status-pill { flex: 0 0 auto; padding: 8rpx 16rpx; border-radius: 999px; font-size: 22rpx; font-weight: 900; background: #edf0f5; color: #667085; }
 .status-pill.pending { background: #fff7ed; color: #9a3412; }
+.status-pill.upcoming { background: #eff6ff; color: #1d4ed8; }
 .status-pill.learning { background: #eef2ff; color: #3730a3; }
 .status-pill.done { background: #ecfdf3; color: #166534; }
 .order-meta { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx 18rpx; margin-top: 18rpx; }

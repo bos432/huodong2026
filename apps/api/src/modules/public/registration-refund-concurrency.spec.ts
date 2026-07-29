@@ -37,6 +37,7 @@ describe("member registration refund consistency guard", () => {
     expect(ordersPage).toContain('return "退款处理中"');
     expect(ordersPage).toContain("退款申请处理中，申请金额");
     expect(ordersPage).toContain('{ key: "pending", label: "待处理" }');
+    expect(ordersPage).toContain('{ key: "upcoming", label: "待参与" }');
     expect(ordersPage).toContain('item.status.endsWith("refund_completed")');
   });
 

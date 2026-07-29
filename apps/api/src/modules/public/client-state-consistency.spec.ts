@@ -269,6 +269,9 @@ describe("mobile client state consistency", () => {
     expect(userMy).toContain("learningOnlyCourses()");
     expect(userMy).not.toContain("member-order-cache");
     expect(userMy).toContain('label:"待处理"');
+    expect(userMy).toContain('label:"待参与"');
+    expect(userMy).toContain('label:"已完成"');
+    expect(userMy).toContain("activityOrderIsUpcoming");
     expect(userMy).toContain("查看全部 ›");
     expect(userMy).not.toContain('label:"全部"');
     expect(userMy).toContain("gridTemplateColumns: `repeat(${orderTabs.length}, minmax(0, 1fr))`");

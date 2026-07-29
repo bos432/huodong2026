@@ -279,13 +279,19 @@ function shouldCompleteWechatProfile(row?: any) {
 const isDefaultWechatNickname = computed(() => isDefaultWechatNicknameValue(profile.value?.nickname));
 const canCompleteWechatProfile = computed(() => shouldCompleteWechatProfile(profile.value));
 const pendingOrderCount = computed(() => ["registrations", "courseOrders"].some(assetFailed) ? null
-  : registrations.value.filter((item) => item.status === "pending_payment" || ["pending", "processing"].includes(String(item.latestRefund?.status || ""))).length
+  : registrations.value.filter(activityOrderIsPending).length
     + courseOrders.value.filter((item) => item.status === "pending_payment" || ["pending", "approved", "processing", "failed"].includes(String(item.latestRefund?.status || ""))).length);
+const upcomingOrderCount = computed(() => assetFailed("registrations") ? null : registrations.value.filter(activityOrderIsUpcoming).length);
 const learningCourseCount = computed(() => ["courses", "courseOrders"].some(assetFailed) ? null : courseOrders.value.filter(courseOrderIsLearning).length + learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) < 100).length);
-const completedOrderCount = computed(() => ["registrations", "courses", "courseOrders"].some(assetFailed) ? null
-  : registrations.value.filter(activityOrderIsCompleted).length
-    + courseOrders.value.filter(courseOrderIsCompleted).length
-    + learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) >= 100).length);
+const completedOrderCount = computed(() => {
+  if (assetFailed("registrations")) return null;
+  let count = registrations.value.filter(activityOrderIsCompleted).length;
+  if (!featureGatesState.value.courses) return count;
+  if (["courses", "courseOrders"].some(assetFailed)) return null;
+  count += courseOrders.value.filter(courseOrderIsCompleted).length;
+  count += learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) >= 100).length;
+  return count;
+});
 
 function memberSession(): MemberOrderSession {
   return { tenantCode: getCurrentTenantCode(), userId: getUserId(), userToken: getUserToken() };
@@ -323,7 +329,16 @@ function courseOrderIsCompleted(order: any) {
 function activityOrderIsCompleted(item: any) {
   const refundStatus = String(item.latestRefund?.status || "");
   if (refundStatus) return refundStatus === "completed";
-  return ["approved", "checked_in", "paid", "completed"].includes(String(item.status || ""));
+  return ["checked_in", "completed"].includes(String(item.status || ""));
+}
+
+function activityOrderIsPending(item: any) {
+  const refundStatus = String(item.latestRefund?.status || "");
+  return ["pending_payment", "pending_review"].includes(String(item.status || "")) || ["pending", "processing"].includes(refundStatus);
+}
+
+function activityOrderIsUpcoming(item: any) {
+  return !item.latestRefund?.status && String(item.status || "") === "approved";
 }
 
 function money(value: string | number | undefined | null) {
@@ -498,11 +513,14 @@ const gridItems = computed(() => {
 });
 
 const orderTabs = computed(() => {
-  const rows = [{ icon:"💳", label:"待处理", count: pendingOrderCount.value, status:"pending" }];
+  const rows = [
+    { icon:"💳", label:"待处理", count: pendingOrderCount.value, status:"pending" },
+    { icon:"🎫", label:"待参与", count: upcomingOrderCount.value, status:"upcoming" }
+  ];
   if (featureGatesState.value.courses) {
-    rows.push({ icon:"📚", label:"待观看", count: learningCourseCount.value, status:"learning" });
-    rows.push({ icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" });
+    rows.push({ icon:"📚", label:"待学习", count: learningCourseCount.value, status:"learning" });
   }
+  rows.push({ icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" });
   return rows;
 });
 
