@@ -465,14 +465,11 @@ async function load() {
   loading.value = true;
   loadError.value = "";
   try {
-    const bootstrapData = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
+    bootstrap.value = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
     if (serial !== loadSerial) return;
-    bootstrap.value = bootstrapData;
     if (!form.value.tenantId && bootstrap.value?.admin?.tenantId) form.value.tenantId = bootstrap.value.admin.tenantId;
     if (!form.value.tenantId && bootstrap.value?.tenants?.length === 1) form.value.tenantId = bootstrap.value.tenants[0].id;
-    const pages = getCurrentPages();
-    const currentPage = pages[pages.length - 1] as any;
-    id.value = Number(currentPage?.options?.id || 0);
+    id.value = Number(((getCurrentPages().slice(-1)[0] as any)?.options?.id) || 0);
     await loadActivity(serial);
     if (serial !== loadSerial) return;
     initialized = true;
