@@ -15,7 +15,7 @@
       <view class="settings-item" role="button" tabindex="0" aria-label="我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="会员中心" @click="goMemberCenter" @keyup.enter="goMemberCenter" @keyup.space.prevent="goMemberCenter"><text>会员中心</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="消息通知" @click="goNotifications" @keyup.enter="goNotifications" @keyup.space.prevent="goNotifications"><text>消息通知</text><text class="item-arrow">›</text></view>
-      <view class="settings-item" role="button" tabindex="0" aria-label="关于慢π" @click="showAbout" @keyup.enter="showAbout" @keyup.space.prevent="showAbout"><text>关于慢π</text><text class="item-arrow">v0.1.0 ›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="关于慢π" @click="showAbout" @keyup.enter="showAbout" @keyup.space.prevent="showAbout"><text>关于慢π</text><text class="item-arrow">{{ clientVersion }} ›</text></view>
     </view>
     <view class="logout-button" :class="{ disabled: activeAction }" role="button" tabindex="0" :aria-busy="activeAction === 'logout'" :aria-label="activeAction === 'logout' ? '正在确认退出登录' : '退出登录'" @click="logout" @keyup.enter="logout" @keyup.space.prevent="logout">{{ activeAction === "logout" ? "确认中..." : "退出登录" }}</view>
     <TabBar current="user" />
@@ -28,6 +28,9 @@ import { clearUser, ensureUser, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
 
 const activeAction = ref("");
+const appVersion = String(import.meta.env.VITE_APP_VERSION || "0.1.0").trim() || "0.1.0";
+const buildCommit = String(import.meta.env.VITE_BUILD_COMMIT || "").trim();
+const clientVersion = `v${appVersion}${buildCommit ? ` · ${buildCommit}` : ""}`;
 
 function goBack() { uni.navigateBack(); }
 function goSecurity() { uni.navigateTo({ url:withTenantCode("/pages/user/security") }); }
@@ -37,7 +40,7 @@ function goNotifications() { uni.navigateTo({ url:withTenantCode("/pages/user/co
 function showAbout() {
   if (activeAction.value) return;
   activeAction.value = "about";
-  uni.showModal({ title:"关于慢π", content:"慢π活动、课程、社区与公益服务平台。当前客户端版本 v0.1.0。", showCancel:false, complete:() => { activeAction.value = ""; } });
+  uni.showModal({ title:"关于慢π", content:`慢π活动、课程、社区与公益服务平台。当前客户端版本 ${clientVersion}。`, showCancel:false, complete:() => { activeAction.value = ""; } });
 }
 function logout() {
   if (activeAction.value) return;

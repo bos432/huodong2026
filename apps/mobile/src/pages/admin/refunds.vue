@@ -2,6 +2,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
+import { stringifyQuery } from "../../query";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
@@ -33,12 +34,13 @@ const tabs = [
 ];
 
 function buildUrl() {
-  const params = new URLSearchParams();
-  if (status.value) params.set("status", status.value);
-  if (keyword.value.trim()) params.set("keyword", keyword.value.trim());
-  params.set("page", String(page.value));
-  params.set("pageSize", String(pageSize));
-  return `/admin/finance/refunds?${params.toString()}`;
+  const query = stringifyQuery({
+    status: status.value || undefined,
+    keyword: keyword.value.trim() || undefined,
+    page: page.value,
+    pageSize
+  });
+  return `/admin/finance/refunds?${query}`;
 }
 
 async function load(refreshBootstrap = false) {
