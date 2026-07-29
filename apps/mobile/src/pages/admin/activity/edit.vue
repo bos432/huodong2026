@@ -455,19 +455,24 @@ async function loadActivity(expectedSerial = loadSerial) {
   dirty.value = false;
 }
 
+function finishLoading(serial: number) {
+  if (serial === loadSerial) loading.value = false;
+}
+
 async function load() {
   try { requireMobileAdmin(); } catch { loading.value = false; return; }
   const serial = ++loadSerial;
   loading.value = true;
   loadError.value = "";
   try {
-    const boot = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
+    const bootstrapData = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
     if (serial !== loadSerial) return;
-    bootstrap.value = boot;
+    bootstrap.value = bootstrapData;
     if (!form.value.tenantId && bootstrap.value?.admin?.tenantId) form.value.tenantId = bootstrap.value.admin.tenantId;
     if (!form.value.tenantId && bootstrap.value?.tenants?.length === 1) form.value.tenantId = bootstrap.value.tenants[0].id;
     const pages = getCurrentPages();
-    id.value = Number((pages[pages.length - 1] as any).options?.id || 0);
+    const currentPage = pages[pages.length - 1] as any;
+    id.value = Number(currentPage?.options?.id || 0);
     await loadActivity(serial);
     if (serial !== loadSerial) return;
     initialized = true;
@@ -476,7 +481,7 @@ async function load() {
     if (serial !== loadSerial) return;
     loadError.value = err.message || "活动编辑页加载失败";
   } finally {
-    if (serial === loadSerial) loading.value = false;
+    finishLoading(serial);
   }
 }
 
