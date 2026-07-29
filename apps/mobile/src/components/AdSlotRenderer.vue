@@ -228,8 +228,8 @@ onBeforeUnmount(clearTimer);
       <view class="ad-splash-skip" @click="closeAd('skip')">跳过 {{ countdown }}</view>
       <image v-if="displayImageUrl" class="ad-splash-image" :src="displayImageUrl" mode="aspectFill" @click="openAd" />
       <view v-else class="ad-splash-fallback" @click="openAd">
-        <text>{{ ad.title }}</text>
-        <text>{{ ad.subtitle || "广告推广" }}</text>
+        <text class="ad-splash-title">{{ ad.title }}</text>
+        <text class="ad-splash-copy">{{ ad.subtitle || "广告推广" }}</text>
       </view>
     </view>
 
@@ -247,11 +247,11 @@ onBeforeUnmount(clearTimer);
       <view v-if="displayImageUrls.length > 1" class="ad-slot-media">
         <swiper class="ad-slot-swiper" circular autoplay indicator-dots indicator-color="rgba(255,255,255,0.62)" indicator-active-color="#ffffff">
           <swiper-item v-for="url in displayImageUrls" :key="url">
-            <image :src="url" mode="aspectFill" />
+            <image class="ad-slot-image" :src="url" mode="aspectFill" />
           </swiper-item>
         </swiper>
       </view>
-      <image v-else-if="displayImageUrl" :src="displayImageUrl" mode="aspectFill" />
+      <image v-else-if="displayImageUrl" class="ad-slot-image" :src="displayImageUrl" mode="aspectFill" />
       <view v-else class="ad-cover-fallback">AD</view>
       <view class="ad-slot-body">
         <view class="ad-slot-title">{{ ad.title }}</view>
@@ -264,11 +264,11 @@ onBeforeUnmount(clearTimer);
 <style scoped>
 .ad-slot-card { display: grid; grid-template-columns: 180rpx 1fr; gap: 18rpx; margin: 18rpx 0; padding: 18rpx; border-radius: 18rpx; background: #fffdf5; border: 1rpx solid rgba(241, 199, 106, 0.55); box-shadow: 0 12rpx 30rpx rgba(154, 106, 36, 0.10); }
 .ad-slot-card.compact { grid-template-columns: 140rpx 1fr; }
-.ad-slot-card image, .ad-slot-media, .ad-slot-swiper, .ad-cover-fallback { width: 180rpx; height: 128rpx; border-radius: 14rpx; background: linear-gradient(135deg, #ffd45a 0%, #fff2b8 100%); }
-.ad-slot-card.compact image, .ad-slot-card.compact .ad-slot-media, .ad-slot-card.compact .ad-slot-swiper, .ad-slot-card.compact .ad-cover-fallback { width: 140rpx; height: 104rpx; }
+.ad-slot-image, .ad-slot-media, .ad-slot-swiper, .ad-cover-fallback { width: 180rpx; height: 128rpx; border-radius: 14rpx; background: linear-gradient(135deg, #ffd45a 0%, #fff2b8 100%); }
+.ad-slot-card.compact .ad-slot-image, .ad-slot-card.compact .ad-slot-media, .ad-slot-card.compact .ad-slot-swiper, .ad-slot-card.compact .ad-cover-fallback { width: 140rpx; height: 104rpx; }
 .ad-slot-media { position: relative; overflow: hidden; }
 .ad-slot-swiper { overflow: hidden; }
-.ad-slot-swiper image { width: 100%; height: 100%; display: block; }
+.ad-slot-swiper .ad-slot-image { width: 100%; height: 100%; display: block; }
 .ad-cover-fallback { display: flex; align-items: center; justify-content: center; color: #9e1b12; font-weight: 900; }
 .ad-slot-body { min-width: 0; display: grid; align-content: center; gap: 8rpx; }
 .ad-slot-title { color: #1f2937; font-size: 28rpx; font-weight: 900; line-height: 1.35; }
@@ -276,7 +276,7 @@ onBeforeUnmount(clearTimer);
 .ad-splash-mask { position: fixed; z-index: 10000; inset: 0; background: #0f172a; }
 .ad-splash-image, .ad-splash-fallback { width: 100%; height: 100%; }
 .ad-splash-fallback { display: grid; place-content: center; gap: 20rpx; padding: 60rpx; background: linear-gradient(180deg, #ffd45a 0%, #e8412f 100%); color: #fff; text-align: center; font-size: 34rpx; font-weight: 900; }
-.ad-splash-fallback text:last-child { font-size: 26rpx; opacity: 0.86; }
+.ad-splash-copy { font-size: 26rpx; opacity: 0.86; }
 .ad-splash-skip { position: absolute; z-index: 1; top: 72rpx; right: 28rpx; padding: 12rpx 22rpx; border-radius: 999rpx; background: rgba(15, 23, 42, 0.55); color: #fff; font-size: 24rpx; font-weight: 800; }
 .official-ad-wrap { margin: 18rpx 0; min-height: 80rpx; overflow: hidden; }
 .ad-reward-card { margin: 18rpx 0; padding: 22rpx; border-radius: 18rpx; background: linear-gradient(135deg, #fff2b8 0%, #fffdf5 100%); border: 1rpx solid #f1c76a; }

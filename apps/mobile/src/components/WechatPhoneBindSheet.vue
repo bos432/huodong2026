@@ -5,7 +5,7 @@
       <view class="sheet-title">{{ title }}</view>
       <view class="sheet-message">{{ message }}</view>
       <!-- #ifdef MP-WEIXIN -->
-      <button class="bind-button native-button" open-type="getPhoneNumber" :disabled="binding" @getphonenumber="handleGetPhoneNumber">
+      <button class="bind-button native-button" :class="{ 'is-disabled': binding }" open-type="getPhoneNumber" :disabled="binding" @getphonenumber="handleGetPhoneNumber">
         {{ binding ? "绑定中..." : "手机号快捷绑定" }}
       </button>
       <!-- #endif -->
@@ -123,11 +123,10 @@ function goSecurity() {
   font-weight: 900;
   line-height: 88rpx;
 }
-.bind-button::after,
-.native-button::after {
+.bind-button::after {
   border: 0;
 }
-.bind-button[disabled] {
+.bind-button.is-disabled {
   color: #fff;
   opacity: .62;
 }

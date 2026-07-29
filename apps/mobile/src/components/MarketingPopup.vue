@@ -141,7 +141,7 @@ watch(() => props.showKey, loadPopup, { immediate: true });
         <view v-if="popup.emphasis" class="marketing-popup-emphasis">{{ popup.emphasis }}</view>
         <view v-if="popup.content" class="marketing-popup-copy">{{ popup.content }}</view>
         <view v-if="activeButtons.length" class="marketing-popup-actions">
-          <button v-for="button in activeButtons" :key="button.text" :class="button.style === 'secondary' ? 'secondary' : 'primary'" @click="handleButton(button)">
+          <button v-for="button in activeButtons" :key="button.text" :class="['marketing-popup-action', button.style === 'secondary' ? 'secondary' : 'primary']" @click="handleButton(button)">
             {{ button.text }}
           </button>
         </view>
@@ -162,7 +162,7 @@ watch(() => props.showKey, loadPopup, { immediate: true });
 .marketing-popup-emphasis { margin-top: 18rpx; color: #e8412f; font-size: 44rpx; line-height: 1.25; font-weight: 900; }
 .marketing-popup-copy { margin-top: 18rpx; color: #344054; font-size: 27rpx; line-height: 1.72; font-weight: 700; white-space: pre-line; }
 .marketing-popup-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18rpx; margin-top: 30rpx; }
-.marketing-popup-actions button { min-height: 82rpx; padding: 0 18rpx; border: 0; border-radius: 999rpx; font-size: 28rpx; font-weight: 900; line-height: 82rpx; }
+.marketing-popup-action { min-height: 82rpx; padding: 0 18rpx; border: 0; border-radius: 999rpx; font-size: 28rpx; font-weight: 900; line-height: 82rpx; }
 .marketing-popup-actions .primary { background: linear-gradient(135deg, #2e5d7f 0%, #d77a4d 100%); color: #fff; }
 .marketing-popup-actions .secondary { background: #eef3f6; color: #344054; }
 .marketing-popup-card.payment .marketing-popup-emphasis { color: #e8412f; }
