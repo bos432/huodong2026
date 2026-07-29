@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { request } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
@@ -14,6 +14,7 @@ const loading = ref(true);
 const loadError = ref("");
 const loadGuard = createTenantLoadGuard();
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("partner_page", "/pages/partner/index");
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 const contactText = computed(() => {
   const parts = [setting.value?.customerServiceName, setting.value?.customerServiceWechat, setting.value?.customerServicePhone].filter(Boolean);
@@ -78,7 +79,7 @@ onShow(() => {
       </view>
     </view>
 
-    <PageDecorationBlocks :sections="contentSections" />
+    <PageDecorationBlocks :sections="bodyDecorationSections" />
 
     <view class="section">
       <view class="section-title">合作对象</view>

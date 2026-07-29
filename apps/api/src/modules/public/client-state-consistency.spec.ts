@@ -116,6 +116,12 @@ describe("mobile client state consistency", () => {
     const attachmentPicker = activityRegister.slice(activityRegister.indexOf("function chooseAttachment"), activityRegister.indexOf("function submit()"));
     expect(attachmentPicker.indexOf("uploadingFieldId.value = field.id")).toBeLessThan(attachmentPicker.indexOf("uni.chooseMessageFile"));
     expect(activityRegister).toContain("getCurrentTenantCode() !== tenantCode");
+    expect(activityRegister).toContain("const availableTicketOptions");
+    expect(activityRegister).toContain("ticket.saleStatus === \"available\"");
+    expect(activityRegister).toContain("selectedTicketTypeId.value = availableTicketOptions.value[0]?.id");
+    expect(activityRegister).toContain("ticketSelectionUnavailable");
+    expect(publicService).toContain('saleStatus: "available" | "sold_out" | "not_started" | "ended"');
+    expect(publicService).toContain("请选择可售票种");
 
     for (const guard of ["courseLoadGuard", "reviewsLoadGuard", "favoriteActionGuard"]) {
       expect(courseDetail).toContain(`const ${guard} = createTenantLoadGuard()`);

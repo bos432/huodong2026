@@ -111,6 +111,11 @@ import { buildMemberOrderOverview } from "./member-order-overview";
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null; userId?: number | null };
 type PublicTrackingContext = { channelCode?: string | null; source?: string | null; inviteCode?: string | null; clientIp?: string | null; userAgent?: string | null };
 type TenantLocationTrackingContext = { source?: string | null; clientIp?: string | null; userAgent?: string | null };
+type PublicTicketAvailability = {
+  soldCount: number;
+  remainingSeats: number | null;
+  saleStatus: "available" | "sold_out" | "not_started" | "ended";
+};
 
 @Injectable()
 export class PublicService {
@@ -1891,7 +1896,7 @@ export class PublicService {
       this.memberAccessSnapshot(activity, userId),
       this.ensureOperationSetting(activity.tenant || null)
     ]);
-    return { ...(await this.withPublicStats(activity)), ticketTypes: ticketTypes.map((item) => this.publicTicketType(item)), memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
+    return { ...(await this.withPublicStats(activity)), ticketTypes: ticketTypes.map(({ ticketType, availability }) => this.publicTicketType(ticketType, availability)), memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
   }
 
   async quote(activityId: number, dto: QuoteDto, user: User, context?: PublicTenantContext) {
@@ -2825,6 +2830,10 @@ export class PublicService {
   private async calculateQuote(activity: Activity, dto: QuoteDto) {
     const ticketType = dto.ticketTypeId ? await this.ticketTypes.findOne({ where: { id: dto.ticketTypeId } }) : null;
     if (dto.ticketTypeId && (!ticketType || ticketType.activity.id !== activity.id || !ticketType.enabled)) throw new BadRequestException("票种不可用");
+    if (!dto.ticketTypeId) {
+      const configuredTicketCount = await this.ticketTypes.count({ where: { activity: { id: activity.id }, enabled: true } });
+      if (configuredTicketCount > 0) throw new BadRequestException("请选择可售票种");
+    }
     const memberProfile = dto.userId ? await this.memberProfiles.findOne({ where: { user: { id: dto.userId }, tenantScopeKey: activity.tenant ? `tenant:${activity.tenant.id}` : "platform" } }) : null;
     const memberLevel = memberProfile?.level && memberProfile.level.enabled ? memberProfile.level : null;
     const memberLevelSnapshotData = memberProfile?.levelSnapshot as Record<string, unknown> | null | undefined;
@@ -3281,14 +3290,40 @@ export class PublicService {
     return Boolean(activity.priorityMemberLevel && activity.priorityRegistrationEndsAt && activity.priorityRegistrationEndsAt.getTime() > Date.now());
   }
 
-  private findPublicTicketTypes(activityId: number) {
-    return this.ticketTypes
-      .createQueryBuilder("ticketType")
-      .where("ticketType.activityId = :activityId", { activityId })
-      .andWhere("ticketType.enabled = :enabled", { enabled: true })
-      .orderBy("ticketType.price", "ASC")
-      .addOrderBy("ticketType.id", "ASC")
-      .getMany();
+  private async findPublicTicketTypes(activityId: number) {
+    const soldStatuses = [OrderStatus.PendingPayment, OrderStatus.Paid, OrderStatus.PartiallyRefunded];
+    const [ticketTypes, soldRows] = await Promise.all([
+      this.ticketTypes
+        .createQueryBuilder("ticketType")
+        .where("ticketType.activityId = :activityId", { activityId })
+        .andWhere("ticketType.enabled = :enabled", { enabled: true })
+        .orderBy("ticketType.price", "ASC")
+        .addOrderBy("ticketType.id", "ASC")
+        .getMany(),
+      this.orders
+        .createQueryBuilder("order")
+        .innerJoin("order.ticketType", "ticketType")
+        .select("order.ticketTypeId", "ticketTypeId")
+        .addSelect("COUNT(*)", "soldCount")
+        .where("ticketType.activityId = :activityId", { activityId })
+        .andWhere("order.status IN (:...statuses)", { statuses: soldStatuses })
+        .groupBy("order.ticketTypeId")
+        .getRawMany<{ ticketTypeId: string; soldCount: string }>()
+    ]);
+    const soldCounts = new Map(soldRows.map((row) => [Number(row.ticketTypeId), Number(row.soldCount)]));
+    const now = new Date();
+    return ticketTypes.map((ticketType) => {
+      const soldCount = soldCounts.get(ticketType.id) || 0;
+      const remainingSeats = ticketType.capacity === null ? null : Math.max(ticketType.capacity - soldCount, 0);
+      const saleStatus: PublicTicketAvailability["saleStatus"] = ticketType.saleStartsAt && now < ticketType.saleStartsAt
+        ? "not_started"
+        : ticketType.saleEndsAt && now > ticketType.saleEndsAt
+          ? "ended"
+          : remainingSeats !== null && remainingSeats <= 0
+            ? "sold_out"
+            : "available";
+      return { ticketType, availability: { soldCount, remainingSeats, saleStatus } };
+    });
   }
 
   private async withPublicStats(activity: Activity) {
@@ -3373,7 +3408,7 @@ export class PublicService {
     };
   }
 
-  private publicTicketType(ticketType?: TicketType | null) {
+  private publicTicketType(ticketType?: TicketType | null, availability?: PublicTicketAvailability) {
     if (!ticketType) return null;
     return {
       id: ticketType.id,
@@ -3387,7 +3422,8 @@ export class PublicService {
       earlyBirdEndsAt: ticketType.earlyBirdEndsAt,
       memberPrice: ticketType.memberPrice,
       tierPrices: ticketType.tierPrices || [],
-      enabled: ticketType.enabled
+      enabled: ticketType.enabled,
+      ...(availability || {})
     };
   }
 

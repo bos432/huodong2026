@@ -2,7 +2,7 @@
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { FieldType } from "@activity/shared";
 import { ensureUser, fetchMyProfile, getCurrentTenantCode, request, getCurrentRouteWithQuery, uploadRegistrationAttachment, withTenantCode } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -41,9 +41,12 @@ const pageLoadGuard = createTenantLoadGuard();
 const quoteLoadGuard = createTenantLoadGuard();
 const couponLoadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_register", "/pages/activity/register");
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 const ticketOptions = computed(() => activity.value?.ticketTypes || []);
 const hasTicketTypes = computed(() => ticketOptions.value.length > 0);
+const availableTicketOptions = computed(() => ticketOptions.value.filter((ticket: any) => ticketCanSelect(ticket)));
+const ticketSelectionUnavailable = computed(() => hasTicketTypes.value && activity.value?.remainingSeats > 0 && !availableTicketOptions.value.length);
 const selectedTicket = computed(() => ticketOptions.value.find((ticket: any) => ticket.id === selectedTicketTypeId.value));
 const currentPayable = computed(() => quote.value?.payableAmount ?? Number(activity.value?.price || 0).toFixed(2));
 const payableNumber = computed(() => Number(currentPayable.value || 0));
@@ -58,6 +61,7 @@ const paymentHint = computed(() => {
   if (registrationPaused.value) return registrationPausedMessage.value;
   if (memberBlocked.value) return activity.value.memberAccess.message;
   if (activity.value.remainingSeats <= 0) return "当前名额已满，提交后将进入候补名单";
+  if (ticketSelectionUnavailable.value) return "当前没有可报名票种，请留意开售时间或联系主办方。";
   return payableNumber.value > 0 ? "提交后请选择支付方式；线下收款需后台确认后生效。" : activity.value.requireReview ? "提交后会进入主办方审核，审核结果会显示在我的报名里。" : "提交后即可获得报名成功状态。";
 });
 const defaultPaymentMethods = { free: true, wechat: false, alipay: false, balance: true, offline: true };
@@ -84,6 +88,7 @@ const submitButtonText = computed(() => {
   if (registrationPaused.value) return "报名暂停";
   if (memberBlocked.value) return "会员等级不足";
   if (activity.value?.remainingSeats <= 0) return "加入候补";
+  if (ticketSelectionUnavailable.value) return "票种不可报名";
   return "确认提交";
 });
 const seatsText = computed(() => {
@@ -106,6 +111,18 @@ function fieldPlaceholder(field: any) {
   if (field.type === FieldType.Number) return "请输入数字";
   if (field.type === FieldType.Address) return "请输入详细地址";
   return `请填写${field.label}`;
+}
+
+function ticketCanSelect(ticket: any) {
+  return !ticket.saleStatus || ticket.saleStatus === "available";
+}
+
+function ticketStatusText(ticket: any) {
+  if (ticket.saleStatus === "not_started") return "未开售";
+  if (ticket.saleStatus === "ended") return "已停售";
+  if (ticket.saleStatus === "sold_out") return "已售罄";
+  if (ticket.remainingSeats !== null && ticket.remainingSeats !== undefined) return `剩余 ${ticket.remainingSeats} 张`;
+  return ticket.capacity ? `限 ${ticket.capacity} 人` : "不限容量";
 }
 
 function fieldOptions(field: any) {
@@ -189,6 +206,10 @@ function submit() {
   }
   if (memberBlocked.value) {
     uni.showToast({ title: activity.value.memberAccess.message, icon: "none" });
+    return;
+  }
+  if (ticketSelectionUnavailable.value) {
+    uni.showToast({ title: "当前没有可报名票种", icon: "none" });
     return;
   }
   const error = validate();
@@ -280,6 +301,11 @@ function handlePhoneBound() {
 
 async function refreshQuote(showError = false) {
   if (!activity.value) return;
+  if (hasTicketTypes.value && !selectedTicketTypeId.value) {
+    quote.value = undefined;
+    quoteError.value = "当前没有可报名票种";
+    return;
+  }
   const token = quoteLoadGuard.begin();
   const activityId = Number(activity.value.id);
   quoting.value = true;
@@ -300,6 +326,11 @@ async function refreshQuote(showError = false) {
 }
 
 function chooseTicket(id?: number) {
+  const ticket = ticketOptions.value.find((item: any) => item.id === id);
+  if (ticket && !ticketCanSelect(ticket)) {
+    uni.showToast({ title: ticketStatusText(ticket), icon: "none" });
+    return;
+  }
   selectedTicketTypeId.value = id;
   refreshQuote();
 }
@@ -368,7 +399,7 @@ async function loadPage() {
     if (payableNumber.value > 0 && !paymentMethods.value[paymentMethod.value]) {
       paymentMethod.value = availablePaymentMethods.value[0]?.value || "offline";
     }
-    selectedTicketTypeId.value = activity.value.ticketTypes?.[0]?.id;
+    selectedTicketTypeId.value = availableTicketOptions.value[0]?.id;
     await Promise.all([refreshQuote(), loadAvailableCoupons()]);
   } catch (error: any) {
     if (!pageLoadGuard.isCurrent(token)) return;
@@ -413,8 +444,8 @@ watch(couponCode, () => {
         </view>
         <view class="hero-bottom">
           <view class="page-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'transparent') }">
-            <view class="page-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ activity.title }}</view>
-            <view class="page-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "确认票种、优惠和报名信息，提交后可在我的活动查看进度。" }}</view>
+            <view class="page-head-title">{{ activity.title }}</view>
+            <view class="page-head-copy">{{ innerPageConfig.subtitle || "确认票种、优惠和报名信息，提交后可在我的活动查看进度。" }}</view>
           </view>
           <view class="hero-summary">
             <view><text>票种</text><text>{{ selectedTicketName }}</text></view>
@@ -424,7 +455,7 @@ watch(couponCode, () => {
         </view>
       </view>
 
-      <PageDecorationBlocks :sections="contentSections" />
+      <PageDecorationBlocks :sections="bodyDecorationSections" />
 
       <view class="card intro-card">
         <view class="section-kicker">提交前确认</view>
@@ -455,14 +486,15 @@ watch(couponCode, () => {
           </view>
         </view>
         <view v-if="hasTicketTypes" class="ticket-list">
-          <view v-for="ticket in ticketOptions" :key="ticket.id" class="ticket" role="radio" tabindex="0" :aria-checked="selectedTicketTypeId === ticket.id" :aria-label="`选择${ticket.name}票`" :class="{ active: selectedTicketTypeId === ticket.id }" @click="chooseTicket(ticket.id)" @keyup.enter="chooseTicket(ticket.id)" @keyup.space.prevent="chooseTicket(ticket.id)">
+          <view v-for="ticket in ticketOptions" :key="ticket.id" class="ticket" role="radio" :tabindex="ticketCanSelect(ticket) ? 0 : -1" :aria-checked="selectedTicketTypeId === ticket.id" :aria-disabled="!ticketCanSelect(ticket)" :aria-label="`${ticketCanSelect(ticket) ? '选择' : ''}${ticket.name}票，${ticketStatusText(ticket)}`" :class="{ active: selectedTicketTypeId === ticket.id, disabled: !ticketCanSelect(ticket) }" @click="chooseTicket(ticket.id)" @keyup.enter="chooseTicket(ticket.id)" @keyup.space.prevent="chooseTicket(ticket.id)">
             <view>
               <view class="ticket-name">{{ ticket.name }}</view>
-              <view class="subtle">{{ ticket.capacity ? `限 ${ticket.capacity} 人` : "不限容量" }}</view>
+              <view class="subtle">{{ ticketStatusText(ticket) }}</view>
             </view>
             <view class="ticket-price">￥{{ Number(ticket.price).toFixed(2) }}</view>
           </view>
         </view>
+        <view v-if="ticketSelectionUnavailable" class="notice muted">当前票种均不可报名，请留意开售时间或联系主办方。</view>
         <view v-else class="ticket active">
           <view><view class="ticket-name">标准报名</view><view class="subtle">活动基础价格</view></view>
           <view class="ticket-price">{{ Number(activity.price) > 0 ? `￥${Number(activity.price).toFixed(2)}` : "免费" }}</view>
@@ -558,7 +590,7 @@ watch(couponCode, () => {
           <text>{{ formProgressText }}</text>
           <text>{{ payableText }}</text>
         </view>
-        <view class="button" role="button" tabindex="0" :aria-disabled="submitting || confirming || memberBlocked || registrationPaused" :aria-busy="submitting || confirming" :aria-label="submitButtonText" :class="{ secondary: submitting || confirming || memberBlocked || registrationPaused }" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">{{ confirming ? "等待确认..." : submitButtonText }}</view>
+        <view class="button" role="button" tabindex="0" :aria-disabled="submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable" :aria-busy="submitting || confirming" :aria-label="submitButtonText" :class="{ secondary: submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable }" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">{{ confirming ? "等待确认..." : submitButtonText }}</view>
       </view>
     </template>
     <WechatPhoneBindSheet
@@ -587,9 +619,9 @@ watch(couponCode, () => {
   overflow: hidden;
   min-height: 500rpx;
   margin-bottom: 24rpx;
-  border-radius: 24rpx;
-  background: #8e2d28;
-  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+  border-radius: 14rpx;
+  background: #0f766e;
+  box-shadow: 0 16rpx 36rpx rgba(15,118,110,.16);
 }
 .hero-image {
   position: absolute;
@@ -602,16 +634,15 @@ watch(couponCode, () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 248, 240, 0.92);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 72rpx;
   font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-  background: #8e2d28;
+  background: #0f766e;
 }
 .hero-mask {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(34, 24, 19, 0.18), rgba(34, 24, 19, 0.76));
+  background: linear-gradient(180deg, rgba(7,36,32,.18), rgba(7,36,32,.8));
 }
 .hero-head,
 .hero-bottom {
@@ -626,7 +657,7 @@ watch(couponCode, () => {
   padding: 24rpx 24rpx 0;
 }
 .hero-kicker {
-  color: rgba(255, 248, 240, 0.78);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 23rpx;
   font-weight: 700;
 }
@@ -638,9 +669,9 @@ watch(couponCode, () => {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: rgba(255, 248, 240, 0.16);
-  color: #fff8f0;
+  border-radius: 8rpx;
+  background: rgba(255,255,255,.16);
+  color: #fff;
   font-size: 22rpx;
   font-weight: 700;
   overflow: hidden;
@@ -663,11 +694,10 @@ watch(couponCode, () => {
   background: transparent !important;
 }
 .page-head-title {
-  color: #fff8f0;
+  color: #fff;
   font-size: 48rpx;
   font-weight: 700;
   line-height: 1.24;
-  font-family: "STKaiti", "KaiTi", serif;
 }
 .page-head-copy {
   margin-top: 12rpx;
@@ -684,16 +714,16 @@ watch(couponCode, () => {
   display: grid;
   gap: 6rpx;
   padding: 16rpx 14rpx;
-  border-radius: 18rpx;
-  background: rgba(255, 248, 240, 0.16);
-  border: 1px solid rgba(255, 248, 240, 0.16);
+  border-radius: 10rpx;
+  background: rgba(255,255,255,.16);
+  border: 1px solid rgba(255,255,255,.18);
 }
 .hero-summary text:first-child {
-  color: rgba(255, 248, 240, 0.68);
+  color: rgba(255,255,255,.68);
   font-size: 22rpx;
 }
 .hero-summary text:last-child {
-  color: #fff8f0;
+  color: #fff;
   font-size: 25rpx;
   font-weight: 800;
   overflow: hidden;
@@ -702,27 +732,24 @@ watch(couponCode, () => {
 }
 .intro-card { display: grid; gap: 16rpx; }
 .section-kicker {
-  color: #4a6b8a;
+  color: #0f766e;
   font-size: 24rpx;
   font-weight: 800;
 }
-.small {
-  font-size: 30rpx;
-  font-family: "STKaiti", "KaiTi", serif;
-}
+.small { font-size: 30rpx; }
 .hint { margin-top: 0; line-height: 1.7; }
-.member-access { margin-top: 2rpx; padding: 20rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); border: 1px solid rgba(74, 107, 138, 0.12); }
+.member-access { margin-top: 2rpx; padding: 20rpx; border-radius: 10rpx; background: #eaf7f3; border: 1px solid rgba(15,118,110,.14); }
 .member-access.blocked { background: rgba(255, 159, 0, 0.08); border-color: rgba(255, 159, 0, 0.18); }
-.operation-notice { margin-top: 2rpx; padding: 20rpx; border-radius: 18rpx; background: #fff7ed; border: 1px solid #fed7aa; }
-.group-flow { padding: 20rpx; border-radius: 18rpx; background: #eef8f5; border: 1px solid rgba(15, 118, 110, 0.16); }
+.operation-notice { margin-top: 2rpx; padding: 20rpx; border-radius: 10rpx; background: #fff7ed; border: 1px solid #fed7aa; }
+.group-flow { padding: 20rpx; border-radius: 10rpx; background: #eef8f5; border: 1px solid rgba(15, 118, 110, 0.16); }
 .group-flow .member-title { color: #0f766e; }
-.member-title { color: #333333; font-weight: 700; margin-bottom: 8rpx; font-family: "STKaiti", "KaiTi", serif; }
+.member-title { color: #173f3a; font-weight: 700; margin-bottom: 8rpx; }
 .price-card { display: grid; gap: 18rpx; }
 .section-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 18rpx; }
-.discount-title { padding-top: 4rpx; color: #4a6b8a; font-size: 26rpx; font-weight: 800; }
+.discount-title { padding-top: 4rpx; color: #0f766e; font-size: 26rpx; font-weight: 800; }
 .form-card { display: grid; gap: 22rpx; }
 .form-heading { margin-bottom: 2rpx; }
-.progress-pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 999px; background: rgba(196, 61, 61, 0.12); color: #c43d3d; font-size: 23rpx; font-weight: 800; }
+.progress-pill { flex: 0 0 auto; padding: 8rpx 14rpx; border-radius: 8rpx; background: rgba(15,118,110,.12); color: #0f766e; font-size: 23rpx; font-weight: 800; }
 .field { margin-bottom: 28rpx; }
 .field:last-child { margin-bottom: 0; }
 .field.missing { padding: 18rpx; margin-left: -18rpx; margin-right: -18rpx; border-radius: 18rpx; background: #fff7ed; border: 1px solid #fed7aa; }
@@ -733,33 +760,34 @@ watch(couponCode, () => {
 .choice { display: flex; align-items: center; gap: 10rpx; margin: 12rpx 0; }
 .choice-text { color: #333333; font-size: 27rpx; line-height: 1.45; }
 .ticket-list { display: grid; gap: 12rpx; }
-.ticket { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 20rpx; border: 1px solid #e8e0d8; border-radius: 18rpx; background: #fffaf4; }
-.ticket.active { border-color: #c43d3d; background: rgba(196, 61, 61, 0.08); }
+.ticket { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 20rpx; border: 1px solid #d9ebe6; border-radius: 10rpx; background: #f9fcfb; }
+.ticket.active { border-color: #0f766e; background: #eaf7f3; }
+.ticket.disabled { opacity: .58; background: #f5f5f4; }
 .ticket-name { font-size: 28rpx; font-weight: 650; margin-bottom: 6rpx; }
-.ticket-price { flex: 0 0 auto; color: #c43d3d; font-weight: 800; }
+.ticket-price { flex: 0 0 auto; color: #0f766e; font-weight: 800; }
 .coupon-row { display: grid; grid-template-columns: 1fr 150rpx; gap: 12rpx; align-items: center; }
 .available-coupons { display: grid; gap: 12rpx; margin-top: 16rpx; }
-.available-coupon { display: flex; justify-content: space-between; gap: 16rpx; align-items: center; padding: 18rpx; border: 1rpx solid #ead8c5; border-radius: 12rpx; background: #fffaf3; }
-.available-coupon.selected { border-color: #c43d3d; background: #fff3ed; }
-.coupon-name { color: #3e2f2a; font-weight: 700; }
-.coupon-action { flex: 0 0 auto; color: #c43d3d; font-size: 24rpx; font-weight: 700; }
+.available-coupon { display: flex; justify-content: space-between; gap: 16rpx; align-items: center; padding: 18rpx; border: 1rpx solid #d9ebe6; border-radius: 10rpx; background: #f9fcfb; }
+.available-coupon.selected { border-color: #0f766e; background: #eaf7f3; }
+.coupon-name { color: #173f3a; font-weight: 700; }
+.coupon-action { flex: 0 0 auto; color: #0f766e; font-size: 24rpx; font-weight: 700; }
 .coupon-input { min-width: 0; }
-.mini-button { height: 78rpx; border-radius: 16rpx; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 700; }
+.mini-button { height: 78rpx; border-radius: 9rpx; background: #0f766e; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 700; }
 .mini-button.disabled { background: #9ca3af; }
 .error { color: #dc2626; font-size: 24rpx; }
 .points-row { display: grid; gap: 10rpx; }
-.summary { display: grid; gap: 10rpx; padding: 18rpx; border-radius: 18rpx; background: #f9f4ee; }
+.summary { display: grid; gap: 10rpx; padding: 18rpx; border-radius: 10rpx; background: #f1f7f5; }
 .summary view { display: flex; justify-content: space-between; color: var(--muted-color, #667085); font-size: 26rpx; }
 .summary .payable { color: #172033; font-weight: 800; font-size: 32rpx; }
-.summary .payable text:last-child { color: #c43d3d; }
+.summary .payable text:last-child { color: #0f766e; }
 .payment-methods { display: grid; gap: 12rpx; padding-top: 10rpx; }
 .method-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }
-.method { min-width: 0; padding: 18rpx; border: 1px solid #e8e0d8; border-radius: 18rpx; background: #fffaf4; }
-.method.active { border-color: #4a6b8a; background: rgba(74, 107, 138, 0.08); }
+.method { min-width: 0; padding: 18rpx; border: 1px solid #d9ebe6; border-radius: 10rpx; background: #f9fcfb; }
+.method.active { border-color: #0f766e; background: #eaf7f3; }
 .method-name { color: #172033; font-size: 27rpx; font-weight: 850; }
-.submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 210rpx) 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid #e8e0d8; box-shadow: 0 -10rpx 30rpx rgba(51, 51, 51, 0.08); }
+.submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 210rpx) 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid #d9ebe6; box-shadow: 0 -10rpx 30rpx rgba(20,72,64,.08); }
 .submit-summary { min-width: 0; display: grid; gap: 4rpx; }
 .submit-summary text:first-child { color: #999999; font-size: 22rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.submit-summary text:last-child { color: #c43d3d; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.submit-summary text:last-child { color: #0f766e; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .submit-bar .button { height: 92rpx; font-size: 32rpx; }
 </style>

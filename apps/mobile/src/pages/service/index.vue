@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { request, withTenantCode } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
@@ -18,6 +18,7 @@ const copying = ref("");
 const paymentInstructionsField = "offlinePaymentInstructions";
 const loadGuard = createTenantLoadGuard();
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("service_center", "/pages/service/index");
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 async function load() {
   const token = loadGuard.begin();
@@ -74,7 +75,7 @@ onShow(async () => {
   <view class="service-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
 
-    <view class="service-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#4a6b8a') }">
+    <view class="service-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#0f766e') }">
       <view class="hero-mark">服</view>
       <view class="hero-copy">
         <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "服务中心" }}</view>
@@ -82,7 +83,7 @@ onShow(async () => {
       </view>
     </view>
 
-    <PageDecorationBlocks :sections="contentSections" />
+    <PageDecorationBlocks :sections="bodyDecorationSections" />
 
     <view v-if="loading" class="card subtle" aria-live="polite">服务信息加载中...</view>
     <view v-else-if="loadError" class="card error-card" aria-live="assertive">
@@ -132,25 +133,25 @@ onShow(async () => {
 </template>
 
 <style scoped>
-.service-page { min-height: 100vh; box-sizing:border-box; padding: 24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); background: var(--page-bg-layer, #f5f0e8); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #333333); }
+.service-page { min-height:100vh; box-sizing:border-box; padding:24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); background:var(--page-bg-layer,#f4f8f7); background-size:var(--page-bg-size,cover); background-position:var(--page-bg-position,center top); background-attachment:fixed; color:var(--text-color,#173f3a); }
 .service-page.has-custom-nav { padding-bottom: 160rpx; }
 .service-hero {
   position: relative;
   overflow: hidden;
-  min-height: 320rpx;
+  min-height: 238rpx;
   display: flex;
   align-items: flex-end;
   gap: 22rpx;
   margin-bottom: 20rpx;
   padding: 34rpx 28rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+  border-radius: 14rpx;
+  box-shadow: 0 16rpx 34rpx rgba(15,118,110,.16);
 }
 .service-hero::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(34, 24, 19, 0.04), rgba(34, 24, 19, 0.24));
+  background: linear-gradient(180deg, rgba(7,36,32,.02), rgba(7,36,32,.24));
   pointer-events: none;
 }
 .hero-mark,
@@ -165,26 +166,26 @@ onShow(async () => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 28rpx;
-  background: rgba(255, 248, 240, 0.16);
-  color: #fff8f0;
+  border-radius: 12rpx;
+  background: rgba(255,255,255,.16);
+  color: #fff;
   font-size: 38rpx;
   font-weight: 700;
   font-family: "STKaiti", "KaiTi", serif;
 }
 .hero-copy { min-width: 0; }
-.title { font-size: 48rpx; line-height: 1.22; font-weight: 700; font-family: "STKaiti", "KaiTi", serif; }
+.title { font-size:42rpx; line-height:1.22; font-weight:900; }
 .subtle { color: var(--muted-color, #999999); font-size: 26rpx; line-height: 1.5; }
 .hero-copy .subtle { margin-top: 12rpx; font-size: 25rpx; line-height: 1.6; }
-.card { margin-bottom: 20rpx; padding: 26rpx; border-radius: 24rpx; background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
-.card-kicker { color: #4a6b8a; font-size: 23rpx; font-weight: 800; margin-bottom: 8rpx; }
-.card-title { color: var(--text-color, #333333); font-size: 32rpx; font-weight: 900; margin-bottom: 14rpx; font-family: "STKaiti", "KaiTi", serif; }
-.line { display: grid; grid-template-columns: 110rpx 1fr; gap: 16rpx; padding: 16rpx 0; border-bottom: 1px solid #e8e0d8; }
+.card { margin-bottom:18rpx; padding:26rpx; border:1rpx solid rgba(15,118,110,.1); border-radius:14rpx; background:var(--card-bg,#fff); box-shadow:0 8rpx 22rpx rgba(20,72,64,.05); }
+.card-kicker { color:#0f766e; font-size:22rpx; font-weight:800; margin-bottom:8rpx; }
+.card-title { color:var(--text-color,#173f3a); font-size:30rpx; font-weight:900; margin-bottom:14rpx; }
+.line { display:grid; grid-template-columns:110rpx 1fr; gap:16rpx; padding:16rpx 0; border-bottom:1px solid #e1eeeb; }
 .line:last-child { border-bottom: 0; }
 .line text:first-child { color: var(--muted-color, #999999); }
 .line text:last-child { color: var(--text-color, #333333); font-weight: 700; overflow-wrap: anywhere; }
-.content { color: #666666; font-size: 27rpx; line-height: 1.7; white-space: pre-wrap; }
-.partner-entry { margin-top: 22rpx; min-height: 80rpx; padding: 0 22rpx; border-radius: 18rpx; background: rgba(196, 61, 61, 0.1); color: #c43d3d; display: flex; align-items: center; justify-content: space-between; gap: 16rpx; font-size: 27rpx; font-weight: 800; }
+.content { color:#54716c; font-size:26rpx; line-height:1.7; white-space:pre-wrap; }
+.partner-entry { margin-top:22rpx; min-height:80rpx; padding:0 22rpx; border-radius:10rpx; background:#eaf7f3; color:#0f766e; display:flex; align-items:center; justify-content:space-between; gap:16rpx; font-size:26rpx; font-weight:800; }
 .error-card { color:#b42318; border:1rpx solid #f0b8b0; background:#fff4f2; line-height:1.6; }
 .error-card .button { margin-top:18rpx; }
 @media (min-width: 900px) {

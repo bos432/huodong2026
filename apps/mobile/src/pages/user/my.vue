@@ -27,7 +27,7 @@
       <view class="member-stats">
         <view v-for="item in memberStats" :key="item.label" class="member-stat">
           <text>{{ item.label }}</text>
-          <strong>{{ item.value }}</strong>
+          <text class="member-stat-value">{{ item.value }}</text>
         </view>
       </view>
       <view v-if="!isLoggedIn" class="member-actions single">
@@ -52,101 +52,50 @@
       <view class="state-retry" role="button" tabindex="0" aria-label="重新同步会员资产" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新同步资产</view>
     </view>
 
-    <!-- 核心入口宫格 -->
-    <view class="card profile-grid-card">
-      <view class="grid-2x4-profile">
-        <view v-for="item in gridItems" :key="item.label" class="grid-profile-item" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)">
-          <view class="grid-profile-icon">{{ item.icon }}</view>
-          <text class="grid-profile-label">{{ item.label }}</text>
-        </view>
-      </view>
-    </view>
-
-    <!-- 公益基金 -->
-    <view v-if="featureGates.charity" class="card charity-card" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity">
-      <view class="row">
-        <view>
-          <text style="font-size:30rpx; font-weight:600; color:#333;">🌱 我的公益贡献</text>
-          <text style="font-size:24rpx; color:#999; display:block; margin-top:4rpx;">累计贡献 {{ charityAmountText }} 元</text>
-        </view>
-        <text class="subtle" style="color:#C43D3D;">查看详情 ›</text>
-      </view>
-    </view>
-
-    <!-- 文化大使入口 -->
-    <view v-if="featureGates.ambassador" class="card ambassador-entry" role="button" tabindex="0" aria-label="加入文化大使" @click="goAmbassador" @keyup.enter="goAmbassador" @keyup.space.prevent="goAmbassador">
-      <view class="row">
-        <text style="font-size:30rpx; color:#C43D3D; font-weight:600;">🏮 加入文化大使</text>
-        <text style="font-size:26rpx; color:#C43D3D;">立即申请 ›</text>
-      </view>
-      <text style="font-size:24rpx; color:#999; margin-top:6rpx;">{{ pageBrand.slogan }}</text>
-    </view>
-
-    <!-- 用户心得入口 -->
-    <view v-if="featureGates.community" class="card community-post-entry" role="button" tabindex="0" aria-label="查看我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts">
-      <view class="row">
-        <view>
-          <text class="entry-title">我的活动心得</text>
-          <text class="entry-copy">查看审核状态，继续分享已通过的活动感悟。</text>
-        </view>
-        <text class="entry-arrow">去查看 ›</text>
-      </view>
-      <view v-if="isLoggedIn" class="growth-panel">
-        <view class="growth-copy"><text>成长值 {{ profile?.growthValue || 0 }}</text><text v-if="profile?.nextLevel">距 {{ profile.nextLevel.name }} 还差 {{ profile.nextLevel.remainingGrowth }}</text><text v-else>已达当前最高等级</text></view>
-        <view class="growth-track"><view class="growth-fill" :style="{ width: profile?.nextLevel ? `${Math.min(100, Math.max(0, Number(profile?.growthValue || 0) / Number(profile.nextLevel.minGrowth || 1) * 100))}%` : '100%' }"></view></view>
-        <view v-if="profile?.memberLevel?.expiresAt" class="growth-expire">等级有效至 {{ String(profile.memberLevel.expiresAt).replace('T', ' ').slice(0, 10) }}</view>
-      </view>
-    </view>
-    <view v-if="featureGates.community" class="card community-post-entry" role="button" tabindex="0" aria-label="查看收藏、关注与消息" @click="goCommunitySocial" @keyup.enter="goCommunitySocial" @keyup.space.prevent="goCommunitySocial"><view class="row"><view><text class="entry-title">收藏、关注与消息</text><text class="entry-copy">查看收藏动态、关注作者和互动提醒。</text></view><text>›</text></view></view>
-    <view v-if="featureGates.community || featureGates.forum" class="card community-post-entry" role="button" tabindex="0" aria-label="查看处罚与申诉" @click="goContentAppeals" @keyup.enter="goContentAppeals" @keyup.space.prevent="goContentAppeals"><view class="row"><view><text class="entry-title">处罚与申诉</text><text class="entry-copy">查看禁言、禁用记录和申诉处理进度。</text></view><text>›</text></view></view>
-    <view v-if="featureGates.mall" class="card community-post-entry" role="button" tabindex="0" aria-label="申请商户入驻" @click="goMerchantApply" @keyup.enter="goMerchantApply" @keyup.space.prevent="goMerchantApply"><view class="row"><view><text class="entry-title">商户入驻</text><text class="entry-copy">提交经营主体与资质，查看平台审核结果。</text></view><text>›</text></view></view>
-    <view v-if="featureGates.forum" class="card forum-post-entry" role="button" tabindex="0" aria-label="查看我的论坛" @click="goForumPosts" @keyup.enter="goForumPosts" @keyup.space.prevent="goForumPosts">
-      <view class="row">
-        <view>
-          <text class="entry-title">我的论坛</text>
-          <text class="entry-copy">查看帖子、回复和收藏，继续参与共修讨论。</text>
-        </view>
-        <text class="entry-arrow">去查看 ›</text>
-      </view>
-    </view>
-
-    <!-- 订单记录 -->
-    <view class="card order-card">
-      <view class="row" style="margin-bottom:16rpx;">
-        <text style="font-size:30rpx; font-weight:600; color:#333;">我的订单</text>
-        <text class="subtle" role="button" tabindex="0" aria-label="查看全部订单" style="color:#C43D3D;" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">查看全部 ›</text>
+    <view class="profile-section order-summary-panel">
+      <view class="profile-section-head">
+        <view><text class="profile-section-title">活动与订单</text><text class="profile-section-copy">报名、付款和参与进度</text></view>
+        <text class="profile-section-link" role="button" tabindex="0" aria-label="查看全部订单" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">查看全部 ›</text>
       </view>
       <view class="order-tabs" :style="{ gridTemplateColumns: `repeat(${orderTabs.length}, minmax(0, 1fr))` }">
         <view v-for="tab in orderTabs" :key="tab.label" class="order-tab" role="button" tabindex="0" :aria-label="`查看${tab.label}订单`" @click="goOrders(tab)" @keyup.enter="goOrders(tab)" @keyup.space.prevent="goOrders(tab)">
-          <text style="font-size:36rpx;">{{ tab.icon }}</text>
-          <text style="font-size:22rpx; color:#666;">{{ tab.label }}</text>
-          <view v-if="tab.count" class="order-badge">{{ tab.count }}</view>
+          <text class="order-tab-icon">{{ tab.icon }}</text><text class="order-tab-label">{{ tab.label }}</text><view v-if="tab.count" class="order-badge">{{ tab.count }}</view>
         </view>
       </view>
     </view>
 
-    <!-- 余额资产入口 -->
-    <view class="card" role="button" tabindex="0" aria-label="查看余额资产明细" style="margin-bottom:16rpx;" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet">
-      <view class="row">
-        <text style="font-size:30rpx; font-weight:600; color:#333;">💰 余额资产</text>
-        <text class="subtle" style="color:#C43D3D;">查看明细 ›</text>
-      </view>
-      <text style="font-size:40rpx; color:#C43D3D; font-weight:700; margin-top:8rpx; display:block;">{{ walletBalanceText }}</text>
+    <view class="profile-asset-grid">
+      <view class="asset-panel wallet-panel" role="button" tabindex="0" aria-label="查看余额资产明细" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet"><text class="asset-label">余额资产</text><text class="asset-value">{{ walletBalanceText }}</text><text class="asset-action">查看明细</text></view>
+      <view v-if="featureGates.charity" class="asset-panel charity-panel" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity"><text class="asset-label">公益贡献</text><text class="asset-value">{{ charityAmountText }} 元</text><text class="asset-action">查看证书</text></view>
     </view>
 
-    <view v-if="isLoggedIn" class="card redemption-entry">
-      <view class="row"><view><text class="entry-title">兑换权益</text><text class="entry-copy">兑换活动券、商城券或会员积分</text></view></view>
+    <view v-if="isLoggedIn" class="profile-section redemption-entry">
+      <view class="profile-section-head compact"><view><text class="profile-section-title">兑换权益</text><text class="profile-section-copy">活动券、商城券或会员积分</text></view></view>
       <view class="redemption-row"><input v-model="redemptionCode" class="redemption-input" maxlength="64" cursor-spacing="24" confirm-type="done" aria-label="兑换码" placeholder="请输入兑换码" @confirm="redeemCode" /><view class="redemption-button" role="button" tabindex="0" :aria-disabled="redeeming" :aria-label="redeeming ? '兑换中' : '兑换'" :class="{ disabled: redeeming }" @click="redeemCode" @keyup.enter="redeemCode" @keyup.space.prevent="redeemCode">{{ redeeming ? "兑换中" : "兑换" }}</view></view>
       <view v-if="redemptionError" class="redemption-error" role="alert" aria-live="assertive">{{ redemptionError }}</view>
     </view>
 
-    <!-- 手机管理入口（有权限时） -->
-    <view v-if="adminAccess?.canAccess" class="card" role="button" tabindex="0" aria-label="打开手机管理" style="margin-bottom:16rpx;" @click="goAdmin" @keyup.enter="goAdmin" @keyup.space.prevent="goAdmin">
-      <view class="row">
-        <text style="font-size:30rpx; font-weight:600; color:#333;">📱 手机管理</text>
-        <text class="subtle">{{ adminAccess.tenantName || "平台" }} · 活动管理 · 报名审核</text>
+    <view class="profile-section">
+      <view class="profile-section-head"><view><text class="profile-section-title">常用服务</text><text class="profile-section-copy">内容、商城、客服和设置</text></view></view>
+      <view class="grid-2x4-profile">
+        <view v-for="item in gridItems" :key="item.label" class="grid-profile-item" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)"><view class="grid-profile-icon">{{ item.icon }}</view><text class="grid-profile-label">{{ item.label }}</text></view>
       </view>
     </view>
+
+    <view v-if="featureGates.community || featureGates.forum || featureGates.mall || featureGates.ambassador" class="profile-section">
+      <view class="profile-section-head"><view><text class="profile-section-title">社区与共建</text><text class="profile-section-copy">记录参与，连接同好</text></view></view>
+      <view class="profile-link-list">
+        <view v-if="featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><view><text class="entry-title">我的活动心得</text><text class="entry-copy">查看审核状态，继续分享已通过的活动感悟。</text></view><text class="entry-arrow">›</text></view>
+        <view v-if="featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看收藏、关注与消息" @click="goCommunitySocial" @keyup.enter="goCommunitySocial" @keyup.space.prevent="goCommunitySocial"><view><text class="entry-title">收藏、关注与消息</text><text class="entry-copy">查看收藏动态、关注作者和互动提醒。</text></view><text class="entry-arrow">›</text></view>
+        <view v-if="featureGates.forum" class="profile-link-row" role="button" tabindex="0" aria-label="查看我的论坛" @click="goForumPosts" @keyup.enter="goForumPosts" @keyup.space.prevent="goForumPosts"><view><text class="entry-title">我的论坛</text><text class="entry-copy">查看帖子、回复和收藏，继续参与讨论。</text></view><text class="entry-arrow">›</text></view>
+        <view v-if="featureGates.ambassador" class="profile-link-row" role="button" tabindex="0" aria-label="加入文化大使" @click="goAmbassador" @keyup.enter="goAmbassador" @keyup.space.prevent="goAmbassador"><view><text class="entry-title">加入文化大使</text><text class="entry-copy">{{ pageBrand.slogan }}</text></view><text class="entry-arrow">›</text></view>
+        <view v-if="featureGates.mall" class="profile-link-row" role="button" tabindex="0" aria-label="申请商户入驻" @click="goMerchantApply" @keyup.enter="goMerchantApply" @keyup.space.prevent="goMerchantApply"><view><text class="entry-title">商户入驻</text><text class="entry-copy">提交经营主体与资质，查看平台审核结果。</text></view><text class="entry-arrow">›</text></view>
+        <view v-if="featureGates.community || featureGates.forum" class="profile-link-row" role="button" tabindex="0" aria-label="查看处罚与申诉" @click="goContentAppeals" @keyup.enter="goContentAppeals" @keyup.space.prevent="goContentAppeals"><view><text class="entry-title">处罚与申诉</text><text class="entry-copy">查看处罚记录和申诉处理进度。</text></view><text class="entry-arrow">›</text></view>
+      </view>
+      <view v-if="featureGates.community && isLoggedIn" class="growth-panel"><view class="growth-copy"><text>成长值 {{ profile?.growthValue || 0 }}</text><text v-if="profile?.nextLevel">距 {{ profile.nextLevel.name }} 还差 {{ profile.nextLevel.remainingGrowth }}</text><text v-else>已达当前最高等级</text></view><view class="growth-track"><view class="growth-fill" :style="{ width: profile?.nextLevel ? `${Math.min(100, Math.max(0, Number(profile?.growthValue || 0) / Number(profile.nextLevel.minGrowth || 1) * 100))}%` : '100%' }"></view></view><view v-if="profile?.memberLevel?.expiresAt" class="growth-expire">等级有效至 {{ String(profile.memberLevel.expiresAt).replace('T', ' ').slice(0, 10) }}</view></view>
+    </view>
+
+    <view v-if="adminAccess?.canAccess" class="profile-section admin-entry" role="button" tabindex="0" aria-label="打开手机管理" @click="goAdmin" @keyup.enter="goAdmin" @keyup.space.prevent="goAdmin"><view><text class="profile-section-title">手机管理</text><text class="profile-section-copy">{{ adminAccess.tenantName || "平台" }} · 活动管理 · 报名审核</text></view><text class="entry-arrow">›</text></view>
 
     <view v-if="isLoggedIn" class="logout-card" role="button" tabindex="0" aria-label="退出当前账号" :aria-busy="logoutConfirming" @click="logoutUser" @keyup.enter="logoutUser" @keyup.space.prevent="logoutUser">
       <text>{{ logoutConfirming ? "确认中..." : "退出当前账号" }}</text>
@@ -236,9 +185,9 @@ const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
-const warmHeaderBackground = "linear-gradient(135deg, #FFF7EC 0%, #F5DDC2 52%, #E8B89D 100%)";
-const warmHeaderTextColor = "#5B2F24";
-const warmHeaderMutedColor = "rgba(91, 47, 36, 0.68)";
+const warmHeaderBackground = "linear-gradient(135deg, #0f766e 0%, #176b61 54%, #245c6d 100%)";
+const warmHeaderTextColor = "#ffffff";
+const warmHeaderMutedColor = "rgba(255, 255, 255, 0.76)";
 const profileHeaderBackground = computed(() => {
   const layout = myPageSection.value?.layout || {};
   const background = String(layout.heroBackgroundColor || "");
@@ -746,7 +695,7 @@ function logoutUser() {
 <style scoped>
 .profile-page {
   min-height: 100vh;
-  background: var(--page-bg, #F5F0E8);
+  background: var(--page-bg, #f4f8f7);
   box-sizing: border-box;
   width: 100%;
   max-width: 760px;
@@ -756,8 +705,8 @@ function logoutUser() {
 }
 .member-card {
   margin: 0 -32rpx 18rpx;
-  padding: 38rpx 32rpx 28rpx;
-  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.12);
+  padding: 38rpx 32rpx 30rpx;
+  box-shadow: 0 16rpx 36rpx rgba(15, 118, 110, 0.16);
 }
 .member-card-top {
   display: grid;
@@ -771,14 +720,14 @@ function logoutUser() {
   min-height: 36rpx;
   padding: 4rpx 14rpx;
   border-radius: 999rpx;
-  background: rgba(22, 163, 74, 0.12);
-  color: #15803d;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
   font-size: 21rpx;
   font-weight: 900;
 }
 .phone-state.missing {
-  background: rgba(196, 61, 61, 0.12);
-  color: #b42318;
+  background: rgba(255, 244, 214, 0.18);
+  color: #fff4d6;
 }
 .member-stats {
   display: grid;
@@ -792,12 +741,12 @@ function logoutUser() {
   align-content: center;
   justify-items: center;
   gap: 6rpx;
-  border-radius: 16rpx;
-  background: rgba(255, 250, 242, 0.54);
-  border: 1rpx solid rgba(139, 63, 50, 0.12);
+  border-radius: 12rpx;
+  background: rgba(255, 255, 255, 0.12);
+  border: 1rpx solid rgba(255, 255, 255, 0.16);
 }
 .member-stat text { color: var(--profile-header-muted, rgba(91, 47, 36, 0.68)); font-size: 22rpx; }
-.member-stat strong { color: var(--profile-header-text, #5B2F24); font-size: 27rpx; line-height: 1.2; }
+.member-stat-value { color: var(--profile-header-text, #fff); font-size: 27rpx; line-height: 1.2; font-weight: 900; }
 .growth-panel { margin-top: 18rpx; }.growth-copy { display: flex; justify-content: space-between; gap: 16rpx; color: var(--profile-header-muted, rgba(91,47,36,.68)); font-size: 21rpx; }.growth-track { height: 10rpx; margin-top: 10rpx; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.45); }.growth-fill { height: 100%; border-radius: inherit; background: var(--profile-header-text, #5B2F24); transition: width .25s ease; }.growth-expire { margin-top: 8rpx; color: var(--profile-header-muted, rgba(91,47,36,.68)); font-size: 20rpx; }
 .member-actions {
   display: grid;
@@ -813,17 +762,17 @@ function logoutUser() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 16rpx;
-  background: rgba(255, 250, 242, 0.7);
-  color: #8b3f32;
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.14);
+  color: #fff;
   font-size: 25rpx;
   font-weight: 900;
-  border: 1rpx solid rgba(139, 63, 50, 0.16);
+  border: 1rpx solid rgba(255, 255, 255, 0.2);
 }
 .member-action.primary {
-  background: #16a34a;
-  color: #fff;
-  border-color: #16a34a;
+  background: #fff;
+  color: #0f766e;
+  border-color: #fff;
 }
 .profile-header {
   display: flex;
@@ -861,20 +810,20 @@ function logoutUser() {
 .wechat-complete-title { color: #5B2F24; font-size: 28rpx; font-weight: 950; }
 .wechat-complete-sub { margin-top: 6rpx; color: #8f8172; font-size: 23rpx; line-height: 1.45; }
 .wechat-complete-action { color: #C43D3D; font-size: 25rpx; font-weight: 900; }
-.profile-greeting { font-size: 38rpx; font-weight: 900; margin-bottom: 16rpx; }
-.profile-nickname { font-size: 32rpx; font-weight: 600; color: var(--profile-header-text, #5B2F24); margin-top: 12rpx; }
+.profile-greeting { font-size: 24rpx; font-weight: 800; margin-bottom: 2rpx; }
+.profile-nickname { font-size: 34rpx; font-weight: 900; color: var(--profile-header-text, #fff); margin-top: 0; }
 .avatar-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
   border-radius: 50%;
-  background: rgba(255, 250, 242, 0.82);
-  color: #8b4a3e;
+  background: rgba(255, 255, 255, 0.9);
+  color: #0f766e;
   font-size: 46rpx;
   font-weight: 950;
 }
 .profile-badge {
-  background: rgba(196, 61, 61, 0.94);
+  background: rgba(255, 255, 255, 0.18);
   color: #fff;
   font-size: 22rpx;
   padding: 4rpx 16rpx;
@@ -896,36 +845,46 @@ function logoutUser() {
   font-weight: 900;
   border: 1rpx solid rgba(139, 63, 50, 0.18);
 }
-.profile-edit-btn { position: absolute; bottom: 16rpx; right: 32rpx; min-width: 72rpx; min-height: 56rpx; display: flex; align-items: center; justify-content: center; overflow-wrap: anywhere; }
+.profile-edit-btn { position: absolute; top: 30rpx; right: 32rpx; min-width: 72rpx; min-height: 56rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid rgba(255,255,255,.32); border-radius: 8rpx; color: #fff; font-size: 23rpx; font-weight: 800; overflow-wrap: anywhere; }
 .profile-edit-text { color: var(--profile-header-text, #5B2F24); font-weight: 700; }
-.profile-grid-card { margin-bottom: 16rpx; }
-.charity-card { margin-bottom: 16rpx; }
-.ambassador-entry {
-  margin-bottom: 16rpx;
-  border: 2rpx solid rgba(196,61,61,0.2);
-}
-.community-post-entry, .forum-post-entry { margin-bottom: 16rpx; }
+.profile-section { margin-bottom: 18rpx; padding: 24rpx; border: 1rpx solid rgba(15,118,110,.1); border-radius: 14rpx; background: #fff; box-shadow: 0 8rpx 22rpx rgba(20,72,64,.05); }
+.profile-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; margin-bottom: 20rpx; }
+.profile-section-head.compact { margin-bottom: 0; }
+.profile-section-title { display: block; color: #173f3a; font-size: 30rpx; font-weight: 900; }
+.profile-section-copy { display: block; margin-top: 6rpx; color: #718a85; font-size: 22rpx; line-height: 1.45; }
+.profile-section-link { flex: 0 0 auto; padding: 8rpx 12rpx; border-radius: 8rpx; background: #eef8f5; color: #0f766e; font-size: 22rpx; font-weight: 800; }
+.order-summary-panel { padding-bottom: 20rpx; }
+.profile-asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-bottom: 18rpx; }
+.asset-panel { min-width: 0; min-height: 142rpx; display: grid; align-content: space-between; padding: 22rpx; border-radius: 14rpx; }
+.wallet-panel { background: #173f3a; color: #fff; }
+.charity-panel { background: #fff4dc; color: #6b4a1b; }
+.asset-label { font-size: 22rpx; font-weight: 800; opacity: .76; }
+.asset-value { overflow: hidden; font-size: 34rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.asset-action { font-size: 21rpx; font-weight: 800; opacity: .78; }
+.profile-link-list { overflow: hidden; border: 1rpx solid #e2eeeb; border-radius: 10rpx; }
+.profile-link-row { min-height: 112rpx; display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 18rpx 20rpx; border-bottom: 1rpx solid #e2eeeb; }
+.profile-link-row:last-child { border-bottom: 0; }
+.admin-entry { display: flex; align-items: center; justify-content: space-between; background: #edf7f5; }
 .entry-title {
   display: block;
-  color: #263d3c;
-  font-size: 30rpx;
+  color: #173f3a;
+  font-size: 27rpx;
   font-weight: 900;
 }
 .entry-copy {
   display: block;
-  margin-top: 8rpx;
-  color: #8f8172;
-  font-size: 24rpx;
-  line-height: 1.55;
+  margin-top: 6rpx;
+  color: #718a85;
+  font-size: 22rpx;
+  line-height: 1.45;
   overflow-wrap: anywhere;
 }
 .entry-arrow {
   flex-shrink: 0;
-  color: #C43D3D;
-  font-size: 25rpx;
+  color: #0f766e;
+  font-size: 32rpx;
   font-weight: 900;
 }
-.order-card { margin-bottom: 16rpx; }
 .order-tabs {
   display: grid;
   gap: 8rpx;
@@ -936,14 +895,16 @@ function logoutUser() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 4rpx;
+  gap: 6rpx;
   position: relative;
 }
+.order-tab-icon { font-size: 34rpx; line-height: 1; }
+.order-tab-label { color: #54716c; font-size: 21rpx; }
 .order-badge {
   position: absolute;
   top: -8rpx;
   right: 8rpx;
-  background: #C43D3D;
+  background: #c35240;
   color: #fff;
   font-size: 20rpx;
   padding: 2rpx 10rpx;
@@ -1033,10 +994,10 @@ function logoutUser() {
 .auth-action.reject { background: #f3f4f6; color: #111827; }
 .auth-action.allow { background: #16a34a; color: #fff; }
 .auth-action[disabled] { opacity: .62; }
-.redemption-entry { margin-bottom: 16rpx; }
+.redemption-entry { margin-bottom: 18rpx; }
 .redemption-row { display: grid; grid-template-columns: 1fr 150rpx; gap: 12rpx; margin-top: 18rpx; }
-.redemption-input { height: 76rpx; min-width: 0; box-sizing: border-box; padding: 0 20rpx; border: 1rpx solid #ead8c5; border-radius: 12rpx; background: #fffaf3; font-size: 26rpx; overflow-wrap: anywhere; }
-.redemption-button { display: flex; align-items: center; justify-content: center; border-radius: 12rpx; background: #c43d3d; color: #fff; font-size: 26rpx; font-weight: 800; }
+.redemption-input { height: 76rpx; min-width: 0; box-sizing: border-box; padding: 0 20rpx; border: 1rpx solid #cfe4df; border-radius: 10rpx; background: #f7fbfa; font-size: 26rpx; overflow-wrap: anywhere; }
+.redemption-button { display: flex; align-items: center; justify-content: center; border-radius: 10rpx; background: #0f766e; color: #fff; font-size: 26rpx; font-weight: 800; }
 .redemption-button.disabled { opacity: .6; }
 .redemption-error { margin-top:12rpx; color:#b91c1c; font-size:23rpx; line-height:1.45; }
 .profile-state-card { display:grid; gap:10rpx; margin:0 0 16rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }

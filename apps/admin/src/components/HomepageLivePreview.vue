@@ -110,6 +110,16 @@ function title(section: HomepageSectionView) {
   return section.title || labels[section.type] || "内容模块";
 }
 
+function activityDateParts(value: unknown) {
+  const date = new Date(String(value || ""));
+  if (Number.isNaN(date.getTime())) return { month: "日期", day: "待定", time: "时间" };
+  return {
+    month: `${date.getMonth() + 1}月`,
+    day: String(date.getDate()).padStart(2, "0"),
+    time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+  };
+}
+
 function select(section: HomepageSectionView) {
   emit("select", section);
 }
@@ -173,14 +183,15 @@ function select(section: HomepageSectionView) {
         </div>
 
         <div v-else-if="isHomeActivityFocus(section)" class="activity-focus" :style="sectionStyle(section, '#eef7f4')">
-          <small>本周主推</small>
           <img v-if="sectionRows(section, 'activities')[0]?.coverUrl" :src="sectionRows(section, 'activities')[0].coverUrl" alt="" />
           <div v-else class="activity-focus-cover">活动报名</div>
+          <i class="focus-mask"></i>
+          <small>{{ sectionRows(section, 'activities')[0]?.category?.name || "本周主推" }}</small>
+          <aside><span>{{ activityDateParts(sectionRows(section, 'activities')[0]?.startTime).month }}</span><b>{{ activityDateParts(sectionRows(section, 'activities')[0]?.startTime).day }}</b><span>{{ activityDateParts(sectionRows(section, 'activities')[0]?.startTime).time }}</span></aside>
           <section>
-            <b>{{ sectionRows(section, 'activities')[0]?.startTime }}</b>
             <h4>{{ sectionRows(section, 'activities')[0]?.title }}</h4>
-            <p>{{ sectionRows(section, 'activities')[0]?.location || "地点待确认" }} · 余 {{ sectionRows(section, 'activities')[0]?.remainingSeats }}</p>
-            <footer><strong>{{ Number(sectionRows(section, 'activities')[0]?.price) > 0 ? `¥${Number(sectionRows(section, 'activities')[0]?.price).toFixed(2)}` : "免费" }}</strong><span>立即报名</span></footer>
+            <p>{{ sectionRows(section, 'activities')[0]?.location || "地点待确认" }}</p>
+            <footer><em>{{ sectionRows(section, 'activities')[0]?.registeredCount || 0 }} 人已报 · 余 {{ sectionRows(section, 'activities')[0]?.remainingSeats }}</em><span><strong>{{ Number(sectionRows(section, 'activities')[0]?.price) > 0 ? `¥${Number(sectionRows(section, 'activities')[0]?.price).toFixed(2)}` : "免费" }}</strong> 立即报名</span></footer>
           </section>
         </div>
 
@@ -188,8 +199,9 @@ function select(section: HomepageSectionView) {
           <h4>{{ title(section) }}</h4><p v-if="section.subtitle">{{ section.subtitle }}</p>
           <div class="activity-list">
             <article v-for="(item, index) in sectionRows(section, 'activities').slice(0, section.type === 'featured_activities' ? 2 : 3)" :key="item.id">
+              <time><span>{{ activityDateParts(item.startTime).month }}</span><b>{{ activityDateParts(item.startTime).day }}</b><span>{{ activityDateParts(item.startTime).time }}</span></time>
               <img v-if="item.coverUrl" :src="item.coverUrl" alt="" /><span v-else class="activity-cover">{{ index === 0 ? "雅" : "集" }}</span>
-              <div><strong>{{ item.title }}</strong><small>{{ item.startTime }} · {{ item.location }}</small><footer><b>{{ Number(item.price) > 0 ? `¥${Number(item.price).toFixed(2)}` : "免费" }}</b><span>余 {{ item.remainingSeats }}</span></footer></div>
+              <div><strong>{{ item.title }}</strong><small>{{ item.location || "地点待确认" }}</small><footer><b>{{ Number(item.price) > 0 ? `¥${Number(item.price).toFixed(2)}` : "免费" }}</b><span>{{ item.registeredCount || 0 }} 人已报 · 余 {{ item.remainingSeats }}</span></footer></div>
             </article>
           </div>
         </div>
@@ -269,19 +281,24 @@ function select(section: HomepageSectionView) {
 .decor-chips,.decor-tabs { display:flex; gap:6px; overflow:hidden; }
 .decor-chips span,.decor-tabs span { flex:0 0 auto; padding:6px 9px; border-radius:999px; background:var(--preview-chip,#fff7ec); color:var(--preview-primary,#0f766e); font-size:9px; font-weight:800; }
 .decor-tabs { margin-bottom:12px; padding:8px 4px; }
-.activity-focus { position:relative; overflow:hidden; margin-bottom:12px; text-align:left; }
-.activity-focus>small { position:absolute; z-index:1; top:10px; left:10px; padding:4px 7px; border-radius:6px; background:rgba(15,118,110,.9); color:#fff; font-size:8px; font-weight:900; }
-.activity-focus>img,.activity-focus-cover { width:100%; height:130px; display:grid; place-items:center; object-fit:cover; background:linear-gradient(135deg,#d8ebe5,#f3e2cb); color:#0f766e; font-size:17px; font-weight:900; }
-.activity-focus>section { padding:11px 12px 12px; background:#fff; }
-.activity-focus section>b { color:var(--preview-primary); font-size:9px; }
-.activity-focus h4 { margin:4px 0; color:#111827; font-size:14px; }
+.activity-focus { position:relative; overflow:hidden; margin-bottom:12px; background:#173f3a; text-align:left; }
+.activity-focus>small { position:absolute; z-index:2; top:10px; left:10px; padding:4px 7px; border-radius:6px; background:rgba(15,118,110,.92); color:#fff; font-size:8px; font-weight:900; }
+.activity-focus>img,.activity-focus-cover { width:100%; height:146px; display:grid; place-items:center; object-fit:cover; background:linear-gradient(135deg,#d8ebe5,#f3e2cb); color:#0f766e; font-size:17px; font-weight:900; }
+.activity-focus .focus-mask { position:absolute; inset:0 0 auto; height:146px; background:linear-gradient(180deg,rgba(8,37,34,.02),rgba(8,37,34,.65)); }
+.activity-focus>aside { position:absolute; z-index:2; top:10px; right:10px; width:42px; display:grid; justify-items:center; padding:5px 3px; border-radius:7px; background:rgba(255,255,255,.94); color:var(--preview-primary); font-size:7px; font-style:normal; font-weight:800; }
+.activity-focus>aside b { margin:2px 0; color:#173f3a; font-size:20px; line-height:1; }
+.activity-focus>section { position:relative; z-index:2; margin-top:-44px; padding:11px 12px 12px; border-radius:11px 11px 0 0; background:#fff; }
+.activity-focus h4 { margin:0 0 4px; color:#111827; font-size:14px; }
 .activity-focus p { margin:0; color:#667085; font-size:9px; }
-.activity-focus footer { display:flex; align-items:center; justify-content:space-between; margin-top:10px; }
-.activity-focus footer strong { color:var(--preview-accent); font-size:13px; }
-.activity-focus footer span { padding:6px 8px; border-radius:6px; background:var(--preview-primary); color:#fff; font-size:9px; font-weight:900; }
+.activity-focus footer { display:flex; align-items:center; justify-content:space-between; gap:6px; margin-top:10px; }
+.activity-focus footer em { overflow:hidden; color:#667085; font-size:8px; font-style:normal; text-overflow:ellipsis; white-space:nowrap; }
+.activity-focus footer strong { color:#fff4d6; font-size:10px; }
+.activity-focus footer span { flex:0 0 auto; padding:6px 8px; border-radius:6px; background:var(--preview-primary); color:#fff; font-size:8px; font-weight:900; }
 .activity-list,.post-list { display:grid; gap:8px; }
-.activity-list article { display:grid; grid-template-columns:66px 1fr; gap:9px; min-width:0; padding:7px; border:1px solid rgba(15,23,42,.06); border-radius:8px; background:#fff; }
-.activity-list img,.activity-cover { width:66px; height:58px; display:grid; place-items:center; border-radius:6px; object-fit:cover; background:linear-gradient(135deg,#d9e9e4,#f3e2cb); color:#5b2f24; font-family:"KaiTi",serif; font-size:22px; }
+.activity-list article { display:grid; grid-template-columns:34px 60px 1fr; gap:8px; min-width:0; min-height:60px; padding:7px; border:1px solid rgba(15,118,110,.08); border-radius:8px; background:#fff; }
+.activity-list time { display:grid; align-content:center; justify-items:center; color:var(--preview-primary); font-size:7px; font-style:normal; font-weight:800; }
+.activity-list time b { margin:2px 0; color:#173f3a; font-size:17px; line-height:1; }
+.activity-list img,.activity-cover { width:60px; height:60px; display:grid; place-items:center; border-radius:6px; object-fit:cover; background:linear-gradient(135deg,#d9e9e4,#f3e2cb); color:#5b2f24; font-family:"KaiTi",serif; font-size:22px; }
 .activity-list article>div { min-width:0; }
 .activity-list strong,.activity-list small { display:block; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .activity-list strong { font-size:11px; }

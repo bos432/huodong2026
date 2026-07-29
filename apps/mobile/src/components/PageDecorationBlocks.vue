@@ -177,6 +177,16 @@ function formatTime(value: string) {
   const minute = String(date.getMinutes()).padStart(2, "0");
   return `${month}-${day} ${hour}:${minute}`;
 }
+
+function activityDateParts(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { month: "日期", day: "待定", time: "时间待定" };
+  return {
+    month: `${date.getMonth() + 1}月`,
+    day: String(date.getDate()).padStart(2, "0"),
+    time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+  };
+}
 </script>
 
 <template>
@@ -251,16 +261,21 @@ function formatTime(value: string) {
     </view>
 
     <view v-else-if="isHomeActivityFocus(section) && activities(section).length" class="decor-activity-focus" :style="sectionStyle(section, '#eef7f4')" @click="goActivity(activities(section)[0].id)">
-      <view class="decor-focus-kicker">本周主推</view>
       <image v-if="activities(section)[0].coverUrl" class="decor-focus-image" :src="activities(section)[0].coverUrl" mode="aspectFill" />
       <view v-else class="decor-focus-image decor-focus-fallback">活动报名</view>
+      <view class="decor-focus-mask"></view>
+      <view class="decor-focus-kicker">{{ activities(section)[0].category?.name || "本周主推" }}</view>
+      <view class="decor-focus-date-card">
+        <text class="decor-date-month">{{ activityDateParts(activities(section)[0].startTime).month }}</text>
+        <text class="decor-date-day">{{ activityDateParts(activities(section)[0].startTime).day }}</text>
+        <text class="decor-date-time">{{ activityDateParts(activities(section)[0].startTime).time }}</text>
+      </view>
       <view class="decor-focus-body">
-        <view class="decor-focus-date">{{ formatTime(activities(section)[0].startTime) }}</view>
         <view class="decor-focus-title">{{ activities(section)[0].title }}</view>
-        <view class="decor-focus-meta">{{ activities(section)[0].location || "地点待确认" }} · 余 {{ activities(section)[0].remainingSeats }}</view>
+        <view class="decor-focus-meta">{{ activities(section)[0].location || "地点待确认" }}</view>
         <view class="decor-focus-footer">
-          <text class="decor-focus-price">{{ priceText(activities(section)[0].price) }}</text>
-          <text class="decor-focus-action">立即报名</text>
+          <text class="decor-focus-seats">{{ activities(section)[0].registeredCount || 0 }} 人已报名 · 余 {{ activities(section)[0].remainingSeats }}</text>
+          <view class="decor-focus-action"><text class="decor-focus-action-price">{{ priceText(activities(section)[0].price) }}</text><text>立即报名</text></view>
         </view>
       </view>
     </view>
@@ -270,14 +285,19 @@ function formatTime(value: string) {
       <view v-if="section.subtitle" class="decor-section-copy">{{ section.subtitle }}</view>
       <view class="decor-activity-list">
         <view v-for="item in activities(section).slice(0, Number(section.config.limit || 6))" :key="item.id" class="decor-activity" @click="goActivity(item.id)">
+          <view class="decor-activity-date-card">
+            <text class="decor-date-month">{{ activityDateParts(item.startTime).month }}</text>
+            <text class="decor-date-day">{{ activityDateParts(item.startTime).day }}</text>
+            <text class="decor-date-time">{{ activityDateParts(item.startTime).time }}</text>
+          </view>
           <image v-if="item.coverUrl" class="decor-activity-image" :src="item.coverUrl" mode="aspectFill" />
           <view v-else class="decor-cover-fallback">活动</view>
           <view class="decor-activity-body">
             <view class="decor-activity-title">{{ item.title }}</view>
-            <view class="decor-activity-meta">{{ formatTime(item.startTime) }} · {{ item.location }}</view>
+            <view class="decor-activity-meta">{{ item.location || "地点待确认" }}</view>
             <view class="decor-activity-foot">
               <text class="decor-activity-price">{{ priceText(item.price) }}</text>
-              <text class="decor-activity-remaining">余 {{ item.remainingSeats }}</text>
+              <text class="decor-activity-remaining">{{ item.registeredCount || 0 }} 人已报 · 余 {{ item.remainingSeats }}</text>
             </view>
           </view>
         </view>
@@ -341,17 +361,21 @@ function formatTime(value: string) {
 .decor-banner-image, .decor-rich-image { width: 100%; border-radius: var(--decor-image-radius, 12px); }
 .decor-banner-swiper { width: 100%; height: 220rpx; border-radius: var(--decor-image-radius, 12px); overflow: hidden; }
 .decor-banner-swiper .decor-banner-image { width: 100%; height: 100%; display: block; border-radius: 0; }
-.decor-activity-focus { position: relative; overflow: hidden; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); box-shadow: 0 18rpx 42rpx rgba(15, 118, 110, 0.16); }
-.decor-focus-kicker { position: absolute; z-index: 1; top: 20rpx; left: 20rpx; padding: 8rpx 14rpx; border-radius: 8rpx; background: rgba(15, 118, 110, 0.9); color: #fff; font-size: 22rpx; font-weight: 900; }
-.decor-focus-image { width: 100%; height: 310rpx; display: block; background: #d8ebe5; }
+.decor-activity-focus { position: relative; overflow: hidden; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: #173f3a; box-shadow: 0 18rpx 42rpx rgba(15, 118, 110, 0.16); }
+.decor-focus-kicker { position: absolute; z-index: 2; top: 20rpx; left: 20rpx; padding: 8rpx 14rpx; border-radius: 8rpx; background: rgba(15, 118, 110, 0.92); color: #fff; font-size: 22rpx; font-weight: 900; }
+.decor-focus-image { width: 100%; height: 360rpx; display: block; background: #d8ebe5; }
 .decor-focus-fallback { display: flex; align-items: center; justify-content: center; color: #0f766e; font-size: 34rpx; font-weight: 900; }
-.decor-focus-body { padding: 22rpx 24rpx 24rpx; background: var(--decor-surface-color, #fff); }
-.decor-focus-date { color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 900; }
-.decor-focus-title { margin-top: 8rpx; color: var(--text-color, #111827); font-size: 32rpx; line-height: 1.35; font-weight: 900; }
+.decor-focus-mask { position: absolute; left: 0; right: 0; top: 0; height: 360rpx; background: linear-gradient(180deg, rgba(8, 37, 34, 0.04), rgba(8, 37, 34, 0.7)); }
+.decor-focus-date-card { position: absolute; z-index: 2; right: 20rpx; top: 20rpx; width: 92rpx; min-height: 116rpx; display: grid; align-content: center; justify-items: center; padding: 10rpx; border-radius: 10px; background: rgba(255, 255, 255, 0.94); color: #0f766e; box-shadow: 0 8rpx 18rpx rgba(8, 37, 34, 0.16); }
+.decor-date-month,.decor-date-time { font-size: 18rpx; font-weight: 800; }
+.decor-date-day { margin: 2rpx 0; color: #173f3a; font-size: 42rpx; line-height: 1; font-weight: 900; }
+.decor-focus-body { position: relative; z-index: 2; margin-top: -116rpx; padding: 22rpx 24rpx 24rpx; background: var(--decor-surface-color, #fff); border-radius: 18rpx 18rpx 0 0; }
+.decor-focus-title { color: var(--text-color, #111827); font-size: 34rpx; line-height: 1.35; font-weight: 900; }
 .decor-focus-meta { margin-top: 10rpx; overflow: hidden; color: var(--muted-color, #667085); font-size: 24rpx; text-overflow: ellipsis; white-space: nowrap; }
-.decor-focus-footer { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; margin-top: 18rpx; }
-.decor-focus-price { color: var(--decor-accent-color, #c43d3d); font-size: 30rpx; font-weight: 900; }
-.decor-focus-action { padding: 12rpx 18rpx; border-radius: 8rpx; background: var(--primary-color, #0f766e); color: #fff; font-size: 25rpx; font-weight: 900; }
+.decor-focus-footer { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; margin-top: 20rpx; }
+.decor-focus-seats { min-width: 0; overflow: hidden; color: var(--muted-color, #667085); font-size: 22rpx; text-overflow: ellipsis; white-space: nowrap; }
+.decor-focus-action { flex: 0 0 auto; display: flex; align-items: center; gap: 10rpx; padding: 12rpx 16rpx; border-radius: 8rpx; background: var(--primary-color, #0f766e); color: #fff; font-size: 23rpx; font-weight: 900; }
+.decor-focus-action-price { color: #fff4d6; }
 .decor-section-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; margin-bottom: 12rpx; }
 .decor-section-copy { margin: -4rpx 0 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.45; }
 .decor-rich-line { color: var(--muted-color, #667085); font-size: 25rpx; line-height: 1.65; }
@@ -363,8 +387,10 @@ function formatTime(value: string) {
 .decor-tabs { width: 100%; overflow-x: auto; margin-bottom: 18rpx; }
 .decor-category, .decor-tab { flex: 0 0 auto; padding: 14rpx 24rpx; border-radius: 999px; background: var(--decor-chip-background, #fff7ec); color: var(--primary-color, #8b5a2b); font-size: 25rpx; font-weight: 800; border: 1px solid rgba(139, 90, 43, 0.12); }
 .decor-activity-list { display: grid; gap: var(--decor-card-gap, 16rpx); }
-.decor-activity { display: grid; grid-template-columns: 154rpx 1fr; gap: 16rpx; min-height: 154rpx; padding: 14rpx; border-radius: 14px; background: var(--decor-item-background, linear-gradient(135deg, #fff 0%, #fffaf3 100%)); border: 1px solid rgba(139, 90, 43, 0.08); }
-.decor-activity-image, .decor-cover-fallback { width: 154rpx; height: 154rpx; border-radius: var(--decor-image-radius, 12px); }
+.decor-activity { display: grid; grid-template-columns: 84rpx 148rpx 1fr; gap: 14rpx; min-height: 148rpx; padding: 12rpx; border-radius: 14px; background: var(--decor-item-background, linear-gradient(135deg, #fff 0%, #fffaf3 100%)); border: 1px solid rgba(15, 118, 110, 0.1); }
+.decor-activity-date-card { display: grid; align-content: center; justify-items: center; color: var(--primary-color, #0f766e); }
+.decor-activity-date-card .decor-date-day { margin: 4rpx 0; color: var(--text-color, #173f3a); font-size: 38rpx; }
+.decor-activity-image, .decor-cover-fallback { width: 148rpx; height: 148rpx; border-radius: var(--decor-image-radius, 12px); }
 .decor-cover-fallback { display: flex; align-items: center; justify-content: center; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-weight: 900; }
 .decor-activity-body { min-width: 0; display: grid; align-content: space-between; gap: 8rpx; }
 .decor-activity-title { color: var(--text-color, #111827); font-size: 27rpx; line-height: 1.35; font-weight: 900; display: -webkit-box; overflow: hidden; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }

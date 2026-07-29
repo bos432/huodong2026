@@ -84,6 +84,12 @@ export function quickInitial(label?: string, icon?: string) {
   return String(icon || label || "入").slice(0, 1);
 }
 
+// Pages with their own title area keep optional decorative content, but avoid repeating
+// the configurable Hero and page-description blocks that already appear in that title area.
+export function filterIntrinsicHeaderDecorationSections(sections: HomepageSectionView[]) {
+  return sections.filter((section) => section.type !== "hero" && !(section.type === "rich_text" && section.title === "页面说明"));
+}
+
 export function goDecoratedLink(url?: string, action?: string) {
   if (!url) return;
   if (!isLinkAllowedByFeature(url)) {

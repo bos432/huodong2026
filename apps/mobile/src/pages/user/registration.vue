@@ -4,7 +4,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { OrderStatus, RegistrationStatus } from "@activity/shared";
 import QRCode from "qrcode";
 import { ensureUser, getCurrentTenantCode, request, requestCheckInQrImage, requestRegistrationRefund, withTenantCode } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { clientError } from "../../error-reporting";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
@@ -55,6 +55,7 @@ const groupQrImageError = ref(false);
 const paymentInstructionsField = "offlinePaymentInstructions";
 const steps = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("registration_detail", "/pages/user/registration");
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 const groupQrCodeUrl = computed(() => detail.value?.groupQrCodeUrl || "");
 const registrationStatus = computed(() => detail.value?.registration?.status as RegistrationStatus | undefined);
@@ -551,8 +552,8 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         </view>
         <view class="hero-bottom">
           <view class="page-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'transparent') }">
-            <view class="page-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ detail.registration.activity.title }}</view>
-            <view class="page-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.84)') }">{{ innerPageConfig.subtitle || "查看报名状态、订单、签到码、入群二维码和主办方服务信息。" }}</view>
+            <view class="page-head-title">{{ detail.registration.activity.title }}</view>
+            <view class="page-head-copy">{{ innerPageConfig.subtitle || "查看报名状态、订单、签到码、入群二维码和主办方服务信息。" }}</view>
           </view>
           <view class="hero-summary">
             <view><text>报名</text><text>{{ registrationStatusText[detail.registration.status as RegistrationStatus] }}</text></view>
@@ -562,7 +563,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         </view>
       </view>
 
-      <PageDecorationBlocks :sections="contentSections" />
+      <PageDecorationBlocks :sections="bodyDecorationSections" />
 
       <view class="card status-card" :class="statusClass(detail.registration.status as RegistrationStatus)">
         <view class="status-label">当前状态</view>
@@ -690,9 +691,9 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
   overflow: hidden;
   min-height: 500rpx;
   margin-bottom: 24rpx;
-  border-radius: 24rpx;
-  background: #4a6b8a;
-  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+  border-radius: 14rpx;
+  background: #0f766e;
+  box-shadow: 0 16rpx 36rpx rgba(15, 118, 110, 0.16);
 }
 .hero-image {
   position: absolute;
@@ -705,16 +706,15 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 248, 240, 0.92);
+  color: rgba(255, 255, 255, 0.92);
   font-size: 72rpx;
   font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-  background: #4a6b8a;
+  background: #0f766e;
 }
 .hero-mask {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(34, 24, 19, 0.16), rgba(34, 24, 19, 0.76));
+  background: linear-gradient(180deg, rgba(7, 36, 32, 0.16), rgba(7, 36, 32, 0.8));
 }
 .hero-head,
 .hero-bottom {
@@ -729,7 +729,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
   padding: 24rpx 24rpx 0;
 }
 .hero-kicker {
-  color: rgba(255, 248, 240, 0.78);
+  color: rgba(255, 255, 255, 0.78);
   font-size: 23rpx;
   font-weight: 700;
 }
@@ -740,9 +740,9 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: rgba(255, 248, 240, 0.16);
-  color: #fff8f0;
+  border-radius: 8rpx;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
   font-size: 22rpx;
   font-weight: 700;
 }
@@ -762,11 +762,10 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
   background: transparent !important;
 }
 .page-head-title {
-  color: #fff8f0;
+  color: #fff;
   font-size: 48rpx;
   font-weight: 700;
   line-height: 1.24;
-  font-family: "STKaiti", "KaiTi", serif;
 }
 .page-head-copy {
   margin-top: 12rpx;
@@ -783,56 +782,53 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
   display: grid;
   gap: 6rpx;
   padding: 16rpx 14rpx;
-  border-radius: 18rpx;
-  background: rgba(255, 248, 240, 0.16);
-  border: 1px solid rgba(255, 248, 240, 0.16);
+  border-radius: 10rpx;
+  background: rgba(255, 255, 255, 0.16);
+  border: 1px solid rgba(255, 255, 255, 0.18);
 }
 .hero-summary text:first-child {
-  color: rgba(255, 248, 240, 0.68);
+  color: rgba(255, 255, 255, 0.68);
   font-size: 22rpx;
 }
 .hero-summary text:last-child {
-  color: #fff8f0;
+  color: #fff;
   font-size: 25rpx;
   font-weight: 800;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.small {
-  font-size: 30rpx;
-  font-family: "STKaiti", "KaiTi", serif;
-}
-.status-card { display: grid; gap: 14rpx; border-color: transparent; background: #fffaf4; color: #333333; border-left: 8rpx solid #4a6b8a; }
-.status-label { color: #4a6b8a; font-size: 23rpx; font-weight: 800; }
-.status-title { font-size: 36rpx; line-height: 1.25; font-weight: 900; font-family: "STKaiti", "KaiTi", serif; }
-.status-copy { color: #666666; font-size: 26rpx; line-height: 1.55; }
+.small { font-size: 30rpx; }
+.status-card { display: grid; gap: 14rpx; border-color: rgba(15,118,110,.1); background: #fff; color: #173f3a; border-left: 8rpx solid #0f766e; box-shadow: 0 8rpx 22rpx rgba(20,72,64,.05); }
+.status-label { color: #0f766e; font-size: 23rpx; font-weight: 800; }
+.status-title { font-size: 36rpx; line-height: 1.25; font-weight: 900; }
+.status-copy { color: #54716c; font-size: 26rpx; line-height: 1.55; }
 .status-meta { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12rpx; }
-.status-meta view { display: grid; gap: 6rpx; padding: 14rpx; border-radius: 16rpx; background: #f9f4ee; }
+.status-meta view { display: grid; gap: 6rpx; padding: 14rpx; border-radius: 10rpx; background: #f1f7f5; }
 .status-meta text:first-child { color: #999999; font-size: 22rpx; }
-.status-meta text:last-child { color: #333333; font-size: 25rpx; font-weight: 800; }
-.status-action { height: 72rpx; display: flex; align-items: center; justify-content: center; border-radius: 16rpx; background: #c43d3d; color: #fff; font-size: 26rpx; font-weight: 900; }
-.status-card.is-payment { border-left-color: #c43d3d; }
-.status-card.is-review { border-left-color: #4a6b8a; }
-.status-card.is-approved { border-left-color: #5b8c5a; }
-.status-card.is-checkin { border-left-color: #5b8c5a; }
+.status-meta text:last-child { color: #173f3a; font-size: 25rpx; font-weight: 800; }
+.status-action { height: 72rpx; display: flex; align-items: center; justify-content: center; border-radius: 9rpx; background: #0f766e; color: #fff; font-size: 26rpx; font-weight: 900; }
+.status-card.is-payment { border-left-color: #c47a26; }
+.status-card.is-review { border-left-color: #0f766e; }
+.status-card.is-approved { border-left-color: #0f766e; }
+.status-card.is-checkin { border-left-color: #0f766e; }
 .status-card.is-muted { border-left-color: #999999; }
 .line { display: grid; grid-template-columns: 150rpx 1fr; gap: 16rpx; margin-top: 14rpx; }
 .line text:first-child { color: var(--muted-color, #667085); }
 .line.strong { font-weight: 800; }
-.line.strong text:last-child { color: #c43d3d; }
-.notice { margin-top: 16rpx; padding: 18rpx; background: #fff7ed; border-radius: 18rpx; color: #9a3412; line-height: 1.5; }
+.line.strong text:last-child { color: #0f766e; }
+.notice { margin-top: 16rpx; padding: 18rpx; background: #fff7ed; border-radius: 10rpx; color: #9a3412; line-height: 1.5; }
 .notice.danger { background: #fef2f2; color: #b91c1c; }
 .notice.muted { background: #f3f4f6; color: #4b5563; }
 .timeline { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; margin-top: 18rpx; }
-.step { padding: 14rpx 8rpx; background: #f9f4ee; border-radius: 16rpx; text-align: center; color: #999999; font-size: 22rpx; }
-.step.active { background: rgba(196, 61, 61, 0.12); color: #c43d3d; font-weight: 650; }
+.step { padding: 14rpx 8rpx; background: #f1f7f5; border-radius: 8rpx; text-align: center; color: #718a85; font-size: 22rpx; }
+.step.active { background: rgba(15, 118, 110, 0.12); color: #0f766e; font-weight: 800; }
 .group-card .row { align-items: flex-start; }
-.mini-button { flex: 0 0 auto; padding: 10rpx 18rpx; border-radius: 999px; background: rgba(74, 107, 138, 0.12); color: #4a6b8a; font-size: 24rpx; font-weight: 800; }
-.group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: 20rpx; border: 1px solid #e8e0d8; background: var(--card-bg, #fff); }
+.mini-button { flex: 0 0 auto; padding: 10rpx 18rpx; border-radius: 8rpx; background: #eaf7f3; color: #0f766e; font-size: 24rpx; font-weight: 800; }
+.group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: 10rpx; border: 1px solid #d9ebe6; background: var(--card-bg, #fff); }
 .code { text-align: center; }
 .code-qr,
-.code-qr-matrix { width: 360rpx; height: 360rpx; margin: 18rpx auto 0; border-radius: 8rpx; border: 1px solid #e8e0d8; background: #fff; overflow: hidden; box-sizing: border-box; }
+.code-qr-matrix { width: 360rpx; height: 360rpx; margin: 18rpx auto 0; border-radius: 8rpx; border: 1px solid #d9ebe6; background: #fff; overflow: hidden; box-sizing: border-box; }
 .code-qr { display: block; }
 .code-qr-matrix { display: flex; flex-direction: column; }
 .code-qr-row { display: flex; width: 100%; flex: 1 1 0; min-height: 0; }
@@ -842,7 +838,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
 .code-tip { margin-top: 14rpx; color: var(--muted-color, #667085); font-size: 24rpx; line-height: 1.5; }
 .copy-code { display: inline-flex; margin-top: 18rpx; }
 .button { margin-top: 18rpx; }
-.share-button { border-color: rgba(74, 107, 138, 0.22); color: #4a6b8a; background: rgba(74, 107, 138, 0.08); }
+.share-button { border-color: rgba(15,118,110,.2); color: #0f766e; background: #eaf7f3; }
 .danger-button { color: #dc2626; background: #fef2f2; }
 .pay-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 14rpx; margin-top: 18rpx; }
 .pay-actions .button { margin-top: 0; }

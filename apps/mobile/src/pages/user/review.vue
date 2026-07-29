@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -21,7 +21,8 @@ const detail = ref<any>(null);
 const loadGuard = createTenantLoadGuard();
 const activityTitle = computed(() => detail.value?.registration?.activity?.title || "活动评价");
 const eligibilityError = computed(() => detail.value?.registration?.status === "checked_in" ? "" : "完成现场签到后才能评价这场活动。" );
-const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("review_page", "/pages/user/review");
+const { tenant, bottomNavSection, contentSections, innerPageConfig, showBottomNav, loadDecoration } = usePageDecoration("review_page", "/pages/user/review");
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 function handleRatingChange(event: any) {
   rating.value = Number(event.detail?.value || 1);
 }
@@ -72,15 +73,15 @@ onShow(() => {
 
     <template v-else-if="detail">
 
-    <view class="review-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#4a6b8a') }">
+    <view class="review-hero" style="background:#0f766e">
       <view class="hero-mark">评</view>
       <view class="hero-copy">
-        <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "评价活动" }}</view>
-        <view class="subtle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "你的反馈会帮助主办方持续改进活动体验。" }}</view>
+        <view class="title">{{ innerPageConfig.title || "评价活动" }}</view>
+        <view class="subtle">{{ innerPageConfig.subtitle || "你的反馈会帮助主办方持续改进活动体验。" }}</view>
       </view>
     </view>
 
-    <PageDecorationBlocks :sections="contentSections" />
+    <PageDecorationBlocks :sections="bodyDecorationSections" />
 
     <view class="card review-card">
       <view class="card-kicker">活动反馈</view>
@@ -108,20 +109,20 @@ onShow(() => {
 .review-hero {
   position: relative;
   overflow: hidden;
-  min-height: 300rpx;
+  min-height: 238rpx;
   display: flex;
   align-items: flex-end;
   gap: 22rpx;
   margin-bottom: 20rpx;
   padding: 34rpx 28rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
+  border-radius: 14rpx;
+  box-shadow: 0 16rpx 34rpx rgba(15,118,110,.16);
 }
 .review-hero::after {
   content: "";
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(34, 24, 19, 0.04), rgba(34, 24, 19, 0.24));
+  background: linear-gradient(180deg, rgba(7,36,32,.02), rgba(7,36,32,.24));
   pointer-events: none;
 }
 .hero-mark,
@@ -136,27 +137,26 @@ onShow(() => {
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 28rpx;
-  background: rgba(255, 248, 240, 0.16);
-  color: #fff8f0;
+  border-radius: 12rpx;
+  background: rgba(255,255,255,.16);
+  color: #fff;
   font-size: 38rpx;
   font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
 }
 .hero-copy { min-width: 0; }
 .title {
-  font-size: 48rpx;
+  font-size: 42rpx;
   line-height: 1.22;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
+  font-weight: 900;
 }
-.subtle { margin-top: 12rpx; font-size: 25rpx; line-height: 1.6; }
-.review-card { border-radius: 24rpx; box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
-.card-kicker { color: #4a6b8a; font-size: 24rpx; font-weight: 800; margin-bottom: 8rpx; }
-.activity-name { margin-top:12rpx; color:#333; font-size:30rpx; font-weight:900; line-height:1.5; }
+.review-hero .title { color:#fff; }
+.subtle { margin-top: 12rpx; color:rgba(255,255,255,.8); font-size: 25rpx; line-height: 1.6; }
+.review-card { border:1rpx solid rgba(15,118,110,.1); border-radius:14rpx; box-shadow:0 8rpx 22rpx rgba(20,72,64,.05); }
+.card-kicker { color:#0f766e; font-size:22rpx; font-weight:800; margin-bottom:8rpx; }
+.activity-name { margin-top:12rpx; color:#173f3a; font-size:30rpx; font-weight:900; line-height:1.5; }
 .eligibility-warning { margin-top:14rpx; padding:16rpx; border-radius:8px; background:#fff7ed; color:#9a3412; font-size:24rpx; line-height:1.55; }
 .label { margin: 20rpx 0 12rpx; font-size: 28rpx; font-weight: 650; color: #333333; }
-.stars { color: #c43d3d; font-size: 38rpx; margin: 8rpx 0 22rpx; letter-spacing: 0; }
+.stars { color: #0f766e; font-size: 38rpx; margin: 8rpx 0 22rpx; letter-spacing: 0; }
 .textarea { min-height: 220rpx; }
 .submit-button { margin-top: 20rpx; }
 .submit-button.disabled { opacity:.6; pointer-events:none; }

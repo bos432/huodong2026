@@ -12,6 +12,31 @@
       </view>
     </view>
 
+    <view class="home-activity-panel">
+      <view class="home-activity-head">
+        <view>
+          <text class="home-activity-kicker">城市活动</text>
+          <text class="home-activity-title">近期可参加的活动</text>
+          <text class="home-activity-copy">查看时间、地点和报名状态，找到适合参加的活动。</text>
+        </view>
+        <view class="home-activity-all" role="button" tabindex="0" aria-label="查看全部活动" @click="goActivityList" @keyup.enter="goActivityList" @keyup.space.prevent="goActivityList">全部活动</view>
+      </view>
+
+      <view v-if="activitiesLoading && !featuredActivities.length" class="activity-state" role="status" aria-live="polite">近期活动加载中...</view>
+      <view v-else-if="activitiesError" class="activity-state activity-error" role="alert" aria-live="assertive">
+        <text>{{ activitiesError }}</text>
+        <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载近期活动" @click="loadActivities">重试</button>
+      </view>
+      <view v-else-if="featuredActivities.length" class="activity-preview-list">
+        <view v-for="activity in featuredActivities" :key="activity.id" class="activity-preview-card" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
+          <view class="activity-date"><text>{{ formatActivityMonthDay(activity.startTime) }}</text><text>{{ formatActivityHour(activity.startTime) }}</text></view>
+          <view class="activity-main"><text class="activity-title">{{ activity.title }}</text><text class="activity-meta">{{ activity.location || "地点待确认" }}</text></view>
+          <view class="activity-status">{{ activityStatusText(activity.status) }}</view>
+        </view>
+      </view>
+      <view v-else class="activity-empty"><text>暂未发布近期活动</text><text class="activity-empty-action" role="button" tabindex="0" @click="goMyRegistrations" @keyup.enter="goMyRegistrations" @keyup.space.prevent="goMyRegistrations">查看我的报名</text></view>
+    </view>
+
     <PageDecorationBlocks :sections="contentSections" />
 
     <view style="height:120rpx;"></view>
@@ -20,17 +45,25 @@
 </template>
 
 <script setup lang="ts">
+import { ref } from "vue";
 import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
-import { applyTenantBootstrapDefault, getCurrentTenantCode, withTenantCode } from "../../api";
+import { applyTenantBootstrapDefault, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 import { resolveTenantByCurrentLocation } from "../../tenant-location";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { usePageDecoration } from "../../decoration";
+import { reviewSafeText } from "../../review-safe-text";
 
 const { tenant, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
+const featuredActivities = ref<any[]>([]);
+const activitiesLoading = ref(false);
+const activitiesError = ref("");
+const loadedActivitiesTenantCode = ref("");
+const activityLoadGuard = createTenantLoadGuard();
 
 const shareOptions = {
   title: () => `${pageBrand.name || "慢π"}活动报名`,
@@ -42,23 +75,82 @@ onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
   await applyTenantBootstrapDefault();
-  await Promise.allSettled([loadPageTheme(), loadDecoration()]);
+  await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()]);
   const beforeTenantCode = getCurrentTenantCode();
   void resolveTenantByCurrentLocation({ silent: true }).then(async () => {
     if (getCurrentTenantCode() === beforeTenantCode) return;
-    await Promise.allSettled([loadPageTheme(), loadDecoration()]);
+    await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()]);
     if (beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
   });
 });
 
 async function handleTenantChanged() {
   await loadPageTheme();
-  await loadDecoration();
+  await Promise.allSettled([loadDecoration(), loadActivities()]);
+}
+
+async function loadActivities() {
+  const loadToken = activityLoadGuard.begin();
+  if (loadedActivitiesTenantCode.value && loadedActivitiesTenantCode.value !== loadToken.tenantCode) featuredActivities.value = [];
+  activitiesLoading.value = true;
+  activitiesError.value = "";
+  try {
+    const result = await request<any>("/public/activities?page=1&pageSize=3&status=open&featured=true");
+    if (!activityLoadGuard.isCurrent(loadToken)) return;
+    let items = Array.isArray(result) ? result : result?.items || [];
+    if (!items.length) {
+      const fallback = await request<any>("/public/activities?page=1&pageSize=3&status=open");
+      if (!activityLoadGuard.isCurrent(loadToken)) return;
+      items = Array.isArray(fallback) ? fallback : fallback?.items || [];
+    }
+    featuredActivities.value = items.slice(0, 3);
+    loadedActivitiesTenantCode.value = loadToken.tenantCode;
+  } catch (error: any) {
+    if (!activityLoadGuard.isCurrent(loadToken)) return;
+    activitiesError.value = reviewSafeText(error?.message || "近期活动加载失败");
+  } finally {
+    if (activityLoadGuard.isCurrent(loadToken)) activitiesLoading.value = false;
+  }
 }
 
 function goSearch() {
   uni.navigateTo({ url: withTenantCode("/pages/search/index") });
 }
+
+function goActivityList() {
+  uni.navigateTo({ url: withTenantCode("/pages/activity/list") });
+}
+
+function goMyRegistrations() {
+  uni.navigateTo({ url: withTenantCode("/pages/user/my") });
+}
+
+function goActivityDetail(activity: any) {
+  uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${activity.id}`) });
+}
+
+function activityStatusText(status: string) {
+  if (status === "full") return "已满员";
+  if (status === "ended") return "已结束";
+  return "报名中";
+}
+
+function formatActivityDate(value: string, part: "date" | "time") {
+  if (!value) return part === "date" ? "待定" : "";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    const text = String(value).replace("T", " ");
+    return part === "date" ? text.slice(5, 10) || "待定" : text.slice(11, 16);
+  }
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  const pad = (partValue: number) => String(partValue).padStart(2, "0");
+  return part === "date"
+    ? `${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())}`
+    : `${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
+}
+
+function formatActivityMonthDay(value: string) { return formatActivityDate(value, "date"); }
+function formatActivityHour(value: string) { return formatActivityDate(value, "time"); }
 
 </script>
 
@@ -103,5 +195,26 @@ function goSearch() {
   font-size: 26rpx;
   font-weight: 700;
 }
+
+.home-activity-panel { margin: 4rpx 0 22rpx; padding: 28rpx; border: 1rpx solid rgba(15, 118, 110, 0.1); border-radius: 16rpx; background: #ffffff; box-shadow: 0 8rpx 24rpx rgba(20, 72, 64, 0.05); }
+.home-activity-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; margin-bottom: 20rpx; }
+.home-activity-kicker { display: block; color: #0f766e; font-size: 22rpx; font-weight: 800; }
+.home-activity-title { display: block; margin-top: 6rpx; color: #173f3a; font-size: 36rpx; font-weight: 900; line-height: 1.3; }
+.home-activity-copy { display: block; margin-top: 8rpx; color: #66827d; font-size: 23rpx; line-height: 1.5; }
+.home-activity-all { flex: 0 0 auto; min-height: 58rpx; display: flex; align-items: center; padding: 0 16rpx; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 23rpx; font-weight: 800; }
+.activity-state { display: grid; gap: 12rpx; padding: 20rpx; border-radius: 10rpx; background: #f4f8f7; color: #66827d; font-size: 24rpx; line-height: 1.55; }
+.activity-error { border: 1rpx solid #fecaca; background: #fff7f7; color: #b91c1c; }
+.activity-retry { width: max-content; min-height: 56rpx; margin: 0; padding: 0 20rpx; border: 0; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 23rpx; font-weight: 800; }
+.activity-retry::after { border: 0; }
+.activity-preview-list { display: grid; gap: 12rpx; }
+.activity-preview-card { display: grid; grid-template-columns: 88rpx minmax(0, 1fr) auto; gap: 16rpx; align-items: center; min-height: 102rpx; padding: 16rpx; border: 1rpx solid #e2eeeb; border-radius: 12rpx; background: #fbfefd; }
+.activity-date { display: grid; align-content: center; justify-items: center; gap: 4rpx; min-height: 70rpx; border-radius: 8rpx; background: #e8f5f1; color: #0f766e; font-size: 20rpx; font-weight: 800; }
+.activity-main { min-width: 0; display: grid; gap: 6rpx; }
+.activity-title { overflow: hidden; color: #173f3a; font-size: 27rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.activity-meta { overflow: hidden; color: #66827d; font-size: 22rpx; text-overflow: ellipsis; white-space: nowrap; }
+.activity-status { padding: 8rpx 12rpx; border-radius: 6rpx; background: #edf7f5; color: #0f766e; font-size: 21rpx; font-weight: 800; }
+.activity-empty { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; padding: 20rpx; border-radius: 10rpx; background: #f4f8f7; color: #66827d; font-size: 24rpx; }
+.activity-empty-action { color: #0f766e; font-weight: 800; }
+.home-activity-all:focus-visible, .activity-preview-card:focus-visible, .activity-empty-action:focus-visible { outline: 3rpx solid #0f766e; outline-offset: 3rpx; }
 
 </style>

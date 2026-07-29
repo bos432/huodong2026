@@ -124,10 +124,10 @@ defineExpose({ show, loadTenantOptions });
 </template>
 
 <style scoped>
-.tenant-entry { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; margin-bottom: 18rpx; padding: 18rpx 22rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 10rpx 28rpx rgba(15, 23, 42, 0.06); }
-.tenant-entry-title { color: var(--text-color, #111827); font-size: 30rpx; font-weight: 900; }
-.tenant-entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4rpx; color: var(--muted-color, #667085); font-size: 23rpx; font-weight: 700; }
-.tenant-entry-action { flex: 0 0 auto; min-width: 86rpx; height: 50rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: var(--primary-soft, #e6f2ef); color: var(--primary-color, #0f766e); font-size: 23rpx; font-weight: 900; }
+.tenant-entry { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; margin-bottom: 18rpx; padding: 18rpx 22rpx; border: 1rpx solid #d9ebe6; border-radius: 10rpx; background: #fff; box-shadow: 0 8rpx 22rpx rgba(20,72,64,.05); }
+.tenant-entry-title { color: #173f3a; font-size: 30rpx; font-weight: 900; }
+.tenant-entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4rpx; color: #66827d; font-size: 23rpx; font-weight: 700; }
+.tenant-entry-action { flex: 0 0 auto; min-width: 86rpx; height: 50rpx; display: flex; align-items: center; justify-content: center; border-radius: 8rpx; background: #eaf7f3; color: #0f766e; font-size: 23rpx; font-weight: 900; }
 .tenant-mask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; background: rgba(15, 23, 42, 0.42); }
 .tenant-sheet { width: 100%; max-height: 76vh; overflow-y: auto; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); border-radius: 8px 8px 0 0; background: #fff; box-shadow: 0 -18rpx 48rpx rgba(15, 23, 42, 0.18); }
 .tenant-sheet-head { display: flex; justify-content: space-between; gap: 24rpx; align-items: flex-start; margin-bottom: 18rpx; }

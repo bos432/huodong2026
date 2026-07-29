@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { onReachBottom, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { consumeActivityListIntent, getCurrentTenantCode, request, withTenantCode } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
@@ -32,11 +32,7 @@ const shareOptions = { title: () => `${tenant.value?.name || "慢π"}活动列�
 onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
 onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
 onShow(showMiniProgramShareMenu);
-const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
-  if (section.type === "hero") return false;
-  if (section.type === "rich_text" && section.title === "页面说明") return false;
-  return true;
-}));
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 const statusTabs = [
   { label: "全部", value: "all" },
@@ -76,6 +72,17 @@ function formatTime(value: string) {
   const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
   const pad = (part: number) => String(part).padStart(2, "0");
   return `${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
+}
+
+function activityDateParts(value: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return { month: "日期", day: "待定", time: "时间待定" };
+  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
+  return {
+    month: `${shifted.getUTCMonth() + 1}月`,
+    day: String(shifted.getUTCDate()).padStart(2, "0"),
+    time: `${String(shifted.getUTCHours()).padStart(2, "0")}:${String(shifted.getUTCMinutes()).padStart(2, "0")}`
+  };
 }
 
 function clearKeyword() {
@@ -229,15 +236,15 @@ onReachBottom(loadMore);
   <view class="container activity-page has-custom-nav">
     <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
 
-    <view class="hero-card" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'linear-gradient(135deg, rgba(196,61,61,0.96), rgba(122,36,32,0.96))') }">
+    <view class="hero-card" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#e8f5f1') }">
       <view class="hero-copy">
-        <text class="hero-kicker">慢π · {{ cityName() }}</text>
-        <text class="hero-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "活动列表" }}</text>
-        <text class="hero-subtitle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ heroSubtitle }}</text>
+        <text class="hero-kicker">{{ cityName() }} · 城市文化活动</text>
+        <text class="hero-title" :style="{ color: String(innerPageLayout.headerTextColor || '#173f3a') }">{{ innerPageConfig.title || "发现正在发生的活动" }}</text>
+        <text class="hero-subtitle" :style="{ color: String(innerPageLayout.headerSubtitleColor || '#54716c') }">{{ heroSubtitle }}</text>
       </view>
       <view class="hero-side">
         <view class="hero-count">{{ total }}</view>
-        <text class="hero-label">当前场次</text>
+        <text class="hero-label">近期场次</text>
       </view>
     </view>
 
@@ -246,7 +253,7 @@ onReachBottom(loadMore);
     <view class="card filter-card" :style="{ background: String(innerPageLayout.stickyFilterBackground || 'var(--card-bg, #FFFFFF)') }">
       <view class="row filter-head">
         <view>
-          <text class="title-md">活动雅集</text>
+          <text class="title-md">按兴趣找活动</text>
           <text class="subtle filter-hint">{{ resultHint }}</text>
         </view>
         <view class="result-badge">{{ rows.length }}/{{ total }}</view>
@@ -297,50 +304,30 @@ onReachBottom(loadMore);
 
     <view v-else class="activity-feed">
       <view v-for="item in rows" :key="item.id" class="activity-card" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
-        <view class="activity-cover">
-          <image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" />
-          <view v-else class="cover-fallback">
-            <text>{{ item.category?.name || "活动" }}</text>
-          </view>
-          <view class="cover-overlay"></view>
-          <view class="cover-top">
-            <text class="card-tag" :class="statusClass(item.displayStatus)">{{ statusText(item.displayStatus) }}</text>
-            <text class="card-price">{{ priceText(item.price) }}</text>
-          </view>
-          <view class="cover-bottom">
-            <text class="cover-title">{{ item.title }}</text>
-            <text class="cover-meta">{{ formatTime(item.startTime) }} · {{ item.location || "待定地点" }}</text>
-          </view>
+        <view class="activity-date-card">
+          <text class="activity-date-month">{{ activityDateParts(item.startTime).month }}</text>
+          <text class="activity-date-day">{{ activityDateParts(item.startTime).day }}</text>
+          <text class="activity-date-time">{{ activityDateParts(item.startTime).time }}</text>
         </view>
-
+        <image v-if="item.coverUrl" class="activity-cover" :src="item.coverUrl" mode="aspectFill" />
+        <view v-else class="activity-cover cover-fallback">{{ item.category?.name || "活动" }}</view>
         <view class="activity-body">
           <view class="row meta-row">
             <view class="tag tag-secondary">{{ item.category?.name || "活动" }}</view>
-            <text class="subtle">{{ item.requireReview ? "需审核" : "即时确认" }}</text>
+            <text class="card-tag" :class="statusClass(item.displayStatus)">{{ statusText(item.displayStatus) }}</text>
           </view>
-
-          <text class="body-text activity-desc">{{ item.description || "主办方正在完善活动介绍，欢迎先进入详情页了解完整安排。" }}</text>
-
-          <view class="info-grid">
-            <view class="info-cell">
-              <text class="info-label">时间</text>
-              <text class="info-value">{{ formatTime(item.startTime) }}</text>
-            </view>
-            <view class="info-cell">
-              <text class="info-label">地点</text>
-              <text class="info-value">{{ item.location || "待定" }}</text>
-            </view>
-          </view>
-
+          <text class="activity-title">{{ item.title }}</text>
+          <text class="activity-location">{{ item.location || "地点待确认" }}</text>
+          <text class="body-text activity-desc">{{ item.description || "主办方正在完善活动介绍，欢迎进入详情页查看完整安排。" }}</text>
           <view class="row capacity-row">
             <view class="capacity-pill">
-              <text>已报 {{ item.registeredCount }}</text>
-              <text>候补 {{ item.waitingCount || 0 }}</text>
+              <text>{{ item.registeredCount || 0 }} 人已报名</text>
               <text>余 {{ item.remainingSeats }}/{{ item.capacity }}</text>
             </view>
-            <view class="button sm">{{ item.displayStatus === "open" ? "去报名" : "查看详情" }}</view>
+            <view class="card-price">{{ priceText(item.price) }}</view>
           </view>
         </view>
+        <view class="activity-action">{{ item.displayStatus === "open" ? "立即报名" : "查看详情" }}</view>
       </view>
 
       <view v-if="hasMore" class="button block load-more" :class="{ disabled: loadingMore }" role="button" tabindex="0" :aria-disabled="loadingMore" :aria-busy="loadingMore" aria-label="加载更多活动" @click="loadMore" @keyup.enter="loadMore" @keyup.space.prevent="loadMore">
@@ -355,20 +342,11 @@ onReachBottom(loadMore);
 
 <style scoped>
 .activity-page { gap: 0; }
-.hero-card {
-  display: flex;
-  gap: 20rpx;
-  align-items: stretch;
-  padding: 30rpx 28rpx;
-  margin-bottom: 24rpx;
-  border-radius: 24rpx;
-  background: linear-gradient(135deg, rgba(196,61,61,0.96), rgba(122,36,32,0.96));
-  box-shadow: 0 18rpx 40rpx rgba(122, 36, 32, 0.18);
-}
+.hero-card { display: flex; gap: 20rpx; align-items: stretch; padding: 28rpx; margin-bottom: 24rpx; border: 1rpx solid rgba(15, 118, 110, 0.1); border-radius: 16rpx; background: #e8f5f1; }
 .hero-copy { flex: 1; min-width: 0; display: grid; gap: 12rpx; }
-.hero-kicker { color: rgba(255, 240, 228, 0.76); font-size: 23rpx; font-weight: 700; letter-spacing: 2rpx; }
-.hero-title { color: #fff8f0; font-size: 48rpx; font-weight: 700; line-height: 1.24; font-family: "STKaiti", "KaiTi", serif; }
-.hero-subtitle { color: rgba(255, 248, 240, 0.82); font-size: 25rpx; line-height: 1.65; }
+.hero-kicker { color: #0f766e; font-size: 23rpx; font-weight: 800; }
+.hero-title { color: #173f3a; font-size: 40rpx; font-weight: 900; line-height: 1.3; }
+.hero-subtitle { color: #54716c; font-size: 24rpx; line-height: 1.55; }
 .hero-side {
   width: 148rpx;
   flex: 0 0 auto;
@@ -376,12 +354,12 @@ onReachBottom(loadMore);
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  border-radius: 20rpx;
-  background: rgba(255, 248, 240, 0.14);
-  color: #fff8f0;
+  border-radius: 12rpx;
+  background: #fff;
+  color: #173f3a;
 }
 .hero-count { font-size: 52rpx; font-weight: 700; line-height: 1; }
-.hero-label { margin-top: 10rpx; font-size: 22rpx; color: rgba(255, 248, 240, 0.84); }
+.hero-label { margin-top: 10rpx; color: #66827d; font-size: 22rpx; }
 .filter-card { margin-bottom: 24rpx; padding-bottom: 22rpx; }
 .filter-head { align-items: flex-start; margin-bottom: 18rpx; }
 .filter-hint { display: block; margin-top: 8rpx; }
@@ -393,8 +371,8 @@ onReachBottom(loadMore);
   align-items: center;
   justify-content: center;
   border-radius: 999px;
-  background: rgba(196, 61, 61, 0.12);
-  color: #c43d3d;
+  background: rgba(15, 118, 110, 0.1);
+  color: #0f766e;
   font-size: 24rpx;
   font-weight: 700;
 }
@@ -405,13 +383,13 @@ onReachBottom(loadMore);
   gap: 14rpx;
   align-items: center;
   padding: 0 22rpx;
-  border-radius: 999px;
-  background: #f9f4ee;
-  border: 1rpx solid rgba(196, 61, 61, 0.08);
+  border-radius: 12rpx;
+  background: #f4f8f7;
+  border: 1rpx solid rgba(15, 118, 110, 0.1);
 }
 .search-icon { font-size: 30rpx; }
 .search-input { min-width: 0; height: 84rpx; font-size: 28rpx; color: var(--text-color, #333333); }
-.clear { color: #c43d3d; font-size: 24rpx; font-weight: 600; }
+.clear { color: #0f766e; font-size: 24rpx; font-weight: 700; }
 .category-tabs { width: 100%; margin-top: 18rpx; white-space: nowrap; }
 .filter-error { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-top:16rpx; padding:14rpx 16rpx; border-radius:8px; background:#fff7f7; color:#b91c1c; font-size:23rpx; line-height:1.5; }
 .filter-retry { flex:0 0 auto; color:#c43d3d; font-weight:700; }
@@ -423,24 +401,24 @@ onReachBottom(loadMore);
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: #f3ece4;
-  color: #666666;
+  border-radius: 10rpx;
+  background: #f2f6f5;
+  color: #54716c;
   font-size: 25rpx;
 }
-.category-chip.active { background: #c43d3d; color: #fff; font-weight: 600; }
+.category-chip.active { background: #0f766e; color: #fff; font-weight: 700; }
 .status-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12rpx; margin-top: 20rpx; }
 .status-tab {
   min-height: 68rpx;
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 18rpx;
-  background: #f3ece4;
-  color: #666666;
+  border-radius: 10rpx;
+  background: #f2f6f5;
+  color: #54716c;
   font-size: 24rpx;
 }
-.status-tab.active { background: rgba(74, 107, 138, 0.14); color: #4a6b8a; font-weight: 600; }
+.status-tab.active { background: rgba(15, 118, 110, 0.12); color: #0f766e; font-weight: 700; }
 .section-head { margin-bottom: 18rpx; }
 .section-copy { display: block; margin-top: 8rpx; }
 .state-card { text-align: center; }
@@ -448,120 +426,76 @@ onReachBottom(loadMore);
 .empty-state-card { display: grid; justify-items: center; gap: 14rpx; text-align: center; }
 .empty-icon { font-size: 72rpx; }
 .empty-copy { text-align: center; }
-.activity-feed { display: grid; gap: 24rpx; }
+.activity-feed { display: grid; gap: 18rpx; }
 .activity-card {
+  display: grid;
+  grid-template-columns: 76rpx 176rpx minmax(0, 1fr);
+  column-gap: 16rpx;
   overflow: hidden;
-  border-radius: 24rpx;
+  padding: 14rpx;
+  border: 1rpx solid rgba(15, 118, 110, 0.1);
+  border-radius: 14rpx;
   background: var(--card-bg, #ffffff);
-  box-shadow: 0 8rpx 28rpx rgba(51, 51, 51, 0.06);
+  box-shadow: 0 8rpx 24rpx rgba(20, 72, 64, 0.06);
 }
 .activity-card:focus-visible,
 .category-chip:focus-visible,
 .status-tab:focus-visible,
 .clear:focus-visible,
 .filter-retry:focus-visible { outline: 3rpx solid #0f766e; outline-offset: 4rpx; }
-.activity-cover { position: relative; height: 320rpx; background: linear-gradient(135deg, #eadfd0, #d7d0ca); }
-.activity-cover image,
-.cover-fallback { width: 100%; height: 100%; display: block; }
+.activity-date-card { display: grid; align-content: center; justify-items: center; color: #0f766e; }
+.activity-date-month,.activity-date-time { font-size: 19rpx; font-weight: 800; }
+.activity-date-day { margin: 4rpx 0; color: #173f3a; font-size: 38rpx; line-height: 1; font-weight: 900; }
+.activity-cover { width: 176rpx; height: 176rpx; display: block; border-radius: 10rpx; background: #d7e8e4; }
 .cover-fallback {
   display: flex;
   align-items: center;
   justify-content: center;
-  color: rgba(255, 248, 240, 0.92);
-  font-size: 46rpx;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-  background: linear-gradient(135deg, #8e2d28, #c43d3d);
-}
-.cover-overlay {
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(24, 20, 18, 0.14), rgba(24, 20, 18, 0.68));
-}
-.cover-top,
-.cover-bottom {
-  position: absolute;
-  left: 22rpx;
-  right: 22rpx;
-  z-index: 1;
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 16rpx;
-}
-.cover-top { top: 20rpx; }
-.cover-bottom {
-  bottom: 20rpx;
-  flex-direction: column;
-  align-items: flex-start;
+  color: #0f766e;
+  font-size: 28rpx;
+  font-weight: 900;
 }
 .card-tag {
-  min-height: 50rpx;
-  padding: 0 16rpx;
+  min-height: 40rpx;
+  padding: 0 12rpx;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border-radius: 6rpx;
   color: #fff;
-  font-size: 23rpx;
+  font-size: 20rpx;
   font-weight: 700;
 }
-.card-tag.is-open { background: rgba(7, 193, 96, 0.9); }
+.card-tag.is-open { background: #0f766e; }
 .card-tag.is-full { background: rgba(255, 159, 0, 0.92); }
 .card-tag.is-ended { background: rgba(102, 102, 102, 0.9); }
-.card-price {
-  padding: 8rpx 16rpx;
-  border-radius: 999px;
-  background: rgba(255, 248, 240, 0.18);
-  color: #fff8f0;
-  font-size: 25rpx;
-  font-weight: 700;
-}
-.cover-title {
-  color: #fff8f0;
-  font-size: 38rpx;
-  line-height: 1.3;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-}
-.cover-meta { color: rgba(255, 248, 240, 0.82); font-size: 23rpx; }
-.activity-body { padding: 24rpx; }
-.meta-row { margin-bottom: 14rpx; }
+.activity-body { min-width: 0; display: grid; align-content: space-between; }
+.meta-row { margin-bottom: 8rpx; }
+.activity-title { display: -webkit-box; overflow: hidden; color: #172b28; font-size: 28rpx; line-height: 1.35; font-weight: 900; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.activity-location { margin-top: 8rpx; overflow: hidden; color: #5b7771; font-size: 22rpx; text-overflow: ellipsis; white-space: nowrap; }
 .activity-desc {
   display: -webkit-box;
-  margin-bottom: 18rpx;
+  margin-top: 8rpx;
   overflow: hidden;
-  -webkit-line-clamp: 2;
+  color: #788f8a;
+  font-size: 21rpx;
+  line-height: 1.45;
+  -webkit-line-clamp: 1;
   -webkit-box-orient: vertical;
 }
-.info-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; margin-bottom: 18rpx; }
-.info-cell {
-  min-width: 0;
-  padding: 18rpx;
-  border-radius: 18rpx;
-  background: #f9f4ee;
-  display: grid;
-  gap: 8rpx;
-}
-.info-label { color: #999999; font-size: 22rpx; }
-.info-value {
-  color: #333333;
-  font-size: 25rpx;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.capacity-row { gap: 16rpx; }
+.capacity-row { gap: 10rpx; margin-top: 10rpx; }
 .capacity-pill {
   flex: 1;
   min-width: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 10rpx;
-  color: #666666;
-  font-size: 23rpx;
+  flex-direction: column;
+  gap: 2rpx;
+  color: #66827d;
+  font-size: 20rpx;
+  white-space: nowrap;
 }
+.card-price { flex: 0 0 auto; align-self: flex-end; color: #c35240; font-size: 26rpx; font-weight: 900; }
+.activity-action { grid-column: 2 / -1; min-height: 62rpx; display: flex; align-items: center; justify-content: center; margin-top: 12rpx; border-radius: 8rpx; background: #0f766e; color: #fff; font-size: 24rpx; font-weight: 900; }
 .load-more { margin-top: 4rpx; }
 .no-more { padding: 6rpx 0 10rpx; text-align: center; color: #999999; font-size: 24rpx; }
 </style>

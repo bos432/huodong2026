@@ -27,8 +27,8 @@ const name = computed(() => props.tenant?.name || code.value || "平台默认");
 </template>
 
 <style scoped>
-.tenant-context { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; margin-bottom: 18rpx; padding: 16rpx 20rpx; border: 1px solid rgba(15, 118, 110, 0.16); border-radius: var(--card-radius, 8px); background: var(--primary-soft, #e6f2ef); }
-.tenant-context-title { color: var(--primary-color, #0f766e); font-size: 24rpx; font-weight: 900; }
-.tenant-context-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4rpx; color: var(--text-color, #111827); font-size: 26rpx; font-weight: 900; }
-.tenant-context-hint { flex: 0 0 auto; min-width: 104rpx; height: 46rpx; display: flex; align-items: center; justify-content: center; padding: 0 14rpx; border-radius: 999px; background: var(--card-bg, #fff); color: var(--primary-color, #0f766e); font-size: 22rpx; font-weight: 800; }
+.tenant-context { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; margin-bottom: 18rpx; padding: 16rpx 20rpx; border: 1px solid #cfe4df; border-radius: 10rpx; background: #eaf7f3; }
+.tenant-context-title { color: #0f766e; font-size: 24rpx; font-weight: 900; }
+.tenant-context-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4rpx; color: #173f3a; font-size: 26rpx; font-weight: 900; }
+.tenant-context-hint { flex: 0 0 auto; min-width: 104rpx; height: 46rpx; display: flex; align-items: center; justify-content: center; padding: 0 14rpx; border-radius: 8rpx; background: #fff; color: #0f766e; font-size: 22rpx; font-weight: 800; }
 </style>

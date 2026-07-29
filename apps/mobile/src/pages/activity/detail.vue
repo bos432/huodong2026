@@ -2,7 +2,7 @@
 import { computed, ref } from "vue";
 import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getUserToken, request, withTenantCode } from "../../api";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -21,11 +21,7 @@ const source = ref("h5");
 const activeAction = ref("");
 const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
-const bodyDecorationSections = computed(() => contentSections.value.filter((section) => {
-  if (section.type === "hero") return false;
-  if (section.type === "rich_text" && section.title === "页面说明") return false;
-  return true;
-}));
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 async function reportReview(review: any) {
   const actionKey = `report:${review?.id || 0}`;
@@ -311,15 +307,21 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
         <view v-else class="hero-image hero-fallback">雅集</view>
         <view class="hero-mask"></view>
         <view class="hero-head">
-          <text class="hero-kicker">慢π · 活动详情</text>
+          <text class="hero-kicker">{{ activity.category?.name || "城市文化活动" }}</text>
           <text class="hero-status">{{ statusText(activity.displayStatus) }}</text>
         </view>
         <view class="hero-bottom">
-          <view class="detail-head" :style="{ background: String(innerPageLayout.headerBackgroundColor || 'transparent') }">
-            <view class="detail-head-title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ activity.title }}</view>
-            <view class="detail-head-copy" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "查看活动介绍、报名规则、服务说明和现场信息。" }}</view>
+          <view class="detail-head">
+            <view class="detail-head-title">{{ activity.title }}</view>
+            <view class="detail-head-copy">{{ innerPageConfig.subtitle || "查看活动介绍、报名规则、服务说明和现场信息。" }}</view>
           </view>
         </view>
+      </view>
+
+      <view class="detail-decision-panel">
+        <view class="decision-time"><text class="decision-label">活动时间</text><text class="decision-value">{{ formatTime(activity.startTime) }}</text><text class="decision-helper">{{ formatTime(activity.endTime) }}</text></view>
+        <view class="decision-place"><text class="decision-label">集合地点</text><text class="decision-value">{{ activity.location || "地点待确认" }}</text><text class="decision-helper">{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats }} 个名额</text></view>
+        <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text></view>
       </view>
 
       <PageDecorationBlocks :sections="bodyDecorationSections" />
@@ -332,7 +334,7 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
             <view class="decision-title">{{ registerButtonText() }}</view>
             <view class="body-text decision-copy">{{ actionHint() }}</view>
           </view>
-          <view class="decision-price">{{ priceText(activity.price) }}</view>
+          <view class="decision-status">{{ statusText(activity.displayStatus) }}</view>
         </view>
         <view class="stats">
           <view><text>{{ activity.registeredCount }}</text><text>已报名</text></view>
@@ -466,15 +468,15 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 </template>
 
 <style scoped>
-.detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(24rpx + env(safe-area-inset-top)) 24rpx calc(168rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
+.detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(16rpx + env(safe-area-inset-top)) 0 calc(168rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
+.detail-page .card { margin-left: 24rpx; margin-right: 24rpx; }
+.detail-page :deep(.tenant-context-badge) { margin-left: 24rpx; margin-right: 24rpx; }
 .detail-hero {
   position: relative;
   overflow: hidden;
-  min-height: 420rpx;
-  margin-bottom: 24rpx;
-  border-radius: 24rpx;
-  background: linear-gradient(135deg, #8e2d28, #c43d3d);
-  box-shadow: 0 18rpx 40rpx rgba(122, 36, 32, 0.18);
+  min-height: 500rpx;
+  background: linear-gradient(135deg, #0c4b43, #0f766e);
+  box-shadow: 0 16rpx 34rpx rgba(15, 118, 110, 0.16);
 }
 .hero-image {
   position: absolute;
@@ -495,7 +497,7 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 .hero-mask {
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(26, 20, 16, 0.18), rgba(26, 20, 16, 0.72));
+  background: linear-gradient(180deg, rgba(7, 36, 32, 0.1), rgba(7, 36, 32, 0.8));
 }
 .hero-head,
 .hero-bottom {
@@ -507,13 +509,12 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
   justify-content: space-between;
   align-items: center;
   gap: 16rpx;
-  padding: 24rpx 24rpx 0;
+  padding: 28rpx 28rpx 0;
 }
 .hero-kicker {
-  color: rgba(255, 248, 240, 0.78);
+  color: rgba(255, 255, 255, 0.82);
   font-size: 23rpx;
-  font-weight: 700;
-  letter-spacing: 2rpx;
+  font-weight: 800;
 }
 .hero-status {
   min-height: 50rpx;
@@ -521,17 +522,17 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
-  background: rgba(255, 248, 240, 0.16);
-  color: #fff8f0;
+  border-radius: 8rpx;
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
   font-size: 22rpx;
   font-weight: 700;
 }
 .hero-bottom {
-  min-height: 420rpx;
+  min-height: 500rpx;
   display: flex;
   align-items: flex-end;
-  padding: 24rpx;
+  padding: 28rpx;
 }
 .detail-head {
   width: 100%;
@@ -542,18 +543,25 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
   background: transparent !important;
 }
 .detail-head-title {
-  color: #fff8f0;
-  font-size: 48rpx;
+  color: #fff;
+  font-size: 46rpx;
   line-height: 1.24;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
+  font-weight: 900;
 }
 .detail-head-copy {
   margin-top: 12rpx;
   font-size: 25rpx;
-  line-height: 1.65;
+  line-height: 1.55;
 }
-.head { display: grid; gap: 16rpx; }
+.detail-decision-panel { display: grid; grid-template-columns: 1.05fr 1.45fr .9fr; gap: 12rpx; margin: -22rpx 24rpx 24rpx; padding: 20rpx; border: 1rpx solid rgba(15,118,110,.1); border-radius: 14rpx; background: #fff; box-shadow: 0 12rpx 28rpx rgba(20,72,64,.1); }
+.decision-label,.decision-helper { display: block; color: #66827d; font-size: 20rpx; line-height: 1.4; }
+.decision-value { display: block; margin: 6rpx 0; overflow: hidden; color: #173f3a; font-size: 25rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
+.decision-time,.decision-place { min-width: 0; }
+.decision-place { padding-left: 16rpx; border-left: 1rpx solid #dbe9e5; }
+.decision-price-panel { display: grid; align-content: center; justify-items: end; text-align: right; }
+.decision-price-value { color: #c35240; font-size: 31rpx; font-weight: 900; }
+.head { display: grid; gap: 16rpx; margin: 0 24rpx 24rpx; }
+.detail-page :deep(.page-decoration-blocks) { margin-left: 24rpx; margin-right: 24rpx; }
 .title { font-family: "STKaiti", "KaiTi", serif; }
 .desc { line-height: 1.7; }
 .decision-box {
@@ -561,12 +569,12 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
   justify-content: space-between;
   gap: 18rpx;
   padding: 22rpx;
-  border-radius: 20rpx;
-  background: #f9f4ee;
+  border-radius: 12rpx;
+  background: #f2f8f6;
 }
-.decision-title { color: #333333; font-size: 32rpx; font-weight: 700; margin-bottom: 10rpx; font-family: "STKaiti", "KaiTi", serif; }
+.decision-title { color: #173f3a; font-size: 30rpx; font-weight: 900; margin-bottom: 10rpx; }
 .decision-copy { max-width: 420rpx; }
-.decision-price { flex: 0 0 auto; color: #c43d3d; font-size: 40rpx; font-weight: 700; }
+.decision-status { align-self: center; flex: 0 0 auto; padding: 10rpx 14rpx; border-radius: 8rpx; background: #0f766e; color: #fff; font-size: 23rpx; font-weight: 800; }
 .small { font-size: 30rpx; margin-bottom: 16rpx; font-family: "STKaiti", "KaiTi", serif; }
 .section-title {
   margin-bottom: 16rpx;
@@ -576,20 +584,20 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
   font-family: "STKaiti", "KaiTi", serif;
 }
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10rpx; }
-.stats view { display: grid; gap: 6rpx; padding: 16rpx 10rpx; border-radius: 18rpx; background: #fbf5ef; text-align: center; }
-.stats text:first-child { color: #c43d3d; font-weight: 700; font-size: 30rpx; }
+.stats view { display: grid; gap: 6rpx; padding: 16rpx 10rpx; border-radius: 10rpx; background: #f4f8f7; text-align: center; }
+.stats text:first-child { color: #0f766e; font-weight: 800; font-size: 30rpx; }
 .stats text:last-child { color: #999999; font-size: 22rpx; }
 .info-summary { display: grid; gap: 10rpx; margin-bottom: 18rpx; }
-.info-summary view { display: grid; grid-template-columns: 92rpx 1fr; gap: 14rpx; padding: 16rpx 18rpx; border-radius: 18rpx; background: #f9f4ee; }
+.info-summary view { display: grid; grid-template-columns: 92rpx 1fr; gap: 14rpx; padding: 16rpx 18rpx; border-radius: 10rpx; background: #f4f8f7; }
 .info-summary text:first-child { color: #999999; font-size: 24rpx; }
 .info-summary text:last-child { color: #333333; font-size: 25rpx; font-weight: 600; }
 .line { display: grid; grid-template-columns: 90rpx 1fr; gap: 16rpx; margin-top: 14rpx; color: #666666; }
 .line text:first-child { color: #999999; }
-.location-map { margin-top: 18rpx; overflow: hidden; border-radius: 20rpx; border: 1px solid #e8e0d8; background: #fbf5ef; }
+.location-map { margin-top: 18rpx; overflow: hidden; border-radius: 12rpx; border: 1px solid #d8e9e5; background: #f4f8f7; }
 .map-view { width: 100%; height: 300rpx; display: block; }
 .map-link { min-height: 160rpx; display: flex; align-items: center; gap: 18rpx; padding: 24rpx; }
-.map-pin { width: 64rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #c43d3d; color: #fff; font-size: 26rpx; font-weight: 700; flex: 0 0 auto; }
-.map-action { display: flex; align-items: center; justify-content: center; min-height: 72rpx; border-top: 1px solid #e8e0d8; color: #c43d3d; font-size: 26rpx; font-weight: 600; background: var(--card-bg, #fff); }
+.map-pin { width: 64rpx; height: 64rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #0f766e; color: #fff; font-size: 26rpx; font-weight: 700; flex: 0 0 auto; }
+.map-action { display: flex; align-items: center; justify-content: center; min-height: 72rpx; border-top: 1px solid #d8e9e5; color: #0f766e; font-size: 26rpx; font-weight: 700; background: var(--card-bg, #fff); }
 .member-access { margin-top: 18rpx; padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); border: 1px solid rgba(74, 107, 138, 0.12); }
 .member-access.blocked { background: rgba(255, 159, 0, 0.08); border-color: rgba(255, 159, 0, 0.18); }
 .operation-notice { margin-top: 18rpx; padding: 18rpx; border-radius: 6px; background: #fff7ed; border: 1px solid #fed7aa; }
@@ -628,11 +636,11 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
   align-items: center;
   padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom));
   background: rgba(255, 255, 255, 0.98);
-  border-top: 1rpx solid #e8e0d8;
-  box-shadow: 0 -10rpx 30rpx rgba(51, 51, 51, 0.08);
+  border-top: 1rpx solid #d8e9e5;
+  box-shadow: 0 -10rpx 30rpx rgba(20, 72, 64, 0.08);
 }
 .bottom-info { display: grid; gap: 4rpx; min-width: 0; }
-.bottom-info text:first-child { color: #c43d3d; font-size: 36rpx; font-weight: 700; }
+.bottom-info text:first-child { color: #c35240; font-size: 36rpx; font-weight: 900; }
 .bottom-info text:last-child { color: #999999; font-size: 22rpx; }
 .action-button { height: 92rpx; font-size: 32rpx; }
 </style>

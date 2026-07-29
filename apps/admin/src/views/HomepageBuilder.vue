@@ -1012,7 +1012,7 @@ function buildDefaultPreviewRows(pageKey: string): HomepageSectionView[] {
       previewRow(2, "announcement_bar", { title: "公告" }),
       previewRow(3, "quick_nav", { title: null }),
       previewRow(4, "category_grid", { title: "活动社区", subtitle: "按兴趣快速进入活动池" }),
-      previewRow(5, "featured_activities", { title: "精选活动", subtitle: "主办方推荐，适合优先查看" }),
+      previewRow(5, "featured_activities", { title: "本周主推", subtitle: "时间、地点和名额一眼确认，立即报名", config: { source: "featured", limit: 6, display: "focus" } }),
       previewRow(6, "activity_tabs", { title: null }),
       previewRow(7, "activity_feed", { title: null }),
       previewRow(8, "bottom_nav", { title: "前台底部导航" })
@@ -3023,6 +3023,12 @@ onMounted(async () => {
             </el-select>
           </el-form-item>
           <el-form-item label="展示数量"><el-input-number v-model="form.config.limit" :min="1" :max="30" @change="syncJsonText" /></el-form-item>
+          <el-form-item v-if="form.type === 'featured_activities'" label="首页展示样式">
+            <el-radio-group v-model="form.config.display" @change="syncJsonText">
+              <el-radio-button value="focus">本周主推大图</el-radio-button>
+              <el-radio-button value="list">活动列表</el-radio-button>
+            </el-radio-group>
+          </el-form-item>
           <template v-if="form.type === 'activity_feed'">
             <el-form-item label="每页数量"><el-input-number v-model="form.config.pageSize" :min="1" :max="12" @change="syncJsonText" /></el-form-item>
             <el-form-item label="分页样式">

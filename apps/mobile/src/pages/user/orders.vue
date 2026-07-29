@@ -1,7 +1,11 @@
 <template>
   <view class="container orders-page has-custom-nav">
+    <view class="orders-hero">
+      <view><text class="orders-kicker">活动与内容</text><text class="orders-toolbar-label">我的订单</text><text class="orders-hero-copy">报名、支付、学习和退款进度都在这里</text></view>
+      <view class="orders-hero-side"><text>{{ allOrders.length }}</text><text>全部记录</text></view>
+    </view>
     <view class="orders-toolbar">
-      <text class="orders-toolbar-label">订单状态</text>
+      <text class="orders-toolbar-hint">按当前进度查看</text>
       <view class="refresh-action" :class="{ disabled: busy }" role="button" tabindex="0" aria-label="刷新我的订单" :aria-busy="busy" :aria-disabled="busy" @click="refreshOrders" @keyup.enter="refreshOrders" @keyup.space.prevent="refreshOrders">{{ busy ? "同步中" : "刷新" }}</view>
     </view>
 
@@ -458,18 +462,25 @@ onShow(() => {
 
 <style scoped>
 .orders-page { padding-bottom: 160rpx; }
+.orders-hero { display:flex; align-items:stretch; justify-content:space-between; gap:18rpx; margin-bottom:16rpx; padding:26rpx; border:1rpx solid rgba(15,118,110,.12); border-radius:14rpx; background:#e9f6f2; }
+.orders-kicker { display:block; color:#0f766e; font-size:21rpx; font-weight:800; }
+.orders-toolbar-label { display:block; margin-top:6rpx; color:#173f3a; font-size:36rpx; font-weight:900; }
+.orders-hero-copy { display:block; margin-top:8rpx; color:#66827d; font-size:22rpx; line-height:1.45; }
+.orders-hero-side { min-width:110rpx; display:grid; align-content:center; justify-items:center; padding:0 12rpx; border-radius:10rpx; background:#fff; color:#0f766e; }
+.orders-hero-side text:first-child { font-size:34rpx; font-weight:900; }
+.orders-hero-side text:last-child { margin-top:4rpx; color:#66827d; font-size:20rpx; }
 .orders-toolbar { display:flex; align-items:center; justify-content:space-between; min-height:64rpx; margin-bottom:12rpx; }
-.orders-toolbar-label { color:#222; font-size:30rpx; font-weight:900; }
-.refresh-action { min-width:88rpx; padding:10rpx 18rpx; border:1rpx solid #d9d3ca; border-radius:10rpx; background:#fff; color:#4A6B8A; text-align:center; font-size:24rpx; font-weight:700; }
+.orders-toolbar-hint { color:#66827d; font-size:23rpx; }
+.refresh-action { min-width:88rpx; padding:10rpx 18rpx; border:1rpx solid #cfe4df; border-radius:8rpx; background:#fff; color:#0f766e; text-align:center; font-size:24rpx; font-weight:800; }
 .refresh-action.disabled { color:#9ca3af; background:#f5f5f4; }
-.order-tabs { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #e8e0d6; border-radius:14rpx; background:#f3ece2; }
-.order-tab { min-width:0; padding:14rpx 4rpx; border-radius:10rpx; color:#6f6255; text-align:center; font-size:25rpx; font-weight:800; white-space:nowrap; }
-.order-tab.active { background:#C43D3D; color:#fff; box-shadow:0 4rpx 12rpx rgba(196, 61, 61, 0.18); }
-.order-card { margin-bottom: 16rpx; }
+.order-tabs { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #d9ebe6; border-radius:10rpx; background:#f1f7f5; }
+.order-tab { min-width:0; padding:14rpx 4rpx; border-radius:7rpx; color:#66827d; text-align:center; font-size:23rpx; font-weight:800; white-space:nowrap; }
+.order-tab.active { background:#0f766e; color:#fff; box-shadow:0 4rpx 12rpx rgba(15, 118, 110, 0.18); }
+.order-card { margin-bottom:16rpx; border:1rpx solid rgba(15,118,110,.1); box-shadow:0 8rpx 22rpx rgba(20,72,64,.05); }
 .order-head { align-items: flex-start; gap: 16rpx; }
-.order-type { color: #C43D3D; font-size: 22rpx; font-weight: 900; }
-.order-title { margin-top: 6rpx; color: #222; font-size: 30rpx; font-weight: 900; line-height: 1.35; }
-.status-pill { flex: 0 0 auto; padding: 8rpx 16rpx; border-radius: 999px; font-size: 22rpx; font-weight: 900; background: #edf0f5; color: #667085; }
+.order-type { color:#0f766e; font-size:22rpx; font-weight:900; }
+.order-title { margin-top:6rpx; color:#173f3a; font-size:30rpx; font-weight:900; line-height:1.35; }
+.status-pill { flex:0 0 auto; padding:8rpx 14rpx; border-radius:7rpx; font-size:22rpx; font-weight:900; background:#edf0f5; color:#667085; }
 .status-pill.pending { background: #fff7ed; color: #9a3412; }
 .status-pill.upcoming { background: #eff6ff; color: #1d4ed8; }
 .status-pill.learning { background: #eef2ff; color: #3730a3; }
@@ -484,7 +495,7 @@ onShow(() => {
 .warning-card { margin-bottom:16rpx; border-color:#fde68a; background:#fffbeb; color:#92400e; font-size:24rpx; line-height:1.5; }
 .action-error { display:flex; align-items:center; justify-content:space-between; gap:16rpx; margin-bottom:16rpx; }
 .error-close { flex:0 0 auto; color:#C43D3D; font-weight:900; }
-.order-action { margin-top: 18rpx; color: #C43D3D; font-size: 26rpx; font-weight: 900; text-align: right; }
+.order-action { margin-top:18rpx; color:#0f766e; font-size:26rpx; font-weight:900; text-align:right; }
 .small { font-size: 30rpx; }
 .retry { display:inline-flex; margin-top:16rpx; }
 </style>

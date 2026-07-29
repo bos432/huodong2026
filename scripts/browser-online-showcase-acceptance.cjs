@@ -55,9 +55,11 @@ const result = {
   screenshots: []
 };
 let tenantEntitlementFeatures = {};
+let tenantLaunchFeatureGates = {};
 
 function tenantFeatureEnabled(key) {
-  return tenantEntitlementFeatures[key] !== false;
+  const launchGate = key === "ads" ? "adCenter" : key;
+  return tenantEntitlementFeatures[key] !== false && tenantLaunchFeatureGates[launchGate] !== false;
 }
 
 function record(name, status, detail = {}) {
@@ -100,6 +102,47 @@ async function loginAdminApi(username, password) {
   const data = await api("/admin/auth/login", { method: "POST", tenant: false, body: { username, password } });
   assert(data.token, `${username} API login did not return token`);
   return data;
+}
+
+function futureDateTime(days, hour) {
+  const date = new Date(Date.now() + days * 24 * 60 * 60 * 1000);
+  date.setUTCHours(hour, 0, 0, 0);
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+async function ensurePaidRegistrationFixture(token) {
+  const title = "【浏览器验收保留】收费报名闭环";
+  const activityPayload = {
+    title,
+    description: "用于浏览器验收收费报名、线下收款、签到核销和用户状态回写的保留活动。",
+    notice: "此活动仅用于自动化验收，不面向实际运营报名。",
+    location: "浏览器验收保留场地",
+    startTime: futureDateTime(7, 10),
+    endTime: futureDateTime(7, 12),
+    registrationDeadline: futureDateTime(6, 18),
+    capacity: 500,
+    price: 66,
+    status: "open",
+    featured: false,
+    requireReview: false,
+    allowCancel: true,
+    fields: [
+      { label: "姓名", type: "text", required: true, sortOrder: 1, options: [] },
+      { label: "手机号", type: "phone", required: true, sortOrder: 2, options: [] },
+      { label: "微信号", type: "text", required: false, sortOrder: 3, options: [] }
+    ]
+  };
+  const activities = await api(`/admin/activities?keyword=${encodeURIComponent(title)}&pageSize=20`, { token });
+  const existing = (activities.items || activities).find((item) => item.title === title);
+  const activity = existing
+    ? await api(`/admin/activities/${existing.id}`, { method: "PATCH", token, body: activityPayload })
+    : await api("/admin/activities", { method: "POST", token, body: activityPayload });
+  const tickets = await api(`/admin/ticket-types?activityId=${activity.id}`, { token });
+  const ticketPayload = { activityId: activity.id, name: "浏览器验收标准票", price: 66, capacity: 500, perUserLimit: 1, enabled: true };
+  const ticket = (tickets.items || tickets).find((item) => item.name === ticketPayload.name);
+  if (ticket) await api(`/admin/ticket-types/${ticket.id}`, { method: "PATCH", token, body: ticketPayload });
+  else await api("/admin/ticket-types", { method: "POST", token, body: ticketPayload });
+  return activity;
 }
 
 async function ensureH5PasswordMember(phone) {
@@ -344,14 +387,15 @@ async function h5VerifyCheckedIn(h5) {
 
 async function runRoleMatrix(browser) {
   const adsEnabled = tenantFeatureEnabled("ads");
+  const mallEnabled = tenantFeatureEnabled("mall");
   const agentSettlementEnabled = tenantFeatureEnabled("agentSettlement");
   const roles = [
     ...(SHOWCASE_ADMIN_USERNAME === "admin" ? [] : [{ username: SHOWCASE_ADMIN_USERNAME, password: SHOWCASE_ADMIN_PASSWORD, label: "商家管理员", allowed: [{ route: "/marketing-popups", text: "营销弹窗" }, ...(adsEnabled ? [{ route: "/ad-center", text: "广告中心" }] : []), { route: "/homepage-builder", text: "首页装修" }, { route: "/members", text: "会员" }], denied: adsEnabled ? [] : ["/ad-center"] }]),
     { username: "showcase_ops", password: SHOWCASE_PASSWORD, label: "运营", allowed: [{ route: "/activities", text: "活动" }, { route: "/registrations", text: "报名" }, { route: "/marketing-popups", text: "营销弹窗" }] },
     { username: "showcase_finance", password: SHOWCASE_PASSWORD, label: "财务", allowed: [{ route: "/orders", text: "订单" }, { route: "/finance", text: "财务" }], denied: ["/marketing-popups"] },
     { username: "showcase_checkin", password: SHOWCASE_PASSWORD, label: "签到", allowed: [{ route: "/check-in", text: "签到核销" }], denied: ["/ad-center"] },
-    { username: "showcase_store_owner", password: SHOWCASE_PASSWORD, label: "店铺负责人", allowed: [{ route: "/mall-products", text: "商品" }, { route: "/mall-orders", text: "商城订单" }], denied: ["/agent-settlements"] },
-    { username: "showcase_store_finance", password: SHOWCASE_PASSWORD, label: "店铺财务", allowed: [{ route: "/mall-orders", text: "商城订单" }, { route: "/mall-settlements", text: "结算" }], denied: ["/mall-products"] },
+    { username: "showcase_store_owner", password: SHOWCASE_PASSWORD, label: "店铺负责人", allowed: mallEnabled ? [{ route: "/mall-products", text: "商品" }, { route: "/mall-orders", text: "商城订单" }] : [], denied: mallEnabled ? ["/agent-settlements"] : ["/mall-products", "/mall-orders", "/agent-settlements"] },
+    { username: "showcase_store_finance", password: SHOWCASE_PASSWORD, label: "店铺财务", allowed: mallEnabled ? [{ route: "/mall-orders", text: "商城订单" }, { route: "/mall-settlements", text: "结算" }] : [], denied: mallEnabled ? ["/mall-products"] : ["/mall-products", "/mall-orders", "/mall-settlements"] },
     ...(RUN_AGENT_SETTLEMENT_ROLE ? [{ username: "showcase_agent_owner", password: SHOWCASE_PASSWORD, label: "代理负责人", allowed: [...(agentSettlementEnabled ? [{ route: "/agent-settlements", text: "代理" }] : []), { route: "/mall-orders", text: "商城订单" }], denied: ["/mall-products", ...(agentSettlementEnabled ? [] : ["/agent-settlements"])] }] : [])
   ];
   if (RUN_PLATFORM_ADMIN) {
@@ -423,9 +467,9 @@ async function runFeaturePages(browser) {
   record("会员详情时间线", "passed", { screenshot: "feature-03-member-timeline.png" });
 
   await gotoAdmin(page, "/homepage-builder");
-  await waitForBodyText(page, "应用上线简洁版模板", "homepage launch template entry");
+  await waitForBodyText(page, ["保存版本", "发布草稿", "已发布"], "homepage draft and publication controls");
   await screenshot(page, "feature-04-homepage-template.png");
-  record("首页简洁模板入口", "passed", { screenshot: "feature-04-homepage-template.png" });
+  record("首页装修草稿与发布工作台", "passed", { screenshot: "feature-04-homepage-template.png" });
 
   await context.close();
 
@@ -475,11 +519,25 @@ async function collectVersionInfo() {
 async function main() {
   const showcaseSession = await loginAdminApi(SHOWCASE_ADMIN_USERNAME, SHOWCASE_ADMIN_PASSWORD);
   tenantEntitlementFeatures = showcaseSession.admin?.tenant?.settings?.entitlements?.features || {};
+  const operationSetting = await api("/public/settings/operation");
+  tenantLaunchFeatureGates = operationSetting?.launchConfig?.featureGates || {};
   result.testData.tenantEntitlementFeatures = tenantEntitlementFeatures;
+  result.testData.tenantLaunchFeatureGates = tenantLaunchFeatureGates;
   const paidActivities = await api("/public/activities?page=1&pageSize=20")
-    .then((data) => (data.items || data).filter((item) => Number(item.price) > 0 && item.displayStatus === "open"));
-  assert(paidActivities.length, "no paid open activity available");
-  const activity = paidActivities[0];
+    .then((data) => (data.items || data).filter((item) => item.displayStatus === "open"));
+  let activity;
+  for (const candidate of paidActivities) {
+    const detail = await api(`/public/activities/${candidate.id}`);
+    if ((detail.ticketTypes || []).some((ticket) => ticket.saleStatus === "available" && Number(ticket.price) > 0)) {
+      activity = candidate;
+      break;
+    }
+  }
+  if (!activity) {
+    activity = await ensurePaidRegistrationFixture(showcaseSession.token);
+    result.testData.fixtureActivity = { id: activity.id, title: activity.title };
+  }
+  assert(activity, "no paid open activity with an available ticket type");
   result.testData.activity = { id: activity.id, title: activity.title, price: activity.price };
 
   const browser = await chromium.launch({ headless: process.env.HEADLESS !== "false" });

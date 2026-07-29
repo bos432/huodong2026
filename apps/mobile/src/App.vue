@@ -21,7 +21,7 @@ onShow(() => {
 
 <style>
 page {
-  background: var(--page-bg, #F5F0E8);
-  color: var(--text-color, #333333);
+  background: var(--page-bg, #F4F8F7);
+  color: var(--text-color, #173F3A);
 }
 </style>

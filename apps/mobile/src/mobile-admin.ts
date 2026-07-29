@@ -87,8 +87,8 @@ export function mobileAdminRequest<T>(url: string, options: UniApp.RequestOption
           resolve(body.data as T);
           return;
         }
+        if (res.statusCode === 401) clearMobileAdminSession();
         if (res.statusCode === 401) {
-          clearMobileAdminSession();
           reject(new MobileAdminError("管理端登录已失效，请重新登录", res.statusCode));
           return;
         }

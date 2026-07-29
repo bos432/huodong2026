@@ -2,7 +2,7 @@
 import { computed, onUnmounted, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getCurrentTenantCode, loginH5, loginH5Password, loginWechat, requestH5Code, uploadMyAvatar, withTenantCode } from "../../api";
-import { isTabUrl, usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, isTabUrl, usePageDecoration } from "../../decoration";
 import { normalizeLoginRedirectTarget } from "../../login-redirect";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
@@ -36,6 +36,7 @@ const wechatAuthAvatarPath = ref("");
 const wechatAuthMessage = ref("");
 const phoneBindVisible = ref(false);
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("login_page", "/pages/user/login");
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 const canSend = computed(() => /^1\d{10}$/.test(phone.value.trim()) && !sending.value && cooldownSeconds.value === 0);
 const canPasswordLogin = computed(() => /^1\d{10}$/.test(phone.value.trim()) && password.value.length >= 6 && !loggingIn.value);
@@ -265,7 +266,7 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
       </view>
     </view>
 
-    <PageDecorationBlocks :sections="contentSections" />
+    <PageDecorationBlocks :sections="bodyDecorationSections" />
 
     <view class="card login-card">
       <view class="card-kicker">欢迎回来</view>

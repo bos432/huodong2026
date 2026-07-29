@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { request } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
-import { usePageDecoration } from "../../decoration";
+import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import { markdownToRichTextHtml } from "@activity/shared";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
@@ -17,6 +17,7 @@ const loading = ref(true);
 const error = ref("");
 const loadGuard = createTenantLoadGuard();
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("announcement_list", "/pages/announcement/list");
+const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
 function formatTime(value?: string) {
   return formatShanghaiDateTime(value, "");
@@ -67,7 +68,7 @@ onShow(async () => {
       </view>
     </view>
 
-    <PageDecorationBlocks :sections="contentSections" />
+    <PageDecorationBlocks :sections="bodyDecorationSections" />
 
     <view v-if="loading" class="state-card" aria-live="polite">加载中...</view>
     <view v-else-if="error" class="state-card error-state" role="alert" aria-live="assertive">

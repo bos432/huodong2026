@@ -426,8 +426,14 @@ async function ensureOperationSettings(token) {
       pageTheme: {
         brandName: "慢π",
         slogan: "传统文化、活动内容、活动报名一站式演示中心",
-        primaryColor: "#8B5A2B",
-        accentColor: "#D8A24A",
+        backgroundColor: "#F4F8F7",
+        backgroundOverlayColor: "#F4F8F7",
+        cardBackgroundColor: "#FFFFFF",
+        cardRadius: 8,
+        textColor: "#173F3A",
+        mutedColor: "#66827D",
+        primaryColor: "#0F766E",
+        accentColor: "#C35240",
         logoUrl: cover(1),
         demoScenario: SCENARIO
       }
@@ -451,7 +457,7 @@ async function ensureHomepage(token) {
       config: {
         eyebrow: "上线演示商家",
         backgroundImage: cover(4),
-        backgroundColor: "linear-gradient(135deg, rgba(91,47,36,0.96), rgba(139,90,43,0.86))",
+        backgroundColor: "linear-gradient(135deg, rgba(15,118,110,0.96), rgba(23,63,58,0.9))",
         primaryButtonText: "查看全部活动",
         primaryButtonLink: "/pages/activity/list",
         demoScenario: SCENARIO
@@ -464,17 +470,17 @@ async function ensureHomepage(token) {
       subtitle: "演示商家已准备活动、内容、动态、余额支付、退款与签到核销数据",
       sortOrder: 2,
       config: { limit: 3, pinnedFirst: true, link: "/pages/announcement/list", demoScenario: SCENARIO },
-      layout: { spacingBottom: 14, backgroundColor: "#FFF7EC", borderRadius: 14 }
+      layout: { spacingBottom: 14, backgroundColor: "#EFF8F5", borderRadius: 14 }
     },
     {
       type: "quick_nav",
       title: "活动服务",
       subtitle: "从发现活动到查看报名记录，高频入口都在这里",
-      sortOrder: 3,
+      sortOrder: 4,
       config: {
         items: [
-          { label: "活动日历", icon: "历", color: "#8B5A2B", link: "/pages/activity/list", action: "mainPage" },
-          { label: "我的报名", icon: "报", color: "#4A6B8A", link: "/pages/user/my", action: "mainPage" },
+          { label: "活动日历", icon: "历", color: "#0F766E", link: "/pages/activity/list", action: "mainPage" },
+          { label: "我的报名", icon: "报", color: "#3D6F9B", link: "/pages/user/my", action: "mainPage" },
           { label: "志愿服务", icon: "愿", color: "#5B8C5A", link: "/pages/volunteer/index" },
           { label: "公益项目", icon: "益", color: "#B45309", link: "/pages/charity/index", action: "mainPage" }
         ],
@@ -482,26 +488,26 @@ async function ensureHomepage(token) {
       },
       layout: { columns: 4, spacingBottom: 18 }
     },
-    { type: "featured_activities", title: "本周主推", subtitle: "时间、地点和剩余名额一眼确认，立即报名", sortOrder: 4, config: { source: "featured", limit: 6, display: "focus", demoScenario: SCENARIO }, layout: { display: "focus", spacingBottom: 18, borderRadius: 16 } },
-    { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、亲子沟通、身心成长", sortOrder: 5, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12 } },
-    { type: "activity_feed", title: "近期活动", subtitle: "更多时间与主题，随时浏览报名", sortOrder: 6, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list", borderRadius: 16 } },
-    { type: "image_banner", title: "专题内容专区", subtitle: "体验活动与专题服务同步展示", sortOrder: 7, config: { imageUrl: cover(8), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, backgroundColor: "#F7E7D0", borderRadius: 16 } },
-    { type: "rich_text", title: "运营闭环看板", subtitle: "用户路径与后台动作已经打通", sortOrder: 8, config: { content: "用户侧：浏览首页 -> 报名活动 -> 余额支付 -> 申请退款 -> 查看内容 -> 互动评论\n后台侧：发布内容 -> 确认收款 -> 审核退款 -> 核销签到 -> 审核评论 -> 查看财务流水", link: "/pages/community/index", demoScenario: SCENARIO }, layout: { spacingBottom: 18, backgroundColor: "#FFFCF6", borderRadius: 16 } },
+    { type: "featured_activities", title: "本周主推", subtitle: "时间、地点和剩余名额一眼确认，立即报名", sortOrder: 3, config: { source: "featured", limit: 6, display: "focus", demoScenario: SCENARIO }, layout: { display: "focus", spacingBottom: 18, borderRadius: 16, primaryColor: "#0F766E", accentColor: "#C35240" } },
+    { type: "activity_tabs", title: "按兴趣找活动", subtitle: "国学、书法、亲子沟通、身心成长", sortOrder: 5, config: { includeHot: true, limit: 8, demoScenario: SCENARIO }, layout: { spacingBottom: 12, primaryColor: "#0F766E" } },
+    { type: "activity_feed", title: "近期活动", subtitle: "更多时间与主题，随时浏览报名", sortOrder: 6, config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", demoScenario: SCENARIO }, layout: { display: "list", borderRadius: 16, primaryColor: "#0F766E", accentColor: "#C35240" } },
+    { type: "image_banner", title: "专题内容专区", subtitle: "体验活动与专题服务同步展示", sortOrder: 7, config: { imageUrl: cover(8), link: "/pages/courses/index", demoScenario: SCENARIO }, layout: { spacingBottom: 14, backgroundColor: "#E6F3EF", borderRadius: 16 } },
+    { type: "rich_text", title: "运营闭环看板", subtitle: "用户路径与后台动作已经打通", sortOrder: 8, config: { content: "用户侧：浏览首页 -> 报名活动 -> 余额支付 -> 申请退款 -> 查看内容 -> 互动评论\n后台侧：发布内容 -> 确认收款 -> 审核退款 -> 核销签到 -> 审核评论 -> 查看财务流水", link: "/pages/community/index", demoScenario: SCENARIO }, layout: { spacingBottom: 18, backgroundColor: "#F7FBFA", borderRadius: 16 } },
     {
       type: "bottom_nav",
       title: "底部导航",
       sortOrder: 99,
       config: {
         items: [
-          { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#8B5A2B" },
-          { label: "专题", icon: "专", activeIcon: "专", link: "/pages/courses/index", action: "mainPage", color: "#8B5A2B" },
-          { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#8B5A2B" },
-          { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#8B5A2B" },
-          { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#8B5A2B" }
+          { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#0F766E" },
+          { label: "专题", icon: "专", activeIcon: "专", link: "/pages/courses/index", action: "mainPage", color: "#0F766E" },
+          { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#0F766E" },
+          { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#0F766E" },
+          { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#0F766E" }
         ],
         demoScenario: SCENARIO
       },
-      layout: { backgroundColor: "#ffffff", activeColor: "#8B5A2B", textColor: "#7A6858" }
+      layout: { backgroundColor: "#ffffff", activeColor: "#0F766E", textColor: "#66827D" }
     },
     {
       type: "my_page",
@@ -520,9 +526,9 @@ async function ensureHomepage(token) {
         demoScenario: SCENARIO
       },
       layout: {
-        heroBackgroundColor: "linear-gradient(135deg, #FFF7EC 0%, #F5DDC2 52%, #E8B89D 100%)",
-        heroTextColor: "#5B2F24",
-        heroMutedTextColor: "rgba(91, 47, 36, 0.68)"
+        heroBackgroundColor: "linear-gradient(135deg, #0F766E 0%, #176B61 54%, #245C6D 100%)",
+        heroTextColor: "#FFFFFF",
+        heroMutedTextColor: "rgba(255, 255, 255, 0.76)"
       }
     },
     {
