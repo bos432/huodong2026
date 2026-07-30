@@ -2736,6 +2736,14 @@ export class OperationSettingDto {
   @IsOptional()
   @IsObject()
   automaticSms?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  automaticWechat?: Record<string, unknown>;
+
+  @IsOptional()
+  @IsObject()
+  postEventAutomation?: Record<string, unknown>;
 }
 
 export class SmsTestDto {

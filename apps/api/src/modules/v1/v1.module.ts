@@ -19,6 +19,7 @@ import { NotificationTemplate } from "../../entities/notification-template.entit
 import { Notification } from "../../entities/notification.entity";
 import { NotificationSchedule } from "../../entities/notification-schedule.entity";
 import { NotificationPreference } from "../../entities/notification-preference.entity";
+import { WechatSubscriptionGrant } from "../../entities/wechat-subscription-grant.entity";
 import { Order } from "../../entities/order.entity";
 import { Refund } from "../../entities/refund.entity";
 import { OperationSetting } from "../../entities/operation-setting.entity";
@@ -37,7 +38,7 @@ import { PublicModule } from "../public/public.module";
 import { MemberPointsModule } from "../member-points/member-points.module";
 
 @Module({
-  imports: [PublicModule, MemberPointsModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityRecapVersion, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, Refund, TicketType, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, ConversionEvent, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, NotificationPreference])],
+  imports: [PublicModule, MemberPointsModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityRecapVersion, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, Refund, TicketType, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, ConversionEvent, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, NotificationPreference, WechatSubscriptionGrant])],
   controllers: [AdminV1Controller, PublicV1Controller],
   providers: [V1Service, NotificationProviderService],
   exports: [V1Service]

@@ -59,7 +59,7 @@ export function normalizeAutomaticSmsSettings(value: unknown): AutomaticSmsSetti
   return result;
 }
 
-type PublishAutomaticSmsInput = {
+export type PublishAutomaticSmsInput = {
   scene: AutomaticSmsScene;
   businessId: string | number;
   userId: number;
@@ -67,6 +67,25 @@ type PublishAutomaticSmsInput = {
   tenantId?: number | null;
   variables?: Record<string, unknown>;
 };
+
+export function renderAutomaticNotification(scene: AutomaticSmsScene, activity: Pick<Activity, "title" | "location"> | null, variables: Record<string, string>) {
+  const activityTitle = activity?.title || variables.activityTitle || "活动";
+  const orderNo = variables.orderNo || "-";
+  const amount = variables.amount || "0.00";
+  const templates: Record<AutomaticSmsScene, { title: string; content: string }> = {
+    registrationSubmitted: { title: "报名已提交", content: `您报名的活动${activityTitle}已提交，请留意审核和支付状态。` },
+    registrationApproved: { title: "报名审核通过", content: `您报名的活动${activityTitle}已审核通过，请按时参加。` },
+    registrationRejected: { title: "报名审核结果", content: `您报名的活动${activityTitle}未通过审核，请登录查看详情。` },
+    paymentSucceeded: { title: "支付成功", content: `活动${activityTitle}订单${orderNo}已支付成功，金额${amount}元。` },
+    refundSucceeded: { title: "退款完成", content: `活动${activityTitle}订单${orderNo}退款${amount}元已处理完成。` },
+    refundRejected: { title: "退款审核结果", content: `活动${activityTitle}订单${orderNo}退款申请未通过，请登录查看详情。` },
+    activityCancelled: { title: "活动取消", content: `活动${activityTitle}已取消，原因${variables.reason || "以平台通知为准"}。` },
+    activityChanged: { title: "活动安排变更", content: `活动${activityTitle}的时间或地点已调整，请登录查看最新安排。` },
+    checkInSucceeded: { title: "签到成功", content: `您已完成活动${activityTitle}签到，感谢参与。` },
+    activityReminder: { title: "活动开始提醒", content: `您报名的活动${activityTitle}将于${variables.startTime || "近期"}开始，地点${variables.location || activity?.location || "以活动详情为准"}。` }
+  };
+  return templates[scene];
+}
 
 type AutomaticSmsPayload = {
   scene: AutomaticSmsScene;
@@ -233,11 +252,12 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
       : !user.phone
         ? "用户未绑定手机号"
         : await this.unsubscribedReason(user.id, tenantScopeKey);
-    const rendered = this.render(payload.scene, activity, payload.variables);
+    const rendered = renderAutomaticNotification(payload.scene, activity, payload.variables);
 
     if (!notification) {
       notification = await this.notifications.save(this.notifications.create({
         channel: "sms",
+        scene: payload.scene,
         tenant: setting?.tenant || activity?.tenant || null,
         tenantScopeKey,
         title: rendered.title,
@@ -248,6 +268,9 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
         errorMessage: null,
         suppressedReason: suppressionReason,
         variablesSnapshot: payload.variables,
+        providerTemplateId: null,
+        templateVersion: null,
+        deliveryOptions: null,
         retryCount: 0,
         sentAt: null,
         failedAt: null,
@@ -316,25 +339,6 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
   private normalizeVariables(value: unknown) {
     if (!value || typeof value !== "object" || Array.isArray(value)) return {};
     return Object.fromEntries(Object.entries(value as Record<string, unknown>).map(([key, item]) => [key.slice(0, 80), String(item ?? "").slice(0, 500)]));
-  }
-
-  private render(scene: AutomaticSmsScene, activity: Activity | null, variables: Record<string, string>) {
-    const activityTitle = activity?.title || variables.activityTitle || "活动";
-    const orderNo = variables.orderNo || "-";
-    const amount = variables.amount || "0.00";
-    const templates: Record<AutomaticSmsScene, { title: string; content: string }> = {
-      registrationSubmitted: { title: "报名已提交", content: `您报名的活动${activityTitle}已提交，请留意审核和支付状态。` },
-      registrationApproved: { title: "报名审核通过", content: `您报名的活动${activityTitle}已审核通过，请按时参加。` },
-      registrationRejected: { title: "报名审核结果", content: `您报名的活动${activityTitle}未通过审核，请登录查看详情。` },
-      paymentSucceeded: { title: "支付成功", content: `活动${activityTitle}订单${orderNo}已支付成功，金额${amount}元。` },
-      refundSucceeded: { title: "退款完成", content: `活动${activityTitle}订单${orderNo}退款${amount}元已处理完成。` },
-      refundRejected: { title: "退款审核结果", content: `活动${activityTitle}订单${orderNo}退款申请未通过，请登录查看详情。` },
-      activityCancelled: { title: "活动取消", content: `活动${activityTitle}已取消，原因${variables.reason || "以平台通知为准"}。` },
-      activityChanged: { title: "活动安排变更", content: `活动${activityTitle}的时间或地点已调整，请登录查看最新安排。` },
-      checkInSucceeded: { title: "签到成功", content: `您已完成活动${activityTitle}签到，感谢参与。` },
-      activityReminder: { title: "活动开始提醒", content: `您报名的活动${activityTitle}将于${variables.startTime || "近期"}开始，地点${variables.location || activity?.location || "以活动详情为准"}。` }
-    };
-    return templates[scene];
   }
 
   private formatDateTime(value: Date) {

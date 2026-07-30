@@ -95,6 +95,12 @@ export class OperationSetting {
   @Column({ type: "json", nullable: true })
   automaticSms!: Record<string, unknown> | null;
 
+  @Column({ type: "json", nullable: true })
+  automaticWechat!: Record<string, unknown> | null;
+
+  @Column({ type: "json", nullable: true })
+  postEventAutomation!: Record<string, unknown> | null;
+
   @UpdateDateColumn()
   updatedAt!: Date;
 }

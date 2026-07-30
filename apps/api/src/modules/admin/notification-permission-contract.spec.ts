@@ -31,7 +31,7 @@ describe("notification center permission and privacy contract", () => {
   it("uses dedicated options, pagination, and activity/member data scope", () => {
     expect(controller).toContain('@Get("notifications/options")');
     expect(controller).toContain('@Query("page") page?: string');
-    expect(page).toContain('api.get<any, { activities: any[]; tags: any[] }>("/admin/notifications/options")');
+    expect(page).toContain('api.get<any, { activities: any[]; tags: any[] }>("/admin/notifications/options", tenantScopeOptions())');
     expect(page).not.toContain('"/admin/activities"');
     expect(page).not.toContain('"/admin/tags"');
     expect(service).toContain('this.notificationPagination(query.page, query.pageSize)');
@@ -39,6 +39,16 @@ describe("notification center permission and privacy contract", () => {
     expect(service).toContain('this.applyNotificationMemberDataScope(builder, "user", admin)');
     expect(service).toContain('this.assertNotificationUserAccess(userId, admin)');
     expect(service).toContain('applyAdminActivityDataScope(builder, "activity", admin?.dataScope)');
+  });
+
+  it("lets only a platform super administrator enter a selected merchant notification scope", () => {
+    expect(controller).toContain('private notificationAdminForTenant');
+    expect(controller).toContain('admin?.role !== AdminRole.SuperAdmin && admin?.role !== "admin"');
+    expect(controller).toContain('return { ...admin, tenantId: selectedTenantId }');
+    expect(page).toContain('function tenantScopeOptions');
+    expect(page).toContain('tenantScopeOptions({ page: notificationPage.value');
+    expect(router).toContain('path: "notifications", component: Notifications, meta: { roles: ["notification.view"], scope: "tenantOrPlatformAdmin" }');
+    expect(menu).toContain('"/notifications"');
   });
 
   it("requires a single target and returns masked minimal projections", () => {

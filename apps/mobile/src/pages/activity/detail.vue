@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
-import { ensureUser, getUserToken, request, withTenantCode } from "../../api";
+import { ensureUser, fetchWechatSubscriptionTemplates, getUserToken, request, requestWechatSubscriptions, withTenantCode } from "../../api";
 import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
@@ -249,8 +249,18 @@ function openLocation() {
 
 async function subscribeNotice() {
   if (activeAction.value || !activity.value) return;
-  activeAction.value = "calendar";
+  activeAction.value = "reminder";
   try {
+    // #ifdef MP-WEIXIN
+    await ensureUser();
+    const templates = await fetchWechatSubscriptionTemplates(["activityReminder", "activityChanged", "activityCancelled"]);
+    const result = await requestWechatSubscriptions(templates);
+    if (result.accepted > 0) uni.showToast({ title: `已订阅 ${result.accepted} 项通知`, icon: "success" });
+    else if (result.banned > 0) uni.showToast({ title: "请在小程序设置中开启订阅消息", icon: "none" });
+    else uni.showToast({ title: "未授权订阅消息", icon: "none" });
+    return;
+    // #endif
+    // #ifndef MP-WEIXIN
     await addActivityToCalendar({
       title: activity.value?.title || "慢π活动",
       startTime: activity.value?.startTime,
@@ -259,10 +269,11 @@ async function subscribeNotice() {
       description: activity.value?.description || "慢π活动提醒"
     });
     uni.showToast({ title: "已添加活动提醒", icon: "success" });
+    // #endif
   } catch (error: any) {
-    uni.showToast({ title: reviewSafeText(error?.message || "添加提醒失败"), icon: "none" });
+    uni.showToast({ title: reviewSafeText(error?.message || "订阅提醒失败"), icon: "none" });
   } finally {
-    if (activeAction.value === "calendar") activeAction.value = "";
+    if (activeAction.value === "reminder") activeAction.value = "";
   }
 }
 
@@ -407,9 +418,14 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
           <text>邀</text>
           <view>邀请好友</view>
         </view>
-        <view class="action-item" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'calendar'" aria-label="订阅活动通知" :class="{ disabled: Boolean(activeAction) }" @click="subscribeNotice" @keyup.enter="subscribeNotice" @keyup.space.prevent="subscribeNotice">
+        <view class="action-item" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'reminder'" aria-label="订阅活动通知" :class="{ disabled: Boolean(activeAction) }" @click="subscribeNotice" @keyup.enter="subscribeNotice" @keyup.space.prevent="subscribeNotice">
           <text>醒</text>
+          <!-- #ifdef MP-WEIXIN -->
+          <view>订阅提醒</view>
+          <!-- #endif -->
+          <!-- #ifndef MP-WEIXIN -->
           <view>添加到日历</view>
+          <!-- #endif -->
         </view>
         <view class="action-item" role="button" tabindex="0" aria-label="联系客服" @click="goService" @keyup.enter="goService" @keyup.space.prevent="goService">
           <text>服</text>

@@ -1193,6 +1193,13 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
     "caution": "涉及权限、租户或主体归属，修改前确认数据范围并保留操作记录。"
   },
   {
+    "group": "平台治理与基础设施",
+    "name": "wechat_subscription_grants",
+    "meaning": "微信订阅授权相关业务数据。",
+    "business": "平台治理与基础设施模块中的微信订阅授权查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
     "group": "用户会员与资产",
     "name": "certificates",
     "meaning": "证书相关业务数据。",

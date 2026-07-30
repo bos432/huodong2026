@@ -31,7 +31,7 @@ const tokenLabels = {
   sale: "销售", shipment: "发货", sku: "SKU", snapshot: "快照", stat: "统计", statement: "账单", subscription: "订阅", support: "客服", tag: "标签",
   task: "任务", teacher: "讲师", template: "模板", tenant: "商家", ticket: "票种", tracking: "轨迹", training: "培训",
   topic: "主题", transaction: "流水", transfer: "转账", type: "类型", update: "进展", usage: "使用", user: "用户", version: "版本", view: "访问", visit: "访问",
-  volunteer: "志愿者", wallet: "钱包", waitlist: "候补", work: "工作", workflow: "流程"
+  volunteer: "志愿者", wallet: "钱包", waitlist: "候补", wechat: "微信", work: "工作", workflow: "流程"
 };
 
 const tableLabelOverrides = {

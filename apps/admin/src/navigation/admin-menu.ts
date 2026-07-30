@@ -55,7 +55,8 @@ export const tenantScopedRoutePaths = new Set([
   "/operation-logs",
   "/business-jobs",
   "/courses",
-  "/community"
+  "/community",
+  "/notifications"
 ]);
 
 export const tenantQuickLinks: TenantQuickLink[] = [
@@ -285,11 +286,11 @@ const rawMenuGroups: AdminMenuGroup[] = [
     index: "tenant-member",
     icon: "User",
     label: "会员运营",
-    scope: "tenant",
+    scope: "tenantOrPlatformAdmin",
     items: [
       { index: "/members", icon: "User", label: "会员资料管理", roles: ["member.view"], scope: "tenant" },
       { index: "/tags", icon: "PriceTag", label: "用户标签", roles: ["tag.view"], scope: "tenant" },
-      { index: "/notifications", icon: "Message", label: "通知中心", roles: ["notification.view"], scope: "tenant" },
+      { index: "/notifications", icon: "Message", label: "通知中心", roles: ["notification.view"], scope: "tenantOrPlatformAdmin" },
       { index: "/reviews", icon: "ChatDotRound", label: "评价管理", roles: ["review.view"], scope: "tenant" }
     ]
   },

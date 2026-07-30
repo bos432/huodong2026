@@ -80,9 +80,14 @@ export interface RecapVersionInput {
 export interface NotificationTemplateInput {
   name: string;
   channel?: string;
+  scene?: string | null;
   title: string;
   content: string;
   enabled?: boolean;
+  providerTemplateId?: string | null;
+  approvalStatus?: "draft" | "pending" | "approved" | "rejected" | "retired";
+  dataKeys?: Record<string, string> | null;
+  page?: string | null;
 }
 
 export interface SendNotificationInput {
@@ -1102,7 +1107,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   async listNotificationTemplates(admin?: AdminContext) {
     const builder = this.notificationTemplates.createQueryBuilder("template").leftJoin("template.tenant", "tenant")
-      .select(["template.id", "template.name", "template.channel", "template.title", "template.content", "template.enabled", "template.createdAt", "template.updatedAt", "tenant.id", "tenant.code", "tenant.name"])
+      .select(["template.id", "template.name", "template.channel", "template.scene", "template.title", "template.content", "template.enabled", "template.providerTemplateId", "template.approvalStatus", "template.version", "template.dataKeys", "template.page", "template.versionHistory", "template.createdAt", "template.updatedAt", "tenant.id", "tenant.code", "tenant.name"])
       .orderBy("template.createdAt", "DESC");
     if (isTenantScopedActor(admin)) builder.andWhere("(template.tenantId IS NULL OR template.tenantId = :tenantId)", { tenantId: admin?.tenantId });
     return (await builder.take(200).getMany()).map((row) => this.publicNotificationTemplate(row));
@@ -1117,22 +1122,68 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     }
     this.assertNotificationTemplateVariables(input.title, input.content);
 
+    const previousSnapshot = id ? this.notificationTemplateSnapshot(row) : null;
     row.tenant = row.tenant || tenantRelationForActor<Tenant>(admin);
     const name = input.name.trim();
     const title = input.title.trim();
     const content = input.content.trim();
     const channel = this.notificationChannel(input.channel || "site");
+    const scene = String(input.scene || "").trim() || null;
+    const allowedScenes = ["registrationSubmitted", "registrationApproved", "registrationRejected", "paymentSucceeded", "refundSucceeded", "refundRejected", "activityCancelled", "activityChanged", "checkInSucceeded", "activityReminder", "reviewInvitation", "certificateAvailable", "activityRecommendations"];
+    if (scene && !allowedScenes.includes(scene)) throw new BadRequestException("通知模板场景不正确");
+    const providerTemplateId = String(input.providerTemplateId || "").trim() || null;
+    const approvalStatus = input.approvalStatus || (id ? row.approvalStatus || "draft" : "draft");
+    if (!["draft", "pending", "approved", "rejected", "retired"].includes(approvalStatus)) throw new BadRequestException("模板审核状态不正确");
+    if (channel === "wechat" && approvalStatus === "approved" && (!scene || !providerTemplateId)) throw new BadRequestException("微信模板审核通过前必须配置场景和服务商模板 ID");
+    const dataKeys: Record<string, string> | null = input.dataKeys && typeof input.dataKeys === "object" && !Array.isArray(input.dataKeys)
+      ? Object.fromEntries(Object.entries(input.dataKeys).map(([source, key]) => [String(source).slice(0, 40), String(key).trim().slice(0, 40)]).filter(([, key]) => Boolean(key)))
+      : null;
+    if (dataKeys && Object.values(dataKeys).some((key) => !/^[A-Za-z]+\d+$/.test(key))) throw new BadRequestException("微信模板字段名格式不正确，例如 thing1、time2");
+    const page = String(input.page || "").trim() || null;
     if (name.length > 120) throw new BadRequestException("模板名称不能超过 120 个字符");
     if (title.length > 160) throw new BadRequestException("通知标题不能超过 160 个字符");
     if (content.length > 5000) throw new BadRequestException("通知内容不能超过 5000 个字符");
     row.name = name;
     row.channel = channel;
+    row.scene = scene;
     row.title = title;
     row.content = content;
     row.enabled = input.enabled ?? true;
+    row.providerTemplateId = providerTemplateId;
+    row.approvalStatus = approvalStatus;
+    row.dataKeys = dataKeys;
+    row.page = page;
+    const nextSnapshot = this.notificationTemplateSnapshot(row);
+    const changed = !previousSnapshot || JSON.stringify(previousSnapshot) !== JSON.stringify(nextSnapshot);
+    if (!id) {
+      row.version = 1;
+      row.versionHistory = [{ ...nextSnapshot, version: 1, changedAt: new Date().toISOString(), changedBy: admin?.username || "system" }];
+    } else if (changed) {
+      row.version = Math.max(Number(row.version || 1) + 1, 2);
+      const history = Array.isArray(row.versionHistory) && row.versionHistory.length
+        ? [...row.versionHistory]
+        : [{ ...previousSnapshot, version: Math.max(Number(row.version || 2) - 1, 1), changedAt: row.createdAt?.toISOString?.() || new Date().toISOString(), changedBy: "history-backfill" }];
+      history.push({ ...nextSnapshot, version: row.version, changedAt: new Date().toISOString(), changedBy: admin?.username || "system" });
+      row.versionHistory = history.slice(-50);
+    }
     const saved = await this.notificationTemplates.save(row);
-    await this.logNotificationOperation(admin, id ? "notification_template.update" : "notification_template.create", "notification_template", saved.id, `${id ? "更新" : "创建"}通知模板：${saved.name}`, { channel: saved.channel, enabled: saved.enabled });
+    await this.logNotificationOperation(admin, id ? "notification_template.update" : "notification_template.create", "notification_template", saved.id, `${id ? "更新" : "创建"}通知模板：${saved.name}`, { channel: saved.channel, scene: saved.scene, version: saved.version, approvalStatus: saved.approvalStatus, enabled: saved.enabled });
     return this.publicNotificationTemplate(saved);
+  }
+
+  async notificationTemplateVersions(id: number, admin?: AdminContext) {
+    const row = await this.notificationTemplates.findOneBy({ id });
+    this.assertNotificationTemplateReadAccess(row, admin);
+    if (!row) throw new NotFoundException("通知模板不存在");
+    return { templateId: row.id, currentVersion: row.version, versions: [...(row.versionHistory || [])].reverse() };
+  }
+
+  async testNotificationTemplate(id: number, userId: number, admin?: AdminContext) {
+    if (!Number.isInteger(userId) || userId <= 0) throw new BadRequestException("请选择测试会员");
+    const template = await this.notificationTemplates.findOneBy({ id });
+    this.assertNotificationTemplateReadAccess(template, admin);
+    if (!template) throw new NotFoundException("通知模板不存在");
+    return this.sendNotification({ templateId: id, userId, channel: template.channel, remark: `模板测试:v${template.version}` }, admin);
   }
 
   async notificationOptions(admin?: AdminContext) {
@@ -1153,16 +1204,19 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  async listNotifications(query: { page?: number; pageSize?: number; status?: string } = {}, admin?: AdminContext) {
+  async listNotifications(query: { page?: number; pageSize?: number; status?: string; channel?: string; scene?: string; keyword?: string } = {}, admin?: AdminContext) {
     const { page, pageSize } = this.notificationPagination(query.page, query.pageSize);
     if (query.status && !["pending", "sent", "failed", "suppressed"].includes(query.status)) throw new BadRequestException("通知状态不正确");
+    if (query.channel) this.notificationChannel(query.channel);
+    const keyword = String(query.keyword || "").trim();
+    if (keyword.length > 120) throw new BadRequestException("通知关键词不能超过 120 个字符");
     const builder = this.notifications
       .createQueryBuilder("notification")
       .leftJoin("notification.activity", "activity")
       .leftJoin("activity.tenant", "activityTenant")
       .leftJoin("notification.user", "user")
       .select([
-        "notification.id", "notification.channel", "notification.tenantScopeKey", "notification.title", "notification.content", "notification.status", "notification.provider", "notification.providerMessageId", "notification.errorMessage", "notification.suppressedReason", "notification.variablesSnapshot", "notification.retryCount", "notification.sentAt", "notification.failedAt", "notification.remark", "notification.createdAt",
+        "notification.id", "notification.channel", "notification.scene", "notification.tenantScopeKey", "notification.title", "notification.content", "notification.status", "notification.provider", "notification.providerMessageId", "notification.errorMessage", "notification.suppressedReason", "notification.variablesSnapshot", "notification.providerTemplateId", "notification.templateVersion", "notification.deliveryOptions", "notification.retryCount", "notification.sentAt", "notification.failedAt", "notification.remark", "notification.createdAt",
         "activity.id", "activity.title", "activity.status", "activityTenant.id", "activityTenant.code", "activityTenant.name",
         "user.id", "user.nickname", "user.phone"
       ])
@@ -1170,9 +1224,37 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (isTenantScopedActor(admin)) builder.andWhere("notification.tenantScopeKey = :tenantScopeKey", { tenantScopeKey: `tenant:${admin?.tenantId}` });
     this.applyNotificationActivityDataScope(builder, "notification", admin);
     if (query.status) builder.andWhere("notification.status = :status", { status: query.status });
+    if (query.channel) builder.andWhere("notification.channel = :channel", { channel: query.channel });
+    if (query.scene) builder.andWhere("notification.scene = :scene", { scene: query.scene });
+    if (keyword) builder.andWhere("(notification.title LIKE :keyword OR notification.remark LIKE :keyword OR user.nickname LIKE :keyword OR user.phone LIKE :keyword)", { keyword: `%${keyword}%` });
     const [rows, total] = await builder.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
     const includeSensitive = this.notificationIncludesSensitive(admin);
     return { items: rows.map((row) => this.notificationPublicPayload(row, includeSensitive)), total, page, pageSize, sensitiveMasked: !includeSensitive };
+  }
+
+  async notificationMonitor(admin?: AdminContext) {
+    const builder = this.notifications.createQueryBuilder("notification")
+      .select("notification.status", "status")
+      .addSelect("notification.channel", "channel")
+      .addSelect("COUNT(*)", "count")
+      .addSelect("COALESCE(SUM(notification.retryCount), 0)", "retries")
+      .groupBy("notification.status").addGroupBy("notification.channel");
+    if (isTenantScopedActor(admin)) builder.where("notification.tenantScopeKey = :tenantScopeKey", { tenantScopeKey: `tenant:${admin?.tenantId}` });
+    const rows = await builder.getRawMany<{ status: string; channel: string; count: string; retries: string }>();
+    const status: Record<string, number> = { pending: 0, sent: 0, failed: 0, suppressed: 0 };
+    const channels: Record<string, number> = { site: 0, sms: 0, wechat: 0, email: 0 };
+    let retries = 0;
+    for (const row of rows) {
+      status[row.status] = (status[row.status] || 0) + Number(row.count || 0);
+      channels[row.channel] = (channels[row.channel] || 0) + Number(row.count || 0);
+      retries += Number(row.retries || 0);
+    }
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recentBuilder = this.notifications.createQueryBuilder("notification").where("notification.createdAt >= :since", { since });
+    if (isTenantScopedActor(admin)) recentBuilder.andWhere("notification.tenantScopeKey = :tenantScopeKey", { tenantScopeKey: `tenant:${admin?.tenantId}` });
+    const recent24h = await recentBuilder.getCount();
+    const jobs = await this.businessJobs.notificationSummary(admin?.tenantId);
+    return { status, channels, retries, recent24h, jobs, generatedAt: new Date() };
   }
 
   async listNotificationPreferences(query: { userId?: number; page?: number; pageSize?: number } = {}, admin?: AdminContext) {
@@ -1249,7 +1331,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (input.activityId && !activity) throw new NotFoundException("活动不存在");
 
     await this.assertNotificationUserAccess(user!.id, admin);
-    const saved = await this.createAndDeliverNotification({ channel: prepared.channel, title: prepared.title, content: prepared.content, variables: prepared.variables, user, activity, tenant: activity?.tenant || (isTenantScopedActor(admin) ? await this.tenants.findOneBy({ id: Number(admin?.tenantId) }) : null), remark: input.remark || null });
+    const saved = await this.createAndDeliverNotification({ channel: prepared.channel, scene: prepared.template?.scene || null, title: prepared.title, content: prepared.content, variables: prepared.variables, user, activity, tenant: activity?.tenant || (isTenantScopedActor(admin) ? await this.tenants.findOneBy({ id: Number(admin?.tenantId) }) : null), remark: input.remark || null, template: prepared.template });
     await this.logNotificationOperation(admin, "notification.send", "notification", saved.id, `发送单条通知：${saved.title}`, { channel: saved.channel, userId: user!.id, status: saved.status });
     return this.notificationPublicPayload(saved, this.notificationIncludesSensitive(admin));
   }
@@ -1356,6 +1438,8 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   async retryNotification(id: number, admin?: AdminContext) {
+    let previousError: string | null = null;
+    let previousFailedAt: Date | null = null;
     const saved = await this.notifications.manager.transaction(async (manager) => {
       const notification = await manager.getRepository(Notification).createQueryBuilder("notification")
         .setLock("pessimistic_write")
@@ -1368,15 +1452,23 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       if (notification.activity) this.assertNotificationActivityAccess(notification.activity, admin);
       if (notification.status !== "failed") throw new BadRequestException("只有发送失败的通知可以重试");
       if (this.notificationRetryCoolingDown(notification)) throw new BadRequestException("通知刚完成重试，请稍后再试");
+      previousError = notification.errorMessage;
+      previousFailedAt = notification.failedAt;
       notification.retryCount += 1;
       notification.status = "pending";
       notification.errorMessage = null;
       notification.failedAt = null;
       return manager.getRepository(Notification).save(notification);
     });
-    const delivered = await this.deliverNotification(saved);
-    await this.logNotificationOperation(admin, "notification.retry", "notification", delivered.id, `重试通知：${delivered.title}`, { retryCount: delivered.retryCount, status: delivered.status });
-    return this.notificationPublicPayload(delivered, this.notificationIncludesSensitive(admin));
+    const identity = this.notificationJobIdentity(saved);
+    try {
+      await this.businessJobs.retryByIdentity(identity.type, identity.idempotencyKey, saved.tenant?.id || saved.activity?.tenant?.id || admin?.tenantId || null);
+    } catch (error) {
+      await this.notifications.createQueryBuilder().update().set({ status: "failed", errorMessage: previousError, failedAt: previousFailedAt }).where("id = :id AND status = 'pending'", { id: saved.id }).execute();
+      throw error;
+    }
+    await this.logNotificationOperation(admin, "notification.retry", "notification", saved.id, `重试通知：${saved.title}`, { retryCount: saved.retryCount, status: saved.status, jobType: identity.type });
+    return this.notificationPublicPayload(saved, this.notificationIncludesSensitive(admin));
   }
 
   async listNotificationSchedules(activityId?: number, admin?: AdminContext) {
@@ -1582,6 +1674,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   private async createAndDeliverNotification(input: {
     channel: string;
+    scene?: string | null;
     title: string;
     content: string;
     variables?: Record<string, string>;
@@ -1589,6 +1682,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     activity?: Activity | null;
     tenant?: Tenant | null;
     remark?: string | null;
+    template?: NotificationTemplate | null;
   }) {
     const tenantScopeKey = input.tenant ? `tenant:${input.tenant.id}` : "platform";
     const createdAt = new Date();
@@ -1604,6 +1698,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       const repository = manager.getRepository(Notification);
       const notification = repository.create({
         channel: input.channel,
+        scene: input.scene || input.template?.scene || null,
         tenant: input.tenant || null,
         tenantScopeKey,
         title: input.title,
@@ -1616,6 +1711,9 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
         errorMessage: null,
         suppressedReason: suppression?.reason || null,
         variablesSnapshot: input.variables || null,
+        providerTemplateId: input.template?.providerTemplateId || null,
+        templateVersion: input.template?.version || null,
+        deliveryOptions: input.template ? { page: input.template.page, dataKeys: input.template.dataKeys } : null,
         retryCount: 0,
         sentAt: null,
         failedAt: null,
@@ -1629,6 +1727,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   private async deliverNotification(row: Notification, enqueueFailure = true) {
+    const wechatOptions = row.channel === "wechat" ? this.notificationWechatDeliveryOptions(row) : null;
     const result = await this.notificationProvider.deliver({
       channel: row.channel,
       title: row.title,
@@ -1638,7 +1737,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
         phone: row.user?.phone,
         openid: row.user?.openid
       }
-    });
+    }, wechatOptions ? { wechat: wechatOptions } : undefined);
 
     row.status = result.status;
     row.provider = result.provider;
@@ -1685,10 +1784,12 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     let title = input.title?.trim();
     let content = input.content?.trim();
     let channel = this.notificationChannel(input.channel || "site");
+    let template: NotificationTemplate | null = null;
 
     if (input.templateId) {
-      const template = await this.notificationTemplateForActor(input.templateId, admin);
+      template = await this.notificationTemplateForActor(input.templateId, admin);
       if (!template || !template.enabled) throw new BadRequestException("通知模板不存在或已停用");
+      if (template.channel === "wechat" && (template.approvalStatus !== "approved" || !template.providerTemplateId)) throw new BadRequestException("微信模板尚未审核通过或未配置服务商模板 ID");
       title ||= template.title;
       content ||= template.content;
       channel = this.notificationChannel(input.channel || template.channel);
@@ -1725,7 +1826,8 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       channel,
       title: this.renderTemplate(title, variables),
       content: this.renderTemplate(content, variables),
-      variables
+      variables,
+      template
     };
   }
 
@@ -1795,7 +1897,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   private publicNotificationTemplate(row: NotificationTemplate) {
-    return { id: row.id, name: row.name, channel: row.channel, title: row.title, content: row.content, enabled: row.enabled, tenant: row.tenant ? { id: row.tenant.id, code: row.tenant.code, name: row.tenant.name } : null, createdAt: row.createdAt, updatedAt: row.updatedAt };
+    return { id: row.id, name: row.name, channel: row.channel, scene: row.scene, title: row.title, content: row.content, enabled: row.enabled, providerTemplateId: row.providerTemplateId, approvalStatus: row.approvalStatus, version: row.version, dataKeys: row.dataKeys, page: row.page, versionCount: row.versionHistory?.length || 0, tenant: row.tenant ? { id: row.tenant.id, code: row.tenant.code, name: row.tenant.name } : null, createdAt: row.createdAt, updatedAt: row.updatedAt };
   }
 
   private publicNotificationSchedule(row: NotificationSchedule) {
@@ -1805,9 +1907,10 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   private notificationPublicPayload(row: Notification, includeSensitive = false) {
     const variables = this.publicNotificationVariables(row.variablesSnapshot, includeSensitive);
     return {
-      id: row.id, channel: row.channel, tenantScopeKey: row.tenantScopeKey,
+      id: row.id, channel: row.channel, scene: row.scene, tenantScopeKey: row.tenantScopeKey,
       title: this.sanitizeNotificationText(row.title, row.variablesSnapshot, variables, includeSensitive), content: this.sanitizeNotificationText(row.content, row.variablesSnapshot, variables, includeSensitive), status: row.status, provider: row.provider,
       providerMessageId: includeSensitive ? row.providerMessageId : null, errorMessage: includeSensitive ? row.errorMessage : null,
+      providerTemplateId: row.providerTemplateId, templateVersion: row.templateVersion,
       suppressedReason: row.suppressedReason, variablesSnapshot: variables,
       retryCount: row.retryCount, sentAt: row.sentAt, failedAt: row.failedAt,
       user: this.publicNotificationUser(row.user, includeSensitive),
@@ -1818,6 +1921,25 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   private logNotificationOperation(admin: AdminContext | undefined, action: string, targetType: string, targetId: number, summary: string, detail: Record<string, unknown>) {
     return this.logReviewOperation(admin, action, targetType, targetId, summary, detail);
+  }
+
+  private notificationTemplateSnapshot(row: NotificationTemplate) {
+    return { name: row.name, channel: row.channel, scene: row.scene, title: row.title, content: row.content, enabled: row.enabled, providerTemplateId: row.providerTemplateId, approvalStatus: row.approvalStatus, dataKeys: row.dataKeys, page: row.page };
+  }
+
+  private notificationWechatDeliveryOptions(row: Notification) {
+    const options = row.deliveryOptions || {};
+    const dataKeys = options.dataKeys && typeof options.dataKeys === "object" ? options.dataKeys as Record<string, string> : { title: "thing1", content: "thing2" };
+    const sourceValues: Record<string, string> = { title: row.title, content: row.content, activityTitle: row.activity?.title || "活动", location: row.activity?.location || "" };
+    const data = Object.fromEntries(Object.entries(dataKeys).filter(([source, key]) => sourceValues[source] && key).map(([source, key]) => [key, sourceValues[source]]));
+    return { templateId: row.providerTemplateId, page: String(options.page || "pages/index/index"), data };
+  }
+
+  private notificationJobIdentity(row: Notification) {
+    const remark = String(row.remark || "");
+    if (remark.startsWith("automatic_sms:")) return { type: "automatic-sms.deliver", idempotencyKey: remark.slice("automatic_sms:".length) };
+    if (remark.startsWith("automatic_wechat:")) return { type: "automatic-wechat.deliver", idempotencyKey: remark.slice("automatic_wechat:".length) };
+    return { type: "notification.deliver", idempotencyKey: `notification:${row.id}` };
   }
 
   private assertNotificationTemplateVariables(...templates: string[]) {

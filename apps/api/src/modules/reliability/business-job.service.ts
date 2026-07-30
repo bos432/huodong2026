@@ -75,6 +75,46 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
     return this.replayForActor(id, null, runAt);
   }
 
+  async retryByIdentity(type: string, idempotencyKey: string, actorTenantId?: number | null, runAt = new Date()) {
+    return this.dataSource.transaction(async (manager) => {
+      const repository = manager.getRepository(BusinessJob);
+      const builder = repository.createQueryBuilder("job").setLock("pessimistic_write")
+        .where("job.type = :type AND job.idempotencyKey = :idempotencyKey", { type, idempotencyKey });
+      if (actorTenantId) builder.andWhere("job.tenantId = :actorTenantId", { actorTenantId });
+      const job = await builder.getOne();
+      if (!job) throw new NotFoundException("Notification business job not found");
+      if (!["pending", "dead_letter"].includes(job.status)) throw new BadRequestException("当前通知任务状态不可重试");
+      const wasDeadLetter = job.status === "dead_letter";
+      job.status = "pending";
+      job.attemptCount = wasDeadLetter ? 0 : job.attemptCount;
+      job.nextAttemptAt = runAt;
+      job.lockedUntil = null;
+      job.lockedBy = null;
+      job.lastError = null;
+      job.deadLetteredAt = null;
+      await repository.save(job);
+      return { ...this.serializeForAdmin(job), operationApplied: true };
+    });
+  }
+
+  async notificationSummary(actorTenantId?: number | null) {
+    const types = ["notification.deliver", "automatic-sms.deliver", "automatic-wechat.deliver", "automatic-sms.activity-fanout", "automatic-wechat.activity-fanout", "post-event.notification"];
+    const builder = this.jobs.createQueryBuilder("job")
+      .select("job.status", "status")
+      .addSelect("COUNT(*)", "count")
+      .addSelect("COALESCE(SUM(job.attemptCount), 0)", "attempts")
+      .where("job.type IN (:...types)", { types })
+      .groupBy("job.status");
+    if (actorTenantId) builder.andWhere("job.tenantId = :actorTenantId", { actorTenantId });
+    const rows = await builder.getRawMany<{ status: string; count: string; attempts: string }>();
+    const result: Record<string, number> = { pending: 0, processing: 0, completed: 0, dead_letter: 0, cancelled: 0, attempts: 0 };
+    for (const row of rows) {
+      result[row.status] = Number(row.count || 0);
+      result.attempts += Number(row.attempts || 0);
+    }
+    return result;
+  }
+
   async list(query: { status?: string; type?: string; tenantId?: number; keyword?: string; page?: number; pageSize?: number }, actorTenantId?: number | null) {
     const rawPage = Number(query.page || 1);
     const rawPageSize = Number(query.pageSize || 20);

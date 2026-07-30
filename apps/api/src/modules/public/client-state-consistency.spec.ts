@@ -106,7 +106,8 @@ describe("mobile client state consistency", () => {
     expect(activityDetail).toContain("loadGuard.isCurrent(token)");
     expect(activityDetail).toContain("Promise.allSettled([load(), loadDecoration()])");
     expect(activityDetail).toContain('activeAction.value = "invite"');
-    expect(activityDetail).toContain('activeAction.value = "calendar"');
+    expect(activityDetail).toContain('activeAction.value = "reminder"');
+    expect(activityDetail).toContain("requestWechatSubscriptions");
 
     for (const guard of ["pageLoadGuard", "quoteLoadGuard", "couponLoadGuard"]) {
       expect(activityRegister).toContain(`const ${guard} = createTenantLoadGuard()`);

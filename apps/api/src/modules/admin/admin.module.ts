@@ -115,6 +115,7 @@ import { MallPaymentStatementRecord } from "../../entities/mall-payment-statemen
 import { MallPaymentTransaction } from "../../entities/mall-payment-transaction.entity";
 import { MallRefund } from "../../entities/mall-refund.entity";
 import { FundRiskMonitorService } from "./fund-risk-monitor.service";
+import { BusinessJob } from "../../entities/business-job.entity";
 import { SupportWorkOrder } from "../../entities/support-work-order.entity";
 import { SupportWorkOrderLog } from "../../entities/support-work-order-log.entity";
 import { AnalyticsDailyMetric } from "../../entities/analytics-daily-metric.entity";
@@ -129,7 +130,7 @@ import { CredentialTemplateModule } from "../credential-templates/credential-tem
     MemberPointsModule,
     CredentialTemplateModule,
     TypeOrmModule.forFeature([CouponClaim, CouponUsage]),
-    TypeOrmModule.forFeature([FundRiskAlert, CourseRefund, MallPaymentCallbackLog, MallPaymentStatementRecord, MallPaymentTransaction, MallRefund, CheckInPoint, MemberSegment, MemberSegmentSnapshot, MemberSegmentSnapshotMember, MemberBehaviorTagRun, SupportWorkOrder, SupportWorkOrderLog, AnalyticsDailyMetric, AnalyticsCalculationRun]),
+    TypeOrmModule.forFeature([FundRiskAlert, BusinessJob, CourseRefund, MallPaymentCallbackLog, MallPaymentStatementRecord, MallPaymentTransaction, MallRefund, CheckInPoint, MemberSegment, MemberSegmentSnapshot, MemberSegmentSnapshotMember, MemberBehaviorTagRun, SupportWorkOrder, SupportWorkOrderLog, AnalyticsDailyMetric, AnalyticsCalculationRun]),
     TypeOrmModule.forFeature([Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminOperationLog, AdminUser, AdminInvite, TenantSubscriptionEvent, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityVersion, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, Course, H5AuthCodeLog, HomepageSection, HomepageDecorationVersion, HomepageDecorationTemplate, MarketingPopup, AdAdvertiser, AdContract, AdCampaign, AdDailyStat, AdSettlement, AdSettlementItem, AdOfficialRevenueImport, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberLevelChange, MemberProfile, MemberPointRule, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundAccount, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectEvent, CharityProjectUpdate, Certificate, VolunteerProfile, VolunteerTrainingRecord, VolunteerBadgeDefinition, VolunteerBadgeAward, VolunteerTask, VolunteerTaskApplication, VolunteerAttendanceRecord, VolunteerServiceRecord, VolunteerHourAdjustment, VolunteerServiceProof]),
     TypeOrmModule.forFeature([AmbassadorProfile, AmbassadorTask, AmbassadorContribution, PartnerContract]),
     PassportModule,

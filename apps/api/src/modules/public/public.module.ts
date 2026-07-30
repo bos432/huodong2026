@@ -51,6 +51,8 @@ import { TenantRegion } from "../../entities/tenant-region.entity";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
+import { NotificationTemplate } from "../../entities/notification-template.entity";
+import { WechatSubscriptionGrant } from "../../entities/wechat-subscription-grant.entity";
 import { CommunityPost } from "../../entities/community-post.entity";
 import { UserFavorite } from "../../entities/user-favorite.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
@@ -79,7 +81,7 @@ import { MemberPointsModule } from "../member-points/member-points.module";
 import { CredentialTemplateModule } from "../credential-templates/credential-template.module";
 
 @Module({
-  imports: [AidModule, MemberPointsModule, CredentialTemplateModule, TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, MarketingPopup, AdCampaign, AdDailyStat, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, MiniprogramReleaseSetting, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundAccount, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectEvent, CharityProjectUpdate, VolunteerProfile, VolunteerTrainingRecord, VolunteerBadgeDefinition, VolunteerBadgeAward, VolunteerTask, VolunteerTaskApplication, VolunteerAttendanceRecord, VolunteerServiceRecord, VolunteerHourAdjustment, VolunteerServiceProof, Course, CourseChapter, CourseLesson, CourseOrder, CourseRefund, UserLearning, UserFavorite, Certificate, CommunityPost])],
+  imports: [AidModule, MemberPointsModule, CredentialTemplateModule, TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, MarketingPopup, AdCampaign, AdDailyStat, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, MiniprogramReleaseSetting, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundAccount, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectEvent, CharityProjectUpdate, VolunteerProfile, VolunteerTrainingRecord, VolunteerBadgeDefinition, VolunteerBadgeAward, VolunteerTask, VolunteerTaskApplication, VolunteerAttendanceRecord, VolunteerServiceRecord, VolunteerHourAdjustment, VolunteerServiceProof, Course, CourseChapter, CourseLesson, CourseOrder, CourseRefund, UserLearning, UserFavorite, Certificate, CommunityPost, NotificationTemplate, WechatSubscriptionGrant])],
   controllers: [PublicController, PaymentController],
   providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
   exports: [PublicService, PaymentProviderService, ObjectStorageService]

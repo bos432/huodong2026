@@ -312,6 +312,25 @@ export class PublicController {
     return this.service.myProfile(user, this.tenantContext(req, tenantCode));
   }
 
+  @Get("wechat-subscriptions/templates")
+  async wechatSubscriptionTemplates(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("scenes") scenes?: string) {
+    await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    const selectedScenes = String(scenes || "").split(",").map((item) => item.trim()).filter(Boolean);
+    return this.service.wechatSubscriptionTemplates(this.tenantContext(req, tenantCode), selectedScenes);
+  }
+
+  @Post("me/wechat-subscriptions")
+  async recordWechatSubscriptions(@Body() body: { results?: Array<{ scene?: string; templateId?: string; status?: string }> }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.recordWechatSubscriptionAuthorizations(user, body?.results as any, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("me/wechat-subscriptions")
+  async myWechatSubscriptions(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myWechatSubscriptionAuthorizations(user, this.tenantContext(req, tenantCode));
+  }
+
   @Get("me/orders-overview")
   async myOrdersOverview(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);

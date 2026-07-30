@@ -35,6 +35,12 @@ export type SmsProviderSettings = {
 
 export type NotificationProviderOverrides = {
   sms?: SmsProviderSettings | null;
+  wechat?: {
+    templateId?: string | null;
+    page?: string | null;
+    data?: Record<string, string> | null;
+    miniprogramState?: "developer" | "trial" | "formal" | null;
+  } | null;
 };
 
 @Injectable()
@@ -51,7 +57,7 @@ export class NotificationProviderService {
     if (input.channel === "site") return this.mockSuccess(provider);
     if (input.channel === "sms") return this.deliverSms(input, provider, overrides?.sms);
     if (input.channel === "email") return this.deliverEmail(input, provider);
-    if (input.channel === "wechat") return this.deliverWechat(input, provider);
+    if (input.channel === "wechat") return this.deliverWechat(input, provider, overrides?.wechat);
 
     return { status: "failed", provider, errorMessage: `Unsupported notification channel: ${input.channel}` };
   }
@@ -100,30 +106,34 @@ export class NotificationProviderService {
     }
   }
 
-  private async deliverWechat(input: NotificationDeliveryInput, provider: string): Promise<NotificationDeliveryResult> {
+  private async deliverWechat(input: NotificationDeliveryInput, provider: string, settings?: NotificationProviderOverrides["wechat"]): Promise<NotificationDeliveryResult> {
     if (!this.channelEnabled("wechat")) return this.notConfigured("wechat", provider);
     if (!input.to?.openid) return this.failed(provider, "微信订阅消息 openid 为空");
     if (provider === "mock-wechat") {
       if (this.canUseMockWechat()) return this.mockSuccess(provider);
       return this.failed(provider, "生产环境禁止 mock-wechat 假发送，请配置真实微信消息服务");
     }
-    const missing = this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_MESSAGE_TEMPLATE_ID"]);
+    const missing = this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET"]);
+    if (!String(settings?.templateId || this.config.get("WECHAT_MESSAGE_TEMPLATE_ID") || "").trim()) missing.push("WECHAT_MESSAGE_TEMPLATE_ID");
     if (missing.length) return this.failed(provider, `微信订阅消息缺少配置：${missing.join(", ")}`);
     if (!["wechat-subscribe-message", "wechat-subscribe"].includes(provider)) return this.failed(provider, `不支持的微信消息服务商：${provider}`);
     try {
       const token = await this.getWechatAccessToken();
       const titleKey = this.config.get("WECHAT_MESSAGE_TITLE_KEY", "thing1");
       const contentKey = this.config.get("WECHAT_MESSAGE_CONTENT_KEY", "thing2");
+      const data = settings?.data && Object.keys(settings.data).length
+        ? Object.fromEntries(Object.entries(settings.data).map(([key, value]) => [key, { value: String(value).slice(0, 20) }]))
+        : { [titleKey]: { value: input.title.slice(0, 20) }, [contentKey]: { value: input.content.slice(0, 20) } };
       const response = await fetch(`https://api.weixin.qq.com/cgi-bin/message/subscribe/send?access_token=${encodeURIComponent(token)}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           touser: input.to.openid,
-          template_id: this.config.get("WECHAT_MESSAGE_TEMPLATE_ID"),
-          page: this.config.get("WECHAT_MESSAGE_PAGE", "pages/index/index"),
-          miniprogram_state: this.config.get("WECHAT_MESSAGE_MINIPROGRAM_STATE", "formal"),
+          template_id: settings?.templateId || this.config.get("WECHAT_MESSAGE_TEMPLATE_ID"),
+          page: settings?.page || this.config.get("WECHAT_MESSAGE_PAGE", "pages/index/index"),
+          miniprogram_state: settings?.miniprogramState || this.config.get("WECHAT_MESSAGE_MINIPROGRAM_STATE", "formal"),
           lang: "zh_CN",
-          data: { [titleKey]: { value: input.title.slice(0, 20) }, [contentKey]: { value: input.content.slice(0, 20) } }
+          data
         })
       });
       const payload = await response.json().catch(() => null) as { errcode?: number; errmsg?: string; msgid?: string | number } | null;

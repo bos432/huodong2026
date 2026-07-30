@@ -107,7 +107,8 @@ import { growthFromPointLog, levelExpiry, manualLevelOverrideActive, memberLevel
 import { checkInNonce, createCheckInTicket } from "../../shared/check-in-ticket";
 import { analyticsDateText } from "../../shared/analytics-metrics";
 import { buildMemberOrderOverview } from "./member-order-overview";
-import { AutomaticSmsService } from "../reliability/automatic-sms.service";
+import { AutomaticNotificationService } from "../reliability/automatic-notification.service";
+import { AutomaticWechatService, WechatSubscriptionAuthorization } from "../reliability/automatic-wechat.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null; userId?: number | null };
 type PublicTrackingContext = { channelCode?: string | null; source?: string | null; inviteCode?: string | null; clientIp?: string | null; userAgent?: string | null };
@@ -184,8 +185,24 @@ export class PublicService {
     private readonly config: ConfigService,
     private readonly objectStorage: ObjectStorageService,
     private readonly credentialTemplates: CredentialTemplateService,
-    private readonly automaticSms: AutomaticSmsService
+    private readonly automaticNotifications: AutomaticNotificationService,
+    private readonly automaticWechat: AutomaticWechatService
   ) {}
+
+  async wechatSubscriptionTemplates(context?: PublicTenantContext, scenes?: string[]) {
+    const tenant = await this.resolveTenantContext(context);
+    return this.automaticWechat.publicTemplates(tenant?.id || null, scenes);
+  }
+
+  async recordWechatSubscriptionAuthorizations(user: User, results: WechatSubscriptionAuthorization[], context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    return this.automaticWechat.recordAuthorizations(user, tenant, results);
+  }
+
+  async myWechatSubscriptionAuthorizations(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    return this.automaticWechat.authorizationSummary(user.id, tenant?.id || null);
+  }
 
   async h5Code(dto: H5CodeDto, clientIp?: string | null) {
     const phone = this.normalizePhone(dto.phone);
@@ -2010,16 +2027,16 @@ export class PublicService {
     if (price > 0 && paymentMethod === PaymentMethod.Balance) {
       try {
         const balanceResult = await this.payWithBalance(order.id, user, context);
-        await this.automaticSms.publish({ scene: "registrationSubmitted", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
+        await this.automaticNotifications.publish({ scene: "registrationSubmitted", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
         return { registration: balanceResult.order.registration, order: balanceResult.order, walletTransaction: balanceResult.walletTransaction, waitlisted: false };
       } catch (error) {
         await this.rollbackPendingRegistration(order, quote.coupon, quote.pointsUsed, "余额支付失败，报名已取消");
         throw error;
       }
     }
-    await this.automaticSms.publish({ scene: "registrationSubmitted", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
+    await this.automaticNotifications.publish({ scene: "registrationSubmitted", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
     if (registration.status === RegistrationStatus.Approved) {
-      await this.automaticSms.publish({ scene: "registrationApproved", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
+      await this.automaticNotifications.publish({ scene: "registrationApproved", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
     }
     return { registration: this.publicRegistration(registration), order: this.publicOrder(order), waitlisted: false };
   }
@@ -2167,8 +2184,8 @@ export class PublicService {
     if (!result.idempotent) await this.charityFund.recordOrderAccrual(result.order, "balance");
     if (!result.idempotent) {
       const smsContext = { userId: result.order.registration.user.id, activityId: result.order.registration.activity.id, tenantId: result.order.tenant?.id || result.order.registration.activity.tenant?.id || null };
-      await this.automaticSms.publish({ ...smsContext, scene: "paymentSucceeded", businessId: result.order.id, variables: { orderNo: result.order.orderNo, amount: result.order.amount } });
-      if (result.order.registration.status === RegistrationStatus.Approved) await this.automaticSms.publish({ ...smsContext, scene: "registrationApproved", businessId: result.order.registration.id });
+      await this.automaticNotifications.publish({ ...smsContext, scene: "paymentSucceeded", businessId: result.order.id, variables: { orderNo: result.order.orderNo, amount: result.order.amount } });
+      if (result.order.registration.status === RegistrationStatus.Approved) await this.automaticNotifications.publish({ ...smsContext, scene: "registrationApproved", businessId: result.order.registration.id });
     }
     return { order: this.publicOrder(result.order), walletTransaction: this.publicWalletTransaction(result.walletTransaction), idempotent: result.idempotent };
   }
@@ -2960,8 +2977,8 @@ export class PublicService {
     await this.charityFund.recordOrderAccrual(savedOrder, provider);
     if (Number(savedOrder.amount) > 0) {
       const smsContext = { userId: savedOrder.registration.user.id, activityId: savedOrder.registration.activity.id, tenantId: savedOrder.tenant?.id || savedOrder.registration.activity.tenant?.id || null };
-      await this.automaticSms.publish({ ...smsContext, scene: "paymentSucceeded", businessId: savedOrder.id, variables: { orderNo: savedOrder.orderNo, amount: savedOrder.amount } });
-      if (registrationBecameApproved) await this.automaticSms.publish({ ...smsContext, scene: "registrationApproved", businessId: savedOrder.registration.id });
+      await this.automaticNotifications.publish({ ...smsContext, scene: "paymentSucceeded", businessId: savedOrder.id, variables: { orderNo: savedOrder.orderNo, amount: savedOrder.amount } });
+      if (registrationBecameApproved) await this.automaticNotifications.publish({ ...smsContext, scene: "registrationApproved", businessId: savedOrder.registration.id });
     }
     return { order: savedOrder, transaction, idempotent: false };
   }
@@ -3145,7 +3162,9 @@ export class PublicService {
       smsSignName: null,
       smsTemplateId: null,
       smsSdkAppId: null,
-      automaticSms: null
+      automaticSms: null,
+      automaticWechat: null,
+      postEventAutomation: null
     });
     return this.operationSettings.save(setting);
   }

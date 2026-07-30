@@ -1,4 +1,5 @@
-import { BadRequestException, ConflictException, Injectable, NotFoundException } from "@nestjs/common";
+import { BadRequestException, ConflictException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, Repository } from "typeorm";
 import { FundRiskAlert } from "../../entities/fund-risk-alert.entity";
@@ -12,13 +13,18 @@ import { PaymentStatementRecord } from "../../entities/payment-statement-record.
 import { PaymentTransaction } from "../../entities/payment-transaction.entity";
 import { Refund } from "../../entities/refund.entity";
 import { UserWallet } from "../../entities/user-wallet.entity";
+import { BusinessJob } from "../../entities/business-job.entity";
+import { Notification } from "../../entities/notification.entity";
 import { rediscoverFundRisk, shouldRediscoverFundRisk } from "../../shared/fund-risk-lifecycle";
 
 type Actor = { username?: string; tenantId?: number | null };
 type Candidate = { tenantId: number | null; fingerprint: string; type: string; severity: string; title: string; message: string; businessType?: string; businessNo?: string | null; evidence?: Record<string, unknown> };
 
 @Injectable()
-export class FundRiskMonitorService {
+export class FundRiskMonitorService implements OnModuleInit, OnModuleDestroy {
+  private scanTimer: NodeJS.Timeout | null = null;
+  private startupTimer: NodeJS.Timeout | null = null;
+
   constructor(
     @InjectRepository(FundRiskAlert) private readonly alerts: Repository<FundRiskAlert>,
     @InjectRepository(PaymentCallbackLog) private readonly callbacks: Repository<PaymentCallbackLog>,
@@ -31,8 +37,25 @@ export class FundRiskMonitorService {
     @InjectRepository(CourseRefund) private readonly courseRefunds: Repository<CourseRefund>,
     @InjectRepository(MallRefund) private readonly mallRefunds: Repository<MallRefund>,
     @InjectRepository(UserWallet) private readonly wallets: Repository<UserWallet>,
-    private readonly dataSource: DataSource
+    @InjectRepository(BusinessJob) private readonly businessJobs: Repository<BusinessJob>,
+    @InjectRepository(Notification) private readonly notifications: Repository<Notification>,
+    private readonly dataSource: DataSource,
+    private readonly config: ConfigService
   ) {}
+
+  onModuleInit() {
+    if (this.config.get("ANOMALY_ALERT_WORKER_ENABLED", "true") !== "true") return;
+    const seconds = Math.max(300, Number(this.config.get("ANOMALY_ALERT_WORKER_INTERVAL_SECONDS", 600)));
+    this.scanTimer = setInterval(() => this.scan().catch(() => undefined), seconds * 1000);
+    this.scanTimer.unref();
+    this.startupTimer = setTimeout(() => this.scan().catch(() => undefined), 30_000);
+    this.startupTimer.unref();
+  }
+
+  onModuleDestroy() {
+    if (this.scanTimer) clearInterval(this.scanTimer);
+    if (this.startupTimer) clearTimeout(this.startupTimer);
+  }
 
   async scan(actor?: Actor) {
     return this.withScanLock(() => this.scanUnlocked(actor));
@@ -61,7 +84,7 @@ export class FundRiskMonitorService {
 
   async list(query: { status?: string; type?: string; tenantId?: string }, actor?: Actor) {
     const allowedStatuses = ["open", "acknowledged", "resolved"];
-    const allowedTypes = ["duplicate_payment", "callback_failed", "payment_mismatch", "statement_mismatch", "refund_failed", "negative_wallet"];
+    const allowedTypes = ["duplicate_payment", "callback_failed", "payment_mismatch", "statement_mismatch", "refund_failed", "refund_backlog", "negative_wallet", "notification_dead_letter", "reminder_backlog", "sms_balance_low"];
     if (query.status && !allowedStatuses.includes(query.status)) throw new BadRequestException("告警状态筛选不正确");
     if (query.type && !allowedTypes.includes(query.type)) throw new BadRequestException("告警类型筛选不正确");
     if (!actor?.tenantId && query.tenantId && (!/^\d+$/.test(query.tenantId) || Number(query.tenantId) <= 0)) throw new BadRequestException("商家编号不正确");
@@ -125,7 +148,10 @@ export class FundRiskMonitorService {
 
   private async detect(tenantId: number | null): Promise<Candidate[]> {
     const scope = (alias: string) => tenantId ? `${alias}.tenantId = ${Number(tenantId)} AND ` : "";
-    const [failedCallbacks, failedMallCallbacks, paymentDiffs, coursePaymentDiffs, mallPaymentDiffs, statementDiffs, mallStatementDiffs, failedRefunds, failedCourseRefunds, failedMallRefunds, negativeWallets, duplicatePayments, duplicateCoursePayments, duplicateMallPayments] = await Promise.all([
+    const refundCutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const reminderCutoff = new Date(Date.now() - 15 * 60 * 1000);
+    const notificationTypes = ["notification.deliver", "automatic-sms.deliver", "automatic-wechat.deliver", "automatic-sms.activity-fanout", "automatic-wechat.activity-fanout", "post-event.notification"];
+    const [failedCallbacks, failedMallCallbacks, paymentDiffs, coursePaymentDiffs, mallPaymentDiffs, statementDiffs, mallStatementDiffs, failedRefunds, failedCourseRefunds, failedMallRefunds, negativeWallets, duplicatePayments, duplicateCoursePayments, duplicateMallPayments, overdueRefunds, overdueCourseRefunds, overdueMallRefunds, deadLetters, reminderBacklogs, smsBalanceFailures] = await Promise.all([
       this.callbacks.createQueryBuilder("row").leftJoinAndSelect("row.tenant", "tenant").where(`${scope("row")}row.resultStatus = 'failed'`).take(200).getMany(),
       this.mallCallbacks.createQueryBuilder("row").leftJoinAndSelect("row.tenant", "tenant").where(`${scope("row")}row.resultStatus = 'failed'`).take(200).getMany(),
       this.transactions.createQueryBuilder("row").leftJoinAndSelect("row.tenant", "tenant").where(`${scope("row")}row.businessType = 'activity' AND row.reconciliationStatus = 'pending'`).take(200).getMany(),
@@ -139,7 +165,13 @@ export class FundRiskMonitorService {
       this.wallets.createQueryBuilder("row").leftJoinAndSelect("row.tenant", "tenant").where(`${scope("row")}(row.availableBalanceFen < 0 OR row.frozenBalanceFen < 0 OR row.giftBalanceFen < 0 OR row.frozenGiftBalanceFen < 0)`).take(200).getMany(),
       this.transactions.createQueryBuilder("row").select("row.orderId", "orderId").addSelect("row.tenantId", "tenantId").addSelect("COUNT(*)", "paymentCount").where(`${scope("row")}row.businessType = 'activity' AND row.orderId IS NOT NULL AND row.status = 'success'`).groupBy("row.orderId").addGroupBy("row.tenantId").having("COUNT(*) > 1").limit(200).getRawMany(),
       this.transactions.createQueryBuilder("row").select("row.businessOrderNo", "businessOrderNo").addSelect("row.tenantId", "tenantId").addSelect("COUNT(*)", "paymentCount").where(`${scope("row")}row.businessType = 'course' AND row.businessOrderNo IS NOT NULL AND row.status = 'success'`).groupBy("row.businessOrderNo").addGroupBy("row.tenantId").having("COUNT(*) > 1").limit(200).getRawMany(),
-      this.mallTransactions.createQueryBuilder("row").select("row.orderId", "orderId").addSelect("row.tenantId", "tenantId").addSelect("COUNT(*)", "paymentCount").where(`${scope("row")}row.status = 'success'`).groupBy("row.orderId").addGroupBy("row.tenantId").having("COUNT(*) > 1").limit(200).getRawMany()
+      this.mallTransactions.createQueryBuilder("row").select("row.orderId", "orderId").addSelect("row.tenantId", "tenantId").addSelect("COUNT(*)", "paymentCount").where(`${scope("row")}row.status = 'success'`).groupBy("row.orderId").addGroupBy("row.tenantId").having("COUNT(*) > 1").limit(200).getRawMany(),
+      this.refunds.createQueryBuilder("row").leftJoinAndSelect("row.tenant", "tenant").where(`${scope("row")}row.status = 'pending' AND row.createdAt <= :refundCutoff`, { refundCutoff }).take(200).getMany(),
+      this.courseRefunds.createQueryBuilder("row").leftJoinAndSelect("row.order", "order").leftJoinAndSelect("order.course", "course").leftJoinAndSelect("course.tenant", "tenant").where(`${tenantId ? `course.tenantId = ${Number(tenantId)} AND ` : ""}row.status = 'pending' AND row.createdAt <= :refundCutoff`, { refundCutoff }).take(200).getMany(),
+      this.mallRefunds.createQueryBuilder("row").leftJoinAndSelect("row.tenant", "tenant").where(`${scope("row")}row.status = 'pending' AND row.createdAt <= :refundCutoff`, { refundCutoff }).take(200).getMany(),
+      this.businessJobs.createQueryBuilder("row").where("row.type IN (:...notificationTypes)", { notificationTypes }).andWhere("row.status = 'dead_letter'").andWhere(tenantId ? "row.tenantId = :tenantId" : "1=1", { tenantId }).take(200).getMany(),
+      this.businessJobs.createQueryBuilder("row").where("row.type IN (:...notificationTypes)", { notificationTypes }).andWhere("row.status = 'pending' AND row.nextAttemptAt <= :reminderCutoff", { reminderCutoff }).andWhere(tenantId ? "row.tenantId = :tenantId" : "1=1", { tenantId }).take(200).getMany(),
+      this.notifications.createQueryBuilder("row").leftJoinAndSelect("row.tenant", "tenant").where("row.channel = 'sms' AND row.status = 'failed'").andWhere("(row.errorMessage LIKE :balance OR row.errorMessage LIKE :arrears OR LOWER(row.errorMessage) LIKE :insufficient)", { balance: "%余额不足%", arrears: "%欠费%", insufficient: "%insufficient%balance%" }).andWhere(tenantId ? "row.tenantId = :tenantId" : "1=1", { tenantId }).take(200).getMany()
     ]);
     return [
       ...failedCallbacks.map(r => this.candidate(r.tenant?.id, `callback:activity:${r.id}`, "callback_failed", "critical", "活动支付回调失败", r.resultMessage || "支付回调处理失败", "activity_payment", r.orderNo, { callbackId: r.id, transactionNo: r.transactionNo })),
@@ -155,7 +187,13 @@ export class FundRiskMonitorService {
       ...negativeWallets.map(r => this.candidate(r.tenant?.id, `wallet:negative:${r.id}`, "negative_wallet", "critical", "会员钱包出现负余额", `钱包 ${r.id} 存在负数资金字段`, "wallet", String(r.id), { userId: r.user?.id, availableBalanceFen: r.availableBalanceFen, frozenBalanceFen: r.frozenBalanceFen, giftBalanceFen: r.giftBalanceFen, frozenGiftBalanceFen: r.frozenGiftBalanceFen })),
       ...duplicatePayments.map(r => this.candidate(Number(r.tenantId) || undefined, `payment:duplicate:activity:${r.orderId}`, "duplicate_payment", "critical", "活动订单疑似重复支付", `同一订单存在 ${r.paymentCount} 条成功支付流水`, "activity_payment", String(r.orderId), { orderId: Number(r.orderId), paymentCount: Number(r.paymentCount) })),
       ...duplicateCoursePayments.map(r => this.candidate(Number(r.tenantId) || undefined, `payment:duplicate:course:${r.businessOrderNo}`, "duplicate_payment", "critical", "课程订单疑似重复支付", `同一课程订单存在 ${r.paymentCount} 条成功支付流水`, "course_payment", String(r.businessOrderNo), { orderNo: String(r.businessOrderNo), paymentCount: Number(r.paymentCount) })),
-      ...duplicateMallPayments.map(r => this.candidate(Number(r.tenantId) || undefined, `payment:duplicate:mall:${r.orderId}`, "duplicate_payment", "critical", "商城订单疑似重复支付", `同一商城订单存在 ${r.paymentCount} 条成功支付流水`, "mall_payment", String(r.orderId), { orderId: Number(r.orderId), paymentCount: Number(r.paymentCount) }))
+      ...duplicateMallPayments.map(r => this.candidate(Number(r.tenantId) || undefined, `payment:duplicate:mall:${r.orderId}`, "duplicate_payment", "critical", "商城订单疑似重复支付", `同一商城订单存在 ${r.paymentCount} 条成功支付流水`, "mall_payment", String(r.orderId), { orderId: Number(r.orderId), paymentCount: Number(r.paymentCount) })),
+      ...overdueRefunds.map(r => this.candidate(r.tenant?.id, `refund:backlog:activity:${r.id}`, "refund_backlog", "high", "活动退款审核积压", `退款申请已超过 24 小时未审核：${r.refundNo}`, "activity_refund", r.refundNo, { refundId: r.id, createdAt: r.createdAt })),
+      ...overdueCourseRefunds.map(r => this.candidate(r.order.course.tenant?.id, `refund:backlog:course:${r.id}`, "refund_backlog", "high", "课程退款审核积压", `退款申请已超过 24 小时未审核：${r.refundNo}`, "course_refund", r.refundNo, { refundId: r.id, createdAt: r.createdAt })),
+      ...overdueMallRefunds.map(r => this.candidate(r.tenant?.id, `refund:backlog:mall:${r.id}`, "refund_backlog", "high", "商城退款审核积压", `退款申请已超过 24 小时未审核：${r.refundNo}`, "mall_refund", r.refundNo, { refundId: r.id, createdAt: r.createdAt })),
+      ...deadLetters.map(r => this.candidate(r.tenantId || undefined, `notification:dead-letter:${r.id}`, "notification_dead_letter", "critical", "通知任务进入死信", `${r.type} 已重试 ${r.attemptCount} 次仍失败`, "notification_job", String(r.id), { jobId: r.id, type: r.type, lastError: r.lastError })),
+      ...reminderBacklogs.map(r => this.candidate(r.tenantId || undefined, `notification:backlog:${r.id}`, "reminder_backlog", "high", "通知提醒任务积压", `${r.type} 已超过 15 分钟未执行`, "notification_job", String(r.id), { jobId: r.id, type: r.type, nextAttemptAt: r.nextAttemptAt })),
+      ...smsBalanceFailures.map(r => this.candidate(r.tenant?.id, `sms:balance:${r.id}`, "sms_balance_low", "critical", "短信余额或账户状态异常", r.errorMessage || "短信服务商返回余额不足", "sms_notification", String(r.id), { notificationId: r.id, provider: r.provider }))
     ];
   }
 

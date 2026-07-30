@@ -1,4 +1,4 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Query, Res } from "@nestjs/common";
+import { BadRequestException, Body, Controller, ForbiddenException, Get, Param, ParseIntPipe, Patch, Post, Query, Res } from "@nestjs/common";
 import { Response } from "express";
 import { CurrentAdmin } from "../admin/current-admin.decorator";
 import { AdminRole, AdminRoles } from "../admin/admin-roles";
@@ -93,79 +93,104 @@ export class AdminV1Controller {
   }
 
   @Get("notification-templates")
-  notificationTemplates(@CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.listNotificationTemplates(admin);
+  notificationTemplates(@Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.listNotificationTemplates(this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Get("notifications/options")
-  notificationOptions(@CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.notificationOptions(admin);
+  notificationOptions(@Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.notificationOptions(this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Post("notification-templates")
-  createNotificationTemplate(@Body() body: NotificationTemplateInput, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.saveNotificationTemplate(body, undefined, admin);
+  createNotificationTemplate(@Body() body: NotificationTemplateInput, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.saveNotificationTemplate(body, undefined, this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Patch("notification-templates/:id")
-  updateNotificationTemplate(@Param("id", ParseIntPipe) id: number, @Body() body: NotificationTemplateInput, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.saveNotificationTemplate(body, id, admin);
+  updateNotificationTemplate(@Param("id", ParseIntPipe) id: number, @Body() body: NotificationTemplateInput, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.saveNotificationTemplate(body, id, this.notificationAdminForTenant(admin, tenantId));
+  }
+
+  @Get("notification-templates/:id/versions")
+  notificationTemplateVersions(@Param("id", ParseIntPipe) id: number, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.notificationTemplateVersions(id, this.notificationAdminForTenant(admin, tenantId));
+  }
+
+  @Post("notification-templates/:id/test")
+  testNotificationTemplate(@Param("id", ParseIntPipe) id: number, @Body() body: { userId: number }, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.testNotificationTemplate(id, Number(body.userId), this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Get("notifications")
-  notifications(@Query("page") page?: string, @Query("pageSize") pageSize?: string, @Query("status") status?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.listNotifications({ page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined, status }, admin);
+  notifications(@Query("page") page?: string, @Query("pageSize") pageSize?: string, @Query("status") status?: string, @Query("channel") channel?: string, @Query("scene") scene?: string, @Query("keyword") keyword?: string, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.listNotifications({ page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined, status, channel, scene, keyword }, this.notificationAdminForTenant(admin, tenantId));
+  }
+
+  @Get("notifications/monitor")
+  notificationMonitor(@Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.notificationMonitor(this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Get("notification-providers")
-  notificationProviders(@CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.notificationProviderStatus(admin);
+  notificationProviders(@Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.notificationProviderStatus(this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Get("notification-preferences")
-  notificationPreferences(@Query("userId") userId?: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string, @CurrentAdmin() admin?: NotificationAdminContext) { return this.service.listNotificationPreferences({ userId: userId ? Number(userId) : undefined, page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined }, admin); }
+  notificationPreferences(@Query("userId") userId?: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) { return this.service.listNotificationPreferences({ userId: userId ? Number(userId) : undefined, page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined }, this.notificationAdminForTenant(admin, tenantId)); }
 
   @Patch("notification-preferences/:userId")
-  saveNotificationPreference(@Param("userId", ParseIntPipe) userId: number, @Body() body: { channel?: string; subscribed?: boolean; reason?: string }, @CurrentAdmin() admin?: NotificationAdminContext) { return this.service.saveNotificationPreference(userId, body, admin); }
+  saveNotificationPreference(@Param("userId", ParseIntPipe) userId: number, @Body() body: { channel?: string; subscribed?: boolean; reason?: string }, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) { return this.service.saveNotificationPreference(userId, body, this.notificationAdminForTenant(admin, tenantId)); }
 
   @Get("notification-schedules")
-  notificationSchedules(@Query("activityId") activityId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.listNotificationSchedules(activityId ? Number(activityId) : undefined, admin);
+  notificationSchedules(@Query("activityId") activityId?: string, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.listNotificationSchedules(activityId ? Number(activityId) : undefined, this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Post("notification-schedules")
-  createNotificationSchedule(@Body() body: NotificationScheduleInput, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.saveNotificationSchedule(body, undefined, admin);
+  createNotificationSchedule(@Body() body: NotificationScheduleInput, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.saveNotificationSchedule(body, undefined, this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Patch("notification-schedules/:id")
-  updateNotificationSchedule(@Param("id", ParseIntPipe) id: number, @Body() body: NotificationScheduleInput, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.saveNotificationSchedule(body, id, admin);
+  updateNotificationSchedule(@Param("id", ParseIntPipe) id: number, @Body() body: NotificationScheduleInput, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.saveNotificationSchedule(body, id, this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Post("notification-schedules/run-due")
-  runDueNotificationSchedules(@CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.runDueNotificationSchedules(new Date(), admin);
+  runDueNotificationSchedules(@Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.runDueNotificationSchedules(new Date(), this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Post("notifications/send")
-  sendNotification(@Body() body: SendNotificationInput, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.sendNotification(body, admin);
+  sendNotification(@Body() body: SendNotificationInput, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.sendNotification(body, this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Post("notifications/send-by-tag")
-  sendTaggedNotification(@Body() body: SendTaggedNotificationInput, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.sendTaggedNotification(body, admin);
+  sendTaggedNotification(@Body() body: SendTaggedNotificationInput, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.sendTaggedNotification(body, this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Post("notifications/preview")
-  previewNotification(@Body() body: PreviewNotificationInput, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.previewNotification(body, admin);
+  previewNotification(@Body() body: PreviewNotificationInput, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.previewNotification(body, this.notificationAdminForTenant(admin, tenantId));
   }
 
   @Post("notifications/:id/retry")
-  retryNotification(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: NotificationAdminContext) {
-    return this.service.retryNotification(id, admin);
+  retryNotification(@Param("id", ParseIntPipe) id: number, @Query("tenantId") tenantId?: string, @CurrentAdmin() admin?: NotificationAdminContext) {
+    return this.service.retryNotification(id, this.notificationAdminForTenant(admin, tenantId));
+  }
+
+  private notificationAdminForTenant(admin?: NotificationAdminContext, tenantId?: string): NotificationAdminContext | undefined {
+    if (tenantId === undefined || tenantId === "") return admin;
+    const selectedTenantId = Number(tenantId);
+    if (!Number.isInteger(selectedTenantId) || selectedTenantId < 1) throw new BadRequestException("商家范围不正确");
+    if (admin?.tenantId && Number(admin.tenantId) !== selectedTenantId) throw new ForbiddenException("无权访问所选商家通知数据");
+    if (admin?.tenantId) return admin;
+    if (admin?.role !== AdminRole.SuperAdmin && admin?.role !== "admin") throw new ForbiddenException("仅平台超级管理员可切换商家通知范围");
+    return { ...admin, tenantId: selectedTenantId };
   }
 
   @Post("activities/:id/reminders/send")

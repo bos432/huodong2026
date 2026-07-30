@@ -173,6 +173,7 @@ import { NotificationTemplate } from "../entities/notification-template.entity";
 import { Notification } from "../entities/notification.entity";
 import { NotificationSchedule } from "../entities/notification-schedule.entity";
 import { NotificationPreference } from "../entities/notification-preference.entity";
+import { WechatSubscriptionGrant } from "../entities/wechat-subscription-grant.entity";
 import { Order } from "../entities/order.entity";
 import { OperationSetting } from "../entities/operation-setting.entity";
 import { PaymentCallbackLog } from "../entities/payment-callback-log.entity";
@@ -269,7 +270,7 @@ const businessModules = [
   ReliabilityModule
 ];
 
-entities.push(HomepagePublication as any, MemberSegment as any, MemberSegmentSnapshot as any, MemberSegmentSnapshotMember as any, MemberBehaviorTagRun as any, NotificationPreference as any, CouponClaim as any, CouponUsage as any, RedemptionCode as any, RedemptionCodeUsage as any, SupportWorkOrder as any, SupportWorkOrderLog as any, AnalyticsDailyMetric as any, AnalyticsCalculationRun as any);
+entities.push(HomepagePublication as any, MemberSegment as any, MemberSegmentSnapshot as any, MemberSegmentSnapshotMember as any, MemberBehaviorTagRun as any, NotificationPreference as any, WechatSubscriptionGrant as any, CouponClaim as any, CouponUsage as any, RedemptionCode as any, RedemptionCodeUsage as any, SupportWorkOrder as any, SupportWorkOrderLog as any, AnalyticsDailyMetric as any, AnalyticsCalculationRun as any);
 entities.push(CommunityActivityMember as any, CommunityPostFavorite as any, CommunityUserFollow as any, CommunityNotification as any, CommunityContentReport as any, ContentKeywordRule as any, ContentUserSanction as any, ContentAppeal as any, CourseAssessment as any, CourseQuestion as any, CourseAssessmentAttempt as any, CourseAssessmentAnswer as any, CourseAssessmentGrant as any, CourseReview as any, CourseQa as any, CourseAnnouncement as any, CourseCertificateTemplate as any, CourseRefund as any);
 entities.push(AidApplication as any, AidApplicationMaterial as any, AidApplicationEvent as any);
 

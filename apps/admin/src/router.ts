@@ -113,7 +113,7 @@ export const router = createRouter({
         { path: "homepage-builder", component: HomepageBuilder, meta: { roles: permissions.operation, scope: "tenantOrPlatformAdmin" } },
         { path: "marketing-popups", component: MarketingPopups, meta: { roles: ["marketing_popup.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "ad-center", component: AdCenter, meta: { roles: ["ad_center.view"], scope: "tenantOrPlatformAdmin" } },
-        { path: "notifications", component: Notifications, meta: { roles: ["notification.view"], scope: "tenant" } },
+        { path: "notifications", component: Notifications, meta: { roles: ["notification.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "reviews", component: Reviews, meta: { roles: ["review.view"], scope: "tenant" } },
         { path: "registrations", component: Registrations, meta: { roles: permissions.registrationView, scope: "tenantOrPlatformAdmin" } },
         { path: "waitlists", component: Waitlists, meta: { roles: ["waitlist.view"], scope: "tenant" } },

@@ -224,6 +224,27 @@ const form = reactive({
     checkInSucceeded: false,
     activityReminder: false,
     reminderBeforeHours: 24
+  },
+  automaticWechat: {
+    enabled: false,
+    registrationSubmitted: false,
+    registrationApproved: false,
+    registrationRejected: false,
+    paymentSucceeded: false,
+    refundSucceeded: false,
+    refundRejected: false,
+    activityCancelled: false,
+    activityChanged: false,
+    checkInSucceeded: false,
+    activityReminder: false,
+    reminderBeforeHours: 24
+  },
+  postEventAutomation: {
+    enabled: false,
+    reviewInvitation: false,
+    certificateAvailable: false,
+    activityRecommendations: false,
+    delayHours: 2
   }
 });
 
@@ -1534,7 +1555,9 @@ function operationPayload() {
     smsSignName: form.smsSignName,
     smsTemplateId: form.smsTemplateId,
     smsSdkAppId: form.smsSdkAppId,
-    automaticSms: { ...form.automaticSms }
+    automaticSms: { ...form.automaticSms },
+    automaticWechat: { ...form.automaticWechat },
+    postEventAutomation: { ...form.postEventAutomation }
   };
   if (editingPlatformOperation.value) payload.defaultTenantCode = form.defaultTenantCode;
   return payload;
@@ -1604,6 +1627,29 @@ async function loadOperation(force = false) {
         activityReminder: false,
         reminderBeforeHours: 24,
         ...(data.automaticSms || {})
+      },
+      automaticWechat: {
+        enabled: false,
+        registrationSubmitted: false,
+        registrationApproved: false,
+        registrationRejected: false,
+        paymentSucceeded: false,
+        refundSucceeded: false,
+        refundRejected: false,
+        activityCancelled: false,
+        activityChanged: false,
+        checkInSucceeded: false,
+        activityReminder: false,
+        reminderBeforeHours: 24,
+        ...(data.automaticWechat || {})
+      },
+      postEventAutomation: {
+        enabled: false,
+        reviewInvitation: false,
+        certificateAvailable: false,
+        activityRecommendations: false,
+        delayHours: 2,
+        ...(data.postEventAutomation || {})
       }
     });
     smsSecretConfigured.value = Boolean(data.smsAccessKeySecretConfigured);
@@ -1981,6 +2027,35 @@ onMounted(async () => {
               <span class="field-hint">小时</span>
             </el-form-item>
             <el-alert title="开启场景前，请先在螺丝帽完成对应内容模板审核；### 表示审核模板中的变量位置。" type="info" :closable="false" show-icon />
+            <el-divider content-position="left">微信订阅消息</el-divider>
+            <el-form-item label="自动通知">
+              <div class="switch-row">
+                <el-switch v-model="form.automaticWechat.enabled" active-text="启用" inactive-text="关闭" />
+                <el-tag :type="form.automaticWechat.enabled ? 'warning' : 'info'" effect="plain">{{ form.automaticWechat.enabled ? "仅发送已授权且已开启的场景" : "微信自动通知已关闭" }}</el-tag>
+              </div>
+            </el-form-item>
+            <el-form-item label="发送场景">
+              <div class="automatic-sms-list">
+                <div v-for="item in automaticSmsSceneOptions" :key="`wechat-${item.key}`" class="automatic-sms-row">
+                  <div><strong>{{ item.label }}</strong><span>需先在通知中心配置审核通过的微信模板 ID</span></div>
+                  <el-switch v-model="form.automaticWechat[item.key]" :disabled="!form.automaticWechat.enabled" />
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item v-if="form.automaticWechat.activityReminder" label="提前提醒">
+              <el-input-number v-model="form.automaticWechat.reminderBeforeHours" :min="1" :max="168" :step="1" /><span class="field-hint">小时</span>
+            </el-form-item>
+            <el-alert title="用户需在小程序活动详情页主动授权。每次接受授权产生一次可用额度，发送成功后自动消费。" type="info" :closable="false" show-icon />
+            <el-divider content-position="left">活动结束自动运营</el-divider>
+            <el-form-item label="自动运营"><el-switch v-model="form.postEventAutomation.enabled" active-text="启用" inactive-text="关闭" /></el-form-item>
+            <el-form-item label="运营场景">
+              <div class="automatic-sms-list">
+                <div class="automatic-sms-row"><div><strong>评价邀请</strong><span>向已签到且尚未评价的用户发送站内邀请</span></div><el-switch v-model="form.postEventAutomation.reviewInvitation" :disabled="!form.postEventAutomation.enabled" /></div>
+                <div class="automatic-sms-row"><div><strong>证书领取</strong><span>证书生成后通知用户查看和验真</span></div><el-switch v-model="form.postEventAutomation.certificateAvailable" :disabled="!form.postEventAutomation.enabled" /></div>
+                <div class="automatic-sms-row"><div><strong>同类活动推荐</strong><span>推荐同商家后续同分类活动</span></div><el-switch v-model="form.postEventAutomation.activityRecommendations" :disabled="!form.postEventAutomation.enabled" /></div>
+              </div>
+            </el-form-item>
+            <el-form-item label="活动结束后延迟"><el-input-number v-model="form.postEventAutomation.delayHours" :min="0" :max="168" :step="1" /><span class="field-hint">小时</span></el-form-item>
             </template>
             <template v-if="operationSection === 'theme'">
             <el-form-item label="H5 页面主题">

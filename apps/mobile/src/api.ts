@@ -417,6 +417,37 @@ export async function fetchMyProfile() {
   return profile;
 }
 
+export type WechatSubscriptionTemplate = { scene: string; templateId: string; page?: string | null; version: number };
+
+export async function fetchWechatSubscriptionTemplates(scenes: string[]) {
+  const query = scenes.length ? `?scenes=${encodeURIComponent(scenes.join(","))}` : "";
+  return request<WechatSubscriptionTemplate[]>(`/public/wechat-subscriptions/templates${query}`);
+}
+
+export async function requestWechatSubscriptions(templates: WechatSubscriptionTemplate[]) {
+  // #ifdef MP-WEIXIN
+  const selected = templates.filter((item) => item.templateId).slice(0, 3);
+  if (!selected.length) throw new Error("后台尚未配置可用的微信订阅消息模板");
+  const response = await new Promise<Record<string, string>>((resolve, reject) => {
+    (uni as any).requestSubscribeMessage({
+      tmplIds: selected.map((item) => item.templateId),
+      success: resolve,
+      fail: reject
+    });
+  });
+  const statusMap: Record<string, "accepted" | "rejected" | "banned"> = { accept: "accepted", reject: "rejected", ban: "banned" };
+  const results = selected.map((item) => ({
+    scene: item.scene,
+    templateId: item.templateId,
+    status: statusMap[String(response[item.templateId] || "reject")] || "rejected"
+  }));
+  return request<{ recorded: number; accepted: number; rejected: number; banned: number }>("/public/me/wechat-subscriptions", { method: "POST", data: { results } });
+  // #endif
+  // #ifndef MP-WEIXIN
+  throw new Error("当前环境不支持微信订阅消息");
+  // #endif
+}
+
 export async function fetchMyCharityTransactions(page = 1, pageSize = 20) {
   return request<any>(`/public/me/charity/transactions?page=${page}&pageSize=${pageSize}`);
 }

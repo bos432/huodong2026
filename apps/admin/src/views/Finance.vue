@@ -519,18 +519,18 @@ watch(
 
       <div class="table-card records">
         <div class="risk-workbench-head">
-          <h3>资金异常告警台</h3>
+          <h3>异常告警中心</h3>
           <div class="risk-workbench-filters">
             <el-select v-model="alertFilters.status" clearable placeholder="全部状态" style="width: 130px" @change="loadFundAlerts">
               <el-option label="待处理" value="open" /><el-option label="跟进中" value="acknowledged" /><el-option label="已解决" value="resolved" />
             </el-select>
             <el-select v-model="alertFilters.type" clearable placeholder="全部类型" style="width: 170px" @change="loadFundAlerts">
-              <el-option label="重复支付" value="duplicate_payment" /><el-option label="支付回调失败" value="callback_failed" /><el-option label="支付账实差异" value="payment_mismatch" /><el-option label="渠道账单差异" value="statement_mismatch" /><el-option label="退款失败" value="refund_failed" /><el-option label="钱包负余额" value="negative_wallet" />
+              <el-option label="重复支付" value="duplicate_payment" /><el-option label="支付回调失败" value="callback_failed" /><el-option label="支付账实差异" value="payment_mismatch" /><el-option label="渠道账单差异" value="statement_mismatch" /><el-option label="退款失败" value="refund_failed" /><el-option label="退款积压" value="refund_backlog" /><el-option label="通知死信" value="notification_dead_letter" /><el-option label="提醒积压" value="reminder_backlog" /><el-option label="短信余额" value="sms_balance_low" /><el-option label="钱包负余额" value="negative_wallet" />
             </el-select>
           </div>
         </div>
         <el-alert v-if="fundAlertError" class="section-error" type="error" :closable="false" show-icon :title="fundAlertError"><template #default><el-button size="small" @click="loadFundAlerts">重试</el-button></template></el-alert>
-        <el-empty v-if="!fundAlertError && !fundAlerts.length" description="当前筛选范围暂无持久化资金告警" />
+        <el-empty v-if="!fundAlertError && !fundAlerts.length" description="当前筛选范围暂无异常告警" />
         <el-table v-else :data="fundAlerts" stripe>
           <el-table-column label="级别" width="90"><template #default="{ row }"><el-tag :type="alertSeverityType(row.severity)">{{ alertSeverityText(row.severity) }}</el-tag></template></el-table-column>
           <el-table-column prop="title" label="告警" min-width="180" show-overflow-tooltip />

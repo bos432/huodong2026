@@ -558,8 +558,9 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
   if (path.startsWith("member-point-rules")) return verb === "GET" ? "member_point_rule.view" : "member_point_rule.manage";
   if ((path === "tags" || path === "tags/options" || path === "tags/behavior-runs") && verb === "GET") return "tag.view";
   if (path.startsWith("tags")) return "tag.manage";
-  if (path === "notifications/options" || path === "notification-templates" && verb === "GET" || path === "notifications" && verb === "GET" || path === "notification-providers" || path === "notification-preferences" && verb === "GET" || path === "notification-schedules" && verb === "GET") return "notification.view";
+  if (path === "notifications/options" || path === "notification-templates" && verb === "GET" || path.startsWith("notification-templates/") && path.endsWith("/versions") && verb === "GET" || path === "notifications" && verb === "GET" || path === "notifications/monitor" || path === "notification-providers" || path === "notification-preferences" && verb === "GET" || path === "notification-schedules" && verb === "GET") return "notification.view";
   if (path === "notifications/preview") return "notification.view";
+  if (path.startsWith("notification-templates/") && path.endsWith("/test")) return "notification.send";
   if (path.startsWith("notification-templates") || path.startsWith("notification-schedules") && path !== "notification-schedules/run-due") return "notification.template.manage";
   if (path.startsWith("notification-preferences")) return "notification.preference.manage";
   if (path === "notification-schedules/run-due" || path === "notifications/send" || path === "notifications/send-by-tag" || path.startsWith("notifications/") && path.endsWith("/retry")) return "notification.send";

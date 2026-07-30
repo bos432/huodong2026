@@ -167,6 +167,7 @@ import { MiniprogramReleaseLog } from "./entities/miniprogram-release-log.entity
 import { MiniprogramReleaseSetting } from "./entities/miniprogram-release-setting.entity";
 import { NotificationSchedule } from "./entities/notification-schedule.entity";
 import { NotificationPreference } from "./entities/notification-preference.entity";
+import { WechatSubscriptionGrant } from "./entities/wechat-subscription-grant.entity";
 import { BusinessJob } from "./entities/business-job.entity";
 import { ActivityVersion } from "./entities/activity-version.entity";
 import { NotificationTemplate } from "./entities/notification-template.entity";
@@ -372,6 +373,7 @@ export default new DataSource({
     Notification,
     NotificationSchedule,
     NotificationPreference,
+    WechatSubscriptionGrant,
     BusinessJob,
     ActivityVersion,
     Course,

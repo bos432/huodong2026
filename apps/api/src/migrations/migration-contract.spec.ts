@@ -199,4 +199,11 @@ describe("migration contracts", () => {
     expect(migration).toContain('type: "json"');
     expect(migration).toContain("isNullable: true");
   });
+
+  it("adds notification automation metadata and consumable WeChat subscription grants", () => {
+    const migration = readFileSync(join(migrationDirectory, "1784020000000-NotificationAutomationSuite.ts"), "utf8");
+    for (const token of ["automaticWechat", "postEventAutomation", "versionHistory", "providerTemplateId", "wechat_subscription_grants", "consumedAt", "IDX_wechat_subscription_grants_available"]) {
+      expect(migration).toContain(token);
+    }
+  });
 });

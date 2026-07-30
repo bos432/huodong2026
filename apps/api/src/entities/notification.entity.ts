@@ -11,6 +11,9 @@ export class Notification {
   @Column({ type: "varchar", length: 40, default: "site" })
   channel!: string;
 
+  @Column({ type: "varchar", length: 64, nullable: true })
+  scene!: string | null;
+
   @ManyToOne(() => Tenant, { nullable: true, eager: true, onDelete: "SET NULL" }) tenant!: Tenant | null;
   @Column({ type: "varchar", length: 32, default: "platform" }) tenantScopeKey!: string;
 
@@ -34,6 +37,10 @@ export class Notification {
 
   @Column({ type: "varchar", length: 255, nullable: true }) suppressedReason!: string | null;
   @Column({ type: "json", nullable: true }) variablesSnapshot!: Record<string, string> | null;
+
+  @Column({ type: "varchar", length: 120, nullable: true }) providerTemplateId!: string | null;
+  @Column({ type: "int", nullable: true }) templateVersion!: number | null;
+  @Column({ type: "json", nullable: true }) deliveryOptions!: Record<string, unknown> | null;
 
   @Column({ type: "int", default: 0 })
   retryCount!: number;

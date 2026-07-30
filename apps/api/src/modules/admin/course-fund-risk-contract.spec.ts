@@ -16,7 +16,7 @@ describe("course fund risk coverage", () => {
   });
 
   it("registers course refunds in the admin repository scope", () => {
-    expect(moduleSource).toContain("FundRiskAlert, CourseRefund, MallPaymentCallbackLog");
+    expect(moduleSource).toContain("FundRiskAlert, BusinessJob, CourseRefund, MallPaymentCallbackLog");
   });
 
   it("separates observed immutable history from newly detected risks", () => {
