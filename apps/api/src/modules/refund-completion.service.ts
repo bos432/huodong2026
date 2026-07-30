@@ -20,6 +20,7 @@ import { OrderStatus, PaymentMethod, RegistrationStatus } from "../shared/domain
 import { fenToYuan, yuanToFen } from "../shared/money";
 import { levelExpiry, manualLevelOverrideActive, memberLevelScopeKey, memberLevelSnapshot, resolveGrowthLevel } from "../shared/member-level-engine";
 import { CharityFundService } from "./charity-fund.service";
+import { AutomaticSmsService } from "./reliability/automatic-sms.service";
 import { MemberPointsService } from "./member-points/member-points.service";
 import { cumulativePointClawbackTarget } from "../shared/member-point-ledger";
 import { ConversionEvent } from "../entities/conversion-event.entity";
@@ -47,7 +48,8 @@ export class RefundCompletionService {
     @InjectRepository(WalletTransaction) private readonly walletTransactions: Repository<WalletTransaction>,
     private readonly charityFund: CharityFundService,
     private readonly memberPoints: MemberPointsService,
-    private readonly dataSource: DataSource
+    private readonly dataSource: DataSource,
+    private readonly automaticSms: AutomaticSmsService
   ) {}
 
   async complete(input: CompleteRefundInput) {
@@ -114,6 +116,17 @@ export class RefundCompletionService {
       userAgent: null,
       payload: { refundNo: savedRefund.refundNo }
     } as any).orIgnore().updateEntity(false).execute();
+
+    if (savedOrder.registration?.user?.id && savedOrder.registration?.activity?.id) {
+      await this.automaticSms.publish({
+        scene: "refundSucceeded",
+        businessId: savedRefund.id,
+        userId: savedOrder.registration.user.id,
+        activityId: savedOrder.registration.activity.id,
+        tenantId: savedRefund.tenant?.id || savedOrder.tenant?.id || savedOrder.registration.activity.tenant?.id || null,
+        variables: { orderNo: savedOrder.orderNo, amount: savedRefund.amount }
+      });
+    }
 
     return { refund: savedRefund, order: savedOrder, idempotent: false };
   }

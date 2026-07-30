@@ -107,6 +107,7 @@ import { growthFromPointLog, levelExpiry, manualLevelOverrideActive, memberLevel
 import { checkInNonce, createCheckInTicket } from "../../shared/check-in-ticket";
 import { analyticsDateText } from "../../shared/analytics-metrics";
 import { buildMemberOrderOverview } from "./member-order-overview";
+import { AutomaticSmsService } from "../reliability/automatic-sms.service";
 
 export type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null; userId?: number | null };
 type PublicTrackingContext = { channelCode?: string | null; source?: string | null; inviteCode?: string | null; clientIp?: string | null; userAgent?: string | null };
@@ -182,7 +183,8 @@ export class PublicService {
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
     private readonly objectStorage: ObjectStorageService,
-    private readonly credentialTemplates: CredentialTemplateService
+    private readonly credentialTemplates: CredentialTemplateService,
+    private readonly automaticSms: AutomaticSmsService
   ) {}
 
   async h5Code(dto: H5CodeDto, clientIp?: string | null) {
@@ -2008,11 +2010,16 @@ export class PublicService {
     if (price > 0 && paymentMethod === PaymentMethod.Balance) {
       try {
         const balanceResult = await this.payWithBalance(order.id, user, context);
+        await this.automaticSms.publish({ scene: "registrationSubmitted", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
         return { registration: balanceResult.order.registration, order: balanceResult.order, walletTransaction: balanceResult.walletTransaction, waitlisted: false };
       } catch (error) {
         await this.rollbackPendingRegistration(order, quote.coupon, quote.pointsUsed, "余额支付失败，报名已取消");
         throw error;
       }
+    }
+    await this.automaticSms.publish({ scene: "registrationSubmitted", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
+    if (registration.status === RegistrationStatus.Approved) {
+      await this.automaticSms.publish({ scene: "registrationApproved", businessId: registration.id, userId: user.id, activityId: activity.id, tenantId: activity.tenant?.id || null });
     }
     return { registration: this.publicRegistration(registration), order: this.publicOrder(order), waitlisted: false };
   }
@@ -2158,6 +2165,11 @@ export class PublicService {
     });
     if (!result.idempotent && Number(result.order.amount) > 0) await this.memberPoints.awardEvent({ user, tenant: result.order.tenant || result.order.registration.activity?.tenant || null, eventType: "activity_order_paid", amountFen: Number(result.order.amountFen || yuanToFen(result.order.amount)), sourceType: "order_paid", sourceId: result.order.id, remark: "活动消费积分" });
     if (!result.idempotent) await this.charityFund.recordOrderAccrual(result.order, "balance");
+    if (!result.idempotent) {
+      const smsContext = { userId: result.order.registration.user.id, activityId: result.order.registration.activity.id, tenantId: result.order.tenant?.id || result.order.registration.activity.tenant?.id || null };
+      await this.automaticSms.publish({ ...smsContext, scene: "paymentSucceeded", businessId: result.order.id, variables: { orderNo: result.order.orderNo, amount: result.order.amount } });
+      if (result.order.registration.status === RegistrationStatus.Approved) await this.automaticSms.publish({ ...smsContext, scene: "registrationApproved", businessId: result.order.registration.id });
+    }
     return { order: this.publicOrder(result.order), walletTransaction: this.publicWalletTransaction(result.walletTransaction), idempotent: result.idempotent };
   }
 
@@ -2939,12 +2951,18 @@ export class PublicService {
       })
     );
     if (Number(savedOrder.amount) > 0) await this.memberPoints.awardEvent({ user: savedOrder.registration.user, tenant: savedOrder.tenant || savedOrder.registration.activity?.tenant || null, eventType: "activity_order_paid", amountFen: Number(savedOrder.amountFen || yuanToFen(savedOrder.amount)), sourceType: "order_paid", sourceId: savedOrder.id, remark: "活动消费积分" });
+    const registrationBecameApproved = savedOrder.registration.status === RegistrationStatus.PendingPayment && !savedOrder.registration.activity.requireReview;
     if (savedOrder.registration.status === RegistrationStatus.PendingPayment) {
       savedOrder.registration.status = savedOrder.registration.activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
       await this.registrations.save(savedOrder.registration);
     }
     await this.recordConversionEvent("pay", { activity: savedOrder.registration.activity, user: savedOrder.registration.user, registration: savedOrder.registration, order: savedOrder, channel: savedOrder.registration.channel || null, amount: savedOrder.amount, source: savedOrder.registration.attributionSource || provider, idempotencyKey: `pay:${savedOrder.id}`, payload: { paymentProvider: provider } });
     await this.charityFund.recordOrderAccrual(savedOrder, provider);
+    if (Number(savedOrder.amount) > 0) {
+      const smsContext = { userId: savedOrder.registration.user.id, activityId: savedOrder.registration.activity.id, tenantId: savedOrder.tenant?.id || savedOrder.registration.activity.tenant?.id || null };
+      await this.automaticSms.publish({ ...smsContext, scene: "paymentSucceeded", businessId: savedOrder.id, variables: { orderNo: savedOrder.orderNo, amount: savedOrder.amount } });
+      if (registrationBecameApproved) await this.automaticSms.publish({ ...smsContext, scene: "registrationApproved", businessId: savedOrder.registration.id });
+    }
     return { order: savedOrder, transaction, idempotent: false };
   }
 
@@ -3126,7 +3144,8 @@ export class PublicService {
       smsAccessKeySecret: null,
       smsSignName: null,
       smsTemplateId: null,
-      smsSdkAppId: null
+      smsSdkAppId: null,
+      automaticSms: null
     });
     return this.operationSettings.save(setting);
   }

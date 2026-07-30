@@ -210,8 +210,35 @@ const form = reactive({
   smsAccessKeySecret: "",
   smsSignName: "",
   smsTemplateId: "",
-  smsSdkAppId: ""
+  smsSdkAppId: "",
+  automaticSms: {
+    enabled: false,
+    registrationSubmitted: false,
+    registrationApproved: false,
+    registrationRejected: false,
+    paymentSucceeded: false,
+    refundSucceeded: false,
+    refundRejected: false,
+    activityCancelled: false,
+    activityChanged: false,
+    checkInSucceeded: false,
+    activityReminder: false,
+    reminderBeforeHours: 24
+  }
 });
+
+const automaticSmsSceneOptions = [
+  { key: "registrationSubmitted", label: "报名提交", template: "您报名的活动###已提交，请留意审核和支付状态。" },
+  { key: "registrationApproved", label: "报名审核通过", template: "您报名的活动###已审核通过，请按时参加。" },
+  { key: "registrationRejected", label: "报名审核拒绝", template: "您报名的活动###未通过审核，请登录查看详情。" },
+  { key: "paymentSucceeded", label: "支付成功", template: "活动###订单###已支付成功，金额###元。" },
+  { key: "refundSucceeded", label: "退款成功", template: "活动###订单###退款###元已处理完成。" },
+  { key: "refundRejected", label: "退款拒绝", template: "活动###订单###退款申请未通过，请登录查看详情。" },
+  { key: "activityCancelled", label: "活动取消", template: "活动###已取消，原因###。" },
+  { key: "activityChanged", label: "时间或地点变更", template: "活动###的时间或地点已调整，请登录查看最新安排。" },
+  { key: "checkInSucceeded", label: "签到成功", template: "您已完成活动###签到，感谢参与。" },
+  { key: "activityReminder", label: "活动开始提醒", template: "您报名的活动###将于###开始，地点###。" }
+] as const;
 
 const smsTestForm = reactive({ phone: "" });
 const smsSecretConfigured = ref(false);
@@ -1506,7 +1533,8 @@ function operationPayload() {
     clearSmsAccessKeySecret: clearSmsSecretRequested.value,
     smsSignName: form.smsSignName,
     smsTemplateId: form.smsTemplateId,
-    smsSdkAppId: form.smsSdkAppId
+    smsSdkAppId: form.smsSdkAppId,
+    automaticSms: { ...form.automaticSms }
   };
   if (editingPlatformOperation.value) payload.defaultTenantCode = form.defaultTenantCode;
   return payload;
@@ -1561,7 +1589,22 @@ async function loadOperation(force = false) {
       smsAccessKeySecret: data.smsAccessKeySecret || "",
       smsSignName: data.smsSignName || "",
       smsTemplateId: data.smsTemplateId || "",
-      smsSdkAppId: data.smsSdkAppId || ""
+      smsSdkAppId: data.smsSdkAppId || "",
+      automaticSms: {
+        enabled: false,
+        registrationSubmitted: false,
+        registrationApproved: false,
+        registrationRejected: false,
+        paymentSucceeded: false,
+        refundSucceeded: false,
+        refundRejected: false,
+        activityCancelled: false,
+        activityChanged: false,
+        checkInSucceeded: false,
+        activityReminder: false,
+        reminderBeforeHours: 24,
+        ...(data.automaticSms || {})
+      }
     });
     smsSecretConfigured.value = Boolean(data.smsAccessKeySecretConfigured);
     clearSmsSecretRequested.value = false;
@@ -1912,6 +1955,32 @@ onMounted(async () => {
                 <el-button v-if="canViewSecurityLogs" text @click="go('/h5-code-logs')">查看验证码日志</el-button>
               </div>
             </el-form-item>
+            <el-divider content-position="left">自动业务短信</el-divider>
+            <el-form-item label="自动通知">
+              <div class="switch-row">
+                <el-switch v-model="form.automaticSms.enabled" active-text="启用" inactive-text="关闭" />
+                <el-tag :type="form.automaticSms.enabled ? 'warning' : 'info'" effect="plain">
+                  {{ form.automaticSms.enabled ? "仅发送下方已开启场景" : "所有自动业务短信均不发送" }}
+                </el-tag>
+              </div>
+            </el-form-item>
+            <el-alert v-if="form.smsProvider !== 'luosimao-sms'" title="自动业务短信当前仅支持 luosimao-sms；验证码仍可继续使用现有短信服务商。" type="warning" :closable="false" show-icon />
+            <el-form-item label="发送场景">
+              <div class="automatic-sms-list">
+                <div v-for="item in automaticSmsSceneOptions" :key="item.key" class="automatic-sms-row">
+                  <div>
+                    <strong>{{ item.label }}</strong>
+                    <span>{{ item.template }}</span>
+                  </div>
+                  <el-switch v-model="form.automaticSms[item.key]" :disabled="!form.automaticSms.enabled" />
+                </div>
+              </div>
+            </el-form-item>
+            <el-form-item v-if="form.automaticSms.activityReminder" label="提前提醒">
+              <el-input-number v-model="form.automaticSms.reminderBeforeHours" :min="1" :max="168" :step="1" />
+              <span class="field-hint">小时</span>
+            </el-form-item>
+            <el-alert title="开启场景前，请先在螺丝帽完成对应内容模板审核；### 表示审核模板中的变量位置。" type="info" :closable="false" show-icon />
             </template>
             <template v-if="operationSection === 'theme'">
             <el-form-item label="H5 页面主题">
@@ -2532,6 +2601,12 @@ onMounted(async () => {
 .theme-grid label { display: flex; align-items: center; justify-content: space-between; gap: 10px; min-height: 36px; color: #475569; font-size: 13px; }
 .theme-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
 .sms-test-row { width: 100%; display: grid; grid-template-columns: minmax(180px, 280px) auto auto; gap: 10px; align-items: center; }
+.automatic-sms-list { width: 100%; display: grid; gap: 8px; }
+.automatic-sms-row { min-height: 58px; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
+.automatic-sms-row > div { min-width: 0; display: grid; gap: 4px; }
+.automatic-sms-row strong { color: #111827; font-size: 13px; }
+.automatic-sms-row span, .field-hint { color: #64748b; font-size: 12px; line-height: 1.45; overflow-wrap: anywhere; }
+.field-hint { margin-left: 8px; }
 .theme-sliders { display: grid; gap: 8px; }
 .theme-sliders > div { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 12px; align-items: center; color: #475569; font-size: 13px; }
 .theme-preview { min-height: 280px; border-radius: 16px; padding: 22px; display: flex; align-items: center; justify-content: center; border: 1px solid #e5e7eb; overflow: hidden; }

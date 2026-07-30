@@ -2732,6 +2732,10 @@ export class OperationSettingDto {
   @IsOptional()
   @IsString()
   smsSdkAppId?: string;
+
+  @IsOptional()
+  @IsObject()
+  automaticSms?: Record<string, unknown>;
 }
 
 export class SmsTestDto {

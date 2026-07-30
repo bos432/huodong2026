@@ -159,6 +159,7 @@ import { CharityProject } from "../../entities/charity-project.entity";
 import { Certificate } from "../../entities/certificate.entity";
 import { renderCertificateSvg } from "../../shared/certificate-svg";
 import { CredentialTemplateService } from "../credential-templates/credential-template.service";
+import { AutomaticSmsService, normalizeAutomaticSmsSettings } from "../reliability/automatic-sms.service";
 import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
 import { VolunteerAttendanceRecord } from "../../entities/volunteer-attendance-record.entity";
 import { VolunteerBadgeAward } from "../../entities/volunteer-badge-award.entity";
@@ -329,7 +330,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     private readonly charityFund: CharityFundService,
     private readonly objectStorage: ObjectStorageService,
     private readonly businessJobs: BusinessJobService,
-    private readonly credentialTemplates: CredentialTemplateService
+    private readonly credentialTemplates: CredentialTemplateService,
+    private readonly automaticSms: AutomaticSmsService
   ) {}
 
   async onModuleInit() {
@@ -5474,6 +5476,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (dto.requireReview && tenant && !permissions.registrationReviewEnabled) throw new BadRequestException("当前商家未开启报名审核权限");
     const fromStatus = id ? activity.status : null;
     const nextStatus = this.resolveActivitySaveStatus(dto.status, activity.status, permissions, admin);
+    const scheduleOrLocationChanged = Boolean(id && (
+      activity.startTime.getTime() !== this.parseDate(dto.startTime).getTime()
+      || activity.endTime.getTime() !== this.parseDate(dto.endTime).getTime()
+      || activity.location !== dto.location.trim()
+    ));
     const fieldsChanged = id ? JSON.stringify((activity.fields || []).map((field) => ({ label: field.label, type: field.type, required: field.required, options: field.options || [], sortOrder: field.sortOrder }))) !== JSON.stringify(dto.fields.map((field) => ({ label: field.label.trim(), type: field.type, required: field.required, options: field.options || [], sortOrder: field.sortOrder }))) : false;
 
     Object.assign(activity, { title: dto.title.trim(), tenant: tenant || this.tenantRelation(admin, activity.tenant), coverUrl: dto.coverUrl || null, shareTitle: dto.shareTitle?.trim() || null, shareDescription: dto.shareDescription?.trim() || null, shareImageUrl: dto.shareImageUrl?.trim() || null, description: dto.description.trim(), notice: dto.notice?.trim() || null, location: dto.location.trim(), locationProvince: dto.locationProvince?.trim() || null, locationCity: dto.locationCity?.trim() || null, locationDistrict: dto.locationDistrict?.trim() || null, locationLatitude: dto.locationLatitude === undefined || dto.locationLatitude === null ? null : Number(dto.locationLatitude).toFixed(6), locationLongitude: dto.locationLongitude === undefined || dto.locationLongitude === null ? null : Number(dto.locationLongitude).toFixed(6), locationMapUrl: dto.locationMapUrl?.trim() || null, groupQrCodeUrl: dto.groupQrCodeUrl?.trim() || null, startTime: this.parseDate(dto.startTime), endTime: this.parseDate(dto.endTime), registrationDeadline: this.parseDate(dto.registrationDeadline), priorityRegistrationEndsAt: dto.priorityRegistrationEndsAt ? this.parseDate(dto.priorityRegistrationEndsAt) : null, formSchemaVersion: id && fieldsChanged ? Number(activity.formSchemaVersion || 1) + 1 : Number(activity.formSchemaVersion || 1), eligibilityRules: dto.eligibilityRules || null, capacity: dto.capacity, price: Number(dto.price).toFixed(2), status: nextStatus, featured: dto.featured, requireReview: dto.requireReview, allowCancel: dto.allowCancel, category, agent, minMemberLevel, priorityMemberLevel });
@@ -5486,6 +5493,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     await this.recordActivityVersion(completeActivity, admin, id ? "manual_save" : "create", id ? "编辑活动内容" : "创建活动");
     await this.recordActivityApproval(saved, id ? "update" : "create", fromStatus, saved.status, admin, id ? "编辑活动内容" : "创建活动");
     await this.logOperation(admin, id ? "activity.update" : "activity.create", "activity", saved.id, id ? `编辑活动：${saved.title}` : `创建活动：${saved.title}`, auditDiff(before, this.activityAuditSnapshot(saved)));
+    if (scheduleOrLocationChanged && [ActivityStatus.Open, ActivityStatus.Closed].includes(saved.status)) {
+      const scheduleFingerprint = createHash("sha256").update(`${saved.startTime.toISOString()}|${saved.endTime.toISOString()}|${saved.location}`).digest("hex").slice(0, 16);
+      await this.automaticSms.publishForActivity({ scene: "activityChanged", activityId: saved.id, businessId: `${saved.id}:${scheduleFingerprint}`, tenantId: saved.tenant?.id || null });
+    }
     return completeActivity;
   }
 
@@ -5751,6 +5762,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     });
     await this.recordActivityApproval(activity, "cancel", from, ActivityStatus.Cancelled, admin, reason.trim());
     await this.logOperation(admin, "activity.cancel", "activity", activity.id, `取消活动：${activity.title}`, { reason: reason.trim(), ...summary });
+    await this.automaticSms.publishForActivity({ scene: "activityCancelled", activityId: activity.id, businessId: activity.id, tenantId: activity.tenant?.id || null, variables: { reason: reason.trim() } });
     return { ...(await this.getActivity(activity.id, admin)), cancellationSummary: summary };
   }
 
@@ -5955,6 +5967,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!result.claimed) return result.saved;
     const saved = result.saved;
     await this.createRegistrationNotification(saved, "报名审核通过", `你报名的活动「${saved.activity.title}」已审核通过。`);
+    await this.automaticSms.publish({ scene: "registrationApproved", businessId: saved.id, userId: saved.user.id, activityId: saved.activity.id, tenantId: saved.tenant?.id || saved.activity.tenant?.id || null });
     await this.logOperation(admin, "registration.approve", "registration", saved.id, `审核通过报名：${saved.activity.title}`, { remark: dto.remark || null });
     return saved;
   }
@@ -5982,6 +5995,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (order?.status === OrderStatus.Cancelled) await this.refundRedeemedPoints(order, "报名拒绝返还积分");
     if (order && [OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status)) await this.ensureRegistrationCancellationRefund(order, dto.remark || "报名审核拒绝", admin);
     await this.createRegistrationNotification(saved, "报名审核未通过", `你报名的活动「${saved.activity.title}」未通过审核。${saved.reviewRemark ? `原因：${saved.reviewRemark}` : ""}`);
+    await this.automaticSms.publish({ scene: "registrationRejected", businessId: saved.id, userId: saved.user.id, activityId: saved.activity.id, tenantId: saved.tenant?.id || saved.activity.tenant?.id || null });
     await this.promoteNextWaitlist(saved.activity.id, admin);
     await this.logOperation(admin, "registration.reject", "registration", saved.id, `拒绝报名：${saved.activity.title}`, { remark: dto.remark || null });
     return saved;
@@ -7943,6 +7957,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (Number(savedOrder.amount) > 0) await this.memberPoints.awardEvent({ user: savedOrder.registration.user, tenant: savedOrder.tenant || savedOrder.registration.activity?.tenant || null, eventType: "activity_order_paid", amountFen: Number(savedOrder.amountFen || yuanToFen(savedOrder.amount)), sourceType: "order_paid", sourceId: savedOrder.id, remark: "活动消费积分" });
     await this.charityFund.recordOrderAccrual(savedOrder, this.actorName(admin));
     await this.recordAdminConversionEvent("pay", { activity: savedOrder.registration.activity, user: savedOrder.registration.user, registration: savedOrder.registration, order: savedOrder, channel: savedOrder.registration.channel || null, source: "admin", idempotencyKey: `pay:${savedOrder.id}` });
+    const smsContext = { userId: savedOrder.registration.user.id, activityId: savedOrder.registration.activity.id, tenantId: savedOrder.tenant?.id || savedOrder.registration.activity.tenant?.id || null };
+    await this.automaticSms.publish({ ...smsContext, scene: "paymentSucceeded", businessId: savedOrder.id, variables: { orderNo: savedOrder.orderNo, amount: savedOrder.amount } });
+    if (savedOrder.registration.status === RegistrationStatus.Approved) await this.automaticSms.publish({ ...smsContext, scene: "registrationApproved", businessId: savedOrder.registration.id });
     await this.logOperation(admin, "order.confirm_offline_payment", "order", savedOrder.id, `确认线下收款：${savedOrder.orderNo}`, { amount: savedOrder.amount, remark: dto.remark || null });
     return savedOrder;
   }
@@ -7987,7 +8004,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       smsAccessKeySecret: mergeStoredSecret(setting.smsAccessKeySecret, dto.smsAccessKeySecret, dto.clearSmsAccessKeySecret === true),
       smsSignName: dto.smsSignName?.trim() || null,
       smsTemplateId: dto.smsTemplateId?.trim() || null,
-      smsSdkAppId: dto.smsSdkAppId?.trim() || null
+      smsSdkAppId: dto.smsSdkAppId?.trim() || null,
+      automaticSms: normalizeAutomaticSmsSettings(dto.automaticSms === undefined ? setting.automaticSms : dto.automaticSms)
     });
     if (paymentSettingsEditable) {
       this.assertOperationPaymentSettingPayload(dto);
@@ -8209,7 +8227,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       return { saved: await repo.save(refund), claimed: true };
     });
     if (!result.claimed) return result.saved;
-    const saved = result.saved;
+    const saved = await this.refunds.findOne({ where: { id: result.saved.id } }) || result.saved;
+    if (saved.order?.registration?.user?.id && saved.order.registration.activity?.id) {
+      await this.automaticSms.publish({ scene: "refundRejected", businessId: saved.id, userId: saved.order.registration.user.id, activityId: saved.order.registration.activity.id, tenantId: saved.tenant?.id || saved.order.tenant?.id || saved.order.registration.activity.tenant?.id || null, variables: { orderNo: saved.order.orderNo, amount: saved.amount } });
+    }
     await this.logOperation(admin, "refund.reject", "refund", saved.id, `拒绝退款申请：${saved.refundNo}`, { remark: dto.remark || null });
     return saved;
   }
@@ -8426,6 +8447,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     ]);
     await this.recordAdminConversionEvent("check_in", { activity: registration.activity, user: registration.user, registration, order, channel: registration.channel || null, idempotencyKey: `check_in:${checkInId}` });
     await this.memberPoints.awardEvent({ user: registration.user, tenant: registration.tenant || registration.activity.tenant || null, eventType: "activity_check_in", sourceType: "check_in", sourceId: checkInId, remark: "活动签到奖励" });
+    await this.automaticSms.publish({ scene: "checkInSucceeded", businessId: checkInId, userId: registration.user.id, activityId: registration.activity.id, tenantId: registration.tenant?.id || registration.activity.tenant?.id || null });
     await this.logOperation(currentAdmin || { id: admin.id, username: admin.username, role: admin.role, tenantId: admin.tenant?.id ?? null }, "check_in.verify", "registration", registration.id, `签到核销：${registration.activity.title}`, { code, remark: remark || null });
     return {
       id: checkInId,
@@ -8530,6 +8552,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (saved.promotedRegistration) await this.recordAdminConversionEvent("register", { activity: saved.activity, user: saved.promotedRegistration.user, registration: saved.promotedRegistration, order: promotedOrder, source: "waitlist", idempotencyKey: `register:${saved.promotedRegistration.id}` });
     if (promotedOrder?.status === OrderStatus.Paid) await this.recordAdminConversionEvent("pay", { activity: saved.activity, user: saved.promotedRegistration!.user, registration: saved.promotedRegistration, order: promotedOrder, source: "waitlist", idempotencyKey: `pay:${promotedOrder.id}` });
     await this.createRegistrationNotification(saved.promotedRegistration!, "候补补位成功", `活动「${saved.activity.title}」已有空余名额，你已成功补位${saved.promotedRegistration?.status === RegistrationStatus.PendingPayment ? "，请在截止时间前完成付款" : ""}。`);
+    if (saved.promotedRegistration) {
+      const smsContext = { userId: saved.promotedRegistration.user.id, activityId: saved.activity.id, tenantId: saved.promotedRegistration.tenant?.id || saved.activity.tenant?.id || null };
+      await this.automaticSms.publish({ ...smsContext, scene: "registrationSubmitted", businessId: saved.promotedRegistration.id });
+      if (saved.promotedRegistration.status === RegistrationStatus.Approved) await this.automaticSms.publish({ ...smsContext, scene: "registrationApproved", businessId: saved.promotedRegistration.id });
+    }
     await this.logOperation(admin, "waitlist.promote", "waitlist", saved.id, `候补补位：${waitlist.activity.title}`, { registrationId: saved.promotedRegistration?.id || null });
     return this.publicWaitlist(saved, Boolean(admin?.permissions?.includes("waitlist.sensitive")));
   }
@@ -10279,7 +10306,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private couponAuditSnapshot(row: Coupon) { return { code: row.code, tenantId: row.tenant?.id || null, name: row.name, activityId: row.activity?.id || null, discountType: row.discountType, discountValue: row.discountValue, minAmount: row.minAmount, usageLimit: row.usageLimit, usedCount: row.usedCount, claimMode: row.claimMode, perUserLimit: row.perUserLimit, claimedCount: row.claimedCount, enabled: row.enabled, startsAt: row.startsAt, endsAt: row.endsAt }; }
   private redemptionCodeAuditSnapshot(row: RedemptionCode) { return { code: row.code, tenantId: row.tenant?.id || null, name: row.name, targetType: row.targetType, targetId: row.targetId, points: row.points, usageLimit: row.usageLimit, perUserLimit: row.perUserLimit, usedCount: row.usedCount, enabled: row.enabled, startsAt: row.startsAt, endsAt: row.endsAt }; }
   private activityAuditSnapshot(row: Activity) { return { title: row.title, tenantId: row.tenant?.id || null, categoryId: row.category?.id || null, status: row.status, price: row.price, capacity: row.capacity, location: row.location, startTime: row.startTime, endTime: row.endTime, registrationDeadline: row.registrationDeadline, featured: row.featured, requireReview: row.requireReview, allowCancel: row.allowCancel }; }
-  private operationSettingAuditSnapshot(row: OperationSetting) { return { registrationEnabled: row.registrationEnabled, paymentMethods: row.paymentMethods, customerServiceName: row.customerServiceName, customerServicePhone: row.customerServicePhone, customerServiceWechat: row.customerServiceWechat, pageTheme: row.pageTheme, userAgreementUrl: row.userAgreementUrl, privacyPolicyUrl: row.privacyPolicyUrl, merchantAgreementUrl: row.merchantAgreementUrl, smsProviderEnabled: row.smsProviderEnabled, smsProvider: row.smsProvider, smsAccessKeyId: row.smsAccessKeyId, smsAccessKeySecret: row.smsAccessKeySecret, defaultTenantCode: row.defaultTenantCode, launchConfig: row.launchConfig }; }
+  private operationSettingAuditSnapshot(row: OperationSetting) { return { registrationEnabled: row.registrationEnabled, paymentMethods: row.paymentMethods, customerServiceName: row.customerServiceName, customerServicePhone: row.customerServicePhone, customerServiceWechat: row.customerServiceWechat, pageTheme: row.pageTheme, userAgreementUrl: row.userAgreementUrl, privacyPolicyUrl: row.privacyPolicyUrl, merchantAgreementUrl: row.merchantAgreementUrl, smsProviderEnabled: row.smsProviderEnabled, smsProvider: row.smsProvider, smsAccessKeyId: row.smsAccessKeyId, smsAccessKeySecret: row.smsAccessKeySecret, automaticSms: normalizeAutomaticSmsSettings(row.automaticSms), defaultTenantCode: row.defaultTenantCode, launchConfig: row.launchConfig }; }
 
   private actorName(admin?: AdminContext) {
     return admin?.username || "system";
@@ -11803,7 +11830,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       smsAccessKeySecret: null,
       smsSignName: null,
       smsTemplateId: null,
-      smsSdkAppId: null
+      smsSdkAppId: null,
+      automaticSms: normalizeAutomaticSmsSettings(null)
     });
   }
 
@@ -11826,6 +11854,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       ...setting,
       settingScope: tenant ? { type: "tenant", tenantId: tenant.id, tenantCode: tenant.code, tenantName: tenant.name } : { type: "platform", tenantId: null, tenantCode: null, tenantName: "平台默认" },
       launchConfig: maskLaunchConfigSecrets(setting.launchConfig),
+      automaticSms: normalizeAutomaticSmsSettings(setting.automaticSms),
       smsAccessKeySecret: maskedStoredSecret(setting.smsAccessKeySecret),
       smsAccessKeySecretConfigured: Boolean(setting.smsAccessKeySecret)
     };

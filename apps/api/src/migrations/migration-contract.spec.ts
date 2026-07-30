@@ -192,4 +192,11 @@ describe("migration contracts", () => {
     }
     expect(migration).toContain("Cannot restore the legacy activity field enum while newer field types are in use");
   });
+
+  it("adds tenant-scoped automatic SMS settings without enabling any scene", () => {
+    const migration = readFileSync(join(migrationDirectory, "1784010000000-AutomaticSmsSettings.ts"), "utf8");
+    expect(migration).toContain('name: "automaticSms"');
+    expect(migration).toContain('type: "json"');
+    expect(migration).toContain("isNullable: true");
+  });
 });

@@ -92,6 +92,9 @@ export class OperationSetting {
   @Column({ type: "varchar", length: 80, nullable: true })
   smsSdkAppId!: string | null;
 
+  @Column({ type: "json", nullable: true })
+  automaticSms!: Record<string, unknown> | null;
+
   @UpdateDateColumn()
   updatedAt!: Date;
 }
