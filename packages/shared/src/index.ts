@@ -199,12 +199,18 @@ export function markdownToRichTextHtml(markdown: unknown) {
   const html: string[] = [];
   let codeLines: string[] = [];
   let inCode = false;
-  let inList = false;
+  let listTag: "ul" | "ol" | null = null;
 
   const closeList = () => {
-    if (!inList) return;
-    html.push("</ul>");
-    inList = false;
+    if (!listTag) return;
+    html.push("</" + listTag + ">");
+    listTag = null;
+  };
+  const openList = (tag: "ul" | "ol") => {
+    if (listTag === tag) return;
+    closeList();
+    html.push("<" + tag + ' style="margin:8px 0 10px;padding-left:20px;color:#344054;font-size:14px;line-height:1.7;">');
+    listTag = tag;
   };
 
   const paragraphStyle = "margin:0 0 10px;color:#344054;font-size:14px;line-height:1.7;white-space:normal;word-break:break-word;";
@@ -230,6 +236,11 @@ export function markdownToRichTextHtml(markdown: unknown) {
       closeList();
       continue;
     }
+    if (/^([-*_])\1\1+$/.test(line.trim())) {
+      closeList();
+      html.push('<hr style="border:0;border-top:1px solid #d0d5dd;margin:18px 0;" />');
+      continue;
+    }
     const heading = /^(#{1,3})\s+(.+)$/.exec(line.trim());
     if (heading) {
       closeList();
@@ -243,13 +254,11 @@ export function markdownToRichTextHtml(markdown: unknown) {
       html.push(`<blockquote style="margin:10px 0;padding:8px 10px;border-left:3px solid #0f766e;background:#ecfdf5;color:#344054;border-radius:6px;">${inlineMarkdownToHtml(quote[1])}</blockquote>`);
       continue;
     }
-    const list = /^[-*]\s+(.+)$/.exec(line.trim());
-    if (list) {
-      if (!inList) {
-        html.push('<ul style="margin:8px 0 10px;padding-left:20px;color:#344054;font-size:14px;line-height:1.7;">');
-        inList = true;
-      }
-      html.push(`<li style="margin:4px 0;">${inlineMarkdownToHtml(list[1])}</li>`);
+    const unorderedList = /^[-*]\s+(.+)$/.exec(line.trim());
+    const orderedList = /^\d+\.\s+(.+)$/.exec(line.trim());
+    if (unorderedList || orderedList) {
+      openList(unorderedList ? "ul" : "ol");
+      html.push('<li style="margin:4px 0;">' + inlineMarkdownToHtml((unorderedList || orderedList)![1]) + "</li>");
       continue;
     }
     closeList();

@@ -7,6 +7,7 @@ import { ActivityStatus, FieldType, checkActivityContentCompliance } from "@acti
 import { api } from "../api";
 import ActivityPosterDialog from "../components/ActivityPosterDialog.vue";
 import H5QrDialog from "../components/H5QrDialog.vue";
+import MarkdownContentEditor from "../components/MarkdownContentEditor.vue";
 import { activityH5PreviewUrl, copyToClipboard } from "../h5-preview";
 import { canAccess, currentTenantCode, currentTenantSettings, isPlatformAdmin } from "../permissions";
 
@@ -165,6 +166,22 @@ const sectionTypeOptions = [
   { label: "活动流程", value: "agenda" },
   { label: "常见问题", value: "faq" },
   { label: "自定义", value: "custom" }
+];
+const activityContentTemplates = [
+  {
+    label: "完整活动介绍",
+    content: "# 活动亮点\n\n- 你会收获什么\n- 适合哪些朋友参与\n- 现场有哪些交流安排\n\n## 适合谁\n\n- 对主题感兴趣的朋友\n- 希望认识同频伙伴的人\n- 想获得具体方法和反馈的人\n\n## 活动信息\n\n**活动时间：** 请填写\n\n**活动地点：** 请填写\n\n---\n\n期待与你现场见面。"
+  },
+  {
+    label: "活动信息排版",
+    content: "## 活动信息\n\n**活动时间：** 请填写\n\n**活动地点：** 请填写\n\n**活动主题：** 请填写\n\n## 你将收获\n\n- 收获一\n- 收获二\n- 收获三"
+  }
+];
+const noticeContentTemplates = [
+  {
+    label: "通用报名须知",
+    content: "## 报名须知\n\n1. 请确认报名信息无误后提交。\n2. 如需取消，请在活动开始前按平台规则操作。\n3. 活动开始前请留意站内、短信或微信通知。\n\n> 如有疑问，请联系主办方客服。"
+  }
 ];
 
 const statusOptions = Object.entries(activityStatusText).map(([value, label]) => ({ value, label }));
@@ -1381,8 +1398,12 @@ onMounted(async () => {
                 <el-checkbox v-model="form.requireReview" :disabled="!registrationReviewEnabled">需要审核</el-checkbox>
                 <el-checkbox v-model="form.allowCancel">允许取消</el-checkbox>
               </el-form-item>
-              <el-form-item class="full" label="活动介绍" required><el-input v-model="form.description" type="textarea" :rows="5" /></el-form-item>
-              <el-form-item class="full" label="报名须知"><el-input v-model="form.notice" type="textarea" :rows="3" /></el-form-item>
+              <el-form-item class="full" label="活动介绍" required>
+                <MarkdownContentEditor v-model="form.description" :disabled="saving || Boolean(activityActionKey)" :templates="activityContentTemplates" placeholder="用标题、列表、加粗和图片组织活动亮点、适合人群、流程与活动信息。" />
+              </el-form-item>
+              <el-form-item class="full" label="报名须知">
+                <MarkdownContentEditor v-model="form.notice" :disabled="saving || Boolean(activityActionKey)" :rows="6" :templates="noticeContentTemplates" placeholder="填写退款、签到、入场、交通和其他报名注意事项。" />
+              </el-form-item>
             </div>
           </el-tab-pane>
 
@@ -1439,7 +1460,9 @@ onMounted(async () => {
                 </el-upload>
                 <img v-if="section.imageUrl" class="section-image-preview" :src="section.imageUrl" alt="详情模块图片预览" />
               </div>
-              <el-input v-model="section.content" class="full" type="textarea" :rows="4" placeholder="模块内容" />
+              <div class="full">
+                <MarkdownContentEditor v-model="section.content" :disabled="saving || Boolean(activityActionKey)" :rows="6" :templates="activityContentTemplates" placeholder="用标题、列表、加粗和图片说明这个详情模块。" />
+              </div>
             </div>
             <el-button :icon="Plus" @click="addSection">增加模块</el-button>
           </el-tab-pane>

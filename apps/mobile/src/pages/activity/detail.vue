@@ -4,6 +4,7 @@ import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchWechatSubscriptionTemplates, getUserToken, request, requestWechatSubscriptions, withTenantCode } from "../../api";
 import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
+import { markdownToRichTextHtml } from "@activity/shared";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
@@ -22,6 +23,10 @@ const activeAction = ref("");
 const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
+
+function richActivityContent(content: unknown) {
+  return markdownToRichTextHtml(content);
+}
 
 async function reportReview(review: any) {
   const actionKey = `report:${review?.id || 0}`;
@@ -347,7 +352,7 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 
       <view class="card head">
         <view class="row"><text class="tag tag-secondary">{{ activity.category?.name || "活动" }}</text><text class="tag tag-primary">{{ activity.requireReview ? "需审核" : "即时确认" }}</text></view>
-        <view class="subtle desc">{{ activity.description || "主办方正在完善活动介绍，欢迎先查看活动信息和报名规则。" }}</view>
+        <rich-text class="activity-description activity-rich" :nodes="richActivityContent(activity.description || '主办方正在完善活动介绍，欢迎先查看活动信息和报名规则。')" />
         <view class="decision-box">
           <view>
             <view class="decision-title">{{ registerButtonText() }}</view>
@@ -475,9 +480,9 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
       <view class="card" v-for="section in activity.sections" :key="section.id">
         <view class="title small">{{ section.title }}</view>
         <image v-if="section.imageUrl" class="section-image" :src="section.imageUrl" mode="widthFix" />
-        <text class="section-content">{{ section.content }}</text>
+        <rich-text class="section-content activity-rich" :nodes="richActivityContent(section.content)" />
       </view>
-      <view class="card" v-if="activity.notice"><view class="title small">报名须知</view><text class="section-content">{{ activity.notice }}</text></view>
+      <view class="card" v-if="activity.notice"><view class="title small">报名须知</view><rich-text class="section-content activity-rich" :nodes="richActivityContent(activity.notice)" /></view>
       <view class="card" v-if="activity.reviews?.length">
         <view class="title small">活动评价</view>
         <view v-for="review in activity.reviews" :key="review.id" class="review"><view class="review-head"><view class="name">{{ "★".repeat(review.rating) }}<text v-if="review.featured" class="featured-review">精选</text></view><view class="report-link" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :class="{ disabled: Boolean(activeAction) }" @click="reportReview(review)" @keyup.enter="reportReview(review)" @keyup.space.prevent="reportReview(review)">{{ activeAction === `report:${review.id}` ? "提交中" : "举报" }}</view></view><view>{{ review.content }}</view><view v-if="review.adminReply" class="subtle reply">主办方回复：{{ review.adminReply }}</view></view>
@@ -646,7 +651,9 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 .host:last-child, .review:last-child { border-bottom: 0; }
 .name { font-weight: 650; margin-bottom: 8rpx; color: #333333; }
 .section-image { display: block; width: 100%; border-radius: 20rpx; margin-bottom: 18rpx; background: #dde5ed; }
-.section-content { line-height: 1.7; color: #666666; }
+.activity-description { display: block; margin-top: 16rpx; }
+.section-content { display: block; line-height: 1.7; color: #666666; }
+.activity-rich { overflow-wrap: anywhere; }
 .reply { margin-top: 8rpx; }
 .retry { margin-top: 18rpx; }
 .bottom-bar {

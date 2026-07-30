@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, ref } from "vue";
 import { onReachBottom, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
+import { markdownToPlainText } from "@activity/shared";
 import { consumeActivityListIntent, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
@@ -59,6 +60,10 @@ function statusClass(status: string) {
 
 function priceText(price: string | number) {
   return Number(price) > 0 ? `￥${Number(price).toFixed(2)}` : "免费";
+}
+
+function activitySummary(value: unknown) {
+  return markdownToPlainText(value, 96) || "主办方正在完善活动介绍，欢迎进入详情页查看完整安排。";
 }
 
 function cityName() {
@@ -318,7 +323,7 @@ onReachBottom(loadMore);
           </view>
           <text class="activity-title">{{ item.title }}</text>
           <text class="activity-location">{{ item.location || "地点待确认" }}</text>
-          <text class="body-text activity-desc">{{ item.description || "主办方正在完善活动介绍，欢迎进入详情页查看完整安排。" }}</text>
+          <text class="body-text activity-desc">{{ activitySummary(item.description) }}</text>
           <view class="row capacity-row">
             <view class="capacity-pill">
               <text>{{ item.registeredCount || 0 }} 人已报名</text>
