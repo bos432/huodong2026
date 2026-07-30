@@ -23,6 +23,19 @@ export function objectStorageMissingFields(input: Partial<ObjectStorageConfig>) 
   return (["endpoint", "bucket", "accessKeyId", "accessKeySecret"] as const).filter((key) => !config[key]);
 }
 
+export function normalizePublicAssetBase(value: unknown) {
+  const text = String(value || "").trim().replace(/\/+$/, "");
+  if (!text) return "";
+  try {
+    const url = new URL(text);
+    const hostname = url.hostname.toLowerCase();
+    const placeholder = hostname === "example.com" || hostname.endsWith(".example.com") || hostname === "localhost" || hostname === "0.0.0.0" || hostname === "127.0.0.1" || hostname === "::1";
+    return ["http:", "https:"].includes(url.protocol) && !placeholder ? text : "";
+  } catch {
+    return "";
+  }
+}
+
 export async function testObjectStorageConnection(input: Partial<ObjectStorageConfig>) {
   const config = normalizeObjectStorageConfig(input);
   const missing = objectStorageMissingFields(config);

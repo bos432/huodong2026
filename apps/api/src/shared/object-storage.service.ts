@@ -8,7 +8,7 @@ import { randomBytes } from "crypto";
 import { Repository } from "typeorm";
 import { OperationSetting } from "../entities/operation-setting.entity";
 import { configWithLaunchOverrides } from "./launch-config";
-import { normalizeObjectStorageConfig, objectStorageMissingFields } from "./object-storage";
+import { normalizeObjectStorageConfig, normalizePublicAssetBase, objectStorageMissingFields } from "./object-storage";
 
 @Injectable()
 export class ObjectStorageService {
@@ -38,12 +38,14 @@ export class ObjectStorageService {
   }
 
   private async storeLocal(runtime: ConfigService, file: Express.Multer.File & { buffer: Buffer }, key: string) {
+    const configuredBase = runtime.get<string>("PUBLIC_API_ORIGIN", "").trim();
+    const base = normalizePublicAssetBase(configuredBase);
+    if (configuredBase && !base) throw new ServiceUnavailableException("API 公开域名配置无效，请在系统设置中填写真实可访问域名");
     const root = runtime.get<string>("UPLOAD_DIR", "uploads");
     const target = join(process.cwd(), root, ...key.split("/"));
     await mkdir(dirname(target), { recursive: true });
     await writeFile(target, file.buffer);
     const path = `/uploads/${key}`;
-    const base = runtime.get<string>("PUBLIC_API_ORIGIN", "").replace(/\/$/, "");
     return { url: base ? `${base}${path}` : path, path, key, provider: "local" };
   }
 
@@ -57,8 +59,8 @@ export class ObjectStorageService {
       client.destroy();
     }
     const runtime = await this.runtimeConfig();
-    const base = runtime.get<string>("STORAGE_PUBLIC_BASE_URL", "").replace(/\/$/, "");
-    if (!base) throw new ServiceUnavailableException("文件访问域名尚未配置，请联系管理员");
+    const base = normalizePublicAssetBase(runtime.get<string>("STORAGE_PUBLIC_BASE_URL", ""));
+    if (!base) throw new ServiceUnavailableException("文件访问域名尚未正确配置，请联系管理员");
     return { url: `${base}/${key}`, path: key, key, provider: storage.provider };
   }
 

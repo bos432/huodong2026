@@ -216,9 +216,9 @@ const clearSmsSecretRequested = ref(false);
 const deployment = reactive({
   appVersion: "0.1.0",
   buildCommit: "",
-  h5Origin: "https://h5.example.com",
-  adminOrigin: "https://admin.example.com",
-  apiOrigin: "https://api.example.com",
+  h5Origin: "",
+  adminOrigin: "",
+  apiOrigin: "",
   wechatH5AcceptanceTenantCode: "qiwai-showcase",
   wechatH5AcceptanceStatus: "not_started" as WechatH5AcceptanceStatus,
   wechatH5AcceptanceAt: "",
