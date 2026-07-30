@@ -49,6 +49,18 @@ describe("tenant member level governance contract", () => {
     expect(courses).toContain("会员等级不存在或不属于当前商家");
   });
 
+  it("keeps activity editor options aligned with each selected tenant", () => {
+    const activities = read("../admin/src/views/Activities.vue");
+    const mobileActivityEditor = read("../mobile/src/pages/admin/activity/edit.vue");
+    expect(admin).toContain("this.activityManagementOptions(admin)");
+    expect(admin).toContain("private applyActivityOptionScope");
+    expect(admin).toContain("const where = this.isTenantScoped(admin)");
+    expect(activities).toContain("return tenantId ? !optionTenantId || optionTenantId === tenantId : !optionTenantId;");
+    expect(mobileActivityEditor).toContain("const availableCategories");
+    expect(mobileActivityEditor).toContain("const availableMemberLevels");
+    expect(mobileActivityEditor).toContain("watch(selectedTenantId");
+  });
+
   it("uses frozen entitlements for pricing and course access", () => {
     expect(publicService).toContain("memberLevelSnapshotData?.discountRate");
     expect(publicService).toContain("levelSnapshot?.sortOrder");

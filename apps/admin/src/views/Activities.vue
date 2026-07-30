@@ -118,8 +118,20 @@ watch(formTenantId, () => {
   if (form.minMemberLevelId && !allowed.has(Number(form.minMemberLevelId))) form.minMemberLevelId = undefined;
   if (form.priorityMemberLevelId && !allowed.has(Number(form.priorityMemberLevelId))) form.priorityMemberLevelId = undefined;
 });
-const formCategories = computed(() => !isPlatformAdmin() ? categories.value : categories.value.filter((item) => Number(item.tenant?.id || 0) === formTenantId.value));
-const formAgents = computed(() => !isPlatformAdmin() ? agents.value : agents.value.filter((item) => Number(item.tenant?.id || 0) === formTenantId.value));
+const formCategories = computed(() => {
+  const tenantId = formTenantId.value;
+  return categories.value.filter((item) => {
+    const optionTenantId = Number(item.tenant?.id || 0);
+    return tenantId ? !optionTenantId || optionTenantId === tenantId : !optionTenantId;
+  });
+});
+const formAgents = computed(() => {
+  const tenantId = formTenantId.value;
+  return agents.value.filter((item) => {
+    const optionTenantId = Number(item.tenant?.id || 0);
+    return tenantId ? !optionTenantId || optionTenantId === tenantId : !optionTenantId;
+  });
+});
 const h5QrUrl = computed(() => (h5QrActivity.value ? activityPreviewUrl(h5QrActivity.value) : ""));
 const h5QrScopeName = computed(() => (h5QrActivity.value ? `活动：${h5QrActivity.value.title || h5QrActivity.value.id}` : "活动 H5"));
 const posterUrl = computed(() => (posterActivity.value ? activityPreviewUrl(posterActivity.value) : ""));

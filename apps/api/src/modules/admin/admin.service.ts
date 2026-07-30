@@ -1241,20 +1241,18 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const canManageFinanceRisks = hasPermission("finance.manage");
     const canViewPaymentAccounts = hasPermission("payment_account.view");
     const currentTenant = admin?.tenantId ? await this.tenants.findOneBy({ id: admin.tenantId }) : null;
-    const [tenants, categories, agents, memberLevels, operationSetting] = await Promise.all([
+    const [activityOptions, tenants, operationSetting] = await Promise.all([
+      this.activityManagementOptions(admin),
       hasPermission("tenant.view") && !admin?.tenantId ? this.listTenants({ ...admin, requiredPermission: "tenant.view" }) : Promise.resolve(currentTenant ? [this.publicTenant(currentTenant)] : []),
-      this.listCategories(true, admin),
-      canViewPaymentAccounts ? this.listAgents(true, { ...admin, requiredPermission: "payment_account.view" }).catch(() => []) : Promise.resolve([]),
-      this.listMemberLevels(true, admin),
       this.getOperationSetting(admin).catch(() => null)
     ]);
     return {
       admin: { id: admin?.id || null, username: admin?.username || "", role: normalizedRole, tenantId: admin?.tenantId || null, permissions: assignedPermissions, tenant: currentTenant ? this.publicTenant(currentTenant) : null },
       permissions: { canWriteActivities, canReviewRegistrations, canViewRegistrations, canViewOrders, canManageOrders, canViewRefunds, canManageRefunds, canCheckIn, canViewAnalytics, canViewFinanceRisks, canManageFinanceRisks, canSelectTenant: hasPermission("tenant.view") && !admin?.tenantId },
       tenants,
-      categories,
-      agents,
-      memberLevels,
+      categories: activityOptions.categories,
+      agents: canViewPaymentAccounts ? activityOptions.agents : [],
+      memberLevels: activityOptions.memberLevels,
       operationSetting,
       upload: { imageEndpoint: "/admin/uploads/images", maxImageSizeMb: 5, imageTypes: ["image/jpeg", "image/png", "image/webp", "image/gif"] }
     };
@@ -5407,8 +5405,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async activityManagementOptions(admin?: AdminContext) {
     const categoryBuilder = this.categories.createQueryBuilder("category").leftJoinAndSelect("category.tenant", "tenant").orderBy("category.sortOrder", "ASC").addOrderBy("category.id", "ASC");
     const agentBuilder = this.agents.createQueryBuilder("agent").leftJoinAndSelect("agent.tenant", "tenant").orderBy("agent.id", "DESC");
-    this.applyTenantScope(categoryBuilder, "category", admin);
-    this.applyTenantScope(agentBuilder, "agent", admin);
+    this.applyActivityOptionScope(categoryBuilder, "category", admin);
+    this.applyActivityOptionScope(agentBuilder, "agent", admin);
     const tenantPromise = this.isTenantScoped(admin)
       ? this.tenants.find({ where: { id: admin?.tenantId || 0 }, order: { id: "ASC" } })
       : this.tenants.find({ order: { id: "ASC" } });
@@ -9255,8 +9253,15 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private memberLevelOptionRows(admin?: AdminContext) {
-    const where = { enabled: true, tenantScopeKey: this.isTenantScoped(admin) ? memberLevelScopeKey({ id: Number(admin?.tenantId || 0) }) : "platform" };
+    const where = this.isTenantScoped(admin)
+      ? { enabled: true, tenantScopeKey: memberLevelScopeKey({ id: Number(admin?.tenantId || 0) }) }
+      : { enabled: true };
     return this.memberLevels.find({ where, order: { tenantScopeKey: "ASC", sortOrder: "ASC", minGrowth: "ASC", id: "ASC" }, take: 5000 });
+  }
+
+  private applyActivityOptionScope(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, alias: string, admin?: AdminContext) {
+    if (!this.isTenantScoped(admin)) return;
+    builder.andWhere(`(${alias}.tenantId IS NULL OR ${alias}.tenantId = :activityOptionTenantId)`, { activityOptionTenantId: admin?.tenantId });
   }
 
   async memberOptions(admin?: AdminContext) {

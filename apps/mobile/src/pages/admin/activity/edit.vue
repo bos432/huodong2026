@@ -36,6 +36,19 @@ const fieldTypes = [
 const canWriteActivities = computed(() => Boolean(bootstrap.value?.permissions?.canWriteActivities));
 const canSelectTenant = computed(() => Boolean(bootstrap.value?.permissions?.canSelectTenant));
 const selectedTenant = computed(() => (bootstrap.value?.tenants || []).find((item: any) => item.id === form.value.tenantId));
+const selectedTenantId = computed(() => Number(form.value.tenantId || bootstrap.value?.admin?.tenantId || 0));
+const availableCategories = computed(() => (bootstrap.value?.categories || []).filter((item: any) => {
+  const optionTenantId = Number(item.tenant?.id || 0);
+  return selectedTenantId.value ? !optionTenantId || optionTenantId === selectedTenantId.value : !optionTenantId;
+}));
+const availableAgents = computed(() => (bootstrap.value?.agents || []).filter((item: any) => {
+  const optionTenantId = Number(item.tenant?.id || 0);
+  return selectedTenantId.value ? !optionTenantId || optionTenantId === selectedTenantId.value : !optionTenantId;
+}));
+const availableMemberLevels = computed(() => (bootstrap.value?.memberLevels || []).filter((item: any) => {
+  const optionTenantId = Number(item.tenantId || 0);
+  return selectedTenantId.value ? optionTenantId === selectedTenantId.value : !optionTenantId;
+}));
 const tenantPermissions = computed(() => selectedTenant.value?.settings || bootstrap.value?.admin?.tenant?.settings || {});
 const canSubmitApproval = computed(() => Boolean(bootstrap.value?.admin?.tenantId));
 const canDirectOpen = computed(() => bootstrap.value?.admin?.role === "super_admin" || tenantPermissions.value.activityPublishReviewRequired === false);
@@ -151,21 +164,31 @@ function pickTenant(e: any) {
 
 function pickCategory(e: any) {
   if (selectionLocked.value) return;
-  const category = (bootstrap.value?.categories || [])[Number(e.detail.value)];
+  const category = availableCategories.value[Number(e.detail.value)];
   form.value.categoryId = category?.id;
 }
 
 function pickAgent(e: any) {
   if (selectionLocked.value) return;
   const index = Number(e.detail.value);
-  form.value.agentId = index <= 0 ? undefined : bootstrap.value?.agents?.[index - 1]?.id;
+  form.value.agentId = index <= 0 ? undefined : availableAgents.value[index - 1]?.id;
 }
 
 function pickMember(key: "minMemberLevelId" | "priorityMemberLevelId", e: any) {
   if (selectionLocked.value) return;
   const index = Number(e.detail.value);
-  form.value[key] = index <= 0 ? undefined : bootstrap.value?.memberLevels?.[index - 1]?.id;
+  form.value[key] = index <= 0 ? undefined : availableMemberLevels.value[index - 1]?.id;
 }
+
+watch(selectedTenantId, () => {
+  const categoryIds = new Set(availableCategories.value.map((item: any) => Number(item.id)));
+  const agentIds = new Set(availableAgents.value.map((item: any) => Number(item.id)));
+  const levelIds = new Set(availableMemberLevels.value.map((item: any) => Number(item.id)));
+  if (form.value.categoryId && !categoryIds.has(Number(form.value.categoryId))) form.value.categoryId = undefined;
+  if (form.value.agentId && !agentIds.has(Number(form.value.agentId))) form.value.agentId = undefined;
+  if (form.value.minMemberLevelId && !levelIds.has(Number(form.value.minMemberLevelId))) form.value.minMemberLevelId = undefined;
+  if (form.value.priorityMemberLevelId && !levelIds.has(Number(form.value.priorityMemberLevelId))) form.value.priorityMemberLevelId = undefined;
+});
 
 function pickFieldType(index: number, e: any) {
   if (selectionLocked.value) return;
@@ -515,8 +538,8 @@ onShow(() => {
         <view class="field"><view class="label">封面图</view><view class="upload" :class="{ disabled: uploadingTarget }" @click="chooseImage('cover')"><image v-if="form.coverUrl" :src="form.coverUrl" mode="aspectFill" /><text v-else>{{ uploadingTarget === 'cover' ? '上传中...' : '上传封面' }}</text></view></view>
         <view class="field"><view class="label">活动介绍</view><textarea v-model="form.description" class="textarea" maxlength="10000" cursor-spacing="24" aria-label="活动介绍" auto-height placeholder="一句话说明活动亮点、对象和收益" /></view>
         <view class="grid2">
-          <view class="field"><view class="label">分类</view><picker :disabled="selectionLocked" :range="bootstrap.categories" range-key="name" @change="pickCategory"><view class="picker">{{ bootstrap.categories.find((c:any)=>c.id===form.categoryId)?.name || "选择分类" }}</view></picker></view>
-          <view class="field"><view class="label">代理/主办</view><picker :disabled="selectionLocked" :range="['平台自营'].concat((bootstrap.agents || []).map((a:any)=>a.name))" @change="pickAgent"><view class="picker">{{ bootstrap.agents.find((a:any)=>a.id===form.agentId)?.name || "平台自营" }}</view></picker></view>
+          <view class="field"><view class="label">分类</view><picker :disabled="selectionLocked" :range="availableCategories" range-key="name" @change="pickCategory"><view class="picker">{{ availableCategories.find((c:any)=>c.id===form.categoryId)?.name || "选择分类" }}</view></picker></view>
+          <view class="field"><view class="label">代理/主办</view><picker :disabled="selectionLocked" :range="['平台自营'].concat(availableAgents.map((a:any)=>a.name))" @change="pickAgent"><view class="picker">{{ availableAgents.find((a:any)=>a.id===form.agentId)?.name || "平台自营" }}</view></picker></view>
         </view>
         <view class="field"><view class="label">地点</view><input v-model="form.location" class="input" maxlength="200" cursor-spacing="24" confirm-type="next" aria-label="活动地点" placeholder="活动地址" /></view>
         <view class="grid2">
@@ -550,8 +573,8 @@ onShow(() => {
           <input v-model="form.groupQrCodeUrl" class="input input-after-upload" placeholder="也可粘贴二维码图片链接" />
         </view>
         <view class="grid2">
-          <view class="field"><view class="label">会员门槛</view><picker :disabled="selectionLocked" :range="['无门槛'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('minMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.minMemberLevelId)?.name || "无门槛" }}</view></picker></view>
-          <view class="field"><view class="label">优先会员</view><picker :disabled="selectionLocked" :range="['无优先'].concat((bootstrap.memberLevels || []).map((m:any)=>m.name))" @change="pickMember('priorityMemberLevelId', $event)"><view class="picker">{{ bootstrap.memberLevels.find((m:any)=>m.id===form.priorityMemberLevelId)?.name || "无优先" }}</view></picker></view>
+          <view class="field"><view class="label">会员门槛</view><picker :disabled="selectionLocked" :range="['无门槛'].concat(availableMemberLevels.map((m:any)=>m.name))" @change="pickMember('minMemberLevelId', $event)"><view class="picker">{{ availableMemberLevels.find((m:any)=>m.id===form.minMemberLevelId)?.name || "无门槛" }}</view></picker></view>
+          <view class="field"><view class="label">优先会员</view><picker :disabled="selectionLocked" :range="['无优先'].concat(availableMemberLevels.map((m:any)=>m.name))" @change="pickMember('priorityMemberLevelId', $event)"><view class="picker">{{ availableMemberLevels.find((m:any)=>m.id===form.priorityMemberLevelId)?.name || "无优先" }}</view></picker></view>
         </view>
         <view v-if="form.priorityMemberLevelId" class="field"><view class="label">优先报名截止</view><input v-model="form.priorityRegistrationEndsAt" class="input" placeholder="YYYY-MM-DD HH:mm" /></view>
         <view class="section-head"><view>报名字段</view><view @click="addField">新增字段</view></view>

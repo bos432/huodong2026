@@ -57,7 +57,7 @@ describe("tenant administration access contract", () => {
     expect(menu).toContain('{ index: "/tenants", icon: "OfficeBuilding", label: "商家/代理列表", roles: ["tenant.view"], scope: "platform" }');
     expect(menu).toContain('{ index: "/tenants?mode=permissions", icon: "Setting", label: "权限配置", roles: ["tenant.permissions.manage"], scope: "platform" }');
     expect(service).toContain('this.listTenants({ ...admin, requiredPermission: "tenant.view" })');
-    expect(service).toContain('canViewPaymentAccounts ? this.listAgents(true, { ...admin, requiredPermission: "payment_account.view" }).catch(() => []) : Promise.resolve([])');
+    expect(service).toContain("agents: canViewPaymentAccounts ? activityOptions.agents : []");
     expect(service).toContain('canSelectTenant: hasPermission("tenant.view")');
     expect(service).toContain("delegatedDashboardAccess");
   });
