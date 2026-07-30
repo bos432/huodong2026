@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from "vue";
+import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
@@ -165,6 +165,10 @@ const report = ref<ConfigInspection | null>(null);
 const adminVersion = ref<StaticVersion | null>(null);
 const h5Version = ref<StaticVersion | null>(null);
 const tenantOptions = ref<TenantOption[]>([]);
+const operationTenantId = ref(0);
+const selectedOperationTenant = computed(() => tenantOptions.value.find((tenant) => tenant.id === operationTenantId.value) || null);
+const editingPlatformOperation = computed(() => canManagePlatformSettings.value && !operationTenantId.value);
+const operationScopeLabel = computed(() => selectedOperationTenant.value ? tenantOptionLabel(selectedOperationTenant.value) : "平台默认配置");
 const operationBusy = computed(() => loadingOperation.value || savingOperation.value || testingSms.value || checkingConnectivity.value);
 const paymentReadiness = computed(() => [
   { key: "free", label: "免费报名", status: "已可用", type: "success", note: "适合免费活动，后端可直接完成报名。" },
@@ -1504,9 +1508,26 @@ function operationPayload() {
     smsTemplateId: form.smsTemplateId,
     smsSdkAppId: form.smsSdkAppId
   };
-  if (canManagePlatformSettings.value) payload.defaultTenantCode = form.defaultTenantCode;
+  if (editingPlatformOperation.value) payload.defaultTenantCode = form.defaultTenantCode;
   return payload;
 }
+
+function operationRequestConfig() {
+  return { params: { tenantId: canManagePlatformSettings.value && operationTenantId.value ? operationTenantId.value : undefined } };
+}
+
+async function changeOperationTenant() {
+  connectivityReport.value = null;
+  connectivityError.value = "";
+  await loadOperation(true);
+}
+
+watch(activeTab, (tab) => {
+  if (canManagePlatformSettings.value && tab !== "operation" && operationTenantId.value) {
+    operationTenantId.value = 0;
+    void loadOperation(true);
+  }
+});
 
 async function loadOperation(force = false) {
   if (operationBusy.value && !force) return;
@@ -1514,8 +1535,8 @@ async function loadOperation(force = false) {
   operationLoadError.value = "";
   try {
     const [data, tenants] = await Promise.all([
-      api.get<any, any>("/admin/settings/operation"),
-      canManagePlatformSettings.value && canManageTenants.value ? api.get<any, TenantOption[]>("/admin/tenants") : Promise.resolve([])
+      api.get<any, any>("/admin/settings/operation", operationRequestConfig()),
+      canManagePlatformSettings.value && canManageTenants.value && !tenantOptions.value.length ? api.get<any, TenantOption[]>("/admin/tenants") : Promise.resolve(tenantOptions.value)
     ]);
     tenantOptions.value = (tenants || []).filter((tenant) => tenant.enabled && tenant.code !== "platform" && !String(tenant.code || "").startsWith("demo-"));
     Object.assign(form, {
@@ -1544,7 +1565,7 @@ async function loadOperation(force = false) {
     });
     smsSecretConfigured.value = Boolean(data.smsAccessKeySecretConfigured);
     clearSmsSecretRequested.value = false;
-    if (canManagePlatformSettings.value) {
+    if (editingPlatformOperation.value) {
       applyDeploymentConfig({
         smsEnabled: Boolean(data.smsProviderEnabled),
         smsProvider: data.smsProvider || deployment.smsProvider,
@@ -1569,7 +1590,7 @@ async function sendTestSms() {
   testingSms.value = true;
   operationSaveError.value = "";
   try {
-    const result = await api.post<any, any>("/admin/settings/sms/test", { phone: smsTestForm.phone.trim() });
+    const result = await api.post<any, any>("/admin/settings/sms/test", { phone: smsTestForm.phone.trim() }, operationRequestConfig());
     ElMessage.success(`测试短信已发送：${result.providerMessageId || result.provider || "已提交"}`);
   } catch (error: any) {
     operationSaveError.value = error.message || "测试短信发送失败";
@@ -1587,12 +1608,12 @@ async function saveOperation() {
   savingOperation.value = true;
   operationSaveError.value = "";
   try {
-    const payload = canManagePlatformSettings.value ? { ...operationPayload(), launchConfig: deploymentPayload() } : operationPayload();
-    await api.post("/admin/settings/operation", payload);
-    if (canManagePlatformSettings.value) writeStoredFeatureGates(deployment.featureGates);
-    ElMessage.success("系统设置已保存");
+    const payload = editingPlatformOperation.value ? { ...operationPayload(), launchConfig: deploymentPayload() } : operationPayload();
+    await api.post("/admin/settings/operation", payload, operationRequestConfig());
+    if (editingPlatformOperation.value) writeStoredFeatureGates(deployment.featureGates);
+    ElMessage.success(`${operationScopeLabel.value}已保存`);
     await loadOperation(true);
-    if (canManagePlatformSettings.value) await loadConfig();
+    if (editingPlatformOperation.value) await loadConfig();
   } catch (error: any) {
     operationSaveError.value = error.message || "保存失败";
     ElMessage.error(operationSaveError.value);
@@ -1652,7 +1673,7 @@ async function runConnectivityCheck() {
   checkingConnectivity.value = true;
   connectivityError.value = "";
   try {
-    connectivityReport.value = await api.post<any, any>("/admin/settings/connectivity-check");
+    connectivityReport.value = await api.post<any, any>("/admin/settings/connectivity-check", undefined, operationRequestConfig());
     const errors = Number(connectivityReport.value?.summary?.error || 0);
     ElMessage[errors ? "warning" : "success"](errors ? `检测完成，发现 ${errors} 项异常` : "配置连通性检测通过");
   } catch (error: any) {
@@ -1716,9 +1737,18 @@ onMounted(async () => {
     <el-tabs v-model="activeTab" class="system-tabs">
       <el-tab-pane label="运营设置" name="operation">
         <div class="table-card" v-loading="loadingOperation">
+          <el-form-item v-if="canManagePlatformSettings && canManageTenants" label="配置对象" class="operation-scope-field">
+            <el-select v-model="operationTenantId" class="operation-scope-select" filterable :disabled="operationBusy" @change="changeOperationTenant">
+              <el-option label="平台默认配置（不覆盖商家配置）" :value="0" />
+              <el-option v-for="tenant in tenantOptions" :key="tenant.id" :label="tenantOptionLabel(tenant)" :value="tenant.id" />
+            </el-select>
+            <el-tag :type="editingPlatformOperation ? 'info' : 'success'" effect="plain">
+              {{ editingPlatformOperation ? "平台范围" : "商家前端实时生效" }}
+            </el-tag>
+          </el-form-item>
           <el-alert
             type="info"
-            title="这里的内容保存后立即影响 H5 和报名流程。入群二维码优先使用活动配置，活动未配置时使用全局默认二维码。"
+            :title="editingPlatformOperation ? '当前修改平台默认配置；已有独立配置的商家不会被覆盖。' : `当前修改 ${operationScopeLabel}；保存后立即影响该商家的 H5 和小程序。`"
             show-icon
             :closable="false"
             class="panel-alert"
@@ -1745,7 +1775,7 @@ onMounted(async () => {
             <el-form-item label="暂停提示" :required="!form.registrationEnabled">
               <el-input v-model="form.registrationDisabledMessage" type="textarea" :rows="3" maxlength="300" show-word-limit />
             </el-form-item>
-            <template v-if="canManagePlatformSettings">
+            <template v-if="editingPlatformOperation">
               <el-divider content-position="left">入口城市</el-divider>
               <el-form-item label="默认入口城市">
                 <div class="entry-tenant-field">
@@ -2462,6 +2492,8 @@ onMounted(async () => {
 .payment-methods-block { display: grid; gap: 6px; }
 .payment-methods { display: flex; align-items: center; gap: 12px 22px; flex-wrap: wrap; }
 .entry-tenant-field { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.operation-scope-field :deep(.el-form-item__content) { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.operation-scope-select { width: min(420px, 100%); }
 .payment-readiness { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; margin-top: 8px; }
 .payment-readiness-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; padding: 12px; border-radius: 8px; border: 1px solid #e5e7eb; background: #f8fafc; }
 .payment-readiness-card div { display: grid; gap: 5px; min-width: 0; }

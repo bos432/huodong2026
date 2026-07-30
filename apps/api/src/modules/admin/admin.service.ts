@@ -7957,19 +7957,19 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return saved;
   }
 
-  async getOperationSetting(admin?: AdminContext) {
-    const id = this.isTenantScoped(admin) ? admin?.tenantId || 1 : 1;
-    const setting = await this.operationSettings.findOne({ where: { id } });
-    if (setting) return this.publicOperationSettingForAdmin(setting);
-    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : null;
-    return this.publicOperationSettingForAdmin(this.createOperationSetting(admin, tenant));
+  async getOperationSetting(admin?: AdminContext, requestedTenantId?: number | string | null) {
+    const scope = await this.operationSettingTarget(admin, requestedTenantId);
+    const setting = await this.operationSettings.findOne({ where: { id: scope.id } });
+    const row = setting || this.createOperationSetting(admin, scope.tenant, scope.id);
+    return this.publicOperationSettingForAdmin(row, scope.tenant);
   }
 
-  async saveOperationSetting(dto: OperationSettingDto, admin?: AdminContext) {
-    const setting = await this.ensureOperationSetting(admin);
+  async saveOperationSetting(dto: OperationSettingDto, admin?: AdminContext, requestedTenantId?: number | string | null) {
+    const scope = await this.operationSettingTarget(admin, requestedTenantId);
+    const setting = await this.ensureOperationSettingForTarget(admin, scope);
     const before = this.operationSettingAuditSnapshot(setting);
     if (this.isTenantScoped(admin)) this.assertTenantSubscriptionWritable(setting.tenant || (await this.currentTenantForAdmin(admin)), admin);
-    const paymentSettingsEditable = await this.canEditTenantPaymentSettings(admin);
+    const paymentSettingsEditable = this.isTenantScoped(admin) ? await this.canEditTenantPaymentSettings(admin) : true;
     Object.assign(setting, {
       registrationEnabled: dto.registrationEnabled ?? true,
       registrationDisabledMessage: dto.registrationDisabledMessage?.trim() || null,
@@ -8000,21 +8000,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     } else {
       setting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
     }
-    if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined) {
+    if (!scope.tenant && dto.launchConfig !== undefined) {
       setting.launchConfig = secureLaunchConfigForStorage(setting.launchConfig, dto.launchConfig, dto.clearLaunchConfigSecrets);
     }
-    if (!this.isTenantScoped(admin) && dto.defaultTenantCode !== undefined) {
+    if (!scope.tenant && dto.defaultTenantCode !== undefined) {
       setting.defaultTenantCode = await this.normalizeDefaultTenantCode(dto.defaultTenantCode);
     }
     const saved = await this.operationSettings.save(setting);
-    await this.logOperation(admin, "settings.operation.update", "operation_setting", saved.id, "更新运营设置", auditDiff(before, this.operationSettingAuditSnapshot(saved)));
-    return this.publicOperationSettingForAdmin(saved);
+    await this.logOperation(this.operationActorForTenant(admin, scope.tenant), "settings.operation.update", "operation_setting", saved.id, "更新运营设置", auditDiff(before, this.operationSettingAuditSnapshot(saved)));
+    return this.publicOperationSettingForAdmin(saved, scope.tenant);
   }
 
-  async sendTestSms(dto: { phone: string }, admin?: AdminContext) {
+  async sendTestSms(dto: { phone: string }, admin?: AdminContext, requestedTenantId?: number | string | null) {
     this.assertSmsTestPermission(admin);
     const phone = this.normalizePhone(dto.phone);
-    const setting = await this.ensureOperationSetting(admin);
+    const scope = await this.operationSettingTarget(admin, requestedTenantId);
+    const setting = await this.ensureOperationSettingForTarget(admin, scope);
     const code = "123456";
     const result = await this.notificationProvider.deliver({
       channel: "sms",
@@ -8043,17 +8044,18 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       expiresAt: result.status === "sent" ? new Date(Date.now() + 5 * 60 * 1000) : null
     }));
     if (result.status !== "sent") throw new BadRequestException(result.errorMessage || "测试短信发送失败");
-    await this.logOperation(admin, "settings.sms.test", "operation_setting", setting.id, `发送测试短信：${this.maskPhone(phone)}`, { provider: result.provider, providerMessageId: result.providerMessageId || null });
+    await this.logOperation(this.operationActorForTenant(admin, scope.tenant), "settings.sms.test", "operation_setting", setting.id, `发送测试短信：${this.maskPhone(phone)}`, { provider: result.provider, providerMessageId: result.providerMessageId || null });
     return { provider: result.provider, providerMessageId: result.providerMessageId, status: result.status, message: "测试短信已提交服务商" };
   }
 
-  async checkConfigurationConnectivity(admin?: AdminContext) {
-    const setting = await this.ensureOperationSetting(admin);
-    const runtime = configWithLaunchOverrides(this.config, this.isTenantScoped(admin) ? null : setting.launchConfig);
+  async checkConfigurationConnectivity(admin?: AdminContext, requestedTenantId?: number | string | null) {
+    const scope = await this.operationSettingTarget(admin, requestedTenantId);
+    const setting = await this.ensureOperationSettingForTarget(admin, scope);
+    const runtime = configWithLaunchOverrides(this.config, scope.tenant ? null : setting.launchConfig);
     const checks: Array<Record<string, unknown>> = [];
     checks.push(configuredChannelCheck("sms", "短信服务", setting.smsProviderEnabled, [["服务商", setting.smsProvider], ["签名", setting.smsSignName], ["访问密钥", decryptStoredSecret(setting.smsAccessKeySecret) || setting.smsAccessKeyId]]));
     checks.push(configuredChannelCheck("agreements", "协议与隐私", true, [["用户协议", setting.userAgreementUrl], ["隐私政策", setting.privacyPolicyUrl]]));
-    if (!this.isTenantScoped(admin)) {
+    if (!scope.tenant) {
       checks.push(configuredChannelCheck("wechat-message", "微信订阅消息", runtime.get("WECHAT_MESSAGE_PROVIDER_ENABLED", "false") === "true", [["AppID", runtime.get("WECHAT_APP_ID", "")], ["AppSecret", runtime.get("WECHAT_APP_SECRET", "")]]));
       checks.push(configuredChannelCheck("wechat-pay", "微信支付", runtime.get("WECHAT_PAY_ENABLED", "false") === "true", [["AppID", runtime.get("WECHAT_PAY_APP_ID", "")], ["商户号", runtime.get("WECHAT_PAY_MCH_ID", "")], ["APIv3 Key", runtime.get("WECHAT_PAY_API_V3_KEY", "")], ["商户私钥", runtime.get("WECHAT_PAY_PRIVATE_KEY_PATH", "")], ["回调地址", runtime.get("WECHAT_PAY_NOTIFY_URL", "")]]));
       checks.push(configuredChannelCheck("alipay", "支付宝", runtime.get("ALIPAY_ENABLED", "false") === "true", [["AppID", runtime.get("ALIPAY_APP_ID", "")], ["应用私钥", runtime.get("ALIPAY_PRIVATE_KEY_PATH", "")], ["回调地址", runtime.get("ALIPAY_NOTIFY_URL", "")]]));
@@ -11752,17 +11754,30 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!dto.refundInstructions?.trim()) throw new BadRequestException("请填写退款说明");
   }
 
-  private async ensureOperationSetting(admin?: AdminContext) {
-    const id = this.isTenantScoped(admin) ? admin?.tenantId || 1 : 1;
-    let setting = await this.operationSettings.findOne({ where: { id } });
+  private async operationSettingTarget(admin?: AdminContext, requestedTenantId?: number | string | null) {
+    const parsedTenantId = requestedTenantId === undefined || requestedTenantId === null || requestedTenantId === "" ? 0 : Number(requestedTenantId);
+    if (!Number.isInteger(parsedTenantId) || parsedTenantId < 0) throw new BadRequestException("商家参数无效");
+    if (this.isTenantScoped(admin)) {
+      const tenantId = Number(admin?.tenantId || 0);
+      if (parsedTenantId && parsedTenantId !== tenantId) throw new ForbiddenException("不能修改其他商家的运营设置");
+      const tenant = await this.currentTenantForAdmin(admin);
+      return { id: tenant.id, tenant };
+    }
+    if (!parsedTenantId) return { id: 1, tenant: null as Tenant | null };
+    const tenant = await this.tenants.findOneBy({ id: parsedTenantId });
+    if (!tenant || !tenant.enabled) throw new NotFoundException("商家不存在或已停用");
+    return { id: tenant.id, tenant };
+  }
+
+  private async ensureOperationSettingForTarget(admin: AdminContext | undefined, scope: { id: number; tenant: Tenant | null }) {
+    let setting = await this.operationSettings.findOne({ where: { id: scope.id } });
     if (setting) return setting;
-    const tenant = this.isTenantScoped(admin) ? await this.currentTenantForAdmin(admin) : null;
-    setting = this.createOperationSetting(admin, tenant);
+    setting = this.createOperationSetting(admin, scope.tenant, scope.id);
     return this.operationSettings.save(setting);
   }
 
-  private createOperationSetting(admin?: AdminContext, tenant?: Tenant | null) {
-    const id = this.isTenantScoped(admin) ? admin?.tenantId || 1 : 1;
+  private createOperationSetting(admin?: AdminContext, tenant?: Tenant | null, targetId?: number) {
+    const id = targetId || (this.isTenantScoped(admin) ? admin?.tenantId || 1 : 1);
     return this.operationSettings.create({
       id,
       tenant: tenant || this.tenantRelation(admin),
@@ -11806,8 +11821,14 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return url.toString();
   }
 
-  private publicOperationSettingForAdmin(setting: OperationSetting) {
-    return { ...setting, launchConfig: maskLaunchConfigSecrets(setting.launchConfig), smsAccessKeySecret: maskedStoredSecret(setting.smsAccessKeySecret), smsAccessKeySecretConfigured: Boolean(setting.smsAccessKeySecret) };
+  private publicOperationSettingForAdmin(setting: OperationSetting, tenant?: Tenant | null) {
+    return {
+      ...setting,
+      settingScope: tenant ? { type: "tenant", tenantId: tenant.id, tenantCode: tenant.code, tenantName: tenant.name } : { type: "platform", tenantId: null, tenantCode: null, tenantName: "平台默认" },
+      launchConfig: maskLaunchConfigSecrets(setting.launchConfig),
+      smsAccessKeySecret: maskedStoredSecret(setting.smsAccessKeySecret),
+      smsAccessKeySecretConfigured: Boolean(setting.smsAccessKeySecret)
+    };
   }
 
   private subscriptionActionLabel(action: TenantSubscriptionChangeDto["action"]) {

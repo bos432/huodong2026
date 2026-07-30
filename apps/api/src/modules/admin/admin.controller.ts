@@ -2111,20 +2111,20 @@ export class AdminController {
 
   @AdminRoles(...OPERATION_ROLES)
   @Get("settings/operation")
-  operationSetting(@CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.getOperationSetting(admin);
+  operationSetting(@Query("tenantId") tenantId: string | undefined, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.getOperationSetting(admin, tenantId);
   }
 
   @AdminRoles(...OPERATION_ROLES)
   @Post("settings/operation")
-  saveOperationSetting(@Body() dto: OperationSettingDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
-    return this.service.saveOperationSetting(dto, admin);
+  saveOperationSetting(@Query("tenantId") tenantId: string | undefined, @Body() dto: OperationSettingDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.saveOperationSetting(dto, admin, tenantId);
   }
 
   @AdminRoles(...OPERATION_ROLES)
   @Post("settings/sms/test")
-  testSmsSetting(@Body() dto: SmsTestDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null; permissions?: string[] }) {
-    return this.service.sendTestSms(dto, admin);
+  testSmsSetting(@Query("tenantId") tenantId: string | undefined, @Body() dto: SmsTestDto, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null; permissions?: string[] }) {
+    return this.service.sendTestSms(dto, admin, tenantId);
   }
 
   @AdminRoles(...FINANCE_ROLES)
@@ -2159,8 +2159,8 @@ export class AdminController {
 
   @AdminRoles(...OPERATION_ROLES)
   @Post("settings/connectivity-check")
-  connectivityCheck(@CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null; permissions?: string[] }) {
-    return this.service.checkConfigurationConnectivity(admin);
+  connectivityCheck(@Query("tenantId") tenantId: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null; permissions?: string[] }) {
+    return this.service.checkConfigurationConnectivity(admin, tenantId);
   }
 
   @AdminRoles(...CHECK_IN_ROLES)

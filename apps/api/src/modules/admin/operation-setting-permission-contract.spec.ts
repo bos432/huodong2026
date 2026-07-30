@@ -39,6 +39,23 @@ describe("operation setting permission contract", () => {
     expect(page).toContain("connectivityError");
   });
 
+  it("lets platform admins target one tenant without crossing tenant or platform boundaries", () => {
+    const controller = read("apps/api/src/modules/admin/admin.controller.ts");
+    const service = read("apps/api/src/modules/admin/admin.service.ts");
+    const page = read("apps/admin/src/views/SystemSettings.vue");
+
+    expect(controller).toContain('@Query("tenantId") tenantId: string | undefined');
+    expect(controller).toContain("this.service.getOperationSetting(admin, tenantId)");
+    expect(controller).toContain("this.service.saveOperationSetting(dto, admin, tenantId)");
+    expect(service).toContain("private async operationSettingTarget");
+    expect(service).toContain('throw new ForbiddenException("不能修改其他商家的运营设置")');
+    expect(service).toContain("if (!scope.tenant && dto.launchConfig !== undefined)");
+    expect(service).toContain("if (!scope.tenant && dto.defaultTenantCode !== undefined)");
+    expect(page).toContain('v-model="operationTenantId"');
+    expect(page).toContain("商家前端实时生效");
+    expect(page).toContain('api.post("/admin/settings/operation", payload, operationRequestConfig())');
+  });
+
   it("documents and enforces feature gate dependencies in the settings workbench", () => {
     const gates = read("apps/admin/src/feature-gates.ts");
     const page = read("apps/admin/src/views/SystemSettings.vue");

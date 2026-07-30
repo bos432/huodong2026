@@ -81,15 +81,19 @@ checkSourceIncludesAll(adminDto, [
 
 checkSourceIncludesAll(adminController, [
   '@Get("settings/operation")',
-  "this.service.getOperationSetting(admin)",
+  '@Query("tenantId") tenantId: string | undefined',
+  "this.service.getOperationSetting(admin, tenantId)",
   '@Post("settings/operation")',
-  "this.service.saveOperationSetting(dto, admin)"
+  "this.service.saveOperationSetting(dto, admin, tenantId)"
 ], "admin operation setting controller");
 
 checkSourceIncludesAll(adminService, [
   "async getOperationSetting",
   "async saveOperationSetting",
-  "this.ensureOperationSetting(admin)",
+  "private async operationSettingTarget",
+  "this.ensureOperationSettingForTarget(admin, scope)",
+  "不能修改其他商家的运营设置",
+  "if (!scope.tenant && dto.launchConfig !== undefined)",
   "registrationEnabled: dto.registrationEnabled ?? true",
   "registrationDisabledMessage: dto.registrationDisabledMessage?.trim() || null",
   "offlinePaymentInstructions: dto.offlinePaymentInstructions.trim()",
@@ -98,7 +102,7 @@ checkSourceIncludesAll(adminService, [
   "refundInstructions: dto.refundInstructions.trim()",
   "invoiceInstructions: dto.invoiceInstructions?.trim() || null",
   '"settings.operation.update"',
-  "tenant: this.tenantRelation(admin)"
+  "tenant: tenant || this.tenantRelation(admin)"
 ], "admin operation setting service");
 
 checkSourceIncludesAll(publicController, [
@@ -143,6 +147,9 @@ checkSourceIncludesAll(adminRouter, [
 
 checkSourceIncludesAll(systemSettings, [
   "/admin/settings/operation",
+  'v-model="operationTenantId"',
+  "operationRequestConfig()",
+  "商家前端实时生效",
   "registrationEnabled",
   "registrationDisabledMessage",
   "offlinePaymentInstructions",

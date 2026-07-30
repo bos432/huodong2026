@@ -28,6 +28,7 @@ const mallPublicController = read("apps/api/src/modules/mall/mall-public.control
 const mallService = read("apps/api/src/modules/mall/mall.service.ts");
 const uploadSecurity = read("apps/api/src/shared/upload-security.ts");
 const uploadMalwareScan = read("apps/api/src/shared/upload-malware-scan.ts");
+const objectStorage = read("apps/api/src/shared/object-storage.ts");
 const objectStorageService = read("apps/api/src/shared/object-storage.service.ts");
 const mainTs = read("apps/api/src/main.ts");
 const configValidation = read("apps/api/src/shared/config-validation.ts");
@@ -172,11 +173,21 @@ checkSourceIncludesAll(mallPublicController, [
 
 checkSourceIncludesAll(objectStorageService, [
   "normalizeObjectStorageConfig",
+  "normalizePublicAssetBase",
   "objectStorageMissingFields",
   "文件存储尚未配置完整",
   "文件存储服务暂时不可用",
-  "文件访问域名尚未配置"
+  "API 公开域名配置无效",
+  "文件访问域名尚未正确配置"
 ], "object storage safe failure handling");
+
+checkSourceIncludesAll(objectStorage, [
+  "normalizePublicAssetBase",
+  'hostname === "example.com"',
+  'hostname.endsWith(".example.com")',
+  'hostname === "localhost"',
+  '["http:", "https:"].includes(url.protocol)'
+], "public upload origin validation");
 
 checkSourceIncludesAll(mainTs, [
   "useStaticAssets",
