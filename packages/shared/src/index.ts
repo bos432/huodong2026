@@ -271,11 +271,11 @@ export function markdownToRichTextHtml(markdown: unknown) {
   const openList = (tag: "ul" | "ol") => {
     if (listTag === tag) return;
     closeList();
-    html.push("<" + tag + ' style="margin:8px 0 10px;padding-left:20px;color:#344054;font-size:14px;line-height:1.7;">');
+    html.push("<" + tag + ' style="margin:10px 0 12px;padding-left:22px;color:#344054;font-size:15px;line-height:1.8;">');
     listTag = tag;
   };
 
-  const paragraphStyle = "margin:0 0 10px;color:#344054;font-size:14px;line-height:1.7;white-space:normal;word-break:break-word;";
+  const paragraphStyle = "margin:0 0 13px;color:#344054;font-size:15px;line-height:1.85;white-space:normal;word-break:break-word;";
 
   for (const rawLine of lines) {
     const line = rawLine.trimEnd();
@@ -309,8 +309,8 @@ export function markdownToRichTextHtml(markdown: unknown) {
     const heading = /^(#{1,3})\s+(.+)$/.exec(line.trim());
     if (heading) {
       closeList();
-      const size = heading[1].length === 1 ? 20 : heading[1].length === 2 ? 17 : 15;
-      html.push(`<h${heading[1].length} style="margin:14px 0 8px;color:#111827;font-size:${size}px;line-height:1.35;font-weight:900;">${inlineMarkdownToHtml(heading[2])}</h${heading[1].length}>`);
+      const size = heading[1].length === 1 ? 22 : heading[1].length === 2 ? 19 : 17;
+      html.push(`<h${heading[1].length} style="margin:20px 0 10px;color:#172b4d;font-size:${size}px;line-height:1.35;font-weight:800;">${inlineMarkdownToHtml(heading[2])}</h${heading[1].length}>`);
       continue;
     }
     const quote = /^>\s?(.+)$/.exec(line.trim());

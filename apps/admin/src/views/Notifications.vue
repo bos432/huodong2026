@@ -303,11 +303,15 @@ async function showTemplateVersions(row: any) {
 
 async function testTemplate(row: any) {
   if (!canSend.value || actionKey.value) return;
+  const provider = providers.value.find((item) => item.channel === row.channel);
+  if (row.channel === "sms" && provider && !provider.ready) {
+    return ElMessage.warning(`短信通道未就绪${provider.missing?.length ? `：缺少 ${provider.missing.join("、")}` : ""}`);
+  }
   try {
     const { value } = await ElMessageBox.prompt("填写接收测试消息的会员 ID。真实短信和微信消息会立即发送。", `测试模板 v${row.version || 1}`, { inputPattern: /^[1-9]\d*$/, inputErrorMessage: "请输入有效会员 ID", confirmButtonText: "发送测试", cancelButtonText: "取消" });
     actionKey.value = `test:${row.id}`;
     const result = await api.post<any, any>(`/admin/notification-templates/${row.id}/test`, { userId: Number(value) }, tenantScopeOptions());
-    ElMessage.success(result.status === "sent" ? "测试消息发送成功" : `测试消息状态：${statusText(result.status)}`);
+    showDeliveryResult(result, true);
     await load();
   } catch (error: any) { if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "模板测试失败"); }
   finally { actionKey.value = ""; }
@@ -326,13 +330,12 @@ async function send() {
   actionKey.value = "notification:send";
   try {
     await ElMessageBox.confirm("确认发送这条通知？若未指定用户，系统会按后端规则创建发送记录。建议先预览变量渲染结果。", "发送通知", { type: "warning", confirmButtonText: "确认发送", cancelButtonText: "先不发送" });
-    await api.post("/admin/notifications/send", {
+    const result = await api.post<any, any>("/admin/notifications/send", {
       ...sendForm,
       activityId: sendForm.activityId || undefined,
       templateId: sendForm.templateId || undefined
     }, tenantScopeOptions());
-    ElMessage.success("通知已发送");
-    resetSendForm();
+    if (showDeliveryResult(result)) resetSendForm();
     await load();
   } catch (error: any) {
     if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "通知发送失败");
@@ -430,6 +433,23 @@ async function savePreference() {
 
 function statusType(status: string) { return status === "sent" ? "success" : status === "failed" ? "danger" : status === "suppressed" ? "warning" : "info"; }
 function statusText(status: string) { return ({ sent: "已发送", failed: "失败", suppressed: "已抑制", pending: "待发送" } as Record<string, string>)[status] || status; }
+function channelText(channel: string) { return ({ site: "站内通知", sms: "短信", wechat: "微信订阅消息", email: "邮件" } as Record<string, string>)[channel] || channel; }
+
+function showDeliveryResult(result: any, isTest = false) {
+  const channel = String(result?.channel || "site");
+  const prefix = isTest ? "测试" : "通知";
+  if (result?.status !== "sent") {
+    ElMessage.error(`${prefix}${channelText(channel)}未发送成功：${result?.errorMessage || result?.suppressedReason || statusText(String(result?.status || "failed"))}`);
+    return false;
+  }
+  if (channel === "site") {
+    ElMessage.info(`${prefix}站内通知已生成，不会发送手机短信。请使用“短信”渠道的模板测试真实短信。`);
+    return true;
+  }
+  const provider = result?.provider ? `，服务商：${result.provider}` : "";
+  ElMessage.success(`${prefix}${channelText(channel)}已提交${provider}`);
+  return true;
+}
 
 function resetSendForm() {
   Object.assign(sendForm, { userId: undefined, templateId: undefined, activityId: undefined, tagName: "", channel: "site", title: "", content: "", remark: "" });
@@ -586,7 +606,7 @@ watch(
             </template>
           </el-table-column>
           <el-table-column prop="name" label="模板" min-width="150" />
-          <el-table-column prop="channel" label="渠道" width="110" />
+          <el-table-column label="渠道" width="110"><template #default="{ row }">{{ channelText(row.channel) }}</template></el-table-column>
           <el-table-column label="场景" min-width="130"><template #default="{ row }">{{ sceneOptions.find((item) => item[0] === row.scene)?.[1] || row.scene || "-" }}</template></el-table-column>
           <el-table-column label="版本" width="80"><template #default="{ row }">v{{ row.version || 1 }}</template></el-table-column>
           <el-table-column label="审核" width="100"><template #default="{ row }"><el-tag :type="row.approvalStatus === 'approved' ? 'success' : row.approvalStatus === 'rejected' ? 'danger' : 'info'">{{ row.approvalStatus || "draft" }}</el-tag></template></el-table-column>
@@ -645,7 +665,7 @@ watch(
       <el-table v-if="preferences.length" :data="preferences" size="small" max-height="260">
         <el-table-column label="会员 ID" width="105"><template #default="{ row }">{{ userIdLabel(row) }}</template></el-table-column>
         <el-table-column label="会员" min-width="160"><template #default="{ row }">{{ displayUser(row, `ID ${row.user?.id || "-"}`) }}</template></el-table-column>
-        <el-table-column prop="channel" label="渠道" width="100" />
+        <el-table-column label="渠道" width="100"><template #default="{ row }">{{ channelText(row.channel) }}</template></el-table-column>
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.subscribed ? 'success' : 'warning'">{{ row.subscribed ? "订阅" : "退订" }}</el-tag></template></el-table-column>
         <el-table-column prop="reason" label="原因" min-width="180" />
         <el-table-column prop="updatedAt" label="更新时间" width="180" />
@@ -664,7 +684,7 @@ watch(
       <el-empty v-if="!notifications.length" description="暂无发送记录" />
       <el-table v-else :data="notifications" stripe>
         <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
-        <el-table-column prop="channel" label="渠道" width="110" />
+        <el-table-column label="渠道" width="110"><template #default="{ row }">{{ channelText(row.channel) }}</template></el-table-column>
         <el-table-column label="场景" min-width="120"><template #default="{ row }">{{ sceneOptions.find((item) => item[0] === row.scene)?.[1] || row.scene || "-" }}</template></el-table-column>
         <el-table-column label="活动" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ row.activity?.title || "-" }}</template>
