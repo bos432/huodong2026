@@ -3265,12 +3265,12 @@ export class PublicService {
   private async memberAccessSnapshot(activity: Activity, userId?: number) {
     const requiredLevel = this.effectiveRequiredMemberLevel(activity);
     const priorityActive = this.isPriorityBookingActive(activity);
-    if (!requiredLevel) return { requiredLevel: null, currentLevel: null, eligible: true, message: "不限会员等级", priorityActive: false, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+    if (!requiredLevel) return { requiredLevel: null, currentLevel: null, eligible: true, loginRequired: false, message: "不限会员等级", priorityActive: false, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     if (!userId) {
-      return { requiredLevel: this.publicMemberLevel(requiredLevel), currentLevel: null, eligible: false, message: priorityActive ? `优先报名截止前仅限${requiredLevel.name}及以上会员报名` : `该活动仅限${requiredLevel.name}及以上会员报名`, priorityActive, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+      return { requiredLevel: this.publicMemberLevel(requiredLevel), currentLevel: null, eligible: false, loginRequired: true, message: "登录后可查看会员等级和报名资格", priorityActive, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     }
     const user = await this.users.findOneBy({ id: userId });
-    if (!user) return { requiredLevel: this.publicMemberLevel(requiredLevel), currentLevel: null, eligible: false, message: "用户不存在", priorityActive, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+    if (!user) return { requiredLevel: this.publicMemberLevel(requiredLevel), currentLevel: null, eligible: false, loginRequired: true, message: "登录状态已失效，请重新登录", priorityActive, priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel), priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     const tenantScopeKey = activity.tenant ? `tenant:${activity.tenant.id}` : "platform";
     let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey } });
     if (!profile) profile = await this.refreshMemberProfile(user, activity.tenant || null);
@@ -3280,6 +3280,7 @@ export class PublicService {
       requiredLevel: this.publicMemberLevel(requiredLevel),
       currentLevel: this.publicMemberLevel(currentLevel),
       eligible,
+      loginRequired: false,
       priorityActive,
       priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel),
       priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt,

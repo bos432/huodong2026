@@ -79,25 +79,33 @@ function registrationPausedMessage() {
   return operationSetting.value?.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。";
 }
 
+function memberLoginRequired() {
+  const access = activity.value?.memberAccess;
+  return Boolean(access?.loginRequired || (access && !access.eligible && !getUserToken()));
+}
+
 function canRegister() {
   const status = activity.value?.displayStatus;
-  return !registrationPaused() && (status === "open" || status === "full") && (activity.value?.memberAccess?.eligible ?? true);
+  const access = activity.value?.memberAccess;
+  return !registrationPaused() && (status === "open" || status === "full") && (!access || access.eligible || memberLoginRequired());
 }
 
 function registerButtonText() {
   if (registrationPaused()) return "报名暂停";
+  if (activity.value?.displayStatus === "ended") return "报名已结束";
+  if (activity.value?.displayStatus !== "open" && activity.value?.displayStatus !== "full") return "暂不可报名";
+  if (memberLoginRequired()) return "登录后报名";
   if (activity.value?.memberAccess && !activity.value.memberAccess.eligible) return "会员等级不足";
   if (activity.value?.displayStatus === "full") return "加入候补";
-  if (activity.value?.displayStatus === "ended") return "报名已结束";
-  if (activity.value?.displayStatus !== "open") return "暂不可报名";
   return "立即报名";
 }
 
 function actionHint() {
   if (registrationPaused()) return registrationPausedMessage();
+  if (activity.value?.displayStatus === "ended") return "报名已结束，可以查看活动信息或联系主办方。";
+  if (memberLoginRequired()) return activity.value?.memberAccess?.message || "登录后可查看会员等级和报名资格。";
   if (activity.value?.memberAccess && !activity.value.memberAccess.eligible) return activity.value.memberAccess.message || "当前账号暂不满足报名条件。";
   if (activity.value?.displayStatus === "full") return "当前名额已满，你仍可先加入候补名单。";
-  if (activity.value?.displayStatus === "ended") return "报名已结束，可以查看活动信息或联系主办方。";
   return "名额仍可报名，提交后请留意付款、审核或活动通知。";
 }
 
@@ -113,7 +121,7 @@ function register() {
     source.value ? `source=${encodeURIComponent(source.value)}` : ""
   ].filter(Boolean).join("&");
   const target = withTenantCode(`/pages/activity/register?${query}`);
-  if (!getUserToken()) {
+  if (memberLoginRequired() || !getUserToken()) {
     uni.navigateTo({ url: withTenantCode(`/pages/user/login?redirect=${encodeURIComponent(target)}`) });
     return;
   }

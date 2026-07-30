@@ -1885,9 +1885,9 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   private async memberAccessSnapshot(activity: Activity, user?: User) {
     const requiredLevel = this.effectiveRequiredMemberLevel(activity);
     const priorityActive = this.isPriorityBookingActive(activity);
-    if (!requiredLevel) return { requiredLevel: null, currentLevel: null, eligible: true, message: "不限会员等级", priorityActive: false, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+    if (!requiredLevel) return { requiredLevel: null, currentLevel: null, eligible: true, loginRequired: false, message: "不限会员等级", priorityActive: false, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     if (!user) {
-      return { requiredLevel, currentLevel: null, eligible: false, message: priorityActive ? `优先报名截止前仅限${requiredLevel.name}及以上会员报名` : `该活动仅限${requiredLevel.name}及以上会员报名`, priorityActive, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
+      return { requiredLevel, currentLevel: null, eligible: false, loginRequired: true, message: "登录后可查看会员等级和报名资格", priorityActive, priorityMemberLevel: activity.priorityMemberLevel, priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt };
     }
     const tenant = activity.tenant || null;
     let profile = await this.memberProfiles.findOne({ where: { user: { id: user.id }, tenantScopeKey: memberLevelScopeKey(tenant) } });
@@ -1898,6 +1898,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       requiredLevel,
       currentLevel,
       eligible,
+      loginRequired: false,
       priorityActive,
       priorityMemberLevel: activity.priorityMemberLevel,
       priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt,

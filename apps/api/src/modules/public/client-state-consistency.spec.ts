@@ -149,6 +149,18 @@ describe("mobile client state consistency", () => {
     expect(activityList).toContain(':aria-label="`查看活动：${item.title}`"');
   });
 
+  it("separates guest login prompts from authenticated member-level rejection", () => {
+    expect(activityDetail).toContain("function memberLoginRequired()");
+    expect(activityDetail).toContain('return "登录后报名"');
+    expect(activityDetail).toContain("access.eligible || memberLoginRequired()");
+    expect(activityDetail).toContain("memberLoginRequired() || !getUserToken()");
+    expect(activityDetail).toContain('return "会员等级不足"');
+    expect(activityRegister).toContain("!activity.value.memberAccess.eligible && !memberLoginRequired.value");
+    expect(activityRegister).toContain('if (memberLoginRequired.value) return "登录后报名"');
+    expect(activityRegister).toContain("if (memberLoginRequired.value) {\n    goLogin();");
+    expect(activityRegister).toContain('if (memberBlocked.value) return "会员等级不足"');
+  });
+
   it("recovers an H5 session from removed versioned chunks without a reload loop", () => {
     expect(errorReporting).toContain("isStaleChunkError");
     expect(errorReporting).toContain("failed to fetch dynamically imported module");

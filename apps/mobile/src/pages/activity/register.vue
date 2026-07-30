@@ -50,7 +50,8 @@ const ticketSelectionUnavailable = computed(() => hasTicketTypes.value && activi
 const selectedTicket = computed(() => ticketOptions.value.find((ticket: any) => ticket.id === selectedTicketTypeId.value));
 const currentPayable = computed(() => quote.value?.payableAmount ?? Number(activity.value?.price || 0).toFixed(2));
 const payableNumber = computed(() => Number(currentPayable.value || 0));
-const memberBlocked = computed(() => activity.value?.memberAccess && !activity.value.memberAccess.eligible);
+const memberLoginRequired = computed(() => Boolean(activity.value?.memberAccess?.loginRequired));
+const memberBlocked = computed(() => activity.value?.memberAccess && !activity.value.memberAccess.eligible && !memberLoginRequired.value);
 const registrationPaused = computed(() => {
   const value = operationSetting.value?.registrationEnabled;
   return value === false || value === 0 || value === "0";
@@ -86,6 +87,7 @@ const payableText = computed(() => payableNumber.value > 0 ? `￥${currentPayabl
 const submitButtonText = computed(() => {
   if (submitting.value) return "提交中...";
   if (registrationPaused.value) return "报名暂停";
+  if (memberLoginRequired.value) return "登录后报名";
   if (memberBlocked.value) return "会员等级不足";
   if (activity.value?.remainingSeats <= 0) return "加入候补";
   if (ticketSelectionUnavailable.value) return "票种不可报名";
@@ -202,6 +204,10 @@ function submit() {
   attemptedSubmit.value = true;
   if (registrationPaused.value) {
     uni.showToast({ title: registrationPausedMessage.value, icon: "none" });
+    return;
+  }
+  if (memberLoginRequired.value) {
+    goLogin();
     return;
   }
   if (memberBlocked.value) {
