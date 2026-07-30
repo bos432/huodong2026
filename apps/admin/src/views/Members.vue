@@ -982,6 +982,7 @@ watch(
       </div>
       <el-table v-loading="loading" :data="rows" stripe empty-text="暂无会员" @selection-change="selectionChange">
         <el-table-column v-if="canManageTags" type="selection" width="44" />
+        <el-table-column label="User ID" width="100"><template #default="{ row }">{{ row.user.id }}</template></el-table-column>
         <el-table-column label="会员" min-width="180"><template #default="{ row }">{{ row.user.nickname || (row.user.phone ? displayPhone(row.user.phone) : `用户${row.user.id}`) }}</template></el-table-column>
         <el-table-column label="手机号" width="140"><template #default="{ row }">{{ displayPhone(row.user.phone) }}</template></el-table-column>
         <el-table-column label="来源" width="115">

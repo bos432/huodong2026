@@ -176,6 +176,67 @@ function safeRichTextUrl(value: unknown) {
   return "";
 }
 
+const SAFE_RICH_TEXT_HTML_TAGS = new Set([
+  "a", "article", "b", "blockquote", "br", "caption", "code", "div", "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "hr", "i", "img", "li", "ol", "p", "pre", "s", "small", "span", "strong", "sub", "sup", "table", "tbody", "td", "th", "thead", "tr", "u", "ul"
+]);
+const SAFE_RICH_TEXT_VOID_HTML_TAGS = new Set(["br", "hr", "img"]);
+const SAFE_RICH_TEXT_STYLE_PROPERTIES = new Set([
+  "background", "background-color", "border", "border-bottom", "border-color", "border-left", "border-radius", "border-right", "border-style", "border-top", "border-width", "color", "display", "font-size", "font-style", "font-weight", "height", "line-height", "margin", "margin-bottom", "margin-left", "margin-right", "margin-top", "max-width", "min-height", "padding", "padding-bottom", "padding-left", "padding-right", "padding-top", "text-align", "text-decoration", "vertical-align", "white-space", "width", "word-break"
+]);
+
+function safeRichTextStyle(value: string) {
+  return value.split(";").map((declaration) => {
+    const separator = declaration.indexOf(":");
+    if (separator < 1) return "";
+    const property = declaration.slice(0, separator).trim().toLowerCase();
+    const styleValue = declaration.slice(separator + 1).trim();
+    if (!SAFE_RICH_TEXT_STYLE_PROPERTIES.has(property) || !styleValue) return "";
+    if (/[<>]|expression\s*\(|url\s*\(|@import|behavior\s*:|-moz-binding/i.test(styleValue)) return "";
+    return `${property}:${styleValue}`;
+  }).filter(Boolean).join(";");
+}
+
+/** Sanitizes the limited HTML layout blocks inserted by the admin editor. */
+export function sanitizeRichTextHtml(value: unknown) {
+  const source = String(value ?? "")
+    .replace(/<!--([\s\S]*?)-->/g, "")
+    .replace(/<(script|style|iframe|object|embed|svg|math)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, "");
+  return source.replace(/<\/?([a-z][a-z0-9]*)\b([^>]*)>/gi, (match, rawTag: string, rawAttributes: string) => {
+    const tag = rawTag.toLowerCase();
+    if (!SAFE_RICH_TEXT_HTML_TAGS.has(tag)) return "";
+    if (match.startsWith("</")) return SAFE_RICH_TEXT_VOID_HTML_TAGS.has(tag) ? "" : `</${tag}>`;
+
+    const attributes: string[] = [];
+    const sourceAttributes = String(rawAttributes || "");
+    const readAttribute = (name: string) => {
+      const result = new RegExp("\\b" + name + "\\s*=\\s*(?:\"([^\"]*)\"|'([^']*)'|([^\\s\"'=<>`]+))", "i").exec(sourceAttributes);
+      return result ? result[1] ?? result[2] ?? result[3] ?? "" : "";
+    };
+    const style = safeRichTextStyle(readAttribute("style"));
+    if (style) attributes.push(`style=\"${escapeRichTextHtml(style)}\"`);
+    const title = readAttribute("title");
+    if (title) attributes.push(`title=\"${escapeRichTextHtml(title)}\"`);
+    if (tag === "a") {
+      const href = safeRichTextUrl(readAttribute("href"));
+      if (href) attributes.push(`href=\"${escapeRichTextHtml(href)}\"`);
+    }
+    if (tag === "img") {
+      const src = safeRichTextUrl(readAttribute("src"));
+      if (!src) return "";
+      attributes.push(`src=\"${escapeRichTextHtml(src)}\"`);
+      const alt = readAttribute("alt");
+      if (alt) attributes.push(`alt=\"${escapeRichTextHtml(alt)}\"`);
+    }
+    if (["table", "td", "th"].includes(tag)) {
+      for (const name of ["colspan", "rowspan", "width", "height", "align"]) {
+        const attribute = readAttribute(name);
+        if (attribute && /^[a-z0-9.% -]+$/i.test(attribute)) attributes.push(`${name}=\"${escapeRichTextHtml(attribute)}\"`);
+      }
+    }
+    return `<${tag}${attributes.length ? ` ${attributes.join(" ")}` : ""}>`;
+  });
+}
+
 function inlineMarkdownToHtml(value: string) {
   let html = escapeRichTextHtml(value);
   html = html.replace(/!\[([^\]]*)\]\(([^)]+)\)/g, (_match, alt, url) => {
@@ -199,6 +260,7 @@ export function markdownToRichTextHtml(markdown: unknown) {
   const html: string[] = [];
   let codeLines: string[] = [];
   let inCode = false;
+  let rawHtmlCode = false;
   let listTag: "ul" | "ol" | null = null;
 
   const closeList = () => {
@@ -219,12 +281,15 @@ export function markdownToRichTextHtml(markdown: unknown) {
     const line = rawLine.trimEnd();
     if (line.trim().startsWith("```")) {
       if (inCode) {
-        html.push(`<pre style="margin:10px 0;padding:10px;border-radius:8px;background:#111827;color:#f9fafb;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.55;"><code>${escapeRichTextHtml(codeLines.join("\n"))}</code></pre>`);
+        if (rawHtmlCode) html.push(sanitizeRichTextHtml(codeLines.join("\n")));
+        else html.push(`<pre style="margin:10px 0;padding:10px;border-radius:8px;background:#111827;color:#f9fafb;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.55;"><code>${escapeRichTextHtml(codeLines.join("\n"))}</code></pre>`);
         codeLines = [];
         inCode = false;
+        rawHtmlCode = false;
       } else {
         closeList();
         inCode = true;
+        rawHtmlCode = /^```html\s*$/i.test(line.trim());
       }
       continue;
     }
@@ -264,7 +329,10 @@ export function markdownToRichTextHtml(markdown: unknown) {
     closeList();
     html.push(`<p style="${paragraphStyle}">${inlineMarkdownToHtml(line.trim())}</p>`);
   }
-  if (inCode) html.push(`<pre style="margin:10px 0;padding:10px;border-radius:8px;background:#111827;color:#f9fafb;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.55;"><code>${escapeRichTextHtml(codeLines.join("\n"))}</code></pre>`);
+  if (inCode) {
+    if (rawHtmlCode) html.push(sanitizeRichTextHtml(codeLines.join("\n")));
+    else html.push(`<pre style="margin:10px 0;padding:10px;border-radius:8px;background:#111827;color:#f9fafb;overflow:auto;white-space:pre-wrap;font-size:13px;line-height:1.55;"><code>${escapeRichTextHtml(codeLines.join("\n"))}</code></pre>`);
+  }
   closeList();
   return html.join("");
 }

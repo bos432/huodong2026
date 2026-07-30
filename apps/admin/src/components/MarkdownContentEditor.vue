@@ -86,6 +86,21 @@ async function insertImageUrl() {
   }
 }
 
+async function insertHtml() {
+  try {
+    const { value } = await ElMessageBox.prompt("粘贴需要保留的排版 HTML。支持标题、段落、列表、图片、表格和安全内联样式；脚本及危险链接会被自动移除。", "插入 HTML 代码", {
+      inputType: "textarea",
+      inputPlaceholder: '<div style="padding:16px;background-color:#fff7ed"><h2>活动亮点</h2><p>内容</p></div>',
+      confirmButtonText: "插入",
+      cancelButtonText: "取消",
+      inputValidator: (input) => Boolean(String(input || "").trim()) || "请输入 HTML 代码"
+    });
+    if (value) insertBlock(`\`\`\`html\n${String(value).trim()}\n\`\`\``);
+  } catch {
+    // Canceling the dialog is an expected edit action.
+  }
+}
+
 async function uploadImage(file: File) {
   if (uploading.value || props.disabled) return false;
   if (!["image/jpeg", "image/png", "image/webp", "image/gif"].includes(file.type)) {
@@ -130,6 +145,7 @@ function applyTemplate(content: string) {
       <el-button size="small" :disabled="disabled" @click="insertBlock('1. 编号项目')">编号</el-button>
       <el-button size="small" :disabled="disabled" @click="insertBlock('> 提示内容')">提示</el-button>
       <el-button size="small" :disabled="disabled" @click="insertBlock('---')">分隔线</el-button>
+      <el-button size="small" :disabled="disabled" @click="insertHtml">HTML</el-button>
       <el-button size="small" :icon="Link" :disabled="disabled" @click="insertLink">链接</el-button>
       <el-button size="small" :icon="Picture" :disabled="disabled" @click="insertImageUrl">图片地址</el-button>
       <el-upload :show-file-list="false" :disabled="disabled || uploading" :before-upload="uploadImage">

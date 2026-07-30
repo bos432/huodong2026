@@ -461,6 +461,10 @@ function displayUser(row: any, emptyText = "全部/未指定") {
   return row.user.nickname || (canViewSensitive.value && !row.sensitiveMasked && !row.user.sensitiveMasked ? phone : maskPhone(phone)) || `ID ${row.user.id}`;
 }
 
+function userIdLabel(row: any) {
+  return row?.user?.id ? `ID ${row.user.id}` : "-";
+}
+
 function changeNotificationPage(page: number) {
   notificationPage.value = page;
   load();
@@ -533,7 +537,7 @@ watch(
       <div v-if="canSend" class="table-card" v-loading="loading">
         <h3>发送通知</h3>
         <el-form label-position="top">
-          <el-form-item label="目标会员 ID"><el-input-number v-model="sendForm.userId" :min="1" placeholder="发送单条时必填" /></el-form-item>
+          <el-form-item label="目标会员 ID"><el-input-number v-model="sendForm.userId" :min="1" placeholder="在会员资产的 User ID 列查找" /><small class="field-tip">在「会员资产」列表查看并复制 User ID；发送记录会保留对应 ID。</small></el-form-item>
           <el-form-item label="选择模板">
             <el-select v-model="sendForm.templateId" clearable filterable placeholder="可选：选择模板后自动填充" @change="applyTemplate">
               <el-option v-for="item in templates" :key="item.id" :label="templateOptionLabel(item)" :value="item.id" />
@@ -639,6 +643,7 @@ watch(
         <el-button type="primary" :loading="actionKey.startsWith('preference:')" :disabled="Boolean(actionKey)" @click="savePreference">保存偏好</el-button>
       </el-form>
       <el-table v-if="preferences.length" :data="preferences" size="small" max-height="260">
+        <el-table-column label="会员 ID" width="105"><template #default="{ row }">{{ userIdLabel(row) }}</template></el-table-column>
         <el-table-column label="会员" min-width="160"><template #default="{ row }">{{ displayUser(row, `ID ${row.user?.id || "-"}`) }}</template></el-table-column>
         <el-table-column prop="channel" label="渠道" width="100" />
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.subscribed ? 'success' : 'warning'">{{ row.subscribed ? "订阅" : "退订" }}</el-tag></template></el-table-column>
@@ -664,6 +669,7 @@ watch(
         <el-table-column label="活动" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ row.activity?.title || "-" }}</template>
         </el-table-column>
+        <el-table-column label="会员 ID" width="105"><template #default="{ row }">{{ userIdLabel(row) }}</template></el-table-column>
         <el-table-column label="用户" min-width="140">
           <template #default="{ row }">{{ displayUser(row) }}</template>
         </el-table-column>
