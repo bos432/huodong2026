@@ -302,6 +302,7 @@ describe("tenant subscription status", () => {
     expect(tenantEntitlementFeatureForGate("communityPublish")).toBe("community");
     expect(tenantEntitlementFeatureForGate("volunteer")).toBe("volunteers");
     expect(tenantEntitlementFeatureForGate("adCenter")).toBe("ads");
+    expect(tenantEntitlementFeatureForGate("partner")).toBeNull();
     expect(tenantEntitlementFeatureForGate("unknown")).toBeNull();
   });
 

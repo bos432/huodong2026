@@ -100,7 +100,7 @@ export function tenantEntitlementFeatureForGate(key: string): TenantEntitlementF
   const mapping: Record<string, TenantEntitlementFeature> = {
     courses: "courses", community: "community", communityPublish: "community", forum: "forum", forumPost: "forum",
     mall: "mall", charity: "charity", volunteer: "volunteers", certificates: "certificates",
-    ambassador: "ambassadors", partner: "partners", adCenter: "ads", agentSettlement: "agentSettlement"
+    ambassador: "ambassadors", adCenter: "ads", agentSettlement: "agentSettlement"
   };
   return mapping[key] || null;
 }
