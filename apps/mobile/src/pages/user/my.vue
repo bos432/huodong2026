@@ -192,7 +192,10 @@ const profileLoadGuard = createTenantLoadGuard();
 const featureGates = featureGatesState;
 const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
-const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
+function safeList<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+const myPageSection = computed(() => safeList<any>(sections.value).find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
 const warmHeaderBackground = "#20d477";
 const warmHeaderTextColor = "#072d19";
@@ -222,7 +225,7 @@ const memberStats = computed(() => [
   { label: "积分", value: profile.value?.id ? String(profile.value?.points || 0) : "--" },
   { label: "成长", value: profile.value?.id ? String(profile.value?.growthValue || 0) : "--" },
   { label: "余额", value: !profile.value?.id || assetFailed("wallet") ? "--" : `¥${money(wallet.value?.availableBalance)}` },
-  { label: "报名", value: !profile.value?.id || assetFailed("registrations") ? "--" : String(registrations.value.length) }
+  { label: "报名", value: !profile.value?.id || assetFailed("registrations") ? "--" : String(safeList<any>(registrations.value).length) }
 ]);
 const charityAmountText = computed(() => !profile.value?.id || assetFailed("charity") ? "--" : money(charity.value?.totalAmount));
 const walletBalanceText = computed(() => !profile.value?.id || assetFailed("wallet") ? "¥--" : `¥${money(wallet.value?.availableBalance)}`);
@@ -237,22 +240,22 @@ function shouldCompleteWechatProfile(row?: any) {
 const isDefaultWechatNickname = computed(() => isDefaultWechatNicknameValue(profile.value?.nickname));
 const canCompleteWechatProfile = computed(() => shouldCompleteWechatProfile(profile.value));
 const pendingOrderCount = computed(() => ["registrations", "courseOrders"].some(assetFailed) ? null
-  : registrations.value.filter(activityOrderIsPending).length
-    + courseOrders.value.filter((item) => item.status === "pending_payment" || ["pending", "approved", "processing", "failed"].includes(String(item.latestRefund?.status || ""))).length);
-const upcomingOrderCount = computed(() => assetFailed("registrations") ? null : registrations.value.filter(activityOrderIsUpcoming).length);
+  : safeList<any>(registrations.value).filter(activityOrderIsPending).length
+    + safeList<any>(courseOrders.value).filter((item) => item.status === "pending_payment" || ["pending", "approved", "processing", "failed"].includes(String(item.latestRefund?.status || ""))).length);
+const upcomingOrderCount = computed(() => assetFailed("registrations") ? null : safeList<any>(registrations.value).filter(activityOrderIsUpcoming).length);
 const completedOrderCount = computed(() => {
   if (assetFailed("registrations")) return null;
-  let count = registrations.value.filter(activityOrderIsCompleted).length;
+  let count = safeList<any>(registrations.value).filter(activityOrderIsCompleted).length;
   if (!featureGatesState.value.courses) return count;
   if (["courses", "courseOrders"].some(assetFailed)) return null;
-  count += courseOrders.value.filter(courseOrderIsCompleted).length;
+  count += safeList<any>(courseOrders.value).filter(courseOrderIsCompleted).length;
   count += learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) >= 100).length;
   return count;
 });
 const afterSaleCount = computed(() => {
   if (["registrations", "courseOrders"].some(assetFailed)) return null;
-  const activityCount = registrations.value.filter((item) => ["pending", "processing", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
-  const courseCount = courseOrders.value.filter((item) => ["pending", "approved", "processing", "failed", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
+  const activityCount = safeList<any>(registrations.value).filter((item) => ["pending", "processing", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
+  const courseCount = safeList<any>(courseOrders.value).filter((item) => ["pending", "approved", "processing", "failed", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
   return activityCount + courseCount;
 });
 
@@ -269,11 +272,11 @@ function isCurrentSession(session: MemberOrderSession) {
 }
 
 function learningOnlyCourses() {
-  return courses.value.filter((course) => !courseOrders.value.some((order) => Number(order.course?.id) === Number(course.id)));
+  return safeList<any>(courses.value).filter((course) => !safeList<any>(courseOrders.value).some((order) => Number(order.course?.id) === Number(course.id)));
 }
 
 function courseProgress(order: any) {
-  return Number(courses.value.find((course) => Number(course.id) === Number(order.course?.id))?.learning?.progress || 0);
+  return Number(safeList<any>(courses.value).find((course) => Number(course.id) === Number(order.course?.id))?.learning?.progress || 0);
 }
 
 function courseOrderIsLearning(order: any) {

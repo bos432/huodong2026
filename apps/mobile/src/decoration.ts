@@ -68,7 +68,14 @@ function normalizeLink(url?: string) {
   return String(url || "").split("?")[0];
 }
 
-function normalizeDecorationSections(list: HomepageSectionView[]) {
+function asDecorationSections(value: unknown): HomepageSectionView[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is HomepageSectionView => Boolean(item) && typeof item === "object")
+    : [];
+}
+
+function normalizeDecorationSections(value: unknown) {
+  const list = asDecorationSections(value);
   const latestSingleton = new Map<string, HomepageSectionView>();
   for (const item of list) {
     if (globalSingletonTypes.includes(item.type)) latestSingleton.set(item.type, item);
@@ -86,8 +93,9 @@ export function quickInitial(label?: string, icon?: string) {
 
 // Pages with their own title area keep optional decorative content, but avoid repeating
 // the configurable Hero and page-description blocks that already appear in that title area.
-export function filterIntrinsicHeaderDecorationSections(sections: HomepageSectionView[]) {
-  return sections.filter((section) => section.type !== "hero" && !(section.type === "rich_text" && section.title === "页面说明"));
+export function filterIntrinsicHeaderDecorationSections(sections: unknown) {
+  return asDecorationSections(sections)
+    .filter((section) => section.type !== "hero" && !(section.type === "rich_text" && section.title === "页面说明"));
 }
 
 export function goDecoratedLink(url?: string, action?: string) {
@@ -114,19 +122,21 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
   const loadGuard = createTenantLoadGuard();
 
   const bottomNavSection = computed(() => {
-    const section = sections.value.find((item) => item.type === "bottom_nav") || (loadFailed.value || decorationLoaded.value ? defaultBottomNavSection : null);
+    const section = asDecorationSections(sections.value)
+      .find((item) => item.type === "bottom_nav") || (loadFailed.value || decorationLoaded.value ? defaultBottomNavSection : null);
     if (!section) return null;
     const items = Array.isArray(section.config?.items) ? filterNavigationItemsByFeature(section.config.items) : [];
     return { ...section, config: { ...(section.config || {}), items } };
   });
-  const innerPagesSection = computed(() => sections.value.find((item) => item.enabled && item.type === "inner_pages") || defaultInnerPagesSection);
+  const innerPagesSection = computed(() => asDecorationSections(sections.value)
+    .find((item) => item.enabled && item.type === "inner_pages") || defaultInnerPagesSection);
   const innerPageLayout = computed<Record<string, any>>(() => ({ ...defaultInnerPagesSection.layout, ...(innerPagesSection.value.layout || {}) }));
   const innerPageConfig = computed<InnerPageConfig>(() => {
-    const pages = Array.isArray(innerPagesSection.value.config.pages) ? innerPagesSection.value.config.pages : [];
+    const pages = Array.isArray(innerPagesSection.value?.config?.pages) ? innerPagesSection.value.config.pages : [];
     return (pages.find((item: any) => item?.key === pageKey) as InnerPageConfig | undefined) || (defaultInnerPagesSection.config.pages as InnerPageConfig[]).find((item) => item.key === pageKey) || { key: pageKey, title: "", subtitle: "", showBottomNav: true };
   });
   const showBottomNav = computed(() => innerPageConfig.value.showBottomNav !== false && Boolean(bottomNavSection.value?.enabled));
-  const contentSections = computed(() => filterDecorationSectionsByFeature(sections.value
+  const contentSections = computed(() => filterDecorationSectionsByFeature(asDecorationSections(sections.value)
     .filter((item) => item.enabled && !["bottom_nav", "my_page", "inner_pages"].includes(item.type))
     .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)));
 
@@ -139,18 +149,18 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
       const endpoint = pageKey === "home" ? "/public/homepage" : `/public/page-decoration?pageKey=${encodeURIComponent(pageKey)}`;
       const payload = reviewSafeData(await request<HomepagePayload>(endpoint));
       if (!loadGuard.isCurrent(loadToken)) return;
-      const pageSections = normalizeDecorationSections(payload.sections || []);
+      const pageSections = normalizeDecorationSections(payload?.sections);
       if (pageKey === "home") {
         sections.value = pageSections;
       } else {
         const homePayload = reviewSafeData(await request<HomepagePayload>("/public/homepage").catch(() => null));
         if (!loadGuard.isCurrent(loadToken)) return;
-        const homeSections = normalizeDecorationSections(homePayload?.sections || []);
-        const localSections = payload.fallback ? pageSections.filter((item) => !globalSingletonTypes.includes(item.type)) : pageSections;
+        const homeSections = normalizeDecorationSections(homePayload?.sections);
+        const localSections = payload?.fallback ? pageSections.filter((item) => !globalSingletonTypes.includes(item.type)) : pageSections;
         const inherited = homeSections.filter((item) => globalSingletonTypes.includes(item.type) && !localSections.some((pageItem) => pageItem.type === item.type));
         sections.value = [...localSections, ...inherited];
       }
-      tenant.value = payload.tenant || null;
+      tenant.value = payload?.tenant || null;
       decorationLoaded.value = true;
     } catch {
       if (!loadGuard.isCurrent(loadToken)) return;

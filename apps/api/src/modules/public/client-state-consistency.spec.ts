@@ -76,6 +76,7 @@ describe("mobile client state consistency", () => {
   const userWallet = readPage("user/wallet.vue");
   const userOrders = readPage("user/orders.vue");
   const userMy = readPage("user/my.vue");
+  const mobileDecoration = readFileSync("../mobile/src/decoration.ts", "utf8");
   const appBottomNav = readFileSync("../mobile/src/components/AppBottomNav.vue", "utf8");
   const entryPages = readFileSync("../mobile/src/entry-pages.ts", "utf8");
   const featureGates = readFileSync("../mobile/src/feature-gates.ts", "utf8");
@@ -151,6 +152,15 @@ describe("mobile client state consistency", () => {
     expect(activityList).toContain("shifted.getUTCMonth()");
     expect(activityList).toContain('role="tablist"');
     expect(activityList).toContain(':aria-label="`查看活动：${item.title}`"');
+  });
+
+  it("keeps decoration-backed mobile pages safe when an old client returns a non-array section payload", () => {
+    expect(mobileDecoration).toContain("function asDecorationSections(value: unknown)");
+    expect(mobileDecoration).toContain("Array.isArray(value)");
+    expect(mobileDecoration).toContain("normalizeDecorationSections(payload?.sections)");
+    expect(userMy).toContain("function safeList<T>(value: unknown)");
+    expect(userMy).toContain("safeList<any>(sections.value).find");
+    expect(homePage).toContain("const decorationSections = computed(() => Array.isArray(sections.value) ? sections.value : [])");
   });
 
   it("separates guest login prompts from authenticated member-level rejection", () => {
