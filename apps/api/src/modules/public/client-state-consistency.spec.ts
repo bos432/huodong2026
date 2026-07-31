@@ -15,6 +15,7 @@ describe("mobile client state consistency", () => {
   const mallOrderDetail = readPage("user/mall-order-detail.vue");
   const mallOrders = readPage("user/mall-orders.vue");
   const activityReview = readPage("user/review.vue");
+  const activityReviewsPage = readPage("user/activity-reviews.vue");
   const partnerPage = readPage("partner/index.vue");
   const volunteerPage = readPage("volunteer/index.vue");
   const aidApply = readPage("apply/aid.vue");
@@ -648,6 +649,18 @@ describe("mobile client state consistency", () => {
     expect(userRegistrationDetail).not.toContain("scanGroupQr");
     expect(appBottomNav).toContain("openActivityQuickAction");
     expect(appBottomNav).toContain('aria-label="扫码识别平台活动码或签到码"');
+  });
+
+  it("keeps the member center linked to a tenant-scoped activity review history", () => {
+    expect(userMy).toContain('label:"我的评价", page:"activityReviews"');
+    expect(userMy).toContain('activityReviews: "/pages/user/activity-reviews"');
+    expect(activityReviewsPage).toContain('request<any[]>("/public/me/activity-reviews")');
+    expect(activityReviewsPage).toContain("createTenantLoadGuard");
+    expect(activityReviewsPage).toContain("onShow(loadReviews)");
+    expect(publicController).toContain('Get("me/activity-reviews")');
+    expect(publicService).toContain("async myActivityReviews(user: User, context?: PublicTenantContext)");
+    expect(publicService).toContain('where("review.userId = :userId", { userId: user.id })');
+    expect(publicService).toContain('activity.tenantId = :tenantId OR activity.tenantId IS NULL');
   });
 
   it("refreshes learning history and course order pages per tenant", () => {

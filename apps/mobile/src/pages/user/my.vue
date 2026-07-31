@@ -412,18 +412,18 @@ onShow(() => {
 });
 
 const defaultGridItems = [
+  { icon:"评", label:"我的评价", page:"activityReviews" },
   { icon:"人", label:"常用报名人", page:"frequentRegistrants" },
   { icon:"📖", label:"我的内容", page:"courses" },
   { icon:"🕐", label:"浏览记录", page:"learning" },
   { icon:"❤", label:"商城收藏", page:"mallFavorites" },
-  { icon:"👣", label:"浏览足迹", page:"mallHistory" },
-  { icon:"🛒", label:"购物车", page:"mallCart" },
   { icon:"🛍", label:"商城订单", page:"mallOrders" },
   { icon:"💬", label:"联系客服", page:"service" },
   { icon:"⚙", label:"设置", page:"settings" }
 ];
 
 const gridPageUrls: Record<string, string> = {
+  activityReviews: "/pages/user/activity-reviews",
   frequentRegistrants: "/pages/user/frequent-registrants",
   courses: "/pages/user/courses",
   learning: "/pages/user/learning",

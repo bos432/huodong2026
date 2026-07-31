@@ -10,6 +10,7 @@ import { In, IsNull, MoreThan, Repository } from "typeorm";
 import { v4 as uuidv4 } from "uuid";
 import { ActivityCategory } from "../../entities/activity-category.entity";
 import { Activity } from "../../entities/activity.entity";
+import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
 import { AmbassadorCase } from "../../entities/ambassador-case.entity";
@@ -132,6 +133,7 @@ export class PublicService {
     @InjectRepository(TenantRegionHitLog) private readonly tenantRegionHitLogs: Repository<TenantRegionHitLog>,
     @InjectRepository(ActivityCategory) private readonly categories: Repository<ActivityCategory>,
     @InjectRepository(Activity) private readonly activities: Repository<Activity>,
+    @InjectRepository(ActivityReview) private readonly activityReviews: Repository<ActivityReview>,
     @InjectRepository(ActivityViewLog) private readonly activityViewLogs: Repository<ActivityViewLog>,
     @InjectRepository(AmbassadorLandingSetting) private readonly ambassadorSettings: Repository<AmbassadorLandingSetting>,
     @InjectRepository(AmbassadorCase) private readonly ambassadorCases: Repository<AmbassadorCase>,
@@ -2342,6 +2344,38 @@ export class PublicService {
   async myRegistrations(userId: number, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
     return this.myRegistrationsForTenant(userId, tenant);
+  }
+
+  async myActivityReviews(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const builder = this.activityReviews
+      .createQueryBuilder("review")
+      .leftJoinAndSelect("review.activity", "activity")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .leftJoinAndSelect("review.registration", "registration")
+      .where("review.userId = :userId", { userId: user.id })
+      .andWhere("(activity.tenantId IS NULL OR activityTenant.enabled = :tenantEnabled)", { tenantEnabled: true })
+      .orderBy("review.createdAt", "DESC")
+      .take(100);
+    if (tenant) builder.andWhere("(activity.tenantId = :tenantId OR activity.tenantId IS NULL)", { tenantId: tenant.id });
+    const rows = await builder.getMany();
+    return rows.map((review) => ({
+      id: review.id,
+      rating: review.rating,
+      content: review.content,
+      status: review.status,
+      featured: review.featured,
+      adminReply: review.adminReply,
+      createdAt: review.createdAt,
+      activity: review.activity ? {
+        id: review.activity.id,
+        title: review.activity.title,
+        coverUrl: review.activity.coverUrl,
+        startTime: review.activity.startTime,
+        location: review.activity.location
+      } : null,
+      registrationId: review.registration?.id || null
+    }));
   }
 
   private async myRegistrationsForTenant(userId: number, tenant: Tenant | null) {

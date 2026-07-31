@@ -619,6 +619,12 @@ export class PublicController {
     return this.service.myRegistrations(user.id, this.tenantContext(req, tenantCode));
   }
 
+  @Get("me/activity-reviews")
+  async myActivityReviews(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myActivityReviews(user, this.tenantContext(req, tenantCode));
+  }
+
   @Get("me/registrations/:id")
   async registrationDetailMe(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
