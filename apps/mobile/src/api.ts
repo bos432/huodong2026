@@ -2,7 +2,6 @@ import { API_BASE } from "./api-base";
 import { clientError, describeError } from "./error-reporting";
 import { queryFromUrl, queryParam, stringifyQuery } from "./query";
 
-const DEV_PHONE = "13800000001";
 const TENANT_CODE_STORAGE_KEY = "h5_tenant_code";
 const TENANT_CODE_SOURCE_STORAGE_KEY = "h5_tenant_code_source";
 const ACTIVITY_LIST_INTENT_STORAGE_KEY = "h5_activity_list_intent";
@@ -604,18 +603,9 @@ export async function ensureUser() {
     }
   }
   if (existing && !existingToken) clearUser();
-  // #ifdef MP-WEIXIN
-  // A DevTools build still has import.meta.env.DEV set. Mini Program routes
-  // must never fall through to the H5 demo-login flow.
+  // A protected page must always use the visible login flow. A local H5 build
+  // can target a production API without demo credentials, and MP DevTools is
+  // also compiled as a development build.
   goLoginForCurrentRoute();
   throw new Error("请先完成手机号验证码登录");
-  // #endif
-  if (!import.meta.env.DEV) {
-    goLoginForCurrentRoute();
-    throw new Error("请先完成手机号验证码登录");
-  }
-  const code = await requestH5Code(DEV_PHONE);
-  if (!code.devCode) throw new Error("请先完成手机号验证码登录");
-  const user = await loginH5(DEV_PHONE, code.verificationToken, code.devCode, "本地演示用户");
-  return user.id;
 }
