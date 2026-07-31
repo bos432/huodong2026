@@ -11,10 +11,13 @@ import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 
+type ActivityStatusFilter = "all" | "open" | "full" | "ended";
+
 const categories = ref<any[]>([]);
 const rows = ref<any[]>([]);
 const activeCategoryId = ref<number | "all">("all");
-const activeStatus = ref<"all" | "open" | "full" | "ended">("all");
+const activeStatus = ref<ActivityStatusFilter>("all");
+const publicActivityArchiveEnabled = ref(false);
 const keyword = ref("");
 const loading = ref(true);
 const loadingMore = ref(false);
@@ -35,12 +38,12 @@ onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
 onShow(showMiniProgramShareMenu);
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 
-const statusTabs = [
+const statusTabs = computed(() => [
   { label: "全部", value: "all" },
   { label: "报名中", value: "open" },
   { label: "已满员", value: "full" },
-  { label: "已结束", value: "ended" }
-] as const;
+  ...(publicActivityArchiveEnabled.value ? [{ label: "已结束", value: "ended" as const }] : [])
+]);
 
 function goDetail(id: number) {
   uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${id}`) });
@@ -161,7 +164,8 @@ function selectCategory(value: number | "all") {
   loadFirstPage();
 }
 
-function selectStatus(value: "all" | "open" | "full" | "ended") {
+function selectStatus(value: ActivityStatusFilter) {
+  if (value === "ended" && !publicActivityArchiveEnabled.value) return;
   if (activeStatus.value === value) return;
   activeStatus.value = value;
   loadFirstPage();
@@ -171,7 +175,19 @@ function applyRouteQuery() {
   const pages = getCurrentPages();
   const query = (pages[pages.length - 1] as any).options || {};
   activeCategoryId.value = query.categoryId ? Number(query.categoryId) : "all";
+  const status = String(query.status || "");
+  activeStatus.value = (["all", "open", "full", "ended"] as ActivityStatusFilter[]).includes(status as ActivityStatusFilter) ? status as ActivityStatusFilter : "all";
   keyword.value = typeof query.keyword === "string" ? query.keyword : keyword.value;
+}
+
+async function loadOperationSetting() {
+  try {
+    const setting = await request<any>("/public/settings/operation");
+    publicActivityArchiveEnabled.value = Boolean(setting?.publicActivityArchiveEnabled);
+  } catch {
+    publicActivityArchiveEnabled.value = false;
+  }
+  if (!publicActivityArchiveEnabled.value && activeStatus.value === "ended") activeStatus.value = "all";
 }
 
 function applyIntent() {
@@ -212,7 +228,8 @@ async function reloadCurrentTenant(resetFilters = false) {
     activeStatus.value = "all";
     keyword.value = "";
   }
-  await Promise.all([loadCategories(), loadDecoration(), loadFirstPage()]);
+  await Promise.all([loadOperationSetting(), loadCategories(), loadDecoration()]);
+  await loadFirstPage();
   if (getCurrentTenantCode() !== tenantCode) return;
 }
 
@@ -275,7 +292,7 @@ onReachBottom(loadMore);
         </view>
       </scroll-view>
 
-      <view class="status-tabs" role="tablist" aria-label="活动状态筛选">
+      <view class="status-tabs" :class="{ 'has-ended': publicActivityArchiveEnabled }" role="tablist" aria-label="活动状态筛选">
         <view v-for="tab in statusTabs" :key="tab.value" class="status-tab app-press" :class="{ active: activeStatus === tab.value }" role="tab" tabindex="0" :aria-selected="activeStatus === tab.value" @click="selectStatus(tab.value)" @keyup.enter="selectStatus(tab.value)" @keyup.space.prevent="selectStatus(tab.value)">
           {{ tab.label }}
         </view>
@@ -405,7 +422,8 @@ onReachBottom(loadMore);
   transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
 }
 .category-chip.active { background: #0f766e; color: #fff; font-weight: 700; }
-.status-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12rpx; margin-top: 20rpx; }
+.status-tabs { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12rpx; margin-top: 20rpx; }
+.status-tabs.has-ended { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .status-tab {
   min-height: 68rpx;
   display: flex;

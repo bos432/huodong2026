@@ -144,7 +144,8 @@ describe("mobile client state consistency", () => {
     const reloadTenant = activityList.slice(activityList.indexOf("async function reloadCurrentTenant"), activityList.indexOf("async function handleTenantChanged"));
     expect(reloadTenant.indexOf("pageLoadGuard.invalidate()")).toBeLessThan(reloadTenant.indexOf("await Promise.all"));
     expect(reloadTenant).toContain("rows.value = []");
-    expect(reloadTenant).toContain("Promise.all([loadCategories(), loadDecoration(), loadFirstPage()])");
+    expect(reloadTenant).toContain("Promise.all([loadOperationSetting(), loadCategories(), loadDecoration()])");
+    expect(reloadTenant).toContain("await loadFirstPage()");
     expect(activityList).toContain("categoryError.value = err?.message");
     expect(activityList).toContain("date.getTime() + 8 * 60 * 60 * 1000");
     expect(activityList).toContain("shifted.getUTCMonth()");
@@ -626,7 +627,7 @@ describe("mobile client state consistency", () => {
     expect(homePage).toContain("activityLoadGuard.isCurrent(loadToken)");
     expect(homePage).toContain('activitiesError.value = reviewSafeText(error?.message || "近期活动加载失败")');
     expect(homePage).toContain('role="alert"');
-    expect(homePage).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration()])");
+    expect(homePage).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()])");
     expect(homePage).toContain("if (featuredSection.value || feedSection.value)");
     expect(homePage).toContain("const featuredDisplay = computed");
     expect(homePage).toContain("const showEndedInFeed = computed");
@@ -635,6 +636,11 @@ describe("mobile client state consistency", () => {
     expect(publicService).toContain("const needsHistoricalActivities");
     expect(publicService).toContain("config.showEnded === true");
     expect(publicService).toContain("const currentActivities = payload.latest.filter((item) => item.displayStatus !== \"ended\")");
+    expect(publicService).toContain("operationSetting.publicActivityArchiveEnabled && source.some");
+    expect(publicService).toContain("payload.publicActivityArchiveEnabled && config.showEnded === true");
+    expect(activityList).toContain("const publicActivityArchiveEnabled = ref(false)");
+    expect(activityList).toContain('value === "ended" && !publicActivityArchiveEnabled.value');
+    expect(homePage).toContain("const publicActivityArchiveEnabled = ref(false)");
   });
 
   it("keeps activity sharing attributable and confines group QR recognition to the native image flow", () => {
@@ -647,8 +653,8 @@ describe("mobile client state consistency", () => {
     expect(userRegistrationDetail).toContain("长按图片识别群二维码");
     expect(userRegistrationDetail).toContain('show-menu-by-longpress="true"');
     expect(userRegistrationDetail).not.toContain("scanGroupQr");
-    expect(appBottomNav).toContain("openActivityQuickAction");
-    expect(appBottomNav).toContain('aria-label="扫码识别平台活动码或签到码"');
+    expect(appBottomNav).not.toContain("openActivityQuickAction");
+    expect(appBottomNav).not.toContain('aria-label="扫码识别平台活动码或签到码"');
   });
 
   it("keeps the member center linked to a tenant-scoped activity review history", () => {

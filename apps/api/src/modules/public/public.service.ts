@@ -1667,6 +1667,7 @@ export class PublicService {
 
   async activitiesList(options: { categoryId?: number; status?: string; featured?: boolean; page?: number; pageSize?: number; keyword?: string }, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
+    const operationSetting = await this.ensureOperationSetting(tenant);
     const usePagination = options.page !== undefined || options.pageSize !== undefined;
     const page = Math.max(Number(options.page || 1), 1);
     const pageSize = Math.min(Math.max(Number(options.pageSize || 10), 1), 50);
@@ -1692,7 +1693,8 @@ export class PublicService {
 
     const list = await builder.getMany();
     const mapped = await Promise.all(list.map((activity) => this.withPublicStats(activity)));
-    const filtered = options.status ? mapped.filter((item) => item.displayStatus === options.status) : mapped;
+    const visible = operationSetting.publicActivityArchiveEnabled ? mapped : mapped.filter((item) => item.displayStatus !== "ended");
+    const filtered = options.status ? visible.filter((item) => item.displayStatus === options.status) : visible;
     if (!usePagination) return filtered;
     const total = filtered.length;
     const start = (page - 1) * pageSize;
@@ -1737,7 +1739,8 @@ export class PublicService {
       fallback = true;
       source = defaultHomepageSections(normalizedPageKey).filter((item) => item.enabled).map((item, index) => this.homepageSections.create({ ...item, id: -(index + 1), pageKey: normalizedPageKey }));
     }
-    const needsHistoricalActivities = source.some((section) => section.enabled && section.type === "activity_feed" && section.config?.showEnded === true);
+    const operationSetting = await this.ensureOperationSetting(tenant);
+    const needsHistoricalActivities = operationSetting.publicActivityArchiveEnabled && source.some((section) => section.enabled && section.type === "activity_feed" && section.config?.showEnded === true);
     const [announcements, categories, latest, featured, historical, testimonials] = await Promise.all([
       this.homepageAnnouncements(10, true, tenant, context?.userId),
       this.categoriesList(tenant ? { tenantId: tenant.id } : context),
@@ -1751,7 +1754,7 @@ export class PublicService {
     const historicalItems = Array.isArray(historical) ? historical : historical.items;
     const publicSections = this.normalizeHomepagePublicSections(source);
     return {
-      sections: publicSections.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, historical: historicalItems, testimonials })),
+      sections: publicSections.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, historical: historicalItems, testimonials, publicActivityArchiveEnabled: operationSetting.publicActivityArchiveEnabled })),
       fallback,
       pageKey: normalizedPageKey,
       tenant: this.publicHomepageTenant(tenant)
@@ -1816,7 +1819,7 @@ export class PublicService {
     return builder.getMany();
   }
 
-  private homepageSectionView(section: HomepageSection, payload: { announcements: unknown[]; categories: unknown[]; latest: any[]; featured: any[]; historical: any[]; testimonials: any[] }) {
+  private homepageSectionView(section: HomepageSection, payload: { announcements: unknown[]; categories: unknown[]; latest: any[]; featured: any[]; historical: any[]; testimonials: any[]; publicActivityArchiveEnabled: boolean }) {
     const config = section.config || {};
     const data: Record<string, unknown> = {};
     const currentActivities = payload.latest.filter((item) => item.displayStatus !== "ended");
@@ -1829,7 +1832,7 @@ export class PublicService {
       const source = config.source === "latest" ? currentActivities : currentFeaturedActivities.length ? currentFeaturedActivities : currentActivities;
       data.activities = source.slice(0, this.configLimit(config, 6, 20));
     } else if (section.type === "activity_feed") {
-      const includeHistorical = config.showEnded === true;
+      const includeHistorical = payload.publicActivityArchiveEnabled && config.showEnded === true;
       const seen = new Set<number>();
       const rows = [...currentActivities, ...(includeHistorical ? payload.historical : [])]
         .filter((item) => {
@@ -1970,14 +1973,25 @@ export class PublicService {
     if (!activity) throw new NotFoundException("活动不存在或未开放");
     await this.assertPublicTenantAccess(activity, context);
     const user = userId ? await this.users.findOneBy({ id: userId }) : null;
-    await this.recordActivityView(activity, user || null, tracking);
-    activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [ticketTypes, memberAccess, operationSetting] = await Promise.all([
-      this.findPublicTicketTypes(id),
-      this.memberAccessSnapshot(activity, userId),
+    const [stats, operationSetting] = await Promise.all([
+      this.withPublicStats(activity),
       this.ensureOperationSetting(activity.tenant || null)
     ]);
-    return { ...(await this.withPublicStats(activity)), ticketTypes: ticketTypes.map(({ ticketType, availability }) => this.publicTicketType(ticketType, availability)), memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
+    if (stats.displayStatus === "ended" && !operationSetting.publicActivityArchiveEnabled && !(await this.canUserViewHiddenActivityHistory(id, userId))) {
+      throw new NotFoundException("活动不存在或未开放");
+    }
+    await this.recordActivityView(activity, user || null, tracking);
+    activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
+    const [ticketTypes, memberAccess] = await Promise.all([
+      this.findPublicTicketTypes(id),
+      this.memberAccessSnapshot(activity, userId)
+    ]);
+    return { ...stats, ticketTypes: ticketTypes.map(({ ticketType, availability }) => this.publicTicketType(ticketType, availability)), memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
+  }
+
+  private async canUserViewHiddenActivityHistory(activityId: number, userId?: number) {
+    if (!userId) return false;
+    return (await this.registrations.count({ where: { activity: { id: activityId }, user: { id: userId }, status: In([RegistrationStatus.Approved, RegistrationStatus.CheckedIn]) } })) > 0;
   }
 
   async quote(activityId: number, dto: QuoteDto, user: User, context?: PublicTenantContext) {
@@ -3230,6 +3244,7 @@ export class PublicService {
       id,
       tenant: tenant || null,
       registrationEnabled: true,
+      publicActivityArchiveEnabled: false,
       registrationDisabledMessage: "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: "请在付款截止前完成线下转账或现场付款，并在备注中填写报名手机号。主办方确认收款后，报名状态会自动更新。",
       paymentMethods: this.defaultPaymentMethods(),
@@ -3785,6 +3800,7 @@ export class PublicService {
       offlinePaymentInstructions: setting.offlinePaymentInstructions,
       paymentMethods: this.normalizePaymentMethods(setting.paymentMethods),
       registrationEnabled: setting.registrationEnabled,
+      publicActivityArchiveEnabled: setting.publicActivityArchiveEnabled,
       registrationDisabledMessage: setting.registrationDisabledMessage,
       customerServiceName: setting.customerServiceName,
       customerServicePhone: setting.customerServicePhone,

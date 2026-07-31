@@ -304,18 +304,23 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const tenant = await this.assertPublicActivityTenantAccess(activity, context);
 
     const user = userId ? await this.users.findOneBy({ id: userId }) : null;
+    const [stats, operationSetting] = await Promise.all([
+      this.activityStats(id, activity.capacity),
+      this.findOperationSetting(tenant || activity.tenant || null)
+    ]);
+    if (this.displayStatus(activity, stats.remainingSeats) === "ended" && !operationSetting?.publicActivityArchiveEnabled && !(await this.activitySpaceAccess(id, user?.id)).allowed) {
+      throw new NotFoundException("活动不存在");
+    }
     const channel = await this.resolveActivityChannel(activity, tracking?.channelCode);
     await this.recordEnhancedActivityView(activity, user, channel, tracking);
     if (tracking?.inviteCode) await this.trackShare(id, { code: tracking.inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
 
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [hosts, sections, stats, reviews, memberAccess, operationSetting, spaceSummary] = await Promise.all([
+    const [hosts, sections, reviews, memberAccess, spaceSummary] = await Promise.all([
       this.hosts.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.sections.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
-      this.activityStats(id, activity.capacity),
       this.activityReviews(id, context),
       this.memberAccessSnapshot(activity, user || undefined),
-      this.findOperationSetting(tenant || activity.tenant || null),
       this.activitySpaceSummary(activity, user?.id || null)
     ]);
 

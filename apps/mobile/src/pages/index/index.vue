@@ -40,7 +40,7 @@
       <text class="discovery-empty-kicker">近期活动</text>
       <text class="discovery-empty-title">暂时没有可报名的活动</text>
       <text class="discovery-empty-copy">可先查看往期活动，主办方发布新活动后会显示在这里。</text>
-      <view class="discovery-empty-action app-press" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory">查看活动回顾</view>
+      <view v-if="publicActivityArchiveEnabled" class="discovery-empty-action app-press" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory">查看活动回顾</view>
     </view>
 
     <scroll-view class="discovery-categories app-enter" style="animation-delay: 78ms" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类">
@@ -76,7 +76,7 @@
         </view>
       </view>
     </view>
-    <view v-else-if="!leadActivity" class="activity-empty"><text>近期没有开放报名的活动</text><text class="activity-empty-action" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory" @keyup.space.prevent="goActivityHistory">查看活动回顾</text></view>
+    <view v-else-if="!leadActivity" class="activity-empty"><text>近期没有开放报名的活动</text><text v-if="publicActivityArchiveEnabled" class="activity-empty-action" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory" @keyup.space.prevent="goActivityHistory">查看活动回顾</text></view>
 
     <PageDecorationBlocks :sections="supplementalSections" />
 
@@ -102,6 +102,7 @@ import { reviewSafeText } from "../../review-safe-text";
 const { tenant, sections, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
 const featuredActivities = ref<any[]>([]);
 const categories = ref<any[]>([]);
+const publicActivityArchiveEnabled = ref(false);
 const activitiesLoading = ref(false);
 const activitiesError = ref("");
 const loadedActivitiesTenantCode = ref("");
@@ -110,7 +111,7 @@ const cityName = computed(() => tenant.value?.region || tenant.value?.name || pa
 const featuredSection = computed(() => sections.value.find((section) => section.enabled && section.type === "featured_activities"));
 const feedSection = computed(() => sections.value.find((section) => section.enabled && section.type === "activity_feed"));
 const featuredDisplay = computed(() => String(featuredSection.value?.config?.display || "lead_rail"));
-const showEndedInFeed = computed(() => feedSection.value?.config?.showEnded === true);
+const showEndedInFeed = computed(() => publicActivityArchiveEnabled.value && feedSection.value?.config?.showEnded === true);
 const featuredLimit = computed(() => Math.max(1, Math.min(Number(featuredSection.value?.config?.limit || 4), 8)));
 const sideLimit = computed(() => Math.max(0, featuredLimit.value - 1));
 function sectionActivities(section?: any) {
@@ -156,13 +157,13 @@ onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
   await applyTenantBootstrapDefault();
-  await Promise.allSettled([loadPageTheme(), loadDecoration()]);
+  await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()]);
   await loadActivities();
   await loadCategories();
   const beforeTenantCode = getCurrentTenantCode();
   void resolveTenantByCurrentLocation({ silent: true }).then(async () => {
     if (getCurrentTenantCode() === beforeTenantCode) return;
-    await Promise.allSettled([loadPageTheme(), loadDecoration()]);
+    await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()]);
     await Promise.allSettled([loadActivities(), loadCategories()]);
     if (beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
   });
@@ -170,7 +171,7 @@ onShow(async () => {
 
 async function handleTenantChanged() {
   await loadPageTheme();
-  await loadDecoration();
+  await Promise.all([loadDecoration(), loadOperationSetting()]);
   await Promise.allSettled([loadActivities(), loadCategories()]);
 }
 
@@ -220,6 +221,15 @@ async function loadCategories() {
     categories.value = Array.isArray(result) ? result.slice(0, 10) : [];
   } catch {
     categories.value = [];
+  }
+}
+
+async function loadOperationSetting() {
+  try {
+    const setting = await request<any>("/public/settings/operation");
+    publicActivityArchiveEnabled.value = Boolean(setting?.publicActivityArchiveEnabled);
+  } catch {
+    publicActivityArchiveEnabled.value = false;
   }
 }
 

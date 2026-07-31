@@ -2637,6 +2637,10 @@ export class OperationSettingDto {
   registrationEnabled?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  publicActivityArchiveEnabled?: boolean;
+
+  @IsOptional()
   @IsString()
   registrationDisabledMessage?: string;
 

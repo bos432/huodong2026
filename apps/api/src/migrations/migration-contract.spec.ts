@@ -206,4 +206,11 @@ describe("migration contracts", () => {
       expect(migration).toContain(token);
     }
   });
+
+  it("keeps public activity archives disabled unless a tenant explicitly enables them", () => {
+    const migration = readFileSync(join(migrationDirectory, "1784120000000-PublicActivityArchiveVisibility.ts"), "utf8");
+    expect(migration).toContain('name: "publicActivityArchiveEnabled"');
+    expect(migration).toContain("default: 0");
+    expect(migration).toContain("UPDATE operation_settings SET publicActivityArchiveEnabled = 0");
+  });
 });

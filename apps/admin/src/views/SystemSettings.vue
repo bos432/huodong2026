@@ -184,6 +184,7 @@ function tenantOptionLabel(item: TenantOption) {
 
 const form = reactive({
   registrationEnabled: true,
+  publicActivityArchiveEnabled: false,
   registrationDisabledMessage: "",
   offlinePaymentInstructions: "",
   paymentMethods: {
@@ -1534,6 +1535,7 @@ function deploymentPayload() {
 function operationPayload() {
   const payload: Record<string, any> = {
     registrationEnabled: form.registrationEnabled,
+    publicActivityArchiveEnabled: form.publicActivityArchiveEnabled,
     registrationDisabledMessage: form.registrationDisabledMessage,
     offlinePaymentInstructions: form.offlinePaymentInstructions,
     paymentMethods: { ...form.paymentMethods },
@@ -1592,6 +1594,7 @@ async function loadOperation(force = false) {
     tenantOptions.value = (tenants || []).filter((tenant) => tenant.enabled && tenant.code !== "platform" && !String(tenant.code || "").startsWith("demo-"));
     Object.assign(form, {
       registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
+      publicActivityArchiveEnabled: Boolean(data.publicActivityArchiveEnabled),
       registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: data.offlinePaymentInstructions || "",
       paymentMethods: { free: true, wechat: false, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
@@ -1863,6 +1866,15 @@ onMounted(async () => {
             </el-form-item>
             <el-form-item label="暂停提示" :required="!form.registrationEnabled">
               <el-input v-model="form.registrationDisabledMessage" type="textarea" :rows="3" maxlength="300" show-word-limit />
+            </el-form-item>
+            <el-form-item label="公开活动回顾">
+              <div class="switch-row">
+                <el-switch v-model="form.publicActivityArchiveEnabled" active-text="展示已结束活动" inactive-text="隐藏已结束活动" />
+                <el-tag :type="form.publicActivityArchiveEnabled ? 'warning' : 'success'" effect="plain">
+                  {{ form.publicActivityArchiveEnabled ? "历史活动会显示在公开列表、搜索和已配置的回顾区" : "历史活动仅对已参与用户保留在我的报名中" }}
+                </el-tag>
+              </div>
+              <div class="form-tip">关闭后，公开分享链接也不能访问已结束活动；后台和已参与用户的历史记录不受影响。</div>
             </el-form-item>
             <template v-if="editingPlatformOperation">
               <el-divider content-position="left">入口城市</el-divider>

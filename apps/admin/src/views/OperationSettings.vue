@@ -7,6 +7,7 @@ const loading = ref(false);
 const saving = ref(false);
 const form = reactive({
   registrationEnabled: true,
+  publicActivityArchiveEnabled: false,
   registrationDisabledMessage: "",
   offlinePaymentInstructions: "",
   paymentMethods: {
@@ -33,6 +34,7 @@ async function load() {
     const data = await api.get<any, any>("/admin/settings/operation");
     Object.assign(form, {
       registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
+      publicActivityArchiveEnabled: Boolean(data.publicActivityArchiveEnabled),
       registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: data.offlinePaymentInstructions || "",
       paymentMethods: { free: true, wechat: false, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
@@ -98,6 +100,12 @@ onMounted(load);
             show-word-limit
             placeholder="例如：报名通道暂时关闭，请稍后再试或联系主办方。"
           />
+        </el-form-item>
+        <el-form-item label="公开活动回顾">
+          <div class="switch-row">
+            <el-switch v-model="form.publicActivityArchiveEnabled" active-text="展示已结束活动" inactive-text="隐藏已结束活动" />
+            <el-tag :type="form.publicActivityArchiveEnabled ? 'warning' : 'success'" effect="plain">{{ form.publicActivityArchiveEnabled ? "公开列表可浏览历史活动" : "历史活动只保留在已参与用户的我的报名中" }}</el-tag>
+          </div>
         </el-form-item>
         <el-form-item label="线下付款说明" required>
           <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit />
