@@ -148,6 +148,9 @@ describe("mobile client state consistency", () => {
     expect(reloadTenant).toContain("Promise.all([loadOperationSetting(), loadCategories(), loadDecoration()])");
     expect(reloadTenant).toContain("await loadFirstPage()");
     expect(activityList).toContain("categoryError.value = err?.message");
+    expect(activityList).toContain("function safeList<T>(value: unknown)");
+    expect(activityList).toContain("visibleCategories.value.find");
+    expect(activityList).toContain("categories.value = safeList<any>(items)");
     expect(activityList).toContain("date.getTime() + 8 * 60 * 60 * 1000");
     expect(activityList).toContain("shifted.getUTCMonth()");
     expect(activityList).toContain('role="tablist"');

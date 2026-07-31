@@ -1,5 +1,4 @@
 <script setup lang="ts">
-import { computed } from "vue";
 import type { HomepageSectionView } from "@activity/shared";
 
 const props = withDefaults(defineProps<{
@@ -86,38 +85,6 @@ function sectionRows(section: HomepageSectionView, key: string) {
   return Array.isArray(value) && value.length ? value : key === "activities" ? sampleActivities : key === "posts" ? samplePosts : sampleCategories;
 }
 
-const isHomePage = computed(() => props.rows.some((section) => section.pageKey === "home"));
-function homeSection(type: string) {
-  return props.rows.find((section) => section.enabled && section.type === type) || null;
-}
-const homeSearchSection = computed(() => homeSection("search_bar"));
-const homeFeedSection = computed(() => homeSection("activity_feed"));
-// The mobile home promotes the first activity-stream item when a tenant has not configured a separate feature module.
-const homeFeaturedSection = computed(() => homeSection("featured_activities") || homeFeedSection.value);
-const homeCategorySection = computed(() => homeSection("activity_tabs") || homeSection("category_grid"));
-const homeFeaturedRows = computed(() => {
-  const section = homeFeaturedSection.value;
-  return section ? sectionRows(section, "activities").slice(0, Math.max(1, Number(section.config?.limit || 4))) : [];
-});
-const homeFeedRows = computed(() => {
-  const section = homeFeedSection.value;
-  return section ? sectionRows(section, "activities").slice(0, Math.max(1, Number(section.config?.limit || 8))) : [];
-});
-const homeCategoryRows = computed(() => homeCategorySection.value ? sectionRows(homeCategorySection.value, "categories").slice(0, 8) : sampleCategories);
-
-function isHomeDiscoverySection(section: HomepageSectionView) {
-  return isHomePage.value && ["search_bar", "featured_activities", "category_grid", "activity_tabs", "activity_feed"].includes(section.type);
-}
-
-function activityPrice(value: unknown) {
-  const price = Number(value || 0);
-  return price > 0 ? `¥${price.toFixed(2)}` : "免费";
-}
-
-function activityStatus(value: unknown) {
-  return value === "full" ? "已满员" : value === "ended" ? "已结束" : "报名中";
-}
-
 function isHomeActivityFocus(section: HomepageSectionView) {
   return section.pageKey === "home" && section.type === "featured_activities" && section.config?.display !== "list";
 }
@@ -161,58 +128,8 @@ function select(section: HomepageSectionView) {
 <template>
   <div class="device-frame" :class="{ large: device === 'large' }">
     <div class="device-status"><span>9:41</span><i></i></div>
-    <div class="frontend-page" :class="{ 'home-discovery-preview': isHomePage }">
-      <template v-if="isHomePage">
-        <div class="discovery-preview-topbar">
-          <button v-if="homeSearchSection" type="button" @click="select(homeSearchSection)"><span>{{ homeSearchSection.config?.cityLabel || "本地" }}</span><b>⌕</b></button>
-          <div v-else><span>本地</span><b>⌕</b></div>
-        </div>
-
-        <button
-          v-if="homeFeaturedSection && homeFeaturedRows.length"
-          type="button"
-          class="preview-block discovery-preview-feature"
-          :class="{ focused: focusedId === homeFeaturedSection.id, fallback }"
-          @click="select(homeFeaturedSection)"
-        >
-          <div class="discovery-preview-lead">
-            <img v-if="homeFeaturedRows[0]?.coverUrl" :src="homeFeaturedRows[0].coverUrl" alt="" />
-            <div v-else class="discovery-preview-cover">{{ homeFeaturedRows[0]?.category?.name || "本地活动" }}</div>
-            <i></i>
-            <div><small>本周主推 · {{ activityDateParts(homeFeaturedRows[0]?.startTime).month }}{{ activityDateParts(homeFeaturedRows[0]?.startTime).day }}日</small><strong>{{ homeFeaturedRows[0]?.title }}</strong><span>{{ activityDateParts(homeFeaturedRows[0]?.startTime).time }} · {{ homeFeaturedRows[0]?.location || "地点待确认" }} · {{ activityPrice(homeFeaturedRows[0]?.price) }}</span></div>
-          </div>
-          <div v-if="homeFeaturedRows.slice(1, 4).length" class="discovery-preview-rail">
-            <article v-for="item in homeFeaturedRows.slice(1, 4)" :key="item.id"><img v-if="item.coverUrl" :src="item.coverUrl" alt="" /><span v-else>{{ item.category?.name || "活动" }}</span><i></i><small>{{ activityDateParts(item.startTime).month }}{{ activityDateParts(item.startTime).day }}日</small><strong>{{ item.title }}</strong><em>{{ activityPrice(item.price) }}</em></article>
-          </div>
-        </button>
-
-        <button
-          v-if="homeCategorySection"
-          type="button"
-          class="preview-block discovery-preview-categories"
-          :class="{ focused: focusedId === homeCategorySection.id, fallback }"
-          @click="select(homeCategorySection)"
-        >
-          <span class="active">推荐</span><span v-for="item in homeCategoryRows" :key="item.id">{{ item.name }}</span>
-        </button>
-
-        <button
-          v-if="homeFeedSection"
-          type="button"
-          class="preview-block discovery-preview-feed"
-          :class="{ focused: focusedId === homeFeedSection.id, fallback }"
-          @click="select(homeFeedSection)"
-        >
-          <header><div><strong>本地正在发生</strong><small>按日期发现适合你的线下活动</small></div><b>全部</b></header>
-          <article v-for="item in homeFeedRows" :key="item.id">
-            <time><small>{{ activityDateParts(item.startTime).month }}</small><b>{{ activityDateParts(item.startTime).day }}</b><small>{{ activityDateParts(item.startTime).time }}</small></time>
-            <img v-if="item.coverUrl" :src="item.coverUrl" alt="" /><span v-else class="feed-cover">{{ item.category?.name || "活动" }}</span>
-            <div><p><em>{{ item.category?.name || "活动" }}</em><i>{{ activityStatus(item.displayStatus || item.status) }}</i></p><strong>{{ item.title }}</strong><small>{{ activityDateParts(item.startTime).time }} · {{ item.location || "地点待确认" }}</small><footer><span>{{ item.registeredCount || 0 }} 人已报名 · 余 {{ item.remainingSeats ?? "-" }}</span><b>{{ activityPrice(item.price) }}</b></footer></div>
-          </article>
-        </button>
-      </template>
-
-      <div v-if="!isHomePage" class="frontend-head">
+    <div class="frontend-page">
+      <div class="frontend-head">
         <div><small>慢π · {{ pageLabel }}</small><strong>发现值得参与的城市生活</strong></div>
         <b>搜</b>
       </div>
@@ -220,7 +137,6 @@ function select(section: HomepageSectionView) {
       <button
         v-for="section in rows"
         :key="section.id"
-        v-show="!isHomeDiscoverySection(section)"
         type="button"
         class="preview-block"
         :class="{ focused: focusedId === section.id, fallback }"
@@ -412,45 +328,6 @@ function select(section: HomepageSectionView) {
 .bottom-nav { position:sticky; z-index:3; bottom:-13px; display:grid; gap:3px; margin-top:6px; padding:8px 5px 10px; border-top:1px solid #eaecf0; background:#fff; box-shadow:0 -8px 20px rgba(15,23,42,.08); }
 .bottom-nav span { min-width:0; display:grid; justify-items:center; gap:3px; color:#667085; font-size:8px; }
 .bottom-nav b { width:24px; height:24px; display:grid; place-items:center; border-radius:50%; background:#f2f4f7; color:#c43d3d; font-size:10px; }
-.home-discovery-preview { padding:11px; background:#f4f7f5; }
-.discovery-preview-topbar { display:flex; justify-content:flex-end; margin:0 0 10px; }
-.discovery-preview-topbar>button,.discovery-preview-topbar>div { display:flex; align-items:center; gap:7px; padding:0; border:0; background:transparent; color:#193326; font-size:10px; font-weight:800; }
-.discovery-preview-topbar b { width:26px; height:26px; display:grid; place-items:center; border:1px solid #e2e9e5; border-radius:50%; background:#fff; color:#08753f; font-size:15px; }
-.discovery-preview-feature { padding:0; margin-bottom:10px; overflow:hidden; border-radius:8px; background:transparent; }
-.discovery-preview-lead { position:relative; height:140px; overflow:hidden; border-radius:8px; background:#e7f4ec; color:#fff; }
-.discovery-preview-lead>img,.discovery-preview-lead>.discovery-preview-cover { width:100%; height:100%; display:grid; place-items:center; object-fit:cover; color:#08753f; font-size:16px; font-weight:900; }
-.discovery-preview-lead>i,.discovery-preview-rail article>i { position:absolute; inset:0; background:linear-gradient(180deg,rgba(4,27,16,.02),rgba(4,27,16,.72)); }
-.discovery-preview-lead>div:last-child { position:absolute; z-index:1; right:12px; bottom:11px; left:12px; display:grid; gap:4px; text-align:left; }
-.discovery-preview-lead small,.discovery-preview-lead span { color:rgba(255,255,255,.84); font-size:9px; }
-.discovery-preview-lead strong { overflow:hidden; font-size:15px; text-overflow:ellipsis; white-space:nowrap; }
-.discovery-preview-rail { display:flex; gap:8px; padding:9px 0 1px; overflow:hidden; }
-.discovery-preview-rail article { position:relative; flex:0 0 118px; height:73px; overflow:hidden; border-radius:8px; background:#e7f4ec; color:#fff; text-align:left; }
-.discovery-preview-rail img,.discovery-preview-rail article>span { width:100%; height:100%; display:grid; place-items:center; object-fit:cover; color:#08753f; font-size:10px; font-weight:800; }
-.discovery-preview-rail small,.discovery-preview-rail strong,.discovery-preview-rail em { position:absolute; z-index:1; left:8px; right:8px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.discovery-preview-rail small { top:7px; color:rgba(255,255,255,.84); font-size:8px; }
-.discovery-preview-rail strong { bottom:19px; font-size:10px; }
-.discovery-preview-rail em { bottom:7px; color:#fff0c9; font-size:8px; font-style:normal; font-weight:800; }
-.discovery-preview-categories { display:flex; gap:7px; margin:0 0 11px; overflow:hidden; padding:2px 0 4px; border-radius:0; }
-.discovery-preview-categories span { flex:0 0 auto; padding:6px 10px; border:1px solid #dce7e0; border-radius:999px; background:#fff; color:#63736a; font-size:9px; font-weight:800; }
-.discovery-preview-categories span.active { border-color:#20d477; background:#20d477; color:#07321c; }
-.discovery-preview-feed { padding:0; margin-bottom:9px; border-radius:0; }
-.discovery-preview-feed>header { display:flex; align-items:center; justify-content:space-between; margin:0 0 8px; text-align:left; }
-.discovery-preview-feed>header div { display:grid; gap:3px; }
-.discovery-preview-feed>header strong { color:#14271b; font-size:14px; }
-.discovery-preview-feed>header small { color:#718078; font-size:9px; }
-.discovery-preview-feed>header>b { color:#08753f; font-size:9px; }
-.discovery-preview-feed>article { display:grid; grid-template-columns:37px 78px minmax(0,1fr); gap:7px; min-height:78px; margin-bottom:7px; padding:7px; border:1px solid #e2eae6; border-radius:8px; background:#fff; text-align:left; }
-.discovery-preview-feed time { display:grid; align-content:center; justify-items:center; gap:2px; border-radius:7px; background:#eafbf1; color:#078347; font-style:normal; }
-.discovery-preview-feed time small { font-size:7px; font-weight:800; }
-.discovery-preview-feed time b { color:#14271b; font-size:17px; line-height:1; }
-.discovery-preview-feed>article>img,.feed-cover { width:78px; height:64px; align-self:center; display:grid; place-items:center; border-radius:7px; object-fit:cover; background:#eafbf1; color:#08753f; font-size:10px; font-weight:800; }
-.discovery-preview-feed>article>div { min-width:0; display:grid; align-content:center; gap:4px; }
-.discovery-preview-feed p { display:flex; gap:4px; margin:0; overflow:hidden; }
-.discovery-preview-feed p em,.discovery-preview-feed p i { max-width:60%; overflow:hidden; padding:2px 4px; border-radius:4px; text-overflow:ellipsis; white-space:nowrap; font-size:7px; font-style:normal; font-weight:800; }
-.discovery-preview-feed p em { background:#eef2f0; color:#59655f; }.discovery-preview-feed p i { background:#e8faf0; color:#078347; }
-.discovery-preview-feed>article strong,.discovery-preview-feed>article small { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-.discovery-preview-feed>article strong { color:#13241a; font-size:10px; }.discovery-preview-feed>article>div>small { color:#607169; font-size:8px; }
-.discovery-preview-feed footer { display:flex; justify-content:space-between; gap:5px; color:#809087; font-size:7px; }.discovery-preview-feed footer span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }.discovery-preview-feed footer b { color:#dc6900; font-size:9px; }
 .preview-empty { padding:60px 20px; color:#98a2b3; font-size:11px; text-align:center; }
 @media (max-width:1024px) { .device-frame { width:min(357px,100%); height:620px; } .device-frame.large { width:min(412px,100%); } }
 </style>

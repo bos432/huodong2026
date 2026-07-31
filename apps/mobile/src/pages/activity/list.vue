@@ -45,6 +45,12 @@ const statusTabs = computed(() => [
   ...(publicActivityArchiveEnabled.value ? [{ label: "已结束", value: "ended" as const }] : [])
 ]);
 
+function safeList<T>(value: unknown): T[] {
+  return Array.isArray(value) ? value as T[] : [];
+}
+
+const visibleCategories = computed(() => safeList<any>(categories.value));
+
 function goDetail(id: number) {
   uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${id}`) });
 }
@@ -91,13 +97,13 @@ const heroSubtitle = computed(() => innerPageConfig.value.subtitle || "筛选近
 const resultHint = computed(() => {
   const categoryName = activeCategoryId.value === "all"
     ? "全部分类"
-    : categories.value.find((item) => item.id === activeCategoryId.value)?.name || "已选分类";
+    : visibleCategories.value.find((item) => item.id === activeCategoryId.value)?.name || "已选分类";
   const statusName = statusTabs.find((item) => item.value === activeStatus.value)?.label || "全部";
   return `${categoryName} · ${statusName}`;
 });
 const dateGroups = computed(() => {
   const groups = new Map<string, { key: string; label: string; items: any[] }>();
-  for (const item of rows.value) {
+  for (const item of safeList<any>(rows.value)) {
     const date = new Date(item.startTime);
     const valid = !Number.isNaN(date.getTime());
     const shifted = valid ? new Date(date.getTime() + 8 * 60 * 60 * 1000) : null;
@@ -132,8 +138,8 @@ async function loadPage(nextPage: number, append = false) {
   try {
     const result = await request<any>(buildQuery(nextPage));
     if (!pageLoadGuard.isCurrent(loadToken)) return;
-    const items = Array.isArray(result) ? result : result.items || [];
-    rows.value = append ? rows.value.concat(items) : items;
+    const items = Array.isArray(result) ? result : safeList<any>(result?.items);
+    rows.value = append ? safeList<any>(rows.value).concat(items) : items;
     total.value = Array.isArray(result) ? items.length : result.total || 0;
     page.value = Array.isArray(result) ? nextPage : result.page || nextPage;
     hasMore.value = Array.isArray(result) ? false : Boolean(result.hasMore);
@@ -204,7 +210,7 @@ async function loadCategories() {
   categoryError.value = "";
   try {
     const items = await request<any[]>("/public/categories");
-    if (categoryLoadGuard.isCurrent(loadToken)) categories.value = items;
+    if (categoryLoadGuard.isCurrent(loadToken)) categories.value = safeList<any>(items);
   } catch (err: any) {
     if (categoryLoadGuard.isCurrent(loadToken)) {
       categories.value = [];
@@ -288,7 +294,7 @@ onReachBottom(loadMore);
       <scroll-view class="category-tabs" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类筛选">
         <view class="tabs-track">
           <view class="category-chip app-press" :class="{ active: activeCategoryId === 'all' }" role="tab" tabindex="0" :aria-selected="activeCategoryId === 'all'" @click="selectCategory('all')" @keyup.enter="selectCategory('all')" @keyup.space.prevent="selectCategory('all')">全部</view>
-          <view v-for="c in categories" :key="c.id" class="category-chip app-press" :class="{ active: activeCategoryId === c.id }" role="tab" tabindex="0" :aria-selected="activeCategoryId === c.id" @click="selectCategory(c.id)" @keyup.enter="selectCategory(c.id)" @keyup.space.prevent="selectCategory(c.id)">{{ c.name }}</view>
+          <view v-for="c in visibleCategories" :key="c.id" class="category-chip app-press" :class="{ active: activeCategoryId === c.id }" role="tab" tabindex="0" :aria-selected="activeCategoryId === c.id" @click="selectCategory(c.id)" @keyup.enter="selectCategory(c.id)" @keyup.space.prevent="selectCategory(c.id)">{{ c.name }}</view>
         </view>
       </scroll-view>
 
