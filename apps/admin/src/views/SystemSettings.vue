@@ -1565,6 +1565,16 @@ function operationPayload() {
   return payload;
 }
 
+function operationLaunchConfigPayload() {
+  if (editingPlatformOperation.value) return deploymentPayload();
+  return {
+    deliveryMode: deployment.deliveryMode,
+    reviewSafeMode: deployment.reviewSafeMode,
+    reviewSafeRemark: deployment.reviewSafeRemark,
+    featureGates: { ...deployment.featureGates }
+  };
+}
+
 function operationRequestConfig() {
   return { params: { tenantId: canManagePlatformSettings.value && operationTenantId.value ? operationTenantId.value : undefined } };
 }
@@ -1657,7 +1667,7 @@ async function loadOperation(force = false) {
     });
     smsSecretConfigured.value = Boolean(data.smsAccessKeySecretConfigured);
     clearSmsSecretRequested.value = false;
-    if (editingPlatformOperation.value) {
+    if (canManagePlatformSettings.value) {
       applyDeploymentConfig({
         smsEnabled: Boolean(data.smsProviderEnabled),
         smsProvider: data.smsProvider || deployment.smsProvider,
@@ -1700,9 +1710,9 @@ async function saveOperation() {
   savingOperation.value = true;
   operationSaveError.value = "";
   try {
-    const payload = editingPlatformOperation.value ? { ...operationPayload(), launchConfig: deploymentPayload() } : operationPayload();
+    const payload = canManagePlatformSettings.value ? { ...operationPayload(), launchConfig: operationLaunchConfigPayload() } : operationPayload();
     await api.post("/admin/settings/operation", payload, operationRequestConfig());
-    if (editingPlatformOperation.value) writeStoredFeatureGates(deployment.featureGates);
+    if (canManagePlatformSettings.value) writeStoredFeatureGates(deployment.featureGates);
     ElMessage.success(`${operationScopeLabel.value}已保存`);
     await loadOperation(true);
     if (editingPlatformOperation.value) await loadConfig();
@@ -1888,6 +1898,8 @@ onMounted(async () => {
                   <span class="form-tip">用户手动切换、分享链接和定位命中仍然优先。</span>
                 </div>
               </el-form-item>
+            </template>
+            <template v-if="canManagePlatformSettings">
               <el-divider content-position="left">交付 / 过审模式</el-divider>
               <el-form-item label="当前模式">
                 <div class="delivery-mode-panel">

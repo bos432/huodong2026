@@ -49,10 +49,12 @@ describe("operation setting permission contract", () => {
     expect(controller).toContain("this.service.saveOperationSetting(dto, admin, tenantId)");
     expect(service).toContain("private async operationSettingTarget");
     expect(service).toContain('throw new ForbiddenException("不能修改其他商家的运营设置")');
-    expect(service).toContain("if (!scope.tenant && dto.launchConfig !== undefined)");
+    expect(service).toContain("if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined)");
     expect(service).toContain("if (!scope.tenant && dto.defaultTenantCode !== undefined)");
     expect(page).toContain('v-model="operationTenantId"');
     expect(page).toContain("商家前端实时生效");
+    expect(page).toContain("operationLaunchConfigPayload");
+    expect(page).toContain('v-if="canManagePlatformSettings"');
     expect(page).toContain('api.post("/admin/settings/operation", payload, operationRequestConfig())');
   });
 

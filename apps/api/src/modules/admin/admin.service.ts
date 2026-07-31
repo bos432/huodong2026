@@ -8022,7 +8022,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     } else {
       setting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
     }
-    if (!scope.tenant && dto.launchConfig !== undefined) {
+    if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined) {
       setting.launchConfig = secureLaunchConfigForStorage(setting.launchConfig, dto.launchConfig, dto.clearLaunchConfigSecrets);
     }
     if (!scope.tenant && dto.defaultTenantCode !== undefined) {
