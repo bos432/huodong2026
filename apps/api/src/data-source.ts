@@ -181,6 +181,7 @@ import { PaymentCallbackLog } from "./entities/payment-callback-log.entity";
 import { PaymentStatementRecord } from "./entities/payment-statement-record.entity";
 import { PaymentTransaction } from "./entities/payment-transaction.entity";
 import { Registration } from "./entities/registration.entity";
+import { FrequentRegistrant } from "./entities/frequent-registrant.entity";
 import { Refund } from "./entities/refund.entity";
 import { RedemptionCode } from "./entities/redemption-code.entity";
 import { RedemptionCodeUsage } from "./entities/redemption-code-usage.entity";
@@ -260,6 +261,7 @@ export default new DataSource({
     ActivityViewLog,
     Announcement,
     Registration,
+    FrequentRegistrant,
     Order,
     OperationSetting,
     PaymentCallbackLog,

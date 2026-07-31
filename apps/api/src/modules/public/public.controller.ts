@@ -1,9 +1,9 @@
-import { Body, Controller, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { Body, Controller, Delete, Get, Param, ParseIntPipe, Patch, Post, Put, Query, Req, Res, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 import QRCode from "qrcode";
 import { PublicService, PublicTenantContext } from "./public.service";
-import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MarketingPopupEventDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerAttendanceSubmitDto, VolunteerServiceConfirmDto, VolunteerTaskApplyDto, VolunteerTaskCancelDto, WechatLoginDto, WechatPhoneDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, FrequentRegistrantDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MarketingPopupEventDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerAttendanceSubmitDto, VolunteerServiceConfirmDto, VolunteerTaskApplyDto, VolunteerTaskCancelDto, WechatLoginDto, WechatPhoneDto } from "./dto";
 import { AidApplicationCreateDto, AidApplicationMaterialDto, AidApplicationSupplementDto } from "./dto";
 import { AidService } from "../aid/aid.service";
 
@@ -310,6 +310,30 @@ export class PublicController {
   async myProfile(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myProfile(user, this.tenantContext(req, tenantCode));
+  }
+
+  @Get("me/frequent-registrants")
+  async frequentRegistrants(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myFrequentRegistrants(user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("me/frequent-registrants")
+  async createFrequentRegistrant(@Body() dto: FrequentRegistrantDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.saveFrequentRegistrant(user, dto, this.tenantContext(req, tenantCode));
+  }
+
+  @Put("me/frequent-registrants/:id")
+  async updateFrequentRegistrant(@Param("id", ParseIntPipe) id: number, @Body() dto: FrequentRegistrantDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.saveFrequentRegistrant(user, dto, this.tenantContext(req, tenantCode), id);
+  }
+
+  @Delete("me/frequent-registrants/:id")
+  async deleteFrequentRegistrant(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.deleteFrequentRegistrant(user, id, this.tenantContext(req, tenantCode));
   }
 
   @Get("wechat-subscriptions/templates")

@@ -95,6 +95,7 @@
         { "path": "mall-order-detail", "style": { "navigationBarTitleText": "商城订单详情" } },
         { "path": "registration", "style": { "navigationBarTitleText": "报名详情" } },
         { "path": "review", "style": { "navigationBarTitleText": "活动评价" } },
+        { "path": "frequent-registrants", "style": { "navigationBarTitleText": "常用报名人" } },
         { "path": "courses", "style": { "navigationBarTitleText": "我的内容" } },
         { "path": "learning", "style": { "navigationBarTitleText": "浏览记录" } },
         { "path": "favorites", "style": { "navigationBarTitleText": "我的收藏" } },

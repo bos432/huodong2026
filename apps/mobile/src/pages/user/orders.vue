@@ -90,6 +90,7 @@ const tabs = [
   { key: "all", label: "全部" },
   { key: "pending", label: "待处理" },
   { key: "upcoming", label: "待参与" },
+  { key: "after_sale", label: "退款售后" },
   { key: "completed", label: "已完成" }
 ] as const;
 const activeTab = ref<OrderTab>("all");
@@ -145,6 +146,7 @@ const allOrders = computed<UiOrder[]>(() => {
 const visibleOrders = computed(() => allOrders.value.filter((item) => {
   if (activeTab.value === "pending") return item.statusClass === "pending";
   if (activeTab.value === "upcoming") return item.type === "activity" && item.statusClass === "upcoming";
+  if (activeTab.value === "after_sale") return item.status.startsWith("refund_") || item.status.startsWith("course_refund_");
   if (activeTab.value === "learning") return item.type === "course" && item.statusClass === "learning" && item.owned && Number(item.progress || 0) < 100;
   if (activeTab.value === "completed") return item.statusClass === "done" || item.status.endsWith("refund_completed") || Number(item.progress || 0) >= 100;
   return true;
@@ -154,7 +156,7 @@ function readRouteStatus() {
   const pages = getCurrentPages();
   const options = (pages[pages.length - 1] as any)?.options || {};
   const status = String(options.status || "all");
-  if (["all", "pending", "upcoming", "learning", "completed"].includes(status)) activeTab.value = status as OrderTab;
+  if (["all", "pending", "upcoming", "after_sale", "learning", "completed"].includes(status)) activeTab.value = status as OrderTab;
 }
 
 async function loadOrders(preserveContent = false) {
@@ -472,8 +474,8 @@ onShow(() => {
 .orders-toolbar-hint { color:#66827d; font-size:23rpx; }
 .refresh-action { min-width:88rpx; padding:10rpx 18rpx; border:1rpx solid #cfe4df; border-radius:8rpx; background:#fff; color:#0f766e; text-align:center; font-size:24rpx; font-weight:800; }
 .refresh-action.disabled { color:#9ca3af; background:#f5f5f4; }
-.order-tabs { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #d9ebe6; border-radius:8rpx; background:#f1f7f5; }
-.order-tab { min-width:0; min-height:56rpx; display:flex;align-items:center;justify-content:center; padding:8rpx 2rpx; border-radius:6rpx; color:#66827d; text-align:center; font-size:20rpx; font-weight:800; white-space:nowrap; }
+.order-tabs { display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #d9ebe6; border-radius:8rpx; background:#f1f7f5; }
+.order-tab { min-width:0; min-height:56rpx; display:flex;align-items:center;justify-content:center; padding:8rpx 2rpx; border-radius:6rpx; color:#66827d; text-align:center; font-size:18rpx; font-weight:800; white-space:normal; line-height:1.2; }
 .order-tab.active { background:#0f766e; color:#fff; box-shadow:0 4rpx 12rpx rgba(15, 118, 110, 0.18); }
 .order-card { margin-bottom:16rpx; border:1rpx solid rgba(15,118,110,.1); box-shadow:0 8rpx 22rpx rgba(20,72,64,.05); }
 .order-head { align-items: flex-start; gap: 16rpx; }

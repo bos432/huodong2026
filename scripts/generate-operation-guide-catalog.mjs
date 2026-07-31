@@ -41,6 +41,7 @@ const tableLabelOverrides = {
   check_in_points: "核销点",
   checkin_tasks: "打卡任务",
   community_checkins: "社区打卡",
+  frequent_registrants: "常用报名人",
   h5_auth_code_logs: "H5认证码日志",
   mall_flash_sales: "商城秒杀活动",
   mall_group_buys: "商城拼团活动",
@@ -57,7 +58,7 @@ function groupFor(name) {
   if (/^(course_|courses$|community_|forum_|content_)/.test(name) || name === "checkin_tasks") return "课程共修与内容治理";
   if (/^(activity_|activities$|registration|ticket_|coupon_|waitlist|check_in|checkin_|conversion_|share_)/.test(name)) return "活动报名与核销";
   if (/^(order|refund|payment_|agent_|wallet_|user_wallet|fund_risk)/.test(name)) return "订单支付与财务";
-  if (/^(user|member_|certificate|invite_)/.test(name)) return "用户会员与资产";
+  if (/^(user|member_|certificate|invite_|frequent_registrant)/.test(name)) return "用户会员与资产";
   if (/^(homepage_|announcement|notification_|marketing_|ad_|miniprogram_)/.test(name)) return "装修营销与通知";
   return "平台治理与基础设施";
 }

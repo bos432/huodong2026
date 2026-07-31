@@ -79,17 +79,6 @@ function formatTime(value: string) {
   return `${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
 }
 
-function activityDateParts(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { month: "日期", day: "待定", time: "时间待定" };
-  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  return {
-    month: `${shifted.getUTCMonth() + 1}月`,
-    day: String(shifted.getUTCDate()).padStart(2, "0"),
-    time: `${String(shifted.getUTCHours()).padStart(2, "0")}:${String(shifted.getUTCMinutes()).padStart(2, "0")}`
-  };
-}
-
 function clearKeyword() {
   keyword.value = "";
   loadFirstPage();
@@ -102,6 +91,22 @@ const resultHint = computed(() => {
     : categories.value.find((item) => item.id === activeCategoryId.value)?.name || "已选分类";
   const statusName = statusTabs.find((item) => item.value === activeStatus.value)?.label || "全部";
   return `${categoryName} · ${statusName}`;
+});
+const dateGroups = computed(() => {
+  const groups = new Map<string, { key: string; label: string; items: any[] }>();
+  for (const item of rows.value) {
+    const date = new Date(item.startTime);
+    const valid = !Number.isNaN(date.getTime());
+    const shifted = valid ? new Date(date.getTime() + 8 * 60 * 60 * 1000) : null;
+    const key = shifted ? `${shifted.getUTCFullYear()}-${String(shifted.getUTCMonth() + 1).padStart(2, "0")}-${String(shifted.getUTCDate()).padStart(2, "0")}` : "待定";
+    const week = shifted ? ["日", "一", "二", "三", "四", "五", "六"][shifted.getUTCDay()] : "";
+    const label = shifted ? `${shifted.getUTCMonth() + 1}月${shifted.getUTCDate()}日 · 周${week}` : "时间待定";
+    if (!groups.has(key)) groups.set(key, { key, label, items: [] });
+    groups.get(key)!.items.push(item);
+  }
+  return [...groups.values()]
+    .map((group) => ({ ...group, items: [...group.items].sort((left, right) => new Date(left.startTime || 0).getTime() - new Date(right.startTime || 0).getTime()) }))
+    .sort((left, right) => left.key.localeCompare(right.key));
 });
 
 function buildQuery(nextPage: number) {
@@ -296,31 +301,29 @@ onReachBottom(loadMore);
     </view>
 
     <view v-else class="activity-feed">
-      <view v-for="(item, index) in rows" :key="item.id" class="activity-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
-        <view class="activity-date-card">
-          <text class="activity-date-month">{{ activityDateParts(item.startTime).month }}</text>
-          <text class="activity-date-day">{{ activityDateParts(item.startTime).day }}</text>
-          <text class="activity-date-time">{{ activityDateParts(item.startTime).time }}</text>
-        </view>
-        <image v-if="item.coverUrl" class="activity-cover app-media-motion" :src="item.coverUrl" mode="aspectFill" />
-        <view v-else class="activity-cover cover-fallback">{{ item.category?.name || "活动" }}</view>
-        <view class="activity-body">
-          <view class="row meta-row">
-            <view class="tag tag-secondary">{{ item.category?.name || "活动" }}</view>
-            <text class="card-tag" :class="statusClass(item.displayStatus)">{{ statusText(item.displayStatus) }}</text>
-          </view>
-          <text class="activity-title">{{ item.title }}</text>
-          <text class="activity-location">{{ item.location || "地点待确认" }}</text>
-          <text class="body-text activity-desc">{{ activitySummary(item.description) }}</text>
-          <view class="row capacity-row">
-            <view class="capacity-pill">
-              <text>{{ item.registeredCount || 0 }} 人已报名</text>
-              <text>余 {{ item.remainingSeats }}/{{ item.capacity }}</text>
+      <view v-for="group in dateGroups" :key="group.key" class="activity-date-group">
+        <view class="date-group-head"><text>{{ group.label }}</text><text>{{ group.items.length }} 场</text></view>
+        <view v-for="(item, index) in group.items" :key="item.id" class="activity-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
+          <image v-if="item.coverUrl" class="activity-cover app-media-motion" :src="item.coverUrl" mode="aspectFill" />
+          <view v-else class="activity-cover cover-fallback">{{ item.category?.name || "活动" }}</view>
+          <view class="activity-body">
+            <view class="row meta-row">
+              <view class="tag tag-secondary">{{ item.category?.name || "活动" }}</view>
+              <text class="card-tag" :class="statusClass(item.displayStatus)">{{ statusText(item.displayStatus) }}</text>
             </view>
-            <view class="card-price">{{ priceText(item.price) }}</view>
+            <text class="activity-title">{{ item.title }}</text>
+            <text class="activity-location">{{ formatTime(item.startTime) }} · {{ item.location || "地点待确认" }}</text>
+            <text class="body-text activity-desc">{{ activitySummary(item.description) }}</text>
+            <view class="row capacity-row">
+              <view class="capacity-pill">
+                <text>{{ item.registeredCount || 0 }} 人已报名</text>
+                <text>余 {{ item.remainingSeats }}/{{ item.capacity }}</text>
+              </view>
+              <view class="card-price">{{ priceText(item.price) }}</view>
+            </view>
           </view>
+          <view class="activity-action">{{ item.displayStatus === "open" ? "立即报名" : "查看详情" }}</view>
         </view>
-        <view class="activity-action">{{ item.displayStatus === "open" ? "立即报名" : "查看详情" }}</view>
       </view>
 
       <view v-if="hasMore" class="button block load-more" :class="{ disabled: loadingMore }" role="button" tabindex="0" :aria-disabled="loadingMore" :aria-busy="loadingMore" aria-label="加载更多活动" @click="loadMore" @keyup.enter="loadMore" @keyup.space.prevent="loadMore">
@@ -505,6 +508,6 @@ onReachBottom(loadMore);
 .activity-page .search-box { height:76rpx; border:1rpx solid #e0e8e4; border-radius:8rpx; background:#f7f9f8; }.activity-page .search-input { height:76rpx; font-size:25rpx; }.activity-page .search-icon { font-size:24rpx; }
 .activity-page .category-tabs { margin-top:16rpx; }.activity-page .tabs-track { gap:10rpx; }.activity-page .category-chip { min-height:56rpx; border:1rpx solid #e0e8e4; border-radius:8rpx; background:#fff; color:#56635d; font-size:23rpx; }.activity-page .category-chip.active { border-color:#20d477; background:#20d477; color:#072d19; }
 .activity-page .status-tabs { gap:8rpx; margin-top:14rpx; }.activity-page .status-tab { min-height:56rpx; border-radius:8rpx; background:#f1f5f3; color:#5d6c64; font-size:22rpx; }.activity-page .status-tab.active { background:#eafbf1; color:#08753f; }
-.activity-result-head { margin:0 0 14rpx; }.activity-page .activity-feed { gap:16rpx; }.activity-page .activity-card { grid-template-columns:74rpx 184rpx minmax(0,1fr); min-height:184rpx; padding:14rpx; border-color:#e2eae6; border-radius:8rpx; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.activity-page .activity-date-card { border-radius:8rpx; background:#eafbf1; color:#078347; }.activity-page .activity-date-day { color:#14271b; font-size:36rpx; }.activity-page .activity-cover { width:184rpx; height:156rpx; align-self:center; border-radius:8rpx; }.activity-page .activity-title { color:#13241a; }.activity-page .activity-location { color:#607169; }.activity-page .activity-desc { color:#809087; }.activity-page .card-tag.is-open { background:#20b967; }.activity-page .activity-action { min-height:60rpx; border-radius:8rpx; background:#20d477; color:#072d19; }
+.activity-result-head { margin:0 0 14rpx; }.activity-page .activity-feed { display:grid; gap:24rpx; }.activity-date-group { display:grid; gap:12rpx; }.date-group-head { display:flex; align-items:center; justify-content:space-between; padding:0 4rpx; color:#183326; font-size:27rpx; font-weight:900; }.date-group-head text:last-child { color:#829087; font-size:20rpx; font-weight:700; }.activity-page .activity-card { grid-template-columns:184rpx minmax(0,1fr); min-height:184rpx; padding:14rpx; border-color:#e2eae6; border-radius:8rpx; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.activity-page .activity-cover { width:184rpx; height:156rpx; align-self:center; border-radius:8rpx; }.activity-page .activity-title { color:#13241a; }.activity-page .activity-location { color:#607169; }.activity-page .activity-desc { color:#809087; }.activity-page .card-tag.is-open { background:#20b967; }.activity-page .activity-action { grid-column:1 / -1; min-height:60rpx; border-radius:8rpx; background:#20d477; color:#072d19; }
 </style>
 

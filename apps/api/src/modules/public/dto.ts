@@ -164,6 +164,23 @@ export class AmbassadorApplicationDto {
   channelCode?: string;
 }
 
+export class FrequentRegistrantDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(80)
+  name!: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(32)
+  phone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(64)
+  idCard?: string;
+}
+
 export class AidApplicationCreateDto {
   @IsIn(["personal", "project"])
   type!: "personal" | "project";

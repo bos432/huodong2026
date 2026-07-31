@@ -30,6 +30,11 @@
           <text class="member-stat-value">{{ item.value }}</text>
         </view>
       </view>
+      <view v-if="isLoggedIn && profile" class="member-rights app-enter" style="animation-delay: 96ms">
+        <view class="member-growth"><text>成长值 {{ profile.growthValue || 0 }}</text><text v-if="profile.nextLevel">距 {{ profile.nextLevel.name }} 还差 {{ profile.nextLevel.remainingGrowth }}</text><text v-else>已达当前最高等级</text></view>
+        <view class="member-growth-track"><view class="member-growth-fill" :style="{ width: profile.nextLevel ? `${Math.min(100, Math.max(0, Number(profile.growthValue || 0) / Number(profile.nextLevel.minGrowth || 1) * 100))}%` : '100%' }"></view></view>
+        <view v-if="profile.memberLevel?.benefits?.length" class="member-benefits"><text v-for="benefit in profile.memberLevel.benefits.slice(0, 3)" :key="benefit.key || benefit.name">{{ benefit.name || benefit.key }}</text></view>
+      </view>
       <view v-if="!isLoggedIn" class="member-actions single">
         <view class="member-action primary app-press" role="button" tabindex="0" aria-label="登录或注册" @click="goLogin" @keyup.enter="goLogin" @keyup.space.prevent="goLogin">登录/注册</view>
       </view>
@@ -64,6 +69,11 @@
       </view>
     </view>
 
+    <view class="member-shortcuts app-enter" style="animation-delay: 128ms">
+      <view class="member-shortcut app-press" role="button" tabindex="0" aria-label="查看我的活动报名" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })"><text class="member-shortcut-kicker">活动记录</text><text class="member-shortcut-title">我的报名</text><text class="member-shortcut-copy">查看活动空间、签到和评价</text></view>
+      <view class="member-shortcut app-press" role="button" tabindex="0" aria-label="查看优惠券" @click="goCoupons" @keyup.enter="goCoupons" @keyup.space.prevent="goCoupons"><text class="member-shortcut-kicker">可用权益</text><text class="member-shortcut-title">优惠券</text><text class="member-shortcut-copy">报名和商城下单时使用</text></view>
+    </view>
+
     <view class="profile-asset-grid app-enter" style="animation-delay: 144ms">
       <view class="asset-panel wallet-panel app-press" role="button" tabindex="0" aria-label="查看余额资产明细" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet"><text class="asset-label">余额资产</text><text class="asset-value">{{ walletBalanceText }}</text><text class="asset-action">查看明细</text></view>
       <view v-if="featureGates.charity" class="asset-panel charity-panel app-press" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity"><text class="asset-label">公益贡献</text><text class="asset-value">{{ charityAmountText }} 元</text><text class="asset-action">查看证书</text></view>
@@ -92,7 +102,6 @@
         <view v-if="featureGates.mall" class="profile-link-row" role="button" tabindex="0" aria-label="申请商户入驻" @click="goMerchantApply" @keyup.enter="goMerchantApply" @keyup.space.prevent="goMerchantApply"><view><text class="entry-title">商户入驻</text><text class="entry-copy">提交经营主体与资质，查看平台审核结果。</text></view><text class="entry-arrow">›</text></view>
         <view v-if="featureGates.community || featureGates.forum" class="profile-link-row" role="button" tabindex="0" aria-label="查看处罚与申诉" @click="goContentAppeals" @keyup.enter="goContentAppeals" @keyup.space.prevent="goContentAppeals"><view><text class="entry-title">处罚与申诉</text><text class="entry-copy">查看处罚记录和申诉处理进度。</text></view><text class="entry-arrow">›</text></view>
       </view>
-      <view v-if="featureGates.community && isLoggedIn" class="growth-panel"><view class="growth-copy"><text>成长值 {{ profile?.growthValue || 0 }}</text><text v-if="profile?.nextLevel">距 {{ profile.nextLevel.name }} 还差 {{ profile.nextLevel.remainingGrowth }}</text><text v-else>已达当前最高等级</text></view><view class="growth-track"><view class="growth-fill" :style="{ width: profile?.nextLevel ? `${Math.min(100, Math.max(0, Number(profile?.growthValue || 0) / Number(profile.nextLevel.minGrowth || 1) * 100))}%` : '100%' }"></view></view><view v-if="profile?.memberLevel?.expiresAt" class="growth-expire">等级有效至 {{ String(profile.memberLevel.expiresAt).replace('T', ' ').slice(0, 10) }}</view></view>
     </view>
 
     <view v-if="adminAccess?.canAccess" class="profile-section admin-entry" role="button" tabindex="0" aria-label="打开手机管理" @click="goAdmin" @keyup.enter="goAdmin" @keyup.space.prevent="goAdmin"><view><text class="profile-section-title">手机管理</text><text class="profile-section-copy">{{ adminAccess.tenantName || "平台" }} · 活动管理 · 报名审核</text></view><text class="entry-arrow">›</text></view>
@@ -239,6 +248,12 @@ const completedOrderCount = computed(() => {
   count += courseOrders.value.filter(courseOrderIsCompleted).length;
   count += learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) >= 100).length;
   return count;
+});
+const afterSaleCount = computed(() => {
+  if (["registrations", "courseOrders"].some(assetFailed)) return null;
+  const activityCount = registrations.value.filter((item) => ["pending", "processing", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
+  const courseCount = courseOrders.value.filter((item) => ["pending", "approved", "processing", "failed", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
+  return activityCount + courseCount;
 });
 
 function memberSession(): MemberOrderSession {
@@ -397,6 +412,7 @@ onShow(() => {
 });
 
 const defaultGridItems = [
+  { icon:"人", label:"常用报名人", page:"frequentRegistrants" },
   { icon:"📖", label:"我的内容", page:"courses" },
   { icon:"🕐", label:"浏览记录", page:"learning" },
   { icon:"❤", label:"商城收藏", page:"mallFavorites" },
@@ -408,6 +424,7 @@ const defaultGridItems = [
 ];
 
 const gridPageUrls: Record<string, string> = {
+  frequentRegistrants: "/pages/user/frequent-registrants",
   courses: "/pages/user/courses",
   learning: "/pages/user/learning",
   favorites: "/pages/user/favorites",
@@ -464,6 +481,7 @@ const orderTabs = computed(() => {
   return [
     { icon:"💳", label:"待处理", count: pendingOrderCount.value, status:"pending" },
     { icon:"🎫", label:"待参与", count: upcomingOrderCount.value, status:"upcoming" },
+    { icon:"↩", label:"退款售后", count: afterSaleCount.value, status:"after_sale" },
     { icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" }
   ];
 });
@@ -528,6 +546,7 @@ function goEdit() {
 function goCharity() { goDecoratedLink("/pages/charity/index"); }
 function goAmbassador() { goDecoratedLink("/pages/ambassador/index"); }
 function goWallet() { navigateProtected("/pages/user/wallet"); }
+function goCoupons() { navigateProtected("/pages/mall/coupons"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
 function goCommunitySocial() { navigateProtected("/pages/user/community-social"); }
 function goContentAppeals() { navigateProtected("/pages/user/content-appeals"); }
@@ -744,7 +763,7 @@ function logoutUser() {
 }
 .member-stat text { color: var(--profile-header-muted, rgba(91, 47, 36, 0.68)); font-size: 22rpx; }
 .member-stat-value { color: var(--profile-header-text, #fff); font-size: 27rpx; line-height: 1.2; font-weight: 900; }
-.growth-panel { margin-top: 18rpx; }.growth-copy { display: flex; justify-content: space-between; gap: 16rpx; color: var(--profile-header-muted, rgba(91,47,36,.68)); font-size: 21rpx; }.growth-track { height: 10rpx; margin-top: 10rpx; overflow: hidden; border-radius: 999px; background: rgba(255,255,255,.45); }.growth-fill { height: 100%; border-radius: inherit; background: var(--profile-header-text, #5B2F24); transition: width .25s ease; }.growth-expire { margin-top: 8rpx; color: var(--profile-header-muted, rgba(91,47,36,.68)); font-size: 20rpx; }
+.member-rights{display:grid;gap:10rpx;margin-top:20rpx;padding:16rpx 18rpx;border:1rpx solid rgba(255,255,255,.18);border-radius:8rpx;background:rgba(255,255,255,.1)}.member-growth{display:flex;justify-content:space-between;gap:16rpx;color:var(--profile-header-muted,rgba(7,45,25,.68));font-size:21rpx}.member-growth text:last-child{text-align:right}.member-growth-track{height:10rpx;overflow:hidden;border-radius:999px;background:rgba(255,255,255,.44)}.member-growth-fill{height:100%;border-radius:inherit;background:#fff;transition:width .25s ease}.member-benefits{display:flex;flex-wrap:wrap;gap:8rpx}.member-benefits text{padding:4rpx 10rpx;border-radius:4rpx;background:rgba(255,255,255,.17);color:var(--profile-header-text,#072d19);font-size:19rpx;font-weight:800}
 .member-actions {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -851,6 +870,7 @@ function logoutUser() {
 .profile-section-copy { display: block; margin-top: 6rpx; color: #718a85; font-size: 22rpx; line-height: 1.45; }
 .profile-section-link { flex: 0 0 auto; padding: 8rpx 12rpx; border-radius: 8rpx; background: #eef8f5; color: #0f766e; font-size: 22rpx; font-weight: 800; }
 .order-summary-panel { padding-bottom: 20rpx; }
+.member-shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14rpx;margin-bottom:18rpx}.member-shortcut{min-width:0;min-height:144rpx;display:grid;align-content:center;gap:7rpx;padding:22rpx;border:1rpx solid #dceae3;border-radius:8rpx;background:#fff}.member-shortcut:first-child{background:#ecfaf1;border-color:#ccead9}.member-shortcut-kicker{color:#66827d;font-size:20rpx;font-weight:800}.member-shortcut-title{color:#173f3a;font-size:29rpx;font-weight:900}.member-shortcut-copy{color:#718a85;font-size:21rpx;line-height:1.4}
 .profile-asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-bottom: 18rpx; }
 .asset-panel { min-width: 0; min-height: 142rpx; display: grid; align-content: space-between; padding: 22rpx; border-radius: 8rpx; }
 .wallet-panel { background: #173f3a; color: #fff; }

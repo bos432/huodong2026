@@ -36,6 +36,7 @@ const pendingPhoneAction = ref<"" | "submit">("");
 const values = reactive<Record<number, any>>({});
 const privacyAccepted = ref(false);
 const companions = ref<Array<{ name: string; phone: string; idCard: string }>>([]);
+const frequentRegistrants = ref<Array<{ id: number; name: string; phone?: string | null; idCard?: string | null }>>([]);
 const uploadingFieldId = ref<number>();
 const pageLoadGuard = createTenantLoadGuard();
 const quoteLoadGuard = createTenantLoadGuard();
@@ -84,6 +85,11 @@ const requiredTotal = computed(() => requiredFields.value.length);
 const formProgressText = computed(() => requiredTotal.value ? `必填 ${completedRequiredCount.value}/${requiredTotal.value}` : "无必填项");
 const selectedTicketName = computed(() => selectedTicket.value?.name || "标准报名");
 const payableText = computed(() => payableNumber.value > 0 ? `￥${currentPayable.value}` : "免费");
+const registrationStep = computed(() => {
+  if (!selectedTicketTypeId.value && hasTicketTypes.value) return 1;
+  if (requiredTotal.value && completedRequiredCount.value < requiredTotal.value) return 2;
+  return 3;
+});
 const submitButtonText = computed(() => {
   if (submitting.value) return "提交中...";
   if (registrationPaused.value) return "报名暂停";
@@ -170,7 +176,12 @@ function validate() {
 function addCompanion() {
   const max = Number(activity.value?.eligibilityRules?.maxCompanions || 0);
   if (companions.value.length >= max) return uni.showToast({ title: `最多添加 ${max} 位同行人`, icon: "none" });
-  companions.value.push({ name: "", phone: "", idCard: "" });
+  const choices = frequentRegistrants.value.slice(0, 5);
+  if (!choices.length) return companions.value.push({ name: "", phone: "", idCard: "" });
+  uni.showActionSheet({ itemList: ["手动填写", ...choices.map((item) => item.name)], success: ({ tapIndex }) => {
+    const item = choices[tapIndex - 1];
+    companions.value.push(item ? { name: item.name, phone: String(item.phone || ""), idCard: String(item.idCard || "") } : { name: "", phone: "", idCard: "" });
+  } });
 }
 
 function removeCompanion(index: number) { companions.value.splice(index, 1); }
@@ -395,13 +406,15 @@ async function loadPage() {
       source.value ? `source=${encodeURIComponent(source.value)}` : "",
       inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : ""
     ].filter(Boolean).join("&");
-    const [detail, setting] = await Promise.all([
+    const [detail, setting, savedRegistrants] = await Promise.all([
       request(`/public/activities/${id}${query ? `?${query}` : ""}`),
-      request("/public/settings/operation")
+      request("/public/settings/operation"),
+      request<any[]>("/public/me/frequent-registrants").catch(() => [])
     ]);
     if (!pageLoadGuard.isCurrent(token)) return;
     activity.value = reviewSafeData(detail);
     operationSetting.value = reviewSafeData(setting);
+    frequentRegistrants.value = Array.isArray(savedRegistrants) ? savedRegistrants : [];
     if (payableNumber.value > 0 && !paymentMethods.value[paymentMethod.value]) {
       paymentMethod.value = availablePaymentMethods.value[0]?.value || "offline";
     }
@@ -462,6 +475,10 @@ watch(couponCode, () => {
       </view>
 
       <PageDecorationBlocks :sections="bodyDecorationSections" />
+
+      <view class="registration-steps app-enter" style="animation-delay: 72ms" aria-label="报名步骤">
+        <view v-for="step in [{ number: 1, label: '选择票种' }, { number: 2, label: '填写资料' }, { number: 3, label: '确认提交' }]" :key="step.number" class="registration-step" :class="{ active: registrationStep >= step.number, current: registrationStep === step.number }"><text>{{ step.number }}</text><text>{{ step.label }}</text></view>
+      </view>
 
       <view class="card intro-card">
         <view class="section-kicker">提交前确认</view>
@@ -793,6 +810,7 @@ watch(couponCode, () => {
 .method-name { color: #172033; font-size: 27rpx; font-weight: 850; }
 .submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 210rpx) 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid #d9ebe6; box-shadow: 0 -10rpx 30rpx rgba(20,72,64,.08); }
 .register { background:#f7f9f8; }.register .detail-hero,.register .hero-image { border-radius:8rpx; overflow:hidden; }.register .card { border-radius:8rpx; border-color:#e2eae6; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.register .ticket-option,.register .field-control,.register .payment-option { border-radius:8rpx; }.register .submit-bar { border-color:#dce8e2; }.register .submit-button { border-radius:8rpx; background:#20d477; color:#072d19; }
+.registration-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8rpx;margin:0 0 18rpx;padding:12rpx;border:1rpx solid #e2eae6;border-radius:8rpx;background:#fff}.registration-step{min-width:0;display:flex;align-items:center;justify-content:center;gap:8rpx;min-height:54rpx;color:#819087;font-size:21rpx;font-weight:700}.registration-step text:first-child{width:30rpx;height:30rpx;display:grid;place-items:center;border-radius:50%;background:#edf1ef;color:#718078;font-size:18rpx}.registration-step.active{color:#08753f}.registration-step.active text:first-child{background:#dff8e7;color:#08753f}.registration-step.current{border-radius:6rpx;background:#effbf4;color:#163423}
 .submit-summary { min-width: 0; display: grid; gap: 4rpx; }
 .submit-summary text:first-child { color: #999999; font-size: 22rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .submit-summary text:last-child { color: #0f766e; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

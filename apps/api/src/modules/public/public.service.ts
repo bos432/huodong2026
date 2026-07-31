@@ -20,6 +20,7 @@ import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { Coupon } from "../../entities/coupon.entity";
 import { CouponClaim } from "../../entities/coupon-claim.entity";
 import { CouponUsage } from "../../entities/coupon-usage.entity";
+import { FrequentRegistrant } from "../../entities/frequent-registrant.entity";
 import { ConversionEvent, ConversionEventType } from "../../entities/conversion-event.entity";
 import { Course } from "../../entities/course.entity";
 import { CourseChapter } from "../../entities/course-chapter.entity";
@@ -91,7 +92,7 @@ import { RefundCompletionService } from "../refund-completion.service";
 import { MemberPointsService } from "../member-points/member-points.service";
 import { CharityFundService } from "../charity-fund.service";
 import { CredentialTemplateService } from "../credential-templates/credential-template.service";
-import { AmbassadorApplicationDto, CreateCourseOrderDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerAttendanceSubmitDto, VolunteerServiceConfirmDto, VolunteerTaskApplyDto, VolunteerTaskCancelDto, WechatLoginDto, WechatPhoneDto } from "./dto";
+import { AmbassadorApplicationDto, CreateCourseOrderDto, FrequentRegistrantDto, H5CodeDto, H5LoginDto, H5PasswordLoginDto, MockPayDto, MockPaymentCallbackDto, PhoneChangeCodeDto, ProviderPayDto, ProviderPaymentCallbackDto, QuoteDto, RegisterDto, UpdatePasswordDto, UpdatePhoneDto, UpdateProfileDto, VolunteerApplyDto, VolunteerAttendanceSubmitDto, VolunteerServiceConfirmDto, VolunteerTaskApplyDto, VolunteerTaskCancelDto, WechatLoginDto, WechatPhoneDto } from "./dto";
 
 const PUBLIC_IMAGE_MIMES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const PUBLIC_ATTACHMENT_MIMES = new Set([...PUBLIC_IMAGE_MIMES, "application/pdf"]);
@@ -141,6 +142,7 @@ export class PublicService {
     @InjectRepository(AdCampaign) private readonly adCampaigns: Repository<AdCampaign>,
     @InjectRepository(AdDailyStat) private readonly adDailyStats: Repository<AdDailyStat>,
     @InjectRepository(Registration) private readonly registrations: Repository<Registration>,
+    @InjectRepository(FrequentRegistrant) private readonly frequentRegistrants: Repository<FrequentRegistrant>,
     @InjectRepository(Order) private readonly orders: Repository<Order>,
     @InjectRepository(OperationSetting) private readonly operationSettings: Repository<OperationSetting>,
     @InjectRepository(PaymentCallbackLog) private readonly paymentCallbackLogs: Repository<PaymentCallbackLog>,
@@ -470,6 +472,42 @@ export class PublicService {
     }
     const saved = await this.applySuccessfulCoursePayment(order, dto.transactionNo || `COURSE-MOCK-${Date.now()}`);
     return { order: this.publicCourseOrder(saved), course: this.publicCourse(saved.course), owned: true };
+  }
+
+  async myFrequentRegistrants(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const rows = await this.frequentRegistrants.find({ where: { user: { id: user.id }, tenant: tenant ? { id: tenant.id } : IsNull() }, order: { updatedAt: "DESC", id: "DESC" }, take: 20 });
+    return rows.map((item) => this.publicFrequentRegistrant(item));
+  }
+
+  async saveFrequentRegistrant(user: User, dto: FrequentRegistrantDto, context?: PublicTenantContext, id?: number) {
+    const tenant = await this.resolveTenantContext(context);
+    const name = String(dto.name || "").trim();
+    const phone = String(dto.phone || "").trim() || null;
+    const idCard = String(dto.idCard || "").trim() || null;
+    if (!name) throw new BadRequestException("请填写报名人姓名");
+    if (phone && !/^1\d{10}$/.test(phone)) throw new BadRequestException("请输入正确的手机号");
+    if (idCard && idCard.length < 6) throw new BadRequestException("证件号格式不正确");
+    let row: FrequentRegistrant;
+    if (id) {
+      row = await this.frequentRegistrants.findOne({ where: { id, user: { id: user.id }, tenant: tenant ? { id: tenant.id } : IsNull() } }) || (() => { throw new NotFoundException("常用报名人不存在"); })();
+    } else {
+      row = this.frequentRegistrants.create({ user, tenant, name, phone, idCard });
+    }
+    Object.assign(row, { name, phone, idCard });
+    return this.publicFrequentRegistrant(await this.frequentRegistrants.save(row));
+  }
+
+  async deleteFrequentRegistrant(user: User, id: number, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const row = await this.frequentRegistrants.findOne({ where: { id, user: { id: user.id }, tenant: tenant ? { id: tenant.id } : IsNull() } });
+    if (!row) throw new NotFoundException("常用报名人不存在");
+    await this.frequentRegistrants.remove(row);
+    return { deleted: true };
+  }
+
+  private publicFrequentRegistrant(row: FrequentRegistrant) {
+    return { id: row.id, name: row.name, phone: row.phone, idCard: row.idCard, updatedAt: row.updatedAt };
   }
 
   async createCourseProviderPayment(orderId: number, provider: SupportedPaymentProvider, dto: ProviderPayDto, user: User, context?: PublicTenantContext) {

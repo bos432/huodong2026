@@ -1229,6 +1229,13 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
   },
   {
     "group": "用户会员与资产",
+    "name": "frequent_registrants",
+    "meaning": "常用报名人相关业务数据。",
+    "business": "用户会员与资产模块中的常用报名人查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "用户会员与资产",
     "name": "invite_codes",
     "meaning": "邀请码相关业务数据。",
     "business": "用户会员与资产模块中的邀请码查询、状态流转和关联记录。",
