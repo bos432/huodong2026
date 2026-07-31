@@ -37,7 +37,6 @@
         <view class="action-grid">
           <view class="action-cell app-press" @click="openLocation"><text>地点导航</text><text>{{ space.activity.location || "待确认" }}</text></view>
           <view v-if="space.checkIn.available" class="action-cell app-press" @click="openCheckIn"><text>签到码</text><text>活动当天出示</text></view>
-          <view class="action-cell app-press" @click="openActivityQuickAction"><text>扫码</text><text>识别活动或签到码</text></view>
           <!-- #ifdef MP-WEIXIN -->
           <button v-if="shareInvite?.code" class="action-cell share-action" open-type="share"><text>分享活动</text><text>邀请朋友一起参加</text></button>
           <view v-else class="action-cell app-press" @click="prepareShare"><text>生成邀请</text><text>生成后可分享给朋友</text></view>
@@ -65,7 +64,6 @@ import { onHide, onLoad, onShow, onUnload, onShareAppMessage, onShareTimeline } 
 import { ensureUser, request, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
-import { openActivityQuickAction } from "../../activity-quick-action";
 
 const id = ref(0); const space = ref<any>(null); const shareInvite = ref<any>(null); const loading = ref(true); const error = ref(""); const composerVisible = ref(false); const draft = ref(""); const groupQrImageError = ref(false); const stageNow = ref(Date.now());
 let stageTimer: ReturnType<typeof setInterval> | undefined;

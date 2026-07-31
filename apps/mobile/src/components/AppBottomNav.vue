@@ -4,7 +4,6 @@ import { onShow } from "@dcloudio/uni-app";
 import type { HomepageSectionView } from "@activity/shared";
 import { defaultBottomNavSection, goDecoratedLink, usePageDecoration } from "../decoration";
 import { filterNavigationItemsByFeature } from "../feature-gates";
-import { openActivityQuickAction } from "../activity-quick-action";
 
 const props = defineProps<{
   section?: HomepageSectionView | null;
@@ -85,6 +84,16 @@ function navIconKind(link?: string) {
   if (path === "/pages/user/my") return "profile";
   return "default";
 }
+
+function navLabel(item: { link?: string; label?: string }) {
+  const path = String(item.link || "").split("?")[0];
+  const configured = String(item.label || "").trim();
+  // A brand name belongs in the page header, not in the primary task navigation.
+  if (path === "/pages/index/index" && (!configured || configured === "慢π")) return "首页";
+  if (path === "/pages/activity/list" && !configured) return "活动";
+  if (path === "/pages/user/my" && !configured) return "我的";
+  return configured;
+}
 </script>
 
 <template>
@@ -96,9 +105,6 @@ function navIconKind(link?: string) {
       '--nav-columns': items.length
     }"
   >
-    <view class="nav-scan-fab app-press" role="button" tabindex="0" aria-label="扫码识别平台活动码或签到码" @click="openActivityQuickAction" @keyup.enter="openActivityQuickAction" @keyup.space.prevent="openActivityQuickAction">
-      <view class="nav-scan-icon" aria-hidden="true" /><text>扫码</text>
-    </view>
     <view
       v-for="item in items"
       :key="item.link"
@@ -110,11 +116,47 @@ function navIconKind(link?: string) {
       <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
       <view v-else-if="navIconKind(item.link) !== 'default'" class="custom-tabbar-icon custom-tabbar-symbol" :class="`is-${navIconKind(item.link)}`" />
       <text v-else class="custom-tabbar-icon custom-tabbar-fallback" :style="{ background: `${item.color || '#C43D3D'}18` }">{{ navIcon(item, isCurrent(item.link)) }}</text>
-      <text>{{ item.label }}</text>
+      <text>{{ navLabel(item) }}</text>
     </view>
   </view>
 </template>
 
 <style scoped>
-.custom-tabbar{position:fixed;z-index:90;left:0;right:0;bottom:0;min-height:126rpx;display:grid;grid-template-columns:repeat(var(--nav-columns),minmax(0,1fr));align-items:end;padding:12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));box-sizing:border-box;border-top:1rpx solid #e3ebe6;box-shadow:0 -8rpx 22rpx rgba(18,43,30,.055)}.custom-tabbar-item{min-width:0;min-height:94rpx;display:grid;justify-items:center;align-content:center;gap:6rpx;font-size:24rpx;line-height:1.2;transition:color 160ms ease,transform 160ms ease}.custom-tabbar-icon,.custom-tabbar-image{width:44rpx;height:44rpx;display:grid;place-items:center;border-radius:50%;font-size:25rpx;transition:transform 180ms ease,background-color 180ms ease}.custom-tabbar-image{background:transparent}.custom-tabbar-item.active{font-weight:900}.custom-tabbar-item.active .custom-tabbar-icon{transform:translateY(-2rpx) scale(1.06)}.custom-tabbar-symbol{position:relative;box-sizing:border-box;color:currentColor;background:transparent!important}.custom-tabbar-symbol::before,.custom-tabbar-symbol::after{position:absolute;content:"";box-sizing:border-box}.is-home::before{left:9rpx;top:15rpx;width:26rpx;height:22rpx;border:3rpx solid currentColor;border-top:0;border-radius:3rpx}.is-home::after{left:11rpx;top:7rpx;width:22rpx;height:22rpx;border:3rpx solid currentColor;border-right:0;border-bottom:0;transform:rotate(45deg);border-radius:3rpx}.is-content::before{left:8rpx;top:8rpx;width:28rpx;height:29rpx;border:3rpx solid currentColor;border-radius:4rpx}.is-content::after{left:14rpx;top:16rpx;width:16rpx;height:3rpx;background:currentColor;box-shadow:0 8rpx 0 currentColor,0 16rpx 0 currentColor;border-radius:3rpx}.is-community::before{left:7rpx;top:8rpx;width:29rpx;height:23rpx;border:3rpx solid currentColor;border-radius:13rpx}.is-community::after{left:11rpx;top:27rpx;width:10rpx;height:10rpx;border-left:3rpx solid currentColor;transform:skew(-26deg)}.is-activity::before{left:8rpx;top:10rpx;width:28rpx;height:27rpx;border:3rpx solid currentColor;border-radius:4rpx}.is-activity::after{left:13rpx;top:7rpx;width:4rpx;height:8rpx;background:currentColor;box-shadow:14rpx 0 0 currentColor,0 14rpx 0 -1rpx currentColor,8rpx 14rpx 0 -1rpx currentColor,16rpx 14rpx 0 -1rpx currentColor;border-radius:3rpx}.is-profile::before{left:15rpx;top:7rpx;width:14rpx;height:14rpx;border:3rpx solid currentColor;border-radius:50%}.is-profile::after{left:8rpx;top:25rpx;width:28rpx;height:14rpx;border:3rpx solid currentColor;border-bottom:0;border-radius:16rpx 16rpx 0 0}.custom-tabbar-fallback{background:#edf5f1}.custom-tabbar-item.active .custom-tabbar-symbol{filter:drop-shadow(0 4rpx 6rpx rgba(8,117,63,.18))}.nav-scan-fab{position:absolute;left:50%;top:-84rpx;width:84rpx;height:84rpx;display:grid;justify-items:center;align-content:center;gap:2rpx;box-sizing:border-box;transform:translateX(-50%);border:5rpx solid #f7f9f8;border-radius:50%;background:#20d477;color:#072d19;box-shadow:0 10rpx 22rpx rgba(8,117,63,.22);font-size:18rpx;font-weight:900;line-height:1}.nav-scan-icon{position:relative;width:30rpx;height:30rpx;box-sizing:border-box;border:3rpx solid currentColor;border-radius:5rpx}.nav-scan-icon::before,.nav-scan-icon::after{position:absolute;content:"";background:currentColor}.nav-scan-icon::before{left:5rpx;right:5rpx;top:12rpx;height:3rpx}.nav-scan-icon::after{top:5rpx;bottom:5rpx;left:12rpx;width:3rpx}@media (min-width:900px){.custom-tabbar{left:50%;right:auto;width:760px;max-width:100%;transform:translateX(-50%);border-left:1rpx solid #e3ebe6;border-right:1rpx solid #e3ebe6}}
+.custom-tabbar {
+  position: fixed;
+  z-index: 90;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  display: grid;
+  grid-template-columns: repeat(var(--nav-columns), minmax(0, 1fr));
+  align-items: end;
+  min-height: 126rpx;
+  padding: 12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));
+  box-sizing: border-box;
+  border-top: 1rpx solid #e3ebe6;
+  box-shadow: 0 -8rpx 22rpx rgba(18, 43, 30, .055);
+}
+.custom-tabbar-item { min-width: 0; min-height: 94rpx; display: grid; justify-items: center; align-content: center; gap: 6rpx; font-size: 24rpx; line-height: 1.2; transition: color 160ms ease, transform 160ms ease; }
+.custom-tabbar-icon, .custom-tabbar-image { width: 44rpx; height: 44rpx; display: grid; place-items: center; border-radius: 50%; font-size: 25rpx; transition: transform 180ms ease, background-color 180ms ease; }
+.custom-tabbar-image { background: transparent; }
+.custom-tabbar-item.active { font-weight: 900; }
+.custom-tabbar-item.active .custom-tabbar-icon { transform: translateY(-2rpx) scale(1.06); }
+.custom-tabbar-symbol { position: relative; box-sizing: border-box; color: currentColor; background: transparent !important; }
+.custom-tabbar-symbol::before, .custom-tabbar-symbol::after { position: absolute; content: ""; box-sizing: border-box; }
+.is-home::before { left: 9rpx; top: 15rpx; width: 26rpx; height: 22rpx; border: 3rpx solid currentColor; border-top: 0; border-radius: 3rpx; }
+.is-home::after { left: 11rpx; top: 7rpx; width: 22rpx; height: 22rpx; border: 3rpx solid currentColor; border-right: 0; border-bottom: 0; border-radius: 3rpx; transform: rotate(45deg); }
+.is-content::before { left: 8rpx; top: 8rpx; width: 28rpx; height: 29rpx; border: 3rpx solid currentColor; border-radius: 4rpx; }
+.is-content::after { left: 14rpx; top: 16rpx; width: 16rpx; height: 3rpx; border-radius: 3rpx; background: currentColor; box-shadow: 0 8rpx 0 currentColor, 0 16rpx 0 currentColor; }
+.is-community::before { left: 7rpx; top: 8rpx; width: 29rpx; height: 23rpx; border: 3rpx solid currentColor; border-radius: 13rpx; }
+.is-community::after { left: 11rpx; top: 27rpx; width: 10rpx; height: 10rpx; border-left: 3rpx solid currentColor; transform: skew(-26deg); }
+.is-activity::before { left: 8rpx; top: 10rpx; width: 28rpx; height: 27rpx; border: 3rpx solid currentColor; border-radius: 4rpx; }
+.is-activity::after { left: 13rpx; top: 7rpx; width: 4rpx; height: 8rpx; border-radius: 3rpx; background: currentColor; box-shadow: 14rpx 0 0 currentColor, 0 14rpx 0 -1rpx currentColor, 8rpx 14rpx 0 -1rpx currentColor, 16rpx 14rpx 0 -1rpx currentColor; }
+.is-profile::before { left: 15rpx; top: 7rpx; width: 14rpx; height: 14rpx; border: 3rpx solid currentColor; border-radius: 50%; }
+.is-profile::after { left: 8rpx; top: 25rpx; width: 28rpx; height: 14rpx; border: 3rpx solid currentColor; border-bottom: 0; border-radius: 16rpx 16rpx 0 0; }
+.custom-tabbar-fallback { background: #edf5f1; }
+.custom-tabbar-item.active .custom-tabbar-symbol { filter: drop-shadow(0 4rpx 6rpx rgba(8, 117, 63, .18)); }
+@media (min-width: 900px) {
+  .custom-tabbar { right: auto; left: 50%; width: 760px; max-width: 100%; border-right: 1rpx solid #e3ebe6; border-left: 1rpx solid #e3ebe6; transform: translateX(-50%); }
+}
 </style>

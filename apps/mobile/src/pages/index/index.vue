@@ -4,8 +4,7 @@
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
       <view class="topbar-actions">
         <view v-if="pageBrand.logoUrl" class="brand-mark"><image :src="pageBrand.logoUrl" mode="aspectFit" /></view>
-        <view class="scan-btn app-press" role="button" tabindex="0" aria-label="扫码识别活动码或签到码" @click="openActivityQuickAction" @keyup.enter="openActivityQuickAction" @keyup.space.prevent="openActivityQuickAction"><text>扫码</text></view>
-        <view class="search-btn app-press" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><text>搜索</text></view>
+        <view class="search-btn app-press" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><view class="search-glyph" aria-hidden="true" /></view>
       </view>
     </view>
 
@@ -39,8 +38,8 @@
 
     <view v-else class="discovery-empty-hero app-enter" style="animation-delay: 42ms">
       <text class="discovery-empty-kicker">近期活动</text>
-      <text class="discovery-empty-title">新的线下活动正在筹备</text>
-      <text class="discovery-empty-copy">主办方发布后会优先显示在这里。</text>
+      <text class="discovery-empty-title">暂时没有可报名的活动</text>
+      <text class="discovery-empty-copy">可先查看往期活动，主办方发布新活动后会显示在这里。</text>
       <view class="discovery-empty-action app-press" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory">查看活动回顾</view>
     </view>
 
@@ -99,7 +98,6 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeText } from "../../review-safe-text";
-import { openActivityQuickAction } from "../../activity-quick-action";
 
 const { tenant, sections, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
 const featuredActivities = ref<any[]>([]);
@@ -284,9 +282,8 @@ function activityDateParts(value: string) {
 .topbar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 12rpx; }
 .brand-mark { width: 52rpx; height: 52rpx; overflow: hidden; border-radius: 50%; background: #e9f9f0; }
 .brand-mark image { width: 100%; height: 100%; }
-.search-btn,.scan-btn { min-width: 70rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 14rpx; border-radius: 8rpx; color: #27362f; font-size: 22rpx; font-weight: 800; }
+.search-btn { min-width: 70rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 14rpx; border-radius: 8rpx; color: #27362f; font-size: 22rpx; font-weight: 800; }
 .search-btn { background: #eef2f0; }
-.scan-btn { background: #eafbf1; color: #08753f; }
 .feature-showcase{display:grid;gap:14rpx;margin:8rpx 0 24rpx}.feature-lead,.feature-side-card{position:relative;overflow:hidden;border-radius:8rpx;background:#143a27}.feature-lead{height:364rpx}.feature-lead image,.feature-side-card image,.feature-shade{position:absolute;inset:0;width:100%;height:100%}.feature-lead image,.feature-side-card image{transition:transform 360ms ease}.feature-lead:active image,.feature-side-card:active image{transform:scale(1.09)}.feature-side-rail{width:100%;white-space:nowrap}.feature-side-track{display:inline-flex;gap:14rpx;padding-right:28rpx}.feature-side-card{width:264rpx;height:196rpx;white-space:normal}.feature-shade{background:linear-gradient(180deg,rgba(8,24,15,.08),rgba(8,24,15,.78))}.feature-fallback{height:100%;display:grid;place-items:center;background:#dff8e7;color:#08753f;font-size:28rpx;font-weight:900}.feature-copy{position:absolute;left:16rpx;right:16rpx;bottom:16rpx;display:grid;gap:5rpx;color:#fff}.feature-copy text:first-child{color:#baf5ca;font-size:22rpx;font-weight:800}.feature-copy text:nth-child(2){display:-webkit-box;overflow:hidden;font-size:30rpx;font-weight:900;line-height:1.28;-webkit-box-orient:vertical;-webkit-line-clamp:2}.feature-copy text:last-child{color:#fff3c4;font-size:22rpx;font-weight:900}.feature-side-card .feature-copy text:nth-child(2){font-size:27rpx}.feature-lead-copy text:nth-child(2){font-size:38rpx}.discovery-empty-hero{display:grid;align-content:center;justify-items:start;min-height:300rpx;margin:8rpx 0 24rpx;padding:32rpx;border:1rpx solid #d8eee1;border-radius:8rpx;background:#effbf4}.discovery-empty-kicker{color:#078347;font-size:22rpx;font-weight:900}.discovery-empty-title{margin-top:12rpx;color:#143a27;font-size:36rpx;font-weight:950}.discovery-empty-copy{margin-top:10rpx;color:#607169;font-size:24rpx}.discovery-empty-action{min-height:58rpx;display:flex;align-items:center;margin-top:22rpx;padding:0 22rpx;border-radius:8rpx;background:#143a27;color:#fff;font-size:24rpx;font-weight:900}
 .discovery-categories { width: 100%; margin: 24rpx 0 28rpx; white-space: nowrap; }
 .category-track { display: inline-flex; gap: 12rpx; padding-right: 28rpx; }
@@ -317,5 +314,13 @@ function activityDateParts(value: string) {
 .activity-price { flex: 0 0 auto; color: #dc6900; font-size: 26rpx; font-weight: 900; }
 .activity-empty { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; padding: 24rpx; border-radius: 8rpx; background: #fff; color: #718078; font-size: 24rpx; }.activity-empty-action { color: #08753f; font-weight: 800; }
 .category-tab:focus-visible, .search-btn:focus-visible, .all-link:focus-visible, .activity-preview-card:focus-visible, .activity-empty-action:focus-visible { outline: 3rpx solid #20d477; outline-offset: 3rpx; }
+
+.search-btn { width:56rpx; min-width:56rpx; height:56rpx; padding:0; border:1rpx solid #e2e9e5; background:#fff; }
+.search-glyph { position:relative; width:24rpx; height:24rpx; border:3rpx solid currentColor; border-radius:50%; }
+.search-glyph::after { position:absolute; right:-8rpx; bottom:-6rpx; width:10rpx; height:3rpx; content:""; border-radius:3rpx; background:currentColor; transform:rotate(45deg); transform-origin:left center; }
+.discovery-empty-hero { min-height:236rpx; padding:30rpx; }
+.discovery-empty-title { font-size:34rpx; }
+.discovery-empty-copy { line-height:1.55; }
+.discovery-empty-action { margin-top:20rpx; }
 
 </style>
