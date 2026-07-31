@@ -185,9 +185,9 @@ const isLoggedIn = computed(() => Boolean(profile.value?.id || getUserToken()));
 const { sections, loadDecoration } = usePageDecoration("user_my", "/pages/user/my");
 const myPageSection = computed(() => sections.value.find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
-const warmHeaderBackground = "linear-gradient(135deg, #0f766e 0%, #176b61 54%, #245c6d 100%)";
-const warmHeaderTextColor = "#ffffff";
-const warmHeaderMutedColor = "rgba(255, 255, 255, 0.76)";
+const warmHeaderBackground = "#20d477";
+const warmHeaderTextColor = "#072d19";
+const warmHeaderMutedColor = "rgba(7, 45, 25, 0.68)";
 const profileHeaderBackground = computed(() => {
   const layout = myPageSection.value?.layout || {};
   const background = String(layout.heroBackgroundColor || "");
@@ -1006,4 +1006,7 @@ function logoutUser() {
 .profile-state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
 .profile-state-card.warning-state { border:1rpx solid #fed7aa; background:#fffaf0; color:#9a3412; }
 .state-retry { width:max-content; color:#C43D3D; font-weight:900; }
+
+/* Member centre uses the same restrained discovery palette as activity pages. */
+.profile-page { background:#f7f9f8; }.member-card { box-shadow:0 10rpx 26rpx rgba(20,98,58,.12); }.member-stat { border-radius:8rpx; }.profile-section { border-color:#e2eae6; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.profile-link-list { border-color:#e2eae6; border-radius:8rpx; }.profile-link-row { border-color:#e7eeea; }.profile-section-link { border-radius:6rpx; background:#eafbf1; color:#08753f; }.wallet-panel { background:#143a27; }.charity-panel { background:#fff2db; }.admin-entry { background:#effbf4; }.order-badge { background:#dc6900; }.logout-card { border-radius:8rpx; }
 </style>

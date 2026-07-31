@@ -239,31 +239,19 @@ onReachBottom(loadMore);
 
 <template>
   <view class="container activity-page has-custom-nav">
-    <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
+    <view class="activity-list-topbar">
+      <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
+      <view class="activity-list-count">{{ total }} 场</view>
+    </view>
 
-    <view class="hero-card" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#e8f5f1') }">
-      <view class="hero-copy">
-        <text class="hero-kicker">{{ cityName() }} · 城市文化活动</text>
-        <text class="hero-title" :style="{ color: String(innerPageLayout.headerTextColor || '#173f3a') }">{{ innerPageConfig.title || "发现正在发生的活动" }}</text>
-        <text class="hero-subtitle" :style="{ color: String(innerPageLayout.headerSubtitleColor || '#54716c') }">{{ heroSubtitle }}</text>
-      </view>
-      <view class="hero-side">
-        <view class="hero-count">{{ total }}</view>
-        <text class="hero-label">近期场次</text>
-      </view>
+    <view class="activity-list-heading">
+      <text class="activity-list-title">发现活动</text>
+      <text class="activity-list-subtitle">按日期、兴趣和报名状态筛选</text>
     </view>
 
     <PageDecorationBlocks :sections="bodyDecorationSections" />
 
     <view class="card filter-card" :style="{ background: String(innerPageLayout.stickyFilterBackground || 'var(--card-bg, #FFFFFF)') }">
-      <view class="row filter-head">
-        <view>
-          <text class="title-md">按兴趣找活动</text>
-          <text class="subtle filter-hint">{{ resultHint }}</text>
-        </view>
-        <view class="result-badge">{{ rows.length }}/{{ total }}</view>
-      </view>
-
       <view class="search-box">
         <text class="search-icon">🔍</text>
         <input v-model="keyword" class="search-input" aria-label="搜索活动、地点或分类" placeholder="搜索活动、地点、分类" confirm-type="search" @confirm="loadFirstPage" />
@@ -289,10 +277,10 @@ onReachBottom(loadMore);
       </view>
     </view>
 
-    <view class="section-head">
+    <view class="section-head activity-result-head">
       <view>
-        <text class="title-md">近期活动</text>
-        <text class="subtle section-copy">共 {{ total }} 场，已加载 {{ rows.length }} 场</text>
+        <text class="title-md">{{ resultHint }}</text>
+        <text class="subtle section-copy">已展示 {{ rows.length }} 场活动</text>
       </view>
     </view>
 
@@ -503,5 +491,17 @@ onReachBottom(loadMore);
 .activity-action { grid-column: 2 / -1; min-height: 62rpx; display: flex; align-items: center; justify-content: center; margin-top: 12rpx; border-radius: 8rpx; background: #0f766e; color: #fff; font-size: 24rpx; font-weight: 900; }
 .load-more { margin-top: 4rpx; }
 .no-more { padding: 6rpx 0 10rpx; text-align: center; color: #999999; font-size: 24rpx; }
+
+/* Activity discovery visual language shared with the homepage. */
+.activity-page { padding-top: 20rpx; background: #f7f9f8; }
+.activity-list-topbar { display:flex; align-items:center; justify-content:space-between; gap:16rpx; min-height:74rpx; }
+.activity-list-count { flex:0 0 auto; min-width:86rpx; height:50rpx; display:flex; align-items:center; justify-content:center; border-radius:8rpx; background:#eafbf1; color:#08753f; font-size:22rpx; font-weight:800; }
+.activity-list-heading { margin:22rpx 0 20rpx; }.activity-list-title { display:block; color:#15251c; font-size:38rpx; line-height:1.2; font-weight:900; }.activity-list-subtitle { display:block; margin-top:7rpx; color:#839189; font-size:22rpx; }
+.activity-page .hero-card { display:none; }
+.activity-page .filter-card { padding:20rpx; margin-bottom:22rpx; border:1rpx solid #e2eae6; border-radius:8rpx; background:#fff !important; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }
+.activity-page .search-box { height:76rpx; border:1rpx solid #e0e8e4; border-radius:8rpx; background:#f7f9f8; }.activity-page .search-input { height:76rpx; font-size:25rpx; }.activity-page .search-icon { font-size:24rpx; }
+.activity-page .category-tabs { margin-top:16rpx; }.activity-page .tabs-track { gap:10rpx; }.activity-page .category-chip { min-height:56rpx; border:1rpx solid #e0e8e4; border-radius:8rpx; background:#fff; color:#56635d; font-size:23rpx; }.activity-page .category-chip.active { border-color:#20d477; background:#20d477; color:#072d19; }
+.activity-page .status-tabs { gap:8rpx; margin-top:14rpx; }.activity-page .status-tab { min-height:56rpx; border-radius:8rpx; background:#f1f5f3; color:#5d6c64; font-size:22rpx; }.activity-page .status-tab.active { background:#eafbf1; color:#08753f; }
+.activity-result-head { margin:0 0 14rpx; }.activity-page .activity-feed { gap:16rpx; }.activity-page .activity-card { grid-template-columns:74rpx 184rpx minmax(0,1fr); min-height:184rpx; padding:14rpx; border-color:#e2eae6; border-radius:8rpx; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.activity-page .activity-date-card { border-radius:8rpx; background:#eafbf1; color:#078347; }.activity-page .activity-date-day { color:#14271b; font-size:36rpx; }.activity-page .activity-cover { width:184rpx; height:156rpx; align-self:center; border-radius:8rpx; }.activity-page .activity-title { color:#13241a; }.activity-page .activity-location { color:#607169; }.activity-page .activity-desc { color:#809087; }.activity-page .card-tag.is-open { background:#20b967; }.activity-page .activity-action { min-height:60rpx; border-radius:8rpx; background:#20d477; color:#072d19; }
 </style>
 

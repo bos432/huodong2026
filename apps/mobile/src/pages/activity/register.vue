@@ -792,6 +792,7 @@ watch(couponCode, () => {
 .method.active { border-color: #0f766e; background: #eaf7f3; }
 .method-name { color: #172033; font-size: 27rpx; font-weight: 850; }
 .submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 210rpx) 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid #d9ebe6; box-shadow: 0 -10rpx 30rpx rgba(20,72,64,.08); }
+.register { background:#f7f9f8; }.register .detail-hero,.register .hero-image { border-radius:8rpx; overflow:hidden; }.register .card { border-radius:8rpx; border-color:#e2eae6; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.register .ticket-option,.register .field-control,.register .payment-option { border-radius:8rpx; }.register .submit-bar { border-color:#dce8e2; }.register .submit-button { border-radius:8rpx; background:#20d477; color:#072d19; }
 .submit-summary { min-width: 0; display: grid; gap: 4rpx; }
 .submit-summary text:first-child { color: #999999; font-size: 22rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .submit-summary text:last-child { color: #0f766e; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
