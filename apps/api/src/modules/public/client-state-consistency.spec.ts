@@ -150,6 +150,8 @@ describe("mobile client state consistency", () => {
     expect(activityList).toContain("categoryError.value = err?.message");
     expect(activityList).toContain("function safeList<T>(value: unknown)");
     expect(activityList).toContain("visibleCategories.value.find");
+    expect(activityList).toContain("statusTabs.value.find");
+    expect(activityList).not.toContain("statusTabs.find(");
     expect(activityList).toContain("categories.value = safeList<any>(items)");
     expect(activityList).toContain("date.getTime() + 8 * 60 * 60 * 1000");
     expect(activityList).toContain("shifted.getUTCMonth()");
@@ -160,10 +162,13 @@ describe("mobile client state consistency", () => {
   it("keeps decoration-backed mobile pages safe when an old client returns a non-array section payload", () => {
     expect(mobileDecoration).toContain("function asDecorationSections(value: unknown)");
     expect(mobileDecoration).toContain("Array.isArray(value)");
+    expect(mobileDecoration).toContain("left.sortOrder || 0");
     expect(mobileDecoration).toContain("normalizeDecorationSections(payload?.sections)");
     expect(userMy).toContain("function safeList<T>(value: unknown)");
     expect(userMy).toContain("safeList<any>(sections.value).find");
     expect(homePage).toContain("const decorationSections = computed(() => Array.isArray(sections.value) ? sections.value : [])");
+    expect(homePage).toContain("const homeSections = computed(() => decorationSections.value.filter");
+    expect(homePage).toContain('v-for="section in homeSections"');
   });
 
   it("separates guest login prompts from authenticated member-level rejection", () => {

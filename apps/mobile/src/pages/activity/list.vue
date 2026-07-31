@@ -98,7 +98,7 @@ const resultHint = computed(() => {
   const categoryName = activeCategoryId.value === "all"
     ? "全部分类"
     : visibleCategories.value.find((item) => item.id === activeCategoryId.value)?.name || "已选分类";
-  const statusName = statusTabs.find((item) => item.value === activeStatus.value)?.label || "全部";
+  const statusName = statusTabs.value.find((item) => item.value === activeStatus.value)?.label || "全部";
   return `${categoryName} · ${statusName}`;
 });
 const dateGroups = computed(() => {

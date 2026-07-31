@@ -8,77 +8,31 @@
       </view>
     </view>
 
-    <view v-if="leadActivity && featuredDisplay !== 'list'" class="feature-showcase app-enter" style="animation-delay: 42ms">
-      <view class="feature-lead app-press" role="button" tabindex="0" @click="goActivityDetail(leadActivity)" @keyup.enter="goActivityDetail(leadActivity)">
-        <image v-if="leadActivity.coverUrl" class="app-media-motion" :src="leadActivity.coverUrl" mode="aspectFill" />
-        <view v-else class="feature-fallback">{{ leadActivity.category?.name || "本地活动" }}</view>
-        <view class="feature-shade" />
-        <view class="feature-copy feature-lead-copy"><text>本周主推 · {{ activityDateParts(leadActivity.startTime).month }}{{ activityDateParts(leadActivity.startTime).day }}日</text><text>{{ leadActivity.title }}</text><text>{{ formatActivityHour(leadActivity.startTime) }} · {{ leadActivity.location || "地点待确认" }} · {{ priceText(leadActivity.price) }}</text></view>
-      </view>
-      <scroll-view v-if="sideActivities.length" class="feature-side-rail" scroll-x :show-scrollbar="false">
-        <view class="feature-side-track">
-          <view v-for="activity in sideActivities" :key="activity.id" class="feature-side-card app-press" role="button" tabindex="0" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)">
-            <image v-if="activity.coverUrl" class="app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
-            <view v-else class="feature-fallback">{{ activity.category?.name || "活动" }}</view>
-            <view class="feature-shade" />
-            <view class="feature-copy"><text>{{ activityDateParts(activity.startTime).month }}{{ activityDateParts(activity.startTime).day }}日</text><text>{{ activity.title }}</text><text>{{ priceText(activity.price) }}</text></view>
+    <template v-for="section in homeSections" :key="section.id">
+      <template v-if="section.id === featuredSection?.id">
+        <view v-if="leadActivity && featuredDisplay !== 'list'" class="feature-showcase app-enter" style="animation-delay: 42ms">
+          <view class="feature-lead app-press" role="button" tabindex="0" @click="goActivityDetail(leadActivity)" @keyup.enter="goActivityDetail(leadActivity)">
+            <image v-if="leadActivity.coverUrl" class="app-media-motion" :src="leadActivity.coverUrl" mode="aspectFill" />
+            <view v-else class="feature-fallback">{{ leadActivity.category?.name || "本地活动" }}</view><view class="feature-shade" />
+            <view class="feature-copy feature-lead-copy"><text>本周主推 · {{ activityDateParts(leadActivity.startTime).month }}{{ activityDateParts(leadActivity.startTime).day }}日</text><text>{{ leadActivity.title }}</text><text>{{ formatActivityHour(leadActivity.startTime) }} · {{ leadActivity.location || "地点待确认" }} · {{ priceText(leadActivity.price) }}</text></view>
           </view>
+          <scroll-view v-if="sideActivities.length" class="feature-side-rail" scroll-x :show-scrollbar="false"><view class="feature-side-track"><view v-for="activity in sideActivities" :key="activity.id" class="feature-side-card app-press" role="button" tabindex="0" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)"><image v-if="activity.coverUrl" class="app-media-motion" :src="activity.coverUrl" mode="aspectFill" /><view v-else class="feature-fallback">{{ activity.category?.name || "活动" }}</view><view class="feature-shade" /><view class="feature-copy"><text>{{ activityDateParts(activity.startTime).month }}{{ activityDateParts(activity.startTime).day }}日</text><text>{{ activity.title }}</text><text>{{ priceText(activity.price) }}</text></view></view></view></scroll-view>
         </view>
-      </scroll-view>
-    </view>
+        <view v-else-if="leadActivity" class="activity-preview-list featured-list app-enter" style="animation-delay: 42ms"><view v-for="(activity, index) in heroActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)"><view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view><image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" /><view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view><view class="activity-main"><view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status" :class="{ ended: activity.displayStatus === 'ended', full: activity.displayStatus === 'full' }">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view><text class="activity-title">{{ activity.title }}</text><text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text><view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view></view></view></view>
+        <view v-else class="discovery-empty-hero app-enter" style="animation-delay: 42ms"><text class="discovery-empty-kicker">近期活动</text><text class="discovery-empty-title">暂时没有可报名的活动</text><text class="discovery-empty-copy">可先查看往期活动，主办方发布新活动后会显示在这里。</text><view v-if="publicActivityArchiveEnabled" class="discovery-empty-action app-press" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory">查看活动回顾</view></view>
+      </template>
 
-    <view v-else-if="leadActivity" class="activity-preview-list featured-list app-enter" style="animation-delay: 42ms">
-      <view v-for="(activity, index) in heroActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
-        <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
-        <image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
-        <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
-        <view class="activity-main"><view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status" :class="{ ended: activity.displayStatus === 'ended', full: activity.displayStatus === 'full' }">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view><text class="activity-title">{{ activity.title }}</text><text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text><view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view></view>
-      </view>
-    </view>
+      <scroll-view v-else-if="section.id === tabsSection?.id" class="discovery-categories app-enter" style="animation-delay: 78ms" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类"><view class="category-track"><view class="category-tab active app-press" role="tab" aria-selected="true" tabindex="0" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">推荐</view><view v-for="category in categories" :key="category.id" class="category-tab app-press" role="tab" aria-selected="false" tabindex="0" @click="goActivityList(category.id)" @keyup.enter="goActivityList(category.id)" @keyup.space.prevent="goActivityList(category.id)">{{ category.name }}</view></view></scroll-view>
 
-    <view v-else class="discovery-empty-hero app-enter" style="animation-delay: 42ms">
-      <text class="discovery-empty-kicker">近期活动</text>
-      <text class="discovery-empty-title">暂时没有可报名的活动</text>
-      <text class="discovery-empty-copy">可先查看往期活动，主办方发布新活动后会显示在这里。</text>
-      <view v-if="publicActivityArchiveEnabled" class="discovery-empty-action app-press" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory">查看活动回顾</view>
-    </view>
+      <template v-else-if="section.id === feedSection?.id">
+        <view class="discovery-heading app-enter" style="animation-delay: 112ms"><view><text class="heading-title">{{ section.title || `${cityName}正在发生` }}</text><text class="heading-copy">{{ section.subtitle || "按日期发现适合你的线下活动" }}</text></view><view class="all-link app-press" role="button" tabindex="0" aria-label="查看全部活动" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">全部</view></view>
+        <view v-if="activitiesLoading && !featuredActivities.length" class="activity-state" role="status" aria-live="polite">活动加载中...</view><view v-else-if="activitiesError" class="activity-state activity-error" role="alert" aria-live="assertive"><text>{{ activitiesError }}</text><button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载活动" @click="loadActivities">重试</button></view>
+        <view v-else-if="feedActivities.length" class="activity-preview-list"><view v-for="(activity, index) in feedActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)"><view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view><image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" /><view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view><view class="activity-main"><view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status" :class="{ ended: activity.displayStatus === 'ended', full: activity.displayStatus === 'full' }">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view><text class="activity-title">{{ activity.title }}</text><text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text><view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view></view></view></view>
+        <view v-else class="activity-empty"><text>近期没有开放报名的活动</text><text v-if="publicActivityArchiveEnabled" class="activity-empty-action" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory" @keyup.space.prevent="goActivityHistory">查看活动回顾</text></view>
+      </template>
 
-    <scroll-view class="discovery-categories app-enter" style="animation-delay: 78ms" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类">
-      <view class="category-track">
-        <view class="category-tab active app-press" role="tab" aria-selected="true" tabindex="0" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">推荐</view>
-        <view v-for="category in categories" :key="category.id" class="category-tab app-press" role="tab" aria-selected="false" tabindex="0" @click="goActivityList(category.id)" @keyup.enter="goActivityList(category.id)" @keyup.space.prevent="goActivityList(category.id)">{{ category.name }}</view>
-      </view>
-    </scroll-view>
-
-    <view class="discovery-heading app-enter" style="animation-delay: 112ms">
-      <view>
-        <text class="heading-title">{{ cityName }}正在发生</text>
-        <text class="heading-copy">按日期发现适合你的线下活动</text>
-      </view>
-      <view class="all-link app-press" role="button" tabindex="0" aria-label="查看全部活动" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">全部</view>
-    </view>
-
-    <view v-if="activitiesLoading && !featuredActivities.length" class="activity-state" role="status" aria-live="polite">活动加载中...</view>
-    <view v-else-if="activitiesError" class="activity-state activity-error" role="alert" aria-live="assertive">
-      <text>{{ activitiesError }}</text>
-      <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载活动" @click="loadActivities">重试</button>
-    </view>
-    <view v-else-if="feedActivities.length" class="activity-preview-list">
-      <view v-for="(activity, index) in feedActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
-        <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
-        <image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
-        <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
-        <view class="activity-main">
-          <view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status" :class="{ ended: activity.displayStatus === 'ended', full: activity.displayStatus === 'full' }">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view>
-          <text class="activity-title">{{ activity.title }}</text>
-          <text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text>
-          <view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view>
-        </view>
-      </view>
-    </view>
-    <view v-else-if="!leadActivity" class="activity-empty"><text>近期没有开放报名的活动</text><text v-if="publicActivityArchiveEnabled" class="activity-empty-action" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory" @keyup.space.prevent="goActivityHistory">查看活动回顾</text></view>
-
-    <PageDecorationBlocks :sections="supplementalSections" />
+      <PageDecorationBlocks v-else-if="section.type !== 'search_bar'" :sections="[section]" />
+    </template>
 
     <view style="height:120rpx;"></view>
     <TabBar current="index" />
@@ -99,7 +53,7 @@ import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeText } from "../../review-safe-text";
 
-const { tenant, sections, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
+const { tenant, sections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
 const featuredActivities = ref<any[]>([]);
 const categories = ref<any[]>([]);
 const publicActivityArchiveEnabled = ref(false);
@@ -111,6 +65,8 @@ const cityName = computed(() => tenant.value?.region || tenant.value?.name || pa
 const decorationSections = computed(() => Array.isArray(sections.value) ? sections.value : []);
 const featuredSection = computed(() => decorationSections.value.find((section) => section.enabled && section.type === "featured_activities"));
 const feedSection = computed(() => decorationSections.value.find((section) => section.enabled && section.type === "activity_feed"));
+const tabsSection = computed(() => decorationSections.value.find((section) => section.enabled && section.type === "activity_tabs"));
+const homeSections = computed(() => decorationSections.value.filter((section) => section.enabled && !["bottom_nav", "my_page", "inner_pages"].includes(section.type)));
 const featuredDisplay = computed(() => String(featuredSection.value?.config?.display || "lead_rail"));
 const showEndedInFeed = computed(() => publicActivityArchiveEnabled.value && feedSection.value?.config?.showEnded === true);
 const featuredLimit = computed(() => Math.max(1, Math.min(Number(featuredSection.value?.config?.limit || 4), 8)));
@@ -142,11 +98,6 @@ const feedActivities = computed(() => {
   const featuredIds = new Set(featuredDisplay.value === "list" ? heroActivities.value.map((item) => Number(item.id)) : []);
   return source.filter((item) => !featuredIds.has(Number(item.id))).slice(0, limit);
 });
-const supplementalSections = computed(() => contentSections.value.filter((section) => ![
-  "featured_activities",
-  "activity_tabs",
-  "activity_feed"
-].includes(section.type)));
 
 const shareOptions = {
   title: () => `${pageBrand.name || "慢π"}活动报名`,

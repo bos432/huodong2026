@@ -69,9 +69,13 @@ function normalizeLink(url?: string) {
 }
 
 function asDecorationSections(value: unknown): HomepageSectionView[] {
-  return Array.isArray(value)
-    ? value.filter((item): item is HomepageSectionView => Boolean(item) && typeof item === "object")
-    : [];
+  if (!Array.isArray(value)) return [];
+  // The API normally returns sorted rows, but publication snapshots and inherited
+  // global sections can arrive from different sources. Keep every client on the
+  // same explicit module order.
+  return value
+    .filter((item): item is HomepageSectionView => Boolean(item) && typeof item === "object")
+    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || Number(left.id || 0) - Number(right.id || 0));
 }
 
 function normalizeDecorationSections(value: unknown) {
