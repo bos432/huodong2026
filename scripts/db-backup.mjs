@@ -56,7 +56,7 @@ function runDump(env, outputFile) {
 }
 
 async function main() {
-  const envFile = process.env.ENV_FILE || (fs.existsSync(path.join(root, "deploy/.env.production")) ? "deploy/.env.production" : "apps/api/.env");
+  const envFile = process.env.ENV_FILE || (fs.existsSync(path.join(root, ".env")) ? ".env" : (fs.existsSync(path.join(root, "deploy/.env.production")) ? "deploy/.env.production" : "apps/api/.env"));
   const useProductionTemplate = envFile.replace(/\\/g, "/").endsWith("deploy/.env.production");
   const env = { ...(useProductionTemplate ? readEnv(path.join(root, "deploy/.env.production.example")) : {}), ...readEnv(path.join(root, envFile)), ...process.env };
   const backupDir = path.resolve(root, env.BACKUP_DIR || "backups/mysql");
