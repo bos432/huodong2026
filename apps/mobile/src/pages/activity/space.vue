@@ -32,9 +32,25 @@
         <view v-else class="empty">还没有问题，先向主办方提问吧</view>
       </view>
 
-      <view class="space-section action-section app-enter" style="animation-delay: 218ms"><view class="section-head"><text>现场与服务</text></view><view class="action-grid"><view class="action-cell app-press" @click="openLocation"><text>地点导航</text><text>{{ space.activity.location || "待确认" }}</text></view><view v-if="space.checkIn.available" class="action-cell app-press" @click="openCheckIn"><text>签到码</text><text>活动当天出示</text></view><button class="action-cell contact app-press" open-type="contact" :session-from="customerServiceSession"><text>联系客服</text><text>咨询活动安排</text></button></view></view>
+      <view class="space-section action-section app-enter" style="animation-delay: 218ms">
+        <view class="section-head"><text>现场与服务</text></view>
+        <view class="action-grid">
+          <view class="action-cell app-press" @click="openLocation"><text>地点导航</text><text>{{ space.activity.location || "待确认" }}</text></view>
+          <view v-if="space.checkIn.available" class="action-cell app-press" @click="openCheckIn"><text>签到码</text><text>活动当天出示</text></view>
+          <view class="action-cell app-press" @click="openActivityQuickAction"><text>扫码</text><text>识别活动或签到码</text></view>
+          <!-- #ifdef MP-WEIXIN -->
+          <button v-if="shareInvite?.code" class="action-cell share-action" open-type="share"><text>分享活动</text><text>邀请朋友一起参加</text></button>
+          <view v-else class="action-cell app-press" @click="prepareShare"><text>生成邀请</text><text>生成后可分享给朋友</text></view>
+          <button class="action-cell contact app-press" open-type="contact" :session-from="customerServiceSession"><text>联系客服</text><text>咨询活动安排</text></button>
+          <!-- #endif -->
+          <!-- #ifndef MP-WEIXIN -->
+          <view class="action-cell app-press" @click="copyActivityLink"><text>{{ shareInvite?.code ? "复制邀请链接" : "生成邀请" }}</text><text>分享给朋友</text></view>
+          <view class="action-cell contact app-press" @click="goService"><text>联系客服</text><text>查看主办方联系方式</text></view>
+          <!-- #endif -->
+        </view>
+      </view>
 
-      <view v-if="space.activity.groupQrCodeUrl" class="space-section group-card"><view class="section-head"><text>活动群</text><text class="section-note">长按二维码识别</text></view><image :src="space.activity.groupQrCodeUrl" mode="aspectFit" class="group-qr" show-menu-by-longpress="true" /></view>
+      <view v-if="space.activity.groupQrCodeUrl" class="space-section group-card"><view class="section-head"><text>活动群</text><text class="section-note">长按二维码识别</text></view><image v-if="!groupQrImageError" :src="space.activity.groupQrCodeUrl" mode="aspectFit" class="group-qr" show-menu-by-longpress="true" @click="previewGroupQr" @error="groupQrImageError = true" /><view v-else class="empty">群二维码加载失败，请在报名详情查看主办方联系方式。</view></view>
       <view class="page-space" />
     </template>
     <TabBar current="activity" />
@@ -45,16 +61,19 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShow, onUnload, onShareAppMessage, onShareTimeline } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
+import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
+import { openActivityQuickAction } from "../../activity-quick-action";
 
-const id = ref(0); const space = ref<any>(null); const loading = ref(true); const error = ref(""); const composerVisible = ref(false); const draft = ref("");
+const id = ref(0); const space = ref<any>(null); const shareInvite = ref<any>(null); const loading = ref(true); const error = ref(""); const composerVisible = ref(false); const draft = ref(""); const groupQrImageError = ref(false); const stageNow = ref(Date.now());
+let stageTimer: ReturnType<typeof setInterval> | undefined;
 const customerServiceSession = computed(() => JSON.stringify({ source: "activity_space", activityId: id.value }));
 const activityStage = computed(() => {
   const start = new Date(space.value?.activity?.startTime || 0).getTime();
   const end = new Date(space.value?.activity?.endTime || 0).getTime();
-  const now = Date.now();
+  const now = stageNow.value;
   if (Number.isFinite(end) && end > 0 && now >= end) return { label: "活动已结束", primary: "回顾中", secondary: "可查看活动记录与评价" };
   if (Number.isFinite(start) && start > now) {
     const minutes = Math.max(1, Math.ceil((start - now) / 60000));
@@ -63,7 +82,12 @@ const activityStage = computed(() => {
   }
   return { label: "活动进行中", primary: "进行中", secondary: `${space.value?.stats?.participantCount || 0} 位已确认参与` };
 });
-onLoad((query) => { id.value = Number(query?.id || 0); }); onShow(() => { if (id.value) void load(); });
+const shareOptions = { title: () => space.value?.activity?.title || "慢π活动", path: () => id.value ? `/pages/activity/detail?id=${id.value}${shareInvite.value?.code ? `&inviteCode=${encodeURIComponent(shareInvite.value.code)}` : ""}` : "/pages/activity/list", imageUrl: () => space.value?.activity?.coverUrl || "" };
+onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
+onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
+function startStageClock() { stopStageClock(); stageNow.value = Date.now(); stageTimer = setInterval(() => { stageNow.value = Date.now(); }, 30000); }
+function stopStageClock() { if (stageTimer) clearInterval(stageTimer); stageTimer = undefined; }
+onLoad((query) => { id.value = Number(query?.id || 0); }); onShow(() => { showMiniProgramShareMenu(); startStageClock(); if (id.value) void load(); }); onHide(stopStageClock); onUnload(stopStageClock);
 async function load() { if (!id.value) { error.value = "活动参数不正确"; loading.value = false; return; } loading.value = true; error.value = ""; try { await ensureUser(); space.value = await request(`/public/activities/${id.value}/space`); } catch (e: any) { error.value = e?.message || "活动空间加载失败"; } finally { loading.value = false; } }
 function formatTime(value: string) { if (!value) return "待确认"; const date = new Date(value); return Number.isNaN(date.getTime()) ? String(value).replace("T", " ").slice(5, 16) : `${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`; }
 function openComposer() { composerVisible.value = true; }
@@ -71,6 +95,23 @@ async function submitPost() { const content = draft.value.trim(); if (!content |
 function reportPost(post: any) { uni.showActionSheet({ itemList: ["广告或垃圾信息", "不友善内容", "虚假或误导信息", "泄露个人隐私"], success: async ({ tapIndex }) => { const reasons = ["广告或垃圾信息", "不友善内容", "虚假或误导信息", "泄露个人隐私"]; try { const result: any = await request(`/public/activities/${id.value}/space/posts/${post.id}/report`, { method: "POST", data: { reason: reasons[tapIndex] } }); uni.showToast({ title: result.idempotent ? "已举报过" : "举报已提交", icon: "none" }); } catch (e: any) { uni.showToast({ title: e?.message || "举报失败", icon: "none" }); } } }); }
 function openCheckIn() { uni.navigateTo({ url: withTenantCode(`/pages/user/registration?id=${space.value.checkIn.registrationId}`) }); }
 function openLocation() { const item = space.value?.activity; if (item?.locationLatitude && item?.locationLongitude) { uni.openLocation({ latitude: Number(item.locationLatitude), longitude: Number(item.locationLongitude), name: item.title, address: item.location }); return; } if (item?.locationMapUrl) { uni.setClipboardData({ data: item.locationMapUrl, success: () => uni.showToast({ title: "地点链接已复制", icon: "none" }) }); return; } uni.showToast({ title: "主办方暂未提供地图坐标", icon: "none" }); }
+function previewGroupQr() { const url = String(space.value?.activity?.groupQrCodeUrl || "").trim(); if (!url || groupQrImageError.value) return; uni.previewImage({ current: url, urls: [url] }); }
+function goService() { uni.navigateTo({ url: withTenantCode("/pages/service/index") }); }
+async function prepareShare() {
+  if (!id.value || shareInvite.value) return;
+  try {
+    await ensureUser();
+    shareInvite.value = await request(`/public/activities/${id.value}/share-poster`, { method: "POST", data: {} });
+    showMiniProgramShareMenu();
+    uni.showToast({ title: "邀请已生成", icon: "success" });
+  } catch (e: any) { uni.showToast({ title: e?.message || "生成邀请失败", icon: "none" }); }
+}
+async function copyActivityLink() {
+  await prepareShare();
+  if (!shareInvite.value?.code) return;
+  const url = withTenantCode(`/pages/activity/detail?id=${id.value}&inviteCode=${encodeURIComponent(shareInvite.value.code)}`);
+  uni.setClipboardData({ data: url, success: () => uni.showToast({ title: "邀请链接已复制", icon: "success" }) });
+}
 </script>
 
 <style scoped>

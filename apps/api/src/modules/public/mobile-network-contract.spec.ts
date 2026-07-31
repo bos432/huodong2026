@@ -39,7 +39,8 @@ describe("mobile production network contract", () => {
     const tabBar = read("apps/mobile/src/components/TabBar.vue");
     const tenantSwitcher = read("apps/mobile/src/components/TenantSwitcher.vue");
 
-    expect(home).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()])");
+    expect(home).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration()]);");
+    expect(home).toContain("await loadActivities();");
     expect(home).toContain("void resolveTenantByCurrentLocation({ silent: true }).then");
     expect(tabBar).toContain('import { applyTenantBootstrapDefault } from "../api"');
     expect(tabBar).toContain("await applyTenantBootstrapDefault()");

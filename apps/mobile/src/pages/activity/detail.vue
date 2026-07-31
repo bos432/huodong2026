@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import QRCode from "qrcode";
+import { computed, nextTick, ref } from "vue";
 import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchWechatSubscriptionTemplates, getUserToken, request, requestWechatSubscriptions, withTenantCode } from "../../api";
 import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
@@ -10,6 +11,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import { addActivityToCalendar } from "../../activity-calendar";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { showMiniProgramShareMenu } from "../../share";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -21,6 +23,7 @@ const channelCode = ref("");
 const source = ref("h5");
 const activeAction = ref("");
 const moreActionsVisible = ref(false);
+const posterUrl = ref("");
 const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
@@ -104,7 +107,7 @@ function registerButtonText() {
   if (memberLoginRequired()) return "登录后报名";
   if (activity.value?.memberAccess && !activity.value.memberAccess.eligible) return "会员等级不足";
   if (activity.value?.displayStatus === "full") return "加入候补";
-  return "立即报名";
+  return Number(activity.value?.price || 0) > 0 ? `报名并支付 ${priceText(activity.value.price)}` : "立即报名";
 }
 
 function actionHint() {
@@ -204,7 +207,9 @@ async function makeInvite() {
   try {
     await ensureUser();
     invite.value = await request(`/public/activities/${activity.value.id}/share-poster`, { method: "POST", data: {} });
-    uni.showToast({ title: "邀请链接已生成", icon: "success" });
+    inviteCode.value = String(invite.value?.code || "");
+    showMiniProgramShareMenu();
+    uni.showToast({ title: "专属邀请已生成", icon: "success" });
   } catch (err: any) {
     uni.showToast({ title: reviewSafeText(err.message || "生成失败"), icon: "none" });
   } finally {
@@ -231,6 +236,174 @@ function goCommunity() {
 
 function goPublish() {
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activity.value?.id || ""}`) });
+}
+
+function h5Origin() {
+  const direct = String(import.meta.env.VITE_H5_ORIGIN || import.meta.env.VITE_PUBLIC_H5_ORIGIN || "").trim().replace(/\/+$/, "");
+  if (/^https?:\/\//i.test(direct)) return direct;
+  const apiBase = String(import.meta.env.VITE_API_BASE || "").trim();
+  try {
+    if (/^https?:\/\//i.test(apiBase)) return new URL(apiBase).origin;
+  } catch {
+    // Build-time configuration can be absent in local preview.
+  }
+  // #ifdef H5
+  if (typeof window !== "undefined" && /^https?:\/\//i.test(window.location.origin)) return window.location.origin;
+  // #endif
+  return "https://rd.chaimen666.com";
+}
+
+function activityPosterLink() {
+  const path = activitySharePath();
+  return `${h5Origin()}/#${path}`;
+}
+
+function posterCoverUrl() {
+  const value = String(activity.value?.shareImageUrl || activity.value?.coverUrl || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value)) return value;
+  if (value.startsWith("//")) return `https:${value}`;
+  return value.startsWith("/") ? `${h5Origin()}${value}` : value;
+}
+
+function drawPosterText(ctx: CanvasRenderingContext2D, text: string, x: number, y: number, maxWidth: number, lineHeight: number, maxLines: number) {
+  const chars = String(text || "").split("");
+  let line = "";
+  let lineCount = 0;
+  for (const char of chars) {
+    const next = line + char;
+    if (ctx.measureText(next).width > maxWidth && line) {
+      ctx.fillText(line, x, y + lineCount * lineHeight);
+      line = char;
+      lineCount += 1;
+      if (lineCount >= maxLines - 1) break;
+    } else line = next;
+  }
+  if (line && lineCount < maxLines) {
+    const consumed = lineCount * Math.max(1, Math.floor(maxWidth / Math.max(1, ctx.measureText("慢").width)));
+    ctx.fillText(consumed < chars.length ? `${line.slice(0, Math.max(0, line.length - 1))}...` : line, x, y + lineCount * lineHeight);
+  }
+}
+
+async function drawPosterImage(ctx: CanvasRenderingContext2D, src: string, x: number, y: number, width: number, height: number) {
+  if (!src || typeof Image === "undefined") return false;
+  return new Promise<boolean>((resolve) => {
+    const image = new Image();
+    image.crossOrigin = "anonymous";
+    image.onload = () => {
+      try { ctx.drawImage(image, x, y, width, height); resolve(true); } catch { resolve(false); }
+    };
+    image.onerror = () => resolve(false);
+    image.src = src;
+  });
+}
+
+async function qrDataUrl() {
+  try { return await QRCode.toDataURL(activityPosterLink(), { errorCorrectionLevel: "M", width: 180, margin: 1, color: { dark: "#13241a", light: "#ffffff" } }); } catch { return ""; }
+}
+
+async function generateH5Poster() {
+  const canvas = document.createElement("canvas");
+  canvas.width = 750;
+  canvas.height = 1120;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return false;
+  ctx.fillStyle = "#f6f8f7";
+  ctx.fillRect(0, 0, 750, 1120);
+  ctx.fillStyle = "#13241a";
+  ctx.font = "bold 40px PingFang SC, sans-serif";
+  ctx.fillText("慢π · 城市活动", 50, 82);
+  const imageDrawn = await drawPosterImage(ctx, posterCoverUrl(), 50, 118, 650, 380);
+  if (!imageDrawn) {
+    ctx.fillStyle = "#ddf6e6";
+    ctx.fillRect(50, 118, 650, 380);
+    ctx.fillStyle = "#08753f";
+    ctx.font = "bold 64px PingFang SC, sans-serif";
+    ctx.fillText("活动报名", 230, 330);
+  }
+  ctx.fillStyle = "#13241a";
+  ctx.font = "bold 40px PingFang SC, sans-serif";
+  drawPosterText(ctx, activity.value?.title || "慢π活动", 50, 565, 650, 52, 2);
+  ctx.fillStyle = "#52645b";
+  ctx.font = "28px PingFang SC, sans-serif";
+  drawPosterText(ctx, `${formatTime(activity.value?.startTime)} 至 ${formatTime(activity.value?.endTime)}`, 50, 690, 430, 42, 2);
+  drawPosterText(ctx, activity.value?.location || "地点待确认", 50, 780, 430, 42, 2);
+  ctx.fillStyle = "#dc6900";
+  ctx.font = "bold 36px PingFang SC, sans-serif";
+  ctx.fillText(priceText(activity.value?.price), 50, 890);
+  ctx.fillStyle = "#718078";
+  ctx.font = "24px PingFang SC, sans-serif";
+  ctx.fillText(`${seatsText()} · ${invite.value?.inviteText || "邀请你一起参加"}`, 50, 932);
+  const qr = await qrDataUrl();
+  const qrDrawn = await drawPosterImage(ctx, qr, 512, 832, 160, 160);
+  ctx.fillStyle = "#52645b";
+  ctx.font = "22px PingFang SC, sans-serif";
+  ctx.fillText(qrDrawn ? "微信扫码查看活动" : "复制链接查看活动", 50, 1032);
+  try { posterUrl.value = canvas.toDataURL("image/png"); return true; } catch { return false; }
+}
+
+function drawMiniProgramText(ctx: any, text: string, x: number, y: number, maxChars: number, lineHeight: number, maxLines: number) {
+  const value = String(text || "");
+  for (let index = 0; index < maxLines; index += 1) {
+    const start = index * maxChars;
+    if (start >= value.length) return;
+    const part = value.slice(start, start + maxChars);
+    ctx.fillText(index === maxLines - 1 && value.length > start + maxChars ? `${part.slice(0, Math.max(0, maxChars - 1))}...` : part, x, y + index * lineHeight);
+  }
+}
+
+function drawMiniProgramQr(ctx: any, text: string, x: number, y: number, size: number) {
+  try {
+    const modules = (QRCode as any).create(text, { errorCorrectionLevel: "M" })?.modules;
+    const moduleCount = Number(modules?.size || 0);
+    if (!moduleCount || typeof modules.get !== "function") return false;
+    const quiet = 4;
+    const cell = Math.max(2, Math.floor(size / (moduleCount + quiet * 2)));
+    const offset = Math.floor((size - cell * (moduleCount + quiet * 2)) / 2);
+    ctx.setFillStyle("#ffffff"); ctx.fillRect(x, y, size, size);
+    ctx.setFillStyle("#13241a");
+    for (let row = 0; row < moduleCount; row += 1) for (let col = 0; col < moduleCount; col += 1) if (modules.get(row, col)) ctx.fillRect(x + offset + (quiet + col) * cell, y + offset + (quiet + row) * cell, cell, cell);
+    return true;
+  } catch { return false; }
+}
+
+async function generateMiniProgramPoster() {
+  await nextTick();
+  try {
+    const ctx = uni.createCanvasContext("activityPosterCanvas");
+    ctx.setFillStyle("#f6f8f7"); ctx.fillRect(0, 0, 750, 1120);
+    ctx.setFillStyle("#13241a"); ctx.setFontSize(40); ctx.fillText("慢π · 城市活动", 50, 82);
+    const cover = posterCoverUrl();
+    const imageInfo = cover ? await new Promise<any>((resolve) => uni.getImageInfo({ src: cover, success: resolve, fail: () => resolve(null) })) : null;
+    if (imageInfo?.path) ctx.drawImage(imageInfo.path, 50, 118, 650, 380);
+    else { ctx.setFillStyle("#ddf6e6"); ctx.fillRect(50, 118, 650, 380); ctx.setFillStyle("#08753f"); ctx.setFontSize(64); ctx.fillText("活动报名", 230, 330); }
+    ctx.setFillStyle("#13241a"); ctx.setFontSize(40); drawMiniProgramText(ctx, activity.value?.title || "慢π活动", 50, 565, 15, 52, 2);
+    ctx.setFillStyle("#52645b"); ctx.setFontSize(28); drawMiniProgramText(ctx, `${formatTime(activity.value?.startTime)} 至 ${formatTime(activity.value?.endTime)}`, 50, 690, 18, 42, 2); drawMiniProgramText(ctx, activity.value?.location || "地点待确认", 50, 780, 18, 42, 2);
+    ctx.setFillStyle("#dc6900"); ctx.setFontSize(36); ctx.fillText(priceText(activity.value?.price), 50, 890);
+    ctx.setFillStyle("#718078"); ctx.setFontSize(24); ctx.fillText(seatsText(), 50, 932);
+    const qrDrawn = drawMiniProgramQr(ctx, activityPosterLink(), 512, 832, 160);
+    ctx.setFillStyle("#52645b"); ctx.setFontSize(22); ctx.fillText(qrDrawn ? "微信扫码查看活动" : "复制链接查看活动", 50, 1032);
+    return await new Promise<boolean>((resolve) => ctx.draw(false, () => uni.canvasToTempFilePath({ canvasId: "activityPosterCanvas", width: 750, height: 1120, destWidth: 750, destHeight: 1120, success: (result) => { posterUrl.value = result.tempFilePath; resolve(true); }, fail: () => resolve(false) })));
+  } catch { return false; }
+}
+
+async function generatePoster() {
+  if (activeAction.value || !activity.value?.id) return;
+  if (!invite.value?.code) await makeInvite();
+  if (!invite.value?.code) return;
+  activeAction.value = "poster";
+  try {
+    // #ifdef H5
+    if (typeof document !== "undefined" && await generateH5Poster()) return;
+    // #endif
+    // #ifdef MP-WEIXIN
+    if (await generateMiniProgramPoster()) return;
+    // #endif
+    copyText(activityPosterLink());
+    uni.showToast({ title: "海报生成失败，已复制邀请链接", icon: "none" });
+  } finally {
+    if (activeAction.value === "poster") activeAction.value = "";
+  }
 }
 
 function goActivitySpace() {
@@ -330,7 +503,13 @@ async function load() {
   }
 }
 
-onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
+onShow(() => {
+  // Sharing without an invite code cannot be attributed to a real inviter.
+  // #ifdef MP-WEIXIN
+  uni.hideShareMenu();
+  // #endif
+  void Promise.allSettled([load(), loadDecoration()]);
+});
 </script>
 
 <template>
@@ -462,6 +641,12 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
           <text>···</text>
           <view>更多操作</view>
         </view>
+        <!-- #ifdef MP-WEIXIN -->
+        <button v-if="invite?.code" class="action-item action-share app-press" open-type="share" aria-label="分享活动给微信好友"><text>享</text><view>微信分享</view></button>
+        <!-- #endif -->
+        <!-- #ifdef H5 -->
+        <view v-if="invite?.code" class="action-item app-press" role="button" tabindex="0" aria-label="复制活动邀请链接" @click="copyText(activityPosterLink())" @keyup.enter="copyText(activityPosterLink())" @keyup.space.prevent="copyText(activityPosterLink())"><text>链</text><view>复制邀请链接</view></view>
+        <!-- #endif -->
       </view>
 
       <view v-if="moreActionsVisible" class="more-actions-mask" role="presentation" @click.self="closeMoreActions">
@@ -482,10 +667,27 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
         <view v-if="invite" class="invite-box">
           <view class="name">邀请码：{{ invite.code }}</view>
           <view class="subtle">{{ invite.inviteText }}</view>
-        <view class="share-url" role="button" tabindex="0" aria-label="复制邀请链接" @click="copyText(invite.shareUrl)" @keyup.enter="copyText(invite.shareUrl)" @keyup.space.prevent="copyText(invite.shareUrl)">{{ invite.shareUrl }}</view>
+          <view class="share-url" role="button" tabindex="0" aria-label="复制邀请链接" @click="copyText(activityPosterLink())" @keyup.enter="copyText(activityPosterLink())" @keyup.space.prevent="copyText(activityPosterLink())">{{ activityPosterLink() }}</view>
           <view class="copy-hint">点击链接可复制</view>
+          <view class="invite-actions">
+            <view class="mini-button" role="button" tabindex="0" :aria-busy="activeAction === 'poster'" @click="generatePoster" @keyup.enter="generatePoster" @keyup.space.prevent="generatePoster">{{ activeAction === "poster" ? "制作中" : "生成活动海报" }}</view>
+            <!-- #ifdef MP-WEIXIN -->
+            <button class="mini-button native-share-button" open-type="share">发给微信好友</button>
+            <!-- #endif -->
+          </view>
         </view>
       </view>
+
+      <view v-if="posterUrl" class="poster-mask" @click="posterUrl = ''">
+        <view class="poster-panel" @click.stop>
+          <image :src="posterUrl" mode="widthFix" />
+          <view class="subtle poster-hint">长按海报保存，海报内容包含本活动真实信息和专属邀请链接。</view>
+          <view class="button secondary" role="button" tabindex="0" aria-label="关闭活动海报" @click="posterUrl = ''" @keyup.enter="posterUrl = ''">关闭</view>
+        </view>
+      </view>
+      <!-- #ifdef MP-WEIXIN -->
+      <canvas canvas-id="activityPosterCanvas" id="activityPosterCanvas" class="poster-canvas"></canvas>
+      <!-- #endif -->
 
       <view class="card service-card" v-if="operationSetting">
         <view class="title small">主办方服务</view>
@@ -715,6 +917,14 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 .bottom-info text:first-child { color: #c35240; font-size: 36rpx; font-weight: 900; }
 .bottom-info text:last-child { color: #999999; font-size: 22rpx; }
 .action-button { height: 92rpx; font-size: 32rpx; }
+.action-share { border:0; padding:0; font-family:inherit; line-height:normal; }
+.native-share-button { margin:0; border:0; }
+.invite-actions { display:flex; flex-wrap:wrap; gap:12rpx; margin-top:16rpx; }
+.poster-mask { position:fixed; inset:0; z-index:40; display:flex; align-items:center; justify-content:center; padding:30rpx; box-sizing:border-box; background:rgba(15,23,42,.62); }
+.poster-panel { width:min(680rpx,100%); max-height:90vh; overflow:auto; padding:22rpx; box-sizing:border-box; border-radius:8rpx; background:#fff; text-align:center; }
+.poster-panel image { display:block; width:100%; max-height:74vh; }
+.poster-hint { margin:14rpx 0; line-height:1.5; }
+.poster-canvas { position:fixed; left:-9999px; top:-9999px; width:750px; height:1120px; opacity:0; pointer-events:none; }
 
 /* Keep the decision flow dense: image, key facts, then the single registration action. */
 .detail-page { background:#f7f9f8; }

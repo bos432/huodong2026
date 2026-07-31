@@ -1735,18 +1735,21 @@ export class PublicService {
       fallback = true;
       source = defaultHomepageSections(normalizedPageKey).filter((item) => item.enabled).map((item, index) => this.homepageSections.create({ ...item, id: -(index + 1), pageKey: normalizedPageKey }));
     }
-    const [announcements, categories, latest, featured, testimonials] = await Promise.all([
+    const needsHistoricalActivities = source.some((section) => section.enabled && section.type === "activity_feed" && section.config?.showEnded === true);
+    const [announcements, categories, latest, featured, historical, testimonials] = await Promise.all([
       this.homepageAnnouncements(10, true, tenant, context?.userId),
       this.categoriesList(tenant ? { tenantId: tenant.id } : context),
       this.activitiesList({ pageSize: 20 }, tenant ? { tenantId: tenant.id } : context),
       this.activitiesList({ featured: true, pageSize: 12 }, tenant ? { tenantId: tenant.id } : context),
+      needsHistoricalActivities ? this.activitiesList({ status: "ended", pageSize: 20 }, tenant ? { tenantId: tenant.id } : context) : Promise.resolve([]),
       this.homepageTestimonials(tenant)
     ]);
     const latestItems = Array.isArray(latest) ? latest : latest.items;
     const featuredItems = Array.isArray(featured) ? featured : featured.items;
+    const historicalItems = Array.isArray(historical) ? historical : historical.items;
     const publicSections = this.normalizeHomepagePublicSections(source);
     return {
-      sections: publicSections.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, testimonials })),
+      sections: publicSections.map((section) => this.homepageSectionView(section, { announcements, categories, latest: latestItems, featured: featuredItems, historical: historicalItems, testimonials })),
       fallback,
       pageKey: normalizedPageKey,
       tenant: this.publicHomepageTenant(tenant)
@@ -1811,18 +1814,30 @@ export class PublicService {
     return builder.getMany();
   }
 
-  private homepageSectionView(section: HomepageSection, payload: { announcements: unknown[]; categories: unknown[]; latest: any[]; featured: any[]; testimonials: any[] }) {
+  private homepageSectionView(section: HomepageSection, payload: { announcements: unknown[]; categories: unknown[]; latest: any[]; featured: any[]; historical: any[]; testimonials: any[] }) {
     const config = section.config || {};
     const data: Record<string, unknown> = {};
+    const currentActivities = payload.latest.filter((item) => item.displayStatus !== "ended");
+    const currentFeaturedActivities = payload.featured.filter((item) => item.displayStatus !== "ended");
     if (section.type === "announcement_bar") {
       data.announcements = payload.announcements.slice(0, this.configLimit(config, 5, 20));
     } else if (section.type === "category_grid" || section.type === "activity_tabs") {
       data.categories = payload.categories.slice(0, this.configLimit(config, 8, 30));
     } else if (section.type === "featured_activities") {
-      const source = config.source === "latest" ? payload.latest : payload.featured.length ? payload.featured : payload.latest;
+      const source = config.source === "latest" ? currentActivities : currentFeaturedActivities.length ? currentFeaturedActivities : currentActivities;
       data.activities = source.slice(0, this.configLimit(config, 6, 20));
     } else if (section.type === "activity_feed") {
-      data.activities = payload.latest.slice(0, this.configLimit(config, 10, 30));
+      const includeHistorical = config.showEnded === true;
+      const seen = new Set<number>();
+      const rows = [...currentActivities, ...(includeHistorical ? payload.historical : [])]
+        .filter((item) => {
+          const id = Number(item?.id || 0);
+          if (!id || seen.has(id)) return false;
+          seen.add(id);
+          return true;
+        })
+        .sort((left, right) => new Date(left.startTime || 0).getTime() - new Date(right.startTime || 0).getTime());
+      data.activities = rows.slice(0, this.configLimit(config, 10, 30));
     } else if (section.type === "testimonial_feed" || section.type === "featured_testimonials" || section.type === "activity_testimonials") {
       data.posts = payload.testimonials.slice(0, this.configLimit(config, 3, 12));
     }

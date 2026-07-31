@@ -75,6 +75,7 @@ describe("mobile client state consistency", () => {
   const userWallet = readPage("user/wallet.vue");
   const userOrders = readPage("user/orders.vue");
   const userMy = readPage("user/my.vue");
+  const appBottomNav = readFileSync("../mobile/src/components/AppBottomNav.vue", "utf8");
   const entryPages = readFileSync("../mobile/src/entry-pages.ts", "utf8");
   const featureGates = readFileSync("../mobile/src/feature-gates.ts", "utf8");
   const courseData = readFileSync("../mobile/src/course-data.ts", "utf8");
@@ -624,7 +625,29 @@ describe("mobile client state consistency", () => {
     expect(homePage).toContain("activityLoadGuard.isCurrent(loadToken)");
     expect(homePage).toContain('activitiesError.value = reviewSafeText(error?.message || "近期活动加载失败")');
     expect(homePage).toContain('role="alert"');
-    expect(homePage).toContain("Promise.allSettled([loadDecoration(), loadActivities(), loadCategories()])");
+    expect(homePage).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration()])");
+    expect(homePage).toContain("if (featuredSection.value || feedSection.value)");
+    expect(homePage).toContain("const featuredDisplay = computed");
+    expect(homePage).toContain("const showEndedInFeed = computed");
+    expect(homePage).toContain('item?.displayStatus !== "ended"');
+    expect(homePage).toContain("featuredDisplay !== 'list'");
+    expect(publicService).toContain("const needsHistoricalActivities");
+    expect(publicService).toContain("config.showEnded === true");
+    expect(publicService).toContain("const currentActivities = payload.latest.filter((item) => item.displayStatus !== \"ended\")");
+  });
+
+  it("keeps activity sharing attributable and confines group QR recognition to the native image flow", () => {
+    expect(activityDetail).toContain('return Number(activity.value?.price || 0) > 0 ? `报名并支付 ${priceText(activity.value.price)}` : "立即报名"');
+    expect(activityDetail).toContain("/share-poster");
+    expect(activityDetail).toContain("inviteCode.value = String(invite.value?.code || \"\")");
+    expect(activityDetail).toContain('open-type="share"');
+    expect(activityDetail).toContain("generateMiniProgramPoster");
+    expect(activityDetail).toContain("activityPosterCanvas");
+    expect(userRegistrationDetail).toContain("长按图片识别群二维码");
+    expect(userRegistrationDetail).toContain('show-menu-by-longpress="true"');
+    expect(userRegistrationDetail).not.toContain("scanGroupQr");
+    expect(appBottomNav).toContain("openActivityQuickAction");
+    expect(appBottomNav).toContain('aria-label="扫码识别平台活动码或签到码"');
   });
 
   it("refreshes learning history and course order pages per tenant", () => {

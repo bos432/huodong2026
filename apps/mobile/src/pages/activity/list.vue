@@ -10,6 +10,7 @@ import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgr
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { openActivityQuickAction } from "../../activity-quick-action";
 
 const categories = ref<any[]>([]);
 const rows = ref<any[]>([]);
@@ -246,7 +247,7 @@ onReachBottom(loadMore);
   <view class="container activity-page has-custom-nav">
     <view class="activity-list-topbar app-enter">
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
-      <view class="activity-list-count">{{ total }} 场</view>
+      <view class="activity-list-actions"><view class="list-scan app-press" role="button" tabindex="0" aria-label="扫码识别活动码或签到码" @click="openActivityQuickAction" @keyup.enter="openActivityQuickAction" @keyup.space.prevent="openActivityQuickAction">扫码</view><view class="activity-list-count">{{ total }} 场</view></view>
     </view>
 
     <view class="activity-list-heading app-enter" style="animation-delay: 36ms">
@@ -338,6 +339,7 @@ onReachBottom(loadMore);
 
 <style scoped>
 .activity-page { gap: 0; }
+.activity-list-actions{display:flex;align-items:center;gap:12rpx}.list-scan{min-height:52rpx;display:flex;align-items:center;padding:0 16rpx;border-radius:8rpx;background:#eafbf1;color:#08753f;font-size:22rpx;font-weight:800}
 .hero-card { display: flex; gap: 20rpx; align-items: stretch; padding: 28rpx; margin-bottom: 24rpx; border: 1rpx solid rgba(15, 118, 110, 0.1); border-radius: 16rpx; background: #e8f5f1; }
 .hero-copy { flex: 1; min-width: 0; display: grid; gap: 12rpx; }
 .hero-kicker { color: #0f766e; font-size: 23rpx; font-weight: 800; }

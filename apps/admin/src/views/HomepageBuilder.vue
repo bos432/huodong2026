@@ -232,9 +232,9 @@ const decorationTemplates: Array<{ key: string; label: string; rows: TemplateRow
     rows: [
       { type: "hero", title: "这周，去参加一场活动", subtitle: "从时间、地点到名额，快速找到适合参与的城市活动。", config: { ...defaultConfig.hero, primaryButtonText: "查看全部活动", primaryButtonLink: "/pages/activity/list", backgroundColor: "#0f766e" } },
       { type: "quick_nav", title: null, config: defaultConfig.quick_nav },
-      { type: "featured_activities", title: "本周主推", subtitle: "优先展示最值得立即报名的一场活动", config: { source: "featured", limit: 6, display: "focus" } },
+      { type: "featured_activities", title: "本周主推", subtitle: "优先展示最值得立即报名的一场活动", config: { source: "featured", limit: 6, display: "lead_rail" } },
       { type: "activity_tabs", title: "按兴趣找活动", subtitle: "今天、本周、周末和不同主题活动", config: { includeHot: true, limit: 8 } },
-      { type: "activity_feed", title: "近期活动", subtitle: "更多时间与主题，随时浏览报名", config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager" } },
+      { type: "activity_feed", title: "近期活动", subtitle: "更多时间与主题，随时浏览报名", config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager", display: "date_stream", showEnded: false } },
       { type: "testimonial_feed", title: "参与者心得", subtitle: "真实活动反馈帮助新用户理解这里在发生什么" }
     ]
   },
@@ -2744,6 +2744,44 @@ onMounted(async () => {
                     </div>
                     <el-button :icon="Plus" @click="addQuickItem">新增入口</el-button>
                   </div>
+                </template>
+
+                <template v-if="form.type === 'featured_activities'">
+                  <el-divider>主推活动</el-divider>
+                  <div class="form-grid">
+                    <el-form-item label="活动来源">
+                      <el-select v-model="form.config.source" @change="syncJsonText">
+                        <el-option label="后台标记为主推的活动" value="featured" />
+                        <el-option label="近期开放报名活动" value="latest" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="展示方式">
+                      <el-select v-model="form.config.display" @change="syncJsonText">
+                        <el-option label="主图 + 横向副卡" value="lead_rail" />
+                        <el-option label="活动列表" value="list" />
+                      </el-select>
+                    </el-form-item>
+                    <el-form-item label="展示数量">
+                      <el-input-number v-model="form.config.limit" :min="1" :max="8" controls-position="right" @change="syncJsonText" />
+                    </el-form-item>
+                  </div>
+                  <el-alert class="editor-tip" type="info" :closable="false" show-icon title="主推只展示报名中或即将开始的真实活动；没有主推活动时会自动回退到近期活动，不会展示已结束活动。" />
+                </template>
+
+                <template v-if="form.type === 'activity_feed'">
+                  <el-divider>日期活动流</el-divider>
+                  <div class="form-grid">
+                    <el-form-item label="显示数量">
+                      <el-input-number v-model="form.config.limit" :min="1" :max="30" controls-position="right" @change="syncJsonText" />
+                    </el-form-item>
+                    <el-form-item label="加载批次">
+                      <el-input-number v-model="form.config.pageSize" :min="1" :max="12" controls-position="right" @change="syncJsonText" />
+                    </el-form-item>
+                    <el-form-item label="包含活动回顾">
+                      <el-switch v-model="form.config.showEnded" active-text="显示已结束活动" inactive-text="仅展示可报名活动" @change="syncJsonText" />
+                    </el-form-item>
+                  </div>
+                  <el-alert class="editor-tip" type="info" :closable="false" show-icon title="前台按活动日期分组展示。关闭活动回顾时，首页不会把已结束活动混入当前推荐。" />
                 </template>
 
                 <template v-if="form.type === 'image_banner'">

@@ -191,30 +191,6 @@ function previewGroupQr() {
   uni.previewImage({ current: groupQrCodeUrl.value, urls: [groupQrCodeUrl.value] });
 }
 
-function scanGroupQr() {
-  // #ifdef MP-WEIXIN
-  uni.scanCode({
-    onlyFromCamera: true,
-    scanType: ["qrCode"],
-    success: (result) => {
-      const content = String(result.result || "").trim();
-      uni.showModal({
-        title: "二维码已识别",
-        content: content ? "微信会按二维码类型继续处理；若未自动跳转，请在群二维码大图中长按识别。" : "未读取到有效内容，请重试或长按群二维码识别。",
-        showCancel: false
-      });
-    },
-    fail: (error) => {
-      if (String(error?.errMsg || "").includes("cancel")) return;
-      uni.showToast({ title: "扫码失败，请重试", icon: "none" });
-    }
-  });
-  // #endif
-  // #ifndef MP-WEIXIN
-  uni.showToast({ title: "请在微信小程序中使用相机扫码", icon: "none" });
-  // #endif
-}
-
 function scrollToCode() {
   setTimeout(() => {
     // #ifdef H5
@@ -627,15 +603,15 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         <view class="row">
           <view>
             <view class="title small">活动群</view>
-            <view class="subtle">长按大图识别群二维码，或使用相机扫码加入活动群。</view>
+          <view class="subtle">请点击二维码预览，再长按图片识别群二维码。相机扫码仅用于平台活动码和签到码。</view>
           </view>
           <view class="mini-button" @click="showGroupDialog">查看二维码</view>
         </view>
-        <image v-if="!groupQrImageError" class="group-qr" :src="groupQrCodeUrl" mode="widthFix" @click="previewGroupQr" @error="groupQrImageError = true" />
+        <image v-if="!groupQrImageError" class="group-qr" :src="groupQrCodeUrl" mode="widthFix" show-menu-by-longpress="true" @click="previewGroupQr" @error="groupQrImageError = true" />
         <view v-else class="notice muted">二维码图片加载失败，请联系主办方获取入群方式。</view>
         <view class="group-actions">
           <view class="group-action" role="button" tabindex="0" aria-label="预览活动群二维码并长按识别" @click="previewGroupQr" @keyup.enter="previewGroupQr" @keyup.space.prevent="previewGroupQr">长按识别</view>
-          <view class="group-action primary" role="button" tabindex="0" aria-label="调用相机扫码加入活动群" @click="scanGroupQr" @keyup.enter="scanGroupQr" @keyup.space.prevent="scanGroupQr">相机扫码</view>
+          <view class="group-action primary" role="button" tabindex="0" aria-label="预览活动群二维码并长按识别" @click="previewGroupQr" @keyup.enter="previewGroupQr" @keyup.space.prevent="previewGroupQr">预览并识别</view>
         </view>
       </view>
 
@@ -710,8 +686,8 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
       <view v-if="groupDialogVisible" class="group-dialog-mask" @click="groupDialogVisible = false">
         <view class="group-dialog" @click.stop>
           <view class="dialog-title">扫码加入活动群</view>
-          <image class="dialog-qr" :src="groupQrCodeUrl" mode="widthFix" @error="groupQrImageError = true; groupDialogVisible = false" />
-          <view class="dialog-copy">点击二维码后可进入图片预览，长按识别；也可返回后使用相机扫码。</view>
+          <image class="dialog-qr" :src="groupQrCodeUrl" mode="widthFix" show-menu-by-longpress="true" @error="groupQrImageError = true; groupDialogVisible = false" />
+          <view class="dialog-copy">点击二维码进入图片预览，然后长按图片识别。相机扫码仅用于平台活动码和签到码。</view>
           <view class="dialog-action" role="button" tabindex="0" aria-label="预览二维码并长按识别" @click="previewGroupQr">预览并长按识别</view>
           <view class="button" @click="groupDialogVisible = false">知道了</view>
         </view>

@@ -4,11 +4,12 @@
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
       <view class="topbar-actions">
         <view v-if="pageBrand.logoUrl" class="brand-mark"><image :src="pageBrand.logoUrl" mode="aspectFit" /></view>
+        <view class="scan-btn app-press" role="button" tabindex="0" aria-label="扫码识别活动码或签到码" @click="openActivityQuickAction" @keyup.enter="openActivityQuickAction" @keyup.space.prevent="openActivityQuickAction"><text>扫码</text></view>
         <view class="search-btn app-press" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><text>搜索</text></view>
       </view>
     </view>
 
-    <view v-if="leadActivity" class="feature-showcase app-enter" style="animation-delay: 42ms">
+    <view v-if="leadActivity && featuredDisplay !== 'list'" class="feature-showcase app-enter" style="animation-delay: 42ms">
       <view class="feature-lead app-press" role="button" tabindex="0" @click="goActivityDetail(leadActivity)" @keyup.enter="goActivityDetail(leadActivity)">
         <image v-if="leadActivity.coverUrl" class="app-media-motion" :src="leadActivity.coverUrl" mode="aspectFill" />
         <view v-else class="feature-fallback">{{ leadActivity.category?.name || "本地活动" }}</view>
@@ -25,6 +26,15 @@
           </view>
         </view>
       </scroll-view>
+    </view>
+
+    <view v-else-if="leadActivity" class="activity-preview-list featured-list app-enter" style="animation-delay: 42ms">
+      <view v-for="(activity, index) in heroActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
+        <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
+        <image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
+        <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
+        <view class="activity-main"><view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status" :class="{ ended: activity.displayStatus === 'ended', full: activity.displayStatus === 'full' }">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view><text class="activity-title">{{ activity.title }}</text><text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text><view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view></view>
+      </view>
     </view>
 
     <view v-else class="discovery-empty-hero app-enter" style="animation-delay: 42ms">
@@ -89,6 +99,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeText } from "../../review-safe-text";
+import { openActivityQuickAction } from "../../activity-quick-action";
 
 const { tenant, sections, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
 const featuredActivities = ref<any[]>([]);
@@ -100,12 +111,37 @@ const activityLoadGuard = createTenantLoadGuard();
 const cityName = computed(() => tenant.value?.region || tenant.value?.name || pageBrand.name || "本地");
 const featuredSection = computed(() => sections.value.find((section) => section.enabled && section.type === "featured_activities"));
 const feedSection = computed(() => sections.value.find((section) => section.enabled && section.type === "activity_feed"));
+const featuredDisplay = computed(() => String(featuredSection.value?.config?.display || "lead_rail"));
+const showEndedInFeed = computed(() => feedSection.value?.config?.showEnded === true);
 const featuredLimit = computed(() => Math.max(1, Math.min(Number(featuredSection.value?.config?.limit || 4), 8)));
 const sideLimit = computed(() => Math.max(0, featuredLimit.value - 1));
-const heroActivities = computed(() => featuredActivities.value.slice(0, featuredLimit.value));
+function sectionActivities(section?: any) {
+  return Array.isArray(section?.data?.activities) ? section.data.activities : [];
+}
+function uniqueActivities(rows: any[]) {
+  const seen = new Set<number>();
+  return rows.filter((item) => {
+    const id = Number(item?.id || 0);
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+const configuredFeaturedActivities = computed(() => sectionActivities(featuredSection.value).filter((item) => item?.displayStatus !== "ended"));
+const configuredFeedActivities = computed(() => sectionActivities(feedSection.value).filter((item) => showEndedInFeed.value || item?.displayStatus !== "ended"));
+const displayedActivities = computed(() => {
+  const configured = uniqueActivities([...configuredFeaturedActivities.value, ...configuredFeedActivities.value]);
+  return configured.length || Boolean(featuredSection.value || feedSection.value) ? configured : featuredActivities.value;
+});
+const heroActivities = computed(() => (configuredFeaturedActivities.value.length ? configuredFeaturedActivities.value : displayedActivities.value).slice(0, featuredLimit.value));
 const leadActivity = computed(() => heroActivities.value[0] || null);
 const sideActivities = computed(() => heroActivities.value.slice(1, sideLimit.value + 1));
-const feedActivities = computed(() => featuredActivities.value.slice(featuredLimit.value, featuredLimit.value + Math.max(1, Math.min(Number(feedSection.value?.config?.limit || 6), 12))));
+const feedActivities = computed(() => {
+  const limit = Math.max(1, Math.min(Number(feedSection.value?.config?.limit || 6), 30));
+  const source = configuredFeedActivities.value.length ? configuredFeedActivities.value : displayedActivities.value.slice(featuredLimit.value);
+  const featuredIds = new Set(featuredDisplay.value === "list" ? heroActivities.value.map((item) => Number(item.id)) : []);
+  return source.filter((item) => !featuredIds.has(Number(item.id))).slice(0, limit);
+});
 const supplementalSections = computed(() => contentSections.value.filter((section) => ![
   "featured_activities",
   "activity_tabs",
@@ -122,19 +158,22 @@ onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
   await applyTenantBootstrapDefault();
-  await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()]);
+  await Promise.allSettled([loadPageTheme(), loadDecoration()]);
+  await loadActivities();
   await loadCategories();
   const beforeTenantCode = getCurrentTenantCode();
   void resolveTenantByCurrentLocation({ silent: true }).then(async () => {
     if (getCurrentTenantCode() === beforeTenantCode) return;
-    await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities(), loadCategories()]);
+    await Promise.allSettled([loadPageTheme(), loadDecoration()]);
+    await Promise.allSettled([loadActivities(), loadCategories()]);
     if (beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
   });
 });
 
 async function handleTenantChanged() {
   await loadPageTheme();
-  await Promise.allSettled([loadDecoration(), loadActivities(), loadCategories()]);
+  await loadDecoration();
+  await Promise.allSettled([loadActivities(), loadCategories()]);
 }
 
 async function loadActivities() {
@@ -143,6 +182,12 @@ async function loadActivities() {
   activitiesLoading.value = true;
   activitiesError.value = "";
   try {
+    const configured = uniqueActivities([...configuredFeaturedActivities.value, ...configuredFeedActivities.value]);
+    if (featuredSection.value || feedSection.value) {
+      featuredActivities.value = configured;
+      loadedActivitiesTenantCode.value = loadToken.tenantCode;
+      return;
+    }
     const result = await request<any>(`/public/activities?page=1&pageSize=${Math.max(8, featuredLimit.value)}&status=open&featured=true`);
     if (!activityLoadGuard.isCurrent(loadToken)) return;
     const featured = Array.isArray(result) ? result : result?.items || [];
@@ -239,7 +284,9 @@ function activityDateParts(value: string) {
 .topbar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 12rpx; }
 .brand-mark { width: 52rpx; height: 52rpx; overflow: hidden; border-radius: 50%; background: #e9f9f0; }
 .brand-mark image { width: 100%; height: 100%; }
-.search-btn { min-width: 82rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 16rpx; border-radius: 8rpx; background: #eef2f0; color: #27362f; font-size: 22rpx; font-weight: 800; }
+.search-btn,.scan-btn { min-width: 70rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 14rpx; border-radius: 8rpx; color: #27362f; font-size: 22rpx; font-weight: 800; }
+.search-btn { background: #eef2f0; }
+.scan-btn { background: #eafbf1; color: #08753f; }
 .feature-showcase{display:grid;gap:14rpx;margin:8rpx 0 24rpx}.feature-lead,.feature-side-card{position:relative;overflow:hidden;border-radius:8rpx;background:#143a27}.feature-lead{height:364rpx}.feature-lead image,.feature-side-card image,.feature-shade{position:absolute;inset:0;width:100%;height:100%}.feature-lead image,.feature-side-card image{transition:transform 360ms ease}.feature-lead:active image,.feature-side-card:active image{transform:scale(1.09)}.feature-side-rail{width:100%;white-space:nowrap}.feature-side-track{display:inline-flex;gap:14rpx;padding-right:28rpx}.feature-side-card{width:264rpx;height:196rpx;white-space:normal}.feature-shade{background:linear-gradient(180deg,rgba(8,24,15,.08),rgba(8,24,15,.78))}.feature-fallback{height:100%;display:grid;place-items:center;background:#dff8e7;color:#08753f;font-size:28rpx;font-weight:900}.feature-copy{position:absolute;left:16rpx;right:16rpx;bottom:16rpx;display:grid;gap:5rpx;color:#fff}.feature-copy text:first-child{color:#baf5ca;font-size:22rpx;font-weight:800}.feature-copy text:nth-child(2){display:-webkit-box;overflow:hidden;font-size:30rpx;font-weight:900;line-height:1.28;-webkit-box-orient:vertical;-webkit-line-clamp:2}.feature-copy text:last-child{color:#fff3c4;font-size:22rpx;font-weight:900}.feature-side-card .feature-copy text:nth-child(2){font-size:27rpx}.feature-lead-copy text:nth-child(2){font-size:38rpx}.discovery-empty-hero{display:grid;align-content:center;justify-items:start;min-height:300rpx;margin:8rpx 0 24rpx;padding:32rpx;border:1rpx solid #d8eee1;border-radius:8rpx;background:#effbf4}.discovery-empty-kicker{color:#078347;font-size:22rpx;font-weight:900}.discovery-empty-title{margin-top:12rpx;color:#143a27;font-size:36rpx;font-weight:950}.discovery-empty-copy{margin-top:10rpx;color:#607169;font-size:24rpx}.discovery-empty-action{min-height:58rpx;display:flex;align-items:center;margin-top:22rpx;padding:0 22rpx;border-radius:8rpx;background:#143a27;color:#fff;font-size:24rpx;font-weight:900}
 .discovery-categories { width: 100%; margin: 24rpx 0 28rpx; white-space: nowrap; }
 .category-track { display: inline-flex; gap: 12rpx; padding-right: 28rpx; }

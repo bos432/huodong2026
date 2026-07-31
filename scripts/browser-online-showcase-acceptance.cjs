@@ -296,12 +296,14 @@ async function h5LoginAndRegister(browser, activity) {
     }
   }
   await submitH5Login(page);
-  await waitForBodyText(page, ["活动详情", "立即报名"], "H5 redirected to activity detail");
+  await waitForBodyText(page, ["立即报名", "报名并支付"], "H5 activity CTA available");
   await dismissH5Overlays(page);
   await screenshot(page, "h5-01-login-activity-detail.png");
   record(usePasswordLogin ? "H5 新会员密码登录" : "H5 新手机号验证码登录", "passed", { phone, screenshot: "h5-01-login-activity-detail.png" });
 
-  await clickText(page, "立即报名", { exact: false });
+  const startedRegistration = await clickTextIfVisible(page, "立即报名", { exact: false })
+    || await clickTextIfVisible(page, "报名并支付", { exact: false });
+  assert(startedRegistration, "H5 activity detail did not expose a registration CTA");
   await waitForBodyText(page, "报名确认", "H5 register page loaded");
   await dismissH5Overlays(page);
   await fillFieldByLabel(page, "姓名", `浏览器验收${phone.slice(-4)}`);
