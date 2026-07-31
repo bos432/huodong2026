@@ -185,6 +185,35 @@ function showGroupDialog() {
   groupDialogVisible.value = true;
 }
 
+function previewGroupQr() {
+  if (!groupQrCodeUrl.value || groupQrImageError.value) return;
+  uni.previewImage({ current: groupQrCodeUrl.value, urls: [groupQrCodeUrl.value] });
+}
+
+function scanGroupQr() {
+  // #ifdef MP-WEIXIN
+  uni.scanCode({
+    onlyFromCamera: true,
+    scanType: ["qrCode"],
+    success: (result) => {
+      const content = String(result.result || "").trim();
+      uni.showModal({
+        title: "二维码已识别",
+        content: content ? "微信会按二维码类型继续处理；若未自动跳转，请在群二维码大图中长按识别。" : "未读取到有效内容，请重试或长按群二维码识别。",
+        showCancel: false
+      });
+    },
+    fail: (error) => {
+      if (String(error?.errMsg || "").includes("cancel")) return;
+      uni.showToast({ title: "扫码失败，请重试", icon: "none" });
+    }
+  });
+  // #endif
+  // #ifndef MP-WEIXIN
+  uni.showToast({ title: "请在微信小程序中使用相机扫码", icon: "none" });
+  // #endif
+}
+
 function scrollToCode() {
   setTimeout(() => {
     // #ifdef H5
@@ -226,7 +255,7 @@ async function load() {
     codeQrUrl.value = "";
     codeQrMatrix.value = [];
     groupQrImageError.value = false;
-    groupDialogVisible.value = Boolean(detail.value?.groupQrCodeUrl);
+    groupDialogVisible.value = false;
     if (canShowCheckInCode.value) showCode(false);
   } catch (error: any) {
     if (!loadGuard.isCurrent(loadToken)) return;
@@ -591,12 +620,16 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         <view class="row">
           <view>
             <view class="title small">活动群</view>
-            <view class="subtle">报名后请扫码加入企业群，后续通知会在群内同步。</view>
+            <view class="subtle">长按大图识别群二维码，或使用相机扫码加入活动群。</view>
           </view>
-          <view class="mini-button" @click="showGroupDialog">放大</view>
+          <view class="mini-button" @click="showGroupDialog">查看二维码</view>
         </view>
-        <image v-if="!groupQrImageError" class="group-qr" :src="groupQrCodeUrl" mode="widthFix" @error="groupQrImageError = true" />
+        <image v-if="!groupQrImageError" class="group-qr" :src="groupQrCodeUrl" mode="widthFix" @click="previewGroupQr" @error="groupQrImageError = true" />
         <view v-else class="notice muted">二维码图片加载失败，请联系主办方获取入群方式。</view>
+        <view class="group-actions">
+          <view class="group-action" role="button" tabindex="0" aria-label="预览活动群二维码并长按识别" @click="previewGroupQr" @keyup.enter="previewGroupQr" @keyup.space.prevent="previewGroupQr">长按识别</view>
+          <view class="group-action primary" role="button" tabindex="0" aria-label="调用相机扫码加入活动群" @click="scanGroupQr" @keyup.enter="scanGroupQr" @keyup.space.prevent="scanGroupQr">相机扫码</view>
+        </view>
       </view>
 
       <view class="card order-card" v-if="detail.order">
@@ -671,7 +704,8 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         <view class="group-dialog" @click.stop>
           <view class="dialog-title">扫码加入活动群</view>
           <image class="dialog-qr" :src="groupQrCodeUrl" mode="widthFix" @error="groupQrImageError = true; groupDialogVisible = false" />
-          <view class="dialog-copy">报名已提交，请长按或扫码加入企业群。</view>
+          <view class="dialog-copy">点击二维码后可进入图片预览，长按识别；也可返回后使用相机扫码。</view>
+          <view class="dialog-action" role="button" tabindex="0" aria-label="预览二维码并长按识别" @click="previewGroupQr">预览并长按识别</view>
           <view class="button" @click="groupDialogVisible = false">知道了</view>
         </view>
       </view>
@@ -826,6 +860,9 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
 .group-card .row { align-items: flex-start; }
 .mini-button { flex: 0 0 auto; padding: 10rpx 18rpx; border-radius: 8rpx; background: #eaf7f3; color: #0f766e; font-size: 24rpx; font-weight: 800; }
 .group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: 10rpx; border: 1px solid #d9ebe6; background: var(--card-bg, #fff); }
+.group-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-top: 20rpx; }
+.group-action { min-height: 72rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid #cfe4de; border-radius: 8rpx; color: #0f766e; background: #f3faf8; font-size: 25rpx; font-weight: 700; }
+.group-action.primary { border-color: #0f766e; color: #fff; background: #0f766e; }
 .code { text-align: center; }
 .code-qr,
 .code-qr-matrix { width: 360rpx; height: 360rpx; margin: 18rpx auto 0; border-radius: 8rpx; border: 1px solid #d9ebe6; background: #fff; overflow: hidden; box-sizing: border-box; }
@@ -852,5 +889,6 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
 .dialog-title { color: var(--text-color, #111827); font-size: 34rpx; font-weight: 900; }
 .dialog-qr { display: block; width: 420rpx; max-width: 100%; margin: 26rpx auto 0; border-radius: var(--card-radius, 8px); border: 1px solid #e5e7eb; background: var(--card-bg, #fff); }
 .dialog-copy { margin-top: 18rpx; color: var(--muted-color, #667085); font-size: 26rpx; line-height: 1.6; }
+.dialog-action { min-height: 72rpx; display: flex; align-items: center; justify-content: center; margin: 20rpx 0 14rpx; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 25rpx; font-weight: 700; }
 @media (min-width: 900px) { .registration { max-width:760px; margin:0 auto; } }
 </style>

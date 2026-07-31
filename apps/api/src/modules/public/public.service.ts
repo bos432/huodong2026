@@ -2426,7 +2426,7 @@ export class PublicService {
     const [order, operationSetting] = await Promise.all([this.findRegistrationOrder(id), this.ensureOperationSetting(tenant)]);
     const refunds = order ? await this.findOrderRefunds(order.id) : [];
     const charityRefund = order ? await this.registrationCharityRefundView(order, refunds) : null;
-    const groupVisible = ![RegistrationStatus.Cancelled, RegistrationStatus.Rejected].includes(registration.status);
+    const groupVisible = [RegistrationStatus.Approved, RegistrationStatus.CheckedIn].includes(registration.status);
     const groupQrCodeUrl = groupVisible ? registration.activity.groupQrCodeUrl || operationSetting.defaultGroupQrCodeUrl || null : null;
     return { registration: this.publicRegistration(registration), order: order ? this.publicOrder(order) : null, refunds: refunds.map((refund) => this.publicRefund(refund)), charityRefund, operationSetting: this.publicOperationSetting(operationSetting), groupQrCodeUrl };
   }

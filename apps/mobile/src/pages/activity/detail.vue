@@ -23,6 +23,7 @@ const activeAction = ref("");
 const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
+const customerServiceSession = computed(() => JSON.stringify({ source: "activity_detail", activityId: activity.value?.id || null, tenantCode: tenant.value?.code || "" }));
 
 function richActivityContent(content: unknown) {
   return markdownToRichTextHtml(content);
@@ -470,6 +471,9 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
         <view v-if="operationSetting.customerServiceName" class="service-line"><text>客服</text><text>{{ operationSetting.customerServiceName }}</text></view>
         <view v-if="operationSetting.customerServicePhone" class="service-line" @click="copyText(operationSetting.customerServicePhone)"><text>电话</text><text>{{ operationSetting.customerServicePhone }}</text></view>
         <view v-if="operationSetting.customerServiceWechat" class="service-line" @click="copyText(operationSetting.customerServiceWechat)"><text>微信</text><text>{{ operationSetting.customerServiceWechat }}</text></view>
+        <!-- #ifdef MP-WEIXIN -->
+        <button class="service-contact-button" open-type="contact" :session-from="customerServiceSession">咨询微信客服</button>
+        <!-- #endif -->
         <view v-if="operationSetting.refundInstructions" class="service-note">{{ operationSetting.refundInstructions }}</view>
       </view>
 
@@ -654,6 +658,8 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 .service-line { display: grid; grid-template-columns: 90rpx 1fr; gap: 16rpx; padding: 12rpx 0; border-bottom: 1px solid #e8e0d8; }
 .service-line text:first-child { color: #999999; }
 .service-line text:last-child { color: #333333; font-weight: 600; overflow-wrap: anywhere; }
+.service-contact-button { width: 100%; min-height: 76rpx; margin-top: 18rpx; border: 0; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 25rpx; font-weight: 700; line-height: 76rpx; }
+.service-contact-button::after { border: 0; }
 .service-note { margin-top: 14rpx; padding: 16rpx; border-radius: 18rpx; background: #f9f4ee; color: #666666; font-size: 25rpx; line-height: 1.6; }
 .host, .review { padding: 16rpx 0; border-bottom: 1px solid #e8e0d8; }
 .host { display: flex; gap: 18rpx; }

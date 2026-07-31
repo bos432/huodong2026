@@ -19,6 +19,7 @@ const paymentInstructionsField = "offlinePaymentInstructions";
 const loadGuard = createTenantLoadGuard();
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("service_center", "/pages/service/index");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
+const customerServiceSession = computed(() => JSON.stringify({ source: "service_center", tenantCode: tenant.value?.code || "" }));
 
 async function load() {
   const token = loadGuard.begin();
@@ -97,6 +98,12 @@ onShow(async () => {
         <view v-if="setting.customerServiceName" class="line"><text>客服</text><text>{{ setting.customerServiceName }}</text></view>
         <view v-if="setting.customerServicePhone" class="line" role="button" aria-label="复制客服电话" @click="copy(setting.customerServicePhone)"><text>电话</text><text>{{ setting.customerServicePhone }}</text></view>
         <view v-if="setting.customerServiceWechat" class="line" role="button" aria-label="复制客服微信" @click="copy(setting.customerServiceWechat)"><text>微信</text><text>{{ setting.customerServiceWechat }}</text></view>
+        <!-- #ifdef MP-WEIXIN -->
+        <button class="customer-service-button" open-type="contact" :session-from="customerServiceSession">打开微信客服</button>
+        <!-- #endif -->
+        <!-- #ifndef MP-WEIXIN -->
+        <view v-if="setting.customerServiceWechat || setting.customerServicePhone" class="service-copy">点击上方联系方式即可复制，微信内可直接添加客服。</view>
+        <!-- #endif -->
       </view>
 
       <view class="card">
@@ -184,6 +191,9 @@ onShow(async () => {
 .line:last-child { border-bottom: 0; }
 .line text:first-child { color: var(--muted-color, #999999); }
 .line text:last-child { color: var(--text-color, #333333); font-weight: 700; overflow-wrap: anywhere; }
+.customer-service-button { width: 100%; min-height: 80rpx; margin-top: 18rpx; border: 0; border-radius: 8rpx; background: #0f766e; color: #fff; font-size: 26rpx; font-weight: 700; line-height: 80rpx; }
+.customer-service-button::after { border: 0; }
+.service-copy { margin-top: 18rpx; padding: 16rpx; border-radius: 8rpx; background: #f3faf8; color: #54716c; font-size: 24rpx; line-height: 1.55; }
 .content { color:#54716c; font-size:26rpx; line-height:1.7; white-space:pre-wrap; }
 .partner-entry { margin-top:22rpx; min-height:80rpx; padding:0 22rpx; border-radius:10rpx; background:#eaf7f3; color:#0f766e; display:flex; align-items:center; justify-content:space-between; gap:16rpx; font-size:26rpx; font-weight:800; }
 .error-card { color:#b42318; border:1rpx solid #f0b8b0; background:#fff4f2; line-height:1.6; }

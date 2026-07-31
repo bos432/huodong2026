@@ -29,9 +29,15 @@
       </view>
       <view v-else-if="featuredActivities.length" class="activity-preview-list">
         <view v-for="activity in featuredActivities" :key="activity.id" class="activity-preview-card" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
-          <view class="activity-date"><text>{{ formatActivityMonthDay(activity.startTime) }}</text><text>{{ formatActivityHour(activity.startTime) }}</text></view>
-          <view class="activity-main"><text class="activity-title">{{ activity.title }}</text><text class="activity-meta">{{ activity.location || "地点待确认" }}</text></view>
-          <view class="activity-status">{{ activityStatusText(activity.status) }}</view>
+          <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
+          <image v-if="activity.coverUrl" class="activity-cover" :src="activity.coverUrl" mode="aspectFill" />
+          <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
+          <view class="activity-main">
+            <view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view>
+            <text class="activity-title">{{ activity.title }}</text>
+            <text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text>
+            <view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view>
+          </view>
         </view>
       </view>
       <view v-else class="activity-empty"><text>暂未发布近期活动</text><text class="activity-empty-action" role="button" tabindex="0" @click="goMyRegistrations" @keyup.enter="goMyRegistrations" @keyup.space.prevent="goMyRegistrations">查看我的报名</text></view>
@@ -135,6 +141,10 @@ function activityStatusText(status: string) {
   return "报名中";
 }
 
+function priceText(price: string | number | undefined) {
+  return Number(price || 0) > 0 ? `￥${Number(price).toFixed(2)}` : "免费";
+}
+
 function formatActivityDate(value: string, part: "date" | "time") {
   if (!value) return part === "date" ? "待定" : "";
   const date = new Date(value);
@@ -151,6 +161,13 @@ function formatActivityDate(value: string, part: "date" | "time") {
 
 function formatActivityMonthDay(value: string) { return formatActivityDate(value, "date"); }
 function formatActivityHour(value: string) { return formatActivityDate(value, "time"); }
+
+function activityDateParts(value: string) {
+  const dateText = formatActivityMonthDay(value);
+  if (!dateText.includes("-")) return { month: "日期", day: "待定", time: formatActivityHour(value) || "待定" };
+  const [month, day] = dateText.split("-");
+  return { month: `${month}月`, day, time: formatActivityHour(value) || "待定" };
+}
 
 </script>
 
@@ -206,13 +223,22 @@ function formatActivityHour(value: string) { return formatActivityDate(value, "t
 .activity-error { border: 1rpx solid #fecaca; background: #fff7f7; color: #b91c1c; }
 .activity-retry { width: max-content; min-height: 56rpx; margin: 0; padding: 0 20rpx; border: 0; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 23rpx; font-weight: 800; }
 .activity-retry::after { border: 0; }
-.activity-preview-list { display: grid; gap: 12rpx; }
-.activity-preview-card { display: grid; grid-template-columns: 88rpx minmax(0, 1fr) auto; gap: 16rpx; align-items: center; min-height: 102rpx; padding: 16rpx; border: 1rpx solid #e2eeeb; border-radius: 12rpx; background: #fbfefd; }
-.activity-date { display: grid; align-content: center; justify-items: center; gap: 4rpx; min-height: 70rpx; border-radius: 8rpx; background: #e8f5f1; color: #0f766e; font-size: 20rpx; font-weight: 800; }
-.activity-main { min-width: 0; display: grid; gap: 6rpx; }
-.activity-title { overflow: hidden; color: #173f3a; font-size: 27rpx; font-weight: 900; text-overflow: ellipsis; white-space: nowrap; }
-.activity-meta { overflow: hidden; color: #66827d; font-size: 22rpx; text-overflow: ellipsis; white-space: nowrap; }
-.activity-status { padding: 8rpx 12rpx; border-radius: 6rpx; background: #edf7f5; color: #0f766e; font-size: 21rpx; font-weight: 800; }
+.activity-preview-list { display: grid; gap: 14rpx; }
+.activity-preview-card { display: grid; grid-template-columns: 82rpx 144rpx minmax(0, 1fr); gap: 16rpx; align-items: stretch; min-height: 148rpx; padding: 14rpx; border: 1rpx solid #dce9e6; border-radius: 8rpx; background: #fff; }
+.activity-date { display: grid; align-content: center; justify-items: center; gap: 2rpx; min-height: 100%; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 20rpx; font-weight: 700; }
+.activity-date-day { color: #172b4d; font-size: 34rpx; line-height: 1.1; font-weight: 800; }
+.activity-cover { width: 144rpx; height: 144rpx; border-radius: 8rpx; background: #dce9e6; }
+.cover-fallback { display: flex; align-items: center; justify-content: center; width: 144rpx; height: 144rpx; padding: 12rpx; border-radius: 8rpx; box-sizing: border-box; background: #e9f3f0; color: #0f766e; font-size: 24rpx; font-weight: 700; text-align: center; }
+.activity-main { min-width: 0; display: grid; align-content: space-between; gap: 7rpx; }
+.activity-tags { display: flex; align-items: center; gap: 8rpx; min-width: 0; }
+.activity-category,.activity-status { max-width: 50%; overflow: hidden; padding: 4rpx 8rpx; border-radius: 6rpx; text-overflow: ellipsis; white-space: nowrap; font-size: 20rpx; font-weight: 700; }
+.activity-category { background: #f3f5f7; color: #475569; }
+.activity-status { background: #edf7f5; color: #0f766e; }
+.activity-title { overflow: hidden; color: #172b4d; font-size: 30rpx; font-weight: 800; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
+.activity-meta { overflow: hidden; color: #64748b; font-size: 22rpx; text-overflow: ellipsis; white-space: nowrap; }
+.activity-foot { display: flex; align-items: center; justify-content: space-between; gap: 8rpx; min-width: 0; color: #718a85; font-size: 20rpx; }
+.activity-foot text:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-price { flex: 0 0 auto; color: #b45309; font-size: 24rpx; font-weight: 800; }
 .activity-empty { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; padding: 20rpx; border-radius: 10rpx; background: #f4f8f7; color: #66827d; font-size: 24rpx; }
 .activity-empty-action { color: #0f766e; font-weight: 800; }
 .home-activity-all:focus-visible, .activity-preview-card:focus-visible, .activity-empty-action:focus-visible { outline: 3rpx solid #0f766e; outline-offset: 3rpx; }

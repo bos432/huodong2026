@@ -695,17 +695,19 @@ function logoutUser() {
 <style scoped>
 .profile-page {
   min-height: 100vh;
-  background: var(--page-bg, #f4f8f7);
+  background: var(--page-bg, #f6f8f7);
   box-sizing: border-box;
   width: 100%;
   max-width: 760px;
   margin: 0 auto;
   padding: 0 32rpx calc(120rpx + env(safe-area-inset-bottom));
   overflow-wrap: anywhere;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
 }
 .member-card {
   margin: 0 -32rpx 18rpx;
   padding: 38rpx 32rpx 30rpx;
+  border-radius: 0 0 16rpx 16rpx;
   box-shadow: 0 16rpx 36rpx rgba(15, 118, 110, 0.16);
 }
 .member-card-top {
@@ -741,7 +743,7 @@ function logoutUser() {
   align-content: center;
   justify-items: center;
   gap: 6rpx;
-  border-radius: 12rpx;
+  border-radius: 8rpx;
   background: rgba(255, 255, 255, 0.12);
   border: 1rpx solid rgba(255, 255, 255, 0.16);
 }
@@ -847,7 +849,7 @@ function logoutUser() {
 }
 .profile-edit-btn { position: absolute; top: 30rpx; right: 32rpx; min-width: 72rpx; min-height: 56rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid rgba(255,255,255,.32); border-radius: 8rpx; color: #fff; font-size: 23rpx; font-weight: 800; overflow-wrap: anywhere; }
 .profile-edit-text { color: var(--profile-header-text, #5B2F24); font-weight: 700; }
-.profile-section { margin-bottom: 18rpx; padding: 24rpx; border: 1rpx solid rgba(15,118,110,.1); border-radius: 14rpx; background: #fff; box-shadow: 0 8rpx 22rpx rgba(20,72,64,.05); }
+.profile-section { margin-bottom: 18rpx; padding: 24rpx; border: 1rpx solid rgba(15,118,110,.1); border-radius: 8rpx; background: #fff; box-shadow: 0 8rpx 22rpx rgba(20,72,64,.05); }
 .profile-section-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16rpx; margin-bottom: 20rpx; }
 .profile-section-head.compact { margin-bottom: 0; }
 .profile-section-title { display: block; color: #173f3a; font-size: 30rpx; font-weight: 900; }
@@ -855,7 +857,7 @@ function logoutUser() {
 .profile-section-link { flex: 0 0 auto; padding: 8rpx 12rpx; border-radius: 8rpx; background: #eef8f5; color: #0f766e; font-size: 22rpx; font-weight: 800; }
 .order-summary-panel { padding-bottom: 20rpx; }
 .profile-asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-bottom: 18rpx; }
-.asset-panel { min-width: 0; min-height: 142rpx; display: grid; align-content: space-between; padding: 22rpx; border-radius: 14rpx; }
+.asset-panel { min-width: 0; min-height: 142rpx; display: grid; align-content: space-between; padding: 22rpx; border-radius: 8rpx; }
 .wallet-panel { background: #173f3a; color: #fff; }
 .charity-panel { background: #fff4dc; color: #6b4a1b; }
 .asset-label { font-size: 22rpx; font-weight: 800; opacity: .76; }
@@ -899,7 +901,7 @@ function logoutUser() {
   position: relative;
 }
 .order-tab-icon { font-size: 34rpx; line-height: 1; }
-.order-tab-label { color: #54716c; font-size: 21rpx; }
+.order-tab-label { color: #475569; font-size: 22rpx; }
 .order-badge {
   position: absolute;
   top: -8rpx;
