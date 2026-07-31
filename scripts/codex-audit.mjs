@@ -518,7 +518,9 @@ function mpWeixinBuildStep() {
       "$code = $LASTEXITCODE",
       "Pop-Location",
       "if ($code -ne 0) { exit $code }",
-      "node scripts/patch-mobile-mp-weixin-auth.mjs"
+      "node scripts/patch-mobile-mp-weixin-auth.mjs",
+      "node scripts/write-static-version.mjs apps/mobile/dist/build/mp-weixin mp-weixin",
+      "node scripts/check-mobile-mp-weixin-artifacts.mjs"
     ].join("; ");
     return {
       name: "wechat mini program build",
@@ -559,7 +561,8 @@ function checkBuildArtifacts() {
     ["API data source", "apps/api/dist/data-source.js"],
     ["Admin", "apps/admin/dist/index.html"],
     ["Mobile H5", "apps/mobile/dist/build/h5/index.html"],
-    ["Mobile mp-weixin", "apps/mobile/dist/build/mp-weixin/app.json"]
+    ["Mobile mp-weixin", "apps/mobile/dist/build/mp-weixin/app.json"],
+    ["Mobile mp-weixin version", "apps/mobile/dist/build/mp-weixin/version.json"]
   ];
   const missing = expected.filter(([, file]) => !fs.existsSync(path.join(root, file)));
   const status = missing.length ? (profile === "release" ? "failed" : "warning") : "passed";
