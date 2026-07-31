@@ -43,7 +43,7 @@
     </view>
     <view v-else class="activity-empty"><text>暂未发布近期活动</text><text class="activity-empty-action" role="button" tabindex="0" @click="goMyRegistrations" @keyup.enter="goMyRegistrations" @keyup.space.prevent="goMyRegistrations">查看我的报名</text></view>
 
-    <PageDecorationBlocks :sections="contentSections" />
+    <PageDecorationBlocks :sections="supplementalSections" />
 
     <view style="height:120rpx;"></view>
     <TabBar current="index" />
@@ -72,6 +72,11 @@ const activitiesError = ref("");
 const loadedActivitiesTenantCode = ref("");
 const activityLoadGuard = createTenantLoadGuard();
 const cityName = computed(() => tenant.value?.region || tenant.value?.name || pageBrand.name || "本地");
+const supplementalSections = computed(() => contentSections.value.filter((section) => ![
+  "featured_activities",
+  "activity_tabs",
+  "activity_feed"
+].includes(section.type)));
 
 const shareOptions = {
   title: () => `${pageBrand.name || "慢π"}活动报名`,
