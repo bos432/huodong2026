@@ -4,6 +4,9 @@ import { ActivityHost } from "../../entities/activity-host.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivityReviewReport } from "../../entities/activity-review-report.entity";
+import { ActivitySpaceAnnouncement } from "../../entities/activity-space-announcement.entity";
+import { ActivitySpacePost } from "../../entities/activity-space-post.entity";
+import { ActivitySpacePostReport } from "../../entities/activity-space-post-report.entity";
 import { ActivityRecapVersion } from "../../entities/activity-recap-version.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
@@ -38,7 +41,7 @@ import { PublicModule } from "../public/public.module";
 import { MemberPointsModule } from "../member-points/member-points.module";
 
 @Module({
-  imports: [PublicModule, MemberPointsModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivityRecapVersion, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, Refund, TicketType, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, ConversionEvent, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, NotificationPreference, WechatSubscriptionGrant])],
+  imports: [PublicModule, MemberPointsModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivitySpaceAnnouncement, ActivitySpacePost, ActivitySpacePostReport, ActivityRecapVersion, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, Refund, TicketType, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, ConversionEvent, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, NotificationPreference, WechatSubscriptionGrant])],
   controllers: [AdminV1Controller, PublicV1Controller],
   providers: [V1Service, NotificationProviderService],
   exports: [V1Service]

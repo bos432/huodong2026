@@ -1,5 +1,5 @@
 import { Body, Controller, Get, Param, ParseIntPipe, Post, Query, Req } from "@nestjs/common";
-import { ReviewInput, TrackShareInput, V1Service } from "./v1.service";
+import { ActivitySpacePostInput, ReviewInput, TrackShareInput, V1Service } from "./v1.service";
 import { PublicService } from "../public/public.service";
 
 @Controller("public")
@@ -56,6 +56,24 @@ export class PublicV1Controller {
   async createReview(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Body() body: ReviewInput & { tenantCode?: string }, @Query("tenantCode") tenantCode?: string) {
     const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.createReview(id, body, user, this.tenantContext(req, tenantCode || body.tenantCode));
+  }
+
+  @Get("activities/:id/space")
+  async activitySpace(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.publicActivitySpace(id, user, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("activities/:id/space/posts")
+  async createActivitySpacePost(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Body() body: ActivitySpacePostInput & { tenantCode?: string }, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.createActivitySpacePost(id, body, user, this.tenantContext(req, tenantCode || body.tenantCode));
+  }
+
+  @Post("activities/:id/space/posts/:postId/report")
+  async reportActivitySpacePost(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Param("postId", ParseIntPipe) postId: number, @Body() body: { reason?: string; tenantCode?: string }, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.reportActivitySpacePost(id, postId, body.reason || "", user, this.tenantContext(req, tenantCode || body.tenantCode));
   }
 
   @Post("reviews/:id/report")

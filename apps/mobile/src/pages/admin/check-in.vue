@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onBeforeUnmount, ref } from "vue";
-import { onHide, onShow } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
 
@@ -287,6 +287,7 @@ function stopPageWork() {
   pageSerial += 1;
 }
 
+onLoad((query) => { const scannedCode = String(query?.code || "").trim(); if (scannedCode) code.value = scannedCode; });
 onShow(async () => { pageVisible = true; await loadPage(); if (pageVisible) startOverviewTimer(); });
 onHide(() => { pageVisible = false; stopPageWork(); });
 onBeforeUnmount(stopPageWork);

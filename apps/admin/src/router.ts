@@ -17,6 +17,7 @@ const MarketingPopups = () => import("./views/MarketingPopups.vue");
 const AdCenter = () => import("./views/AdCenter.vue");
 const Notifications = () => import("./views/Notifications.vue");
 const Reviews = () => import("./views/Reviews.vue");
+const ActivitySpace = () => import("./views/ActivitySpace.vue");
 const Registrations = () => import("./views/Registrations.vue");
 const Orders = () => import("./views/Orders.vue");
 const UnifiedOrders = () => import("./views/UnifiedOrders.vue");
@@ -115,6 +116,7 @@ export const router = createRouter({
         { path: "ad-center", component: AdCenter, meta: { roles: ["ad_center.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "notifications", component: Notifications, meta: { roles: ["notification.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "reviews", component: Reviews, meta: { roles: ["review.view"], scope: "tenant" } },
+        { path: "activity-space", component: ActivitySpace, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
         { path: "registrations", component: Registrations, meta: { roles: permissions.registrationView, scope: "tenantOrPlatformAdmin" } },
         { path: "waitlists", component: Waitlists, meta: { roles: ["waitlist.view"], scope: "tenant" } },
         { path: "tags", component: UserTags, meta: { roles: ["tag.view"], scope: "tenant" } },

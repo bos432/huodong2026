@@ -27,6 +27,7 @@ export type TenantQuickLink = {
 
 export const tenantScopedRoutePaths = new Set([
   "/activities",
+  "/activity-space",
   "/support",
   "/registrations",
   "/orders",
@@ -61,6 +62,7 @@ export const tenantScopedRoutePaths = new Set([
 
 export const tenantQuickLinks: TenantQuickLink[] = [
   { label: "活动", path: "/activities" },
+  { label: "活动空间", path: "/activity-space" },
   { label: "客服", path: "/support" },
   { label: "报名", path: "/registrations" },
   { label: "订单", path: "/orders" },

@@ -8,6 +8,15 @@
       </view>
     </view>
 
+    <view v-if="heroActivities.length" class="feature-rail">
+      <view v-for="activity in heroActivities" :key="activity.id" class="feature-card" role="button" tabindex="0" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)">
+        <image v-if="activity.coverUrl" :src="activity.coverUrl" mode="aspectFill" />
+        <view v-else class="feature-fallback">{{ activity.category?.name || "本地活动" }}</view>
+        <view class="feature-shade" />
+        <view class="feature-copy"><text>{{ activityDateParts(activity.startTime).month }}{{ activityDateParts(activity.startTime).day }}日</text><text>{{ activity.title }}</text><text>{{ priceText(activity.price) }}</text></view>
+      </view>
+    </view>
+
     <scroll-view class="discovery-categories" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类">
       <view class="category-track">
         <view class="category-tab active" role="tab" aria-selected="true" tabindex="0" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">推荐</view>
@@ -29,7 +38,7 @@
       <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载活动" @click="loadActivities">重试</button>
     </view>
     <view v-else-if="featuredActivities.length" class="activity-preview-list">
-      <view v-for="activity in featuredActivities" :key="activity.id" class="activity-preview-card" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
+      <view v-for="activity in feedActivities" :key="activity.id" class="activity-preview-card" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
         <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
         <image v-if="activity.coverUrl" class="activity-cover" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
@@ -72,6 +81,8 @@ const activitiesError = ref("");
 const loadedActivitiesTenantCode = ref("");
 const activityLoadGuard = createTenantLoadGuard();
 const cityName = computed(() => tenant.value?.region || tenant.value?.name || pageBrand.name || "本地");
+const heroActivities = computed(() => featuredActivities.value.slice(0, 2));
+const feedActivities = computed(() => featuredActivities.value.slice(2).length ? featuredActivities.value.slice(2) : featuredActivities.value);
 const supplementalSections = computed(() => contentSections.value.filter((section) => ![
   "featured_activities",
   "activity_tabs",
@@ -189,12 +200,13 @@ function activityDateParts(value: string) {
 </script>
 
 <style scoped>
-.discovery-page { padding-top: 20rpx; background: #f7f9f8; }
+.discovery-page { padding-top: 20rpx; background: #f7f9f8; font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
 .discovery-topbar { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; min-height: 82rpx; }
 .topbar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 12rpx; }
 .brand-mark { width: 52rpx; height: 52rpx; overflow: hidden; border-radius: 50%; background: #e9f9f0; }
 .brand-mark image { width: 100%; height: 100%; }
 .search-btn { min-width: 82rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 16rpx; border-radius: 8rpx; background: #eef2f0; color: #27362f; font-size: 22rpx; font-weight: 800; }
+.feature-rail{display:grid;grid-template-columns:1.3fr 1fr;gap:14rpx;height:268rpx;margin:8rpx 0 24rpx}.feature-card{position:relative;min-width:0;overflow:hidden;border-radius:8rpx;background:#143a27}.feature-card image,.feature-shade{position:absolute;inset:0;width:100%;height:100%}.feature-shade{background:linear-gradient(180deg,rgba(8,24,15,.08),rgba(8,24,15,.78))}.feature-fallback{height:100%;display:grid;place-items:center;background:#dff8e7;color:#08753f;font-size:25rpx;font-weight:900}.feature-copy{position:absolute;left:16rpx;right:16rpx;bottom:16rpx;display:grid;gap:5rpx;color:#fff}.feature-copy text:first-child{color:#baf5ca;font-size:19rpx;font-weight:800}.feature-copy text:nth-child(2){display:-webkit-box;overflow:hidden;font-size:27rpx;font-weight:900;line-height:1.28;-webkit-box-orient:vertical;-webkit-line-clamp:2}.feature-copy text:last-child{color:#fff3c4;font-size:20rpx;font-weight:900}
 .discovery-categories { width: 100%; margin: 24rpx 0 28rpx; white-space: nowrap; }
 .category-track { display: inline-flex; gap: 12rpx; padding-right: 28rpx; }
 .category-tab { min-width: 92rpx; height: 58rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 20rpx; border: 1rpx solid #e0e8e4; border-radius: 8rpx; background: #fff; color: #56635d; font-size: 24rpx; font-weight: 700; }

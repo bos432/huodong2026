@@ -4,7 +4,8 @@
     { "path": "pages/courses/index", "style": { "navigationBarTitleText": "专题内容" } },
     { "path": "pages/activity/list", "style": { "navigationBarTitleText": "活动列表" } },
     { "path": "pages/activity/detail", "style": { "navigationBarTitleText": "活动详情" } },
-    { "path": "pages/activity/register", "style": { "navigationBarTitleText": "报名" } }
+    { "path": "pages/activity/register", "style": { "navigationBarTitleText": "报名" } },
+    { "path": "pages/activity/space", "style": { "navigationBarTitleText": "活动空间" } }
   ],
   "subPackages": [
     {

@@ -7,6 +7,9 @@ import { ActivityHost } from "../../entities/activity-host.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivityReviewReport } from "../../entities/activity-review-report.entity";
+import { ActivitySpaceAnnouncement } from "../../entities/activity-space-announcement.entity";
+import { ActivitySpacePost } from "../../entities/activity-space-post.entity";
+import { ActivitySpacePostReport } from "../../entities/activity-space-post-report.entity";
 import { ActivityRecapVersion } from "../../entities/activity-recap-version.entity";
 import { AdminOperationLog } from "../../entities/admin-operation-log.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
@@ -44,6 +47,7 @@ import { contentAudienceMatches } from "../../shared/content-audience";
 import { boundedPercentage } from "../admin/dashboard-metrics";
 import { adminCanAccessActivity, applyAdminActivityDataScope, normalizeAdminDataScope } from "../admin/admin-data-scope";
 import { yuanToFen } from "../../shared/money";
+import { isDuplicateEntryError } from "../../shared/database-errors";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[]; dataScope?: Record<string, unknown>; clientIp?: string | null; userAgent?: string | null; requestId?: string | null };
 type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -69,6 +73,16 @@ export interface TrackShareInput {
   source?: string;
   scene?: string;
 }
+
+export interface ActivitySpaceAnnouncementInput {
+  title: string;
+  content: string;
+  status?: "draft" | "published" | "cancelled";
+  pinned?: boolean;
+  publishAt?: string | null;
+}
+
+export interface ActivitySpacePostInput { content: string; }
 
 export interface RecapVersionInput {
   summary?: string;
@@ -143,6 +157,9 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(ActivityHost) private readonly hosts: Repository<ActivityHost>,
     @InjectRepository(ActivitySection) private readonly sections: Repository<ActivitySection>,
     @InjectRepository(ActivityReview) private readonly reviews: Repository<ActivityReview>,
+    @InjectRepository(ActivitySpaceAnnouncement) private readonly spaceAnnouncements: Repository<ActivitySpaceAnnouncement>,
+    @InjectRepository(ActivitySpacePost) private readonly spacePosts: Repository<ActivitySpacePost>,
+    @InjectRepository(ActivitySpacePostReport) private readonly spacePostReports: Repository<ActivitySpacePostReport>,
     @InjectRepository(ActivityRecapVersion) private readonly recapVersions: Repository<ActivityRecapVersion>,
     @InjectRepository(ActivityViewLog) private readonly viewLogs: Repository<ActivityViewLog>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
@@ -292,16 +309,99 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (tracking?.inviteCode) await this.trackShare(id, { code: tracking.inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
 
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [hosts, sections, stats, reviews, memberAccess, operationSetting] = await Promise.all([
+    const [hosts, sections, stats, reviews, memberAccess, operationSetting, spaceSummary] = await Promise.all([
       this.hosts.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.sections.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.activityStats(id, activity.capacity),
       this.activityReviews(id, context),
       this.memberAccessSnapshot(activity, user || undefined),
-      this.findOperationSetting(tenant || activity.tenant || null)
+      this.findOperationSetting(tenant || activity.tenant || null),
+      this.activitySpaceSummary(activity, user?.id || null)
     ]);
 
-    return { ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews, memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting) };
+    return { ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews, memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting), space: spaceSummary };
+  }
+
+  private async activitySpaceAccess(activityId: number, userId?: number | null) {
+    if (!userId) return { allowed: false, registration: null };
+    const registration = await this.registrations.findOne({ where: { activity: { id: activityId }, user: { id: userId }, status: In([RegistrationStatus.Approved, RegistrationStatus.CheckedIn]) } });
+    return { allowed: Boolean(registration), registration };
+  }
+
+  private async activitySpaceSummary(activity: Activity, userId?: number | null) {
+    const now = new Date();
+    const [access, participants, announcementCount, postCount] = await Promise.all([
+      this.activitySpaceAccess(activity.id, userId),
+      this.registrations.count({ where: { activity: { id: activity.id }, status: In([RegistrationStatus.Approved, RegistrationStatus.CheckedIn]) } }),
+      this.spaceAnnouncements.createQueryBuilder("announcement").where("announcement.activityId = :id", { id: activity.id }).andWhere("announcement.status = 'published'").andWhere("(announcement.publishAt IS NULL OR announcement.publishAt <= :now)", { now }).getCount(),
+      this.spacePosts.count({ where: { activity: { id: activity.id }, status: "visible" } })
+    ]);
+    return { canAccess: access.allowed, participantCount: participants, announcementCount, postCount };
+  }
+
+  async publicActivitySpace(id: number, user: User, context?: PublicTenantContext) {
+    const activity = await this.findPublicActivity(id, true);
+    if (!activity) throw new NotFoundException("活动不存在");
+    await this.assertPublicActivityTenantAccess(activity, context);
+    const access = await this.activitySpaceAccess(id, user.id);
+    if (!access.allowed) throw new BadRequestException("报名审核通过后才能进入活动空间");
+    const now = new Date();
+    const [announcements, posts, registrations, stats, operationSetting] = await Promise.all([
+      this.spaceAnnouncements.createQueryBuilder("announcement").where("announcement.activityId = :id", { id }).andWhere("announcement.status = 'published'").andWhere("(announcement.publishAt IS NULL OR announcement.publishAt <= :now)", { now }).orderBy("announcement.pinned", "DESC").addOrderBy("announcement.publishAt", "DESC").take(30).getMany(),
+      this.spacePosts.createQueryBuilder("post").leftJoinAndSelect("post.user", "user").where("post.activityId = :id", { id }).andWhere("(post.status = 'visible' OR (post.status = 'pending' AND post.userId = :userId))", { userId: user.id }).orderBy("post.createdAt", "DESC").take(50).getMany(),
+      this.registrations.createQueryBuilder("registration").leftJoinAndSelect("registration.user", "user").where("registration.activityId = :id", { id }).andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] }).orderBy("registration.createdAt", "ASC").take(24).getMany(),
+      this.activityStats(id, activity.capacity),
+      this.findOperationSetting(activity.tenant || null)
+    ]);
+    const groupQrCodeUrl = activity.groupQrCodeUrl?.trim() || operationSetting?.defaultGroupQrCodeUrl?.trim() || null;
+    return {
+      activity: { id: activity.id, title: activity.title, coverUrl: activity.coverUrl, startTime: activity.startTime, endTime: activity.endTime, location: activity.location, locationLatitude: activity.locationLatitude, locationLongitude: activity.locationLongitude, locationMapUrl: activity.locationMapUrl, groupQrCodeUrl, hasGroupQrCode: Boolean(groupQrCodeUrl), hosts: (await this.hosts.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } })).map((host) => ({ name: host.name, title: host.title, avatarUrl: host.avatarUrl })) },
+      stats: { participantCount: stats.registeredCount, remainingSeats: stats.remainingSeats },
+      announcements: announcements.map((row) => this.publicSpaceAnnouncement(row)),
+      participants: registrations.map((row) => ({ nickname: this.publicUserDisplayName(row.user), avatarUrl: row.user?.avatarUrl || null, checkedIn: row.status === RegistrationStatus.CheckedIn })),
+      posts: posts.map((row) => this.publicSpacePost(row, user.id)),
+      checkIn: access.registration?.status === RegistrationStatus.Approved ? { available: true, registrationId: access.registration.id } : { available: false, registrationId: access.registration?.id || null }
+    };
+  }
+
+  async createActivitySpacePost(id: number, input: ActivitySpacePostInput, user: User, context?: PublicTenantContext) {
+    const activity = await this.findPublicActivity(id);
+    if (!activity) throw new NotFoundException("活动不存在");
+    await this.assertPublicActivityTenantAccess(activity, context);
+    if (!(await this.activitySpaceAccess(id, user.id)).allowed) throw new BadRequestException("报名审核通过后才能发布问答");
+    const content = String(input.content || "").trim().slice(0, 1000);
+    if (!content) throw new BadRequestException("请填写内容");
+    const row = await this.spacePosts.save(this.spacePosts.create({ activity, tenant: activity.tenant, user, content, status: "pending", adminReply: null, reportCount: 0 }));
+    return this.publicSpacePost(row, user.id);
+  }
+
+  async reportActivitySpacePost(activityId: number, postId: number, reason: string, user: User, context?: PublicTenantContext) {
+    const activity = await this.findPublicActivity(activityId);
+    if (!activity) throw new NotFoundException("活动不存在");
+    await this.assertPublicActivityTenantAccess(activity, context);
+    if (!(await this.activitySpaceAccess(activityId, user.id)).allowed) throw new BadRequestException("报名审核通过后才能举报");
+    const post = await this.spacePosts.findOne({ where: { id: postId, activity: { id: activityId } } });
+    if (!post || post.status !== "visible") throw new NotFoundException("问答不存在");
+    if (post.user.id === user.id) throw new BadRequestException("不能举报自己的内容");
+    const cleaned = String(reason || "").trim().slice(0, 500);
+    if (!cleaned) throw new BadRequestException("请选择举报原因");
+    const existing = await this.spacePostReports.findOne({ where: { post: { id: postId }, user: { id: user.id } } });
+    if (existing) return { idempotent: true };
+    try {
+      await this.spacePostReports.save(this.spacePostReports.create({ post, user, reason: cleaned, status: "pending", resolution: null, handledByAdminId: null, handledAt: null }));
+    } catch (error) {
+      if (!isDuplicateEntryError(error)) throw error;
+      return { idempotent: true };
+    }
+    post.reportCount += 1;
+    await this.spacePosts.save(post);
+    return { idempotent: false };
+  }
+
+  private publicSpaceAnnouncement(row: ActivitySpaceAnnouncement) { return { id: row.id, title: row.title, content: row.content, pinned: row.pinned, publishAt: row.publishAt, createdAt: row.createdAt }; }
+  private publicSpacePost(row: ActivitySpacePost, viewerId?: number) {
+    const mine = row.user?.id === viewerId;
+    return { id: row.id, content: row.content, createdAt: row.createdAt, adminReply: row.adminReply, mine, status: mine ? row.status : "visible", user: { nickname: this.publicUserDisplayName(row.user), avatarUrl: row.user?.avatarUrl || null } };
   }
 
   private publicActivity(activity: Activity) {
@@ -2036,6 +2136,52 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   private isPriorityBookingActive(activity: Activity) {
     return Boolean(activity.priorityMemberLevel && activity.priorityRegistrationEndsAt && activity.priorityRegistrationEndsAt.getTime() > Date.now());
+  }
+
+  async adminActivitySpaceAnnouncements(activityId: number, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id: activityId });
+    this.assertAnalyticsActivityAccess(activity, admin);
+    const rows = await this.spaceAnnouncements.find({ where: { activity: { id: activityId } }, order: { pinned: "DESC", createdAt: "DESC" } });
+    return rows.map((row) => ({ ...this.publicSpaceAnnouncement(row), status: row.status, updatedAt: row.updatedAt }));
+  }
+
+  async saveActivitySpaceAnnouncement(activityId: number, input: ActivitySpaceAnnouncementInput, id: number | undefined, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id: activityId });
+    this.assertAnalyticsActivityAccess(activity, admin);
+    const row = id ? await this.spaceAnnouncements.findOne({ where: { id, activity: { id: activityId } } }) : this.spaceAnnouncements.create({ activity: activity!, tenant: activity!.tenant, createdByAdminId: admin?.id || null });
+    if (!row) throw new NotFoundException("活动公告不存在");
+    const title = String(input.title || "").trim().slice(0, 160);
+    const content = String(input.content || "").trim().slice(0, 20000);
+    if (!title || !content) throw new BadRequestException("请填写公告标题和内容");
+    row.title = title;
+    row.content = content;
+    row.status = ["draft", "published", "cancelled"].includes(String(input.status)) ? input.status! : "draft";
+    row.pinned = Boolean(input.pinned);
+    row.publishAt = input.publishAt ? new Date(input.publishAt) : row.status === "published" ? row.publishAt || new Date() : null;
+    if (row.publishAt && Number.isNaN(row.publishAt.getTime())) throw new BadRequestException("发布时间不正确");
+    return this.spaceAnnouncements.save(row);
+  }
+
+  async adminActivitySpacePosts(query: { activityId?: number; status?: string; page?: number; pageSize?: number }, admin?: AdminContext) {
+    const page = Math.max(1, Number(query.page || 1));
+    const pageSize = Math.min(100, Math.max(1, Number(query.pageSize || 20)));
+    const builder = this.spacePosts.createQueryBuilder("post").leftJoinAndSelect("post.activity", "activity").leftJoinAndSelect("post.user", "user").leftJoinAndSelect("post.tenant", "tenant").orderBy("post.createdAt", "DESC");
+    applyTenantScopeToQuery(builder, "activity", admin);
+    applyAdminActivityDataScope(builder, "activity", admin?.dataScope);
+    if (query.activityId) builder.andWhere("post.activityId = :activityId", { activityId: query.activityId });
+    if (query.status && ["visible", "hidden", "pending"].includes(query.status)) builder.andWhere("post.status = :status", { status: query.status });
+    const [rows, total] = await builder.skip((page - 1) * pageSize).take(pageSize).getManyAndCount();
+    return { items: rows.map((row) => ({ ...this.publicSpacePost(row), status: row.status, reportCount: row.reportCount, activity: { id: row.activity.id, title: row.activity.title } })), total, page, pageSize };
+  }
+
+  async moderateActivitySpacePost(id: number, input: { status?: string; adminReply?: string }, admin?: AdminContext) {
+    const row = await this.spacePosts.findOne({ where: { id } });
+    if (!row) throw new NotFoundException("活动问答不存在");
+    this.assertAnalyticsActivityAccess(row.activity, admin);
+    if (!input.status || !["visible", "hidden"].includes(input.status)) throw new BadRequestException("内容状态不正确");
+    row.status = input.status as "visible" | "hidden";
+    row.adminReply = String(input.adminReply || "").trim().slice(0, 500) || null;
+    return this.spacePosts.save(row);
   }
 
   private async ensureV1Seeds() {

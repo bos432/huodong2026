@@ -3,6 +3,7 @@ import { Response } from "express";
 import { CurrentAdmin } from "../admin/current-admin.decorator";
 import { AdminRole, AdminRoles } from "../admin/admin-roles";
 import {
+  ActivitySpaceAnnouncementInput,
   NotificationTemplateInput,
   NotificationScheduleInput,
   PreviewNotificationInput,
@@ -32,6 +33,31 @@ export class AdminV1Controller {
   @AdminRoles(AdminRole.SuperAdmin, AdminRole.Operator, AdminRole.Finance)
   activityFunnel(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: AnalyticsAdminContext) {
     return this.service.activityFunnel(id, admin);
+  }
+
+  @Get("activities/:id/space/announcements")
+  activitySpaceAnnouncements(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: AnalyticsAdminContext) {
+    return this.service.adminActivitySpaceAnnouncements(id, admin);
+  }
+
+  @Post("activities/:id/space/announcements")
+  saveActivitySpaceAnnouncement(@Param("id", ParseIntPipe) id: number, @Body() body: ActivitySpaceAnnouncementInput, @CurrentAdmin() admin?: AnalyticsAdminContext) {
+    return this.service.saveActivitySpaceAnnouncement(id, body, undefined, admin);
+  }
+
+  @Patch("activities/:id/space/announcements/:announcementId")
+  updateActivitySpaceAnnouncement(@Param("id", ParseIntPipe) id: number, @Param("announcementId", ParseIntPipe) announcementId: number, @Body() body: ActivitySpaceAnnouncementInput, @CurrentAdmin() admin?: AnalyticsAdminContext) {
+    return this.service.saveActivitySpaceAnnouncement(id, body, announcementId, admin);
+  }
+
+  @Get("activity-space-posts")
+  activitySpacePosts(@Query("activityId") activityId?: string, @Query("status") status?: string, @Query("page") page?: string, @Query("pageSize") pageSize?: string, @CurrentAdmin() admin?: AnalyticsAdminContext) {
+    return this.service.adminActivitySpacePosts({ activityId: activityId ? Number(activityId) : undefined, status, page: page ? Number(page) : undefined, pageSize: pageSize ? Number(pageSize) : undefined }, admin);
+  }
+
+  @Patch("activity-space-posts/:id")
+  moderateActivitySpacePost(@Param("id", ParseIntPipe) id: number, @Body() body: { status?: string; adminReply?: string }, @CurrentAdmin() admin?: AnalyticsAdminContext) {
+    return this.service.moderateActivitySpacePost(id, body, admin);
   }
 
   @Get("analytics/activity-options")

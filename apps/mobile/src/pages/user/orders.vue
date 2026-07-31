@@ -473,8 +473,8 @@ onShow(() => {
 .orders-toolbar-hint { color:#66827d; font-size:23rpx; }
 .refresh-action { min-width:88rpx; padding:10rpx 18rpx; border:1rpx solid #cfe4df; border-radius:8rpx; background:#fff; color:#0f766e; text-align:center; font-size:24rpx; font-weight:800; }
 .refresh-action.disabled { color:#9ca3af; background:#f5f5f4; }
-.order-tabs { display:grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #d9ebe6; border-radius:10rpx; background:#f1f7f5; }
-.order-tab { min-width:0; padding:14rpx 4rpx; border-radius:7rpx; color:#66827d; text-align:center; font-size:23rpx; font-weight:800; white-space:nowrap; }
+.order-tabs { display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #d9ebe6; border-radius:8rpx; background:#f1f7f5; }
+.order-tab { min-width:0; min-height:56rpx; display:flex;align-items:center;justify-content:center; padding:8rpx 2rpx; border-radius:6rpx; color:#66827d; text-align:center; font-size:20rpx; font-weight:800; white-space:nowrap; }
 .order-tab.active { background:#0f766e; color:#fff; box-shadow:0 4rpx 12rpx rgba(15, 118, 110, 0.18); }
 .order-card { margin-bottom:16rpx; border:1rpx solid rgba(15,118,110,.1); box-shadow:0 8rpx 22rpx rgba(20,72,64,.05); }
 .order-head { align-items: flex-start; gap: 16rpx; }

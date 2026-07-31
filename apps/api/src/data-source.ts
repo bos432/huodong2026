@@ -8,6 +8,9 @@ import { ActivityField } from "./entities/activity-field.entity";
 import { ActivityHost } from "./entities/activity-host.entity";
 import { ActivityReview } from "./entities/activity-review.entity";
 import { ActivityReviewReport } from "./entities/activity-review-report.entity";
+import { ActivitySpaceAnnouncement } from "./entities/activity-space-announcement.entity";
+import { ActivitySpacePost } from "./entities/activity-space-post.entity";
+import { ActivitySpacePostReport } from "./entities/activity-space-post-report.entity";
 import { ActivityRecapVersion } from "./entities/activity-recap-version.entity";
 import { ActivitySection } from "./entities/activity-section.entity";
 import { ActivityViewLog } from "./entities/activity-view-log.entity";
@@ -250,6 +253,9 @@ export default new DataSource({
     ActivitySection,
     ActivityReview,
     ActivityReviewReport,
+    ActivitySpaceAnnouncement,
+    ActivitySpacePost,
+    ActivitySpacePostReport,
     ActivityRecapVersion,
     ActivityViewLog,
     Announcement,

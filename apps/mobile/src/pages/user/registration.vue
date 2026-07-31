@@ -65,6 +65,7 @@ const charityRefund = computed(() => detail.value?.charityRefund || null);
 const canShareActivityPost = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
 const communityPublishAvailable = computed(() => isLinkAllowedByFeature("/pages/community/publish"));
 const canShowCheckInCode = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
+const canEnterActivitySpace = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
 const paymentBusy = computed(() => Boolean(paying.value) || paymentChecking.value || paymentClosing.value);
 
 type RegistrationActionContext = { tenantCode: string; registrationId: number; orderId: number };
@@ -545,6 +546,10 @@ function requestWechatPayment(params: Record<string, any>) {
 function goReview() {
   uni.navigateTo({ url: withTenantCode(`/pages/user/review?id=${detail.value.registration.id}`) });
 }
+function goActivitySpace() {
+  const activityId = Number(detail.value?.registration?.activity?.id || 0);
+  if (activityId) uni.navigateTo({ url: withTenantCode(`/pages/activity/space?id=${activityId}`) });
+}
 
 async function goPublish() {
   await loadFeatureGates(true);
@@ -604,6 +609,8 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         </view>
         <view class="status-action" @click="runPrimaryAction">{{ primaryAction.label }}</view>
       </view>
+
+      <view v-if="canEnterActivitySpace" class="card activity-space-entry" @click="goActivitySpace"><view><text class="space-entry-kicker">报名后活动空间</text><text class="space-entry-title">公告、参与成员、问答与现场服务</text></view><text class="space-entry-arrow">›</text></view>
 
       <view class="card">
         <view class="title small">状态时间线</view>
@@ -718,6 +725,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
 <style scoped>
 .registration { min-height:100vh; box-sizing:border-box; padding-bottom:calc(36rpx + env(safe-area-inset-bottom)); }
 .registration.has-custom-nav { padding-bottom:calc(160rpx + env(safe-area-inset-bottom)); }
+.activity-space-entry{display:flex;align-items:center;justify-content:space-between;gap:18rpx;background:#effbf4;border-color:#d8eee1}.space-entry-kicker,.space-entry-title{display:block}.space-entry-kicker{color:#078347;font-size:20rpx;font-weight:900}.space-entry-title{margin-top:8rpx;color:#163423;font-size:27rpx;font-weight:900}.space-entry-arrow{color:#08753f;font-size:44rpx;font-weight:900}
 .action-error { display:flex; align-items:center; justify-content:space-between; gap:18rpx; border:1rpx solid #fecaca; background:#fff7f7; color:#b42318; line-height:1.55; overflow-wrap:anywhere; }
 .action-error-close { flex:0 0 auto; padding:10rpx 18rpx; border-radius:8px; background:#b42318; color:#fff; font-weight:800; }
 .registration-hero {

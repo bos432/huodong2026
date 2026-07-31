@@ -528,13 +528,12 @@ describe("mobile client state consistency", () => {
     expect(communityCheckin).toContain("getCurrentTenantCode() !== tenantCode");
   });
 
-  it("keeps search state tenant-scoped and exposes course loading failures", () => {
+  it("keeps activity search state tenant-scoped and exposes loading failures", () => {
     expect(searchPage).toContain("createTenantLoadGuard");
     expect(searchPage).toContain("loadGuard.isCurrent(token)");
-    expect(searchPage).toContain('loadError.value = reviewSafeText(error?.message || "搜索内容加载失败")');
-    expect(searchPage).toContain('`course_search_history:${tenantCode || "global"}`');
-    expect(searchPage).toContain("onShow(async () =>");
-    expect(searchPage).toContain("guardCurrentPageFeature");
+    expect(searchPage).toContain('error.value=reviewSafeText(e?.message||"活动搜索失败")');
+    expect(searchPage).toContain('request(`/public/activities?${params.join("&")}`)');
+    expect(searchPage).toContain("onShow(()=>void load())");
   });
 
   it("refreshes service settings independently from decoration fallbacks", () => {
@@ -625,7 +624,7 @@ describe("mobile client state consistency", () => {
     expect(homePage).toContain("activityLoadGuard.isCurrent(loadToken)");
     expect(homePage).toContain('activitiesError.value = reviewSafeText(error?.message || "近期活动加载失败")');
     expect(homePage).toContain('role="alert"');
-    expect(homePage).toContain("Promise.allSettled([loadDecoration(), loadActivities()])");
+    expect(homePage).toContain("Promise.allSettled([loadDecoration(), loadActivities(), loadCategories()])");
   });
 
   it("refreshes learning history and course order pages per tenant", () => {

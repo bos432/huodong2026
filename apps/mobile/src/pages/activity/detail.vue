@@ -232,6 +232,14 @@ function goPublish() {
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activity.value?.id || ""}`) });
 }
 
+function goActivitySpace() {
+  if (!activity.value?.space?.canAccess) {
+    uni.showToast({ title: "报名审核通过后可进入活动空间", icon: "none" });
+    return;
+  }
+  uni.navigateTo({ url: withTenantCode(`/pages/activity/space?id=${activity.value.id}`) });
+}
+
 function openLocation() {
   const latitude = locationLatitude();
   const longitude = locationLongitude();
@@ -444,6 +452,10 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
         <view class="action-item" @click="goMy">
           <text>票</text>
           <view>我的报名</view>
+        </view>
+        <view class="action-item" :class="{ disabled: !activity.space?.canAccess }" @click="goActivitySpace">
+          <text>圈</text>
+          <view>活动空间</view>
         </view>
         <view class="action-item" @click="goPublish">
           <text>记</text>
