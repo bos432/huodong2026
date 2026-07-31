@@ -1,35 +1,35 @@
 <template>
   <view class="container discovery-page has-custom-nav">
-    <view class="discovery-topbar">
+    <view class="discovery-topbar app-enter">
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
       <view class="topbar-actions">
         <view v-if="pageBrand.logoUrl" class="brand-mark"><image :src="pageBrand.logoUrl" mode="aspectFit" /></view>
-        <view class="search-btn" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><text>搜索</text></view>
+        <view class="search-btn app-press" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><text>搜索</text></view>
       </view>
     </view>
 
-    <view v-if="heroActivities.length" class="feature-rail">
-      <view v-for="activity in heroActivities" :key="activity.id" class="feature-card" role="button" tabindex="0" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)">
-        <image v-if="activity.coverUrl" :src="activity.coverUrl" mode="aspectFill" />
+    <view v-if="heroActivities.length" class="feature-rail app-enter" style="animation-delay: 42ms">
+      <view v-for="activity in heroActivities" :key="activity.id" class="feature-card app-press" role="button" tabindex="0" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)">
+        <image v-if="activity.coverUrl" class="app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="feature-fallback">{{ activity.category?.name || "本地活动" }}</view>
         <view class="feature-shade" />
         <view class="feature-copy"><text>{{ activityDateParts(activity.startTime).month }}{{ activityDateParts(activity.startTime).day }}日</text><text>{{ activity.title }}</text><text>{{ priceText(activity.price) }}</text></view>
       </view>
     </view>
 
-    <scroll-view class="discovery-categories" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类">
+    <scroll-view class="discovery-categories app-enter" style="animation-delay: 78ms" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类">
       <view class="category-track">
-        <view class="category-tab active" role="tab" aria-selected="true" tabindex="0" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">推荐</view>
-        <view v-for="category in categories" :key="category.id" class="category-tab" role="tab" aria-selected="false" tabindex="0" @click="goActivityList(category.id)" @keyup.enter="goActivityList(category.id)" @keyup.space.prevent="goActivityList(category.id)">{{ category.name }}</view>
+        <view class="category-tab active app-press" role="tab" aria-selected="true" tabindex="0" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">推荐</view>
+        <view v-for="category in categories" :key="category.id" class="category-tab app-press" role="tab" aria-selected="false" tabindex="0" @click="goActivityList(category.id)" @keyup.enter="goActivityList(category.id)" @keyup.space.prevent="goActivityList(category.id)">{{ category.name }}</view>
       </view>
     </scroll-view>
 
-    <view class="discovery-heading">
+    <view class="discovery-heading app-enter" style="animation-delay: 112ms">
       <view>
         <text class="heading-title">{{ cityName }}正在发生</text>
         <text class="heading-copy">按日期发现适合你的线下活动</text>
       </view>
-      <view class="all-link" role="button" tabindex="0" aria-label="查看全部活动" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">全部</view>
+      <view class="all-link app-press" role="button" tabindex="0" aria-label="查看全部活动" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">全部</view>
     </view>
 
     <view v-if="activitiesLoading && !featuredActivities.length" class="activity-state" role="status" aria-live="polite">活动加载中...</view>
@@ -38,9 +38,9 @@
       <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载活动" @click="loadActivities">重试</button>
     </view>
     <view v-else-if="featuredActivities.length" class="activity-preview-list">
-      <view v-for="activity in feedActivities" :key="activity.id" class="activity-preview-card" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
+      <view v-for="(activity, index) in feedActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
         <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
-        <image v-if="activity.coverUrl" class="activity-cover" :src="activity.coverUrl" mode="aspectFill" />
+        <image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
         <view class="activity-main">
           <view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status" :class="{ ended: activity.displayStatus === 'ended', full: activity.displayStatus === 'full' }">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view>
@@ -206,10 +206,10 @@ function activityDateParts(value: string) {
 .brand-mark { width: 52rpx; height: 52rpx; overflow: hidden; border-radius: 50%; background: #e9f9f0; }
 .brand-mark image { width: 100%; height: 100%; }
 .search-btn { min-width: 82rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 16rpx; border-radius: 8rpx; background: #eef2f0; color: #27362f; font-size: 22rpx; font-weight: 800; }
-.feature-rail{display:grid;grid-template-columns:1.3fr 1fr;gap:14rpx;height:286rpx;margin:8rpx 0 24rpx}.feature-card{position:relative;min-width:0;overflow:hidden;border-radius:8rpx;background:#143a27}.feature-card image,.feature-shade{position:absolute;inset:0;width:100%;height:100%}.feature-shade{background:linear-gradient(180deg,rgba(8,24,15,.08),rgba(8,24,15,.78))}.feature-fallback{height:100%;display:grid;place-items:center;background:#dff8e7;color:#08753f;font-size:28rpx;font-weight:900}.feature-copy{position:absolute;left:16rpx;right:16rpx;bottom:16rpx;display:grid;gap:5rpx;color:#fff}.feature-copy text:first-child{color:#baf5ca;font-size:22rpx;font-weight:800}.feature-copy text:nth-child(2){display:-webkit-box;overflow:hidden;font-size:30rpx;font-weight:900;line-height:1.28;-webkit-box-orient:vertical;-webkit-line-clamp:2}.feature-copy text:last-child{color:#fff3c4;font-size:22rpx;font-weight:900}
+.feature-rail{display:grid;grid-template-columns:1.3fr 1fr;gap:14rpx;height:286rpx;margin:8rpx 0 24rpx}.feature-card{position:relative;min-width:0;overflow:hidden;border-radius:8rpx;background:#143a27}.feature-card image,.feature-shade{position:absolute;inset:0;width:100%;height:100%}.feature-card image{transition:transform 360ms ease}.feature-card:active image{transform:scale(1.09)}.feature-shade{background:linear-gradient(180deg,rgba(8,24,15,.08),rgba(8,24,15,.78))}.feature-fallback{height:100%;display:grid;place-items:center;background:#dff8e7;color:#08753f;font-size:28rpx;font-weight:900}.feature-copy{position:absolute;left:16rpx;right:16rpx;bottom:16rpx;display:grid;gap:5rpx;color:#fff}.feature-copy text:first-child{color:#baf5ca;font-size:22rpx;font-weight:800}.feature-copy text:nth-child(2){display:-webkit-box;overflow:hidden;font-size:30rpx;font-weight:900;line-height:1.28;-webkit-box-orient:vertical;-webkit-line-clamp:2}.feature-copy text:last-child{color:#fff3c4;font-size:22rpx;font-weight:900}
 .discovery-categories { width: 100%; margin: 24rpx 0 28rpx; white-space: nowrap; }
 .category-track { display: inline-flex; gap: 12rpx; padding-right: 28rpx; }
-.category-tab { min-width: 96rpx; height: 64rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 22rpx; border: 1rpx solid #e0e8e4; border-radius: 8rpx; background: #fff; color: #56635d; font-size: 26rpx; font-weight: 700; }
+.category-tab { min-width: 96rpx; height: 64rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 22rpx; border: 1rpx solid #e0e8e4; border-radius: 8rpx; background: #fff; color: #56635d; font-size: 26rpx; font-weight: 700; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease; }
 .category-tab.active { border-color: #20d477; background: #20d477; color: #072d19; }
 .discovery-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; margin-bottom: 18rpx; }
 .heading-title { display: block; color: #15251c; font-size: 42rpx; font-weight: 900; line-height: 1.25; }

@@ -10,7 +10,7 @@
         '--profile-header-muted': profileHeaderMutedColor
       }"
     >
-      <view class="member-card-top">
+      <view class="member-card-top app-enter">
         <image v-if="profile?.avatarUrl" class="avatar-lg" :src="profile.avatarUrl" mode="aspectFill" aria-label="会员头像" />
         <view v-else class="avatar-lg avatar-fallback">{{ displayName.slice(0, 1) }}</view>
         <view class="member-main">
@@ -24,18 +24,18 @@
         </view>
         <view class="profile-edit-btn" role="button" tabindex="0" aria-label="编辑会员资料" @click="goEdit" @keyup.enter="goEdit" @keyup.space.prevent="goEdit">编辑</view>
       </view>
-      <view class="member-stats">
-        <view v-for="item in memberStats" :key="item.label" class="member-stat">
+      <view class="member-stats app-enter" style="animation-delay: 72ms">
+        <view v-for="(item, index) in memberStats" :key="item.label" class="member-stat app-stagger" :style="{ '--motion-index': index }">
           <text>{{ item.label }}</text>
           <text class="member-stat-value">{{ item.value }}</text>
         </view>
       </view>
       <view v-if="!isLoggedIn" class="member-actions single">
-        <view class="member-action primary" role="button" tabindex="0" aria-label="登录或注册" @click="goLogin" @keyup.enter="goLogin" @keyup.space.prevent="goLogin">登录/注册</view>
+        <view class="member-action primary app-press" role="button" tabindex="0" aria-label="登录或注册" @click="goLogin" @keyup.enter="goLogin" @keyup.space.prevent="goLogin">登录/注册</view>
       </view>
       <view v-else-if="!loadingProfile && !profileError && (!profile?.phone || canCompleteWechatProfile)" class="member-actions">
-        <view v-if="!profile?.phone" class="member-action primary" role="button" tabindex="0" aria-label="绑定手机号" @click="openPhoneBindPanel" @keyup.enter="openPhoneBindPanel" @keyup.space.prevent="openPhoneBindPanel">绑定手机号</view>
-        <view v-if="canCompleteWechatProfile" class="member-action" role="button" tabindex="0" aria-label="完善头像昵称" @click="openWechatProfilePanel()" @keyup.enter="openWechatProfilePanel()" @keyup.space.prevent="openWechatProfilePanel()">完善头像昵称</view>
+        <view v-if="!profile?.phone" class="member-action primary app-press" role="button" tabindex="0" aria-label="绑定手机号" @click="openPhoneBindPanel" @keyup.enter="openPhoneBindPanel" @keyup.space.prevent="openPhoneBindPanel">绑定手机号</view>
+        <view v-if="canCompleteWechatProfile" class="member-action app-press" role="button" tabindex="0" aria-label="完善头像昵称" @click="openWechatProfilePanel()" @keyup.enter="openWechatProfilePanel()" @keyup.space.prevent="openWechatProfilePanel()">完善头像昵称</view>
       </view>
     </view>
 
@@ -52,21 +52,21 @@
       <view class="state-retry" role="button" tabindex="0" aria-label="重新同步会员资产" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新同步资产</view>
     </view>
 
-    <view class="profile-section order-summary-panel">
+    <view class="profile-section order-summary-panel app-enter" style="animation-delay: 110ms">
       <view class="profile-section-head">
         <view><text class="profile-section-title">活动与订单</text><text class="profile-section-copy">报名、付款和参与进度</text></view>
         <text class="profile-section-link" role="button" tabindex="0" aria-label="查看全部订单" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">查看全部 ›</text>
       </view>
       <view class="order-tabs" :style="{ gridTemplateColumns: `repeat(${orderTabs.length}, minmax(0, 1fr))` }">
-        <view v-for="tab in orderTabs" :key="tab.label" class="order-tab" role="button" tabindex="0" :aria-label="`查看${tab.label}订单`" @click="goOrders(tab)" @keyup.enter="goOrders(tab)" @keyup.space.prevent="goOrders(tab)">
+        <view v-for="(tab, index) in orderTabs" :key="tab.label" class="order-tab app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看${tab.label}订单`" @click="goOrders(tab)" @keyup.enter="goOrders(tab)" @keyup.space.prevent="goOrders(tab)">
           <text class="order-tab-icon">{{ tab.icon }}</text><text class="order-tab-label">{{ tab.label }}</text><view v-if="tab.count" class="order-badge">{{ tab.count }}</view>
         </view>
       </view>
     </view>
 
-    <view class="profile-asset-grid">
-      <view class="asset-panel wallet-panel" role="button" tabindex="0" aria-label="查看余额资产明细" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet"><text class="asset-label">余额资产</text><text class="asset-value">{{ walletBalanceText }}</text><text class="asset-action">查看明细</text></view>
-      <view v-if="featureGates.charity" class="asset-panel charity-panel" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity"><text class="asset-label">公益贡献</text><text class="asset-value">{{ charityAmountText }} 元</text><text class="asset-action">查看证书</text></view>
+    <view class="profile-asset-grid app-enter" style="animation-delay: 144ms">
+      <view class="asset-panel wallet-panel app-press" role="button" tabindex="0" aria-label="查看余额资产明细" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet"><text class="asset-label">余额资产</text><text class="asset-value">{{ walletBalanceText }}</text><text class="asset-action">查看明细</text></view>
+      <view v-if="featureGates.charity" class="asset-panel charity-panel app-press" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity"><text class="asset-label">公益贡献</text><text class="asset-value">{{ charityAmountText }} 元</text><text class="asset-action">查看证书</text></view>
     </view>
 
     <view v-if="isLoggedIn" class="profile-section redemption-entry">
@@ -75,14 +75,14 @@
       <view v-if="redemptionError" class="redemption-error" role="alert" aria-live="assertive">{{ redemptionError }}</view>
     </view>
 
-    <view class="profile-section">
+    <view class="profile-section app-enter" style="animation-delay: 176ms">
       <view class="profile-section-head"><view><text class="profile-section-title">常用服务</text><text class="profile-section-copy">内容、商城、客服和设置</text></view></view>
       <view class="grid-2x4-profile">
-        <view v-for="item in gridItems" :key="item.label" class="grid-profile-item" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)"><view class="grid-profile-icon">{{ item.icon }}</view><text class="grid-profile-label">{{ item.label }}</text></view>
+        <view v-for="(item, index) in gridItems" :key="item.label" class="grid-profile-item app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)"><view class="grid-profile-icon">{{ item.icon }}</view><text class="grid-profile-label">{{ item.label }}</text></view>
       </view>
     </view>
 
-    <view v-if="featureGates.community || featureGates.forum || featureGates.mall || featureGates.ambassador" class="profile-section">
+    <view v-if="featureGates.community || featureGates.forum || featureGates.mall || featureGates.ambassador" class="profile-section app-enter" style="animation-delay: 208ms">
       <view class="profile-section-head"><view><text class="profile-section-title">社区与共建</text><text class="profile-section-copy">记录参与，连接同好</text></view></view>
       <view class="profile-link-list">
         <view v-if="featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><view><text class="entry-title">我的活动心得</text><text class="entry-copy">查看审核状态，继续分享已通过的活动感悟。</text></view><text class="entry-arrow">›</text></view>

@@ -3,42 +3,42 @@
     <view v-if="loading" class="space-state">活动空间加载中...</view>
     <view v-else-if="error" class="space-state error"><text>{{ error }}</text><text class="retry" @click="load">重新加载</text></view>
     <template v-else-if="space">
-      <view class="space-hero">
-        <image v-if="space.activity.coverUrl" :src="space.activity.coverUrl" mode="aspectFill" class="hero-cover" />
+      <view class="space-hero app-enter">
+        <image v-if="space.activity.coverUrl" :src="space.activity.coverUrl" mode="aspectFill" class="hero-cover app-media-motion" />
         <view class="hero-shade" />
         <view class="hero-copy"><text class="hero-kicker">已报名活动</text><text class="hero-title">{{ space.activity.title }}</text><text class="hero-meta">{{ formatTime(space.activity.startTime) }} · {{ space.activity.location }}</text></view>
       </view>
 
-      <view class="member-strip">
+      <view class="member-strip app-enter" style="animation-delay: 82ms">
         <view><text class="strip-number">{{ space.stats.participantCount }}</text><text> 位已确认参与</text></view>
         <view class="avatar-stack"><template v-for="(person, index) in space.participants.slice(0, 5)" :key="`${person.nickname}-${index}`"><image v-if="person.avatarUrl" :src="person.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view></template></view>
       </view>
 
-      <view class="space-section" v-if="space.announcements.length">
+      <view class="space-section app-enter" style="animation-delay: 118ms" v-if="space.announcements.length">
         <view class="section-head"><text>活动公告</text><text class="section-note">主办方发布</text></view>
-        <view v-for="item in space.announcements" :key="item.id" class="announcement"><view class="announcement-title"><text v-if="item.pinned" class="pin">置顶</text>{{ item.title }}</view><text class="announcement-content">{{ item.content }}</text><text class="announcement-time">{{ formatTime(item.publishAt || item.createdAt) }}</text></view>
+        <view v-for="(item, index) in space.announcements" :key="item.id" class="announcement app-stagger" :style="{ '--motion-index': index }"><view class="announcement-title"><text v-if="item.pinned" class="pin">置顶</text>{{ item.title }}</view><text class="announcement-content">{{ item.content }}</text><text class="announcement-time">{{ formatTime(item.publishAt || item.createdAt) }}</text></view>
       </view>
 
-      <view class="space-section">
+      <view class="space-section app-enter" style="animation-delay: 150ms">
         <view class="section-head"><text>参与成员</text><text class="section-note">仅向已确认参与者展示</text></view>
-        <view v-if="space.participants.length" class="participants"><view v-for="(person, index) in space.participants" :key="`${person.nickname}-${index}`" class="participant"><image v-if="person.avatarUrl" :src="person.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ person.nickname }}</text><text v-if="person.checkedIn" class="checked">已签到</text></view></view>
+        <view v-if="space.participants.length" class="participants"><view v-for="(person, index) in space.participants" :key="`${person.nickname}-${index}`" class="participant app-stagger" :style="{ '--motion-index': index }"><image v-if="person.avatarUrl" :src="person.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ person.nickname }}</text><text v-if="person.checkedIn" class="checked">已签到</text></view></view>
         <view v-else class="empty">暂时还没有可展示的参与成员</view>
       </view>
 
-      <view class="space-section">
-        <view class="section-head"><text>活动问答</text><text class="ask" @click="openComposer">提问</text></view>
-        <view v-if="space.posts.length" class="post-list"><view v-for="post in space.posts" :key="post.id" class="post"><view class="post-head"><image v-if="post.user.avatarUrl" :src="post.user.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ post.user.nickname }}</text><text v-if="post.mine && post.status === 'pending'" class="pending">审核中</text><text class="post-time">{{ formatTime(post.createdAt) }}</text><text v-if="!post.mine" class="report" @click="reportPost(post)">举报</text></view><text class="post-content">{{ post.content }}</text><text v-if="post.adminReply" class="reply">主办方回复：{{ post.adminReply }}</text></view></view>
+      <view class="space-section app-enter" style="animation-delay: 184ms">
+        <view class="section-head"><text>活动问答</text><text class="ask app-press" @click="openComposer">提问</text></view>
+        <view v-if="space.posts.length" class="post-list"><view v-for="(post, index) in space.posts" :key="post.id" class="post app-stagger" :style="{ '--motion-index': index }"><view class="post-head"><image v-if="post.user.avatarUrl" :src="post.user.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ post.user.nickname }}</text><text v-if="post.mine && post.status === 'pending'" class="pending">审核中</text><text class="post-time">{{ formatTime(post.createdAt) }}</text><text v-if="!post.mine" class="report app-press" @click="reportPost(post)">举报</text></view><text class="post-content">{{ post.content }}</text><text v-if="post.adminReply" class="reply">主办方回复：{{ post.adminReply }}</text></view></view>
         <view v-else class="empty">还没有问题，先向主办方提问吧</view>
       </view>
 
-      <view class="space-section action-section"><view class="section-head"><text>现场与服务</text></view><view class="action-grid"><view class="action-cell" @click="openLocation"><text>地点导航</text><text>{{ space.activity.location || "待确认" }}</text></view><view v-if="space.checkIn.available" class="action-cell" @click="openCheckIn"><text>签到码</text><text>活动当天出示</text></view><button class="action-cell contact" open-type="contact" :session-from="customerServiceSession"><text>联系客服</text><text>咨询活动安排</text></button></view></view>
+      <view class="space-section action-section app-enter" style="animation-delay: 218ms"><view class="section-head"><text>现场与服务</text></view><view class="action-grid"><view class="action-cell app-press" @click="openLocation"><text>地点导航</text><text>{{ space.activity.location || "待确认" }}</text></view><view v-if="space.checkIn.available" class="action-cell app-press" @click="openCheckIn"><text>签到码</text><text>活动当天出示</text></view><button class="action-cell contact app-press" open-type="contact" :session-from="customerServiceSession"><text>联系客服</text><text>咨询活动安排</text></button></view></view>
 
       <view v-if="space.activity.groupQrCodeUrl" class="space-section group-card"><view class="section-head"><text>活动群</text><text class="section-note">长按二维码识别</text></view><image :src="space.activity.groupQrCodeUrl" mode="aspectFit" class="group-qr" show-menu-by-longpress="true" /></view>
       <view class="page-space" />
     </template>
     <TabBar current="activity" />
 
-    <view v-if="composerVisible" class="composer-mask" @click.self="composerVisible = false"><view class="composer"><text class="composer-title">提出问题</text><textarea v-model="draft" maxlength="1000" placeholder="活动安排、现场准备等问题都可以写在这里" auto-height /><view class="composer-actions"><text @click="composerVisible = false">取消</text><text class="submit" @click="submitPost">发布</text></view></view></view>
+    <view v-if="composerVisible" class="composer-mask" @click.self="composerVisible = false"><view class="composer app-sheet-enter"><text class="composer-title">提出问题</text><textarea v-model="draft" maxlength="1000" placeholder="活动安排、现场准备等问题都可以写在这里" auto-height /><view class="composer-actions"><text class="app-press" @click="composerVisible = false">取消</text><text class="submit app-press" @click="submitPost">发布</text></view></view></view>
   </view>
 </template>
 

@@ -335,8 +335,8 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
     <template v-else-if="activity">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="活动归属" />
 
-      <view class="detail-hero">
-        <image v-if="activity.coverUrl" class="hero-image" :src="activity.coverUrl" mode="aspectFill" />
+      <view class="detail-hero app-enter">
+        <image v-if="activity.coverUrl" class="hero-image app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="hero-image hero-fallback">雅集</view>
         <view class="hero-mask"></view>
         <view class="hero-head">
@@ -351,7 +351,7 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
         </view>
       </view>
 
-      <view class="detail-decision-panel">
+      <view class="detail-decision-panel app-enter" style="animation-delay: 92ms">
         <view class="decision-time"><text class="decision-label">活动时间</text><text class="decision-value">{{ formatTime(activity.startTime) }}</text><text class="decision-helper">{{ formatTime(activity.endTime) }}</text></view>
         <view class="decision-place"><text class="decision-label">集合地点</text><text class="decision-value">{{ activity.location || "地点待确认" }}</text><text class="decision-helper">{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats }} 个名额</text></view>
         <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text></view>
@@ -359,7 +359,7 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 
       <PageDecorationBlocks :sections="bodyDecorationSections" />
 
-      <view class="card head">
+      <view class="card head app-enter" style="animation-delay: 132ms">
         <view class="decision-box">
           <view>
             <view class="decision-title">{{ registerButtonText() }}</view>
@@ -383,7 +383,7 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 
       <AdSlotRenderer slot-key="activity_detail_middle" page-key="activity_detail" />
 
-      <view class="card info">
+      <view class="card info app-enter" style="animation-delay: 164ms">
         <view class="section-title">活动信息</view>
         <view class="info-summary">
           <view><text>状态</text><text>{{ statusText(activity.displayStatus) }}</text></view>
@@ -430,13 +430,13 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
         </view>
       </view>
 
-      <view class="card action-card">
+      <view class="card action-card app-enter" style="animation-delay: 196ms">
         <view class="section-title">快捷操作</view>
-        <view class="action-item" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'invite'" aria-label="邀请好友" :class="{ disabled: Boolean(activeAction) }" @click="makeInvite" @keyup.enter="makeInvite" @keyup.space.prevent="makeInvite">
+        <view class="action-item app-press" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'invite'" aria-label="邀请好友" :class="{ disabled: Boolean(activeAction) }" @click="makeInvite" @keyup.enter="makeInvite" @keyup.space.prevent="makeInvite">
           <text>邀</text>
           <view>邀请好友</view>
         </view>
-        <view class="action-item" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'reminder'" aria-label="订阅活动通知" :class="{ disabled: Boolean(activeAction) }" @click="subscribeNotice" @keyup.enter="subscribeNotice" @keyup.space.prevent="subscribeNotice">
+        <view class="action-item app-press" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'reminder'" aria-label="订阅活动通知" :class="{ disabled: Boolean(activeAction) }" @click="subscribeNotice" @keyup.enter="subscribeNotice" @keyup.space.prevent="subscribeNotice">
           <text>醒</text>
           <!-- #ifdef MP-WEIXIN -->
           <view>订阅提醒</view>
@@ -445,7 +445,7 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
           <view>添加到日历</view>
           <!-- #endif -->
         </view>
-        <view class="action-item" role="button" tabindex="0" aria-label="联系客服" @click="goService" @keyup.enter="goService" @keyup.space.prevent="goService">
+        <view class="action-item app-press" role="button" tabindex="0" aria-label="联系客服" @click="goService" @keyup.enter="goService" @keyup.space.prevent="goService">
           <text>服</text>
           <view>客服说明</view>
         </view>
@@ -508,9 +508,9 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
         <view v-for="review in activity.reviews" :key="review.id" class="review"><view class="review-head"><view class="name">{{ "★".repeat(review.rating) }}<text v-if="review.featured" class="featured-review">精选</text></view><view class="report-link" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :class="{ disabled: Boolean(activeAction) }" @click="reportReview(review)" @keyup.enter="reportReview(review)" @keyup.space.prevent="reportReview(review)">{{ activeAction === `report:${review.id}` ? "提交中" : "举报" }}</view></view><view>{{ review.content }}</view><view v-if="review.adminReply" class="subtle reply">主办方回复：{{ review.adminReply }}</view></view>
       </view>
 
-      <view class="bottom-bar" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
+      <view class="bottom-bar app-enter" style="animation-delay: 180ms" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
         <view class="bottom-info"><text>{{ priceText(activity.price) }}</text><text>{{ activity.displayStatus === "full" ? "候补开放" : statusText(activity.displayStatus) }}</text></view>
-        <view class="button action-button" role="button" tabindex="0" :aria-disabled="!canRegister()" :aria-label="registerButtonText()" :class="{ secondary: !canRegister() }" @click="register" @keyup.enter="register" @keyup.space.prevent="register">{{ registerButtonText() }}</view>
+        <view class="button action-button app-press" role="button" tabindex="0" :aria-disabled="!canRegister()" :aria-label="registerButtonText()" :class="{ secondary: !canRegister() }" @click="register" @keyup.enter="register" @keyup.space.prevent="register">{{ registerButtonText() }}</view>
       </view>
     </template>
   </view>

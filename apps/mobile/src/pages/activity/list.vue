@@ -239,19 +239,19 @@ onReachBottom(loadMore);
 
 <template>
   <view class="container activity-page has-custom-nav">
-    <view class="activity-list-topbar">
+    <view class="activity-list-topbar app-enter">
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
       <view class="activity-list-count">{{ total }} 场</view>
     </view>
 
-    <view class="activity-list-heading">
+    <view class="activity-list-heading app-enter" style="animation-delay: 36ms">
       <text class="activity-list-title">发现活动</text>
       <text class="activity-list-subtitle">按日期、兴趣和报名状态筛选</text>
     </view>
 
     <PageDecorationBlocks :sections="bodyDecorationSections" />
 
-    <view class="card filter-card" :style="{ background: String(innerPageLayout.stickyFilterBackground || 'var(--card-bg, #FFFFFF)') }">
+    <view class="card filter-card app-enter" style="animation-delay: 72ms" :style="{ background: String(innerPageLayout.stickyFilterBackground || 'var(--card-bg, #FFFFFF)') }">
       <view class="search-box">
         <text class="search-icon">🔍</text>
         <input v-model="keyword" class="search-input" aria-label="搜索活动、地点或分类" placeholder="搜索活动、地点、分类" confirm-type="search" @confirm="loadFirstPage" />
@@ -265,19 +265,19 @@ onReachBottom(loadMore);
 
       <scroll-view class="category-tabs" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类筛选">
         <view class="tabs-track">
-          <view class="category-chip" :class="{ active: activeCategoryId === 'all' }" role="tab" tabindex="0" :aria-selected="activeCategoryId === 'all'" @click="selectCategory('all')" @keyup.enter="selectCategory('all')" @keyup.space.prevent="selectCategory('all')">全部</view>
-          <view v-for="c in categories" :key="c.id" class="category-chip" :class="{ active: activeCategoryId === c.id }" role="tab" tabindex="0" :aria-selected="activeCategoryId === c.id" @click="selectCategory(c.id)" @keyup.enter="selectCategory(c.id)" @keyup.space.prevent="selectCategory(c.id)">{{ c.name }}</view>
+          <view class="category-chip app-press" :class="{ active: activeCategoryId === 'all' }" role="tab" tabindex="0" :aria-selected="activeCategoryId === 'all'" @click="selectCategory('all')" @keyup.enter="selectCategory('all')" @keyup.space.prevent="selectCategory('all')">全部</view>
+          <view v-for="c in categories" :key="c.id" class="category-chip app-press" :class="{ active: activeCategoryId === c.id }" role="tab" tabindex="0" :aria-selected="activeCategoryId === c.id" @click="selectCategory(c.id)" @keyup.enter="selectCategory(c.id)" @keyup.space.prevent="selectCategory(c.id)">{{ c.name }}</view>
         </view>
       </scroll-view>
 
       <view class="status-tabs" role="tablist" aria-label="活动状态筛选">
-        <view v-for="tab in statusTabs" :key="tab.value" class="status-tab" :class="{ active: activeStatus === tab.value }" role="tab" tabindex="0" :aria-selected="activeStatus === tab.value" @click="selectStatus(tab.value)" @keyup.enter="selectStatus(tab.value)" @keyup.space.prevent="selectStatus(tab.value)">
+        <view v-for="tab in statusTabs" :key="tab.value" class="status-tab app-press" :class="{ active: activeStatus === tab.value }" role="tab" tabindex="0" :aria-selected="activeStatus === tab.value" @click="selectStatus(tab.value)" @keyup.enter="selectStatus(tab.value)" @keyup.space.prevent="selectStatus(tab.value)">
           {{ tab.label }}
         </view>
       </view>
     </view>
 
-    <view class="section-head activity-result-head">
+    <view class="section-head activity-result-head app-enter" style="animation-delay: 108ms">
       <view>
         <text class="title-md">{{ resultHint }}</text>
         <text class="subtle section-copy">已展示 {{ rows.length }} 场活动</text>
@@ -296,13 +296,13 @@ onReachBottom(loadMore);
     </view>
 
     <view v-else class="activity-feed">
-      <view v-for="item in rows" :key="item.id" class="activity-card" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
+      <view v-for="(item, index) in rows" :key="item.id" class="activity-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
         <view class="activity-date-card">
           <text class="activity-date-month">{{ activityDateParts(item.startTime).month }}</text>
           <text class="activity-date-day">{{ activityDateParts(item.startTime).day }}</text>
           <text class="activity-date-time">{{ activityDateParts(item.startTime).time }}</text>
         </view>
-        <image v-if="item.coverUrl" class="activity-cover" :src="item.coverUrl" mode="aspectFill" />
+        <image v-if="item.coverUrl" class="activity-cover app-media-motion" :src="item.coverUrl" mode="aspectFill" />
         <view v-else class="activity-cover cover-fallback">{{ item.category?.name || "活动" }}</view>
         <view class="activity-body">
           <view class="row meta-row">
@@ -398,6 +398,7 @@ onReachBottom(loadMore);
   background: #f2f6f5;
   color: #54716c;
   font-size: 25rpx;
+  transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
 }
 .category-chip.active { background: #0f766e; color: #fff; font-weight: 700; }
 .status-tabs { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12rpx; margin-top: 20rpx; }
@@ -410,6 +411,7 @@ onReachBottom(loadMore);
   background: #f2f6f5;
   color: #54716c;
   font-size: 24rpx;
+  transition: background-color 180ms ease, color 180ms ease, transform 180ms ease;
 }
 .status-tab.active { background: rgba(15, 118, 110, 0.12); color: #0f766e; font-weight: 700; }
 .section-head { margin-bottom: 18rpx; }
@@ -431,6 +433,7 @@ onReachBottom(loadMore);
   background: var(--card-bg, #ffffff);
   box-shadow: 0 8rpx 24rpx rgba(20, 72, 64, 0.06);
 }
+.activity-card:active .activity-cover { transform: scale(1.08); }
 .activity-card:focus-visible,
 .category-chip:focus-visible,
 .status-tab:focus-visible,

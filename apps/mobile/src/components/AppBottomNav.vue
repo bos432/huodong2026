@@ -88,7 +88,7 @@ function navIcon(item: { link?: string; icon?: string; activeIcon?: string; labe
     <view
       v-for="item in items"
       :key="item.link"
-      class="custom-tabbar-item"
+      class="custom-tabbar-item app-press"
       :class="{ active: isCurrent(item.link) }"
       :style="{ color: isCurrent(item.link) ? String(item.color || activeSection?.layout?.activeColor || '#0f766e') : String(activeSection?.layout?.textColor || '#667085') }"
       @click="goDecoratedLink(item.link, item.action)"
@@ -101,5 +101,5 @@ function navIcon(item: { link?: string; icon?: string; activeIcon?: string; labe
 </template>
 
 <style scoped>
-.custom-tabbar{position:fixed;z-index:90;left:0;right:0;bottom:0;min-height:126rpx;display:grid;grid-template-columns:repeat(var(--nav-columns),minmax(0,1fr));align-items:end;padding:12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));box-sizing:border-box;border-top:1rpx solid #e3ebe6;box-shadow:0 -8rpx 22rpx rgba(18,43,30,.055)}.custom-tabbar-item{min-width:0;min-height:94rpx;display:grid;justify-items:center;align-content:center;gap:6rpx;font-size:24rpx;line-height:1.2}.custom-tabbar-icon,.custom-tabbar-image{width:44rpx;height:44rpx;display:grid;place-items:center;border-radius:50%;font-size:25rpx}.custom-tabbar-image{background:transparent}.custom-tabbar-item.active{font-weight:900}@media (min-width:900px){.custom-tabbar{left:50%;right:auto;width:760px;max-width:100%;transform:translateX(-50%);border-left:1rpx solid #e3ebe6;border-right:1rpx solid #e3ebe6}}
+.custom-tabbar{position:fixed;z-index:90;left:0;right:0;bottom:0;min-height:126rpx;display:grid;grid-template-columns:repeat(var(--nav-columns),minmax(0,1fr));align-items:end;padding:12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));box-sizing:border-box;border-top:1rpx solid #e3ebe6;box-shadow:0 -8rpx 22rpx rgba(18,43,30,.055)}.custom-tabbar-item{min-width:0;min-height:94rpx;display:grid;justify-items:center;align-content:center;gap:6rpx;font-size:24rpx;line-height:1.2;transition:color 160ms ease,transform 160ms ease}.custom-tabbar-icon,.custom-tabbar-image{width:44rpx;height:44rpx;display:grid;place-items:center;border-radius:50%;font-size:25rpx;transition:transform 180ms ease,background-color 180ms ease}.custom-tabbar-image{background:transparent}.custom-tabbar-item.active{font-weight:900}.custom-tabbar-item.active .custom-tabbar-icon{transform:translateY(-2rpx) scale(1.06)}@media (min-width:900px){.custom-tabbar{left:50%;right:auto;width:760px;max-width:100%;transform:translateX(-50%);border-left:1rpx solid #e3ebe6;border-right:1rpx solid #e3ebe6}}
 </style>
