@@ -17,6 +17,24 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 /* ===== 城市文化活动设计系统 ===== */
 /* 背景暖白 #F4F8F7  主色青绿 #0F766E  提示色珊瑚 #C35240 */
 /* 主文字 #173F3A  次要文字 #54716C  浅色文字 #718A85 */
+:root {
+  --app-page-bg: #F4F8F7;
+  --app-surface: #FFFFFF;
+  --app-surface-muted: #EDF7F2;
+  --app-text: #173F3A;
+  --app-text-muted: #54716C;
+  --app-text-subtle: #718A85;
+  --app-primary: #0F766E;
+  --app-primary-soft: #DFF5E8;
+  --app-price: #C35240;
+  --app-radius: 8rpx;
+  --app-space-1: 8rpx;
+  --app-space-2: 12rpx;
+  --app-space-3: 16rpx;
+  --app-space-4: 24rpx;
+  --app-motion-fast: 180ms;
+  --app-motion-standard: 280ms;
+}
 
 .container {
   min-height: 100vh;

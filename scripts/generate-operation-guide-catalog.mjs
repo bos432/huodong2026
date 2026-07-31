@@ -27,7 +27,7 @@ const tokenLabels = {
   rate: "频控", record: "记录", redemption: "兑换", refund: "退款", region: "区域", registration: "报名", release: "发布",
   reply: "回复", report: "举报", revenue: "收入", run: "任务",
   resource: "资源", review: "评价", risk: "风险", rule: "规则", sanction: "处罚", schedule: "计划",
-  section: "模块", segment: "分群", service: "服务", setting: "设置", settlement: "结算", share: "分享",
+  section: "模块", segment: "分群", service: "服务", setting: "设置", settlement: "结算", share: "分享", space: "空间",
   sale: "销售", shipment: "发货", sku: "SKU", snapshot: "快照", stat: "统计", statement: "账单", subscription: "订阅", support: "客服", tag: "标签",
   task: "任务", teacher: "讲师", template: "模板", tenant: "商家", ticket: "票种", tracking: "轨迹", training: "培训",
   topic: "主题", transaction: "流水", transfer: "转账", type: "类型", update: "进展", usage: "使用", user: "用户", version: "版本", view: "访问", visit: "访问",

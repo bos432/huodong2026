@@ -231,7 +231,6 @@ const pendingOrderCount = computed(() => ["registrations", "courseOrders"].some(
   : registrations.value.filter(activityOrderIsPending).length
     + courseOrders.value.filter((item) => item.status === "pending_payment" || ["pending", "approved", "processing", "failed"].includes(String(item.latestRefund?.status || ""))).length);
 const upcomingOrderCount = computed(() => assetFailed("registrations") ? null : registrations.value.filter(activityOrderIsUpcoming).length);
-const learningCourseCount = computed(() => ["courses", "courseOrders"].some(assetFailed) ? null : courseOrders.value.filter(courseOrderIsLearning).length + learningOnlyCourses().filter((item) => Number(item.learning?.progress || 0) < 100).length);
 const completedOrderCount = computed(() => {
   if (assetFailed("registrations")) return null;
   let count = registrations.value.filter(activityOrderIsCompleted).length;
@@ -462,15 +461,11 @@ const gridItems = computed(() => {
 });
 
 const orderTabs = computed(() => {
-  const rows = [
+  return [
     { icon:"💳", label:"待处理", count: pendingOrderCount.value, status:"pending" },
-    { icon:"🎫", label:"待参与", count: upcomingOrderCount.value, status:"upcoming" }
+    { icon:"🎫", label:"待参与", count: upcomingOrderCount.value, status:"upcoming" },
+    { icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" }
   ];
-  if (featureGatesState.value.courses) {
-    rows.push({ icon:"📚", label:"待学习", count: learningCourseCount.value, status:"learning" });
-  }
-  rows.push({ icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" });
-  return rows;
 });
 
 const protectedGridPages = new Set(["courses", "learning", "favorites", "mallFavorites", "mallHistory", "certificates", "mallCart", "mallOrders", "mallAddresses", "settings"]);

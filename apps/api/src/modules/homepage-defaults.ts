@@ -166,7 +166,7 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
       subtitle: "时间、地点和名额一眼确认，立即报名",
       enabled: true,
       sortOrder: 60,
-      config: { source: "featured", limit: 6, display: "focus" },
+      config: { source: "featured", limit: 4, display: "lead_rail" },
       layout: { display: "horizontal", spacingBottom: 18 }
     },
     {
@@ -186,7 +186,7 @@ export function defaultPageSections(pageKey = "home"): HomepageSectionTemplate[]
       subtitle: "更多时间与主题，随时浏览报名",
       enabled: true,
       sortOrder: 80,
-      config: { source: "latest", limit: 10, pageSize: 4, pagination: "pager" },
+      config: { source: "latest", limit: 8, pageSize: 4, pagination: "load_more", display: "date_stream", showEnded: false },
       layout: { display: "list" }
     },
     {

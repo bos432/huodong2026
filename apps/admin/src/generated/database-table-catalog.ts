@@ -691,22 +691,22 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
   {
     "group": "活动报名与核销",
     "name": "activity_space_announcements",
-    "meaning": "活动SPACE公告相关业务数据。",
-    "business": "活动报名与核销模块中的活动SPACE公告查询、状态流转和关联记录。",
+    "meaning": "活动空间公告相关业务数据。",
+    "business": "活动报名与核销模块中的活动空间公告查询、状态流转和关联记录。",
     "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
   },
   {
     "group": "活动报名与核销",
     "name": "activity_space_post_reports",
-    "meaning": "活动SPACE帖子举报相关业务数据。",
-    "business": "活动报名与核销模块中的活动SPACE帖子举报查询、状态流转和关联记录。",
+    "meaning": "活动空间帖子举报相关业务数据。",
+    "business": "活动报名与核销模块中的活动空间帖子举报查询、状态流转和关联记录。",
     "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
   },
   {
     "group": "活动报名与核销",
     "name": "activity_space_posts",
-    "meaning": "活动SPACE帖子相关业务数据。",
-    "business": "活动报名与核销模块中的活动SPACE帖子查询、状态流转和关联记录。",
+    "meaning": "活动空间帖子相关业务数据。",
+    "business": "活动报名与核销模块中的活动空间帖子查询、状态流转和关联记录。",
     "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
   },
   {

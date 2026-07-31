@@ -168,6 +168,7 @@ function fallbackPath() {
     { path: "/tenant-regions", roles: ["tenant_region.view"], scope: "platform" },
     { path: "/tenant-region-hit-logs", roles: ["tenant_region_hit_log.view"], scope: "platform" },
     { path: "/activities", roles: ["activity.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/activity-space", roles: ["activity.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/funnels", roles: ["analytics.view"], scope: "tenant" },
     { path: "/recaps", roles: ["analytics.view"], scope: "tenant" },
     { path: "/announcements", roles: ["announcement.view"], scope: "tenantOrPlatformAdmin" },

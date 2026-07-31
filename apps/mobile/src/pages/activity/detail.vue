@@ -20,6 +20,7 @@ const inviteCode = ref("");
 const channelCode = ref("");
 const source = ref("h5");
 const activeAction = ref("");
+const moreActionsVisible = ref(false);
 const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
@@ -240,6 +241,14 @@ function goActivitySpace() {
   uni.navigateTo({ url: withTenantCode(`/pages/activity/space?id=${activity.value.id}`) });
 }
 
+function openMoreActions() {
+  moreActionsVisible.value = true;
+}
+
+function closeMoreActions() {
+  moreActionsVisible.value = false;
+}
+
 function openLocation() {
   const latitude = locationLatitude();
   const longitude = locationLongitude();
@@ -449,21 +458,21 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
           <text>服</text>
           <view>客服说明</view>
         </view>
-        <view class="action-item" @click="goMy">
-          <text>票</text>
-          <view>我的报名</view>
+        <view class="action-item app-press" role="button" tabindex="0" aria-label="更多活动操作" @click="openMoreActions" @keyup.enter="openMoreActions" @keyup.space.prevent="openMoreActions">
+          <text>···</text>
+          <view>更多操作</view>
         </view>
-        <view class="action-item" :class="{ disabled: !activity.space?.canAccess }" @click="goActivitySpace">
-          <text>圈</text>
-          <view>活动空间</view>
-        </view>
-        <view class="action-item" @click="goPublish">
-          <text>记</text>
-          <view>分享心得</view>
-        </view>
-        <view class="action-item" @click="goCommunity">
-          <text>看</text>
-          <view>活动口碑</view>
+      </view>
+
+      <view v-if="moreActionsVisible" class="more-actions-mask" role="presentation" @click.self="closeMoreActions">
+        <view class="more-actions-sheet app-sheet-enter" role="dialog" aria-label="更多活动操作">
+          <view class="more-actions-head"><text class="section-title">更多操作</text><text class="more-actions-close app-press" role="button" tabindex="0" aria-label="关闭更多操作" @click="closeMoreActions" @keyup.enter="closeMoreActions">关闭</text></view>
+          <view class="more-actions-list">
+            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goMy()"><text class="more-action-icon">票</text><view><text>我的报名</text><text>查看当前活动的报名状态</text></view><text class="more-action-arrow">›</text></view>
+            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goActivitySpace()"><text class="more-action-icon">圈</text><view><text>活动空间</text><text>{{ activity.space?.canAccess ? "公告、成员、问答和签到" : "报名审核通过后开放" }}</text></view><text class="more-action-arrow">›</text></view>
+            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goPublish()"><text class="more-action-icon">记</text><view><text>分享心得</text><text>记录你的活动体验</text></view><text class="more-action-arrow">›</text></view>
+            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goCommunity()"><text class="more-action-icon">看</text><view><text>活动口碑</text><text>查看评价与公开讨论</text></view><text class="more-action-arrow">›</text></view>
+          </view>
         </view>
       </view>
 
@@ -518,6 +527,10 @@ onShow(() => { void Promise.allSettled([load(), loadDecoration()]); });
 
 <style scoped>
 .detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(16rpx + env(safe-area-inset-top)) 0 calc(168rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; background:#f6f8f7; }
+.more-actions-mask{position:fixed;inset:0;z-index:30;display:flex;align-items:flex-end;background:rgba(15,23,42,.46)}
+.more-actions-sheet{width:100%;box-sizing:border-box;padding:28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom));border-radius:18rpx 18rpx 0 0;background:#fff}
+.more-actions-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12rpx}.more-actions-head .section-title{margin:0}.more-actions-close{color:#6b7c85;font-size:23rpx}
+.more-actions-list{display:grid;gap:4rpx}.more-action-row{display:flex;align-items:center;gap:16rpx;min-height:92rpx;padding:12rpx 4rpx;border-bottom:1rpx solid #eef2f0}.more-action-row:last-child{border-bottom:0}.more-action-row>view{display:grid;gap:5rpx;min-width:0;flex:1}.more-action-row>view text:first-child{color:#172b4d;font-size:26rpx;font-weight:800}.more-action-row>view text:last-child{color:#7a8881;font-size:21rpx}.more-action-icon{width:58rpx;height:58rpx;display:grid;place-items:center;border-radius:50%;background:#e9f8ef;color:#08753f;font-size:23rpx;font-weight:900}.more-action-arrow{color:#9aa7a0;font-size:34rpx}
 .detail-page .card { margin-left: 24rpx; margin-right: 24rpx; }
 .detail-page :deep(.tenant-context-badge) { margin-left: 24rpx; margin-right: 24rpx; }
 .detail-hero {

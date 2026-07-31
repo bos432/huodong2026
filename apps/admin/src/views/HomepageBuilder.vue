@@ -104,9 +104,9 @@ const defaultConfig: Record<string, Record<string, any>> = {
     ]
   },
   category_grid: { limit: 8, showCover: true },
-  featured_activities: { source: "featured", limit: 6, display: "focus" },
+  featured_activities: { source: "featured", limit: 4, display: "lead_rail" },
   activity_tabs: { includeHot: true, limit: 8 },
-  activity_feed: { source: "latest", limit: 10, pageSize: 4, pagination: "pager" },
+  activity_feed: { source: "latest", limit: 8, pageSize: 4, pagination: "load_more", display: "date_stream", showEnded: false },
   testimonial_feed: { source: "participant", limit: 3, link: "/pages/community/index" },
   featured_testimonials: { source: "featured", limit: 3, link: "/pages/community/index" },
   activity_testimonials: { source: "activity", limit: 6, link: "/pages/community/index" },
@@ -3025,11 +3025,19 @@ onMounted(async () => {
           <el-form-item label="展示数量"><el-input-number v-model="form.config.limit" :min="1" :max="30" @change="syncJsonText" /></el-form-item>
           <el-form-item v-if="form.type === 'featured_activities'" label="首页展示样式">
             <el-radio-group v-model="form.config.display" @change="syncJsonText">
+              <el-radio-button value="lead_rail">主推 + 横滑副卡</el-radio-button>
               <el-radio-button value="focus">本周主推大图</el-radio-button>
               <el-radio-button value="list">活动列表</el-radio-button>
             </el-radio-group>
           </el-form-item>
           <template v-if="form.type === 'activity_feed'">
+            <el-form-item label="活动流样式">
+              <el-radio-group v-model="form.config.display" @change="syncJsonText">
+                <el-radio-button value="date_stream">日期活动流</el-radio-button>
+                <el-radio-button value="list">普通列表</el-radio-button>
+              </el-radio-group>
+            </el-form-item>
+            <el-form-item label="显示历史活动"><el-switch v-model="form.config.showEnded" @change="syncJsonText" /></el-form-item>
             <el-form-item label="每页数量"><el-input-number v-model="form.config.pageSize" :min="1" :max="12" @change="syncJsonText" /></el-form-item>
             <el-form-item label="分页样式">
               <el-radio-group v-model="form.config.pagination" @change="syncJsonText">

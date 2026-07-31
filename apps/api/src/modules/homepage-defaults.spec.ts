@@ -22,7 +22,7 @@ describe("homepage defaults", () => {
     const feed = sections.find((item) => item.type === "activity_feed");
     const quickNav = sections.find((item) => item.type === "quick_nav");
     expect(focus?.title).toBe("本周主推");
-    expect(focus?.config.display).toBe("focus");
+    expect(focus?.config.display).toBe("lead_rail");
     expect(feed?.title).toBe("近期活动");
     expect((quickNav?.config.items as Array<{ label: string }>).map((item) => item.label)).toEqual(["活动日历", "我的报名", "志愿服务", "公益项目"]);
   });
