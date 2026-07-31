@@ -8,6 +8,7 @@ defineOptions({ name: "TenantSwitcher" });
 const props = defineProps<{
   tenant?: HomepagePayload["tenant"] | null;
   title?: string;
+  compact?: boolean;
 }>();
 
 defineEmits<{
@@ -82,10 +83,16 @@ defineExpose({ show, loadTenantOptions });
 </script>
 
 <template>
-  <view class="tenant-entry" @click="show">
+  <view class="tenant-entry" :class="{ compact }" @click="show">
     <view>
+      <template v-if="compact">
+        <view class="tenant-entry-title">{{ cityLabel }}</view>
+        <view class="tenant-entry-name">{{ tenantName }}</view>
+      </template>
+      <template v-else>
       <view class="tenant-entry-title">{{ title || cityLabel }}</view>
       <view class="tenant-entry-name">{{ tenantName }}</view>
+      </template>
     </view>
     <view class="tenant-entry-action">切换</view>
   </view>
@@ -128,6 +135,10 @@ defineExpose({ show, loadTenantOptions });
 .tenant-entry-title { color: #173f3a; font-size: 30rpx; font-weight: 900; }
 .tenant-entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4rpx; color: #66827d; font-size: 23rpx; font-weight: 700; }
 .tenant-entry-action { flex: 0 0 auto; min-width: 86rpx; height: 50rpx; display: flex; align-items: center; justify-content: center; border-radius: 8rpx; background: #eaf7f3; color: #0f766e; font-size: 23rpx; font-weight: 900; }
+.tenant-entry.compact { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
+.tenant-entry.compact .tenant-entry-title { color: #101828; font-size: 30rpx; line-height: 1.15; }
+.tenant-entry.compact .tenant-entry-name { max-width: 360rpx; margin-top: 5rpx; color: #667085; font-size: 20rpx; }
+.tenant-entry.compact .tenant-entry-action { min-width: 72rpx; height: 48rpx; border-radius: 8rpx; background: #ecfdf3; color: #0d8a4d; font-size: 22rpx; }
 .tenant-mask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; background: rgba(15, 23, 42, 0.42); }
 .tenant-sheet { width: 100%; max-height: 76vh; overflow-y: auto; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); border-radius: 8px 8px 0 0; background: #fff; box-shadow: 0 -18rpx 48rpx rgba(15, 23, 42, 0.18); }
 .tenant-sheet-head { display: flex; justify-content: space-between; gap: 24rpx; align-items: flex-start; margin-bottom: 18rpx; }

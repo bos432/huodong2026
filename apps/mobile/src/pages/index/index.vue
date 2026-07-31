@@ -1,47 +1,47 @@
 <template>
-  <view class="container has-custom-nav">
-    <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
-
-    <view class="header-row">
-      <view class="brand-title">
-        <image v-if="pageBrand.logoUrl" class="brand-logo" :src="pageBrand.logoUrl" mode="aspectFit" />
-        <text class="title-xxl brand-name">{{ pageBrand.name }}</text>
-      </view>
-      <view class="search-btn" @click="goSearch">
-        <text class="search-icon">搜</text>
+  <view class="container discovery-page has-custom-nav">
+    <view class="discovery-topbar">
+      <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
+      <view class="topbar-actions">
+        <view v-if="pageBrand.logoUrl" class="brand-mark"><image :src="pageBrand.logoUrl" mode="aspectFit" /></view>
+        <view class="search-btn" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><text>搜索</text></view>
       </view>
     </view>
 
-    <view class="home-activity-panel">
-      <view class="home-activity-head">
-        <view>
-          <text class="home-activity-kicker">城市活动</text>
-          <text class="home-activity-title">近期可参加的活动</text>
-          <text class="home-activity-copy">查看时间、地点和报名状态，找到适合参加的活动。</text>
-        </view>
-        <view class="home-activity-all" role="button" tabindex="0" aria-label="查看全部活动" @click="goActivityList" @keyup.enter="goActivityList" @keyup.space.prevent="goActivityList">全部活动</view>
+    <scroll-view class="discovery-categories" scroll-x :show-scrollbar="false" role="tablist" aria-label="活动分类">
+      <view class="category-track">
+        <view class="category-tab active" role="tab" aria-selected="true" tabindex="0" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">推荐</view>
+        <view v-for="category in categories" :key="category.id" class="category-tab" role="tab" aria-selected="false" tabindex="0" @click="goActivityList(category.id)" @keyup.enter="goActivityList(category.id)" @keyup.space.prevent="goActivityList(category.id)">{{ category.name }}</view>
       </view>
+    </scroll-view>
 
-      <view v-if="activitiesLoading && !featuredActivities.length" class="activity-state" role="status" aria-live="polite">近期活动加载中...</view>
-      <view v-else-if="activitiesError" class="activity-state activity-error" role="alert" aria-live="assertive">
-        <text>{{ activitiesError }}</text>
-        <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载近期活动" @click="loadActivities">重试</button>
+    <view class="discovery-heading">
+      <view>
+        <text class="heading-title">{{ cityName }}正在发生</text>
+        <text class="heading-copy">按日期发现适合你的线下活动</text>
       </view>
-      <view v-else-if="featuredActivities.length" class="activity-preview-list">
-        <view v-for="activity in featuredActivities" :key="activity.id" class="activity-preview-card" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
-          <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
-          <image v-if="activity.coverUrl" class="activity-cover" :src="activity.coverUrl" mode="aspectFill" />
-          <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
-          <view class="activity-main">
-            <view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view>
-            <text class="activity-title">{{ activity.title }}</text>
-            <text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text>
-            <view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view>
-          </view>
+      <view class="all-link" role="button" tabindex="0" aria-label="查看全部活动" @click="goActivityList()" @keyup.enter="goActivityList()" @keyup.space.prevent="goActivityList()">全部</view>
+    </view>
+
+    <view v-if="activitiesLoading && !featuredActivities.length" class="activity-state" role="status" aria-live="polite">活动加载中...</view>
+    <view v-else-if="activitiesError" class="activity-state activity-error" role="alert" aria-live="assertive">
+      <text>{{ activitiesError }}</text>
+      <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载活动" @click="loadActivities">重试</button>
+    </view>
+    <view v-else-if="featuredActivities.length" class="activity-preview-list">
+      <view v-for="activity in featuredActivities" :key="activity.id" class="activity-preview-card" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
+        <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
+        <image v-if="activity.coverUrl" class="activity-cover" :src="activity.coverUrl" mode="aspectFill" />
+        <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
+        <view class="activity-main">
+          <view class="activity-tags"><text class="activity-category">{{ activity.category?.name || "活动" }}</text><text class="activity-status" :class="{ ended: activity.displayStatus === 'ended', full: activity.displayStatus === 'full' }">{{ activityStatusText(activity.displayStatus || activity.status) }}</text></view>
+          <text class="activity-title">{{ activity.title }}</text>
+          <text class="activity-meta">{{ formatActivityHour(activity.startTime) }} · {{ activity.location || "地点待确认" }}</text>
+          <view class="activity-foot"><text>{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats ?? activity.capacity ?? "-" }}</text><text class="activity-price">{{ priceText(activity.price) }}</text></view>
         </view>
       </view>
-      <view v-else class="activity-empty"><text>暂未发布近期活动</text><text class="activity-empty-action" role="button" tabindex="0" @click="goMyRegistrations" @keyup.enter="goMyRegistrations" @keyup.space.prevent="goMyRegistrations">查看我的报名</text></view>
     </view>
+    <view v-else class="activity-empty"><text>暂未发布近期活动</text><text class="activity-empty-action" role="button" tabindex="0" @click="goMyRegistrations" @keyup.enter="goMyRegistrations" @keyup.space.prevent="goMyRegistrations">查看我的报名</text></view>
 
     <PageDecorationBlocks :sections="contentSections" />
 
@@ -51,7 +51,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref } from "vue";
+import { computed, ref } from "vue";
 import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { applyTenantBootstrapDefault, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
@@ -66,10 +66,12 @@ import { reviewSafeText } from "../../review-safe-text";
 
 const { tenant, contentSections, loadDecoration } = usePageDecoration("home", "/pages/index/index");
 const featuredActivities = ref<any[]>([]);
+const categories = ref<any[]>([]);
 const activitiesLoading = ref(false);
 const activitiesError = ref("");
 const loadedActivitiesTenantCode = ref("");
 const activityLoadGuard = createTenantLoadGuard();
+const cityName = computed(() => tenant.value?.region || tenant.value?.name || pageBrand.name || "本地");
 
 const shareOptions = {
   title: () => `${pageBrand.name || "慢π"}活动报名`,
@@ -81,18 +83,18 @@ onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
   await applyTenantBootstrapDefault();
-  await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()]);
+  await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities(), loadCategories()]);
   const beforeTenantCode = getCurrentTenantCode();
   void resolveTenantByCurrentLocation({ silent: true }).then(async () => {
     if (getCurrentTenantCode() === beforeTenantCode) return;
-    await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities()]);
+    await Promise.allSettled([loadPageTheme(), loadDecoration(), loadActivities(), loadCategories()]);
     if (beforeTenantCode) uni.showToast({ title: "已按当前位置切换慢π城市", icon: "none" });
   });
 });
 
 async function handleTenantChanged() {
   await loadPageTheme();
-  await Promise.allSettled([loadDecoration(), loadActivities()]);
+  await Promise.allSettled([loadDecoration(), loadActivities(), loadCategories()]);
 }
 
 async function loadActivities() {
@@ -101,15 +103,15 @@ async function loadActivities() {
   activitiesLoading.value = true;
   activitiesError.value = "";
   try {
-    const result = await request<any>("/public/activities?page=1&pageSize=3&status=open&featured=true");
+    const result = await request<any>("/public/activities?page=1&pageSize=8&status=open&featured=true");
     if (!activityLoadGuard.isCurrent(loadToken)) return;
     let items = Array.isArray(result) ? result : result?.items || [];
     if (!items.length) {
-      const fallback = await request<any>("/public/activities?page=1&pageSize=3&status=open");
+      const fallback = await request<any>("/public/activities?page=1&pageSize=8");
       if (!activityLoadGuard.isCurrent(loadToken)) return;
       items = Array.isArray(fallback) ? fallback : fallback?.items || [];
     }
-    featuredActivities.value = items.slice(0, 3);
+    featuredActivities.value = items.slice(0, 8);
     loadedActivitiesTenantCode.value = loadToken.tenantCode;
   } catch (error: any) {
     if (!activityLoadGuard.isCurrent(loadToken)) return;
@@ -123,8 +125,18 @@ function goSearch() {
   uni.navigateTo({ url: withTenantCode("/pages/search/index") });
 }
 
-function goActivityList() {
-  uni.navigateTo({ url: withTenantCode("/pages/activity/list") });
+async function loadCategories() {
+  try {
+    const result = await request<any[]>("/public/categories");
+    categories.value = Array.isArray(result) ? result.slice(0, 10) : [];
+  } catch {
+    categories.value = [];
+  }
+}
+
+function goActivityList(categoryId?: number) {
+  const suffix = categoryId ? `?categoryId=${categoryId}` : "";
+  uni.navigateTo({ url: withTenantCode(`/pages/activity/list${suffix}`) });
 }
 
 function goMyRegistrations() {
@@ -172,75 +184,40 @@ function activityDateParts(value: string) {
 </script>
 
 <style scoped>
-.header-row {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 20rpx 0 16rpx;
-}
-
-.brand-title {
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 12rpx;
-}
-
-.brand-logo {
-  width: 58rpx;
-  height: 58rpx;
-  border-radius: 16rpx;
-  background: rgba(255, 255, 255, 0.68);
-}
-
-.brand-name {
-  font-family: "STKaiti", "KaiTi", serif;
-}
-
-.search-btn {
-  width: 72rpx;
-  height: 72rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(74, 107, 138, 0.08);
-  border-radius: 20rpx;
-}
-
-.search-icon {
-  color: #4A6B8A;
-  font-size: 26rpx;
-  font-weight: 700;
-}
-
-.home-activity-panel { margin: 4rpx 0 22rpx; padding: 28rpx; border: 1rpx solid rgba(15, 118, 110, 0.1); border-radius: 16rpx; background: #ffffff; box-shadow: 0 8rpx 24rpx rgba(20, 72, 64, 0.05); }
-.home-activity-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 20rpx; margin-bottom: 20rpx; }
-.home-activity-kicker { display: block; color: #0f766e; font-size: 22rpx; font-weight: 800; }
-.home-activity-title { display: block; margin-top: 6rpx; color: #173f3a; font-size: 36rpx; font-weight: 900; line-height: 1.3; }
-.home-activity-copy { display: block; margin-top: 8rpx; color: #66827d; font-size: 23rpx; line-height: 1.5; }
-.home-activity-all { flex: 0 0 auto; min-height: 58rpx; display: flex; align-items: center; padding: 0 16rpx; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 23rpx; font-weight: 800; }
-.activity-state { display: grid; gap: 12rpx; padding: 20rpx; border-radius: 10rpx; background: #f4f8f7; color: #66827d; font-size: 24rpx; line-height: 1.55; }
+.discovery-page { padding-top: 20rpx; background: #f7f9f8; }
+.discovery-topbar { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; min-height: 82rpx; }
+.topbar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 12rpx; }
+.brand-mark { width: 52rpx; height: 52rpx; overflow: hidden; border-radius: 50%; background: #e9f9f0; }
+.brand-mark image { width: 100%; height: 100%; }
+.search-btn { min-width: 82rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 16rpx; border-radius: 8rpx; background: #eef2f0; color: #27362f; font-size: 22rpx; font-weight: 800; }
+.discovery-categories { width: 100%; margin: 24rpx 0 28rpx; white-space: nowrap; }
+.category-track { display: inline-flex; gap: 12rpx; padding-right: 28rpx; }
+.category-tab { min-width: 92rpx; height: 58rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 20rpx; border: 1rpx solid #e0e8e4; border-radius: 8rpx; background: #fff; color: #56635d; font-size: 24rpx; font-weight: 700; }
+.category-tab.active { border-color: #20d477; background: #20d477; color: #072d19; }
+.discovery-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; margin-bottom: 18rpx; }
+.heading-title { display: block; color: #15251c; font-size: 36rpx; font-weight: 900; line-height: 1.25; }
+.heading-copy { display: block; margin-top: 6rpx; color: #839189; font-size: 22rpx; }
+.all-link { flex: 0 0 auto; min-height: 48rpx; display: flex; align-items: center; color: #11894c; font-size: 24rpx; font-weight: 800; }
+.activity-state { display: grid; gap: 12rpx; padding: 24rpx; border-radius: 8rpx; background: #fff; color: #667085; font-size: 24rpx; line-height: 1.55; }
 .activity-error { border: 1rpx solid #fecaca; background: #fff7f7; color: #b91c1c; }
-.activity-retry { width: max-content; min-height: 56rpx; margin: 0; padding: 0 20rpx; border: 0; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 23rpx; font-weight: 800; }
+.activity-retry { width: max-content; min-height: 56rpx; margin: 0; padding: 0 20rpx; border: 0; border-radius: 8rpx; background: #eafbf1; color: #08753f; font-size: 23rpx; font-weight: 800; }
 .activity-retry::after { border: 0; }
-.activity-preview-list { display: grid; gap: 14rpx; }
-.activity-preview-card { display: grid; grid-template-columns: 82rpx 144rpx minmax(0, 1fr); gap: 16rpx; align-items: stretch; min-height: 148rpx; padding: 14rpx; border: 1rpx solid #dce9e6; border-radius: 8rpx; background: #fff; }
-.activity-date { display: grid; align-content: center; justify-items: center; gap: 2rpx; min-height: 100%; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 20rpx; font-weight: 700; }
-.activity-date-day { color: #172b4d; font-size: 34rpx; line-height: 1.1; font-weight: 800; }
-.activity-cover { width: 144rpx; height: 144rpx; border-radius: 8rpx; background: #dce9e6; }
-.cover-fallback { display: flex; align-items: center; justify-content: center; width: 144rpx; height: 144rpx; padding: 12rpx; border-radius: 8rpx; box-sizing: border-box; background: #e9f3f0; color: #0f766e; font-size: 24rpx; font-weight: 700; text-align: center; }
-.activity-main { min-width: 0; display: grid; align-content: space-between; gap: 7rpx; }
+.activity-preview-list { display: grid; gap: 16rpx; }
+.activity-preview-card { display: grid; grid-template-columns: 74rpx 184rpx minmax(0, 1fr); gap: 14rpx; align-items: stretch; min-height: 184rpx; padding: 14rpx; border: 1rpx solid #e2eae6; border-radius: 8rpx; background: #fff; box-shadow: 0 8rpx 20rpx rgba(23, 48, 36, 0.035); }
+.activity-date { display: grid; align-content: center; justify-items: center; gap: 3rpx; border-radius: 8rpx; background: #eafbf1; color: #078347; font-size: 19rpx; font-weight: 800; }
+.activity-date-day { color: #14271b; font-size: 36rpx; line-height: 1.05; font-weight: 900; }
+.activity-cover { width: 184rpx; height: 156rpx; align-self: center; border-radius: 8rpx; background: #e4ece7; }
+.cover-fallback { display: flex; align-items: center; justify-content: center; width: 184rpx; height: 156rpx; align-self: center; padding: 12rpx; border-radius: 8rpx; background: #eafbf1; color: #08753f; font-size: 24rpx; font-weight: 800; text-align: center; }
+.activity-main { min-width: 0; display: grid; align-content: center; gap: 8rpx; }
 .activity-tags { display: flex; align-items: center; gap: 8rpx; min-width: 0; }
-.activity-category,.activity-status { max-width: 50%; overflow: hidden; padding: 4rpx 8rpx; border-radius: 6rpx; text-overflow: ellipsis; white-space: nowrap; font-size: 20rpx; font-weight: 700; }
-.activity-category { background: #f3f5f7; color: #475569; }
-.activity-status { background: #edf7f5; color: #0f766e; }
-.activity-title { overflow: hidden; color: #172b4d; font-size: 30rpx; font-weight: 800; line-height: 1.35; text-overflow: ellipsis; white-space: nowrap; }
-.activity-meta { overflow: hidden; color: #64748b; font-size: 22rpx; text-overflow: ellipsis; white-space: nowrap; }
-.activity-foot { display: flex; align-items: center; justify-content: space-between; gap: 8rpx; min-width: 0; color: #718a85; font-size: 20rpx; }
-.activity-foot text:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.activity-price { flex: 0 0 auto; color: #b45309; font-size: 24rpx; font-weight: 800; }
-.activity-empty { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; padding: 20rpx; border-radius: 10rpx; background: #f4f8f7; color: #66827d; font-size: 24rpx; }
-.activity-empty-action { color: #0f766e; font-weight: 800; }
-.home-activity-all:focus-visible, .activity-preview-card:focus-visible, .activity-empty-action:focus-visible { outline: 3rpx solid #0f766e; outline-offset: 3rpx; }
+.activity-category,.activity-status { max-width: 50%; overflow: hidden; padding: 4rpx 8rpx; border-radius: 5rpx; text-overflow: ellipsis; white-space: nowrap; font-size: 19rpx; font-weight: 800; }
+.activity-category { background: #eef2f0; color: #59655f; }
+.activity-status { background: #e8faf0; color: #078347; }.activity-status.full { background: #fff2dd; color: #b66300; }.activity-status.ended { background: #f0f2f1; color: #7a8580; }
+.activity-title { display: -webkit-box; overflow: hidden; color: #13241a; font-size: 28rpx; font-weight: 900; line-height: 1.35; -webkit-box-orient: vertical; -webkit-line-clamp: 2; }
+.activity-meta { overflow: hidden; color: #607169; font-size: 21rpx; text-overflow: ellipsis; white-space: nowrap; }
+.activity-foot { display: flex; align-items: center; justify-content: space-between; gap: 8rpx; min-width: 0; color: #809087; font-size: 19rpx; }.activity-foot text:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.activity-price { flex: 0 0 auto; color: #dc6900; font-size: 23rpx; font-weight: 900; }
+.activity-empty { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; padding: 24rpx; border-radius: 8rpx; background: #fff; color: #718078; font-size: 24rpx; }.activity-empty-action { color: #08753f; font-weight: 800; }
+.category-tab:focus-visible, .search-btn:focus-visible, .all-link:focus-visible, .activity-preview-card:focus-visible, .activity-empty-action:focus-visible { outline: 3rpx solid #20d477; outline-offset: 3rpx; }
 
 </style>
