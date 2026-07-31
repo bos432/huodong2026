@@ -604,6 +604,12 @@ export async function ensureUser() {
     }
   }
   if (existing && !existingToken) clearUser();
+  // #ifdef MP-WEIXIN
+  // A DevTools build still has import.meta.env.DEV set. Mini Program routes
+  // must never fall through to the H5 demo-login flow.
+  goLoginForCurrentRoute();
+  throw new Error("请先完成手机号验证码登录");
+  // #endif
   if (!import.meta.env.DEV) {
     goLoginForCurrentRoute();
     throw new Error("请先完成手机号验证码登录");

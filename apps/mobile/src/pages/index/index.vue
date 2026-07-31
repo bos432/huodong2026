@@ -29,7 +29,7 @@
     </view>
 
     <view v-else-if="leadActivity" class="activity-preview-list featured-list app-enter" style="animation-delay: 42ms">
-      <view v-for="(activity, index) in heroActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
+      <view v-for="(activity, index) in heroActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
         <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
         <image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>
@@ -65,7 +65,7 @@
       <button class="activity-retry" :disabled="activitiesLoading" aria-label="重新加载活动" @click="loadActivities">重试</button>
     </view>
     <view v-else-if="feedActivities.length" class="activity-preview-list">
-      <view v-for="(activity, index) in feedActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
+      <view v-for="(activity, index) in feedActivities" :key="activity.id" class="activity-preview-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${activity.title}`" @click="goActivityDetail(activity)" @keyup.enter="goActivityDetail(activity)" @keyup.space.prevent="goActivityDetail(activity)">
         <view class="activity-date"><text>{{ activityDateParts(activity.startTime).month }}</text><text class="activity-date-day">{{ activityDateParts(activity.startTime).day }}</text><text>{{ activityDateParts(activity.startTime).time }}</text></view>
         <image v-if="activity.coverUrl" class="activity-cover app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="activity-cover cover-fallback">{{ activity.category?.name || "活动" }}</view>

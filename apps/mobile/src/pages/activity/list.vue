@@ -304,7 +304,7 @@ onReachBottom(loadMore);
     <view v-else class="activity-feed">
       <view v-for="group in dateGroups" :key="group.key" class="activity-date-group">
         <view class="date-group-head"><text>{{ group.label }}</text><text>{{ group.items.length }} 场</text></view>
-        <view v-for="(item, index) in group.items" :key="item.id" class="activity-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
+        <view v-for="(item, index) in group.items" :key="item.id" class="activity-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="goDetail(item.id)" @keyup.enter="goDetail(item.id)" @keyup.space.prevent="goDetail(item.id)">
           <image v-if="item.coverUrl" class="activity-cover app-media-motion" :src="item.coverUrl" mode="aspectFill" />
           <view v-else class="activity-cover cover-fallback">{{ item.category?.name || "活动" }}</view>
           <view class="activity-body">

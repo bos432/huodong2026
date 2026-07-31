@@ -25,7 +25,7 @@
         <view class="profile-edit-btn" role="button" tabindex="0" aria-label="编辑会员资料" @click="goEdit" @keyup.enter="goEdit" @keyup.space.prevent="goEdit">编辑</view>
       </view>
       <view class="member-stats app-enter" style="animation-delay: 72ms">
-        <view v-for="(item, index) in memberStats" :key="item.label" class="member-stat app-stagger" :style="{ '--motion-index': index }">
+        <view v-for="(item, index) in memberStats" :key="item.label" class="member-stat app-stagger" :style="{ '--motion-delay': `${index * 42}ms` }">
           <text>{{ item.label }}</text>
           <text class="member-stat-value">{{ item.value }}</text>
         </view>
@@ -63,7 +63,7 @@
         <text class="profile-section-link" role="button" tabindex="0" aria-label="查看全部订单" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">查看全部 ›</text>
       </view>
       <view class="order-tabs" :style="{ gridTemplateColumns: `repeat(${orderTabs.length}, minmax(0, 1fr))` }">
-        <view v-for="(tab, index) in orderTabs" :key="tab.label" class="order-tab app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看${tab.label}订单`" @click="goOrders(tab)" @keyup.enter="goOrders(tab)" @keyup.space.prevent="goOrders(tab)">
+        <view v-for="(tab, index) in orderTabs" :key="tab.label" class="order-tab app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看${tab.label}订单`" @click="goOrders(tab)" @keyup.enter="goOrders(tab)" @keyup.space.prevent="goOrders(tab)">
           <text class="order-tab-icon">{{ tab.icon }}</text><text class="order-tab-label">{{ tab.label }}</text><view v-if="tab.count" class="order-badge">{{ tab.count }}</view>
         </view>
       </view>
@@ -88,7 +88,7 @@
     <view class="profile-section app-enter" style="animation-delay: 176ms">
       <view class="profile-section-head"><view><text class="profile-section-title">常用服务</text><text class="profile-section-copy">内容、商城、客服和设置</text></view></view>
       <view class="grid-2x4-profile">
-        <view v-for="(item, index) in gridItems" :key="item.label" class="grid-profile-item app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)"><view class="grid-profile-icon">{{ item.icon }}</view><text class="grid-profile-label">{{ item.label }}</text></view>
+        <view v-for="(item, index) in gridItems" :key="item.label" class="grid-profile-item app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)"><view class="grid-profile-icon">{{ item.icon }}</view><text class="grid-profile-label">{{ item.label }}</text></view>
       </view>
     </view>
 

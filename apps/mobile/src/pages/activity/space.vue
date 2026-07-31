@@ -16,19 +16,19 @@
 
       <view class="space-section app-enter" style="animation-delay: 118ms">
         <view class="section-head"><text>活动公告</text><text class="section-note">主办方发布</text></view>
-        <template v-if="space.announcements.length"><view v-for="(item, index) in space.announcements" :key="item.id" class="announcement app-stagger" :style="{ '--motion-index': index }"><view class="announcement-title"><text v-if="item.pinned" class="pin">置顶</text>{{ item.title }}</view><text class="announcement-content">{{ item.content }}</text><text class="announcement-time">{{ formatTime(item.publishAt || item.createdAt) }}</text></view></template>
+        <template v-if="space.announcements.length"><view v-for="(item, index) in space.announcements" :key="item.id" class="announcement app-stagger" :style="{ '--motion-delay': `${index * 42}ms` }"><view class="announcement-title"><text v-if="item.pinned" class="pin">置顶</text>{{ item.title }}</view><text class="announcement-content">{{ item.content }}</text><text class="announcement-time">{{ formatTime(item.publishAt || item.createdAt) }}</text></view></template>
         <view v-else class="empty">主办方暂未发布公告，活动变更会在这里同步。</view>
       </view>
 
       <view class="space-section app-enter" style="animation-delay: 150ms">
         <view class="section-head"><text>参与成员</text><text class="section-note">仅向已确认参与者展示</text></view>
-        <view v-if="space.participants.length" class="participants"><view v-for="(person, index) in space.participants" :key="`${person.nickname}-${index}`" class="participant app-stagger" :style="{ '--motion-index': index }"><image v-if="person.avatarUrl" :src="person.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ person.nickname }}</text><text v-if="person.checkedIn" class="checked">已签到</text></view></view>
+        <view v-if="space.participants.length" class="participants"><view v-for="(person, index) in space.participants" :key="`${person.nickname}-${index}`" class="participant app-stagger" :style="{ '--motion-delay': `${index * 42}ms` }"><image v-if="person.avatarUrl" :src="person.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ person.nickname }}</text><text v-if="person.checkedIn" class="checked">已签到</text></view></view>
         <view v-else class="empty">暂时还没有可展示的参与成员</view>
       </view>
 
       <view class="space-section app-enter" style="animation-delay: 184ms">
         <view class="section-head"><text>活动问答</text><text class="ask app-press" @click="openComposer">提问</text></view>
-        <view v-if="space.posts.length" class="post-list"><view v-for="(post, index) in space.posts" :key="post.id" class="post app-stagger" :style="{ '--motion-index': index }"><view class="post-head"><image v-if="post.user.avatarUrl" :src="post.user.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ post.user.nickname }}</text><text v-if="post.mine && post.status === 'pending'" class="pending">审核中</text><text class="post-time">{{ formatTime(post.createdAt) }}</text><text v-if="!post.mine" class="report app-press" @click="reportPost(post)">举报</text></view><text class="post-content">{{ post.content }}</text><text v-if="post.adminReply" class="reply">主办方回复：{{ post.adminReply }}</text></view></view>
+        <view v-if="space.posts.length" class="post-list"><view v-for="(post, index) in space.posts" :key="post.id" class="post app-stagger" :style="{ '--motion-delay': `${index * 42}ms` }"><view class="post-head"><image v-if="post.user.avatarUrl" :src="post.user.avatarUrl" mode="aspectFill" /><view v-else class="avatar-placeholder">慢</view><text>{{ post.user.nickname }}</text><text v-if="post.mine && post.status === 'pending'" class="pending">审核中</text><text class="post-time">{{ formatTime(post.createdAt) }}</text><text v-if="!post.mine" class="report app-press" @click="reportPost(post)">举报</text></view><text class="post-content">{{ post.content }}</text><text v-if="post.adminReply" class="reply">主办方回复：{{ post.adminReply }}</text></view></view>
         <view v-else class="empty">还没有问题，先向主办方提问吧</view>
       </view>
 

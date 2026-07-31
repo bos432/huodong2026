@@ -18,7 +18,7 @@
       <view class="state-retry app-press" role="button" tabindex="0" aria-label="重新加载活动评价" @click="loadReviews" @keyup.enter="loadReviews" @keyup.space.prevent="loadReviews">重新加载</view>
     </view>
     <template v-else-if="reviews.length">
-      <view v-for="(item, index) in reviews" :key="item.id" class="review-card app-stagger app-press" :style="{ '--motion-index': index }" role="button" tabindex="0" :aria-label="`查看活动：${item.activity?.title || '活动评价'}`" @click="openActivity(item)" @keyup.enter="openActivity(item)" @keyup.space.prevent="openActivity(item)">
+      <view v-for="(item, index) in reviews" :key="item.id" class="review-card app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="`查看活动：${item.activity?.title || '活动评价'}`" @click="openActivity(item)" @keyup.enter="openActivity(item)" @keyup.space.prevent="openActivity(item)">
         <image v-if="item.activity?.coverUrl" class="review-cover" :src="item.activity.coverUrl" mode="aspectFill" />
         <view v-else class="review-cover review-cover-fallback">活动</view>
         <view class="review-content">
