@@ -13,6 +13,7 @@ const props = defineProps<{
 const autoDecoration = usePageDecoration("home", props.currentPath);
 const activeSection = computed(() => props.section === undefined ? autoDecoration.bottomNavSection.value : props.section);
 const defaultItems = Array.isArray(defaultBottomNavSection.config?.items) ? defaultBottomNavSection.config.items : [];
+const genericTextIcons = new Set(["π", "专", "修", "活", "我"]);
 
 onShow(() => {
   if (props.section === undefined) void autoDecoration.loadDecoration();
@@ -61,6 +62,18 @@ function isCurrent(url?: string) {
   if (current.startsWith("/pages/user/") || current.startsWith("/pages/charity/") || current.startsWith("/pages/service/")) return target === "/pages/user/my";
   return false;
 }
+
+function navIcon(item: { link?: string; icon?: string; activeIcon?: string; label?: string }, active: boolean) {
+  const configured = String(active ? item.activeIcon || item.icon || "" : item.icon || "").trim();
+  if (configured && !genericTextIcons.has(configured)) return configured;
+  const path = String(item.link || "").split("?")[0];
+  if (path === "/pages/index/index") return "⌂";
+  if (path === "/pages/courses/index") return "▤";
+  if (path === "/pages/community/index") return "◎";
+  if (path === "/pages/activity/list") return "▣";
+  if (path === "/pages/user/my") return "◉";
+  return configured || String(item.label || "入").slice(0, 1);
+}
 </script>
 
 <template>
@@ -81,12 +94,12 @@ function isCurrent(url?: string) {
       @click="goDecoratedLink(item.link, item.action)"
     >
       <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
-      <text v-else class="custom-tabbar-icon" :style="{ background: `${item.color || '#C43D3D'}18` }">{{ isCurrent(item.link) ? item.activeIcon || item.icon || item.label.slice(0, 1) : item.icon || item.label.slice(0, 1) }}</text>
+      <text v-else class="custom-tabbar-icon" :style="{ background: `${item.color || '#C43D3D'}18` }">{{ navIcon(item, isCurrent(item.link)) }}</text>
       <text>{{ item.label }}</text>
     </view>
   </view>
 </template>
 
 <style scoped>
-.custom-tabbar{position:fixed;z-index:90;left:0;right:0;bottom:0;min-height:104rpx;display:grid;grid-template-columns:repeat(var(--nav-columns),minmax(0,1fr));align-items:end;padding:10rpx 20rpx calc(10rpx + env(safe-area-inset-bottom));box-sizing:border-box;border-top:1rpx solid #e3ebe6;box-shadow:0 -8rpx 22rpx rgba(18,43,30,.055)}.custom-tabbar-item{min-width:0;min-height:78rpx;display:grid;justify-items:center;align-content:center;gap:4rpx;font-size:19rpx;line-height:1.15}.custom-tabbar-icon,.custom-tabbar-image{width:38rpx;height:38rpx;display:grid;place-items:center;border-radius:50%;font-size:20rpx}.custom-tabbar-image{background:transparent}.custom-tabbar-item.active{font-weight:900}
+.custom-tabbar{position:fixed;z-index:90;left:0;right:0;bottom:0;min-height:126rpx;display:grid;grid-template-columns:repeat(var(--nav-columns),minmax(0,1fr));align-items:end;padding:12rpx 20rpx calc(12rpx + env(safe-area-inset-bottom));box-sizing:border-box;border-top:1rpx solid #e3ebe6;box-shadow:0 -8rpx 22rpx rgba(18,43,30,.055)}.custom-tabbar-item{min-width:0;min-height:94rpx;display:grid;justify-items:center;align-content:center;gap:6rpx;font-size:24rpx;line-height:1.2}.custom-tabbar-icon,.custom-tabbar-image{width:44rpx;height:44rpx;display:grid;place-items:center;border-radius:50%;font-size:25rpx}.custom-tabbar-image{background:transparent}.custom-tabbar-item.active{font-weight:900}@media (min-width:900px){.custom-tabbar{left:50%;right:auto;width:760px;max-width:100%;transform:translateX(-50%);border-left:1rpx solid #e3ebe6;border-right:1rpx solid #e3ebe6}}
 </style>

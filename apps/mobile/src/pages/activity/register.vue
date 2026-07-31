@@ -797,4 +797,5 @@ watch(couponCode, () => {
 .submit-summary text:first-child { color: #999999; font-size: 22rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .submit-summary text:last-child { color: #0f766e; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .submit-bar .button { height: 92rpx; font-size: 32rpx; }
+@media (min-width:900px){.submit-bar{left:50%;right:auto;width:760px;max-width:100%;transform:translateX(-50%);box-sizing:border-box;border-left:1rpx solid #dce8e2;border-right:1rpx solid #dce8e2}}
 </style>

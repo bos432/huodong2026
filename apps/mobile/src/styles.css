@@ -194,6 +194,19 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   white-space: nowrap;
 }
 
+/* H5 remains a mobile product on wide screens: keep its reading column and
+   persistent navigation aligned instead of stretching them across a desktop. */
+@media (min-width: 900px) {
+  .container,
+  .profile-page,
+  .space-page {
+    width: 760px;
+    max-width: 100%;
+    margin-left: auto;
+    margin-right: auto;
+  }
+}
+
 /* ===== 金刚区 ===== */
 .grid-2x4 {
   display: grid;
