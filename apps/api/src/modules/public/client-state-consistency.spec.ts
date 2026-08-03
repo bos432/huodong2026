@@ -681,6 +681,11 @@ describe("mobile client state consistency", () => {
     expect(appBottomNav).not.toContain('aria-label="扫码识别平台活动码或签到码"');
   });
 
+  it("keeps the home tenant switcher outside transformed containers", () => {
+    expect(homePage).toContain('<view class="discovery-topbar app-enter-soft">');
+    expect(homePage).not.toContain('<view class="discovery-topbar app-enter">');
+  });
+
   it("keeps the member center linked to a tenant-scoped activity review history", () => {
     expect(userMy).toContain('label:"我的评价", page:"activityReviews"');
     expect(userMy).toContain('activityReviews: "/pages/user/activity-reviews"');
