@@ -159,7 +159,7 @@ import { CharityProject } from "../../entities/charity-project.entity";
 import { Certificate } from "../../entities/certificate.entity";
 import { renderCertificateSvg } from "../../shared/certificate-svg";
 import { CredentialTemplateService } from "../credential-templates/credential-template.service";
-import { normalizeAutomaticSmsSettings } from "../reliability/automatic-sms.service";
+import { automaticSmsScenes, normalizeAutomaticSmsSettings } from "../reliability/automatic-sms.service";
 import { AutomaticNotificationService } from "../reliability/automatic-notification.service";
 import { normalizeAutomaticWechatSettings } from "../reliability/automatic-wechat.service";
 import { normalizePostEventAutomationSettings } from "../reliability/post-event-automation.service";
@@ -8076,6 +8076,21 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const runtime = configWithLaunchOverrides(this.config, scope.tenant ? null : setting.launchConfig);
     const checks: Array<Record<string, unknown>> = [];
     checks.push(configuredChannelCheck("sms", "短信服务", setting.smsProviderEnabled, [["服务商", setting.smsProvider], ["签名", setting.smsSignName], ["访问密钥", decryptStoredSecret(setting.smsAccessKeySecret) || setting.smsAccessKeyId]]));
+    const automaticSms = normalizeAutomaticSmsSettings(setting.automaticSms);
+    const enabledAutomaticSmsScenes = automaticSmsScenes.filter((scene) => automaticSms[scene]);
+    if (!automaticSms.enabled) {
+      checks.push({ key: "automatic-sms", label: "自动业务短信", status: "disabled", message: "自动业务短信总开关未启用；验证码服务不受此开关影响。" });
+    } else if (!setting.smsProviderEnabled) {
+      checks.push({ key: "automatic-sms", label: "自动业务短信", status: "error", message: "自动通知已启用，但短信服务总开关未启用。" });
+    } else if (setting.smsProvider !== "luosimao-sms") {
+      checks.push({ key: "automatic-sms", label: "自动业务短信", status: "error", message: "当前自动业务短信仅支持 luosimao-sms，请切换服务商后再启用场景。" });
+    } else if (!enabledAutomaticSmsScenes.length) {
+      checks.push({ key: "automatic-sms", label: "自动业务短信", status: "warning", message: "自动通知已启用，但没有开启任何发送场景。" });
+    } else if (runtime.get("BUSINESS_JOB_WORKER_ENABLED", "true") !== "true") {
+      checks.push({ key: "automatic-sms", label: "自动业务短信", status: "error", message: `已开启场景：${enabledAutomaticSmsScenes.join("、")}；但后台任务消费者未运行，短信不会发送。` });
+    } else {
+      checks.push({ key: "automatic-sms", label: "自动业务短信", status: "ok", message: `已开启场景：${enabledAutomaticSmsScenes.join("、")}；报名成功请按活动类型同时开启审核通过或支付成功。` });
+    }
     checks.push(configuredChannelCheck("agreements", "协议与隐私", true, [["用户协议", setting.userAgreementUrl], ["隐私政策", setting.privacyPolicyUrl]]));
     if (!scope.tenant) {
       checks.push(configuredChannelCheck("wechat-message", "微信订阅消息", runtime.get("WECHAT_MESSAGE_PROVIDER_ENABLED", "false") === "true", [["AppID", runtime.get("WECHAT_APP_ID", "")], ["AppSecret", runtime.get("WECHAT_APP_SECRET", "")]]));

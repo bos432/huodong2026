@@ -534,6 +534,7 @@ watch(
     </div>
 
     <el-alert class="page-hint" type="info" :closable="false" show-icon title="发送前建议先预览" description="短信、微信、邮件一旦接入真实服务商就会触达用户。发送活动提醒前请确认模板变量、渠道状态和活动范围。" />
+    <el-alert class="page-hint" type="warning" :closable="false" show-icon title="自动业务短信说明" description="系统设置中的自动短信场景使用内置文案，不依赖下方通知模板表。报名提交、审核通过、支付成功等场景分别受独立开关控制；真实报名或支付触发后，才会在发送记录中显示短信会员 ID、状态和服务商结果。" />
 
     <div class="monitor-grid" v-loading="loading">
       <div class="monitor-item"><span>发送成功</span><strong>{{ monitor?.status?.sent || 0 }}</strong></div>

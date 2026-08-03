@@ -250,10 +250,10 @@ const form = reactive({
 });
 
 const automaticSmsSceneOptions = [
-  { key: "registrationSubmitted", label: "报名提交", template: "您报名的活动###已提交，请留意审核和支付状态。" },
-  { key: "registrationApproved", label: "报名审核通过", template: "您报名的活动###已审核通过，请按时参加。" },
+  { key: "registrationSubmitted", label: "报名提交（不等于成功）", template: "创建报名记录后发送，适用于提醒用户留意审核或支付。" },
+  { key: "registrationApproved", label: "报名审核通过（即报名成功）", template: "审核制活动通过审核后发送，请按时参加。" },
   { key: "registrationRejected", label: "报名审核拒绝", template: "您报名的活动###未通过审核，请登录查看详情。" },
-  { key: "paymentSucceeded", label: "支付成功", template: "活动###订单###已支付成功，金额###元。" },
+  { key: "paymentSucceeded", label: "支付成功（付费报名必开）", template: "付费订单支付成功后发送，金额###元。" },
   { key: "refundSucceeded", label: "退款成功", template: "活动###订单###退款###元已处理完成。" },
   { key: "refundRejected", label: "退款拒绝", template: "活动###订单###退款申请未通过，请登录查看详情。" },
   { key: "activityCancelled", label: "活动取消", template: "活动###已取消，原因###。" },
@@ -2048,6 +2048,9 @@ onMounted(async () => {
               </div>
             </el-form-item>
             <el-alert v-if="form.smsProvider !== 'luosimao-sms'" title="自动业务短信当前仅支持 luosimao-sms；验证码仍可继续使用现有短信服务商。" type="warning" :closable="false" show-icon />
+            <el-alert title="报名成功场景怎么选" type="info" :closable="false" show-icon>
+              免费报名通常开启“报名提交”和“报名审核通过”；付费报名至少开启“支付成功”，审核制活动再开启“报名审核通过”。只开启“报名提交”时，短信内容是“报名已提交”，不会在支付成功或审核通过时再次发送。
+            </el-alert>
             <el-form-item label="发送场景">
               <div class="automatic-sms-list">
                 <div v-for="item in automaticSmsSceneOptions" :key="item.key" class="automatic-sms-row">

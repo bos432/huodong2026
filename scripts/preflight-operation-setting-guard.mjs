@@ -93,7 +93,6 @@ checkSourceIncludesAll(adminService, [
   "private async operationSettingTarget",
   "this.ensureOperationSettingForTarget(admin, scope)",
   "不能修改其他商家的运营设置",
-  "if (!scope.tenant && dto.launchConfig !== undefined)",
   "registrationEnabled: dto.registrationEnabled ?? true",
   "registrationDisabledMessage: dto.registrationDisabledMessage?.trim() || null",
   "offlinePaymentInstructions: dto.offlinePaymentInstructions.trim()",
@@ -104,6 +103,10 @@ checkSourceIncludesAll(adminService, [
   '"settings.operation.update"',
   "tenant: tenant || this.tenantRelation(admin)"
 ], "admin operation setting service");
+check(
+  adminService.includes("if (!scope.tenant && dto.launchConfig !== undefined)") || adminService.includes("if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined)"),
+  "admin operation setting service must guard launchConfig writes to platform scope."
+);
 
 checkSourceIncludesAll(publicController, [
   '@Get("settings/operation")',
