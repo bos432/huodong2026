@@ -398,6 +398,12 @@ describe("mobile client state consistency", () => {
     expect(publicService).toContain("tenantEntitlementFeatureForGate(key)");
     expect(publicService).toContain("launchConfig.featureGates[key] = false");
     expect(publicService).toContain("tenantFeatureAccess(tenant.settings as any, entitlementFeature).allowed");
+    expect(publicService).toContain("const reviewSafeMode = Boolean(tenantConfig.reviewSafeMode ?? platformConfig.reviewSafeMode ?? false)");
+    expect(publicService).toContain("featureGates.userContentSharing = false");
+    expect(publicService).toContain("featureGates.communityPublish = false");
+    expect(publicService).toContain("featureGates.forumPost = false");
+    expect(featureGates).toContain('"userContentSharing"');
+    expect(featureGates).toContain('featureGatesState.value.userContentSharing !== false');
   });
 
   it("keeps merchant and order detail failures separate from auxiliary warnings", () => {

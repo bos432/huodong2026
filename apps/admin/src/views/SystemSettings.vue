@@ -376,7 +376,20 @@ const openFeatureGateCount = computed(() => featureGateItems.filter((item) => de
 function applyFeatureGatePreset(mode: "open" | "activity") {
   const next = mode === "open" ? defaultFeatureGates : conservativeFeatureGates;
   deployment.featureGates = { ...next };
-  ElMessage.success(mode === "open" ? "已切换为全部功能开放" : "已切换为基础活动 + 心得模式");
+  ElMessage.success(mode === "open" ? "已切换为全部功能开放" : "已切换为基础活动（关闭用户内容发布与分享）");
+}
+
+function handleReviewSafeModeChanged(enabled: boolean) {
+  if (!enabled) return;
+  deployment.featureGates = {
+    ...deployment.featureGates,
+    userContentSharing: false,
+    community: false,
+    communityPublish: false,
+    forum: false,
+    forumPost: false
+  };
+  ElMessage.info("过审隐藏已同步关闭发布心得、图片、活动动态、公开分享和论坛入口");
 }
 
 function featureGateTagType(key: FeatureGateKey) {
@@ -1907,7 +1920,7 @@ onMounted(async () => {
                     <el-radio-button value="production">正式运营</el-radio-button>
                     <el-radio-button value="review">微信过审</el-radio-button>
                   </el-radio-group>
-                  <el-switch v-model="deployment.reviewSafeMode" active-text="启用过审隐藏" inactive-text="展示完整功能" />
+                  <el-switch v-model="deployment.reviewSafeMode" active-text="启用过审隐藏" inactive-text="展示完整功能" @change="handleReviewSafeModeChanged" />
                   <el-tag :type="deployment.reviewSafeMode ? 'warning' : 'success'" effect="plain">
                     {{ deployment.reviewSafeMode ? "审核版隐藏敏感运营内容" : "正式版恢复完整功能" }}
                   </el-tag>
@@ -1919,10 +1932,10 @@ onMounted(async () => {
               <el-form-item label="功能开放">
                 <div class="feature-gate-panel">
                   <div v-if="canEditSettings" class="feature-gate-actions">
-                    <el-button size="small" @click="applyFeatureGatePreset('activity')">基础活动 + 心得</el-button>
+                    <el-button size="small" @click="applyFeatureGatePreset('activity')">基础活动（关闭用户内容）</el-button>
                     <el-button size="small" @click="applyFeatureGatePreset('open')">全部开放</el-button>
                     <el-tag type="success" effect="plain">已开放 {{ openFeatureGateCount }} / {{ featureGateItems.length }}</el-tag>
-                    <span class="form-tip">关闭后会隐藏小程序入口、装修链接、我的页面入口和非超管后台菜单。</span>
+                    <span class="form-tip">关闭后会隐藏小程序入口、装修链接、我的页面入口和非超管后台菜单；“用户内容发布与分享”关闭后会同步拦截发布心得、图片、活动动态、公开分享和论坛。</span>
                   </div>
                   <div class="feature-gate-grid">
                     <div v-for="item in featureGateItems" :key="item.key" class="feature-gate-card">

@@ -4003,10 +4003,18 @@ export class PublicService {
   private publicLaunchConfig(tenantLaunchConfig: unknown, platformLaunchConfig?: unknown) {
     const platformConfig = normalizeLaunchConfig(platformLaunchConfig);
     const tenantConfig = normalizeLaunchConfig(tenantLaunchConfig);
+    const reviewSafeMode = Boolean(tenantConfig.reviewSafeMode ?? platformConfig.reviewSafeMode ?? false);
     const featureGates = normalizeFeatureGates(tenantConfig.featureGates, normalizeFeatureGates(platformConfig.featureGates, defaultFeatureGates));
+    if (reviewSafeMode) {
+      featureGates.userContentSharing = false;
+      featureGates.community = false;
+      featureGates.communityPublish = false;
+      featureGates.forum = false;
+      featureGates.forumPost = false;
+    }
     return {
       deliveryMode: tenantConfig.deliveryMode ?? platformConfig.deliveryMode ?? "production",
-      reviewSafeMode: Boolean(tenantConfig.reviewSafeMode ?? platformConfig.reviewSafeMode ?? false),
+      reviewSafeMode,
       reviewSafeRemark: String(tenantConfig.reviewSafeRemark ?? platformConfig.reviewSafeRemark ?? ""),
       featureGates
     };

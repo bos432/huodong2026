@@ -12,9 +12,9 @@
     </view>
     <view class="settings-card">
       <view class="settings-item" role="button" tabindex="0" aria-label="账号与安全" @click="goSecurity" @keyup.enter="goSecurity" @keyup.space.prevent="goSecurity"><text>账号与安全</text><text class="item-arrow">›</text></view>
-      <view class="settings-item" role="button" tabindex="0" aria-label="我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
+      <view v-if="featureGates.userContentSharing && featureGates.community" class="settings-item" role="button" tabindex="0" aria-label="我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="会员中心" @click="goMemberCenter" @keyup.enter="goMemberCenter" @keyup.space.prevent="goMemberCenter"><text>会员中心</text><text class="item-arrow">›</text></view>
-      <view class="settings-item" role="button" tabindex="0" aria-label="消息通知" @click="goNotifications" @keyup.enter="goNotifications" @keyup.space.prevent="goNotifications"><text>消息通知</text><text class="item-arrow">›</text></view>
+      <view v-if="featureGates.userContentSharing && featureGates.community" class="settings-item" role="button" tabindex="0" aria-label="消息通知" @click="goNotifications" @keyup.enter="goNotifications" @keyup.space.prevent="goNotifications"><text>消息通知</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="关于慢π" @click="showAbout" @keyup.enter="showAbout" @keyup.space.prevent="showAbout"><text>关于慢π</text><text class="item-arrow">{{ clientVersion }} ›</text></view>
     </view>
     <view class="logout-button" :class="{ disabled: activeAction }" role="button" tabindex="0" :aria-busy="activeAction === 'logout'" :aria-label="activeAction === 'logout' ? '正在确认退出登录' : '退出登录'" @click="logout" @keyup.enter="logout" @keyup.space.prevent="logout">{{ activeAction === "logout" ? "确认中..." : "退出登录" }}</view>
@@ -26,8 +26,10 @@ import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { clearUser, ensureUser, request, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
+import { featureGatesState, loadFeatureGates } from "../../feature-gates";
 
 const activeAction = ref("");
+const featureGates = featureGatesState;
 const miniprogramVersion = ref("");
 const clientVersion = computed(() => {
   const version = miniprogramVersion.value.replace(/^v/i, "").trim();
@@ -68,7 +70,7 @@ function logout() {
   });
 }
 
-onShow(() => { void ensureUser(); void loadMiniprogramVersion(); });
+onShow(() => { void ensureUser(); void loadMiniprogramVersion(); void loadFeatureGates(true); });
 </script>
 <style scoped>
 .user-subpage {

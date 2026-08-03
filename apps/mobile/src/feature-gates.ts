@@ -12,6 +12,7 @@ type HomepageSectionView = {
 
 export type FeatureGateKey =
   | "courses"
+  | "userContentSharing"
   | "community"
   | "communityPublish"
   | "forum"
@@ -32,6 +33,7 @@ let featureDisabledDialogOpen = false;
 
 export const defaultFeatureGates: FeatureGates = {
   courses: true,
+  userContentSharing: true,
   community: true,
   communityPublish: true,
   forum: true,
@@ -48,6 +50,7 @@ export const defaultFeatureGates: FeatureGates = {
 
 const featureGateLabels: Record<FeatureGateKey, string> = {
   courses: "专题内容",
+  userContentSharing: "用户内容发布与分享",
   community: "共修动态",
   communityPublish: "发布心得",
   forum: "共修论坛",
@@ -155,9 +158,9 @@ export function featureGateForLink(url?: string): FeatureGateKey | null {
   const path = normalizePath(url);
   if (!path) return null;
   if (path === "/pages/forum/publish") return "forumPost";
-  if (path.startsWith("/pages/forum/") || path === "/pages/user/forum-posts") return "forum";
+  if (path.startsWith("/pages/forum/") || path === "/pages/user/forum-posts") return "userContentSharing";
   if (path === "/pages/community/publish" || path === "/pages/community/checkin") return "communityPublish";
-  if (path.startsWith("/pages/community/") || ["/pages/user/community-posts", "/pages/user/community-social", "/pages/user/content-appeals"].includes(path)) return "community";
+  if (path.startsWith("/pages/community/") || ["/pages/user/community-posts", "/pages/user/community-social", "/pages/user/content-appeals"].includes(path)) return "userContentSharing";
   if (path.startsWith("/pages/courses/") || path.startsWith("/pages/course/") || ["/pages/search/index", "/pages/user/courses", "/pages/user/learning", "/pages/user/favorites"].includes(path)) return "courses";
   if (path.startsWith("/pages/mall/") || path === "/pages/user/mall-orders" || path === "/pages/user/mall-order-detail") return "mall";
   if (path.startsWith("/pages/charity/") || path === "/pages/apply/aid") return "charity";
@@ -171,8 +174,13 @@ export function featureGateForLink(url?: string): FeatureGateKey | null {
 export function isLinkAllowedByFeature(url?: string) {
   const gate = featureGateForLink(url);
   if (!gate) return true;
-  if (gate === "forumPost") return featureGatesState.value.forum !== false && featureGatesState.value.forumPost !== false;
-  if (gate === "communityPublish") return featureGatesState.value.community !== false && featureGatesState.value.communityPublish !== false;
+  if (gate === "forumPost") return featureGatesState.value.userContentSharing !== false && featureGatesState.value.forum !== false && featureGatesState.value.forumPost !== false;
+  if (gate === "communityPublish") return featureGatesState.value.userContentSharing !== false && featureGatesState.value.community !== false && featureGatesState.value.communityPublish !== false;
+  if (gate === "userContentSharing") {
+    const path = normalizePath(url);
+    const forumPath = path.startsWith("/pages/forum/") || path === "/pages/user/forum-posts";
+    return featureGatesState.value.userContentSharing !== false && (forumPath ? featureGatesState.value.forum !== false : featureGatesState.value.community !== false);
+  }
   return featureGatesState.value[gate] !== false;
 }
 
@@ -215,7 +223,7 @@ export function filterDecorationSectionsByFeature(sections: HomepageSectionView[
       if (section.type === "charity_summary" && featureGatesState.value.charity === false) return null;
       if (section.type === "course_recommendations" && featureGatesState.value.courses === false) return null;
       if (section.type === "mall_showcase" && featureGatesState.value.mall === false) return null;
-      if (["testimonial_feed", "featured_testimonials", "activity_testimonials"].includes(section.type) && featureGatesState.value.community === false) return null;
+      if (["testimonial_feed", "featured_testimonials", "activity_testimonials"].includes(section.type) && (featureGatesState.value.userContentSharing === false || featureGatesState.value.community === false)) return null;
       const link = String(section.config?.primaryButtonLink || section.config?.link || "");
       if (link && !isLinkAllowedByFeature(link)) return null;
       return section;

@@ -5,6 +5,7 @@ type LaunchConfig = Record<string, unknown> | null | undefined;
 
 export const featureGateKeys = [
   "courses",
+  "userContentSharing",
   "community",
   "communityPublish",
   "forum",
@@ -23,6 +24,7 @@ export type FeatureGateKey = typeof featureGateKeys[number];
 
 export const defaultFeatureGates: Record<FeatureGateKey, boolean> = {
   courses: true,
+  userContentSharing: true,
   community: true,
   communityPublish: true,
   forum: true,

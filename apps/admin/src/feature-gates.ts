@@ -1,5 +1,6 @@
 export type FeatureGateKey =
   | "courses"
+  | "userContentSharing"
   | "community"
   | "communityPublish"
   | "forum"
@@ -16,12 +17,15 @@ export type FeatureGateKey =
 export type FeatureGates = Record<FeatureGateKey, boolean>;
 
 export const featureGateDependencies: Partial<Record<FeatureGateKey, FeatureGateKey>> = {
+  community: "userContentSharing",
+  forum: "userContentSharing",
   communityPublish: "community",
   forumPost: "forum"
 };
 
 export const featureGateItems: Array<{ key: FeatureGateKey; label: string; description: string }> = [
   { key: "courses", label: "专题/课程", description: "前台专题、课程详情、我的内容和学习记录。" },
+  { key: "userContentSharing", label: "用户内容发布与分享", description: "控制发布心得、图片、活动动态、公开分享及相关用户内容入口；关闭后适合微信过审版本。" },
   { key: "community", label: "共修动态/心得", description: "前台共修动态、活动心得和我的心得。" },
   { key: "communityPublish", label: "发布心得/打卡", description: "用户发布活动心得、打卡任务入口；依赖共修动态/心得。" },
   { key: "forum", label: "论坛浏览", description: "关闭后隐藏论坛首页、帖子详情和我的论坛入口。" },
@@ -38,6 +42,7 @@ export const featureGateItems: Array<{ key: FeatureGateKey; label: string; descr
 
 export const defaultFeatureGates: FeatureGates = {
   courses: true,
+  userContentSharing: true,
   community: true,
   communityPublish: true,
   forum: true,
@@ -54,8 +59,9 @@ export const defaultFeatureGates: FeatureGates = {
 
 export const conservativeFeatureGates: FeatureGates = {
   courses: false,
-  community: true,
-  communityPublish: true,
+  userContentSharing: false,
+  community: false,
+  communityPublish: false,
   forum: false,
   forumPost: false,
   mall: false,

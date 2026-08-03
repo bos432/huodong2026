@@ -12,6 +12,7 @@ import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import { addActivityToCalendar } from "../../activity-calendar";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { showMiniProgramShareMenu } from "../../share";
+import { isLinkAllowedByFeature } from "../../feature-gates";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -655,8 +656,8 @@ onShow(() => {
           <view class="more-actions-list">
             <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goMy()"><text class="more-action-icon">票</text><view><text>我的报名</text><text>查看当前活动的报名状态</text></view><text class="more-action-arrow">›</text></view>
             <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goActivitySpace()"><text class="more-action-icon">圈</text><view><text>活动空间</text><text>{{ activity.space?.canAccess ? "公告、成员、问答和签到" : "报名审核通过后开放" }}</text></view><text class="more-action-arrow">›</text></view>
-            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goPublish()"><text class="more-action-icon">记</text><view><text>分享心得</text><text>记录你的活动体验</text></view><text class="more-action-arrow">›</text></view>
-            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goCommunity()"><text class="more-action-icon">看</text><view><text>活动口碑</text><text>查看评价与公开讨论</text></view><text class="more-action-arrow">›</text></view>
+            <view v-if="isLinkAllowedByFeature('/pages/community/publish')" class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goPublish()"><text class="more-action-icon">记</text><view><text>分享心得</text><text>记录你的活动体验</text></view><text class="more-action-arrow">›</text></view>
+            <view v-if="isLinkAllowedByFeature('/pages/community/index')" class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goCommunity()"><text class="more-action-icon">看</text><view><text>活动口碑</text><text>查看评价与公开讨论</text></view><text class="more-action-arrow">›</text></view>
           </view>
         </view>
       </view>
