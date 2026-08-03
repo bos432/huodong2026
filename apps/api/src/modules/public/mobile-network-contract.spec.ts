@@ -38,6 +38,7 @@ describe("mobile production network contract", () => {
     const home = read("apps/mobile/src/pages/index/index.vue");
     const tabBar = read("apps/mobile/src/components/TabBar.vue");
     const tenantSwitcher = read("apps/mobile/src/components/TenantSwitcher.vue");
+    const pageDecorationBlocks = read("apps/mobile/src/components/PageDecorationBlocks.vue");
 
     expect(home).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()]);");
     expect(home).toContain("await loadActivities();");
@@ -53,7 +54,13 @@ describe("mobile production network contract", () => {
     expect(api).toContain("tenantCode: normalizeTenantCode(tenantCode)");
     expect(tenantSwitcher).toContain("v-if=\"tenantSwitcherEnabled\"");
     expect(tenantSwitcher).toContain("position: fixed; top: 0; right: 0; bottom: 0; left: 0");
+    expect(tenantSwitcher).toContain("z-index: 10001");
     expect(tenantSwitcher).toContain("const nextRoute = getCurrentRouteForTenant(item.code)");
     expect(tenantSwitcher).toContain("uni.reLaunch({ url: nextRoute })");
+    expect(home).toContain(":show-overlays=\"false\"");
+    expect(home).toContain("<MarketingPopup />");
+    expect(home).toContain("<SplashAd />");
+    expect(pageDecorationBlocks).toContain("showOverlays?: boolean");
+    expect(pageDecorationBlocks).toContain("<template v-if=\"showOverlays\">");
   });
 });

@@ -4,9 +4,12 @@ import { goDecoratedLink, quickInitial } from "../decoration";
 import MarketingPopup from "./MarketingPopup.vue";
 import SplashAd from "./SplashAd.vue";
 
-defineProps<{
+withDefaults(defineProps<{
   sections: HomepageSectionView[];
-}>();
+  showOverlays?: boolean;
+}>(), {
+  showOverlays: true
+});
 
 function densityPadding(value: unknown) {
   if (value === "compact") return "18rpx";
@@ -342,8 +345,10 @@ function activityDateParts(value: string) {
       </view>
     </view>
   </template>
-  <SplashAd />
-  <MarketingPopup />
+  <template v-if="showOverlays">
+    <SplashAd />
+    <MarketingPopup />
+  </template>
 </template>
 
 <style scoped>

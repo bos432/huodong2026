@@ -31,9 +31,11 @@
         <view v-else class="activity-empty"><text>近期没有开放报名的活动</text><text v-if="publicActivityArchiveEnabled" class="activity-empty-action" role="button" tabindex="0" @click="goActivityHistory" @keyup.enter="goActivityHistory" @keyup.space.prevent="goActivityHistory">查看活动回顾</text></view>
       </template>
 
-      <PageDecorationBlocks v-else-if="section.type !== 'search_bar'" :sections="[section]" />
+      <PageDecorationBlocks v-else-if="section.type !== 'search_bar'" :sections="[section]" :show-overlays="false" />
     </template>
 
+    <SplashAd />
+    <MarketingPopup />
     <view style="height:120rpx;"></view>
     <TabBar current="index" />
   </view>
@@ -49,6 +51,8 @@ import { resolveTenantByCurrentLocation } from "../../tenant-location";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import MarketingPopup from "../../components/MarketingPopup.vue";
+import SplashAd from "../../components/SplashAd.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeText } from "../../review-safe-text";

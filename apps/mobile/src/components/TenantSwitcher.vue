@@ -143,7 +143,7 @@ onMounted(() => void loadTenantOptions());
 .tenant-entry.compact .tenant-entry-title { color: #101828; font-size: 30rpx; line-height: 1.15; }
 .tenant-entry.compact .tenant-entry-name { max-width: 360rpx; margin-top: 5rpx; color: #667085; font-size: 20rpx; }
 .tenant-entry.compact .tenant-entry-action { min-width: 72rpx; height: 48rpx; border-radius: 8rpx; background: #ecfdf3; color: #0d8a4d; font-size: 22rpx; }
-.tenant-mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 999; display: flex; align-items: flex-end; background: rgba(15, 23, 42, 0.46); }
+.tenant-mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 10001; display: flex; align-items: flex-end; background: rgba(15, 23, 42, 0.46); }
 .tenant-sheet { box-sizing: border-box; width: 100%; max-height: 78vh; overflow-y: auto; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); border-radius: 16rpx 16rpx 0 0; background: #fff; box-shadow: 0 -18rpx 48rpx rgba(15, 23, 42, 0.18); animation: app-sheet-rise 220ms ease-out both; }
 .tenant-sheet-head { display: flex; justify-content: space-between; gap: 24rpx; align-items: flex-start; margin-bottom: 18rpx; }
 .tenant-sheet-title { color: #111827; font-size: 32rpx; font-weight: 900; }
