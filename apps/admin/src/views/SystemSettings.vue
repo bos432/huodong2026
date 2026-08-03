@@ -185,6 +185,7 @@ function tenantOptionLabel(item: TenantOption) {
 const form = reactive({
   registrationEnabled: true,
   publicActivityArchiveEnabled: false,
+  tenantSwitcherEnabled: true,
   registrationDisabledMessage: "",
   offlinePaymentInstructions: "",
   paymentMethods: {
@@ -1549,6 +1550,7 @@ function operationPayload() {
   const payload: Record<string, any> = {
     registrationEnabled: form.registrationEnabled,
     publicActivityArchiveEnabled: form.publicActivityArchiveEnabled,
+    tenantSwitcherEnabled: form.tenantSwitcherEnabled,
     registrationDisabledMessage: form.registrationDisabledMessage,
     offlinePaymentInstructions: form.offlinePaymentInstructions,
     paymentMethods: { ...form.paymentMethods },
@@ -1618,6 +1620,7 @@ async function loadOperation(force = false) {
     Object.assign(form, {
       registrationEnabled: isRegistrationEnabled(data.registrationEnabled),
       publicActivityArchiveEnabled: Boolean(data.publicActivityArchiveEnabled),
+      tenantSwitcherEnabled: data.tenantSwitcherEnabled !== false,
       registrationDisabledMessage: data.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: data.offlinePaymentInstructions || "",
       paymentMethods: { free: true, wechat: false, alipay: false, balance: true, offline: true, ...(data.paymentMethods || {}) },
@@ -1901,6 +1904,15 @@ onMounted(async () => {
             </el-form-item>
             <template v-if="editingPlatformOperation">
               <el-divider content-position="left">入口城市</el-divider>
+              <el-form-item label="城市/商家切换">
+                <div class="switch-row">
+                  <el-switch v-model="form.tenantSwitcherEnabled" active-text="允许用户切换" inactive-text="隐藏切换入口" />
+                  <el-tag :type="form.tenantSwitcherEnabled ? 'success' : 'warning'" effect="plain">
+                    {{ form.tenantSwitcherEnabled ? "首页显示切换按钮，用户可自由切换" : "首页隐藏切换按钮，使用默认入口商家" }}
+                  </el-tag>
+                </div>
+                <div class="form-tip">关闭后，普通打开会进入下方默认商家；活动分享链接仍按链接中的商家打开，确保分享和报名链路不失效。</div>
+              </el-form-item>
               <el-form-item label="默认入口城市">
                 <div class="entry-tenant-field">
                   <el-select v-if="canManageTenants" v-model="form.defaultTenantCode" clearable filterable placeholder="请选择小程序默认打开的城市/商家" style="width: 360px">

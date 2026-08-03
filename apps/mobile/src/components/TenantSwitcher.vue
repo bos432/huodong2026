@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from "vue";
+import { computed, onMounted, ref } from "vue";
 import { getCurrentRouteForTenant, getCurrentTenantCode, getUserToken, request, setCurrentTenantCode, setCurrentTenantCodeSource, type TenantBootstrap } from "../api";
 import type { HomepagePayload, PublicTenantView } from "@activity/shared";
 
@@ -21,6 +21,7 @@ const open = ref(false);
 const loading = ref(false);
 const keyword = ref("");
 const assetScopeMessage = ref("");
+const tenantSwitcherEnabled = ref(true);
 
 const currentTenantCode = computed(() => props.tenant?.code || getCurrentTenantCode());
 const cityLabel = computed(() => props.tenant?.region || "本地");
@@ -39,6 +40,7 @@ async function loadTenantOptions() {
   loading.value = true;
   try {
     const bootstrap = await request<TenantBootstrap>("/public/tenants/bootstrap");
+    tenantSwitcherEnabled.value = bootstrap?.tenantSwitcherEnabled !== false;
     tenantOptions.value = (bootstrap?.tenants || []) as PublicTenantView[];
     defaultTenantCode.value = bootstrap?.defaultTenant?.code || "";
     assetScopeMessage.value = bootstrap?.policy?.assetScopeMessage || "报名、订单、钱包、积分、课程和优惠权益按当前城市商家分别展示，切换不会删除原城市数据";
@@ -51,6 +53,7 @@ async function loadTenantOptions() {
 }
 
 async function show() {
+  if (!tenantSwitcherEnabled.value) return;
   if (!tenantOptions.value.length) await loadTenantOptions();
   open.value = true;
 }
@@ -80,10 +83,11 @@ async function selectTenant(item: PublicTenantView) {
 }
 
 defineExpose({ show, loadTenantOptions });
+onMounted(() => void loadTenantOptions());
 </script>
 
 <template>
-  <view class="tenant-entry" :class="{ compact }" @click="show">
+  <view v-if="tenantSwitcherEnabled" class="tenant-entry" :class="{ compact }" @click="show">
     <view>
       <template v-if="compact">
         <view class="tenant-entry-title">{{ cityLabel }}</view>
@@ -97,7 +101,7 @@ defineExpose({ show, loadTenantOptions });
     <view class="tenant-entry-action">切换</view>
   </view>
 
-  <view v-if="open" class="tenant-mask" @click="hide">
+  <view v-if="open && tenantSwitcherEnabled" class="tenant-mask" @click="hide">
     <view class="tenant-sheet" @click.stop>
       <view class="tenant-sheet-head">
         <view>
@@ -139,8 +143,8 @@ defineExpose({ show, loadTenantOptions });
 .tenant-entry.compact .tenant-entry-title { color: #101828; font-size: 30rpx; line-height: 1.15; }
 .tenant-entry.compact .tenant-entry-name { max-width: 360rpx; margin-top: 5rpx; color: #667085; font-size: 20rpx; }
 .tenant-entry.compact .tenant-entry-action { min-width: 72rpx; height: 48rpx; border-radius: 8rpx; background: #ecfdf3; color: #0d8a4d; font-size: 22rpx; }
-.tenant-mask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: flex-end; background: rgba(15, 23, 42, 0.42); }
-.tenant-sheet { width: 100%; max-height: 76vh; overflow-y: auto; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); border-radius: 8px 8px 0 0; background: #fff; box-shadow: 0 -18rpx 48rpx rgba(15, 23, 42, 0.18); }
+.tenant-mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 999; display: flex; align-items: flex-end; background: rgba(15, 23, 42, 0.46); }
+.tenant-sheet { box-sizing: border-box; width: 100%; max-height: 78vh; overflow-y: auto; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); border-radius: 16rpx 16rpx 0 0; background: #fff; box-shadow: 0 -18rpx 48rpx rgba(15, 23, 42, 0.18); animation: app-sheet-rise 220ms ease-out both; }
 .tenant-sheet-head { display: flex; justify-content: space-between; gap: 24rpx; align-items: flex-start; margin-bottom: 18rpx; }
 .tenant-sheet-title { color: #111827; font-size: 32rpx; font-weight: 900; }
 .tenant-sheet-subtitle { margin-top: 6rpx; color: #667085; font-size: 24rpx; line-height: 1.45; }

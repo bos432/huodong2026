@@ -57,6 +57,7 @@ const { tenant, sections, loadDecoration } = usePageDecoration("home", "/pages/i
 const featuredActivities = ref<any[]>([]);
 const categories = ref<any[]>([]);
 const publicActivityArchiveEnabled = ref(false);
+const tenantSwitcherEnabled = ref(true);
 const activitiesLoading = ref(false);
 const activitiesError = ref("");
 const loadedActivitiesTenantCode = ref("");
@@ -108,11 +109,13 @@ onShareTimeline(() => defaultMiniProgramTimelineShare(shareOptions));
 onShow(showMiniProgramShareMenu);
 
 onShow(async () => {
-  await applyTenantBootstrapDefault();
+  const bootstrap = await applyTenantBootstrapDefault();
+  tenantSwitcherEnabled.value = bootstrap?.tenantSwitcherEnabled !== false;
   await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()]);
   await loadActivities();
   await loadCategories();
   const beforeTenantCode = getCurrentTenantCode();
+  if (!tenantSwitcherEnabled.value) return;
   void resolveTenantByCurrentLocation({ silent: true }).then(async () => {
     if (getCurrentTenantCode() === beforeTenantCode) return;
     await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()]);
@@ -180,6 +183,7 @@ async function loadOperationSetting() {
   try {
     const setting = await request<any>("/public/settings/operation");
     publicActivityArchiveEnabled.value = Boolean(setting?.publicActivityArchiveEnabled);
+    tenantSwitcherEnabled.value = setting?.tenantSwitcherEnabled !== false;
   } catch {
     publicActivityArchiveEnabled.value = false;
   }

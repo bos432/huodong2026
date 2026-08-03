@@ -146,18 +146,24 @@ export function getCurrentTenantCodeSource() {
 export type TenantBootstrap = {
   tenants: Array<{ id: number; code: string; name: string; region?: string | null }>;
   defaultTenant: { id: number; code: string; name: string; region?: string | null } | null;
+  tenantSwitcherEnabled?: boolean;
   policy?: { precedence?: string[]; serverDefaultTenantCode?: string | null; selectionPersistence?: string; assetScope?: string; assetScopeMessage?: string };
 };
-
 export async function applyTenantBootstrapDefault() {
   if (hasExplicitTenantCodeInRoute()) return null;
   const current = getCurrentTenantCode();
   const source = getCurrentTenantCodeSource();
-  if (current && ["route", "manual", "location"].includes(source)) return null;
   try {
     const bootstrap = await request<TenantBootstrap>("/public/tenants/bootstrap");
     const serverDefault = normalizeTenantCode(bootstrap?.defaultTenant?.code);
     const firstEnabled = normalizeTenantCode(bootstrap?.tenants?.[0]?.code);
+    if (bootstrap?.tenantSwitcherEnabled === false) {
+      const lockedCode = serverDefault || DEFAULT_TENANT_CODE || firstEnabled;
+      if (lockedCode && lockedCode !== current) setCurrentTenantCode(lockedCode);
+      if (lockedCode) setCurrentTenantCodeSource("default");
+      return bootstrap;
+    }
+    if (current && ["route", "manual", "location"].includes(source)) return bootstrap;
     const nextCode = serverDefault || current || DEFAULT_TENANT_CODE || firstEnabled;
     if (nextCode && nextCode !== current) {
       setCurrentTenantCode(nextCode);

@@ -2641,6 +2641,10 @@ export class OperationSettingDto {
   publicActivityArchiveEnabled?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  tenantSwitcherEnabled?: boolean;
+
+  @IsOptional()
   @IsString()
   registrationDisabledMessage?: string;
 

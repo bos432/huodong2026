@@ -35,6 +35,16 @@ export class OperationSetting {
   })
   publicActivityArchiveEnabled!: boolean;
 
+  @Column({
+    type: "tinyint",
+    default: 1,
+    transformer: {
+      to: (value: boolean) => (value === false ? 0 : 1),
+      from: (value: boolean | number | string | null) => value === true || value === 1 || value === "1"
+    }
+  })
+  tenantSwitcherEnabled!: boolean;
+
   @Column({ type: "text", nullable: true })
   registrationDisabledMessage!: string | null;
 

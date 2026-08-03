@@ -982,6 +982,7 @@ export class PublicService {
     return {
       tenants,
       defaultTenant,
+      tenantSwitcherEnabled: setting?.tenantSwitcherEnabled !== false,
       policy: {
         precedence: ["route", "manual", "location", "server_default", "build_default", "first_enabled"],
         serverDefaultTenantCode: defaultTenant?.code || null,
@@ -3245,6 +3246,7 @@ export class PublicService {
       tenant: tenant || null,
       registrationEnabled: true,
       publicActivityArchiveEnabled: false,
+      tenantSwitcherEnabled: true,
       registrationDisabledMessage: "报名通道暂时关闭，请稍后再试或联系主办方。",
       offlinePaymentInstructions: "请在付款截止前完成线下转账或现场付款，并在备注中填写报名手机号。主办方确认收款后，报名状态会自动更新。",
       paymentMethods: this.defaultPaymentMethods(),
@@ -3801,6 +3803,7 @@ export class PublicService {
       paymentMethods: this.normalizePaymentMethods(setting.paymentMethods),
       registrationEnabled: setting.registrationEnabled,
       publicActivityArchiveEnabled: setting.publicActivityArchiveEnabled,
+      tenantSwitcherEnabled: (platformSetting || setting).tenantSwitcherEnabled !== false,
       registrationDisabledMessage: setting.registrationDisabledMessage,
       customerServiceName: setting.customerServiceName,
       customerServicePhone: setting.customerServicePhone,

@@ -8028,6 +8028,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!scope.tenant && dto.defaultTenantCode !== undefined) {
       setting.defaultTenantCode = await this.normalizeDefaultTenantCode(dto.defaultTenantCode);
     }
+    if (!scope.tenant && dto.tenantSwitcherEnabled !== undefined) {
+      setting.tenantSwitcherEnabled = dto.tenantSwitcherEnabled;
+    }
     const saved = await this.operationSettings.save(setting);
     await this.logOperation(this.operationActorForTenant(admin, scope.tenant), "settings.operation.update", "operation_setting", saved.id, "更新运营设置", auditDiff(before, this.operationSettingAuditSnapshot(saved)));
     return this.publicOperationSettingForAdmin(saved, scope.tenant);
@@ -10332,7 +10335,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private couponAuditSnapshot(row: Coupon) { return { code: row.code, tenantId: row.tenant?.id || null, name: row.name, activityId: row.activity?.id || null, discountType: row.discountType, discountValue: row.discountValue, minAmount: row.minAmount, usageLimit: row.usageLimit, usedCount: row.usedCount, claimMode: row.claimMode, perUserLimit: row.perUserLimit, claimedCount: row.claimedCount, enabled: row.enabled, startsAt: row.startsAt, endsAt: row.endsAt }; }
   private redemptionCodeAuditSnapshot(row: RedemptionCode) { return { code: row.code, tenantId: row.tenant?.id || null, name: row.name, targetType: row.targetType, targetId: row.targetId, points: row.points, usageLimit: row.usageLimit, perUserLimit: row.perUserLimit, usedCount: row.usedCount, enabled: row.enabled, startsAt: row.startsAt, endsAt: row.endsAt }; }
   private activityAuditSnapshot(row: Activity) { return { title: row.title, tenantId: row.tenant?.id || null, categoryId: row.category?.id || null, status: row.status, price: row.price, capacity: row.capacity, location: row.location, startTime: row.startTime, endTime: row.endTime, registrationDeadline: row.registrationDeadline, featured: row.featured, requireReview: row.requireReview, allowCancel: row.allowCancel }; }
-  private operationSettingAuditSnapshot(row: OperationSetting) { return { registrationEnabled: row.registrationEnabled, publicActivityArchiveEnabled: row.publicActivityArchiveEnabled, paymentMethods: row.paymentMethods, customerServiceName: row.customerServiceName, customerServicePhone: row.customerServicePhone, customerServiceWechat: row.customerServiceWechat, pageTheme: row.pageTheme, userAgreementUrl: row.userAgreementUrl, privacyPolicyUrl: row.privacyPolicyUrl, merchantAgreementUrl: row.merchantAgreementUrl, smsProviderEnabled: row.smsProviderEnabled, smsProvider: row.smsProvider, smsAccessKeyId: row.smsAccessKeyId, smsAccessKeySecret: row.smsAccessKeySecret, automaticSms: normalizeAutomaticSmsSettings(row.automaticSms), automaticWechat: normalizeAutomaticWechatSettings(row.automaticWechat), postEventAutomation: normalizePostEventAutomationSettings(row.postEventAutomation), defaultTenantCode: row.defaultTenantCode, launchConfig: row.launchConfig }; }
+  private operationSettingAuditSnapshot(row: OperationSetting) { return { registrationEnabled: row.registrationEnabled, publicActivityArchiveEnabled: row.publicActivityArchiveEnabled, tenantSwitcherEnabled: row.tenantSwitcherEnabled, paymentMethods: row.paymentMethods, customerServiceName: row.customerServiceName, customerServicePhone: row.customerServicePhone, customerServiceWechat: row.customerServiceWechat, pageTheme: row.pageTheme, userAgreementUrl: row.userAgreementUrl, privacyPolicyUrl: row.privacyPolicyUrl, merchantAgreementUrl: row.merchantAgreementUrl, smsProviderEnabled: row.smsProviderEnabled, smsProvider: row.smsProvider, smsAccessKeyId: row.smsAccessKeyId, smsAccessKeySecret: row.smsAccessKeySecret, automaticSms: normalizeAutomaticSmsSettings(row.automaticSms), automaticWechat: normalizeAutomaticWechatSettings(row.automaticWechat), postEventAutomation: normalizePostEventAutomationSettings(row.postEventAutomation), defaultTenantCode: row.defaultTenantCode, launchConfig: row.launchConfig }; }
 
   private actorName(admin?: AdminContext) {
     return admin?.username || "system";
@@ -11836,6 +11839,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       tenant: tenant || this.tenantRelation(admin),
       registrationEnabled: true,
       publicActivityArchiveEnabled: false,
+      tenantSwitcherEnabled: true,
       registrationDisabledMessage: "报名通道暂时关闭，请稍后再试或联系主办方",
       offlinePaymentInstructions: "请在付款截止前完成线下转账或现场付款，并在备注中填写报名手机号。主办方确认收款后，报名状态会自动更新",
       paymentMethods: this.defaultPaymentMethods(),

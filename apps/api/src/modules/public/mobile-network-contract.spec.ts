@@ -42,6 +42,8 @@ describe("mobile production network contract", () => {
     expect(home).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()]);");
     expect(home).toContain("await loadActivities();");
     expect(home).toContain("void resolveTenantByCurrentLocation({ silent: true }).then");
+    expect(home).toContain("if (!tenantSwitcherEnabled.value) return");
+    expect(api).toContain("if (bootstrap?.tenantSwitcherEnabled === false)");
     expect(tabBar).toContain('import { applyTenantBootstrapDefault } from "../api"');
     expect(tabBar).toContain("await applyTenantBootstrapDefault()");
     expect(tabBar).toContain("if (serial !== refreshSerial) return");
@@ -49,6 +51,8 @@ describe("mobile production network contract", () => {
     expect(tabBar).toContain("onShow(() => void refreshBottomNav())");
     expect(api).toContain("export function getCurrentRouteForTenant");
     expect(api).toContain("tenantCode: normalizeTenantCode(tenantCode)");
+    expect(tenantSwitcher).toContain("v-if=\"tenantSwitcherEnabled\"");
+    expect(tenantSwitcher).toContain("position: fixed; top: 0; right: 0; bottom: 0; left: 0");
     expect(tenantSwitcher).toContain("const nextRoute = getCurrentRouteForTenant(item.code)");
     expect(tenantSwitcher).toContain("uni.reLaunch({ url: nextRoute })");
   });

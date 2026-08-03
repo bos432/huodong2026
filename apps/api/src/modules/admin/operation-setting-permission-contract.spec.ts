@@ -51,6 +51,7 @@ describe("operation setting permission contract", () => {
     expect(service).toContain('throw new ForbiddenException("不能修改其他商家的运营设置")');
     expect(service).toContain("if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined)");
     expect(service).toContain("if (!scope.tenant && dto.defaultTenantCode !== undefined)");
+    expect(service).toContain("if (!scope.tenant && dto.tenantSwitcherEnabled !== undefined)");
     expect(page).toContain('v-model="operationTenantId"');
     expect(page).toContain("商家前端实时生效");
     expect(page).toContain("operationLaunchConfigPayload");

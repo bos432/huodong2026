@@ -213,4 +213,11 @@ describe("migration contracts", () => {
     expect(migration).toContain("default: 0");
     expect(migration).toContain("UPDATE operation_settings SET publicActivityArchiveEnabled = 0");
   });
+
+  it("keeps tenant switching enabled for existing operation settings", () => {
+    const migration = readFileSync(join(migrationDirectory, "1784130000000-TenantSwitcherSettings.ts"), "utf8");
+    expect(migration).toContain('name: "tenantSwitcherEnabled"');
+    expect(migration).toContain("default: 1");
+    expect(migration).toContain("UPDATE operation_settings SET tenantSwitcherEnabled = 1");
+  });
 });
