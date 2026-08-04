@@ -682,7 +682,8 @@ describe("mobile client state consistency", () => {
   });
 
   it("keeps the home tenant switcher outside transformed containers", () => {
-    expect(homePage).toContain('<view class="discovery-topbar app-enter-soft">');
+    expect(homePage).toContain('<view class="discovery-topbar">');
+    expect(homePage).not.toContain('<view class="discovery-topbar app-enter-soft">');
     expect(homePage).not.toContain('<view class="discovery-topbar app-enter">');
   });
 

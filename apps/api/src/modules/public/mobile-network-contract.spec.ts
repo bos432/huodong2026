@@ -57,6 +57,8 @@ describe("mobile production network contract", () => {
     expect(tenantSwitcher).toContain("z-index: 10001");
     expect(tenantSwitcher).toContain("const nextRoute = getCurrentRouteForTenant(item.code)");
     expect(tenantSwitcher).toContain("uni.reLaunch({ url: nextRoute })");
+    expect(home).toContain('<view class="discovery-topbar">');
+    expect(home).not.toContain('<view class="discovery-topbar app-enter-soft">');
     expect(home).toContain(":show-overlays=\"false\"");
     expect(home).toContain("<MarketingPopup />");
     expect(home).toContain("<SplashAd />");

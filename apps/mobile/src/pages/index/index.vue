@@ -1,6 +1,6 @@
 <template>
   <view class="container discovery-page has-custom-nav">
-    <view class="discovery-topbar app-enter-soft">
+    <view class="discovery-topbar">
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
       <view class="topbar-actions">
         <view v-if="pageBrand.logoUrl" class="brand-mark"><image :src="pageBrand.logoUrl" mode="aspectFit" /></view>
