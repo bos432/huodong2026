@@ -246,6 +246,8 @@ const form = reactive({
     reviewInvitation: false,
     certificateAvailable: false,
     activityRecommendations: false,
+    returnVisitReminders: false,
+    recallDays: [30, 60, 90],
     delayHours: 2
   }
 });
@@ -1677,6 +1679,8 @@ async function loadOperation(force = false) {
         reviewInvitation: false,
         certificateAvailable: false,
         activityRecommendations: false,
+        returnVisitReminders: false,
+        recallDays: [30, 60, 90],
         delayHours: 2,
         ...(data.postEventAutomation || {})
       }
@@ -2105,6 +2109,7 @@ onMounted(async () => {
                 <div class="automatic-sms-row"><div><strong>评价邀请</strong><span>向已签到且尚未评价的用户发送站内邀请</span></div><el-switch v-model="form.postEventAutomation.reviewInvitation" :disabled="!form.postEventAutomation.enabled" /></div>
                 <div class="automatic-sms-row"><div><strong>证书领取</strong><span>证书生成后通知用户查看和验真</span></div><el-switch v-model="form.postEventAutomation.certificateAvailable" :disabled="!form.postEventAutomation.enabled" /></div>
                 <div class="automatic-sms-row"><div><strong>同类活动推荐</strong><span>推荐同商家后续同分类活动</span></div><el-switch v-model="form.postEventAutomation.activityRecommendations" :disabled="!form.postEventAutomation.enabled" /></div>
+                <div class="automatic-sms-row"><div><strong>30 / 60 / 90 天召回</strong><span>仅在有后续开放活动时发送站内提醒，避免无内容打扰</span></div><el-switch v-model="form.postEventAutomation.returnVisitReminders" :disabled="!form.postEventAutomation.enabled" /></div>
               </div>
             </el-form-item>
             <el-form-item label="活动结束后延迟"><el-input-number v-model="form.postEventAutomation.delayHours" :min="0" :max="168" :step="1" /><span class="field-hint">小时</span></el-form-item>

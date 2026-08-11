@@ -25,6 +25,7 @@ const source = ref("h5");
 const activeAction = ref("");
 const moreActionsVisible = ref(false);
 const posterUrl = ref("");
+const organizerFollowLoading = ref(false);
 const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
@@ -237,6 +238,33 @@ function goCommunity() {
 
 function goPublish() {
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activity.value?.id || ""}`) });
+}
+
+async function toggleOrganizerFollow() {
+  const tenantId = Number(activity.value?.tenant?.id || 0);
+  if (!tenantId || organizerFollowLoading.value) return;
+  try { await ensureUser(); } catch { return; }
+  organizerFollowLoading.value = true;
+  try {
+    const result = await request<any>(`/public/organizers/${tenantId}/follow`, { method: "POST" });
+    activity.value.organizerTrust = { ...(activity.value.organizerTrust || {}), followed: Boolean(result.followed), followerCount: Number(result.followerCount || 0) };
+    uni.showToast({ title: result.followed ? "已关注主办方" : "已取消关注", icon: "none" });
+  } catch (error: any) {
+    uni.showToast({ title: reviewSafeText(error?.message || "关注操作失败"), icon: "none" });
+  } finally {
+    organizerFollowLoading.value = false;
+  }
+}
+
+function organizerMetric(value: unknown, suffix = "") {
+  if (value === null || value === undefined || value === "") return "暂无";
+  const number = Number(value);
+  return Number.isFinite(number) ? `${number}${suffix}` : "暂无";
+}
+
+function goRelatedActivity(item: any) {
+  if (!item?.id) return;
+  uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${item.id}`) });
 }
 
 function h5Origin() {
@@ -546,6 +574,13 @@ onShow(() => {
         <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text></view>
       </view>
 
+      <view v-if="activity.organizerTrust" class="trust-strip app-enter" style="animation-delay: 112ms">
+        <view><text>{{ activity.organizerTrust.verified ? "已认证" : "主办方" }}</text><text>主体信息</text></view>
+        <view><text>{{ organizerMetric(activity.organizerTrust.historicalActivityCount, " 场") }}</text><text>历史活动</text></view>
+        <view><text>{{ activity.organizerTrust.reviewCount ? organizerMetric(activity.organizerTrust.averageRating, " 分") : "暂无" }}</text><text>真实评价</text></view>
+        <view><text>{{ organizerMetric(activity.organizerTrust.fulfillmentRate, "%") }}</text><text>活动履约</text></view>
+      </view>
+
       <PageDecorationBlocks :sections="bodyDecorationSections" />
 
       <view class="card head app-enter" style="animation-delay: 132ms">
@@ -701,8 +736,8 @@ onShow(() => {
         <view v-if="operationSetting.refundInstructions" class="service-note">{{ operationSetting.refundInstructions }}</view>
       </view>
 
-      <view class="card organizer-card" v-if="activity.tenant?.organizerProfile?.logoUrl || activity.tenant?.organizerProfile?.intro || activity.tenant?.organizerProfile?.servicePromise">
-        <view class="title small">主办方</view>
+      <view class="card organizer-card" v-if="activity.tenant">
+        <view class="organizer-title-row"><view class="title small">主办方</view><view class="organizer-follow app-press" :class="{ active: activity.organizerTrust?.followed, disabled: organizerFollowLoading }" role="button" tabindex="0" :aria-busy="organizerFollowLoading" @click="toggleOrganizerFollow" @keyup.enter="toggleOrganizerFollow" @keyup.space.prevent="toggleOrganizerFollow">{{ organizerFollowLoading ? "处理中" : activity.organizerTrust?.followed ? "已关注" : "+ 关注" }}</view></view>
         <view class="organizer-head">
           <image v-if="activity.tenant?.organizerProfile?.logoUrl" :src="activity.tenant.organizerProfile.logoUrl" mode="aspectFill" />
           <view v-else class="organizer-logo-fallback">{{ (activity.tenant?.name || "主办方").slice(0, 1) }}</view>
@@ -710,6 +745,7 @@ onShow(() => {
         </view>
         <view v-if="activity.tenant?.organizerProfile?.intro" class="organizer-intro">{{ activity.tenant.organizerProfile.intro }}</view>
         <view v-if="activity.tenant?.organizerProfile?.servicePromise" class="organizer-promise"><text>服务承诺</text><text>{{ activity.tenant.organizerProfile.servicePromise }}</text></view>
+        <view v-if="activity.organizerTrust" class="organizer-proof"><text>{{ activity.organizerTrust.followerCount || 0 }} 人关注</text><text v-if="activity.organizerTrust.reviewCount">{{ activity.organizerTrust.reviewCount }} 条已审核评价</text><text v-if="activity.organizerTrust.fulfillmentRate !== null">履约率 {{ activity.organizerTrust.fulfillmentRate }}%</text></view>
       </view>
 
       <view class="card" v-if="activity.hosts?.length">
@@ -726,9 +762,15 @@ onShow(() => {
         <rich-text class="section-content activity-rich" :nodes="richActivityContent(section.content)" />
       </view>
       <view class="card" v-if="activity.notice"><view class="title small">报名须知</view><rich-text class="section-content activity-rich" :nodes="richActivityContent(activity.notice)" /></view>
+      <view class="card refund-rule-card" v-if="activity.refundInstructions && !operationSetting?.refundInstructions"><view class="title small">退款规则</view><view class="section-content">{{ activity.refundInstructions }}</view></view>
       <view class="card" v-if="activity.reviews?.length">
         <view class="title small">活动评价</view>
         <view v-for="review in activity.reviews" :key="review.id" class="review"><view class="review-head"><view class="name">{{ "★".repeat(review.rating) }}<text v-if="review.featured" class="featured-review">精选</text></view><view class="report-link" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :class="{ disabled: Boolean(activeAction) }" @click="reportReview(review)" @keyup.enter="reportReview(review)" @keyup.space.prevent="reportReview(review)">{{ activeAction === `report:${review.id}` ? "提交中" : "举报" }}</view></view><view>{{ review.content }}</view><view v-if="review.adminReply" class="subtle reply">主办方回复：{{ review.adminReply }}</view></view>
+      </view>
+
+      <view class="card related-card" v-if="activity.relatedActivities?.length">
+        <view class="title small">系列活动</view>
+        <scroll-view scroll-x class="related-scroll" :show-scrollbar="false"><view class="related-track"><view v-for="item in activity.relatedActivities" :key="item.id" class="related-item app-press" role="button" tabindex="0" @click="goRelatedActivity(item)" @keyup.enter="goRelatedActivity(item)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="related-cover-fallback">活动</view><view class="related-copy"><text>{{ item.title }}</text><text>{{ formatTime(item.startTime) }}</text><text>{{ item.location || "地点待确认" }} · {{ priceText(item.price) }}</text></view></view></view></scroll-view>
       </view>
 
       <view class="bottom-bar app-enter" style="animation-delay: 180ms" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
@@ -901,6 +943,9 @@ onShow(() => {
 .service-contact-button::after { border: 0; }
 .service-note { margin-top: 14rpx; padding: 16rpx; border-radius: 18rpx; background: #f9f4ee; color: #666666; font-size: 25rpx; line-height: 1.6; }
 .organizer-card { display: grid; gap: 16rpx; }
+.organizer-title-row{display:flex;align-items:center;justify-content:space-between;gap:16rpx}.organizer-title-row .title{margin:0}.organizer-follow{min-width:104rpx;padding:10rpx 16rpx;border:1rpx solid #b9dfc8;border-radius:8rpx;color:#08753f;font-size:var(--app-font-helper);font-weight:800;text-align:center}.organizer-follow.active{border-color:#dce6e0;background:#eef4f1;color:#536a61}.organizer-follow.disabled{opacity:.55}.organizer-proof{display:flex;flex-wrap:wrap;gap:10rpx}.organizer-proof text{padding:7rpx 10rpx;border-radius:6rpx;background:#f1f7f4;color:#4d6a60;font-size:var(--app-font-caption)}
+.trust-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rpx;margin:0 24rpx 20rpx;overflow:hidden;border:1rpx solid #dce9e2;border-radius:8rpx;background:#dce9e2}.trust-strip view{min-width:0;display:grid;gap:5rpx;padding:17rpx 8rpx;background:#fff;text-align:center}.trust-strip text:first-child{color:#173f3a;font-size:23rpx;font-weight:900}.trust-strip text:last-child{color:#788a82;font-size:19rpx}
+.related-scroll{width:100%}.related-track{display:flex;gap:14rpx;width:max-content}.related-item{width:390rpx;overflow:hidden;border:1rpx solid #e2ebe6;border-radius:8rpx;background:#fff}.related-item image,.related-cover-fallback{width:100%;height:190rpx;display:flex;align-items:center;justify-content:center;background:#e8f6ed;color:#08753f}.related-copy{display:grid;gap:7rpx;padding:16rpx}.related-copy text:first-child{color:#173f3a;font-size:26rpx;font-weight:900}.related-copy text:not(:first-child){color:#71817a;font-size:21rpx;line-height:1.4}
 .organizer-head { display: flex; align-items: center; gap: 16rpx; }
 .organizer-head image, .organizer-logo-fallback { width: 76rpx; height: 76rpx; border-radius: 8rpx; background: #e9f8ef; flex: 0 0 auto; }
 .organizer-logo-fallback { display: grid; place-items: center; color: #08753f; font-size: 29rpx; font-weight: 900; }

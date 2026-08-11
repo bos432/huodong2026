@@ -1187,6 +1187,13 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
   },
   {
     "group": "平台治理与基础设施",
+    "name": "tenant_followers",
+    "meaning": "商家关注关系相关业务数据。",
+    "business": "平台治理与基础设施模块中的商家关注关系查询、状态流转和关联记录。",
+    "caution": "涉及权限、租户或主体归属，修改前确认数据范围并保留操作记录。"
+  },
+  {
+    "group": "平台治理与基础设施",
     "name": "tenant_region_hit_logs",
     "meaning": "商家区域命中日志相关业务数据。",
     "business": "平台治理与基础设施模块中的商家区域命中日志查询、状态流转和关联记录。",

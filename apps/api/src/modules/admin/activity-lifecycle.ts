@@ -50,6 +50,58 @@ export type ActivityPublishReadinessInput = {
   now?: Date;
 };
 
+function normalizedContent(value?: string | null) {
+  return String(value || "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, " ")
+    .replace(/\[[^\]]+\]\([^)]*\)/g, " ")
+    .replace(/[*_#>`~-]/g, " ")
+    .replace(/[\t\r]+/g, " ")
+    .replace(/ +/g, " ");
+}
+
+function localDateParts(value: Date | string) {
+  const date = new Date(value);
+  return { year: date.getFullYear(), month: date.getMonth() + 1, day: date.getDate(), hour: date.getHours(), minute: date.getMinutes() };
+}
+
+export function activityContentConsistencyIssues(input: Pick<ActivityPublishReadinessInput, "description" | "location" | "startTime" | "endTime" | "price">): ActivityPublishIssue[] {
+  const content = normalizedContent(input.description);
+  if (!content.trim()) return [];
+  const issues: ActivityPublishIssue[] = [];
+  const start = localDateParts(input.startTime);
+  const end = localDateParts(input.endTime);
+  const scheduleLine = content.match(/(?:活动时间|活动日期|时间|日期)\s*[：:]\s*([^\n]{1,80})/i)?.[1] || "";
+  if (scheduleLine && /\d{1,4}\s*[年./-]\s*\d{1,2}|\d{1,2}\s*月\s*\d{1,2}/.test(scheduleLine)) {
+    const acceptedDates = [
+      `${start.year}-${start.month}-${start.day}`, `${start.year}/${start.month}/${start.day}`, `${start.month}-${start.day}`, `${start.month}/${start.day}`, `${start.month}月${start.day}日`,
+      `${end.year}-${end.month}-${end.day}`, `${end.year}/${end.month}/${end.day}`, `${end.month}-${end.day}`, `${end.month}/${end.day}`, `${end.month}月${end.day}日`
+    ];
+    const compact = scheduleLine.replace(/\s+/g, "").replace(/0(\d)/g, "$1");
+    if (!acceptedDates.some((value) => compact.includes(value))) issues.push({ field: "descriptionSchedule", message: "活动介绍中的活动日期可能与开始/结束时间不一致，请核对", blocking: false });
+  }
+  if (scheduleLine && /\d{1,2}\s*[：:]\s*\d{2}/.test(scheduleLine)) {
+    const pad = (value: number) => String(value).padStart(2, "0");
+    const acceptedTimes = [`${pad(start.hour)}:${pad(start.minute)}`, `${pad(end.hour)}:${pad(end.minute)}`];
+    if (!acceptedTimes.some((value) => scheduleLine.replace(/：/g, ":").includes(value))) issues.push({ field: "descriptionSchedule", message: "活动介绍中的活动时间可能与开始/结束时间不一致，请核对", blocking: false });
+  }
+  const locationLine = content.match(/(?:活动地点|集合地点|地址|地点)\s*[：:]\s*([^\n]{1,100})/i)?.[1]?.trim() || "";
+  const actualLocation = String(input.location || "").replace(/\s+/g, "");
+  if (locationLine && actualLocation) {
+    const describedLocation = locationLine.replace(/\s+/g, "");
+    const anchor = actualLocation.slice(0, Math.min(actualLocation.length, 6));
+    if (!describedLocation.includes(actualLocation) && !actualLocation.includes(describedLocation) && anchor.length >= 3 && !describedLocation.includes(anchor)) issues.push({ field: "descriptionLocation", message: "活动介绍中的地点可能与活动地点字段不一致，请核对", blocking: false });
+  }
+  const priceLine = content.match(/(?:活动费用|报名费用|价格|费用)\s*[：:]\s*([^\n]{1,40})/i)?.[1] || "";
+  if (priceLine) {
+    const expected = Number(input.price || 0);
+    const described = priceLine.match(/(?:¥|￥)?\s*(\d+(?:\.\d{1,2})?)/)?.[1];
+    const saysFree = /免费|0\s*元/.test(priceLine);
+    if (expected === 0 && described && Number(described) > 0 || expected > 0 && (saysFree || described !== undefined && Math.abs(Number(described) - expected) > 0.009)) issues.push({ field: "descriptionPrice", message: "活动介绍中的费用可能与活动价格字段不一致，请核对", blocking: false });
+  }
+  return issues;
+}
+
 export function activityPublishReadinessIssues(input: ActivityPublishReadinessInput): ActivityPublishIssue[] {
   const issues: ActivityPublishIssue[] = [];
   const startAt = new Date(input.startTime);
@@ -69,5 +121,6 @@ export function activityPublishReadinessIssues(input: ActivityPublishReadinessIn
   if (input.hasOrganizerProfile === false) issues.push({ field: "organizerProfile", message: "建议完善主办方简介或服务承诺，活动详情将展示可信信息", blocking: false });
   if (input.hasCustomerServiceContact === false) issues.push({ field: "customerService", message: "建议配置客服联系方式，方便用户在报名和活动当天获得支持", blocking: false });
   if (Number(input.price || 0) > 0 && !hasPaidPaymentMethod(input.paymentMethods)) issues.push({ field: "paymentMethods", message: "付费活动尚未配置可用支付方式", blocking: true });
+  issues.push(...activityContentConsistencyIssues(input));
   return issues;
 }

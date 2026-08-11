@@ -389,6 +389,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
   const verb = method.toUpperCase();
   const write = ["POST", "PATCH", "PUT", "DELETE"].includes(verb);
   if (path === "dashboard") return "dashboard.view";
+  if (path === "resource-network") return "analytics.view";
   if (path === "business-jobs" && verb === "GET") return "business_job.view";
   if (path.startsWith("business-jobs")) return "business_job.manage";
   if (path === "analytics/recompute") return "analytics.manage";

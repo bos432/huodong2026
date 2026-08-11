@@ -27,6 +27,7 @@ export type TenantQuickLink = {
 
 export const tenantScopedRoutePaths = new Set([
   "/activities",
+  "/resource-network",
   "/activity-space",
   "/support",
   "/registrations",
@@ -111,7 +112,8 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "platform",
     items: [
       { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: ["activity.approve"], scope: "platform" },
-      { index: "/activities", icon: "Calendar", label: "全部活动", roles: permissions.activityView, scope: "platform" },
+      { index: "/activities", icon: "Calendar", label: "平台活动池", roles: permissions.activityView, scope: "platform" },
+      { index: "/resource-network", icon: "Connection", label: "场地与讲师资源", roles: permissions.analytics, scope: "platform" },
       { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
       { index: "/announcements", icon: "Bell", label: "公告监管", roles: ["announcement.view"], scope: "platform" },
       { index: "/categories", icon: "CollectionTag", label: "全局分类", roles: ["category.view"], scope: "platform" }
@@ -232,6 +234,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/activities", icon: "Calendar", label: "活动管理", roles: permissions.activityView, scope: "tenant" },
+      { index: "/resource-network", icon: "Connection", label: "场地与讲师资源", roles: permissions.analytics, scope: "tenant" },
       { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: ["category.view"], scope: "tenant" },
       { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: ["ticket.view"], scope: "tenant" },
       { index: "/coupons", icon: "Discount", label: "优惠券与兑换码", roles: ["coupon.view", "redemption_code.view"], scope: "tenant" }

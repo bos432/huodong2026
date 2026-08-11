@@ -16,7 +16,7 @@ const tokenLabels = {
   change: "变更", check: "检查", checkout: "结算确认", claim: "领取", code: "码", commission: "佣金", community: "社区",
   comment: "评论", company: "公司", content: "内容", contract: "合同", contribution: "贡献", conversion: "转化",
   coupon: "优惠券", course: "课程", daily: "每日", decoration: "装修", definition: "定义", disbursement: "拨付",
-  event: "事件", favorite: "收藏", field: "字段", flash: "秒杀", follow: "关注", followup: "跟进", forum: "论坛",
+  event: "事件", favorite: "收藏", field: "字段", flash: "秒杀", follow: "关注", follower: "关注关系", followup: "跟进", forum: "论坛",
   fund: "资金", grant: "授权", group: "分组", history: "历史", hit: "命中", homepage: "首页", host: "主办方",
   hour: "工时", inventory: "库存", invite: "邀请", item: "明细", job: "任务", keyword: "关键词", landing: "落地页",
   learning: "学习", lesson: "课时", level: "等级", like: "点赞", limit: "限制", line: "行项目", log: "日志", login: "登录", logistics: "物流",

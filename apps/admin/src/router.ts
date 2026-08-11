@@ -7,6 +7,7 @@ const AdminInviteAccept = () => import("./views/AdminInviteAccept.vue");
 const Layout = () => import("./views/Layout.vue");
 const Dashboard = () => import("./views/Dashboard.vue");
 const Analytics = () => import("./views/Analytics.vue");
+const ResourceNetwork = () => import("./views/ResourceNetwork.vue");
 const SupportSearch = () => import("./views/SupportSearch.vue");
 const Activities = () => import("./views/Activities.vue");
 const Funnels = () => import("./views/Funnels.vue");
@@ -82,6 +83,7 @@ export const router = createRouter({
         { path: "", redirect: "/dashboard" },
         { path: "dashboard", component: Dashboard, meta: { roles: permissions.overview, scope: "tenantOrPlatformAdmin" } },
         { path: "analytics", component: Analytics, meta: { roles: permissions.analytics, scope: "tenantOrPlatformAdmin" } },
+        { path: "resource-network", component: ResourceNetwork, meta: { roles: permissions.analytics, scope: "tenantOrPlatformAdmin" } },
         { path: "support", component: SupportSearch, meta: { roles: ["support.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "courses", component: Courses, meta: { roles: ["course.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "community", component: Community, meta: { roles: ["community.manage"], scope: "tenantOrPlatformAdmin" } },
@@ -158,6 +160,7 @@ function fallbackPath() {
   const candidates = [
     { path: "/dashboard", roles: permissions.overview, scope: "tenantOrPlatformAdmin" },
     { path: "/analytics", roles: permissions.analytics, scope: "tenantOrPlatformAdmin" },
+    { path: "/resource-network", roles: permissions.analytics, scope: "tenantOrPlatformAdmin" },
     { path: "/support", roles: ["support.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/courses", roles: ["course.manage"], scope: "tenantOrPlatformAdmin" },
     { path: "/community", roles: ["community.manage"], scope: "tenantOrPlatformAdmin" },

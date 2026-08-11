@@ -58,6 +58,12 @@ export class PublicV1Controller {
     return this.service.createReview(id, body, user, this.tenantContext(req, tenantCode || body.tenantCode));
   }
 
+  @Post("organizers/:tenantId/follow")
+  async toggleOrganizerFollow(@Req() req: any, @Param("tenantId", ParseIntPipe) tenantId: number, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.toggleOrganizerFollow(tenantId, user, this.tenantContext(req, tenantCode));
+  }
+
   @Get("activities/:id/space")
   async activitySpace(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Query("tenantCode") tenantCode?: string) {
     const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);

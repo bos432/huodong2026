@@ -29,6 +29,7 @@ import { OperationSetting } from "../../entities/operation-setting.entity";
 import { Registration } from "../../entities/registration.entity";
 import { ShareVisit } from "../../entities/share-visit.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantFollower } from "../../entities/tenant-follower.entity";
 import { User } from "../../entities/user.entity";
 import { UserTag } from "../../entities/user-tag.entity";
 import { ConversionEvent } from "../../entities/conversion-event.entity";
@@ -41,7 +42,7 @@ import { PublicModule } from "../public/public.module";
 import { MemberPointsModule } from "../member-points/member-points.module";
 
 @Module({
-  imports: [PublicModule, MemberPointsModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivitySpaceAnnouncement, ActivitySpacePost, ActivitySpacePostReport, ActivityRecapVersion, ActivityViewLog, AdminUser, Announcement, Tenant, Registration, Order, Refund, TicketType, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, ConversionEvent, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, NotificationPreference, WechatSubscriptionGrant])],
+  imports: [PublicModule, MemberPointsModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivitySpaceAnnouncement, ActivitySpacePost, ActivitySpacePostReport, ActivityRecapVersion, ActivityViewLog, AdminUser, Announcement, Tenant, TenantFollower, Registration, Order, Refund, TicketType, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, ConversionEvent, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, NotificationPreference, WechatSubscriptionGrant])],
   controllers: [AdminV1Controller, PublicV1Controller],
   providers: [V1Service, NotificationProviderService],
   exports: [V1Service]

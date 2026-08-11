@@ -47,6 +47,8 @@ describe("notification automation suite", () => {
     expect(v1).toContain("notificationJobIdentity");
     expect(jobs).toContain("retryByIdentity");
     expect(postEvent).toContain('const JOB_TYPE = "post-event.notification"');
+    expect(postEvent).toContain('"returnVisitReminder"');
+    expect(postEvent).toContain("recallDays: [30, 60, 90]");
     expect(postEvent).toContain('remark: `post_event:${scene}:${businessId}`');
   });
 });

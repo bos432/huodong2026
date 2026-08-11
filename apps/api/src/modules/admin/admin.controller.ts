@@ -421,6 +421,12 @@ export class AdminController {
   }
 
   @AdminRoles(...OVERVIEW_ROLES)
+  @Get("resource-network")
+  resourceNetwork(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.service.resourceNetwork(query, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
   @Get("analytics/trends")
   analyticsTrends(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.analyticsTrends(query, admin);

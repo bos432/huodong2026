@@ -220,4 +220,9 @@ describe("migration contracts", () => {
     expect(migration).toContain("default: 1");
     expect(migration).toContain("UPDATE operation_settings SET tenantSwitcherEnabled = 1");
   });
+
+  it("creates a unique tenant-scoped organizer follow relation", () => {
+    const migration = readFileSync(join(migrationDirectory, "1784140000000-TenantFollowers.ts"), "utf8");
+    for (const token of ["tenant_followers", "tenantId", "userId", "UQ_tenant_followers_tenant_user", "isUnique: true"]) expect(migration).toContain(token);
+  });
 });

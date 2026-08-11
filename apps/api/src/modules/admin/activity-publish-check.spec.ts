@@ -44,4 +44,27 @@ describe("activity publish check", () => {
 
     expect(result).toContainEqual(expect.objectContaining({ field: "paymentMethods", blocking: true }));
   });
+
+  it("warns when rich content repeats conflicting schedule, location or price", () => {
+    const result = activityPublishReadinessIssues({
+      ...activity({
+        description: "活动时间：2026年8月3日 13:50\n活动地点：另一处空间\n活动费用：免费",
+        location: "铜梁城市书房",
+        startTime: new Date("2026-08-14T21:50:00+08:00"),
+        endTime: new Date("2026-08-14T23:00:00+08:00"),
+        registrationDeadline: new Date("2026-08-14T20:00:00+08:00"),
+        price: 19.9
+      }),
+      hasOrganizerProfile: true,
+      hasCustomerServiceContact: true,
+      paymentMethods: { wechat: true },
+      now: new Date("2026-08-10T12:00:00+08:00")
+    });
+
+    expect(result).toEqual(expect.arrayContaining([
+      expect.objectContaining({ field: "descriptionSchedule", blocking: false }),
+      expect.objectContaining({ field: "descriptionLocation", blocking: false }),
+      expect.objectContaining({ field: "descriptionPrice", blocking: false })
+    ]));
+  });
 });

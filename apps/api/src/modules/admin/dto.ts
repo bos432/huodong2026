@@ -1074,6 +1074,10 @@ export class ActivityQueryDto {
   tenantId?: number;
 
   @IsOptional()
+  @IsString()
+  locationCity?: string;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   page?: number;

@@ -16,6 +16,8 @@ export type PostEventAutomationSettings = {
   reviewInvitation: boolean;
   certificateAvailable: boolean;
   activityRecommendations: boolean;
+  returnVisitReminders: boolean;
+  recallDays: number[];
   delayHours: number;
 };
 
@@ -24,6 +26,8 @@ export const defaultPostEventAutomationSettings: PostEventAutomationSettings = {
   reviewInvitation: false,
   certificateAvailable: false,
   activityRecommendations: false,
+  returnVisitReminders: false,
+  recallDays: [30, 60, 90],
   delayHours: 2
 };
 
@@ -31,16 +35,21 @@ export function normalizePostEventAutomationSettings(value: unknown): PostEventA
   const input = value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
   const truthy = (item: unknown) => item === true || item === 1 || item === "1" || item === "true";
   const delayHours = Number(input.delayHours);
+  const recallDays = Array.isArray(input.recallDays)
+    ? Array.from(new Set(input.recallDays.map(Number).filter((day) => Number.isInteger(day) && day >= 1 && day <= 365))).sort((a, b) => a - b).slice(0, 6)
+    : [30, 60, 90];
   return {
     enabled: truthy(input.enabled),
     reviewInvitation: truthy(input.reviewInvitation),
     certificateAvailable: truthy(input.certificateAvailable),
     activityRecommendations: truthy(input.activityRecommendations),
+    returnVisitReminders: truthy(input.returnVisitReminders),
+    recallDays: recallDays.length ? recallDays : [30, 60, 90],
     delayHours: Number.isFinite(delayHours) ? Math.max(0, Math.min(168, Math.round(delayHours))) : 2
   };
 }
 
-type PostEventScene = "reviewInvitation" | "certificateAvailable" | "activityRecommendations";
+type PostEventScene = "reviewInvitation" | "certificateAvailable" | "activityRecommendations" | "returnVisitReminder";
 const JOB_TYPE = "post-event.notification";
 
 @Injectable()
@@ -83,7 +92,7 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
       if (!automation.enabled) continue;
       const tenantId = setting.tenant?.id || null;
       const cutoff = new Date(now.getTime() - automation.delayHours * 3_600_000);
-      if (automation.reviewInvitation || automation.activityRecommendations) {
+      if (automation.reviewInvitation || automation.activityRecommendations || automation.returnVisitReminders) {
         const builder = this.registrations.createQueryBuilder("registration")
           .leftJoinAndSelect("registration.activity", "activity")
           .leftJoinAndSelect("activity.tenant", "tenant")
@@ -100,6 +109,12 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
           if (automation.activityRecommendations) {
             if (await this.enqueue("activityRecommendations", registration.user.id, tenantId, registration.activity.id, `activity:${registration.activity.id}:user:${registration.user.id}`)) queued += 1;
           }
+          if (automation.returnVisitReminders) {
+            for (const day of automation.recallDays) {
+              const runAt = new Date(registration.activity.endTime.getTime() + day * 86_400_000);
+              if (await this.enqueue("returnVisitReminder", registration.user.id, tenantId, registration.activity.id, `activity:${registration.activity.id}:user:${registration.user.id}:day:${day}`, { recallDay: day }, runAt)) queued += 1;
+            }
+          }
         }
       }
       if (automation.certificateAvailable) {
@@ -112,15 +127,15 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
     return { queued };
   }
 
-  private async enqueue(scene: PostEventScene, userId: number, tenantId: number | null, activityId: number | null, businessId: string, variables: Record<string, unknown> = {}) {
+  private async enqueue(scene: PostEventScene, userId: number, tenantId: number | null, activityId: number | null, businessId: string, variables: Record<string, unknown> = {}, runAt?: Date) {
     const existing = await this.notifications.findOne({ where: { tenantScopeKey: tenantId ? `tenant:${tenantId}` : "platform", remark: `post_event:${scene}:${businessId}` } });
     if (existing) return null;
-    return this.jobs.publish({ tenantId, type: JOB_TYPE, idempotencyKey: `${scene}:${businessId}`.slice(0, 120), payload: { scene, userId, tenantId, activityId, businessId, variables }, maxAttempts: 5 });
+    return this.jobs.publish({ tenantId, type: JOB_TYPE, idempotencyKey: `${scene}:${businessId}`.slice(0, 120), payload: { scene, userId, tenantId, activityId, businessId, variables }, maxAttempts: 5, runAt });
   }
 
   private async deliver(payload: Record<string, unknown>) {
     const scene = String(payload.scene || "") as PostEventScene;
-    if (!(["reviewInvitation", "certificateAvailable", "activityRecommendations"] as const).includes(scene)) throw new Error("活动结束运营场景无效");
+    if (!(["reviewInvitation", "certificateAvailable", "activityRecommendations", "returnVisitReminder"] as const).includes(scene)) throw new Error("活动结束运营场景无效");
     const userId = Number(payload.userId);
     const tenantId = payload.tenantId ? Number(payload.tenantId) : null;
     const activityId = payload.activityId ? Number(payload.activityId) : null;
@@ -134,7 +149,8 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
       activityId ? this.activities.findOneBy({ id: activityId }) : Promise.resolve(null)
     ]);
     const automation = normalizePostEventAutomationSettings(setting?.postEventAutomation);
-    if (!automation.enabled || !automation[scene]) return { status: "suppressed", reason: "活动结束自动运营场景已关闭" };
+    const sceneEnabled = scene === "returnVisitReminder" ? automation.returnVisitReminders : automation[scene];
+    if (!automation.enabled || !sceneEnabled) return { status: "suppressed", reason: "活动结束自动运营场景已关闭" };
     const message = await this.message(scene, userId, tenantId, registrationActivity, payload.variables as Record<string, unknown> || {});
     if (!message) return { status: "suppressed", reason: "当前没有可发送的运营内容" };
     const row = await this.notifications.save(this.notifications.create({
@@ -177,6 +193,28 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
         variables: { activityIds: recommended.map((row) => row.id).join(","), userId: String(userId) }
       };
     }
+    if (scene === "returnVisitReminder" && activity) {
+      const recommendation = await this.recommendedActivities(activity, tenantId);
+      if (!recommendation.length) return null;
+      const day = Number(variables.recallDay || 0);
+      return {
+        title: "有新的活动适合你",
+        content: `距离你参加「${activity.title}」已过去 ${day} 天，为你找到：${recommendation.map((row) => row.title).join("、")}。`,
+        page: "pages/activity/list",
+        variables: { activityIds: recommendation.map((row) => row.id).join(","), recallDay: String(day), userId: String(userId) }
+      };
+    }
     return null;
+  }
+
+  private async recommendedActivities(activity: Activity, tenantId: number | null) {
+    const builder = this.activities.createQueryBuilder("activity").leftJoinAndSelect("activity.tenant", "tenant")
+      .where("activity.startTime > :now", { now: new Date() })
+      .andWhere("activity.status = :status", { status: ActivityStatus.Open })
+      .andWhere("activity.id <> :activityId", { activityId: activity.id })
+      .orderBy("activity.featured", "DESC").addOrderBy("activity.startTime", "ASC").take(3);
+    tenantId ? builder.andWhere("activity.tenantId = :tenantId", { tenantId }) : builder.andWhere("activity.tenantId IS NULL");
+    if (activity.category?.id) builder.andWhere("activity.categoryId = :categoryId", { categoryId: activity.category.id });
+    return builder.getMany();
   }
 }

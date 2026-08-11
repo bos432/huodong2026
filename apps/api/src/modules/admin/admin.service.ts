@@ -3020,7 +3020,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async analyticsOverview(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
     const scope = await this.analyticsScope(query, admin);
     const builders = this.analyticsBuilders(scope, admin);
-    const [eventCounts, paidAmount, refundAmount, walletRechargeAmount, charitySummary, activeUserCount, tenantRanking, risk, metricRows] = await Promise.all([
+    const [eventCounts, paidAmount, refundAmount, walletRechargeAmount, charitySummary, activeUserCount, tenantRanking, cityOperations, risk, metricRows] = await Promise.all([
       builders.events.select("event.type", "type").addSelect("COUNT(1)", "count").groupBy("event.type").getRawMany<{ type: string; count: string }>(),
       builders.payments.select("COALESCE(SUM(transaction.amount), 0)", "sum").andWhere("transaction.status = :status", { status: "success" }).getRawOne<{ sum: string }>(),
       builders.refunds.select("COALESCE(SUM(refund.amount), 0)", "sum").andWhere("refund.status = :status", { status: "completed" }).getRawOne<{ sum: string }>(),
@@ -3028,6 +3028,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       this.charityFund.adminSummary(admin),
       builders.events.select("COUNT(DISTINCT event.userId)", "count").andWhere("event.userId IS NOT NULL").getRawOne<{ count: string }>(),
       this.analyticsTenantRanking(scope, admin),
+      this.analyticsCityOperations(scope, admin),
       this.analyticsRisk(scope, admin),
       this.analyticsReportMetricRows(query, scope, scope.activityId ? "activity" : scope.tenantId ? "tenant" : "platform", String(scope.activityId || scope.tenantId || "all"), admin)
     ]);
@@ -3069,6 +3070,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       totals,
       rates,
       tenantRanking,
+      cityOperations,
       risk,
       operationAdvice: this.analyticsOperationAdvice(totals, rates, risk)
       ,metricSource: metricRows.length ? "daily_metrics" : "live_tables"
@@ -3130,6 +3132,63 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     }
     const rows = await this.channelReportBuilder(scope, admin).getRawMany<any>();
     return rows.map((row) => ({ ...this.channelReportRow(row), metricSource: "live_tables" }));
+  }
+
+  async resourceNetwork(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
+    const scope = await this.analyticsScope(query, admin);
+    const activityStatuses = [ActivityStatus.Open, ActivityStatus.Closed, ActivityStatus.Ended];
+    const venueBuilder = this.activities
+      .createQueryBuilder("activity")
+      .select("activity.location", "location")
+      .addSelect("COALESCE(NULLIF(activity.locationCity, ''), '未归属城市')", "city")
+      .addSelect("COUNT(activity.id)", "activityCount")
+      .addSelect("COALESCE(SUM(activity.capacity), 0)", "totalCapacity")
+      .addSelect("MAX(activity.startTime)", "lastActivityAt")
+      .where("activity.status IN (:...resourceStatuses)", { resourceStatuses: activityStatuses })
+      .groupBy("activity.location")
+      .addGroupBy("activity.locationCity")
+      .orderBy("activityCount", "DESC")
+      .limit(200);
+    const hostBuilder = this.hosts
+      .createQueryBuilder("host")
+      .leftJoin("host.activity", "activity")
+      .select("host.name", "name")
+      .addSelect("MAX(host.title)", "title")
+      .addSelect("MAX(host.avatarUrl)", "avatarUrl")
+      .addSelect("COUNT(DISTINCT activity.id)", "activityCount")
+      .addSelect("GROUP_CONCAT(DISTINCT activity.locationCity ORDER BY activity.locationCity SEPARATOR '、')", "cities")
+      .addSelect("MAX(activity.startTime)", "lastActivityAt")
+      .where("activity.status IN (:...resourceStatuses)", { resourceStatuses: activityStatuses })
+      .groupBy("host.name")
+      .orderBy("activityCount", "DESC")
+      .limit(200);
+    this.applyTenantScope(venueBuilder, "activity", admin);
+    this.applyTenantScope(hostBuilder, "activity", admin);
+    if (scope.tenantId) {
+      venueBuilder.andWhere("activity.tenantId = :resourceTenantId", { resourceTenantId: scope.tenantId });
+      hostBuilder.andWhere("activity.tenantId = :resourceTenantId", { resourceTenantId: scope.tenantId });
+    }
+    if (scope.startDate) {
+      venueBuilder.andWhere("activity.startTime >= :resourceStartDate", { resourceStartDate: scope.startDate });
+      hostBuilder.andWhere("activity.startTime >= :resourceStartDate", { resourceStartDate: scope.startDate });
+    }
+    if (scope.endDate) {
+      venueBuilder.andWhere("activity.startTime < :resourceEndDate", { resourceEndDate: scope.endDate });
+      hostBuilder.andWhere("activity.startTime < :resourceEndDate", { resourceEndDate: scope.endDate });
+    }
+    const [venueRows, hostRows] = await Promise.all([venueBuilder.getRawMany<any>(), hostBuilder.getRawMany<any>()]);
+    const venues = venueRows.map((row) => ({ location: row.location, city: row.city, activityCount: Number(row.activityCount || 0), totalCapacity: Number(row.totalCapacity || 0), lastActivityAt: row.lastActivityAt || null }));
+    const hosts = hostRows.map((row) => ({ name: row.name, title: row.title || "", avatarUrl: row.avatarUrl || null, activityCount: Number(row.activityCount || 0), cities: String(row.cities || "").split("、").filter(Boolean), lastActivityAt: row.lastActivityAt || null }));
+    return {
+      summary: {
+        hostCount: hosts.length,
+        venueCount: venues.length,
+        activityCount: venues.reduce((sum, row) => sum + row.activityCount, 0),
+        cityCount: new Set(venues.map((row) => row.city).filter((city) => city && city !== "未归属城市")).size
+      },
+      hosts,
+      venues
+    };
   }
 
   async exportAnalyticsMetrics(query: AnalyticsMetricQueryDto = {}, admin?: AdminContext) {
@@ -5387,6 +5446,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     }
     if (query.status) builder.andWhere("activity.status = :status", { status: query.status });
     if (query.categoryId) builder.andWhere("category.id = :categoryId", { categoryId: query.categoryId });
+    if (query.locationCity?.trim()) builder.andWhere("activity.locationCity LIKE :locationCity", { locationCity: `%${query.locationCity.trim()}%` });
     if (!this.isTenantScoped(admin) && query.tenantId) builder.andWhere("tenant.id = :tenantId", { tenantId: query.tenantId });
 
     if (!pageSize) {
@@ -5402,6 +5462,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       countBuilder.andWhere("(activity.title LIKE :keyword OR activity.location LIKE :keyword)", { keyword: `%${query.keyword.trim()}%` });
     }
     if (query.categoryId) countBuilder.andWhere("activity.categoryId = :categoryId", { categoryId: query.categoryId });
+    if (query.locationCity?.trim()) countBuilder.andWhere("activity.locationCity LIKE :locationCity", { locationCity: `%${query.locationCity.trim()}%` });
     if (!this.isTenantScoped(admin) && query.tenantId) countBuilder.andWhere("activity.tenantId = :tenantId", { tenantId: query.tenantId });
     const statusCounts = await countBuilder.select("activity.status", "status").addSelect("COUNT(*)", "cnt").groupBy("activity.status").getRawMany();
     const counts: Record<string, number> = {};
@@ -10549,6 +10610,45 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (scope.endDate) builder.andWhere("(event.createdAt IS NULL OR event.createdAt < :rankEndDate)", { rankEndDate: scope.endDate });
     const rows = await builder.getRawMany<any>();
     return rows.map((row) => ({ tenantId: Number(row.tenantId), tenantName: row.tenantName, activityCount: Number(row.activityCount || 0), registrationCount: Number(row.registrationCount || 0), paidAmount: Number(row.paidAmount || 0).toFixed(2) }));
+  }
+
+  private async analyticsCityOperations(scope: { tenantId?: number; activityId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
+    const cityExpression = "COALESCE(NULLIF(event.citySnapshot, ''), NULLIF(activity.locationCity, ''), '未归属城市')";
+    const builder = this.conversionEvents
+      .createQueryBuilder("event")
+      .leftJoin("event.activity", "activity")
+      .select(cityExpression, "city")
+      .addSelect("SUM(CASE WHEN event.type = 'view' THEN 1 ELSE 0 END)", "viewCount")
+      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
+      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", "paidCount")
+      .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", "checkInCount")
+      .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "paidAmount")
+      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
+      .groupBy(cityExpression)
+      .orderBy("paidCount", "DESC")
+      .addOrderBy("registrationCount", "DESC")
+      .limit(100);
+    this.applyAnalyticsScope(builder, "event", scope, admin);
+    applyAdminActivityDataScope(builder, "event", admin?.dataScope);
+    const rows = await builder.getRawMany<any>();
+    return rows.map((row) => {
+      const viewCount = Number(row.viewCount || 0);
+      const registrationCount = Number(row.registrationCount || 0);
+      const paidCount = Number(row.paidCount || 0);
+      return {
+        city: row.city,
+        viewCount,
+        registrationCount,
+        paidCount,
+        checkInCount: Number(row.checkInCount || 0),
+        refundCount: Number(row.refundCount || 0),
+        signupRate: this.rate(registrationCount, viewCount),
+        paymentRate: this.rate(paidCount, registrationCount),
+        paidAmount: Number(row.paidAmount || 0).toFixed(2),
+        refundAmount: Math.abs(Number(row.refundAmount || 0)).toFixed(2)
+      };
+    });
   }
 
   private async analyticsRisk(scope: { tenantId?: number }, admin?: AdminContext) {

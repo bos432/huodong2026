@@ -218,7 +218,8 @@ describe("public announcement and community asset boundaries", () => {
 
   it("allowlists enhanced activities and removes private eligibility rules", () => {
     const view = v1Service.slice(v1Service.indexOf("private publicActivity(activity"), v1Service.indexOf("private findOperationSetting"));
-    expect(view).toContain("tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region } : null");
+    expect(view).toContain("tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region, organizerProfile: this.publicOrganizerProfile(activity.tenant) } : null");
+    expect(view).toContain("logoUrl: typeof raw.logoUrl === \"string\" ? raw.logoUrl : null");
     expect(view).toContain("eligibilityRules: this.publicEligibilityRules(activity.eligibilityRules)");
     expect(view).not.toContain("...publicActivity");
     expect(view).not.toContain("settings:");

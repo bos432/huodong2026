@@ -57,6 +57,17 @@
       <view class="state-retry" role="button" tabindex="0" aria-label="重新同步会员资产" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新同步资产</view>
     </view>
 
+    <view v-if="isLoggedIn && (nextRegistration || memberTodos.length)" class="profile-section next-action-panel app-enter" style="animation-delay: 102ms">
+      <view class="profile-section-head compact"><view><text class="profile-section-title">接下来</text><text class="profile-section-copy">先处理最重要的活动事项</text></view></view>
+      <view v-if="nextRegistration" class="next-activity app-press" role="button" tabindex="0" :aria-label="`查看${nextRegistration.activity?.title || '下一场活动'}`" @click="openRegistration(nextRegistration.id)" @keyup.enter="openRegistration(nextRegistration.id)" @keyup.space.prevent="openRegistration(nextRegistration.id)">
+        <image v-if="nextRegistration.activity?.coverUrl" :src="nextRegistration.activity.coverUrl" mode="aspectFill" />
+        <view v-else class="next-activity-cover">活</view>
+        <view class="next-activity-copy"><text class="next-activity-kicker">{{ nextRegistration.status === 'pending_payment' ? '待付款' : nextRegistration.status === 'pending_review' ? '审核中' : '下一场活动' }}</text><text class="next-activity-title">{{ nextRegistration.activity?.title }}</text><text>{{ formatMemberActivityTime(nextRegistration.activity?.startTime) }} · {{ nextRegistration.activity?.location || '地点待确认' }}</text></view>
+        <text class="entry-arrow">›</text>
+      </view>
+      <view v-if="memberTodos.length" class="member-todo-list"><view v-for="item in memberTodos" :key="item.key" class="member-todo app-press" role="button" tabindex="0" @click="handleMemberTodo(item)" @keyup.enter="handleMemberTodo(item)" @keyup.space.prevent="handleMemberTodo(item)"><view><text>{{ item.label }}</text><text>{{ item.copy }}</text></view><text class="entry-arrow">›</text></view></view>
+    </view>
+
     <view class="profile-section order-summary-panel app-enter" style="animation-delay: 110ms">
       <view class="profile-section-head">
         <view><text class="profile-section-title">活动与订单</text><text class="profile-section-copy">报名、付款和参与进度</text></view>
@@ -67,6 +78,11 @@
           <text class="order-tab-icon">{{ tab.icon }}</text><text class="order-tab-label">{{ tab.label }}</text><view v-if="tab.count" class="order-badge">{{ tab.count }}</view>
         </view>
       </view>
+    </view>
+
+    <view v-if="isLoggedIn && repurchaseRecommendations.length" class="profile-section recommendation-panel app-enter" style="animation-delay: 136ms">
+      <view class="profile-section-head compact"><view><text class="profile-section-title">继续发现</text><text class="profile-section-copy">根据当前城市的开放活动推荐</text></view><view class="profile-section-link" @click="goDecoratedLink('/pages/activity/list')">全部活动</view></view>
+      <scroll-view class="recommendation-scroll" scroll-x :show-scrollbar="false"><view class="recommendation-track"><view v-for="item in repurchaseRecommendations" :key="item.id" class="recommendation-item app-press" role="button" tabindex="0" @click="openRecommendedActivity(item.id)" @keyup.enter="openRecommendedActivity(item.id)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="recommendation-cover">活动</view><text>{{ item.title }}</text><text>{{ formatMemberActivityTime(item.startTime) }} · {{ item.location || '地点待确认' }}</text></view></view></scroll-view>
     </view>
 
     <view class="member-shortcuts app-enter" style="animation-delay: 128ms">
@@ -172,6 +188,7 @@ const courses = ref<any[]>([]);
 const registrations = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
 const mallOrders = ref<any[]>([]);
+const recommendedActivities = ref<any[]>([]);
 const loadingProfile = ref(false);
 const profileError = ref("");
 const assetWarning = ref("");
@@ -307,6 +324,42 @@ function activityOrderIsUpcoming(item: any) {
   return !item.latestRefund?.status && String(item.status || "") === "approved";
 }
 
+const nextRegistration = computed(() => safeList<any>(registrations.value)
+  .filter((item) => !item.latestRefund?.status && ["pending_payment", "pending_review", "approved"].includes(String(item.status || "")) && new Date(item.activity?.endTime || 0).getTime() > Date.now())
+  .sort((a, b) => new Date(a.activity?.startTime || 0).getTime() - new Date(b.activity?.startTime || 0).getTime())[0] || null);
+const memberTodos = computed(() => {
+  if (!profile.value?.id) return [];
+  const rows: Array<{ key: string; label: string; copy: string; action: string }> = [];
+  const pendingPayment = safeList<any>(registrations.value).find((item) => item.status === "pending_payment");
+  const pendingReview = safeList<any>(registrations.value).find((item) => item.status === "pending_review");
+  const pendingRefund = safeList<any>(registrations.value).find((item) => ["pending", "processing"].includes(String(item.latestRefund?.status || "")));
+  if (!profile.value.phone) rows.push({ key: "phone", label: "绑定手机号", copy: "接收报名、退款与活动变更通知", action: "phone" });
+  if (pendingPayment) rows.push({ key: "payment", label: "完成活动付款", copy: pendingPayment.activity?.title || "有一笔报名待付款", action: `registration:${pendingPayment.id}` });
+  if (pendingReview) rows.push({ key: "review", label: "等待报名审核", copy: pendingReview.activity?.title || "审核结果会同步到报名详情", action: `registration:${pendingReview.id}` });
+  if (pendingRefund) rows.push({ key: "refund", label: "查看退款进度", copy: pendingRefund.activity?.title || "退款申请正在处理", action: `registration:${pendingRefund.id}` });
+  return rows.slice(0, 4);
+});
+const repurchaseRecommendations = computed(() => {
+  const registeredIds = new Set(safeList<any>(registrations.value).map((item) => Number(item.activity?.id || 0)));
+  return safeList<any>(recommendedActivities.value).filter((item) => !registeredIds.has(Number(item.id)) && item.displayStatus !== "ended").slice(0, 3);
+});
+
+function formatMemberActivityTime(value?: string) {
+  if (!value) return "时间待确认";
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
+  const pad = (part: number) => String(part).padStart(2, "0");
+  return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
+function openRegistration(id: number) { navigateProtected(`/pages/user/registration?id=${id}`); }
+function openRecommendedActivity(id: number) { uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${id}`) }); }
+function handleMemberTodo(item: { action: string }) {
+  if (item.action === "phone") return openPhoneBindPanel();
+  const registrationId = Number(item.action.split(":")[1] || 0);
+  if (registrationId) openRegistration(registrationId);
+}
+
 function money(value: string | number | undefined | null) {
   return Number(value || 0).toFixed(2);
 }
@@ -343,7 +396,8 @@ async function loadProfile() {
       gates.charity ? request<any>("/public/me/charity") : Promise.resolve(null),
       request<any>("/public/me/admin-access"),
       loadMemberOrderOverview(requestedSession),
-      gates.mall ? request<any[]>("/public/me/mall/orders") : Promise.resolve([])
+      gates.mall ? request<any[]>("/public/me/mall/orders") : Promise.resolve([]),
+      request<any>("/public/activities?page=1&pageSize=8&status=open")
     ]);
     if (!isCurrentLoad()) return;
     const profileResult = results[0];
@@ -382,6 +436,8 @@ async function loadProfile() {
       failedLabels.push("报名与订单");
     }
     if (gates.mall) applyResult<any[]>(5, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
+    const activityResult = results[6];
+    recommendedActivities.value = activityResult.status === "fulfilled" ? safeList<any>(Array.isArray(activityResult.value) ? activityResult.value : activityResult.value?.items) : [];
     assetFailures.value = failures;
     assetWarning.value = failedLabels.length ? `部分会员资产同步失败：${failedLabels.join("、")}。对应数值暂不作为真实数据展示。` : "";
     loadedContextKey.value = sessionKey(requestedSession);
@@ -417,12 +473,12 @@ onShow(() => {
 const defaultGridItems = [
   { icon:"评", label:"我的评价", page:"activityReviews" },
   { icon:"人", label:"常用报名人", page:"frequentRegistrants" },
-  { icon:"📖", label:"我的内容", page:"courses" },
-  { icon:"🕐", label:"浏览记录", page:"learning" },
-  { icon:"❤", label:"商城收藏", page:"mallFavorites" },
-  { icon:"🛍", label:"商城订单", page:"mallOrders" },
-  { icon:"💬", label:"联系客服", page:"service" },
-  { icon:"⚙", label:"设置", page:"settings" }
+  { icon:"学", label:"我的内容", page:"courses" },
+  { icon:"览", label:"浏览记录", page:"learning" },
+  { icon:"藏", label:"商城收藏", page:"mallFavorites" },
+  { icon:"单", label:"商城订单", page:"mallOrders" },
+  { icon:"服", label:"联系客服", page:"service" },
+  { icon:"设", label:"设置", page:"settings" }
 ];
 
 const gridPageUrls: Record<string, string> = {
@@ -482,10 +538,10 @@ const gridItems = computed(() => {
 
 const orderTabs = computed(() => {
   return [
-    { icon:"💳", label:"待处理", count: pendingOrderCount.value, status:"pending" },
-    { icon:"🎫", label:"待参与", count: upcomingOrderCount.value, status:"upcoming" },
-    { icon:"↩", label:"退款售后", count: afterSaleCount.value, status:"after_sale" },
-    { icon:"✅", label:"已完成", count: completedOrderCount.value, status:"completed" }
+    { icon:"办", label:"待处理", count: pendingOrderCount.value, status:"pending" },
+    { icon:"票", label:"待参与", count: upcomingOrderCount.value, status:"upcoming" },
+    { icon:"退", label:"退款售后", count: afterSaleCount.value, status:"after_sale" },
+    { icon:"成", label:"已完成", count: completedOrderCount.value, status:"completed" }
   ];
 });
 
@@ -583,6 +639,7 @@ function resetUserState() {
   registrations.value = [];
   courseOrders.value = [];
   mallOrders.value = [];
+  recommendedActivities.value = [];
   wechatProfilePanelVisible.value = false;
   syncingWechatProfile.value = false;
   requestingWechatProfile.value = false;
@@ -873,6 +930,7 @@ function logoutUser() {
 .profile-section-copy { display: block; margin-top: 6rpx; color: #718a85; font-size: var(--app-font-helper); line-height: 1.45; }
 .profile-section-link { flex: 0 0 auto; padding: 8rpx 12rpx; border-radius: 8rpx; background: #eef8f5; color: #0f766e; font-size: var(--app-font-helper); font-weight: 800; }
 .order-summary-panel { padding-bottom: 20rpx; }
+.next-action-panel{display:grid;gap:16rpx}.next-activity{display:flex;align-items:center;gap:16rpx;min-width:0;padding:14rpx;border:1rpx solid #cfe8d9;border-radius:8rpx;background:#effbf4}.next-activity image,.next-activity-cover{flex:0 0 116rpx;width:116rpx;height:116rpx;border-radius:8rpx;display:grid;place-items:center;background:#d9f4e4;color:#08753f;font-weight:900}.next-activity-copy{min-width:0;flex:1;display:grid;gap:5rpx}.next-activity-copy>text{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#71817a;font-size:21rpx}.next-activity-copy .next-activity-kicker{color:#08753f;font-size:20rpx;font-weight:900}.next-activity-copy .next-activity-title{color:#173f3a;font-size:27rpx;font-weight:900}.member-todo-list{display:grid;border-top:1rpx solid #e4ece8}.member-todo{min-height:92rpx;display:flex;align-items:center;justify-content:space-between;gap:14rpx;border-bottom:1rpx solid #e4ece8}.member-todo:last-child{border-bottom:0}.member-todo>view{min-width:0;display:grid;gap:5rpx}.member-todo>view text:first-child{color:#223d35;font-size:25rpx;font-weight:800}.member-todo>view text:last-child{color:#788a82;font-size:21rpx}.recommendation-scroll{width:100%}.recommendation-track{display:flex;gap:14rpx;width:max-content}.recommendation-item{width:310rpx;display:grid;gap:8rpx;overflow:hidden;border:1rpx solid #e0eae5;border-radius:8rpx;background:#fff}.recommendation-item image,.recommendation-cover{width:100%;height:160rpx;display:grid;place-items:center;background:#edf8f1;color:#08753f}.recommendation-item>text{padding:0 14rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.recommendation-item>text:nth-last-child(2){color:#1f3f35;font-size:24rpx;font-weight:900}.recommendation-item>text:last-child{padding-bottom:14rpx;color:#7a8982;font-size:20rpx}
 .member-shortcuts{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14rpx;margin-bottom:18rpx}.member-shortcut{min-width:0;min-height:144rpx;display:grid;align-content:center;gap:7rpx;padding:22rpx;border:1rpx solid #dceae3;border-radius:8rpx;background:#fff}.member-shortcut:first-child{background:#ecfaf1;border-color:#ccead9}.member-shortcut-kicker{color:#66827d;font-size:var(--app-font-caption);font-weight:800}.member-shortcut-title{color:#173f3a;font-size:29rpx;font-weight:900}.member-shortcut-copy{color:#718a85;font-size:var(--app-font-helper);line-height:1.4}
 .profile-asset-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-bottom: 18rpx; }
 .asset-panel { min-width: 0; min-height: 142rpx; display: grid; align-content: space-between; padding: 22rpx; border-radius: 8rpx; }

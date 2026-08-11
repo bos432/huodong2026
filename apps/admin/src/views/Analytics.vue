@@ -355,6 +355,21 @@ onMounted(load);
       </el-table>
     </div>
 
+    <div class="table-card city-card">
+      <h3>城市经营看板</h3>
+      <el-table :data="overview?.cityOperations || []" stripe empty-text="暂无已归属城市的经营数据">
+        <el-table-column prop="city" label="城市" min-width="140" />
+        <el-table-column prop="viewCount" label="浏览" width="90" />
+        <el-table-column prop="registrationCount" label="报名" width="90" />
+        <el-table-column prop="paidCount" label="支付" width="90" />
+        <el-table-column prop="checkInCount" label="签到" width="90" />
+        <el-table-column label="报名率" width="100"><template #default="{ row }">{{ row.signupRate }}%</template></el-table-column>
+        <el-table-column label="支付率" width="100"><template #default="{ row }">{{ row.paymentRate }}%</template></el-table-column>
+        <el-table-column label="实收" width="120"><template #default="{ row }">¥{{ row.paidAmount }}</template></el-table-column>
+        <el-table-column label="退款" width="120"><template #default="{ row }">¥{{ row.refundAmount }}</template></el-table-column>
+      </el-table>
+    </div>
+
     <el-dialog v-model="drilldownVisible" :title="drilldownTitle" width="980px">
       <el-alert v-if="drilldownError" class="dialog-error" type="error" show-icon :closable="false" :title="drilldownError" />
       <el-table v-loading="drilldownLoading" :data="drilldownRows" stripe max-height="560" empty-text="暂无明细">
@@ -394,6 +409,7 @@ onMounted(load);
 .business-item strong { color:#111827; font-size:24px; }
 .business-actions { display:flex; align-items:center; gap:4px; min-height:24px; }
 .merchant-card { margin-bottom:18px; }
+.city-card { margin: 18px 0; }
 .metric span { color: #667085; font-size: 13px; }
 .metric strong { color: #111827; font-size: 28px; }
 .metric small { color: #667085; }

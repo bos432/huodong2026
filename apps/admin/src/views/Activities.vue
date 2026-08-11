@@ -91,13 +91,14 @@ const routeActivityId = () => {
 };
 const filters = reactive({
   keyword: "",
+  locationCity: "",
   status: routeActivityId() ? "" : (routeStatus() as ActivityStatus | ""),
   categoryId: undefined as number | undefined,
   tenantId: routeTenantId() as number | undefined
 });
 const routeFocusedActivityId = ref<number | undefined>(routeActivityId());
 const activeStatusFilter = computed(() => filters.status);
-const pageTitle = computed(() => (isPlatformAdmin() && filters.status === ActivityStatus.PendingApproval ? "活动审核" : isPlatformAdmin() ? "全部活动" : "活动管理"));
+const pageTitle = computed(() => (isPlatformAdmin() && filters.status === ActivityStatus.PendingApproval ? "活动审核" : isPlatformAdmin() ? "平台活动池" : "活动管理"));
 const pagination = reactive({
   page: 1,
   pageSize: 20,
@@ -283,6 +284,7 @@ function defaultForm() {
 function activityQueryParams() {
   const params: Record<string, unknown> = { page: pagination.page, pageSize: pagination.pageSize };
   if (filters.keyword.trim()) params.keyword = filters.keyword.trim();
+  if (filters.locationCity.trim()) params.locationCity = filters.locationCity.trim();
   if (filters.status) params.status = filters.status;
   if (filters.categoryId) params.categoryId = filters.categoryId;
   if (isPlatformAdmin() && filters.tenantId) params.tenantId = filters.tenantId;
@@ -345,6 +347,7 @@ function setStatusFilter(status: string) {
 
 function resetFilters() {
   filters.keyword = "";
+  filters.locationCity = "";
   filters.status = "";
   filters.categoryId = undefined;
   filters.tenantId = undefined;
@@ -1199,6 +1202,7 @@ onMounted(async () => {
       </el-alert>
       <div class="filter-bar">
         <el-input v-model="filters.keyword" clearable :disabled="Boolean(activityActionKey)" placeholder="搜索活动标题或地点" @keyup.enter="search" />
+        <el-input v-model="filters.locationCity" clearable :disabled="Boolean(activityActionKey)" placeholder="城市，例如：重庆市" @keyup.enter="search" />
         <el-select v-if="canOperateActivities" v-model="filters.categoryId" clearable :disabled="Boolean(activityActionKey)" placeholder="全部分类" @change="search">
           <el-option v-for="category in categories" :key="category.id" :label="category.name" :value="category.id" />
         </el-select>

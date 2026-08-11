@@ -187,6 +187,7 @@ import { RedemptionCode } from "./entities/redemption-code.entity";
 import { RedemptionCodeUsage } from "./entities/redemption-code-usage.entity";
 import { ShareVisit } from "./entities/share-visit.entity";
 import { Tenant } from "./entities/tenant.entity";
+import { TenantFollower } from "./entities/tenant-follower.entity";
 import { TenantRegionHitLog } from "./entities/tenant-region-hit-log.entity";
 import { TenantRegion } from "./entities/tenant-region.entity";
 import { TicketType } from "./entities/ticket-type.entity";
@@ -225,6 +226,7 @@ export default new DataSource({
     UserWallet,
     WalletTransaction,
     Tenant,
+    TenantFollower,
     TenantRegion,
     TenantRegionHitLog,
     AdminLoginLog,

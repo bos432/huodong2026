@@ -31,10 +31,11 @@ import { OperationSetting } from "../../entities/operation-setting.entity";
 import { Registration } from "../../entities/registration.entity";
 import { ShareVisit } from "../../entities/share-visit.entity";
 import { Tenant } from "../../entities/tenant.entity";
+import { TenantFollower } from "../../entities/tenant-follower.entity";
 import { User } from "../../entities/user.entity";
 import { UserTag } from "../../entities/user-tag.entity";
 import { ConversionEvent, ConversionEventType } from "../../entities/conversion-event.entity";
-import { OrderStatus, RegistrationStatus } from "../../shared/domain";
+import { ActivityStatus, OrderStatus, RegistrationStatus } from "../../shared/domain";
 import { maskPhone } from "../../shared/data-masking";
 import { renderNotificationTemplate, unknownNotificationTemplateVariables } from "../../shared/notification-template";
 import { notificationTenantScopeMatches } from "../../shared/notification-scope";
@@ -164,6 +165,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(ActivityViewLog) private readonly viewLogs: Repository<ActivityViewLog>,
     @InjectRepository(Announcement) private readonly announcements: Repository<Announcement>,
     @InjectRepository(Tenant) private readonly tenants: Repository<Tenant>,
+    @InjectRepository(TenantFollower) private readonly tenantFollowers: Repository<TenantFollower>,
     @InjectRepository(Registration) private readonly registrations: Repository<Registration>,
     @InjectRepository(Order) private readonly orders: Repository<Order>,
     @InjectRepository(CheckIn) private readonly checkIns: Repository<CheckIn>,
@@ -316,15 +318,103 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (tracking?.inviteCode) await this.trackShare(id, { code: tracking.inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
 
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [hosts, sections, reviews, memberAccess, spaceSummary] = await Promise.all([
+    const [hosts, sections, reviews, memberAccess, spaceSummary, organizerTrust, relatedActivities] = await Promise.all([
       this.hosts.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.sections.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.activityReviews(id, context),
       this.memberAccessSnapshot(activity, user || undefined),
-      this.activitySpaceSummary(activity, user?.id || null)
+      this.activitySpaceSummary(activity, user?.id || null),
+      this.organizerTrustSnapshot(activity, user?.id || null),
+      this.relatedActivities(activity)
     ]);
 
-    return { ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews, memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting), space: spaceSummary };
+    const reviewSummary = {
+      count: reviews.length,
+      averageRating: reviews.length ? Number((reviews.reduce((sum, row) => sum + Number(row.rating || 0), 0) / reviews.length).toFixed(1)) : 0
+    };
+    return {
+      ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews,
+      reviewSummary, organizerTrust, relatedActivities, refundInstructions: operationSetting?.refundInstructions || null,
+      memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting), space: spaceSummary
+    };
+  }
+
+  async toggleOrganizerFollow(tenantId: number, user: User, context?: PublicTenantContext) {
+    const tenant = await this.tenants.findOne({ where: { id: tenantId, enabled: true } });
+    if (!tenant) throw new NotFoundException("主办方不存在或未开放");
+    const scopedTenant = await this.resolveTenantContext(context);
+    if (scopedTenant && scopedTenant.id !== tenant.id) throw new NotFoundException("主办方不存在或未开放");
+    const result = await this.tenantFollowers.manager.transaction(async (manager) => {
+      const repository = manager.getRepository(TenantFollower);
+      const existing = await repository.findOne({ where: { tenant: { id: tenant.id }, user: { id: user.id } }, loadEagerRelations: false });
+      if (existing) {
+        await repository.delete(existing.id);
+        return false;
+      }
+      try {
+        await repository.save(repository.create({ tenant, user }));
+        return true;
+      } catch (error) {
+        if (!isDuplicateEntryError(error)) throw error;
+        return true;
+      }
+    });
+    return { tenantId: tenant.id, followed: result, followerCount: await this.tenantFollowers.count({ where: { tenant: { id: tenant.id } } }) };
+  }
+
+  private async organizerTrustSnapshot(activity: Activity, userId?: number | null) {
+    const tenant = activity.tenant;
+    if (!tenant) return null;
+    const now = new Date();
+    const pastBuilder = this.activities.createQueryBuilder("pastActivity")
+      .select("COUNT(*)", "scheduledCount")
+      .addSelect("SUM(CASE WHEN pastActivity.status <> :cancelled THEN 1 ELSE 0 END)", "fulfilledCount")
+      .where("pastActivity.tenantId = :tenantId", { tenantId: tenant.id })
+      .andWhere("pastActivity.endTime <= :now", { now })
+      .andWhere("pastActivity.status IN (:...statuses)", { statuses: [ActivityStatus.Open, ActivityStatus.Ended, ActivityStatus.Cancelled], cancelled: ActivityStatus.Cancelled });
+    const reviewBuilder = this.reviews.createQueryBuilder("trustReview")
+      .leftJoin("trustReview.activity", "trustActivity")
+      .select("COUNT(trustReview.id)", "reviewCount")
+      .addSelect("COALESCE(AVG(trustReview.rating), 0)", "averageRating")
+      .where("trustReview.status = :status", { status: "visible" })
+      .andWhere("trustActivity.tenantId = :tenantId", { tenantId: tenant.id });
+    const [past, review, followerCount, followed] = await Promise.all([
+      pastBuilder.getRawOne<{ scheduledCount: string; fulfilledCount: string }>(),
+      reviewBuilder.getRawOne<{ reviewCount: string; averageRating: string }>(),
+      this.tenantFollowers.count({ where: { tenant: { id: tenant.id } } }),
+      userId ? this.tenantFollowers.exist({ where: { tenant: { id: tenant.id }, user: { id: userId } } }) : Promise.resolve(false)
+    ]);
+    const scheduledCount = Number(past?.scheduledCount || 0);
+    const fulfilledCount = Number(past?.fulfilledCount || 0);
+    const profile = this.publicOrganizerProfile(tenant);
+    return {
+      verified: Boolean(tenant.enabled && (profile?.intro || profile?.servicePromise)),
+      historicalActivityCount: fulfilledCount,
+      fulfillmentRate: scheduledCount ? Number((fulfilledCount / scheduledCount * 100).toFixed(1)) : null,
+      reviewCount: Number(review?.reviewCount || 0),
+      averageRating: Number(Number(review?.averageRating || 0).toFixed(1)),
+      followerCount,
+      followed
+    };
+  }
+
+  private async relatedActivities(activity: Activity) {
+    const builder = this.activities.createQueryBuilder("related")
+      .leftJoinAndSelect("related.tenant", "tenant")
+      .leftJoinAndSelect("related.category", "category")
+      .where("related.id <> :activityId", { activityId: activity.id })
+      .andWhere("related.status = :status", { status: ActivityStatus.Open })
+      .andWhere("related.registrationDeadline > :now", { now: new Date() })
+      .orderBy("related.featured", "DESC")
+      .addOrderBy("related.startTime", "ASC")
+      .take(4);
+    activity.tenant ? builder.andWhere("related.tenantId = :tenantId", { tenantId: activity.tenant.id }) : builder.andWhere("related.tenantId IS NULL");
+    if (activity.category?.id) builder.andWhere("related.categoryId = :categoryId", { categoryId: activity.category.id });
+    const rows = await builder.getMany();
+    return Promise.all(rows.map(async (row) => {
+      const stats = await this.activityStats(row.id, row.capacity);
+      return { id: row.id, title: row.title, coverUrl: row.coverUrl, startTime: row.startTime, location: row.location, price: row.price, category: row.category ? { id: row.category.id, name: row.category.name } : null, remainingSeats: stats.remainingSeats, displayStatus: this.displayStatus(row, stats.remainingSeats) };
+    }));
   }
 
   private async activitySpaceAccess(activityId: number, userId?: number | null) {
@@ -413,7 +503,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     return {
       id: activity.id,
       title: activity.title,
-      tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region } : null,
+      tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region, organizerProfile: this.publicOrganizerProfile(activity.tenant) } : null,
       coverUrl: activity.coverUrl,
       shareTitle: activity.shareTitle,
       shareDescription: activity.shareDescription,
@@ -448,6 +538,16 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       eligibilityRules: this.publicEligibilityRules(activity.eligibilityRules),
       createdAt: activity.createdAt,
       updatedAt: activity.updatedAt
+    };
+  }
+
+  private publicOrganizerProfile(tenant: Tenant) {
+    const settings = tenant.settings && typeof tenant.settings === "object" && !Array.isArray(tenant.settings) ? tenant.settings as Record<string, unknown> : {};
+    const raw = settings.organizerProfile && typeof settings.organizerProfile === "object" && !Array.isArray(settings.organizerProfile) ? settings.organizerProfile as Record<string, unknown> : {};
+    return {
+      logoUrl: typeof raw.logoUrl === "string" ? raw.logoUrl : null,
+      intro: typeof raw.intro === "string" ? raw.intro : null,
+      servicePromise: typeof raw.servicePromise === "string" ? raw.servicePromise : null
     };
   }
 
