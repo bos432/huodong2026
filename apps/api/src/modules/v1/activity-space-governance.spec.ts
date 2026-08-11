@@ -5,6 +5,7 @@ const service = readFileSync("src/modules/v1/v1.service.ts", "utf8");
 const publicController = readFileSync("src/modules/v1/v1-public.controller.ts", "utf8");
 const adminController = readFileSync("src/modules/v1/v1-admin.controller.ts", "utf8");
 const migration = readFileSync("src/migrations/1784100000000-ActivitySpace.ts", "utf8");
+const adminPage = readFileSync("../admin/src/views/ActivitySpace.vue", "utf8");
 
 function methodBody(start: string, end: string) {
   return service.slice(service.indexOf(start), service.indexOf(end));
@@ -46,5 +47,14 @@ describe("activity space governance", () => {
     expect(migration).toContain("activity_space_posts");
     expect(migration).toContain("activity_space_post_reports");
     expect(migration).toContain("UQ_activity_space_post_reports_post_user");
+  });
+
+  it("shows operators group QR readiness and a retryable activity-space state", () => {
+    expect(adminPage).toContain("api.get(`/admin/activities/${activityId}`)");
+    expect(adminPage).toContain("selectedActivity?.groupQrCodeUrl");
+    expect(adminPage).toContain("报名后活动空间检查");
+    expect(adminPage).toContain("未上传时，报名用户无法在报名详情和活动空间中识别活动群二维码。");
+    expect(adminPage).toContain("重新加载");
+    expect(adminPage).toContain('router.push({ path: "/activities", query: { activityId: String(selectedId.value) } })');
   });
 });

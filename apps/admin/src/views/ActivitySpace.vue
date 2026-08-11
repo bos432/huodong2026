@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, watch } from "vue";
+import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api } from "../api";
 
@@ -7,11 +8,15 @@ type AnnouncementStatus = "draft" | "published" | "cancelled";
 
 const activities = ref<any[]>([]);
 const selectedId = ref<number>();
+const selectedActivity = ref<any>();
 const announcements = ref<any[]>([]);
 const posts = ref<any[]>([]);
 const loading = ref(false);
 const saving = ref(false);
+const loadError = ref("");
 const editingId = ref<number>();
+const router = useRouter();
+let loadSequence = 0;
 const form = ref<{ title: string; content: string; status: AnnouncementStatus; pinned: boolean; publishAt: string }>({
   title: "",
   content: "",
@@ -25,6 +30,8 @@ const submitLabel = computed(() => {
   if (form.value.status === "cancelled") return "停止发布";
   return editingId.value ? "保存公告" : "发布公告";
 });
+
+const pendingPostCount = computed(() => posts.value.filter((item) => item.status === "pending").length);
 
 function resetForm() {
   editingId.value = undefined;
@@ -46,24 +53,50 @@ function formatTime(value?: string) {
 }
 
 async function loadOptions() {
-  const result: any = await api.get("/admin/reviews/options");
-  activities.value = result?.activities || [];
-  if (!selectedId.value) selectedId.value = activities.value[0]?.id;
+  try {
+    const result: any = await api.get("/admin/reviews/options");
+    activities.value = result?.activities || [];
+    if (!selectedId.value) selectedId.value = activities.value[0]?.id;
+  } catch (error: any) {
+    loadError.value = error.message || "活动列表加载失败";
+  }
 }
 
 async function load() {
   if (!selectedId.value) return;
+  const activityId = selectedId.value;
+  const sequence = ++loadSequence;
   loading.value = true;
+  loadError.value = "";
+  selectedActivity.value = undefined;
+  announcements.value = [];
+  posts.value = [];
   try {
-    const [notice, post]: any = await Promise.all([
-      api.get(`/admin/activities/${selectedId.value}/space/announcements`),
-      api.get("/admin/activity-space-posts", { params: { activityId: selectedId.value, pageSize: 50 } })
+    const [activity, notice, post]: any = await Promise.all([
+      api.get(`/admin/activities/${activityId}`),
+      api.get(`/admin/activities/${activityId}/space/announcements`),
+      api.get("/admin/activity-space-posts", { params: { activityId, pageSize: 50 } })
     ]);
+    if (sequence !== loadSequence || activityId !== selectedId.value) return;
+    selectedActivity.value = activity;
     announcements.value = notice || [];
     posts.value = post?.items || [];
+  } catch (error: any) {
+    if (sequence !== loadSequence || activityId !== selectedId.value) return;
+    loadError.value = error.message || "活动空间数据加载失败";
   } finally {
-    loading.value = false;
+    if (sequence === loadSequence) loading.value = false;
   }
+}
+
+async function reload() {
+  await loadOptions();
+  await load();
+}
+
+function editSelectedActivity() {
+  if (!selectedId.value) return;
+  router.push({ path: "/activities", query: { activityId: String(selectedId.value) } });
 }
 
 function editAnnouncement(item: any) {
@@ -128,6 +161,25 @@ onMounted(async () => {
       <el-select v-model="selectedId" filterable placeholder="选择活动" class="activity-select">
         <el-option v-for="item in activities" :key="item.id" :label="item.title" :value="item.id" />
       </el-select>
+    </el-card>
+
+    <el-alert v-if="loadError" type="error" show-icon :closable="false" :title="loadError">
+      <template #default><el-button size="small" :loading="loading" @click="reload">重新加载</el-button></template>
+    </el-alert>
+
+    <el-card v-if="selectedId" v-loading="loading" class="space-readiness-card">
+      <template #header>报名后活动空间检查</template>
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="活动">{{ selectedActivity?.title || "加载中" }}</el-descriptions-item>
+        <el-descriptions-item label="活动群二维码">
+          <el-tag :type="selectedActivity?.groupQrCodeUrl ? 'success' : 'warning'">{{ selectedActivity?.groupQrCodeUrl ? "已配置" : "未配置" }}</el-tag>
+          <el-link v-if="selectedActivity?.groupQrCodeUrl" class="qr-link" type="primary" :href="selectedActivity.groupQrCodeUrl" target="_blank">查看图片</el-link>
+        </el-descriptions-item>
+        <el-descriptions-item label="已发布公告">{{ announcements.filter(item => item.status === "published").length }} 条</el-descriptions-item>
+        <el-descriptions-item label="待审核问答"><el-tag :type="pendingPostCount ? 'warning' : 'success'">{{ pendingPostCount }} 条</el-tag></el-descriptions-item>
+      </el-descriptions>
+      <div v-if="selectedActivity && !selectedActivity.groupQrCodeUrl" class="space-readiness-warning">未上传时，报名用户无法在报名详情和活动空间中识别活动群二维码。</div>
+      <div class="space-readiness-actions"><el-button size="small" @click="editSelectedActivity">去编辑活动</el-button></div>
     </el-card>
 
     <el-row :gutter="16">
@@ -213,6 +265,10 @@ onMounted(async () => {
 .el-row { margin: 0 !important; }
 .el-card { margin-bottom: 0; }
 .activity-select { width: min(100%, 360px); }
+.space-readiness-card { min-width: 0; }
+.qr-link { margin-left: 10px; }
+.space-readiness-warning { margin-top: 10px; color: #a16207; font-size: 13px; line-height: 1.5; }
+.space-readiness-actions { display: flex; justify-content: flex-end; margin-top: 12px; }
 .form-control { width: 100%; }
 .field-tip { margin-top: 6px; color: #7a857f; font-size: 12px; line-height: 1.5; }
 .form-actions, .announcement-title, .announcement-tags { display: flex; align-items: center; gap: 8px; }
