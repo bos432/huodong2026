@@ -875,18 +875,27 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const tenant = await this.currentTenantForAdmin(admin);
     const name = dto.name.trim();
     if (!name) throw new BadRequestException("商家名称不能为空");
+    const organizerLogoUrl = dto.organizerLogoUrl?.trim() || null;
+    if (organizerLogoUrl && !organizerLogoUrl.startsWith("/uploads/") && !/^https:\/\//i.test(organizerLogoUrl)) throw new BadRequestException("主办方头像必须使用 HTTPS 或站内上传路径");
+    const organizerProfile = {
+      logoUrl: organizerLogoUrl,
+      intro: dto.organizerIntro?.trim() || null,
+      servicePromise: dto.organizerServicePromise?.trim() || null
+    };
     Object.assign(tenant, {
       name,
       region: dto.region?.trim() || null,
       contactName: dto.contactName?.trim() || null,
-      contactPhone: dto.contactPhone?.trim() || null
+      contactPhone: dto.contactPhone?.trim() || null,
+      settings: { ...(this.isPlainObject(tenant.settings) ? tenant.settings : {}), organizerProfile }
     });
     const saved = await this.tenants.save(tenant);
     await this.logOperation(admin, "tenant.profile.update", "tenant", saved.id, `更新商家资料：${saved.name}`, {
       name: saved.name,
       region: saved.region,
       contactName: saved.contactName,
-      contactPhone: saved.contactPhone
+      contactPhone: saved.contactPhone,
+      organizerProfile: { hasLogo: Boolean(organizerProfile.logoUrl), introLength: organizerProfile.intro?.length || 0, servicePromiseLength: organizerProfile.servicePromise?.length || 0 }
     });
     return this.publicTenant(saved);
   }
@@ -10664,7 +10673,15 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private publicTenant(tenant: Tenant) {
     const settings = { ...this.tenantPermissions(tenant), entitlements: tenantEffectiveEntitlements(this.tenantEntitlementSettings(tenant)) };
-    return { id: tenant.id, code: tenant.code, name: tenant.name, region: tenant.region, contactName: tenant.contactName, contactPhone: tenant.contactPhone, remark: tenant.remark, enabled: tenant.enabled, settings, subscriptionStatus: tenantSubscriptionStatus(settings), renewalReminder: tenantRenewalReminder(settings), packageTemplate: tenantPackagePermissionTemplate(settings.packagePlan), createdAt: tenant.createdAt, updatedAt: tenant.updatedAt };
+    return { id: tenant.id, code: tenant.code, name: tenant.name, region: tenant.region, contactName: tenant.contactName, contactPhone: tenant.contactPhone, organizerProfile: this.publicTenantOrganizerProfile(tenant), remark: tenant.remark, enabled: tenant.enabled, settings, subscriptionStatus: tenantSubscriptionStatus(settings), renewalReminder: tenantRenewalReminder(settings), packageTemplate: tenantPackagePermissionTemplate(settings.packagePlan), createdAt: tenant.createdAt, updatedAt: tenant.updatedAt };
+  }
+
+  private publicTenantOrganizerProfile(tenant: Tenant) {
+    const raw = this.isPlainObject(tenant.settings) && this.isPlainObject(tenant.settings.organizerProfile) ? tenant.settings.organizerProfile : {};
+    const logoUrl = this.nullableText(typeof raw.logoUrl === "string" ? raw.logoUrl : null);
+    const intro = this.nullableText(typeof raw.intro === "string" ? raw.intro : null);
+    const servicePromise = this.nullableText(typeof raw.servicePromise === "string" ? raw.servicePromise : null);
+    return { logoUrl, intro, servicePromise };
   }
 
   private publicTenantListItem(tenant: Tenant, includeSensitive: boolean) {

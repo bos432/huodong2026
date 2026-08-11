@@ -701,6 +701,17 @@ onShow(() => {
         <view v-if="operationSetting.refundInstructions" class="service-note">{{ operationSetting.refundInstructions }}</view>
       </view>
 
+      <view class="card organizer-card" v-if="activity.tenant?.organizerProfile?.logoUrl || activity.tenant?.organizerProfile?.intro || activity.tenant?.organizerProfile?.servicePromise">
+        <view class="title small">主办方</view>
+        <view class="organizer-head">
+          <image v-if="activity.tenant?.organizerProfile?.logoUrl" :src="activity.tenant.organizerProfile.logoUrl" mode="aspectFill" />
+          <view v-else class="organizer-logo-fallback">{{ (activity.tenant?.name || "主办方").slice(0, 1) }}</view>
+          <view><view class="name">{{ activity.tenant?.name || "主办方" }}</view><view v-if="activity.tenant?.region" class="subtle">{{ activity.tenant.region }}</view></view>
+        </view>
+        <view v-if="activity.tenant?.organizerProfile?.intro" class="organizer-intro">{{ activity.tenant.organizerProfile.intro }}</view>
+        <view v-if="activity.tenant?.organizerProfile?.servicePromise" class="organizer-promise"><text>服务承诺</text><text>{{ activity.tenant.organizerProfile.servicePromise }}</text></view>
+      </view>
+
       <view class="card" v-if="activity.hosts?.length">
         <view class="title small">讲师 / 主理人</view>
         <view v-for="host in activity.hosts" :key="host.id" class="host">
@@ -889,6 +900,14 @@ onShow(() => {
 .service-contact-button { width: 100%; min-height: 76rpx; margin-top: 18rpx; border: 0; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 25rpx; font-weight: 700; line-height: 76rpx; }
 .service-contact-button::after { border: 0; }
 .service-note { margin-top: 14rpx; padding: 16rpx; border-radius: 18rpx; background: #f9f4ee; color: #666666; font-size: 25rpx; line-height: 1.6; }
+.organizer-card { display: grid; gap: 16rpx; }
+.organizer-head { display: flex; align-items: center; gap: 16rpx; }
+.organizer-head image, .organizer-logo-fallback { width: 76rpx; height: 76rpx; border-radius: 8rpx; background: #e9f8ef; flex: 0 0 auto; }
+.organizer-logo-fallback { display: grid; place-items: center; color: #08753f; font-size: 29rpx; font-weight: 900; }
+.organizer-head .name { color: #193827; font-size: 27rpx; font-weight: 850; }
+.organizer-intro { color: #52645b; font-size: 23rpx; line-height: 1.65; }
+.organizer-promise { display: grid; gap: 6rpx; padding: 14rpx; border-radius: 6rpx; background: #edf9f1; color: #355044; font-size: 22rpx; line-height: 1.55; }
+.organizer-promise text:first-child { color: #08753f; font-size: 20rpx; font-weight: 800; }
 .host, .review { padding: 16rpx 0; border-bottom: 1px solid #e8e0d8; }
 .host { display: flex; gap: 18rpx; }
 .host image { width: 88rpx; height: 88rpx; border-radius: 44rpx; background: #dde5ed; flex: 0 0 auto; }

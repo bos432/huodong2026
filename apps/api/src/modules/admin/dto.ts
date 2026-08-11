@@ -1570,6 +1570,21 @@ export class TenantProfileDto {
   @MaxLength(40)
   @MaxLength(40)
   contactPhone?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(500)
+  organizerLogoUrl?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(1000)
+  organizerIntro?: string;
+
+  @IsOptional()
+  @IsString()
+  @MaxLength(300)
+  organizerServicePromise?: string;
 }
 
 export class OrderQueryDto {

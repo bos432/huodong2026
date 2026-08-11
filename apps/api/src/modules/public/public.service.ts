@@ -1869,8 +1869,16 @@ export class PublicService {
       name: tenant.name,
       region: tenant.region || null,
       contactName: tenant.contactName || null,
-      contactPhone: tenant.contactPhone || null
+      contactPhone: tenant.contactPhone || null,
+      organizerProfile: this.publicTenantOrganizerProfile(tenant)
     };
+  }
+
+  private publicTenantOrganizerProfile(tenant: Tenant) {
+    const settings = tenant.settings && typeof tenant.settings === "object" && !Array.isArray(tenant.settings) ? tenant.settings : {};
+    const raw = settings.organizerProfile && typeof settings.organizerProfile === "object" && !Array.isArray(settings.organizerProfile) ? settings.organizerProfile as Record<string, unknown> : {};
+    const text = (value: unknown, limit: number) => typeof value === "string" ? value.trim().slice(0, limit) || null : null;
+    return { logoUrl: text(raw.logoUrl, 500), intro: text(raw.intro, 1000), servicePromise: text(raw.servicePromise, 300) };
   }
 
   private publicTenantRegion(region: TenantRegion, distanceMeters?: number) {

@@ -53,6 +53,11 @@ const h5QrDialogVisible = ref(false);
 const h5QrActivity = ref<any | null>(null);
 const posterDialogVisible = ref(false);
 const posterActivity = ref<any | null>(null);
+const publishCheckDialogVisible = ref(false);
+const publishCheckLoading = ref(false);
+const publishCheckError = ref("");
+const publishCheck = ref<any | null>(null);
+const publishCheckActivity = ref<any | null>(null);
 const channelDrawer = ref(false);
 const channelActivity = ref<any | null>(null);
 const channelLoading = ref(false);
@@ -1021,6 +1026,27 @@ function showActivityPoster(row: any) {
   posterDialogVisible.value = true;
 }
 
+async function showPublishCheck(row: any) {
+  publishCheckActivity.value = row;
+  publishCheckDialogVisible.value = true;
+  publishCheckLoading.value = true;
+  publishCheckError.value = "";
+  publishCheck.value = null;
+  try {
+    publishCheck.value = await api.get<any, any>(`/admin/activities/${row.id}/publish-check`);
+  } catch (error: any) {
+    publishCheckError.value = error.message || "活动发布检查失败";
+  } finally {
+    publishCheckLoading.value = false;
+  }
+}
+
+async function editFromPublishCheck() {
+  const row = publishCheckActivity.value;
+  publishCheckDialogVisible.value = false;
+  if (row) await edit(row);
+}
+
 async function showActivityChannels(row: any) {
   channelActivity.value = row;
   Object.assign(channelForm, { name: "", code: "", source: "", remark: "" });
@@ -1237,6 +1263,7 @@ onMounted(async () => {
                   <el-dropdown-item :icon="CopyDocument" @click="copyActivityH5Url(row)">复制链接</el-dropdown-item>
                   <el-dropdown-item :icon="Grid" @click="showActivityH5Qr(row)">二维码</el-dropdown-item>
                   <el-dropdown-item :icon="Picture" @click="showActivityPoster(row)">海报</el-dropdown-item>
+                  <el-dropdown-item :icon="Check" @click="showPublishCheck(row)">发布检查</el-dropdown-item>
                   <el-dropdown-item :icon="Grid" @click="showActivityChannels(row)">渠道</el-dropdown-item>
                   <el-dropdown-item :icon="Clock" @click="loadApprovalLogs(row)">审核记录</el-dropdown-item>
                   <el-dropdown-item v-if="canOperateActivities" :icon="CopyDocument" @click="copyActivity(row)">复制活动</el-dropdown-item>
@@ -1283,6 +1310,31 @@ onMounted(async () => {
       <template #footer>
         <el-button @click="templateDialogVisible = false">取消</el-button>
         <el-button type="primary" @click="create()">空白新建</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="publishCheckDialogVisible" title="活动发布检查" width="680px">
+      <div class="publish-check-head">
+        <strong>{{ publishCheckActivity?.title || "-" }}</strong>
+        <el-tag v-if="publishCheck" :type="publishCheck.passed ? 'success' : 'danger'">{{ publishCheck.passed ? "可以提交审核" : "暂不可提交审核" }}</el-tag>
+      </div>
+      <el-skeleton v-if="publishCheckLoading" :rows="5" animated />
+      <el-alert v-else-if="publishCheckError" type="error" show-icon :closable="false" :title="publishCheckError">
+        <template #default><el-button v-if="publishCheckActivity" size="small" @click="showPublishCheck(publishCheckActivity)">重新检查</el-button></template>
+      </el-alert>
+      <template v-else-if="publishCheck">
+        <el-alert v-if="publishCheck.passed" type="success" show-icon :closable="false" title="基础发布条件已满足，可继续提交平台审核" />
+        <div v-if="publishCheck.issues?.length" class="publish-check-list">
+          <div v-for="issue in publishCheck.issues" :key="`${issue.field}-${issue.message}`" class="publish-check-item" :class="{ blocking: issue.blocking }">
+            <el-tag size="small" :type="issue.blocking ? 'danger' : 'warning'">{{ issue.blocking ? "必须修复" : "建议完善" }}</el-tag>
+            <span>{{ issue.message }}</span>
+          </div>
+        </div>
+        <el-empty v-else description="没有发现发布问题" :image-size="72" />
+      </template>
+      <template #footer>
+        <el-button @click="publishCheckDialogVisible = false">关闭</el-button>
+        <el-button v-if="publishCheckActivity" type="primary" @click="editFromPublishCheck">去编辑活动</el-button>
       </template>
     </el-dialog>
 
@@ -1595,6 +1647,10 @@ onMounted(async () => {
 .section-image-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px; border-radius: 8px; background: #f8fafc; border: 1px dashed #d7dee8; }
 .section-image-preview { grid-column: 1 / -1; width: min(360px, 100%); aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
 .approval-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; margin-bottom: 18px; }
+.publish-check-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid #e5e7eb; margin-bottom: 16px; }
+.publish-check-list { display: grid; gap: 8px; margin-top: 16px; }
+.publish-check-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #fff7ed; color: #92400e; line-height: 1.5; }
+.publish-check-item.blocking { background: #fff1f2; color: #991b1b; }
 .approval-timeline { padding: 4px 4px 4px 0; }
 .approval-log { display: grid; gap: 6px; color: #334155; font-size: 13px; }
 .approval-log-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; }

@@ -252,13 +252,14 @@ describe("tenant profile dto", () => {
   const pipe = new ValidationPipe({ whitelist: true, transform: true });
 
   it("accepts profile fields within database column limits", async () => {
-    const result = await pipe.transform({ name: "演示商家", region: "上海", contactName: "运营负责人", contactPhone: "021-12345678" }, { type: "body", metatype: TenantProfileDto });
-    expect(result).toMatchObject({ name: "演示商家", region: "上海", contactName: "运营负责人", contactPhone: "021-12345678" });
+    const result = await pipe.transform({ name: "演示商家", region: "上海", contactName: "运营负责人", contactPhone: "021-12345678", organizerLogoUrl: "/uploads/tenant.png", organizerIntro: "长期举办城市文化活动", organizerServicePromise: "报名咨询及时响应" }, { type: "body", metatype: TenantProfileDto });
+    expect(result).toMatchObject({ name: "演示商家", region: "上海", contactName: "运营负责人", contactPhone: "021-12345678", organizerLogoUrl: "/uploads/tenant.png", organizerIntro: "长期举办城市文化活动", organizerServicePromise: "报名咨询及时响应" });
   });
 
   it("rejects profile fields that exceed database column limits", async () => {
     await expect(pipe.transform({ name: "a".repeat(121) }, { type: "body", metatype: TenantProfileDto })).rejects.toThrow();
     await expect(pipe.transform({ name: "演示商家", contactPhone: "1".repeat(41) }, { type: "body", metatype: TenantProfileDto })).rejects.toThrow();
+    await expect(pipe.transform({ name: "演示商家", organizerIntro: "a".repeat(1001) }, { type: "body", metatype: TenantProfileDto })).rejects.toThrow();
   });
 });
 
