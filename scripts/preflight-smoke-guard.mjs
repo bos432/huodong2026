@@ -32,6 +32,7 @@ check(packageJson.scripts?.smoke === "node scripts/smoke.mjs", "package.json mus
 check(packageJson.scripts?.["smoke:flow"] === "node scripts/smoke-flow.mjs", "package.json must expose smoke:flow.");
 check(packageJson.scripts?.["smoke:community-sharing"] === "node scripts/smoke-community-sharing.mjs", "package.json must expose smoke:community-sharing.");
 check(packageJson.scripts?.["browser:online-showcase"] === "node scripts/browser-online-showcase-acceptance.cjs", "package.json must expose browser:online-showcase.");
+check(packageJson.scripts?.["browser:activity-responsive"] === "node scripts/browser-online-showcase-acceptance.cjs --responsive-only", "package.json must expose browser:activity-responsive.");
 
 checkSourceIncludesAll(smoke, [
   "Smoke target:",
@@ -96,6 +97,14 @@ checkSourceIncludesAll(browserOnlineShowcase, [
   "平台超管",
   "店铺负责人",
   "广告位 resolvedImageUrl",
+  "runResponsiveActivityCore",
+  "--responsive-only",
+  'viewports: "375/390/760"',
+  'routes: "home/list/detail"',
+  "has horizontal overflow",
+  "fixed elements outside viewport",
+  "console errors",
+  "missingVersionSurfaces",
   "三端版本信息读取",
   "result.json"
 ], "browser online showcase acceptance script");

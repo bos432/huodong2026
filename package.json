@@ -41,6 +41,7 @@
     "smoke:online-showcase": "node scripts/smoke-online-showcase.mjs",
     "smoke:operations-forum": "node scripts/operations-forum-acceptance.mjs",
     "browser:online-showcase": "node scripts/browser-online-showcase-acceptance.cjs",
+    "browser:activity-responsive": "node scripts/browser-online-showcase-acceptance.cjs --responsive-only",
     "browser:operations-forum": "node scripts/browser-operations-forum-acceptance.cjs",
     "browser:activity-commerce": "node scripts/browser-activity-commerce-acceptance.cjs",
     "browser:activity-lifecycle-pricing": "node scripts/browser-activity-lifecycle-pricing-acceptance.cjs",

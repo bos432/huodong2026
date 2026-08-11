@@ -41,6 +41,7 @@ const PLATFORM_ADMIN_PASSWORD = process.env.PLATFORM_ADMIN_PASSWORD || process.e
 const RUN_PLATFORM_ADMIN = process.env.ACCEPTANCE_SKIP_PLATFORM_ADMIN === "true" ? false : Boolean(PLATFORM_ADMIN_PASSWORD);
 const H5_LOGIN_MODE = process.env.H5_LOGIN_MODE || (WEB_BASE.startsWith("https://rd.chaimen666.com") ? "password" : "code");
 const H5_SMS_CODE = process.env.H5_SMS_CODE || "";
+const RESPONSIVE_ONLY = process.argv.includes("--responsive-only");
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
 const outputRoot = path.resolve(process.env.ACCEPTANCE_OUTPUT_DIR || path.join(repoRoot, ".local-logs"));
 const outputDir = path.resolve(outputRoot, `browser-acceptance-${runId}`);
@@ -507,18 +508,105 @@ async function runFeaturePages(browser) {
   await h5Context.close();
 }
 
+async function runResponsiveActivityCore(browser, activity) {
+  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
+  const page = await context.newPage();
+  const runtimeErrors = [];
+  page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
+  page.on("console", (message) => {
+    if (message.type() === "error") runtimeErrors.push(`console: ${message.text()}`);
+  });
+
+  const routes = [
+    { name: "home", url: `/?tenantCode=${encodeURIComponent(TENANT_CODE)}#/`, expected: ["首页", "活动"] },
+    { name: "list", url: `/?tenantCode=${encodeURIComponent(TENANT_CODE)}#/pages/activity/list?tenantCode=${encodeURIComponent(TENANT_CODE)}`, expected: ["发现活动", "活动"] },
+    { name: "detail", url: `/?tenantCode=${encodeURIComponent(TENANT_CODE)}#/pages/activity/detail?id=${activity.id}&tenantCode=${encodeURIComponent(TENANT_CODE)}`, expected: ["活动详情", activity.title] }
+  ];
+  const viewports = [
+    { width: 375, height: 812 },
+    { width: 390, height: 844 },
+    { width: 760, height: 900 }
+  ];
+  const evidence = [];
+
+  try {
+    for (const viewport of viewports) {
+      await page.setViewportSize(viewport);
+      for (const route of routes) {
+        runtimeErrors.length = 0;
+        await page.goto(`${WEB_BASE}${route.url}`, { waitUntil: "domcontentloaded" });
+        await waitForBodyText(page, route.expected, `responsive ${route.name} ${viewport.width}`);
+        await dismissH5Overlays(page);
+        await page.waitForTimeout(600);
+        const layout = await page.evaluate(() => {
+          const viewportWidth = window.innerWidth;
+          const scrollWidth = Math.max(document.documentElement.scrollWidth, document.body?.scrollWidth || 0);
+          const fixedOverflow = Array.from(document.querySelectorAll("*"))
+            .filter((element) => getComputedStyle(element).position === "fixed")
+            .map((element) => {
+              const rect = element.getBoundingClientRect();
+              return { className: String(element.className || ""), left: rect.left, right: rect.right, width: rect.width, height: rect.height };
+            })
+            .filter((item) => item.width > 0 && item.height > 0 && (item.left < -1 || item.right > viewportWidth + 1));
+          return { viewportWidth, scrollWidth, fixedOverflow };
+        });
+        assert(layout.scrollWidth <= layout.viewportWidth + 1, `${route.name} ${viewport.width}px has horizontal overflow: ${layout.scrollWidth}/${layout.viewportWidth}`);
+        assert(layout.fixedOverflow.length === 0, `${route.name} ${viewport.width}px has fixed elements outside viewport: ${JSON.stringify(layout.fixedOverflow)}`);
+        assert(runtimeErrors.length === 0, `${route.name} ${viewport.width}px console errors: ${runtimeErrors.join(" | ")}`);
+        const image = `activity-core-${route.name}-${viewport.width}.png`;
+        await screenshot(page, image, { fullPage: false });
+        evidence.push({ route: route.name, viewport: viewport.width, screenshot: image });
+      }
+    }
+    record("H5 活动核心链路响应式布局", "passed", { viewports: "375/390/760", routes: "home/list/detail", evidence });
+  } finally {
+    await context.close();
+  }
+}
+
 async function collectVersionInfo() {
   const ready = await api("/health/ready", { tenant: false });
   const h5Version = await fetch(`${WEB_BASE}/version.json`).then((res) => res.json()).catch(() => null);
   const adminVersion = await fetch(`${ADMIN_WEB_BASE}/admin/version.json`).then((res) => res.json()).catch(() => null);
   result.versions = { api: ready.release, h5: h5Version, admin: adminVersion };
   const commits = [ready.release?.commit, h5Version?.commit, adminVersion?.commit].filter(Boolean);
-  record("三端版本信息读取", new Set(commits).size <= 1 ? "passed" : "warning", {
-    note: `API=${ready.release?.commit || "-"}, Admin=${adminVersion?.commit || "-"}, H5=${h5Version?.commit || "-"}`
+  const missingVersionSurfaces = [
+    !ready.release?.commit ? "API" : "",
+    !adminVersion?.commit ? "Admin" : "",
+    !h5Version?.commit ? "H5" : ""
+  ].filter(Boolean);
+  const versionStatus = missingVersionSurfaces.length === 0 && new Set(commits).size === 1 ? "passed" : "warning";
+  record("三端版本信息读取", versionStatus, {
+    note: `API=${ready.release?.commit || "-"}, Admin=${adminVersion?.commit || "-"}, H5=${h5Version?.commit || "-"}${missingVersionSurfaces.length ? `；缺少 ${missingVersionSurfaces.join("/")} 版本文件` : ""}`
   });
 }
 
 async function main() {
+  if (RESPONSIVE_ONLY) {
+    const activityResult = await api("/public/activities?page=1&pageSize=20");
+    const activity = (activityResult.items || activityResult)[0];
+    assert(activity, `no public activity available for responsive acceptance in tenant ${TENANT_CODE}`);
+    result.testData.activity = { id: activity.id, title: activity.title, price: activity.price };
+    const browser = await chromium.launch({ headless: process.env.HEADLESS !== "false" });
+    try {
+      await collectVersionInfo();
+      await runResponsiveActivityCore(browser, activity);
+      result.finishedAt = new Date().toISOString();
+      result.status = "passed";
+    } catch (error) {
+      result.finishedAt = new Date().toISOString();
+      result.status = "failed";
+      result.error = error.stack || error.message;
+      record("H5 活动核心链路响应式布局", "failed", { note: error.message });
+      throw error;
+    } finally {
+      await browser.close();
+      fs.writeFileSync(path.join(outputDir, "result.json"), JSON.stringify(result, null, 2));
+      console.log(`验收结果已写入：${path.join(outputDir, "result.json")}`);
+    }
+    return;
+  }
+
   const showcaseSession = await loginAdminApi(SHOWCASE_ADMIN_USERNAME, SHOWCASE_ADMIN_PASSWORD);
   tenantEntitlementFeatures = showcaseSession.admin?.tenant?.settings?.entitlements?.features || {};
   const operationSetting = await api("/public/settings/operation");
@@ -563,6 +651,7 @@ async function main() {
 
     await runRoleMatrix(browser);
     await runFeaturePages(browser);
+    await runResponsiveActivityCore(browser, activity);
     result.finishedAt = new Date().toISOString();
     result.status = "passed";
   } catch (error) {

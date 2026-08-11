@@ -44,6 +44,8 @@ admin / Admin123456
 先执行以下命令，确认当前代码和本地数据库处于可验收状态。
 
 - `npm run browser:online-showcase` 可作为线上演示商家浏览器全流程复验命令，结果会写入 `.local-logs/browser-acceptance-*/result.json`，截图会保留在同一目录。
+- 该浏览器验收会在 `375px`、`390px`、`760px` 三种宽度下逐页检查首页、活动列表和活动详情，阻断横向溢出、固定栏越界及控制台错误。
+- 只做只读响应式复验时，可执行 `npm run browser:activity-responsive`；通过 `WEB_BASE`、`API_BASE` 和 `TENANT_CODE` 指向待验收环境，不会创建报名或修改后台数据。
 
 ```bash
 npm run build
