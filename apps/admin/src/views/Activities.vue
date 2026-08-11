@@ -8,6 +8,7 @@ import { api } from "../api";
 import ActivityPosterDialog from "../components/ActivityPosterDialog.vue";
 import H5QrDialog from "../components/H5QrDialog.vue";
 import MarkdownContentEditor from "../components/MarkdownContentEditor.vue";
+import { activityTemplates, type ActivityTemplate } from "../activity-templates";
 import { activityH5PreviewUrl, copyToClipboard } from "../h5-preview";
 import { canAccess, currentTenantCode, currentTenantSettings, isPlatformAdmin } from "../permissions";
 
@@ -32,6 +33,7 @@ const loading = ref(false);
 const errorMessage = ref("");
 const metaErrorMessage = ref("");
 const drawer = ref(false);
+const templateDialogVisible = ref(false);
 const activityEditorReturnFocus = ref<HTMLElement | null>(null);
 const saving = ref(false);
 const activityActionKey = ref("");
@@ -368,6 +370,7 @@ function rememberActivityEditorTrigger(event?: Event) {
 function create(event?: Event) {
   if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
   rememberActivityEditorTrigger(event);
+  templateDialogVisible.value = false;
   editingId.value = null;
   activeActivityStep.value = activityFormSteps[0].name;
   Object.assign(form, {
@@ -376,6 +379,33 @@ function create(event?: Event) {
   });
   drawer.value = true;
   void offerDraftRestore();
+}
+
+function showTemplatePicker(event?: Event) {
+  if (!canOperateActivities.value) return ElMessage.warning("当前账号只能只读查看活动列表");
+  rememberActivityEditorTrigger(event);
+  templateDialogVisible.value = true;
+}
+
+function createFromTemplate(template: ActivityTemplate) {
+  const nextForm = defaultForm();
+  editingId.value = null;
+  activeActivityStep.value = activityFormSteps[0].name;
+  Object.assign(form, {
+    ...nextForm,
+    title: template.title,
+    capacity: template.capacity,
+    fields: template.fields.map((field) => ({ ...field, options: field.options.map((option) => ({ ...option })) })),
+    sections: template.sections.map((section) => ({ ...section })),
+    notice: template.notice,
+    eligibilityRules: { ...nextForm.eligibilityRules, ...(template.eligibilityRules || {}) },
+    requireReview: registrationReviewEnabled.value
+  });
+  clearActivityDraft();
+  templateDialogVisible.value = false;
+  drawer.value = true;
+  void nextTick(focusActivityEditorPanel);
+  ElMessage.success(`已应用「${template.name}」模板，请补齐活动时间、地点和封面后保存`);
 }
 
 async function edit(row: any) {
@@ -1112,6 +1142,7 @@ onMounted(async () => {
       <h2>{{ pageTitle }}</h2>
       <div class="toolbar-actions">
         <el-button v-if="isPlatformAdmin()" :icon="Check" :disabled="Boolean(activityActionKey) || saving" @click="showPendingApproval">待审核活动</el-button>
+        <el-button v-if="canOperateActivities && !isPlatformAdmin()" :disabled="Boolean(activityActionKey) || saving" @click="showTemplatePicker($event)">使用模板</el-button>
         <el-button v-if="canOperateActivities && !isPlatformAdmin()" type="primary" :icon="Plus" :disabled="Boolean(activityActionKey) || saving" @click="create($event)">新建活动</el-button>
       </div>
     </div>
@@ -1239,6 +1270,21 @@ onMounted(async () => {
         />
       </div>
     </div>
+
+    <el-dialog v-model="templateDialogVisible" class="activity-template-dialog" title="从活动模板开始" width="760px" destroy-on-close>
+      <p class="activity-template-intro">模板会带入推荐的报名字段、详情模块和报名须知，不会自动发布活动；时间、地点、封面和收费仍需由主办方确认。</p>
+      <div class="activity-template-grid">
+        <button v-for="template in activityTemplates" :key="template.id" type="button" class="activity-template-card" @click="createFromTemplate(template)">
+          <strong>{{ template.name }}</strong>
+          <span>{{ template.description }}</span>
+          <em>默认 {{ template.capacity }} 人</em>
+        </button>
+      </div>
+      <template #footer>
+        <el-button @click="templateDialogVisible = false">取消</el-button>
+        <el-button type="primary" @click="create()">空白新建</el-button>
+      </template>
+    </el-dialog>
 
     <el-drawer v-model="approvalDrawer" size="560px" title="审核记录">
       <div class="approval-header">
@@ -1557,8 +1603,16 @@ onMounted(async () => {
 .channel-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 14px; margin-bottom: 16px; }
 .channel-form .el-button { align-self: end; margin-bottom: 18px; }
 .embedded { margin-top: 16px; }
+:global(.activity-template-dialog .el-dialog__body) { padding-top: 8px; }
+.activity-template-intro { margin: 0 0 16px; color: #64748b; font-size: 14px; line-height: 1.65; }
+.activity-template-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+.activity-template-card { display: grid; gap: 7px; min-height: 132px; padding: 16px; border: 1px solid #dce8e4; border-radius: 8px; background: #fff; color: #1f2937; text-align: left; cursor: pointer; transition: border-color .18s ease, box-shadow .18s ease, transform .18s ease; }
+.activity-template-card:hover, .activity-template-card:focus-visible { border-color: #10b981; box-shadow: 0 8px 18px rgba(16, 185, 129, .12); outline: none; transform: translateY(-1px); }
+.activity-template-card strong { color: #064e3b; font-size: 16px; }
+.activity-template-card span { color: #64748b; font-size: 13px; line-height: 1.55; }
+.activity-template-card em { align-self: end; color: #0f766e; font-size: 12px; font-style: normal; }
 @media (max-width: 1100px) {
-  .filter-bar, .form-grid, .field-main, .host-row, .section-row, .section-image-field, .channel-form { grid-template-columns: 1fr; }
+  .filter-bar, .form-grid, .field-main, .host-row, .section-row, .section-image-field, .channel-form, .activity-template-grid { grid-template-columns: 1fr; }
   .field-head { align-items: flex-start; flex-direction: column; }
   .field-actions { justify-content: flex-start; }
   .pager-row { align-items: flex-start; flex-direction: column; }
