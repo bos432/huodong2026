@@ -78,6 +78,8 @@ describe("mobile client state consistency", () => {
   const userMy = readPage("user/my.vue");
   const mobileDecoration = readFileSync("../mobile/src/decoration.ts", "utf8");
   const appBottomNav = readFileSync("../mobile/src/components/AppBottomNav.vue", "utf8");
+  const mobileScanPage = readPage("scan/index.vue");
+  const mobileActivityQr = readFileSync("../mobile/src/activity-qr.ts", "utf8");
   const entryPages = readFileSync("../mobile/src/entry-pages.ts", "utf8");
   const featureGates = readFileSync("../mobile/src/feature-gates.ts", "utf8");
   const courseData = readFileSync("../mobile/src/course-data.ts", "utf8");
@@ -679,6 +681,12 @@ describe("mobile client state consistency", () => {
     expect(userRegistrationDetail).not.toContain("scanGroupQr");
     expect(appBottomNav).not.toContain("openActivityQuickAction");
     expect(appBottomNav).not.toContain('aria-label="扫码识别平台活动码或签到码"');
+    expect(homePage).toContain('aria-label="扫一扫"');
+    expect(mobileScanPage).toContain('onlyFromCamera: source === "camera"');
+    expect(mobileScanPage).toContain('scanType: ["qrCode"]');
+    expect(mobileScanPage).toContain('from "../../activity-qr"');
+    expect(mobileActivityQr).toContain('path !== "/pages/activity/detail"');
+    expect(mobileScanPage).toContain("签到码请由签到员在手机管理端扫码核销");
   });
 
   it("keeps the home tenant switcher outside transformed containers", () => {

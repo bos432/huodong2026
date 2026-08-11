@@ -4,6 +4,7 @@
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
       <view class="topbar-actions">
         <view v-if="pageBrand.logoUrl" class="brand-mark"><image :src="pageBrand.logoUrl" mode="aspectFit" /></view>
+        <view class="scan-btn app-press" role="button" tabindex="0" aria-label="扫一扫" @click="goScan" @keyup.enter="goScan" @keyup.space.prevent="goScan"><view class="scan-glyph" aria-hidden="true" /></view>
         <view class="search-btn app-press" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><view class="search-glyph" aria-hidden="true" /></view>
       </view>
     </view>
@@ -174,6 +175,10 @@ function goSearch() {
   uni.navigateTo({ url: withTenantCode("/pages/search/index") });
 }
 
+function goScan() {
+  uni.navigateTo({ url: withTenantCode("/pages/scan/index") });
+}
+
 async function loadCategories() {
   try {
     const result = await request<any[]>("/public/categories");
@@ -285,9 +290,10 @@ function activityDateParts(value: string) {
 .activity-empty { display: flex; justify-content: space-between; align-items: center; gap: 16rpx; padding: 24rpx; border-radius: 8rpx; background: #fff; color: #718078; font-size: 24rpx; }.activity-empty-action { color: #08753f; font-weight: 800; }
 .category-tab:focus-visible, .search-btn:focus-visible, .all-link:focus-visible, .activity-preview-card:focus-visible, .activity-empty-action:focus-visible { outline: 3rpx solid #20d477; outline-offset: 3rpx; }
 
-.search-btn { width:56rpx; min-width:56rpx; height:56rpx; padding:0; border:1rpx solid #e2e9e5; background:#fff; }
+.search-btn,.scan-btn { width:56rpx; min-width:56rpx; height:56rpx; display:flex;align-items:center;justify-content:center;padding:0; border:1rpx solid #e2e9e5; border-radius:8rpx; background:#fff; color:#27362f; }
 .search-glyph { position:relative; width:24rpx; height:24rpx; border:3rpx solid currentColor; border-radius:50%; }
 .search-glyph::after { position:absolute; right:-8rpx; bottom:-6rpx; width:10rpx; height:3rpx; content:""; border-radius:3rpx; background:currentColor; transform:rotate(45deg); transform-origin:left center; }
+.scan-glyph{position:relative;width:25rpx;height:25rpx;border:3rpx solid currentColor;border-radius:4rpx;box-sizing:border-box}.scan-glyph::before,.scan-glyph::after{position:absolute;width:11rpx;height:11rpx;content:"";background:#fff}.scan-glyph::before{top:-3rpx;left:-3rpx}.scan-glyph::after{right:-3rpx;bottom:-3rpx}
 .discovery-empty-hero { min-height:236rpx; padding:30rpx; }
 .discovery-empty-title { font-size:34rpx; }
 .discovery-empty-copy { line-height:1.55; }
