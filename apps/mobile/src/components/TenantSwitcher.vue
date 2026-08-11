@@ -11,7 +11,7 @@ const props = defineProps<{
   compact?: boolean;
 }>();
 
-defineEmits<{
+const emit = defineEmits<{
   changed: [tenant: PublicTenantView];
 }>();
 
@@ -22,6 +22,7 @@ const loading = ref(false);
 const keyword = ref("");
 const assetScopeMessage = ref("");
 const tenantSwitcherEnabled = ref(true);
+const loadError = ref("");
 
 const currentTenantCode = computed(() => props.tenant?.code || getCurrentTenantCode());
 const cityLabel = computed(() => props.tenant?.region || "本地");
@@ -38,23 +39,27 @@ function tenantOptionLabel(item: PublicTenantView) {
 
 async function loadTenantOptions() {
   loading.value = true;
+  loadError.value = "";
   try {
     const bootstrap = await request<TenantBootstrap>("/public/tenants/bootstrap");
     tenantSwitcherEnabled.value = bootstrap?.tenantSwitcherEnabled !== false;
     tenantOptions.value = (bootstrap?.tenants || []) as PublicTenantView[];
     defaultTenantCode.value = bootstrap?.defaultTenant?.code || "";
     assetScopeMessage.value = bootstrap?.policy?.assetScopeMessage || "报名、订单、钱包、积分、课程和优惠权益按当前城市商家分别展示，切换不会删除原城市数据";
-  } catch {
+  } catch (error: any) {
     tenantOptions.value = [];
     defaultTenantCode.value = "";
+    loadError.value = error?.message || "商家列表加载失败，请重试。";
   } finally {
     loading.value = false;
   }
 }
 
 async function show() {
+  if (loading.value) return;
+  await loadTenantOptions();
   if (!tenantSwitcherEnabled.value) return;
-  if (!tenantOptions.value.length) await loadTenantOptions();
+  keyword.value = "";
   open.value = true;
 }
 
@@ -79,6 +84,7 @@ async function selectTenant(item: PublicTenantView) {
   setCurrentTenantCode(item.code);
   setCurrentTenantCodeSource("manual");
   hide();
+  emit("changed", item);
   uni.reLaunch({ url: nextRoute });
 }
 
@@ -111,6 +117,7 @@ onMounted(() => void loadTenantOptions());
         <view class="tenant-close" @click="hide">×</view>
       </view>
       <view v-if="loading" class="tenant-empty">加载中...</view>
+      <view v-else-if="loadError" class="tenant-empty tenant-error"><text>{{ loadError }}</text><view class="tenant-retry" role="button" tabindex="0" @click="loadTenantOptions" @keyup.enter="loadTenantOptions" @keyup.space.prevent="loadTenantOptions">重新加载</view></view>
       <view v-else-if="!tenantOptions.length" class="tenant-empty">暂无可切换商家</view>
       <template v-else>
         <input v-model="keyword" class="tenant-search" placeholder="搜索城市、商家名称或编码" />
@@ -150,6 +157,8 @@ onMounted(() => void loadTenantOptions());
 .tenant-sheet-subtitle { margin-top: 6rpx; color: #667085; font-size: 24rpx; line-height: 1.45; }
 .tenant-close { flex: 0 0 auto; width: 56rpx; height: 56rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; background: #f2f4f7; color: #344054; font-size: 34rpx; font-weight: 800; }
 .tenant-empty { padding: 34rpx 0; color: #667085; text-align: center; font-size: 26rpx; }
+.tenant-error { display: grid; gap: 14rpx; color: #b42318; }
+.tenant-retry { color: #0f766e; font-weight: 900; }
 .tenant-search { box-sizing: border-box; width: 100%; height: 76rpx; padding: 0 20rpx; border: 1px solid #d0d5dd; border-radius: 8px; background: #fff; color: #101828; font-size: 26rpx; }
 .tenant-scope-note { margin: 14rpx 0 6rpx; padding: 14rpx 16rpx; border-left: 6rpx solid #0f766e; background: #f0fdfa; color: #475467; font-size: 22rpx; line-height: 1.55; }
 .tenant-option { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; min-height: 104rpx; margin-top: 12rpx; padding: 18rpx 20rpx; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }

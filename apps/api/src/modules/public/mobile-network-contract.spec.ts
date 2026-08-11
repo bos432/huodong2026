@@ -56,6 +56,9 @@ describe("mobile production network contract", () => {
     expect(tenantSwitcher).toContain("position: fixed; top: 0; right: 0; bottom: 0; left: 0");
     expect(tenantSwitcher).toContain("z-index: 10001");
     expect(tenantSwitcher).toContain("const nextRoute = getCurrentRouteForTenant(item.code)");
+    expect(tenantSwitcher).toContain("await loadTenantOptions();\n  if (!tenantSwitcherEnabled.value) return;");
+    expect(tenantSwitcher).toContain('v-else-if="loadError"');
+    expect(tenantSwitcher).toContain('emit("changed", item)');
     expect(tenantSwitcher).toContain("uni.reLaunch({ url: nextRoute })");
     expect(home).toContain('<view class="discovery-topbar">');
     expect(home).not.toContain('<view class="discovery-topbar app-enter-soft">');
