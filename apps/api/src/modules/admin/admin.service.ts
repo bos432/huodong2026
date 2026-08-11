@@ -144,7 +144,7 @@ import { auditDiff } from "./audit-diff";
 import { normalizeTenantPackageExpiresAt, normalizeTenantPackagePlan, TenantEntitlementFeature, TenantQuotaKey, tenantEffectiveEntitlements, tenantFeatureAccess, tenantPackagePermissionTemplate, tenantQuotaAccess, tenantRenewalReminder, tenantSubscriptionStatus, tenantSubscriptionWriteRestriction } from "./tenant-subscription";
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { BusinessJobService } from "../reliability/business-job.service";
-import { ActivityLifecycleAction, canTransitionActivity, hasPaidPaymentMethod, scheduledPublishWindowIssue } from "./activity-lifecycle";
+import { ActivityLifecycleAction, activityPublishReadinessIssues, canTransitionActivity, scheduledPublishWindowIssue } from "./activity-lifecycle";
 import { normalizeRefundPagination } from "./refund-pagination";
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
@@ -5539,19 +5539,24 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async activityPublishCheck(id: number, admin?: AdminContext) {
     const activity = await this.getActivity(id, admin) as any;
-    const issues: Array<{ field: string; message: string; blocking: boolean }> = [];
-    if (!activity.title?.trim()) issues.push({ field: "title", message: "请填写活动标题", blocking: true });
-    if (!activity.coverUrl) issues.push({ field: "coverUrl", message: "建议上传活动封面", blocking: false });
-    if (!activity.description?.trim()) issues.push({ field: "description", message: "请填写活动介绍", blocking: true });
-    if (!activity.location?.trim()) issues.push({ field: "location", message: "请填写活动地点", blocking: true });
-    if (new Date(activity.endTime) <= new Date(activity.startTime)) issues.push({ field: "endTime", message: "结束时间必须晚于开始时间", blocking: true });
-    if (new Date(activity.registrationDeadline) >= new Date(activity.startTime)) issues.push({ field: "registrationDeadline", message: "报名截止时间必须早于活动开始时间", blocking: true });
-    if (!activity.fields?.length) issues.push({ field: "fields", message: "至少配置一个报名字段", blocking: true });
-    if (!activity.sections?.length) issues.push({ field: "sections", message: "建议至少配置一个详情模块", blocking: false });
-    if (Number(activity.price || 0) > 0) {
-      const setting = await this.operationSettings.findOne({ where: activity.tenant ? { tenant: { id: activity.tenant.id } } : { tenant: IsNull() } });
-      if (!hasPaidPaymentMethod(setting?.paymentMethods)) issues.push({ field: "paymentMethods", message: "付费活动尚未配置可用支付方式", blocking: true });
-    }
+    const setting = await this.operationSettings.findOne({ where: activity.tenant ? { tenant: { id: activity.tenant.id } } : { tenant: IsNull() } });
+    const organizerProfile = activity.tenant ? this.publicTenantOrganizerProfile(activity.tenant) : null;
+    const issues = activityPublishReadinessIssues({
+      title: activity.title,
+      coverUrl: activity.coverUrl,
+      description: activity.description,
+      location: activity.location,
+      startTime: activity.startTime,
+      endTime: activity.endTime,
+      registrationDeadline: activity.registrationDeadline,
+      fields: activity.fields,
+      sections: activity.sections,
+      hosts: activity.hosts,
+      price: activity.price,
+      paymentMethods: setting?.paymentMethods,
+      hasOrganizerProfile: activity.tenant ? Boolean(organizerProfile?.intro || organizerProfile?.servicePromise) : undefined,
+      hasCustomerServiceContact: Boolean(setting?.customerServicePhone || setting?.customerServiceWechat)
+    });
     return { passed: !issues.some((item) => item.blocking), blockingCount: issues.filter((item) => item.blocking).length, warningCount: issues.filter((item) => !item.blocking).length, issues };
   }
 
