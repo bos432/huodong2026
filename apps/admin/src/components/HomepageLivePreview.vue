@@ -193,6 +193,13 @@ function select(section: HomepageSectionView) {
             <p>{{ sectionRows(section, 'activities')[0]?.location || "地点待确认" }}</p>
             <footer><em>{{ sectionRows(section, 'activities')[0]?.registeredCount || 0 }} 人已报 · 余 {{ sectionRows(section, 'activities')[0]?.remainingSeats }}</em><span><strong>{{ Number(sectionRows(section, 'activities')[0]?.price) > 0 ? `¥${Number(sectionRows(section, 'activities')[0]?.price).toFixed(2)}` : "免费" }}</strong> 立即报名</span></footer>
           </section>
+          <div v-if="section.config?.display === 'lead_rail'" class="activity-focus-rail">
+            <article v-for="item in sectionRows(section, 'activities').slice(1, 3)" :key="item.id">
+              <img v-if="item.coverUrl" :src="item.coverUrl" alt="" />
+              <span v-else class="activity-focus-rail-cover">活动</span>
+              <strong>{{ item.title }}</strong>
+            </article>
+          </div>
         </div>
 
         <div v-else-if="['featured_activities','activity_feed'].includes(section.type)" class="decor-card" :style="sectionStyle(section)">
@@ -294,6 +301,10 @@ function select(section: HomepageSectionView) {
 .activity-focus footer em { overflow:hidden; color:#667085; font-size:8px; font-style:normal; text-overflow:ellipsis; white-space:nowrap; }
 .activity-focus footer strong { color:#fff4d6; font-size:10px; }
 .activity-focus footer span { flex:0 0 auto; padding:6px 8px; border-radius:6px; background:var(--preview-primary); color:#fff; font-size:8px; font-weight:900; }
+.activity-focus-rail { display:flex; gap:8px; overflow:hidden; padding:0 10px 10px; background:#fff; }
+.activity-focus-rail article { min-width:112px; display:grid; grid-template-columns:40px minmax(0,1fr); align-items:center; gap:7px; padding:6px; border:1px solid rgba(15,118,110,.1); border-radius:7px; background:#f8fbfa; }
+.activity-focus-rail img,.activity-focus-rail-cover { width:40px; height:32px; display:grid; place-items:center; border-radius:5px; object-fit:cover; background:#d9e9e4; color:#0f766e; font-size:8px; }
+.activity-focus-rail strong { overflow:hidden; color:#173f3a; font-size:9px; text-overflow:ellipsis; white-space:nowrap; }
 .activity-list,.post-list { display:grid; gap:8px; }
 .activity-list article { display:grid; grid-template-columns:34px 60px 1fr; gap:8px; min-width:0; min-height:60px; padding:7px; border:1px solid rgba(15,118,110,.08); border-radius:8px; background:#fff; }
 .activity-list time { display:grid; align-content:center; justify-items:center; color:var(--preview-primary); font-size:7px; font-style:normal; font-weight:800; }

@@ -245,7 +245,7 @@ onBeforeUnmount(clearTimer);
 
     <view v-else-if="!isOfficial" :class="cardClass" @click="openAd">
       <view v-if="displayImageUrls.length > 1" class="ad-slot-media">
-        <swiper class="ad-slot-swiper" circular autoplay indicator-dots indicator-color="rgba(255,255,255,0.62)" indicator-active-color="#ffffff">
+        <swiper class="ad-slot-swiper" circular indicator-dots indicator-color="rgba(255,255,255,0.62)" indicator-active-color="#ffffff">
           <swiper-item v-for="url in displayImageUrls" :key="url">
             <image class="ad-slot-image" :src="url" mode="aspectFill" />
           </swiper-item>

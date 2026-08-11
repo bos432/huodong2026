@@ -32,6 +32,11 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   --app-space-2: 12rpx;
   --app-space-3: 16rpx;
   --app-space-4: 24rpx;
+  --app-font-page-title: 44rpx;
+  --app-font-card-title: 34rpx;
+  --app-font-body: 30rpx;
+  --app-font-helper: 24rpx;
+  --app-font-caption: 22rpx;
   --app-motion-fast: 180ms;
   --app-motion-standard: 280ms;
 }
@@ -76,11 +81,11 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 
 /* ===== 文字 ===== */
 .title-xxl { font-size: 48rpx; font-weight: 700; color: #173F3A; line-height: 1.3; }
-.title-xl { font-size: 40rpx; font-weight: 700; color: #173F3A; }
-.title-lg { font-size: 36rpx; font-weight: 700; color: #173F3A; }
+.title-xl { font-size: var(--app-font-page-title); font-weight: 700; color: #173F3A; }
+.title-lg { font-size: var(--app-font-card-title); font-weight: 700; color: #173F3A; }
 .title-md { font-size: 32rpx; font-weight: 600; color: #173F3A; }
-.body-text { font-size: 28rpx; color: #54716C; line-height: 1.6; }
-.subtle { color: #718A85; font-size: 24rpx; }
+.body-text { font-size: var(--app-font-body); color: #54716C; line-height: 1.6; }
+.subtle { color: #718A85; font-size: var(--app-font-helper); }
 .price { font-size: 36rpx; font-weight: 700; color: #C35240; }
 .price-original { font-size: 24rpx; color: #999999; text-decoration: line-through; }
 

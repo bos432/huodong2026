@@ -273,6 +273,9 @@ describe("mobile client state consistency", () => {
     expect(userOrders).toContain("订单退款状态或金额已变化");
     expect(userOrders).toContain('from "../../tenant-load-guard"');
     expect(userOrders).toContain('role="tablist"');
+    expect(userOrders).toContain('type OrderTab = "all" | "pending" | "upcoming" | "after_sale" | "learning" | "completed"');
+    expect(userOrders).toContain('{ key: "after_sale", label: "退款售后" }');
+    expect(userOrders).toContain('activeTab.value === "after_sale"');
     expect(userOrders).toContain('aria-label="重新加载我的订单"');
     expect(userOrders).toContain(':aria-disabled="busy"');
     expect(userOrders).toContain("if (busy.value) return");

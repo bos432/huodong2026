@@ -216,7 +216,6 @@ function activityDateParts(value: string) {
         class="decor-banner-swiper"
         :style="bannerSwiperStyle(section)"
         circular
-        autoplay
         indicator-dots
         indicator-color="rgba(255,255,255,0.62)"
         indicator-active-color="#ffffff"

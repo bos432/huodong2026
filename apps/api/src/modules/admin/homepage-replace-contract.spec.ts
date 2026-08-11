@@ -46,6 +46,7 @@ describe("homepage transactional replacement contract", () => {
   it("keeps the simplified builder and live draft preview contract", () => {
     const builder = read("apps/admin/src/views/HomepageBuilder.vue");
     const preview = read("apps/admin/src/components/HomepageLivePreview.vue");
+    const mobileHome = read("apps/mobile/src/pages/index/index.vue");
 
     expect(builder).toContain("<HomepageLivePreview");
     expect(builder).toContain('v-model="previewDevice"');
@@ -75,6 +76,9 @@ describe("homepage transactional replacement contract", () => {
       expect(preview).toContain(type);
     }
     expect(preview).toContain('emit("select", section)');
+    expect(preview).toContain("section.config?.display === 'lead_rail'");
+    expect(preview).toContain('class="activity-focus-rail"');
+    expect(mobileHome).toContain("featuredDisplay === 'lead_rail' && sideActivities.length");
     expect(preview).toContain("width:357px");
     expect(preview).toContain("width:412px");
   });

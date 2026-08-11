@@ -33,6 +33,28 @@ describe("mobile production network contract", () => {
     expect(communityProgram).not.toContain('from "../../date-time"');
   });
 
+  it("keeps decorated image banners under user control", () => {
+    const pageDecorationBlocks = read("apps/mobile/src/components/PageDecorationBlocks.vue");
+    const adSlotRenderer = read("apps/mobile/src/components/AdSlotRenderer.vue");
+
+    expect(pageDecorationBlocks).toContain("indicator-dots");
+    expect(pageDecorationBlocks).not.toMatch(/\sautoplay(?:\s|>)/);
+    expect(adSlotRenderer).toContain("indicator-dots");
+    expect(adSlotRenderer).not.toMatch(/\sautoplay(?:\s|>)/);
+  });
+
+  it("keeps the shared mobile typography scale legible", () => {
+    const styles = read("apps/mobile/src/styles.css");
+
+    expect(styles).toContain("--app-font-page-title: 44rpx");
+    expect(styles).toContain("--app-font-card-title: 34rpx");
+    expect(styles).toContain("--app-font-body: 30rpx");
+    expect(styles).toContain("--app-font-helper: 24rpx");
+    expect(styles).toContain("--app-font-caption: 22rpx");
+    expect(styles).toContain("font-size: var(--app-font-body)");
+    expect(styles).toContain("font-size: var(--app-font-helper)");
+  });
+
   it("does not block initial navigation on location and replaces stale tenant routes", () => {
     const api = read("apps/mobile/src/api.ts");
     const home = read("apps/mobile/src/pages/index/index.vue");

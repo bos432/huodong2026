@@ -1,6 +1,7 @@
 import { spawn, spawnSync } from "node:child_process";
 import fs from "node:fs";
 import http from "node:http";
+import https from "node:https";
 import os from "node:os";
 import path from "node:path";
 
@@ -395,7 +396,8 @@ async function runProfileCommands() {
     ACCEPTANCE_OUTPUT_DIR: acceptanceOutputDir,
     WEB_BASE: acceptanceServer.baseUrl,
     ADMIN_WEB_BASE: acceptanceServer.baseUrl,
-    API_BASE: `${acceptanceServer.baseUrl}/api`
+    API_BASE: `${acceptanceServer.baseUrl}/api`,
+    H5_LOGIN_MODE: process.env.H5_LOGIN_MODE || acceptanceServer.h5LoginMode
   };
   try {
     await runCommandStep({
@@ -450,6 +452,7 @@ function startAcceptanceStaticServer() {
       console.log(`[acceptance] serving current build at ${baseUrl}, proxy ${proxyBase.href}`);
       resolve({
         baseUrl,
+        h5LoginMode: proxyBase.protocol === "https:" ? "password" : "code",
         close: () => new Promise((done) => server.close(() => done()))
       });
     });
@@ -490,7 +493,8 @@ function serveStaticFile(filePath, fallback, res) {
 
 function proxyAcceptanceRequest(req, res, proxyBase) {
   const target = new URL(req.url || "/", proxyBase);
-  const proxyReq = http.request(target, {
+  const transport = proxyBase.protocol === "https:" ? https : http;
+  const proxyReq = transport.request(target, {
     method: req.method,
     headers: { ...req.headers, host: proxyBase.host }
   }, (proxyRes) => {

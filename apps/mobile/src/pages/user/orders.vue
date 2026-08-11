@@ -61,7 +61,7 @@ import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
 
-type OrderTab = "all" | "pending" | "upcoming" | "learning" | "completed";
+type OrderTab = "all" | "pending" | "upcoming" | "after_sale" | "learning" | "completed";
 type UiOrder = {
   key: string;
   type: "activity" | "course";
@@ -464,31 +464,31 @@ onShow(() => {
 <style scoped>
 .orders-page { padding-bottom: 160rpx; }
 .orders-hero { display:flex; align-items:stretch; justify-content:space-between; gap:18rpx; margin-bottom:16rpx; padding:26rpx; border:1rpx solid rgba(15,118,110,.12); border-radius:14rpx; background:#e9f6f2; }
-.orders-kicker { display:block; color:#0f766e; font-size:21rpx; font-weight:800; }
+.orders-kicker { display:block; color:#0f766e; font-size:var(--app-font-caption); font-weight:800; }
 .orders-toolbar-label { display:block; margin-top:6rpx; color:#173f3a; font-size:36rpx; font-weight:900; }
-.orders-hero-copy { display:block; margin-top:8rpx; color:#66827d; font-size:22rpx; line-height:1.45; }
+.orders-hero-copy { display:block; margin-top:8rpx; color:#66827d; font-size:var(--app-font-helper); line-height:1.45; }
 .orders-hero-side { min-width:110rpx; display:grid; align-content:center; justify-items:center; padding:0 12rpx; border-radius:10rpx; background:#fff; color:#0f766e; }
 .orders-hero-side text:first-child { font-size:34rpx; font-weight:900; }
-.orders-hero-side text:last-child { margin-top:4rpx; color:#66827d; font-size:20rpx; }
+.orders-hero-side text:last-child { margin-top:4rpx; color:#66827d; font-size:var(--app-font-caption); }
 .orders-toolbar { display:flex; align-items:center; justify-content:space-between; min-height:64rpx; margin-bottom:12rpx; }
-.orders-toolbar-hint { color:#66827d; font-size:23rpx; }
+.orders-toolbar-hint { color:#66827d; font-size:var(--app-font-helper); }
 .refresh-action { min-width:88rpx; padding:10rpx 18rpx; border:1rpx solid #cfe4df; border-radius:8rpx; background:#fff; color:#0f766e; text-align:center; font-size:24rpx; font-weight:800; }
 .refresh-action.disabled { color:#9ca3af; background:#f5f5f4; }
 .order-tabs { display:grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap:4rpx; margin-bottom:18rpx; padding:6rpx; border:1rpx solid #d9ebe6; border-radius:8rpx; background:#f1f7f5; }
-.order-tab { min-width:0; min-height:56rpx; display:flex;align-items:center;justify-content:center; padding:8rpx 2rpx; border-radius:6rpx; color:#66827d; text-align:center; font-size:18rpx; font-weight:800; white-space:normal; line-height:1.2; }
+.order-tab { min-width:0; min-height:56rpx; display:flex;align-items:center;justify-content:center; padding:8rpx 2rpx; border-radius:6rpx; color:#66827d; text-align:center; font-size:var(--app-font-caption); font-weight:800; white-space:normal; line-height:1.2; }
 .order-tab.active { background:#0f766e; color:#fff; box-shadow:0 4rpx 12rpx rgba(15, 118, 110, 0.18); }
 .order-card { margin-bottom:16rpx; border:1rpx solid rgba(15,118,110,.1); box-shadow:0 8rpx 22rpx rgba(20,72,64,.05); }
 .order-head { align-items: flex-start; gap: 16rpx; }
-.order-type { color:#0f766e; font-size:22rpx; font-weight:900; }
+.order-type { color:#0f766e; font-size:var(--app-font-helper); font-weight:900; }
 .order-title { margin-top:6rpx; color:#173f3a; font-size:30rpx; font-weight:900; line-height:1.35; }
-.status-pill { flex:0 0 auto; padding:8rpx 14rpx; border-radius:7rpx; font-size:22rpx; font-weight:900; background:#edf0f5; color:#667085; }
+.status-pill { flex:0 0 auto; padding:8rpx 14rpx; border-radius:7rpx; font-size:var(--app-font-caption); font-weight:900; background:#edf0f5; color:#667085; }
 .status-pill.pending { background: #fff7ed; color: #9a3412; }
 .status-pill.upcoming { background: #eff6ff; color: #1d4ed8; }
 .status-pill.learning { background: #eef2ff; color: #3730a3; }
 .status-pill.done { background: #ecfdf3; color: #166534; }
 .order-meta { display:grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12rpx 18rpx; margin-top: 18rpx; }
 .order-meta view { display:grid; gap: 4rpx; }
-.order-meta text:first-child { color: #999; font-size: 22rpx; }
+.order-meta text:first-child { color: #999; font-size: var(--app-font-helper); }
 .order-meta text:last-child { color: #333; font-size: 25rpx; font-weight: 700; word-break: break-all; }
 .notice { margin-top: 16rpx; padding: 16rpx; border-radius: 12rpx; background: #fff7ed; color: #9a3412; font-size: 24rpx; line-height: 1.5; }
 .notice.muted { background: #f3f4f6; color: #4b5563; }
