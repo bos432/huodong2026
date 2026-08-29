@@ -49,6 +49,7 @@ import { boundedPercentage } from "../admin/dashboard-metrics";
 import { adminCanAccessActivity, applyAdminActivityDataScope, normalizeAdminDataScope } from "../admin/admin-data-scope";
 import { yuanToFen } from "../../shared/money";
 import { isDuplicateEntryError } from "../../shared/database-errors";
+import { isWechatTemplateFieldKey } from "../../shared/wechat-template-field";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[]; dataScope?: Record<string, unknown>; clientIp?: string | null; userAgent?: string | null; requestId?: string | null };
 type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -1343,7 +1344,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const dataKeys: Record<string, string> | null = input.dataKeys && typeof input.dataKeys === "object" && !Array.isArray(input.dataKeys)
       ? Object.fromEntries(Object.entries(input.dataKeys).map(([source, key]) => [String(source).slice(0, 40), String(key).trim().slice(0, 40)]).filter(([, key]) => Boolean(key)))
       : null;
-    if (dataKeys && Object.values(dataKeys).some((key) => !/^[A-Za-z]+\d+$/.test(key))) throw new BadRequestException("微信模板字段名格式不正确，例如 thing1、time2");
+    if (dataKeys && Object.values(dataKeys).some((key) => !isWechatTemplateFieldKey(key))) throw new BadRequestException("微信模板字段名格式不正确，例如 thing1、time2、character_string6");
     const page = String(input.page || "").trim() || null;
     if (name.length > 120) throw new BadRequestException("模板名称不能超过 120 个字符");
     if (title.length > 160) throw new BadRequestException("通知标题不能超过 160 个字符");

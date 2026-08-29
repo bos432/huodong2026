@@ -728,7 +728,7 @@ watch(
         <template v-if="templateForm.channel === 'wechat'">
           <el-form-item label="微信模板 ID"><el-input v-model="templateForm.providerTemplateId" placeholder="微信公众平台审核后的模板 ID" /></el-form-item>
           <el-form-item label="审核状态"><el-select v-model="templateForm.approvalStatus"><el-option label="草稿" value="draft" /><el-option label="审核中" value="pending" /><el-option label="已通过" value="approved" /><el-option label="已拒绝" value="rejected" /><el-option label="已停用" value="retired" /></el-select></el-form-item>
-          <el-form-item label="字段映射"><el-input v-model="templateForm.dataKeysText" type="textarea" :rows="5" placeholder='例如 {"activityTitle":"thing1","startTime":"time2"}' /></el-form-item>
+          <el-form-item label="字段映射"><el-input v-model="templateForm.dataKeysText" type="textarea" :rows="5" placeholder='例如 {"activityTitle":"thing1","startTime":"time2","orderNo":"character_string6"}' /></el-form-item>
           <el-form-item label="小程序落地页"><el-input v-model="templateForm.page" placeholder="pages/activity/detail" /></el-form-item>
         </template>
         <el-form-item><el-checkbox v-model="templateForm.enabled">启用</el-checkbox></el-form-item>
