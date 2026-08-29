@@ -1501,7 +1501,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   async notificationProviderStatus(admin?: AdminContext) {
     const id = isTenantScopedActor(admin) ? admin?.tenantId || 1 : 1;
     const setting = await this.operationSettings.findOne({ where: { id } });
-    return this.notificationProvider.providerStatus({
+    return await this.notificationProvider.providerStatus({
       sms: setting
         ? {
             enabled: setting.smsProviderEnabled,

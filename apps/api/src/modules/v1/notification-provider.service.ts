@@ -1,7 +1,11 @@
-import { Injectable } from "@nestjs/common";
+import { Injectable, Optional } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { InjectRepository } from "@nestjs/typeorm";
 import * as TencentCloud from "tencentcloud-sdk-nodejs";
 import nodemailer from "nodemailer";
+import { Repository } from "typeorm";
+import { OperationSetting } from "../../entities/operation-setting.entity";
+import { launchConfigToEnv } from "../../shared/launch-config";
 
 export interface NotificationDeliveryInput {
   channel: string;
@@ -36,6 +40,10 @@ export type SmsProviderSettings = {
 export type NotificationProviderOverrides = {
   sms?: SmsProviderSettings | null;
   wechat?: {
+    enabled?: boolean | number | string | null;
+    provider?: string | null;
+    appId?: string | null;
+    appSecret?: string | null;
     templateId?: string | null;
     page?: string | null;
     data?: Record<string, string> | null;
@@ -45,30 +53,38 @@ export type NotificationProviderOverrides = {
 
 @Injectable()
 export class NotificationProviderService {
-  private wechatAccessToken: { value: string; expiresAt: number } | null = null;
-  constructor(private readonly config: ConfigService) {}
+  private wechatAccessToken: { appId: string; value: string; expiresAt: number } | null = null;
+  constructor(
+    private readonly config: ConfigService,
+    @Optional() @InjectRepository(OperationSetting) private readonly operationSettings?: Repository<OperationSetting>
+  ) {}
 
   async deliver(input: NotificationDeliveryInput, overrides?: NotificationProviderOverrides): Promise<NotificationDeliveryResult> {
-    const provider = this.providerName(input.channel, overrides);
+    const resolvedOverrides = input.channel === "wechat"
+      ? { ...overrides, wechat: { ...await this.platformWechatSettings(), ...overrides?.wechat } }
+      : overrides;
+    const provider = this.providerName(input.channel, resolvedOverrides);
     if (this.config.get("NOTIFICATION_FORCE_FAIL") === "true" || input.title.includes("[fail]")) {
       return { status: "failed", provider, errorMessage: "Mock provider forced failure" };
     }
 
     if (input.channel === "site") return this.mockSuccess(provider);
-    if (input.channel === "sms") return this.deliverSms(input, provider, overrides?.sms);
+    if (input.channel === "sms") return this.deliverSms(input, provider, resolvedOverrides?.sms);
     if (input.channel === "email") return this.deliverEmail(input, provider);
-    if (input.channel === "wechat") return this.deliverWechat(input, provider, overrides?.wechat);
+    if (input.channel === "wechat") return this.deliverWechat(input, provider, resolvedOverrides?.wechat);
 
     return { status: "failed", provider, errorMessage: `Unsupported notification channel: ${input.channel}` };
   }
 
-  providerStatus(overrides?: NotificationProviderOverrides) {
-    const smsProvider = this.providerName("sms", overrides);
+  async providerStatus(overrides?: NotificationProviderOverrides) {
+    const resolvedOverrides = { ...overrides, wechat: { ...await this.platformWechatSettings(), ...overrides?.wechat } };
+    const smsProvider = this.providerName("sms", resolvedOverrides);
+    const wechatProvider = this.providerName("wechat", resolvedOverrides);
     return [
       this.statusFor("site", "site", true, []),
-      this.statusFor("sms", smsProvider, this.channelEnabled("sms", overrides), this.missingSms(smsProvider, overrides?.sms)),
+      this.statusFor("sms", smsProvider, this.channelEnabled("sms", resolvedOverrides), this.missingSms(smsProvider, resolvedOverrides?.sms)),
       this.statusFor("email", this.providerName("email"), this.channelEnabled("email"), this.missing(["SMTP_HOST", "SMTP_PORT", "SMTP_USER", "SMTP_PASSWORD", "SMTP_FROM"])),
-      this.statusFor("wechat", this.providerName("wechat"), this.channelEnabled("wechat"), this.providerName("wechat") === "mock-wechat" && this.canUseMockWechat() ? [] : this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET", "WECHAT_MESSAGE_TEMPLATE_ID"]))
+      this.statusFor("wechat", wechatProvider, this.channelEnabled("wechat", resolvedOverrides), wechatProvider === "mock-wechat" && this.canUseMockWechat() ? [] : this.missingWechat(resolvedOverrides.wechat))
     ];
   }
 
@@ -107,18 +123,18 @@ export class NotificationProviderService {
   }
 
   private async deliverWechat(input: NotificationDeliveryInput, provider: string, settings?: NotificationProviderOverrides["wechat"]): Promise<NotificationDeliveryResult> {
-    if (!this.channelEnabled("wechat")) return this.notConfigured("wechat", provider);
+    if (!this.channelEnabled("wechat", { wechat: settings })) return this.notConfigured("wechat", provider);
     if (!input.to?.openid) return this.failed(provider, "微信订阅消息 openid 为空");
     if (provider === "mock-wechat") {
       if (this.canUseMockWechat()) return this.mockSuccess(provider);
       return this.failed(provider, "生产环境禁止 mock-wechat 假发送，请配置真实微信消息服务");
     }
-    const missing = this.missing(["WECHAT_APP_ID", "WECHAT_APP_SECRET"]);
+    const missing = this.missingWechat(settings);
     if (!String(settings?.templateId || this.config.get("WECHAT_MESSAGE_TEMPLATE_ID") || "").trim()) missing.push("WECHAT_MESSAGE_TEMPLATE_ID");
     if (missing.length) return this.failed(provider, `微信订阅消息缺少配置：${missing.join(", ")}`);
     if (!["wechat-subscribe-message", "wechat-subscribe"].includes(provider)) return this.failed(provider, `不支持的微信消息服务商：${provider}`);
     try {
-      const token = await this.getWechatAccessToken();
+      const token = await this.getWechatAccessToken(settings);
       const titleKey = this.config.get("WECHAT_MESSAGE_TITLE_KEY", "thing1");
       const contentKey = this.config.get("WECHAT_MESSAGE_CONTENT_KEY", "thing2");
       const data = settings?.data && Object.keys(settings.data).length
@@ -144,16 +160,18 @@ export class NotificationProviderService {
     }
   }
 
-  private async getWechatAccessToken() {
-    if (this.wechatAccessToken && this.wechatAccessToken.expiresAt > Date.now() + 60000) return this.wechatAccessToken.value;
+  private async getWechatAccessToken(settings?: NotificationProviderOverrides["wechat"]) {
+    const appId = String(settings?.appId || this.config.get("WECHAT_APP_ID") || "");
+    const appSecret = String(settings?.appSecret || this.config.get("WECHAT_APP_SECRET") || "");
+    if (this.wechatAccessToken?.appId === appId && this.wechatAccessToken.expiresAt > Date.now() + 60000) return this.wechatAccessToken.value;
     const url = new URL("https://api.weixin.qq.com/cgi-bin/token");
     url.searchParams.set("grant_type", "client_credential");
-    url.searchParams.set("appid", String(this.config.get("WECHAT_APP_ID") || ""));
-    url.searchParams.set("secret", String(this.config.get("WECHAT_APP_SECRET") || ""));
+    url.searchParams.set("appid", appId);
+    url.searchParams.set("secret", appSecret);
     const response = await fetch(url);
     const payload = await response.json().catch(() => null) as { access_token?: string; expires_in?: number; errcode?: number; errmsg?: string } | null;
     if (!response.ok || !payload?.access_token) throw new Error(payload?.errmsg || `微信 access_token 获取失败：HTTP ${response.status}`);
-    this.wechatAccessToken = { value: payload.access_token, expiresAt: Date.now() + Math.max(Number(payload.expires_in || 7200) - 120, 60) * 1000 };
+    this.wechatAccessToken = { appId, value: payload.access_token, expiresAt: Date.now() + Math.max(Number(payload.expires_in || 7200) - 120, 60) * 1000 };
     return payload.access_token;
   }
 
@@ -176,7 +194,7 @@ export class NotificationProviderService {
   private providerName(channel: string, overrides?: NotificationProviderOverrides) {
     if (channel === "sms") return String(overrides?.sms?.provider || this.config.get("SMS_PROVIDER", "mock-sms") || "mock-sms").trim();
     if (channel === "email") return this.config.get("EMAIL_PROVIDER", "mock-email");
-    if (channel === "wechat") return this.config.get("WECHAT_MESSAGE_PROVIDER", "mock-wechat");
+    if (channel === "wechat") return String(overrides?.wechat?.provider || this.config.get("WECHAT_MESSAGE_PROVIDER", "mock-wechat") || "mock-wechat").trim();
     return "site";
   }
 
@@ -187,7 +205,12 @@ export class NotificationProviderService {
       return this.config.get("SMS_PROVIDER_ENABLED", "false") === "true";
     }
     if (channel === "email") return this.config.get("EMAIL_PROVIDER_ENABLED", "false") !== "false";
-    if (channel === "wechat") return this.config.get("WECHAT_MESSAGE_PROVIDER_ENABLED", "false") !== "false";
+    if (channel === "wechat") {
+      if (overrides?.wechat?.enabled !== undefined && overrides.wechat.enabled !== null && overrides.wechat.enabled !== "") {
+        return this.truthy(overrides.wechat.enabled);
+      }
+      return this.config.get("WECHAT_MESSAGE_PROVIDER_ENABLED", "false") !== "false";
+    }
     return false;
   }
 
@@ -321,6 +344,26 @@ export class NotificationProviderService {
 
   private canUseMockSms() {
     return this.config.get("NODE_ENV") !== "production" || this.config.get("SMS_MOCK_ALLOWED") === "true" || this.config.get("H5_AUTH_MODE") === "dev";
+  }
+
+  private missingWechat(settings?: NotificationProviderOverrides["wechat"]) {
+    const pairs: Array<[string, unknown]> = [
+      ["WECHAT_APP_ID", settings?.appId || this.config.get("WECHAT_APP_ID")],
+      ["WECHAT_APP_SECRET", settings?.appSecret || this.config.get("WECHAT_APP_SECRET")]
+    ];
+    return pairs.filter(([, value]) => !String(value || "").trim()).map(([key]) => key);
+  }
+
+  private async platformWechatSettings(): Promise<NonNullable<NotificationProviderOverrides["wechat"]>> {
+    if (!this.operationSettings) return {};
+    const setting = await this.operationSettings.findOne({ where: { id: 1 } });
+    const values = launchConfigToEnv(setting?.launchConfig);
+    return {
+      enabled: values.WECHAT_MESSAGE_PROVIDER_ENABLED,
+      provider: values.WECHAT_MESSAGE_PROVIDER,
+      appId: values.WECHAT_APP_ID,
+      appSecret: values.WECHAT_APP_SECRET
+    };
   }
 
   private canUseMockWechat() {

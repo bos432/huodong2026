@@ -9,8 +9,9 @@ function config(values: Record<string, string>) {
   } as any;
 }
 
-function service(values: Record<string, string>) {
-  return new NotificationProviderService(config(values));
+function service(values: Record<string, string>, launchConfig?: Record<string, unknown>) {
+  const operationSettings = launchConfig ? { findOne: vi.fn().mockResolvedValue({ launchConfig }) } : undefined;
+  return new NotificationProviderService(config(values), operationSettings as any);
 }
 
 const smsInput = {
@@ -33,7 +34,7 @@ describe("notification provider service", () => {
 
   it("marks production mock sms as not ready and rejects fake sends", async () => {
     const provider = service({ NODE_ENV: "production" });
-    const status = provider.providerStatus({ sms: { enabled: true, provider: "mock-sms" } }).find((item) => item.channel === "sms");
+    const status = (await provider.providerStatus({ sms: { enabled: true, provider: "mock-sms" } })).find((item) => item.channel === "sms");
     expect(status).toMatchObject({ ready: false, missing: ["SMS_PROVIDER"] });
 
     const result = await provider.deliver(smsInput, { sms: { enabled: true, provider: "mock-sms" } });
@@ -58,18 +59,45 @@ describe("notification provider service", () => {
     expect(result.errorMessage).toContain("smsSdkAppId");
   });
 
-  it("marks Luosimao SMS ready without template id or SDK AppID", () => {
+  it("marks Luosimao SMS ready without template id or SDK AppID", async () => {
     const provider = service({ NODE_ENV: "production" });
-    const status = provider.providerStatus({
+    const status = (await provider.providerStatus({
       sms: {
         enabled: true,
         provider: "luosimao-sms",
         accessKeySecret: "key-test",
         signName: "慢π"
       }
-    }).find((item) => item.channel === "sms");
+    })).find((item) => item.channel === "sms");
 
     expect(status).toMatchObject({ ready: true, missing: [] });
+  });
+
+  it("uses encrypted platform launch configuration for WeChat provider status", async () => {
+    const provider = service({ NODE_ENV: "production" }, {
+      wechatMessageEnabled: true,
+      wechatMessageProvider: "wechat-subscribe-message",
+      wechatAppId: "wx-test",
+      wechatAppSecret: "plain:test-secret"
+    });
+
+    const status = (await provider.providerStatus()).find((item) => item.channel === "wechat");
+
+    expect(status).toMatchObject({ provider: "wechat-subscribe-message", enabled: true, ready: true, missing: [] });
+  });
+
+  it("keeps environment WeChat configuration when launch overrides are absent", async () => {
+    const provider = service({
+      NODE_ENV: "production",
+      WECHAT_MESSAGE_PROVIDER_ENABLED: "true",
+      WECHAT_MESSAGE_PROVIDER: "wechat-subscribe-message",
+      WECHAT_APP_ID: "wx-env",
+      WECHAT_APP_SECRET: "env-secret"
+    });
+
+    const status = (await provider.providerStatus()).find((item) => item.channel === "wechat");
+
+    expect(status).toMatchObject({ provider: "wechat-subscribe-message", enabled: true, ready: true, missing: [] });
   });
 
   it("sends Luosimao SMS with basic auth, form body and trailing signature", async () => {
