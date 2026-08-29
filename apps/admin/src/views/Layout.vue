@@ -10,6 +10,7 @@ import { copyToClipboard, h5PreviewUrl, openH5Preview } from "../h5-preview";
 import { adminFeatureGateForPath, readStoredFeatureGates, writeStoredFeatureGates } from "../feature-gates";
 import { menuGroups, tenantQuickLinks, tenantScopedRoutePaths } from "../navigation/admin-menu";
 import { observeAdminTables } from "../accessibility";
+import { playAdminPageMotion } from "../motion";
 
 const route = useRoute();
 const router = useRouter();
@@ -24,6 +25,7 @@ const selectedPlatformTenantId = ref(Number(localStorage.getItem("admin_selected
 const shellBrand = ref<{ adminTitle?: string; brandName?: string; brandLogoUrl?: string }>({});
 const featureGates = ref(readStoredFeatureGates());
 let stopTableObserver: (() => void) | null = null;
+let stopPageMotion: (() => void) | null = null;
 const tenantSettings = computed(() => currentTenantSettings());
 const roleLabel = computed(() => roleOptions.find((item) => item.value === currentRole())?.label || "管理员");
 const shellTitle = computed(() => {
@@ -225,15 +227,25 @@ function focusMainContent() {
   target?.focus({ preventScroll: true });
 }
 
+function playCurrentPageMotion() {
+  stopPageMotion?.();
+  const target = mainContent.value instanceof HTMLElement ? mainContent.value : mainContent.value?.$el;
+  stopPageMotion = playAdminPageMotion(target?.querySelector("[data-admin-page]") || null);
+}
+
 onMounted(() => {
   refreshCurrentAdminContext();
   loadShellBrand();
   loadPlatformTenants();
   syncSelectedTenantToRoute();
   stopTableObserver = observeAdminTables();
+  nextTick(playCurrentPageMotion);
 });
 
-onBeforeUnmount(() => stopTableObserver?.());
+onBeforeUnmount(() => {
+  stopTableObserver?.();
+  stopPageMotion?.();
+});
 
 watch(
   () => route.path,
@@ -242,6 +254,7 @@ watch(
     syncSelectedTenantToRoute();
     await nextTick();
     focusMainContent();
+    playCurrentPageMotion();
   }
 );
 </script>
@@ -303,7 +316,13 @@ watch(
           <el-button :icon="SwitchButton" @click="logout">退出</el-button>
         </div>
       </el-header>
-      <el-main ref="mainContent" tabindex="-1" :aria-label="pageAnnouncement" :class="{ 'homepage-builder-main': route.path === '/homepage-builder' }"><router-view /></el-main>
+      <el-main ref="mainContent" tabindex="-1" :aria-label="pageAnnouncement" :class="{ 'homepage-builder-main': route.path === '/homepage-builder' }">
+        <router-view v-slot="{ Component }">
+          <Transition name="admin-page" mode="out-in">
+            <div data-admin-page :key="route.fullPath"><component :is="Component" /></div>
+          </Transition>
+        </router-view>
+      </el-main>
     </el-container>
   </el-container>
 
@@ -371,6 +390,10 @@ watch(
 .tenant-switcher { display: flex; align-items: center; gap: 8px; color: #475569; font-size: 12px; }
 .tenant-switcher .el-select { width: 220px; }
 .homepage-builder-main { overflow: visible; }
+.admin-page-enter-active,
+.admin-page-leave-active { transition: opacity 180ms ease, transform 180ms cubic-bezier(.2, .7, .2, 1); }
+.admin-page-enter-from { opacity: 0; transform: translateY(8px); }
+.admin-page-leave-to { opacity: 0; transform: translateY(-4px); }
 .el-menu { border-right: 0; }
 :deep(.el-sub-menu__title) { height: 46px; color: #b7c2d6; font-weight: 700; }
 :deep(.el-sub-menu__title:hover), :deep(.el-menu-item:hover) { background-color: #1e2b43; }

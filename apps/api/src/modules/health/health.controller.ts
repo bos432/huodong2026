@@ -2,6 +2,7 @@ import { Controller, Get, Header, HttpCode, ServiceUnavailableException } from "
 import { ConfigService } from "@nestjs/config";
 import { DataSource } from "typeorm";
 import { inspectRuntimeConfig } from "../../shared/config-validation";
+import { isWorkerHeartbeatReady, readWorkerHeartbeat, workerHeartbeatAgeMs } from "../../worker-heartbeat";
 
 @Controller("health")
 export class HealthController {
@@ -16,6 +17,7 @@ export class HealthController {
       api: "up",
       database,
       config: inspectRuntimeConfig(this.config).status,
+      worker: this.workerStatus(),
       release: this.releaseInfo(),
       uptimeSeconds: this.uptimeSeconds(),
       time: new Date().toISOString()
@@ -37,12 +39,14 @@ export class HealthController {
   async ready() {
     const database = await this.databaseStatus();
     const configInspection = inspectRuntimeConfig(this.config);
-    const ready = database === "up" && configInspection.status !== "error";
+    const worker = this.workerStatus();
+    const ready = database === "up" && configInspection.status !== "error" && (!worker.required || worker.ready);
     const payload = {
       ready,
       api: "up",
       database,
       config: configInspection.status,
+      worker,
       configSummary: configInspection.summary,
       configWarnings: configInspection.checks
         .filter((check) => check.status !== "ok")
@@ -60,6 +64,7 @@ export class HealthController {
   async metrics() {
     const database = await this.databaseStatus();
     const configStatus = inspectRuntimeConfig(this.config).status;
+    const worker = this.workerStatus();
     const operations = database === "up" ? await this.operationalMetrics() : null;
     const lines = [
       "# HELP activity_api_up API process liveness.",
@@ -77,6 +82,15 @@ export class HealthController {
       "# HELP activity_build_info Build and release metadata.",
       "# TYPE activity_build_info gauge",
       `activity_build_info{version="${this.metricLabel(this.releaseInfo().version)}",commit="${this.metricLabel(this.releaseInfo().commit)}"} 1`,
+      "# HELP activity_worker_required Whether the deployment requires an external business worker.",
+      "# TYPE activity_worker_required gauge",
+      `activity_worker_required ${worker.required ? 1 : 0}`,
+      "# HELP activity_worker_ready External business worker heartbeat readiness.",
+      "# TYPE activity_worker_ready gauge",
+      `activity_worker_ready ${worker.ready ? 1 : 0}`,
+      "# HELP activity_worker_heartbeat_age_seconds Age of the external business worker heartbeat.",
+      "# TYPE activity_worker_heartbeat_age_seconds gauge",
+      `activity_worker_heartbeat_age_seconds ${Number.isFinite(worker.ageMs) ? Math.floor(worker.ageMs / 1000) : -1}`,
       "# HELP activity_operational_metrics_up Operational risk metrics query status.",
       "# TYPE activity_operational_metrics_up gauge",
       `activity_operational_metrics_up ${operations ? 1 : 0}`,
@@ -112,6 +126,11 @@ export class HealthController {
     } catch {
       return "down";
     }
+  }
+
+  @Get("worker")
+  worker() {
+    return this.workerStatus();
   }
 
   private async operationalMetrics() {
@@ -155,5 +174,19 @@ export class HealthController {
 
   private metricLabel(value: string) {
     return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+  }
+
+  private workerStatus() {
+    const mode = this.config.get<string>("BUSINESS_JOB_WORKER_MODE", "embedded");
+    const external = mode === "external";
+    const heartbeat = external ? readWorkerHeartbeat() : null;
+    return {
+      mode,
+      required: external,
+      ready: !external || isWorkerHeartbeatReady(heartbeat),
+      workerId: heartbeat?.workerId || null,
+      heartbeatAt: heartbeat?.heartbeatAt || null,
+      ageMs: external ? workerHeartbeatAgeMs(heartbeat) : 0
+    };
   }
 }

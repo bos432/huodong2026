@@ -2619,6 +2619,8 @@ export class PublicService {
         .getMany();
       const pendingRefund = refunds.find((item) => ["pending", "processing"].includes(item.status));
       const preview = await this.charityFund.previewRetainedActivityRefund(lockedOrder);
+      const terminalCharityRefund = refunds.some((item) => item.status === "completed" && String(item.reason || "").includes("[charity_retained]"));
+      if (terminalCharityRefund || lockedOrder.registration.status === RegistrationStatus.Cancelled) throw new BadRequestException("该报名已结束，不能再次申请退款");
       if (pendingRefund) return { refund: this.publicRefund(pendingRefund), order: this.publicOrder(lockedOrder), charityRefund: { ...preview, canRequest: false, pendingRefund: this.publicRefund(pendingRefund) }, idempotent: true };
       if (!preview.enabled) throw new BadRequestException("当前订单暂不支持公益退款申请");
       const completedAmount = refunds.filter((item) => item.status === "completed").reduce((sum, item) => sum + Number(item.amount), 0);
@@ -2759,9 +2761,12 @@ export class PublicService {
     const preview = await this.charityFund.previewRetainedActivityRefund(order);
     const activeRefund = refunds.find((item) => ["pending", "processing"].includes(item.status)) || null;
     const completedAmount = refunds.filter((item) => item.status === "completed").reduce((sum, item) => sum + Number(item.amount), 0);
+    const terminalCharityRefund = refunds.some((item) => item.status === "completed" && String(item.reason || "").includes("[charity_retained]"));
     const availableAmount = Math.max(Number(order.amount || 0) - completedAmount, 0);
     const canRequest = Boolean(
       preview.enabled &&
+      !terminalCharityRefund &&
+      order.registration?.status !== RegistrationStatus.Cancelled &&
       !activeRefund &&
       [OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status) &&
       Number(preview.refundAmount || 0) > 0 &&
@@ -2770,6 +2775,7 @@ export class PublicService {
     return {
       ...preview,
       canRequest,
+      terminal: terminalCharityRefund,
       pendingRefund: this.publicRefund(activeRefund),
       completedRefundAmount: completedAmount.toFixed(2),
       availableRefundAmount: availableAmount.toFixed(2),

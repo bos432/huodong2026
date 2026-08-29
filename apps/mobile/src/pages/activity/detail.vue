@@ -13,6 +13,7 @@ import { addActivityToCalendar } from "../../activity-calendar";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { showMiniProgramShareMenu } from "../../share";
 import { isLinkAllowedByFeature } from "../../feature-gates";
+import { motionStyle } from "../../motion/platform-adapter";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -310,7 +311,7 @@ function drawPosterText(ctx: CanvasRenderingContext2D, text: string, x: number, 
   }
   if (line && lineCount < maxLines) {
     const consumed = lineCount * Math.max(1, Math.floor(maxWidth / Math.max(1, ctx.measureText("慢").width)));
-    ctx.fillText(consumed < chars.length ? `${line.slice(0, Math.max(0, line.length - 1))}...` : line, x, y + lineCount * lineHeight);
+    ctx.fillText(consumed < chars.length ? `${line.slice(0, Math.max(0, line.length - 1))}…` : line, x, y + lineCount * lineHeight);
   }
 }
 
@@ -377,7 +378,7 @@ function drawMiniProgramText(ctx: any, text: string, x: number, y: number, maxCh
     const start = index * maxChars;
     if (start >= value.length) return;
     const part = value.slice(start, start + maxChars);
-    ctx.fillText(index === maxLines - 1 && value.length > start + maxChars ? `${part.slice(0, Math.max(0, maxChars - 1))}...` : part, x, y + index * lineHeight);
+    ctx.fillText(index === maxLines - 1 && value.length > start + maxChars ? `${part.slice(0, Math.max(0, maxChars - 1))}…` : part, x, y + index * lineHeight);
   }
 }
 
@@ -543,7 +544,7 @@ onShow(() => {
 
 <template>
   <view class="container detail-page has-custom-nav">
-    <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-if="loading" class="card subtle" role="status" aria-live="polite">加载中…</view>
     <view v-else-if="error" class="card">
       <view class="subtle">{{ error }}</view>
       <view class="button secondary retry" role="button" tabindex="0" aria-label="重新加载活动详情" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view>
@@ -568,13 +569,13 @@ onShow(() => {
         </view>
       </view>
 
-      <view class="detail-decision-panel app-enter" style="animation-delay: 92ms">
+      <view class="detail-decision-panel app-enter" :style="motionStyle(92)">
         <view class="decision-time"><text class="decision-label">活动时间</text><text class="decision-value">{{ formatTime(activity.startTime) }}</text><text class="decision-helper">{{ formatTime(activity.endTime) }}</text></view>
         <view class="decision-place"><text class="decision-label">集合地点</text><text class="decision-value">{{ activity.location || "地点待确认" }}</text><text class="decision-helper">{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats }} 个名额</text></view>
         <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text></view>
       </view>
 
-      <view v-if="activity.organizerTrust" class="trust-strip app-enter" style="animation-delay: 112ms">
+      <view v-if="activity.organizerTrust" class="trust-strip app-enter" :style="motionStyle(112)">
         <view><text>{{ activity.organizerTrust.verified ? "已认证" : "主办方" }}</text><text>主体信息</text></view>
         <view><text>{{ organizerMetric(activity.organizerTrust.historicalActivityCount, " 场") }}</text><text>历史活动</text></view>
         <view><text>{{ activity.organizerTrust.reviewCount ? organizerMetric(activity.organizerTrust.averageRating, " 分") : "暂无" }}</text><text>真实评价</text></view>
@@ -583,7 +584,7 @@ onShow(() => {
 
       <PageDecorationBlocks :sections="bodyDecorationSections" />
 
-      <view class="card head app-enter" style="animation-delay: 132ms">
+      <view class="card head app-enter" :style="motionStyle(132)">
         <view class="decision-box">
           <view>
             <view class="decision-title">{{ registerButtonText() }}</view>
@@ -607,7 +608,7 @@ onShow(() => {
 
       <AdSlotRenderer slot-key="activity_detail_middle" page-key="activity_detail" />
 
-      <view class="card info app-enter" style="animation-delay: 164ms">
+      <view class="card info app-enter" :style="motionStyle(164)">
         <view class="section-title">活动信息</view>
         <view class="info-summary">
           <view><text>状态</text><text>{{ statusText(activity.displayStatus) }}</text></view>
@@ -654,7 +655,7 @@ onShow(() => {
         </view>
       </view>
 
-      <view class="card action-card app-enter" style="animation-delay: 196ms">
+      <view class="card action-card app-enter" :style="motionStyle(196)">
         <view class="section-title">快捷操作</view>
         <view class="action-item app-press" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'invite'" aria-label="邀请好友" :class="{ disabled: Boolean(activeAction) }" @click="makeInvite" @keyup.enter="makeInvite" @keyup.space.prevent="makeInvite">
           <text>邀</text>
@@ -773,7 +774,7 @@ onShow(() => {
         <scroll-view scroll-x class="related-scroll" :show-scrollbar="false"><view class="related-track"><view v-for="item in activity.relatedActivities" :key="item.id" class="related-item app-press" role="button" tabindex="0" @click="goRelatedActivity(item)" @keyup.enter="goRelatedActivity(item)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="related-cover-fallback">活动</view><view class="related-copy"><text>{{ item.title }}</text><text>{{ formatTime(item.startTime) }}</text><text>{{ item.location || "地点待确认" }} · {{ priceText(item.price) }}</text></view></view></view></scroll-view>
       </view>
 
-      <view class="bottom-bar app-enter" style="animation-delay: 180ms" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
+      <view class="bottom-bar app-enter" :style="{ ...motionStyle(180), background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
         <view class="bottom-info"><text>{{ priceText(activity.price) }}</text><text>{{ activity.displayStatus === "full" ? "候补开放" : statusText(activity.displayStatus) }}</text></view>
         <view class="button action-button app-press" role="button" tabindex="0" :aria-disabled="!canRegister()" :aria-label="registerButtonText()" :class="{ secondary: !canRegister() }" @click="register" @keyup.enter="register" @keyup.space.prevent="register">{{ registerButtonText() }}</view>
       </view>
@@ -997,4 +998,15 @@ onShow(() => {
 .detail-page .detail-decision-panel { margin:0 24rpx 18rpx; padding:20rpx; border:1rpx solid #e2eae6; border-radius:8rpx; background:#fff; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }
 .detail-page .head,.detail-page .card { border-color:#e2eae6; border-radius:8rpx; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.detail-page .decision-box { border-color:#d8eee1; border-radius:8rpx; background:#effbf4; }.detail-page .decision-status { border-radius:6rpx; background:#20b967; }.detail-page .content-kicker { color:#078347; }.detail-page .stats view,.detail-page .info-summary view { border-radius:8rpx; background:#f4f8f6; }.detail-page .stats text:first-child { color:#078347; }.detail-page .location-map { border-radius:8rpx; border-color:#dce8e2; background:#f7f9f8; }.detail-page .map-pin { border-radius:8rpx; background:#20b967; }.detail-page .map-action { border-color:#dce8e2; color:#08753f; }.detail-page .group-flow { border-radius:8rpx; background:#effbf4; border-color:#d8eee1; }.detail-page .action-item text { border-radius:8rpx; background:#eafbf1; color:#08753f; }.detail-page .section-image { border-radius:8rpx; }.detail-page .bottom-bar { border-color:#dce8e2; }.detail-page .bottom-info text:first-child { color:#dc6900; }.detail-page .action-button { border-radius:8rpx; background:#20d477; color:#072d19; }
 @media (min-width:900px){.detail-page .bottom-bar{left:50%;right:auto;width:760px;max-width:100%;transform:translateX(-50%);box-sizing:border-box;border-left:1rpx solid #dce8e2;border-right:1rpx solid #dce8e2}}
+.detail-page{background:var(--app-page-bg)}
+.detail-page .detail-hero{border-radius:16rpx}
+.detail-page .head,.detail-page .card,.detail-decision-panel,.trust-strip{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
+.detail-page .decision-box{border-color:var(--app-border);border-radius:14rpx;background:#f5f7f8}
+.detail-page .decision-status{border-radius:10rpx;background:#0f766e}
+.detail-page .stats view,.detail-page .info-summary view{border-radius:12rpx;background:#f5f7f8}
+.detail-page .location-map,.detail-page .group-flow,.detail-page .section-image{border-radius:14rpx}
+.detail-page .action-item text{border-radius:12rpx;background:#eaf7f1;color:#0f766e}
+.detail-page .bottom-bar{border-color:var(--app-border);box-shadow:0 -8rpx 24rpx rgba(22,37,45,.06)}
+.detail-page .bottom-info text:first-child{color:var(--app-price)}
+.detail-page .action-button{border-radius:14rpx;background:#16252d;color:#fff}
 </style>

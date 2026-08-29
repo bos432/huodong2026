@@ -141,7 +141,7 @@ const defaultConfig: Record<string, Record<string, any>> = {
     items: [
       { label: "慢π", icon: "π", activeIcon: "π", link: "/pages/index/index", action: "mainPage", color: "#C43D3D", enabled: true },
       { label: "专题", icon: "专", activeIcon: "专", link: "/pages/courses/index", action: "mainPage", color: "#C43D3D", enabled: true },
-      { label: "共修", icon: "修", activeIcon: "修", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", enabled: true },
+      { label: "社区", icon: "社", activeIcon: "社", link: "/pages/community/index", action: "mainPage", color: "#C43D3D", enabled: true },
       { label: "活动", icon: "活", activeIcon: "活", link: "/pages/activity/list", action: "mainPage", color: "#C43D3D", enabled: true },
       { label: "我的", icon: "我", activeIcon: "我", link: "/pages/user/my", action: "mainPage", color: "#C43D3D", enabled: true }
     ]

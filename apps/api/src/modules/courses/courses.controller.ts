@@ -188,6 +188,12 @@ export class CoursesController {
   @Delete("community-posts/:id") deletePost(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin: AdminContext) { return this.service.deleteCommunityPost(id, admin); }
 
   @AdminRoles(...COMMUNITY_ROLES)
+  @Get("social-profiles") listSocialProfiles(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listSocialProfiles(q, admin); }
+
+  @AdminRoles(...COMMUNITY_ROLES)
+  @Patch("social-profiles/:id") reviewSocialProfile(@Param("id", ParseIntPipe) id: number, @Body() dto: any, @CurrentAdmin() admin: AdminContext) { return this.service.reviewSocialProfile(id, dto, admin); }
+
+  @AdminRoles(...COMMUNITY_ROLES)
   @Get("community-post-comments") listPostComments(@Query() q: any, @CurrentAdmin() admin: AdminContext) { return this.service.listCommunityPostComments(q, admin); }
 
   @AdminRoles(...COMMUNITY_ROLES)

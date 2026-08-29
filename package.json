@@ -141,6 +141,7 @@
     "build:mobile:mp-weixin": "node scripts/build-mp-weixin.mjs",
     "publish:webroot": "node scripts/publish-webroot.mjs",
     "wait:api-ready": "node scripts/wait-api-ready.mjs",
+    "wait:worker-ready": "node scripts/wait-worker-ready.mjs",
     "monitor:health": "node scripts/monitor-health.mjs",
     "maintenance:archive-acceptance-dead-letters": "node scripts/archive-acceptance-dead-letters.mjs",
     "drill:rollback:api": "node scripts/docker-api-rollback-drill.mjs",

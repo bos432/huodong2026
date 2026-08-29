@@ -202,7 +202,16 @@ export function launchConfigToEnv(value: LaunchConfig): Record<string, string> {
   const launchConfig = normalizeLaunchConfig(value);
   const env: Record<string, string> = {};
   for (const [field, envKey] of launchConfigEnvMap) {
-    const raw = launchConfigSecretKeys.has(field) ? decryptStoredSecret(String(launchConfig[field] || "")) : launchConfig[field];
+    let raw: unknown = launchConfig[field];
+    if (launchConfigSecretKeys.has(field)) {
+      try {
+        raw = decryptStoredSecret(String(launchConfig[field] || ""));
+      } catch {
+        // A rotated or stale stored secret must not make health/config inspection fail.
+        // The runtime falls back to its process environment and reports the missing value.
+        continue;
+      }
+    }
     const normalized = normalizeLaunchValue(raw);
     if (normalized !== undefined && normalized !== "") env[envKey] = normalized;
   }

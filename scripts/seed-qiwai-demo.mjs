@@ -117,7 +117,8 @@ function readEnv(file) {
 function futureDate(days, hour = 10) {
   const date = new Date(Date.now() + days * 86400000);
   date.setHours(hour, 0, 0, 0);
-  return date.toISOString().slice(0, 19).replace("T", " ");
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 async function main() {

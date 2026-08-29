@@ -17,6 +17,9 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
   constructor(@InjectRepository(BusinessJob) private readonly jobs: Repository<BusinessJob>, private readonly dataSource: DataSource, private readonly config: ConfigService) {}
 
   onModuleInit() {
+    const externalWorkerMode = this.config.get("BUSINESS_JOB_WORKER_MODE", "embedded") === "external";
+    const processRole = this.config.get("APP_PROCESS_ROLE", "api");
+    if (externalWorkerMode && processRole !== "worker") return;
     if (this.config.get("BUSINESS_JOB_WORKER_ENABLED", "true") !== "true") return;
     const intervalSeconds = Math.max(10, Number(this.config.get("BUSINESS_JOB_WORKER_INTERVAL_SECONDS", 30)));
     const workerId = this.config.get("BUSINESS_JOB_WORKER_ID", `${process.pid}`);

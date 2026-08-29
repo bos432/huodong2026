@@ -15,6 +15,8 @@
         { "path": "index", "style": { "navigationBarTitleText": "共修" } },
         { "path": "detail", "style": { "navigationBarTitleText": "动态详情" } },
         { "path": "publish", "style": { "navigationBarTitleText": "发布心得" } },
+        { "path": "social", "style": { "navigationBarTitleText": "社交拓展" } },
+        { "path": "social-profile", "style": { "navigationBarTitleText": "拓展资料" } },
         { "path": "checkin", "style": { "navigationBarTitleText": "今日打卡" } },
         { "path": "program", "style": { "navigationBarTitleText": "共学计划" } }
       ]

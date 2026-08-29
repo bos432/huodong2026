@@ -10,6 +10,7 @@ import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgr
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import { motionStyle } from "../../motion/platform-adapter";
 
 type ActivityStatusFilter = "all" | "open" | "full" | "ended";
 
@@ -272,16 +273,16 @@ onReachBottom(loadMore);
       <view class="activity-list-actions"><view class="activity-list-count">{{ total }} 场活动</view></view>
     </view>
 
-    <view class="activity-list-heading app-enter" style="animation-delay: 36ms">
+    <view class="activity-list-heading app-enter" :style="motionStyle(36)">
       <text class="activity-list-title">发现活动</text>
       <text class="activity-list-subtitle">按日期、兴趣和报名状态筛选</text>
     </view>
 
     <PageDecorationBlocks :sections="bodyDecorationSections" />
 
-    <view class="card filter-card app-enter" style="animation-delay: 72ms" :style="{ background: String(innerPageLayout.stickyFilterBackground || 'var(--card-bg, #FFFFFF)') }">
+    <view class="card filter-card app-enter" :style="{ ...motionStyle(72), background: String(innerPageLayout.stickyFilterBackground || 'var(--card-bg, #FFFFFF)') }">
       <view class="search-box">
-        <text class="search-icon">🔍</text>
+        <view class="search-icon" aria-hidden="true" />
         <input v-model="keyword" class="search-input" aria-label="搜索活动、地点或分类" placeholder="搜索活动、地点、分类" confirm-type="search" @confirm="loadFirstPage" />
         <text v-if="keyword" class="clear" role="button" tabindex="0" aria-label="清空活动搜索词" @click="clearKeyword" @keyup.enter="clearKeyword" @keyup.space.prevent="clearKeyword">清空</text>
       </view>
@@ -305,20 +306,19 @@ onReachBottom(loadMore);
       </view>
     </view>
 
-    <view class="section-head activity-result-head app-enter" style="animation-delay: 108ms">
+    <view class="section-head activity-result-head app-enter" :style="motionStyle(108)">
       <view>
         <text class="title-md">{{ resultHint }}</text>
         <text class="subtle section-copy">已展示 {{ rows.length }} 场活动</text>
       </view>
     </view>
 
-    <view v-if="loading" class="card state-card" role="status" aria-live="polite">加载中...</view>
+    <view v-if="loading" class="card state-card" role="status" aria-live="polite">加载中…</view>
     <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
       <view>{{ error }}</view>
       <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载活动列表" @click="loadFirstPage" @keyup.enter="loadFirstPage" @keyup.space.prevent="loadFirstPage">重试</view>
     </view>
     <view v-else-if="!rows.length" class="card empty-state-card">
-      <text class="empty-icon">🪷</text>
       <text class="title-md">没有找到匹配活动</text>
       <text class="body-text empty-copy">试试切换分类、状态，或者减少搜索关键词。</text>
     </view>
@@ -350,7 +350,7 @@ onReachBottom(loadMore);
       </view>
 
       <view v-if="hasMore" class="button block load-more" :class="{ disabled: loadingMore }" role="button" tabindex="0" :aria-disabled="loadingMore" :aria-busy="loadingMore" aria-label="加载更多活动" @click="loadMore" @keyup.enter="loadMore" @keyup.space.prevent="loadMore">
-        {{ loadingMore ? "加载中..." : "加载更多" }}
+        {{ loadingMore ? "加载中…" : "加载更多" }}
       </view>
       <view v-else class="no-more">没有更多活动了</view>
     </view>
@@ -534,5 +534,17 @@ onReachBottom(loadMore);
 .activity-page .category-tabs { margin-top:16rpx; }.activity-page .tabs-track { gap:10rpx; }.activity-page .category-chip { min-height:56rpx; border:1rpx solid #e0e8e4; border-radius:8rpx; background:#fff; color:#56635d; font-size:var(--app-font-helper); }.activity-page .category-chip.active { border-color:#20d477; background:#20d477; color:#072d19; }
 .activity-page .status-tabs { gap:8rpx; margin-top:14rpx; }.activity-page .status-tab { min-height:56rpx; border-radius:8rpx; background:#f1f5f3; color:#5d6c64; font-size:var(--app-font-caption); }.activity-page .status-tab.active { background:#eafbf1; color:#08753f; }
 .activity-result-head { margin:0 0 14rpx; }.activity-page .activity-feed { display:grid; gap:24rpx; }.activity-date-group { display:grid; gap:12rpx; }.date-group-head { display:flex; align-items:center; justify-content:space-between; padding:0 4rpx; color:#183326; font-size:27rpx; font-weight:900; }.date-group-head text:last-child { color:#829087; font-size:var(--app-font-caption); font-weight:700; }.activity-page .activity-card { grid-template-columns:184rpx minmax(0,1fr); min-height:184rpx; padding:14rpx; border-color:#e2eae6; border-radius:8rpx; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.activity-page .activity-cover { width:184rpx; height:156rpx; align-self:center; border-radius:8rpx; }.activity-page .activity-title { color:#13241a; }.activity-page .activity-location { color:#607169; }.activity-page .activity-desc { color:#809087; }.activity-page .card-tag.is-open { background:#20b967; }.activity-page .activity-action { grid-column:1 / -1; min-height:60rpx; border-radius:8rpx; background:#20d477; color:#072d19; }
+.activity-page{padding:24rpx 28rpx;background:var(--app-page-bg)}
+.activity-list-title{color:var(--app-text);font-size:40rpx;font-weight:850}
+.filter-card{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
+.search-box{border-color:var(--app-border);border-radius:14rpx;background:#fff}
+.search-icon{position:relative;width:26rpx;height:26rpx;border:3rpx solid #52636b;border-radius:50%}
+.search-icon::after{position:absolute;right:-8rpx;bottom:-5rpx;width:10rpx;height:3rpx;border-radius:3rpx;background:#52636b;content:"";transform:rotate(45deg)}
+.category-chip,.status-tab{border-radius:12rpx}
+.category-chip.active,.status-tab.active{background:#0f766e;color:#fff}
+.activity-card{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
+.activity-cover{border-radius:12rpx}
+.activity-action{border-radius:12rpx;background:#16252d;color:#fff}
+.card-price{color:var(--app-price)}
+.state-card,.empty-state-card{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
 </style>
-

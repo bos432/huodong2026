@@ -26,7 +26,7 @@ function setting(automaticSms: Record<string, unknown>, overrides: Record<string
   } as any;
 }
 
-function createHarness(input: { automaticSms?: Record<string, unknown>; phone?: string | null; unsubscribed?: boolean; delivery?: { status: "sent" | "failed"; provider: string; providerMessageId?: string; errorMessage?: string } } = {}) {
+function createHarness(input: { automaticSms?: Record<string, unknown>; phone?: string | null; userMissing?: boolean; unsubscribed?: boolean; delivery?: { status: "sent" | "failed"; provider: string; providerMessageId?: string; errorMessage?: string } } = {}) {
   const notifications: any[] = [];
   const currentSetting = setting(input.automaticSms || { enabled: true, registrationSubmitted: true });
   const operationSettings: any = { findOne: vi.fn(async () => currentSetting), find: vi.fn(async () => [currentSetting]) };
@@ -39,7 +39,7 @@ function createHarness(input: { automaticSms?: Record<string, unknown>; phone?: 
     })
   };
   const preferences: any = { findOne: vi.fn(async () => input.unsubscribed ? { subscribed: false, reason: "用户主动退订" } : null) };
-  const users: any = { findOneBy: vi.fn(async () => ({ id: 7, phone: input.phone === undefined ? "13800138000" : input.phone })) };
+  const users: any = { findOneBy: vi.fn(async () => input.userMissing ? null : ({ id: 7, phone: input.phone === undefined ? "13800138000" : input.phone })) };
   const activities: any = { findOneBy: vi.fn(async () => ({ id: 9, title: "城市徒步", location: "中心公园", tenant: { id: 3 } })) };
   const registrations: any = { find: vi.fn(async () => []), createQueryBuilder: vi.fn() };
   const handlers = new Map<string, (payload: Record<string, unknown>) => Promise<unknown>>();
@@ -60,12 +60,14 @@ describe("AutomaticSmsService", () => {
     expect(normalizeAutomaticSmsSettings({ enabled: true, paymentSucceeded: "1", reminderBeforeHours: 999 })).toMatchObject({ enabled: true, paymentSucceeded: true, registrationSubmitted: false, reminderBeforeHours: 168 });
   });
 
-  it("does not create a business job while the total or scene switch is off", async () => {
-    const { service, currentSetting, jobs } = createHarness({ automaticSms: { enabled: false, registrationSubmitted: true } });
+  it("records a suppressed audit row without creating a business job while the total or scene switch is off", async () => {
+    const { service, currentSetting, jobs, notifications } = createHarness({ automaticSms: { enabled: false, registrationSubmitted: true } });
     await service.publish({ scene: "registrationSubmitted", businessId: 10, userId: 7, activityId: 9, tenantId: 3 });
     currentSetting.automaticSms = { enabled: true, registrationSubmitted: false };
     await service.publish({ scene: "registrationSubmitted", businessId: 10, userId: 7, activityId: 9, tenantId: 3 });
     expect(jobs.publish).not.toHaveBeenCalled();
+    expect(notifications).toHaveLength(1);
+    expect(notifications[0]).toMatchObject({ status: "suppressed", suppressedReason: "自动短信场景已关闭" });
   });
 
   it("uses a stable business job idempotency key without putting credentials in the payload", async () => {
@@ -81,6 +83,14 @@ describe("AutomaticSmsService", () => {
     const result = await handler()({ scene: "registrationSubmitted", businessId: "10", userId: 7, activityId: 9, tenantId: 3, variables: {} });
     expect(result).toEqual(expect.objectContaining({ status: "suppressed", reason: "用户未绑定手机号" }));
     expect(notifications[0]).toMatchObject({ status: "suppressed", suppressedReason: "用户未绑定手机号" });
+    expect(provider.deliver).not.toHaveBeenCalled();
+  });
+
+  it("records a missing user as suppressed instead of dropping the worker event", async () => {
+    const { handler, notifications, provider } = createHarness({ userMissing: true });
+    const result = await handler()({ scene: "registrationSubmitted", businessId: "11", userId: 7, activityId: 9, tenantId: 3, variables: {} });
+    expect(result).toEqual(expect.objectContaining({ status: "suppressed", reason: "用户不存在" }));
+    expect(notifications[0]).toMatchObject({ status: "suppressed", suppressedReason: "用户不存在" });
     expect(provider.deliver).not.toHaveBeenCalled();
   });
 

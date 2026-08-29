@@ -8,6 +8,7 @@ import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { motionStyle } from "../../motion/platform-adapter";
 
 const activity = ref<any>();
 const operationSetting = ref<any>();
@@ -91,7 +92,7 @@ const registrationStep = computed(() => {
   return 3;
 });
 const submitButtonText = computed(() => {
-  if (submitting.value) return "提交中...";
+  if (submitting.value) return "提交中…";
   if (registrationPaused.value) return "报名暂停";
   if (memberLoginRequired.value) return "登录后报名";
   if (memberBlocked.value) return "会员等级不足";
@@ -441,7 +442,7 @@ watch(couponCode, () => {
 
 <template>
   <view class="container register">
-    <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-if="loading" class="card subtle" role="status" aria-live="polite">加载中…</view>
       <view v-else-if="loadError" class="card" role="alert" aria-live="assertive">
         <view class="title">报名页面加载失败</view>
         <view class="subtle">{{ loadError }}</view>
@@ -476,7 +477,7 @@ watch(couponCode, () => {
 
       <PageDecorationBlocks :sections="bodyDecorationSections" />
 
-      <view class="registration-steps app-enter" style="animation-delay: 72ms" aria-label="报名步骤">
+      <view class="registration-steps app-enter" :style="motionStyle(72)" aria-label="报名步骤">
         <view v-for="step in [{ number: 1, label: '选择票种' }, { number: 2, label: '填写资料' }, { number: 3, label: '确认提交' }]" :key="step.number" class="registration-step" :class="{ active: registrationStep >= step.number, current: registrationStep === step.number }"><text>{{ step.number }}</text><text>{{ step.label }}</text></view>
       </view>
 
@@ -574,7 +575,7 @@ watch(couponCode, () => {
             <picker mode="time" @change="values[field.id] = `${(values[field.id] || '').split(' ')[0] || new Date().toISOString().slice(0, 10)} ${$event.detail.value}`"><view class="input picker-value">{{ (values[field.id] || '').split(' ')[1] || '选择时间' }}</view></picker>
           </view>
           <picker v-else-if="field.type === FieldType.Region" mode="region" @change="values[field.id] = $event.detail.value.join('/')"><view class="input picker-value">{{ values[field.id] || '请选择省市区' }}</view></picker>
-          <view v-else-if="field.type === FieldType.Attachment" class="attachment-row"><view class="mini-button" role="button" tabindex="0" :aria-label="values[field.id] ? '重新上传附件' : '选择附件'" @click="chooseAttachment(field)" @keyup.enter="chooseAttachment(field)" @keyup.space.prevent="chooseAttachment(field)">{{ uploadingFieldId === field.id ? '上传中...' : (values[field.id] ? '重新上传' : '选择附件') }}</view><text v-if="values[field.id]" class="attachment-done">已上传</text></view>
+          <view v-else-if="field.type === FieldType.Attachment" class="attachment-row"><view class="mini-button" role="button" tabindex="0" :aria-label="values[field.id] ? '重新上传附件' : '选择附件'" @click="chooseAttachment(field)" @keyup.enter="chooseAttachment(field)" @keyup.space.prevent="chooseAttachment(field)">{{ uploadingFieldId === field.id ? '上传中…' : (values[field.id] ? '重新上传' : '选择附件') }}</view><text v-if="values[field.id]" class="attachment-done">已上传</text></view>
           <radio-group v-else-if="field.type === FieldType.SingleChoice" @change="values[field.id] = $event.detail.value">
             <label v-for="(opt, optIndex) in fieldOptions(field)" :key="optionKey(opt, optIndex)" class="choice">
               <radio :value="optionAnswerValue(opt)" />
@@ -613,7 +614,7 @@ watch(couponCode, () => {
           <text>{{ formProgressText }}</text>
           <text>{{ payableText }}</text>
         </view>
-        <view class="button" role="button" tabindex="0" :aria-disabled="submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable" :aria-busy="submitting || confirming" :aria-label="submitButtonText" :class="{ secondary: submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable }" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">{{ confirming ? "等待确认..." : submitButtonText }}</view>
+        <view class="button" role="button" tabindex="0" :aria-disabled="submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable" :aria-busy="submitting || confirming" :aria-label="submitButtonText" :class="{ secondary: submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable }" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">{{ confirming ? "等待确认…" : submitButtonText }}</view>
       </view>
     </template>
     <WechatPhoneBindSheet
@@ -816,4 +817,14 @@ watch(couponCode, () => {
 .submit-summary text:last-child { color: #0f766e; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .submit-bar .button { height: 92rpx; font-size: 32rpx; }
 @media (min-width:900px){.submit-bar{left:50%;right:auto;width:760px;max-width:100%;transform:translateX(-50%);box-sizing:border-box;border-left:1rpx solid #dce8e2;border-right:1rpx solid #dce8e2}}
+.register{background:var(--app-page-bg)}
+.register .detail-hero,.register .hero-image{border-radius:16rpx}
+.register .card,.registration-steps{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
+.register .ticket,.register .field-control,.register .method,.register .available-coupon{border-color:var(--app-border);border-radius:14rpx;background:#fff}
+.register .ticket.active,.register .method.active,.register .available-coupon.selected{border-color:#0f766e;background:#eaf7f1}
+.registration-step.current{border-radius:10rpx;background:#eaf7f1;color:#0f766e}
+.summary{border-radius:14rpx;background:#f5f7f8}
+.summary .payable text:last-child,.ticket-price,.submit-summary text:last-child{color:var(--app-price)}
+.register .submit-bar{border-color:var(--app-border);box-shadow:0 -8rpx 24rpx rgba(22,37,45,.06)}
+.register .submit-bar .button{border-radius:14rpx;background:#16252d;color:#fff}
 </style>

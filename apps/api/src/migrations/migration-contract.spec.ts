@@ -5,6 +5,15 @@ import { describe, expect, it } from "vitest";
 const migrationDirectory = __dirname;
 
 describe("migration contracts", () => {
+  it("creates tenant-scoped reviewed social profiles without public contact fields", () => {
+    const migration = readFileSync(join(migrationDirectory, "1784150000000-SocialProfiles.ts"), "utf8");
+    expect(migration).toContain("UQ_social_profiles_scope_user");
+    expect(migration).toContain("IDX_social_profiles_public");
+    expect(migration).toContain('name: "tenantScopeKey"');
+    expect(migration).toContain('name: "status"');
+    expect(migration).not.toContain('name: "phone"');
+    expect(migration).not.toContain('name: "wechat"');
+  });
   it("keeps test files out of the production migration glob", () => {
     const dataSource = readFileSync(join(migrationDirectory, "..", "data-source.ts"), "utf8");
     expect(dataSource).toContain('`${__dirname}/migrations/[0-9]*.js`');
@@ -224,5 +233,13 @@ describe("migration contracts", () => {
   it("creates a unique tenant-scoped organizer follow relation", () => {
     const migration = readFileSync(join(migrationDirectory, "1784140000000-TenantFollowers.ts"), "utf8");
     for (const token of ["tenant_followers", "tenantId", "userId", "UQ_tenant_followers_tenant_user", "isUnique: true"]) expect(migration).toContain(token);
+  });
+
+  it("closes historical registrations after completed charity-retained refunds", () => {
+    const migration = readFileSync(join(migrationDirectory, "1784160000000-TerminalCharityRefundRegistrations.ts"), "utf8");
+    for (const token of ["refund.status = 'completed'", "[charity_retained]", "registration.status = 'cancelled'", "公益保留退款已完成，报名资格已关闭"]) {
+      expect(migration).toContain(token);
+    }
+    expect(migration).not.toContain("DELETE FROM");
   });
 });

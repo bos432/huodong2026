@@ -56,6 +56,7 @@ BUILD_TIME=<iso-build-time>
 - `/api/health/live`：进程存活。
 - `/api/health/ready`：数据库和生产配置可接流量。
 - `/api/health`：API、数据库、配置状态和发布版本。
+- `/api/health/worker`：独立业务 Worker 的心跳状态；`mode=external` 时必须看到 `ready=true`。
 - `/api/health/metrics`：Prometheus 文本指标，包含 `activity_api_up`、`activity_database_up`、`activity_config_error`、`activity_process_uptime_seconds`、`activity_build_info`。
 - 业务风险指标包含到期任务、死信任务、过期处理锁、15 分钟支付回调失败、退款服务商失败、库存异常和资金风险告警。
 
@@ -70,6 +71,25 @@ npm run monitor:health
 脚本会写入 `deploy/monitor-health-result.json`，相同告警指纹不会重复通知；故障恢复后发送 `recovered` 事件。未配置 webhook 时仍会完成检查和结果留档，critical 状态返回非零退出码。
 
 如果 `ready` 不通过，不要切流量；优先检查数据库连通、生产配置体检和容器日志。
+
+使用独立 Worker 时，API 和 Worker 必须分别启动。API 进程不消费业务任务，Worker 通过共享的 `runtime/activity-worker-heartbeat.json` 报告心跳：
+
+```bash
+export APP_PROCESS_ROLE=api
+export BUSINESS_JOB_WORKER_MODE=external
+export BUSINESS_JOB_WORKER_ENABLED=false
+pm2 restart activity-api --update-env
+
+export APP_PROCESS_ROLE=worker
+export BUSINESS_JOB_WORKER_MODE=external
+export BUSINESS_JOB_WORKER_ENABLED=true
+pm2 start apps/api/dist/worker.js --name activity-worker --update-env
+pm2 save
+npm run wait:worker-ready
+curl -fsS https://your-domain.example/api/health/worker
+```
+
+发布后若 `/api/health/worker` 不是 `ready=true`，先不要接收新的付费报名或依赖异步通知的运营流量，检查 `pm2 logs activity-worker`、`runtime/activity-worker-heartbeat.json` 和数据库连接。不要通过重启 API 代替启动 Worker。
 
 ## 4. 请求排障
 

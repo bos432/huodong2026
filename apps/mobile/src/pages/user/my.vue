@@ -24,13 +24,13 @@
         </view>
         <view class="profile-edit-btn" role="button" tabindex="0" aria-label="编辑会员资料" @click="goEdit" @keyup.enter="goEdit" @keyup.space.prevent="goEdit">编辑</view>
       </view>
-      <view class="member-stats app-enter" style="animation-delay: 72ms">
+      <view class="member-stats app-enter" :style="motionStyle(72)">
         <view v-for="(item, index) in memberStats" :key="item.label" class="member-stat app-stagger" :style="{ '--motion-delay': `${index * 42}ms` }">
           <text>{{ item.label }}</text>
           <text class="member-stat-value">{{ item.value }}</text>
         </view>
       </view>
-      <view v-if="isLoggedIn && profile" class="member-rights app-enter" style="animation-delay: 96ms">
+      <view v-if="isLoggedIn && profile" class="member-rights app-enter" :style="motionStyle(96)">
         <view class="member-growth"><text>成长值 {{ profile.growthValue || 0 }}</text><text v-if="profile.nextLevel">距 {{ profile.nextLevel.name }} 还差 {{ profile.nextLevel.remainingGrowth }}</text><text v-else>已达当前最高等级</text></view>
         <view class="member-growth-track"><view class="member-growth-fill" :style="{ width: profile.nextLevel ? `${Math.min(100, Math.max(0, Number(profile.growthValue || 0) / Number(profile.nextLevel.minGrowth || 1) * 100))}%` : '100%' }"></view></view>
         <view v-if="profile.memberLevel?.benefits?.length" class="member-benefits"><text v-for="benefit in profile.memberLevel.benefits.slice(0, 3)" :key="benefit.key || benefit.name">{{ benefit.name || benefit.key }}</text></view>
@@ -44,7 +44,7 @@
       </view>
     </view>
 
-    <view v-if="loadingProfile && !profile" class="profile-state-card" role="status" aria-live="polite">会员资料加载中...</view>
+    <view v-if="loadingProfile && !profile" class="profile-state-card" role="status" aria-live="polite">会员资料加载中…</view>
     <view v-else-if="profileError" class="profile-state-card error-state" role="alert" aria-live="assertive">
       <text>{{ profileError }}</text>
       <view class="state-retry" role="button" tabindex="0" aria-label="重新加载会员资料" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新加载</view>
@@ -57,7 +57,7 @@
       <view class="state-retry" role="button" tabindex="0" aria-label="重新同步会员资产" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新同步资产</view>
     </view>
 
-    <view v-if="isLoggedIn && (nextRegistration || memberTodos.length)" class="profile-section next-action-panel app-enter" style="animation-delay: 102ms">
+    <view v-if="isLoggedIn && (nextRegistration || memberTodos.length)" class="profile-section next-action-panel app-enter" :style="motionStyle(102)">
       <view class="profile-section-head compact"><view><text class="profile-section-title">接下来</text><text class="profile-section-copy">先处理最重要的活动事项</text></view></view>
       <view v-if="nextRegistration" class="next-activity app-press" role="button" tabindex="0" :aria-label="`查看${nextRegistration.activity?.title || '下一场活动'}`" @click="openRegistration(nextRegistration.id)" @keyup.enter="openRegistration(nextRegistration.id)" @keyup.space.prevent="openRegistration(nextRegistration.id)">
         <image v-if="nextRegistration.activity?.coverUrl" :src="nextRegistration.activity.coverUrl" mode="aspectFill" />
@@ -68,7 +68,7 @@
       <view v-if="memberTodos.length" class="member-todo-list"><view v-for="item in memberTodos" :key="item.key" class="member-todo app-press" role="button" tabindex="0" @click="handleMemberTodo(item)" @keyup.enter="handleMemberTodo(item)" @keyup.space.prevent="handleMemberTodo(item)"><view><text>{{ item.label }}</text><text>{{ item.copy }}</text></view><text class="entry-arrow">›</text></view></view>
     </view>
 
-    <view class="profile-section order-summary-panel app-enter" style="animation-delay: 110ms">
+    <view class="profile-section order-summary-panel app-enter" :style="motionStyle(110)">
       <view class="profile-section-head">
         <view><text class="profile-section-title">活动与订单</text><text class="profile-section-copy">报名、付款和参与进度</text></view>
         <text class="profile-section-link" role="button" tabindex="0" aria-label="查看全部订单" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })">查看全部 ›</text>
@@ -80,12 +80,12 @@
       </view>
     </view>
 
-    <view v-if="isLoggedIn && repurchaseRecommendations.length" class="profile-section recommendation-panel app-enter" style="animation-delay: 136ms">
+    <view v-if="isLoggedIn && repurchaseRecommendations.length" class="profile-section recommendation-panel app-enter" :style="motionStyle(136)">
       <view class="profile-section-head compact"><view><text class="profile-section-title">继续发现</text><text class="profile-section-copy">根据当前城市的开放活动推荐</text></view><view class="profile-section-link" @click="goDecoratedLink('/pages/activity/list')">全部活动</view></view>
       <scroll-view class="recommendation-scroll" scroll-x :show-scrollbar="false"><view class="recommendation-track"><view v-for="item in repurchaseRecommendations" :key="item.id" class="recommendation-item app-press" role="button" tabindex="0" @click="openRecommendedActivity(item.id)" @keyup.enter="openRecommendedActivity(item.id)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="recommendation-cover">活动</view><text>{{ item.title }}</text><text>{{ formatMemberActivityTime(item.startTime) }} · {{ item.location || '地点待确认' }}</text></view></view></scroll-view>
     </view>
 
-    <view class="member-shortcuts app-enter" style="animation-delay: 128ms">
+    <view class="member-shortcuts app-enter" :style="motionStyle(128)">
       <view class="member-shortcut app-press" role="button" tabindex="0" aria-label="查看我的活动报名" @click="goOrders({ status: 'all' })" @keyup.enter="goOrders({ status: 'all' })" @keyup.space.prevent="goOrders({ status: 'all' })"><text class="member-shortcut-kicker">活动记录</text><text class="member-shortcut-title">我的报名</text><text class="member-shortcut-copy">查看活动空间、签到和评价</text></view>
       <view class="member-shortcut app-press" role="button" tabindex="0" aria-label="查看优惠券" @click="goCoupons" @keyup.enter="goCoupons" @keyup.space.prevent="goCoupons"><text class="member-shortcut-kicker">可用权益</text><text class="member-shortcut-title">优惠券</text><text class="member-shortcut-copy">报名和商城下单时使用</text></view>
     </view>
@@ -96,28 +96,32 @@
       <text class="entry-arrow">›</text>
     </view>
 
+    <view class="more-services-toggle app-press" role="button" tabindex="0" :aria-expanded="moreServicesVisible" @click="moreServicesVisible = !moreServicesVisible" @keyup.enter="moreServicesVisible = !moreServicesVisible" @keyup.space.prevent="moreServicesVisible = !moreServicesVisible">
+      <view><text class="more-services-title">更多服务</text><text class="more-services-copy">余额、公益、兑换与常用工具</text></view><text class="entry-arrow">{{ moreServicesVisible ? '⌃' : '›' }}</text>
+    </view>
 
-    <view class="profile-asset-grid app-enter" style="animation-delay: 144ms">
+    <view v-if="moreServicesVisible" class="profile-asset-grid app-enter" :style="motionStyle(144)">
       <view class="asset-panel wallet-panel app-press" role="button" tabindex="0" aria-label="查看余额资产明细" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet"><text class="asset-label">余额资产</text><text class="asset-value">{{ walletBalanceText }}</text><text class="asset-action">查看明细</text></view>
       <view v-if="featureGates.charity" class="asset-panel charity-panel app-press" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity"><text class="asset-label">公益贡献</text><text class="asset-value">{{ charityAmountText }} 元</text><text class="asset-action">查看证书</text></view>
     </view>
 
-    <view v-if="isLoggedIn" class="profile-section redemption-entry">
+    <view v-if="isLoggedIn && moreServicesVisible" class="profile-section redemption-entry">
       <view class="profile-section-head compact"><view><text class="profile-section-title">兑换权益</text><text class="profile-section-copy">活动券、商城券或会员积分</text></view></view>
       <view class="redemption-row"><input v-model="redemptionCode" class="redemption-input" maxlength="64" cursor-spacing="24" confirm-type="done" aria-label="兑换码" placeholder="请输入兑换码" @confirm="redeemCode" /><view class="redemption-button" role="button" tabindex="0" :aria-disabled="redeeming" :aria-label="redeeming ? '兑换中' : '兑换'" :class="{ disabled: redeeming }" @click="redeemCode" @keyup.enter="redeemCode" @keyup.space.prevent="redeemCode">{{ redeeming ? "兑换中" : "兑换" }}</view></view>
       <view v-if="redemptionError" class="redemption-error" role="alert" aria-live="assertive">{{ redemptionError }}</view>
     </view>
 
-    <view class="profile-section app-enter" style="animation-delay: 176ms">
+    <view v-if="moreServicesVisible" class="profile-section app-enter" :style="motionStyle(176)">
       <view class="profile-section-head"><view><text class="profile-section-title">常用服务</text><text class="profile-section-copy">内容、商城、客服和设置</text></view></view>
       <view class="grid-2x4-profile">
         <view v-for="(item, index) in gridItems" :key="item.label" class="grid-profile-item app-stagger app-press" :style="{ '--motion-delay': `${index * 42}ms` }" role="button" tabindex="0" :aria-label="item.label" @click="goGrid(item)" @keyup.enter="goGrid(item)" @keyup.space.prevent="goGrid(item)"><view class="grid-profile-icon">{{ item.icon }}</view><text class="grid-profile-label">{{ item.label }}</text></view>
       </view>
     </view>
 
-    <view v-if="(featureGates.userContentSharing && (featureGates.community || featureGates.forum)) || featureGates.mall || featureGates.ambassador" class="profile-section app-enter" style="animation-delay: 208ms">
+    <view v-if="(featureGates.userContentSharing && (featureGates.community || featureGates.forum)) || featureGates.mall || featureGates.ambassador" class="profile-section app-enter" :style="motionStyle(208)">
       <view class="profile-section-head"><view><text class="profile-section-title">社区与共建</text><text class="profile-section-copy">记录参与，连接同好</text></view></view>
       <view class="profile-link-list">
+        <view v-if="featureGates.userContentSharing && featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="进入社交拓展" @click="goSocialExpansion" @keyup.enter="goSocialExpansion" @keyup.space.prevent="goSocialExpansion"><view><text class="entry-title">社交拓展</text><text class="entry-copy">完善公开资料，发现同行与潜在合作伙伴。</text></view><text class="entry-arrow">›</text></view>
         <view v-if="featureGates.userContentSharing && featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><view><text class="entry-title">我的活动心得</text><text class="entry-copy">查看审核状态，继续分享已通过的活动感悟。</text></view><text class="entry-arrow">›</text></view>
         <view v-if="featureGates.userContentSharing && featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看收藏、关注与消息" @click="goCommunitySocial" @keyup.enter="goCommunitySocial" @keyup.space.prevent="goCommunitySocial"><view><text class="entry-title">收藏、关注与消息</text><text class="entry-copy">查看收藏动态、关注作者和互动提醒。</text></view><text class="entry-arrow">›</text></view>
         <view v-if="featureGates.userContentSharing && featureGates.forum" class="profile-link-row" role="button" tabindex="0" aria-label="查看我的论坛" @click="goForumPosts" @keyup.enter="goForumPosts" @keyup.space.prevent="goForumPosts"><view><text class="entry-title">我的论坛</text><text class="entry-copy">查看帖子、回复和收藏，继续参与讨论。</text></view><text class="entry-arrow">›</text></view>
@@ -130,7 +134,7 @@
     <view v-if="adminAccess?.canAccess" class="profile-section admin-entry" role="button" tabindex="0" aria-label="打开手机管理" @click="goAdmin" @keyup.enter="goAdmin" @keyup.space.prevent="goAdmin"><view><text class="profile-section-title">手机管理</text><text class="profile-section-copy">{{ adminAccess.tenantName || "平台" }} · 活动管理 · 报名审核</text></view><text class="entry-arrow">›</text></view>
 
     <view v-if="isLoggedIn" class="logout-card" role="button" tabindex="0" aria-label="退出当前账号" :aria-busy="logoutConfirming" @click="logoutUser" @keyup.enter="logoutUser" @keyup.space.prevent="logoutUser">
-      <text>{{ logoutConfirming ? "确认中..." : "退出当前账号" }}</text>
+      <text>{{ logoutConfirming ? "确认中…" : "退出当前账号" }}</text>
     </view>
 
     <!-- #ifdef MP-WEIXIN -->
@@ -186,6 +190,7 @@ import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import MarketingPopup from "../../components/MarketingPopup.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
+import { motionStyle } from "../../motion/platform-adapter";
 
 const profile = ref<any>(null);
 const wallet = ref<any>(null);
@@ -211,6 +216,7 @@ const redemptionCode = ref("");
 const redeeming = ref(false);
 const redemptionError = ref("");
 const logoutConfirming = ref(false);
+const moreServicesVisible = ref(false);
 const loadedContextKey = ref("");
 const profileLoadGuard = createTenantLoadGuard();
 const featureGates = featureGatesState;
@@ -221,9 +227,9 @@ function safeList<T>(value: unknown): T[] {
 }
 const myPageSection = computed(() => safeList<any>(sections.value).find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
-const warmHeaderBackground = "#20d477";
-const warmHeaderTextColor = "#072d19";
-const warmHeaderMutedColor = "rgba(7, 45, 25, 0.68)";
+const warmHeaderBackground = "#16252D";
+const warmHeaderTextColor = "#FFFFFF";
+const warmHeaderMutedColor = "rgba(255, 255, 255, 0.68)";
 const profileHeaderBackground = computed(() => {
   const layout = myPageSection.value?.layout || {};
   const background = String(layout.heroBackgroundColor || "");
@@ -235,7 +241,7 @@ const profileHeaderTextColor = computed(() => {
   return !textColor || (textColor === "#ffffff" && String(layout.heroBackgroundColor || "") === "#111827") ? warmHeaderTextColor : textColor;
 });
 const profileHeaderMutedColor = computed(() => String(myPageSection.value?.layout?.heroMutedTextColor || warmHeaderMutedColor));
-const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `平台用户${profile.value.id}` : loadingProfile.value ? "加载中..." : getUserToken() && profileError.value ? "资料同步失败" : "未登录"));
+const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `平台用户${profile.value.id}` : loadingProfile.value ? "加载中…" : getUserToken() && profileError.value ? "资料同步失败" : "未登录"));
 const memberLevelName = computed(() => profile.value?.memberLevel?.name || (getUserToken() ? "普通会员" : "游客"));
 const profileIdentityText = computed(() => {
   if (loadingProfile.value && !profile.value) return "正在同步会员资料";
@@ -616,6 +622,7 @@ function goCoupons() { navigateProtected("/pages/mall/coupons"); }
 function goBrowsingHistory() { navigateProtected("/pages/user/learning"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
 function goCommunitySocial() { navigateProtected("/pages/user/community-social"); }
+function goSocialExpansion() { navigateProtected("/pages/community/social"); }
 function goContentAppeals() { navigateProtected("/pages/user/content-appeals"); }
 function goMerchantApply() { navigateProtected("/pages/mall/merchant-apply"); }
 function goForumPosts() { navigateProtected("/pages/user/forum-posts"); }
@@ -1093,5 +1100,6 @@ function logoutUser() {
 
 /* Member centre uses the same restrained discovery palette as activity pages. */
 .profile-page { background:#f7f9f8; }.member-card { box-shadow:0 10rpx 26rpx rgba(20,98,58,.12); }.member-stat { border-radius:8rpx; }.profile-section { border-color:#e2eae6; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.profile-link-list { border-color:#e2eae6; border-radius:8rpx; }.profile-link-row { border-color:#e7eeea; }.profile-section-link { border-radius:6rpx; background:#eafbf1; color:#08753f; }.wallet-panel { background:#143a27; }.charity-panel { background:#fff2db; }.admin-entry { background:#effbf4; }.order-badge { background:#dc6900; }.logout-card { border-radius:8rpx; }
+.profile-page{background:var(--app-page-bg)}.member-card{box-shadow:none}.profile-section,.more-services-toggle{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}.profile-link-list{border-color:var(--app-border);border-radius:16rpx}.member-shortcut{border-radius:16rpx}.more-services-toggle{display:flex;align-items:center;justify-content:space-between;gap:20rpx;margin:0 28rpx 18rpx;padding:24rpx;border:1rpx solid var(--app-border);background:#fff}.more-services-title,.more-services-copy{display:block}.more-services-title{color:var(--app-text);font-size:28rpx;font-weight:850}.more-services-copy{margin-top:6rpx;color:var(--app-text-muted);font-size:23rpx}
 .history-entry{display:flex;align-items:center;gap:20rpx;margin:0 28rpx 18rpx;padding:22rpx 24rpx;border:1rpx solid var(--app-border);border-radius:16rpx;background:#fff}.history-entry-icon{width:68rpx;height:68rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto;border-radius:50%;background:#eaf7f1;color:#08753f;font-size:27rpx;font-weight:900}.history-entry-content{min-width:0;flex:1}.history-entry-title,.history-entry-copy{display:block}.history-entry-title{color:var(--app-text);font-size:28rpx;font-weight:850}.history-entry-copy{margin-top:6rpx;color:var(--app-text-muted);font-size:23rpx;line-height:1.45}
 </style>

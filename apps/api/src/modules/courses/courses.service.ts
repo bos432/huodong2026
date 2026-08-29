@@ -34,6 +34,7 @@ import { CommunityPostComment, CommunityPostCommentStatus } from "../../entities
 import { CommunityPostLike } from "../../entities/community-post-like.entity";
 import { CommunityPostFavorite } from "../../entities/community-post-favorite.entity";
 import { CommunityUserFollow } from "../../entities/community-user-follow.entity";
+import { SocialProfile, SocialProfileStatus } from "../../entities/social-profile.entity";
 import { CommunityNotification } from "../../entities/community-notification.entity";
 import { CommunityContentReport } from "../../entities/community-content-report.entity";
 import { ContentAppeal } from "../../entities/content-appeal.entity";
@@ -101,6 +102,7 @@ export class CoursesService implements OnModuleInit {
     @InjectRepository(CommunityPostLike) private communityPostLikes: Repository<CommunityPostLike>,
     @InjectRepository(CommunityPostFavorite) private communityPostFavorites: Repository<CommunityPostFavorite>,
     @InjectRepository(CommunityUserFollow) private communityUserFollows: Repository<CommunityUserFollow>,
+    @InjectRepository(SocialProfile) private socialProfiles: Repository<SocialProfile>,
     @InjectRepository(CommunityNotification) private communityNotifications: Repository<CommunityNotification>,
     @InjectRepository(CommunityContentReport) private communityContentReports: Repository<CommunityContentReport>,
     @InjectRepository(ContentKeywordRule) private contentKeywordRules: Repository<ContentKeywordRule>,
@@ -894,6 +896,29 @@ export class CoursesService implements OnModuleInit {
     if (oldStatus === "approved" && nextStatus !== "approved") await this.adjustPostCommentCount(comment.postId, -1);
     if(oldStatus!=="approved"&&nextStatus==="approved")await this.createCommunityCommentNotifications(saved);
     if (comment.userId) await this.notifications.sendNotification({ userId: comment.userId, channel: "site", title: "社区评论审核结果", content: `${comment.status === "approved" ? "已通过" : comment.status === "rejected" ? "未通过" : "待审核"}${comment.reviewRemark ? `：${comment.reviewRemark}` : ""}`, remark: `社区评论审核:${comment.id}` }, admin).catch(() => null);
+    return saved;
+  }
+
+  async listSocialProfiles(query: any, admin?: AdminContext) {
+    const builder = this.socialProfiles.createQueryBuilder("profile").leftJoinAndSelect("profile.tenant", "tenant").leftJoinAndSelect("profile.user", "user").orderBy("profile.updatedAt", "DESC").take(200);
+    applyTenantScopeToQuery(builder, "profile", admin);
+    this.applyPlatformTenantFilter(builder, "profile", query.tenantId, admin);
+    if (query.status) builder.andWhere("profile.status = :status", { status: query.status });
+    return builder.getMany();
+  }
+
+  async reviewSocialProfile(id: number, dto: { status?: SocialProfileStatus; reviewRemark?: string | null; visible?: boolean }, admin?: AdminContext) {
+    const profile = await this.socialProfiles.findOne({ where: { id } });
+    if (!profile) throw new NotFoundException("社交资料不存在");
+    assertTenantAccessForActor(profile, admin, "社交资料不存在或不属于当前商家");
+    if (!['approved', 'rejected', 'pending'].includes(String(dto.status || ''))) throw new BadRequestException("审核状态不正确");
+    profile.status = dto.status as SocialProfileStatus;
+    profile.visible = dto.visible === undefined ? profile.status !== "rejected" : Boolean(dto.visible);
+    profile.reviewRemark = String(dto.reviewRemark || "").trim().slice(0, 500) || null;
+    profile.reviewedAt = new Date();
+    profile.reviewedByAdminId = admin?.id || null;
+    const saved = await this.socialProfiles.save(profile);
+    await this.notifications.sendNotification({ userId: profile.userId, channel: "site", title: "社交资料审核结果", content: `${profile.status === "approved" ? "资料已通过，可以开始拓展连接" : profile.status === "rejected" ? "资料未通过" : "资料待审核"}${profile.reviewRemark ? `：${profile.reviewRemark}` : ""}`, remark: `社交资料审核:${profile.id}` }, admin).catch(() => null);
     return saved;
   }
 

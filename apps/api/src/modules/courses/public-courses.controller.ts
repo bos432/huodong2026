@@ -28,6 +28,7 @@ import { CommunityPostComment } from "../../entities/community-post-comment.enti
 import { CommunityPostLike } from "../../entities/community-post-like.entity";
 import { CommunityPostFavorite } from "../../entities/community-post-favorite.entity";
 import { CommunityUserFollow } from "../../entities/community-user-follow.entity";
+import { SocialProfile } from "../../entities/social-profile.entity";
 import { CommunityNotification } from "../../entities/community-notification.entity";
 import { CommunityContentReport } from "../../entities/community-content-report.entity";
 import { ContentAppeal } from "../../entities/content-appeal.entity";
@@ -79,6 +80,7 @@ export class PublicCoursesController {
     @InjectRepository(CommunityPostLike) private communityPostLikes: Repository<CommunityPostLike>,
     @InjectRepository(CommunityPostFavorite) private communityPostFavorites: Repository<CommunityPostFavorite>,
     @InjectRepository(CommunityUserFollow) private communityUserFollows: Repository<CommunityUserFollow>,
+    @InjectRepository(SocialProfile) private socialProfiles: Repository<SocialProfile>,
     @InjectRepository(CommunityNotification) private communityNotifications: Repository<CommunityNotification>,
     @InjectRepository(CommunityContentReport) private communityContentReports: Repository<CommunityContentReport>,
     @InjectRepository(ContentKeywordRule) private contentKeywordRules: Repository<ContentKeywordRule>,
@@ -240,6 +242,69 @@ export class PublicCoursesController {
     return items.map((item) => this.postView(item, {
       liked: likedRows.some((row) => row.postId === item.id),favorited:favoriteRows.some(row=>row.postId===item.id),following:followRows.some(row=>row.followedUserId===item.userId)
     }));
+  }
+
+  @Get("social/profiles")
+  async listSocialProfiles(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("keyword") keyword?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
+    const viewerId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    const builder = this.socialProfiles.createQueryBuilder("profile").leftJoinAndSelect("profile.user", "user")
+      .where("profile.tenantScopeKey = :tenantScopeKey", { tenantScopeKey })
+      .andWhere("profile.status = 'approved'").andWhere("profile.visible = 1")
+      .orderBy("profile.updatedAt", "DESC").take(100);
+    const query = String(keyword || "").trim().slice(0, 60);
+    if (query) builder.andWhere("(profile.displayName LIKE :query OR profile.city LIKE :query OR profile.industry LIKE :query OR profile.roleTitle LIKE :query OR profile.introduction LIKE :query)", { query: `%${query}%` });
+    const rows = await builder.getMany();
+    const followedIds = rows.length ? new Set((await this.communityUserFollows.find({ where: { followerUserId: viewerId, followedUserId: In(rows.map((row) => row.userId)) } })).map((row) => row.followedUserId)) : new Set<number>();
+    return rows.map((row) => this.publicSocialProfile(row, viewerId, followedIds.has(row.userId)));
+  }
+
+  @Get("me/social-profile")
+  async mySocialProfile(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    const row = await this.socialProfiles.findOne({ where: { userId, tenantScopeKey } });
+    return row ? this.publicSocialProfile(row, userId, false, true) : null;
+  }
+
+  @Post("me/social-profile")
+  async saveMySocialProfile(@Body() dto: any, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    await this.assertContentWriteAllowed(userId, tenant, "community");
+    const socialFields = {
+      displayName: this.requiredText(dto.displayName, 2, 30, "请填写2至30字的展示名称"),
+      city: this.optionalText(dto.city, 80),
+      industry: this.optionalText(dto.industry, 80),
+      roleTitle: this.optionalText(dto.roleTitle, 100),
+      introduction: this.requiredText(dto.introduction, 10, 500, "请填写10至500字的自我介绍"),
+      offers: this.normalizeSocialTags(dto.offers, "请至少填写一项可提供的资源"),
+      needs: this.normalizeSocialTags(dto.needs, "请至少填写一项希望拓展的方向")
+    };
+    const screened = await Promise.all([
+      ...Object.values(socialFields).filter((value): value is string => typeof value === "string").map((value) => this.screenContent(value, tenant, "community")),
+      ...socialFields.offers.map((value) => this.screenContent(value, tenant, "community")),
+      ...socialFields.needs.map((value) => this.screenContent(value, tenant, "community"))
+    ]);
+    let screenedIndex = 0;
+    const sanitizedText = (value: string | null) => value === null ? null : screened[screenedIndex++].text;
+    const displayName = sanitizedText(socialFields.displayName) as string;
+    const city = sanitizedText(socialFields.city);
+    const industry = sanitizedText(socialFields.industry);
+    const roleTitle = sanitizedText(socialFields.roleTitle);
+    const introduction = sanitizedText(socialFields.introduction) as string;
+    const offers = socialFields.offers.map(() => screened[screenedIndex++].text);
+    const needs = socialFields.needs.map(() => screened[screenedIndex++].text);
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    let row = await this.socialProfiles.findOne({ where: { userId, tenantScopeKey } });
+    row ||= this.socialProfiles.create({ userId, user: { id: userId } as User, tenant, tenantScopeKey });
+    Object.assign(row, { displayName, city, industry, roleTitle, introduction, offers, needs, status: "pending", visible: dto.visible !== false, reviewRemark: screened.some((result) => result.requiresReview) ? "内容需人工复核" : null, reviewedAt: null, reviewedByAdminId: null });
+    return { profile: this.publicSocialProfile(await this.socialProfiles.save(row), userId, false, true), message: "资料已提交审核，通过后会在社交拓展中展示" };
   }
 
   @Get("me/community/postable-activities")
@@ -585,15 +650,15 @@ export class PublicCoursesController {
   }
 
   @Post("community/users/:id/follow")
-  async toggleCommunityFollow(@Param("id",ParseIntPipe) followedUserId:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const followerUserId=this.requireUserId(req.headers?.authorization);if(followerUserId===followedUserId)throw new BadRequestException("不能关注自己");const tenant=await this.resolveTenant(req,tenantCode);const visibleAuthorPost=await this.communityPosts.findOne({where:this.exactTenantWhere({userId:followedUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)});if(!visibleAuthorPost)throw new NotFoundException("用户在当前机构没有可见内容");const row=await this.communityUserFollows.findOneBy({followerUserId,followedUserId});if(row){await this.communityUserFollows.delete(row.id);return{following:false};}try{await this.communityUserFollows.save(this.communityUserFollows.create({followerUserId,followedUserId}));await this.communityNotifications.save(this.communityNotifications.create({userId:followedUserId,type:"follow",postId:null,commentId:null,actorUserId:followerUserId,title:"你有新的关注者",content:"你有一位新的社区关注者",readAt:null}));}catch(error:any){if(!this.isDuplicateKeyError(error))throw error;}return{following:true};}
+  async toggleCommunityFollow(@Param("id",ParseIntPipe) followedUserId:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const followerUserId=this.requireUserId(req.headers?.authorization);if(followerUserId===followedUserId)throw new BadRequestException("不能关注自己");const tenant=await this.resolveTenant(req,tenantCode);const visibleAuthorPost=await this.communityPosts.findOne({where:this.exactTenantWhere({userId:followedUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)});const tenantScopeKey=tenant?`tenant:${tenant.id}`:"platform";const visibleSocialProfile=await this.socialProfiles.findOneBy({userId:followedUserId,tenantScopeKey,status:"approved",visible:true});if(!visibleAuthorPost&&!visibleSocialProfile)throw new NotFoundException("用户在当前机构没有可见内容");const row=await this.communityUserFollows.findOneBy({followerUserId,followedUserId});if(row){await this.communityUserFollows.delete(row.id);return{following:false};}try{await this.communityUserFollows.save(this.communityUserFollows.create({followerUserId,followedUserId}));await this.communityNotifications.save(this.communityNotifications.create({userId:followedUserId,type:"follow",postId:null,commentId:null,actorUserId:followerUserId,title:"你有新的关注者",content:"你有一位新的社区关注者",readAt:null}));}catch(error:any){if(!this.isDuplicateKeyError(error))throw error;}return{following:true};}
 
   @Get("me/community/favorites")
   async myCommunityFavorites(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityPostFavorites.find({where:{userId},order:{createdAt:"DESC"},take:100});if(!rows.length)return[];const posts=await this.communityPosts.find({where:this.exactTenantWhere({id:In(rows.map(row=>row.postId)),status:"approved",visible:true,deletedAt:IsNull()},tenant),order:{createdAt:"DESC"}});return posts.map(post=>this.postView(post,{liked:false,favorited:true}));}
 
   @Get("me/community/notifications")
-  async myCommunityNotifications(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityNotifications.find({where:{userId},order:{createdAt:"DESC"},take:100});const postIds=Array.from(new Set(rows.filter(row=>row.postId).map(row=>Number(row.postId))));const visiblePosts=postIds.length?await this.communityPosts.find({where:this.exactTenantWhere({id:In(postIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visiblePostIds=new Set(visiblePosts.map(post=>post.id));const actorIds=Array.from(new Set(rows.filter(row=>!row.postId&&row.actorUserId).map(row=>Number(row.actorUserId))));const visibleActors=actorIds.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(actorIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visibleActorIds=new Set(visibleActors.map(post=>post.userId));return rows.filter(row=>row.postId?visiblePostIds.has(row.postId):Boolean(row.actorUserId&&visibleActorIds.has(row.actorUserId))).map(row=>this.publicCommunityNotification(row));}
-  @Post("me/community/notifications/:id/read") async readCommunityNotification(@Param("id",ParseIntPipe) id:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const row=await this.communityNotifications.findOneBy({id,userId});if(!row)throw new NotFoundException("消息不存在");if(row.postId&&!(await this.communityPosts.findOne({where:this.exactTenantWhere({id:row.postId},tenant)})))throw new NotFoundException("消息不存在");if(!row.postId&&(!row.actorUserId||!(await this.communityPosts.findOne({where:this.exactTenantWhere({userId:row.actorUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)}))))throw new NotFoundException("消息不存在");row.readAt=row.readAt||new Date();return this.publicCommunityNotification(await this.communityNotifications.save(row));}
-  @Get("me/community/follows") async myCommunityFollows(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityUserFollows.find({where:{followerUserId:userId},order:{createdAt:"DESC"},take:200});const ids=Array.from(new Set(rows.map(row=>row.followedUserId)));const visiblePosts=ids.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(ids),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visibleIds=new Set(visiblePosts.map(post=>post.userId));const scopedRows=rows.filter(row=>visibleIds.has(row.followedUserId));const users=scopedRows.length?await this.dataSource.getRepository(User).find({where:{id:In(scopedRows.map(row=>row.followedUserId))}}):[];return scopedRows.map(row=>({id:row.id,followedName:users.find(user=>user.id===row.followedUserId)?.nickname||`用户${String(row.followedUserId).padStart(4,"0").slice(-4)}`,createdAt:row.createdAt}));}
+  async myCommunityNotifications(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityNotifications.find({where:{userId},order:{createdAt:"DESC"},take:100});const postIds=Array.from(new Set(rows.filter(row=>row.postId).map(row=>Number(row.postId))));const visiblePosts=postIds.length?await this.communityPosts.find({where:this.exactTenantWhere({id:In(postIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const visiblePostIds=new Set(visiblePosts.map(post=>post.id));const actorIds=Array.from(new Set(rows.filter(row=>!row.postId&&row.actorUserId).map(row=>Number(row.actorUserId))));const visibleActors=actorIds.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(actorIds),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const tenantScopeKey=tenant?`tenant:${tenant.id}`:"platform";const visibleSocialProfiles=actorIds.length?await this.socialProfiles.find({where:{userId:In(actorIds),tenantScopeKey,status:"approved",visible:true}}):[];const visibleActorIds=new Set([...visibleActors.map(post=>post.userId),...visibleSocialProfiles.map(profile=>profile.userId)]);return rows.filter(row=>row.postId?visiblePostIds.has(row.postId):Boolean(row.actorUserId&&visibleActorIds.has(row.actorUserId))).map(row=>this.publicCommunityNotification(row));}
+  @Post("me/community/notifications/:id/read") async readCommunityNotification(@Param("id",ParseIntPipe) id:number,@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const row=await this.communityNotifications.findOneBy({id,userId});if(!row)throw new NotFoundException("消息不存在");if(row.postId&&!(await this.communityPosts.findOne({where:this.exactTenantWhere({id:row.postId},tenant)})))throw new NotFoundException("消息不存在");if(!row.postId){const tenantScopeKey=tenant?`tenant:${tenant.id}`:"platform";const visiblePost=row.actorUserId?await this.communityPosts.findOne({where:this.exactTenantWhere({userId:row.actorUserId,status:"approved",visible:true,deletedAt:IsNull()},tenant)}):null;const visibleProfile=row.actorUserId?await this.socialProfiles.findOneBy({userId:row.actorUserId,tenantScopeKey,status:"approved",visible:true}):null;if(!visiblePost&&!visibleProfile)throw new NotFoundException("消息不存在");}row.readAt=row.readAt||new Date();return this.publicCommunityNotification(await this.communityNotifications.save(row));}
+  @Get("me/community/follows") async myCommunityFollows(@Req() req:any,@Query("tenantCode") tenantCode?:string){await this.assertCommunityEnabled(req,tenantCode);const userId=this.requireUserId(req.headers?.authorization);const tenant=await this.resolveTenant(req,tenantCode);const rows=await this.communityUserFollows.find({where:{followerUserId:userId},order:{createdAt:"DESC"},take:200});const ids=Array.from(new Set(rows.map(row=>row.followedUserId)));const visiblePosts=ids.length?await this.communityPosts.find({where:this.exactTenantWhere({userId:In(ids),status:"approved",visible:true,deletedAt:IsNull()},tenant)}):[];const tenantScopeKey=tenant?`tenant:${tenant.id}`:"platform";const visibleSocialProfiles=ids.length?await this.socialProfiles.find({where:{userId:In(ids),tenantScopeKey,status:"approved",visible:true}}):[];const visibleIds=new Set([...visiblePosts.map(post=>post.userId),...visibleSocialProfiles.map(profile=>profile.userId)]);const scopedRows=rows.filter(row=>visibleIds.has(row.followedUserId));const users=scopedRows.length?await this.dataSource.getRepository(User).find({where:{id:In(scopedRows.map(row=>row.followedUserId))}}):[];return scopedRows.map(row=>({id:row.id,followedName:visibleSocialProfiles.find(profile=>profile.userId===row.followedUserId)?.displayName||users.find(user=>user.id===row.followedUserId)?.nickname||`用户${String(row.followedUserId).padStart(4,"0").slice(-4)}`,createdAt:row.createdAt}));}
 
   @Get("me/content/sanctions")
   async myContentSanctions(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
@@ -1466,6 +1531,33 @@ export class PublicCoursesController {
   private normalizeTags(value: unknown) {
     if (!Array.isArray(value)) return [];
     return value.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 6);
+  }
+
+  private normalizeSocialTags(value: unknown, message: string) {
+    const input = Array.isArray(value) ? value : String(value || "").split(/[，,、\n]/);
+    const tags = Array.from(new Set(input.map((item) => String(item || "").trim().slice(0, 30)).filter(Boolean))).slice(0, 6);
+    if (!tags.length) throw new BadRequestException(message);
+    return tags;
+  }
+
+  private publicSocialProfile(row: SocialProfile, viewerId: number, following = false, includeReview = false) {
+    return {
+      id: row.id,
+      userId: row.userId,
+      displayName: row.displayName,
+      avatarUrl: row.user?.avatarUrl || null,
+      city: row.city,
+      industry: row.industry,
+      roleTitle: row.roleTitle,
+      introduction: row.introduction,
+      offers: Array.isArray(row.offers) ? row.offers : [],
+      needs: Array.isArray(row.needs) ? row.needs : [],
+      mine: row.userId === viewerId,
+      following,
+      visible: row.visible,
+      updatedAt: row.updatedAt,
+      ...(includeReview ? { status: row.status, reviewRemark: row.reviewRemark } : {})
+    };
   }
 
   private optionalText(value: unknown, maxLength: number) {

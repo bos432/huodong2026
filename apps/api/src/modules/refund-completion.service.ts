@@ -87,9 +87,10 @@ export class RefundCompletionService {
     await this.clawbackOrderPoints(order, savedRefund, totalRefunded);
     order.status = totalRefunded >= Number(order.amount) ? OrderStatus.Refunded : OrderStatus.PartiallyRefunded;
     const savedOrder = await this.orders.save(order);
-    if (savedOrder.status === OrderStatus.Refunded && ![RegistrationStatus.CheckedIn, RegistrationStatus.Cancelled].includes(savedOrder.registration.status)) {
+    const isTerminalCharityRefund = String(savedRefund.reason || "").includes("[charity_retained]");
+    if ((savedOrder.status === OrderStatus.Refunded || isTerminalCharityRefund) && ![RegistrationStatus.CheckedIn, RegistrationStatus.Cancelled].includes(savedOrder.registration.status)) {
       savedOrder.registration.status = RegistrationStatus.Cancelled;
-      savedOrder.registration.cancelReason = savedRefund.reason || "订单已退款";
+      savedOrder.registration.cancelReason = isTerminalCharityRefund ? "公益保留退款已完成，报名资格已关闭" : (savedRefund.reason || "订单已退款");
       await this.registrations.save(savedOrder.registration);
       await this.refundRedeemedPoints(savedOrder, "订单全额退款返还积分");
       await this.releaseCoupon(savedOrder, "订单全额退款返还优惠券");

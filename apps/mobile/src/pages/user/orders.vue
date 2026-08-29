@@ -13,7 +13,7 @@
       <view v-for="tab in tabs" :key="tab.key" class="order-tab" :class="{ active: activeTab === tab.key }" role="tab" tabindex="0" :aria-selected="activeTab === tab.key" @click="selectTab(tab.key)" @keyup.enter="selectTab(tab.key)" @keyup.space.prevent="selectTab(tab.key)">{{ tab.label }}</view>
     </view>
 
-    <view v-if="loading" class="card subtle" role="status" aria-live="polite">订单加载中...</view>
+    <view v-if="loading" class="card subtle" role="status" aria-live="polite">订单加载中…</view>
     <view v-else-if="loadError" class="card error-card" role="alert" aria-live="assertive">
       <view class="title small">订单加载失败</view>
       <view class="subtle">{{ loadError }}</view>
@@ -41,10 +41,10 @@
           <view><text>时间</text><text>{{ formatTime(item.createdAt) }}</text></view>
         </view>
         <view v-if="item.tip" class="notice" :class="{ muted: item.statusClass !== 'pending' }">{{ item.tip }}</view>
-        <view v-if="item.type === 'course' && item.canRefund" class="button secondary course-refund-action" :class="{ disabled: refundingOrderId !== 0 }" role="button" tabindex="0" :aria-label="`申请${item.title}退款${fenMoneyText(item.refundableAmountFen)}`" :aria-busy="refundingOrderId === item.orderId" @click.stop="requestCourseRefund(item)" @keyup.enter.stop="requestCourseRefund(item)" @keyup.space.stop.prevent="requestCourseRefund(item)">{{ refundingOrderId === item.orderId ? "提交中..." : `申请退款 ${fenMoneyText(item.refundableAmountFen)}` }}</view>
+        <view v-if="item.type === 'course' && item.canRefund" class="button secondary course-refund-action" :class="{ disabled: refundingOrderId !== 0 }" role="button" tabindex="0" :aria-label="`申请${item.title}退款${fenMoneyText(item.refundableAmountFen)}`" :aria-busy="refundingOrderId === item.orderId" @click.stop="requestCourseRefund(item)" @keyup.enter.stop="requestCourseRefund(item)" @keyup.space.stop.prevent="requestCourseRefund(item)">{{ refundingOrderId === item.orderId ? "提交中…" : `申请退款 ${fenMoneyText(item.refundableAmountFen)}` }}</view>
         <view class="order-action">{{ item.actionText }} ›</view>
       </view>
-      <empty-state v-if="!visibleOrders.length" icon="📋" text="暂无对应订单" />
+      <empty-state v-if="!visibleOrders.length" icon="单" text="暂无对应订单" />
     </template>
     <TabBar current="user" />
   </view>
@@ -499,4 +499,16 @@ onShow(() => {
 .order-action { margin-top:18rpx; color:#0f766e; font-size:26rpx; font-weight:900; text-align:right; }
 .small { font-size: 30rpx; }
 .retry { display:inline-flex; margin-top:16rpx; }
+.orders-page{padding:24rpx 28rpx 160rpx;background:var(--app-page-bg)}
+.orders-hero{border-color:var(--app-border);border-radius:16rpx;background:#fff}
+.orders-toolbar-label{color:var(--app-text)}
+.orders-hero-side{border:1rpx solid var(--app-border);border-radius:12rpx;background:#f5f7f8}
+.refresh-action{border-color:var(--app-border);border-radius:12rpx}
+.order-tabs{border-color:var(--app-border);border-radius:14rpx;background:#fff}
+.order-tab{border-radius:10rpx}.order-tab.active{background:#0f766e;box-shadow:none}
+.order-card{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
+.order-title{color:var(--app-text)}
+.order-meta text:last-child{color:#33454e}
+.status-pill,.notice{border-radius:10rpx}
+.order-action{color:#0f766e}
 </style>

@@ -19,7 +19,7 @@ describe("member registration refund consistency guard", () => {
   });
 
   it("refreshes server truth when the detail page returns to the foreground", () => {
-    expect(page).toContain('import { onShow } from "@dcloudio/uni-app"');
+    expect(page).toMatch(/import\s*\{[^}]*\bonShow\b[^}]*\}\s*from\s*["']@dcloudio\/uni-app["']/);
     expect(page).toContain("onShow(async () =>");
     expect(page).toContain("Promise.allSettled([load(), loadDecoration(), loadFeatureGates(true)])");
     expect(page).toContain("createTenantLoadGuard");

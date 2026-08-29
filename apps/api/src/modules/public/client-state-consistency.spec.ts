@@ -169,7 +169,8 @@ describe("mobile client state consistency", () => {
     expect(userMy).toContain("function safeList<T>(value: unknown)");
     expect(userMy).toContain("safeList<any>(sections.value).find");
     expect(homePage).toContain("const decorationSections = computed(() => Array.isArray(sections.value) ? sections.value : [])");
-    expect(homePage).toContain("const homeSections = computed(() => decorationSections.value.filter");
+    expect(homePage).toContain("const homeSections = computed(() => {");
+    expect(homePage).toContain("const configured = decorationSections.value.filter");
     expect(homePage).toContain('v-for="section in homeSections"');
   });
 
@@ -657,7 +658,8 @@ describe("mobile client state consistency", () => {
     expect(homePage).toContain('activitiesError.value = reviewSafeText(error?.message || "近期活动加载失败")');
     expect(homePage).toContain('role="alert"');
     expect(homePage).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()])");
-    expect(homePage).toContain("if (featuredSection.value || feedSection.value)");
+    expect(homePage).toContain("if ((configuredFeaturedSection.value || configuredFeedSection.value) && configured.length)");
+    expect(homePage).toContain("return configured.length ? configured : featuredActivities.value");
     expect(homePage).toContain("const featuredDisplay = computed");
     expect(homePage).toContain("const showEndedInFeed = computed");
     expect(homePage).toContain('item?.displayStatus !== "ended"');
@@ -717,8 +719,6 @@ describe("mobile client state consistency", () => {
       expect(page).toContain("onShow(");
     }
     expect(learningHistory).toContain('from "../../tenant-load-guard"');
-    expect(courseOrderConfirm).toContain("clientOrderKey.value = createClientOrderKey()");
-    expect(courseOrderConfirm).toContain('const contextKey = `${token.tenantCode}:${id}`');
     expect(learningHistory).toContain('request<any[]>("/public/me/activity-history")');
     expect(learningHistory).toContain('error?.statusCode === 404');
     expect(learningHistory).toContain('message.includes("Cannot GET /api/public/me/activity-history")');
@@ -727,6 +727,8 @@ describe("mobile client state consistency", () => {
     expect(publicService).toContain("async myActivityHistory(user: User, context?: PublicTenantContext)");
     expect(publicService).toContain('where("viewLog.userId = :userId", { userId: user.id })');
     expect(publicService).toContain("RegistrationStatus.CheckedIn");
+    expect(courseOrderConfirm).toContain("clientOrderKey.value = createClientOrderKey()");
+    expect(courseOrderConfirm).toContain('const contextKey = `${token.tenantCode}:${id}`');
   });
 
   it("locks course order closing before confirmation and releases every dialog path", () => {

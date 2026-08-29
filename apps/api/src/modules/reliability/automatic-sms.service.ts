@@ -145,7 +145,10 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
   private async enqueue(input: PublishAutomaticSmsInput) {
     const setting = await this.setting(input.tenantId);
     const automaticSms = normalizeAutomaticSmsSettings(setting?.automaticSms);
-    if (!setting?.smsProviderEnabled || !automaticSms.enabled || !automaticSms[input.scene]) return null;
+    if (!setting?.smsProviderEnabled || !automaticSms.enabled || !automaticSms[input.scene]) {
+      await this.suppress(input, String(input.businessId).slice(0, 120), this.normalizeVariables(input.variables), "自动短信场景已关闭");
+      return null;
+    }
     const payload: AutomaticSmsPayload = {
       scene: input.scene,
       businessId: String(input.businessId).slice(0, 120),
@@ -243,7 +246,9 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
       this.users.findOneBy({ id: payload.userId }),
       payload.activityId ? this.activities.findOneBy({ id: payload.activityId }) : Promise.resolve(null)
     ]);
-    if (!user) return { status: "suppressed", reason: "用户不存在" };
+    if (!user) {
+      return this.suppress({ ...payload, businessId: payload.businessId, variables: payload.variables }, payload.businessId, payload.variables, "用户不存在");
+    }
     const automaticSms = normalizeAutomaticSmsSettings(setting?.automaticSms);
     const suppressionReason = !setting?.smsProviderEnabled || !automaticSms.enabled || !automaticSms[payload.scene]
       ? "自动短信场景已关闭"
@@ -319,6 +324,43 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
   private async unsubscribedReason(userId: number, tenantScopeKey: string) {
     const preference = await this.notificationPreferences.findOne({ where: { user: { id: userId }, tenantScopeKey, channel: "sms" } });
     return preference && !preference.subscribed ? preference.reason || "用户已退订短信通知" : null;
+  }
+
+  private async suppress(input: PublishAutomaticSmsInput, businessId: string, variables: Record<string, string>, reason: string) {
+    const tenantScopeKey = input.tenantId ? `tenant:${input.tenantId}` : "platform";
+    const remark = `automatic_sms:${input.scene}:${businessId}`.slice(0, 255);
+    const existing = await this.notifications.findOne({ where: { remark, tenantScopeKey } });
+    if (existing) return { notificationId: existing.id, status: existing.status, reason: existing.suppressedReason || reason };
+    const [user, activity, setting] = await Promise.all([
+      this.users.findOneBy({ id: input.userId }),
+      input.activityId ? this.activities.findOneBy({ id: input.activityId }) : Promise.resolve(null),
+      this.setting(input.tenantId)
+    ]);
+    const rendered = renderAutomaticNotification(input.scene, activity, variables);
+    const row = await this.notifications.save(this.notifications.create({
+      channel: "sms",
+      scene: input.scene,
+      tenant: setting?.tenant || activity?.tenant || null,
+      tenantScopeKey,
+      title: rendered.title,
+      content: rendered.content,
+      status: "suppressed",
+      provider: "automatic-sms",
+      providerMessageId: null,
+      errorMessage: null,
+      suppressedReason: reason,
+      variablesSnapshot: variables,
+      providerTemplateId: null,
+      templateVersion: null,
+      deliveryOptions: null,
+      retryCount: 0,
+      sentAt: null,
+      failedAt: null,
+      user,
+      activity,
+      remark
+    }));
+    return { notificationId: row.id, status: row.status, reason };
   }
 
   private payload(value: Record<string, unknown>): AutomaticSmsPayload {

@@ -29,5 +29,5 @@ onShow(() => void refreshBottomNav());
 </script>
 
 <template>
-  <AppBottomNav v-if="showBottomNav" :section="bottomNavSection" :current-path="currentPath" />
+  <AppBottomNav v-show="showBottomNav" :section="bottomNavSection" :current-path="currentPath" />
 </template>

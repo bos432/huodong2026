@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onLoad, onShow } from "@dcloudio/uni-app";
 import { OrderStatus, RegistrationStatus } from "@activity/shared";
 import QRCode from "qrcode";
 import { ensureUser, getCurrentTenantCode, request, requestCheckInQrImage, requestRegistrationRefund, withTenantCode } from "../../api";
@@ -35,6 +35,7 @@ const orderStatusText: Record<OrderStatus, string> = {
 };
 
 const detail = ref<any>();
+const registrationId = ref(0);
 const code = ref("");
 const codeQrUrl = ref("");
 const codeQrMatrix = ref<boolean[][]>([]);
@@ -71,8 +72,7 @@ const paymentBusy = computed(() => Boolean(paying.value) || paymentChecking.valu
 type RegistrationActionContext = { tenantCode: string; registrationId: number; orderId: number };
 
 function routeRegistrationId() {
-  const pages = getCurrentPages();
-  return Number((pages[pages.length - 1] as any)?.options?.id || 0);
+  return registrationId.value;
 }
 
 function actionContext(): RegistrationActionContext | null {
@@ -537,12 +537,13 @@ async function goPublish() {
   uni.navigateTo({ url: withTenantCode(`/pages/community/publish?activityId=${activityId}`) });
 }
 
+onLoad((query) => { registrationId.value = Number(query?.id || 0); });
 onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFeatureGates(true)]); });
 </script>
 
 <template>
   <view class="container registration" :class="{ 'has-custom-nav': showBottomNav }">
-    <view v-if="loading" class="card subtle">加载中...</view>
+    <view v-if="loading" class="card subtle" role="status" aria-live="polite">加载中…</view>
     <view v-else-if="loadError" class="card error-card">
       <view class="title small">报名详情加载失败</view>
       <view class="subtle">{{ loadError }}</view>
@@ -607,7 +608,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
           </view>
           <view class="mini-button" @click="showGroupDialog">查看二维码</view>
         </view>
-        <image v-if="!groupQrImageError" class="group-qr" :src="groupQrCodeUrl" mode="widthFix" show-menu-by-longpress="true" @click="previewGroupQr" @error="groupQrImageError = true" />
+        <image v-if="!groupQrImageError" class="group-qr" :src="groupQrCodeUrl" mode="aspectFit" show-menu-by-longpress="true" @click="previewGroupQr" @error="groupQrImageError = true" />
         <view v-else class="notice muted">二维码图片加载失败，请联系主办方获取入群方式。</view>
         <view class="group-actions">
           <view class="group-action" role="button" tabindex="0" aria-label="预览活动群二维码并长按识别" @click="previewGroupQr" @keyup.enter="previewGroupQr" @keyup.space.prevent="previewGroupQr">长按识别</view>
@@ -630,18 +631,19 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         <view v-if="detail.order.status === OrderStatus.PendingPayment && detail.order.paymentMethod !== 'offline'" class="notice">请选择当前订单对应的支付方式完成付款。余额不足时可联系后台充值后再支付。</view>
         <view v-if="detail.order.status === OrderStatus.PendingPayment && detail.order.paymentMethod === 'offline'" class="notice">{{ paymentInstructions() }}</view>
         <view v-if="detail.order.status === OrderStatus.PendingPayment && Number(detail.order.amount) > 0" class="pay-actions">
-          <view v-if="detail.order.paymentMethod === 'wechat' && canPay('wechat')" class="button" :class="{ disabled: paymentBusy }" @click="payOrder('wechat')">{{ paying === "wechat" ? "微信支付中..." : "微信支付" }}</view>
-          <view v-if="detail.order.paymentMethod === 'alipay' && canPay('alipay')" class="button" :class="{ disabled: paymentBusy }" @click="payOrder('alipay')">{{ paying === "alipay" ? "支付宝支付中..." : "支付宝" }}</view>
-          <view v-if="detail.order.paymentMethod === 'balance' && canPay('balance')" class="button secondary" :class="{ disabled: paymentBusy }" @click="payOrder('balance')">{{ paying === "balance" ? "余额支付中..." : "余额支付" }}</view>
+          <view v-if="detail.order.paymentMethod === 'wechat' && canPay('wechat')" class="button" :class="{ disabled: paymentBusy }" role="button" tabindex="0" :aria-disabled="paymentBusy" :aria-busy="paying === 'wechat'" @click="payOrder('wechat')" @keyup.enter="payOrder('wechat')" @keyup.space.prevent="payOrder('wechat')">{{ paying === "wechat" ? "微信支付中…" : "微信支付" }}</view>
+          <view v-if="detail.order.paymentMethod === 'alipay' && canPay('alipay')" class="button" :class="{ disabled: paymentBusy }" role="button" tabindex="0" :aria-disabled="paymentBusy" :aria-busy="paying === 'alipay'" @click="payOrder('alipay')" @keyup.enter="payOrder('alipay')" @keyup.space.prevent="payOrder('alipay')">{{ paying === "alipay" ? "支付宝支付中…" : "支付宝" }}</view>
+          <view v-if="detail.order.paymentMethod === 'balance' && canPay('balance')" class="button secondary" :class="{ disabled: paymentBusy }" role="button" tabindex="0" :aria-disabled="paymentBusy" :aria-busy="paying === 'balance'" @click="payOrder('balance')" @keyup.enter="payOrder('balance')" @keyup.space.prevent="payOrder('balance')">{{ paying === "balance" ? "余额支付中…" : "余额支付" }}</view>
           <view v-if="detail.order.paymentMethod === 'offline'" class="button secondary disabled">等待后台确认收款</view>
-          <view class="button secondary" :class="{ disabled: paymentBusy }" @click="refreshPaymentStatus">{{ paymentChecking ? "查询中..." : "刷新支付状态" }}</view>
-          <view class="button secondary danger-button" :class="{ disabled: paymentBusy }" @click="closePendingPayment">{{ paymentClosing ? "关闭中..." : "关闭订单" }}</view>
+          <view class="button secondary" :class="{ disabled: paymentBusy }" role="button" tabindex="0" :aria-disabled="paymentBusy" :aria-busy="paymentChecking" @click="refreshPaymentStatus" @keyup.enter="refreshPaymentStatus" @keyup.space.prevent="refreshPaymentStatus">{{ paymentChecking ? "查询中…" : "刷新支付状态" }}</view>
+          <view class="button secondary danger-button" :class="{ disabled: paymentBusy }" role="button" tabindex="0" :aria-disabled="paymentBusy" :aria-busy="paymentClosing" @click="closePendingPayment" @keyup.enter="closePendingPayment" @keyup.space.prevent="closePendingPayment">{{ paymentClosing ? "关闭中…" : "关闭订单" }}</view>
         </view>
         <view v-if="charityRefund?.enabled" class="charity-refund-box">
           <view class="charity-refund-title">公益退款规则</view>
-          <view class="charity-refund-copy">该订单公益金 ¥{{ money(charityRefund.charityAmount) }} 会保留到你的公益基金，预计可退 ¥{{ money(charityRefund.actualRefundAmount || charityRefund.refundAmount) }}。</view>
+          <view v-if="charityRefund.terminal" class="charity-refund-copy">公益退款已完成，公益金 ¥{{ money(charityRefund.charityAmount) }} 已保留，报名资格已关闭。</view>
+          <view v-else class="charity-refund-copy">该订单公益金 ¥{{ money(charityRefund.charityAmount) }} 会保留到你的公益基金，预计可退 ¥{{ money(charityRefund.actualRefundAmount || charityRefund.refundAmount) }}。</view>
           <view v-if="charityRefund.pendingRefund" class="notice">退款申请处理中：¥{{ money(charityRefund.pendingRefund.amount) }}，请等待后台审核。</view>
-          <view v-else-if="charityRefund.canRequest" class="button secondary" :class="{ disabled: refunding }" @click="requestRefund">{{ refunding ? "提交中..." : "申请退款并保留公益金" }}</view>
+          <view v-else-if="charityRefund.canRequest" class="button secondary" :class="{ disabled: refunding }" role="button" tabindex="0" :aria-disabled="refunding" :aria-busy="refunding" @click="requestRefund" @keyup.enter="requestRefund" @keyup.space.prevent="requestRefund">{{ refunding ? "提交中…" : "申请退款并保留公益金" }}</view>
         </view>
         <view v-if="detail.order.status === OrderStatus.Closed" class="notice muted">订单已关闭：{{ detail.order.closeReason || "订单已关闭，名额已释放" }}</view>
         <view v-if="detail.order.status === OrderStatus.PartiallyRefunded" class="notice">该订单已有部分退款，具体金额请联系主办方确认。</view>
@@ -670,7 +672,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
             <view v-for="(cell, cellIndex) in row" :key="cellIndex" class="code-qr-cell" :class="{ dark: cell }" />
           </view>
         </view>
-        <image v-else-if="codeQrUrl" class="code-qr" :src="codeQrUrl" mode="widthFix" />
+        <image v-else-if="codeQrUrl" class="code-qr" :src="codeQrUrl" mode="aspectFit" />
         <view v-else class="notice muted">二维码暂未生成，可先复制下方签到码让工作人员手动核销。</view>
         <view class="code-text">{{ code }}</view>
         <view class="code-tip">现场可出示二维码扫码核销，也可让工作人员手动输入下方签到码。</view>
@@ -681,12 +683,12 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
       <view v-if="canShowCheckInCode" class="button secondary" @click="addCalendarReminder">添加到日历</view>
       <view v-if="canShowCheckInCode" class="button secondary" @click="goReview">评价活动</view>
       <view v-if="canShareActivityPost && communityPublishAvailable" class="button secondary share-button" @click="goPublish">分享活动心得</view>
-      <view v-if="canCancel()" class="button secondary danger-button" :class="{ disabled: cancelling }" @click="cancel">{{ cancelling ? "取消中..." : "取消报名" }}</view>
+      <view v-if="canCancel()" class="button secondary danger-button" :class="{ disabled: cancelling }" role="button" tabindex="0" :aria-disabled="cancelling" :aria-busy="cancelling" @click="cancel" @keyup.enter="cancel" @keyup.space.prevent="cancel">{{ cancelling ? "取消中…" : "取消报名" }}</view>
 
       <view v-if="groupDialogVisible" class="group-dialog-mask" @click="groupDialogVisible = false">
         <view class="group-dialog" @click.stop>
           <view class="dialog-title">扫码加入活动群</view>
-          <image class="dialog-qr" :src="groupQrCodeUrl" mode="widthFix" show-menu-by-longpress="true" @error="groupQrImageError = true; groupDialogVisible = false" />
+          <image class="dialog-qr" :src="groupQrCodeUrl" mode="aspectFit" show-menu-by-longpress="true" @error="groupQrImageError = true; groupDialogVisible = false" />
           <view class="dialog-copy">点击二维码进入图片预览，然后长按图片识别。相机扫码仅用于平台活动码和签到码。</view>
           <view class="dialog-action" role="button" tabindex="0" aria-label="预览二维码并长按识别" @click="previewGroupQr">预览并长按识别</view>
           <view class="button" @click="groupDialogVisible = false">知道了</view>
@@ -843,7 +845,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
 .step.active { background: rgba(15, 118, 110, 0.12); color: #0f766e; font-weight: 800; }
 .group-card .row { align-items: flex-start; }
 .mini-button { flex: 0 0 auto; padding: 10rpx 18rpx; border-radius: 8rpx; background: #eaf7f3; color: #0f766e; font-size: 24rpx; font-weight: 800; }
-.group-qr { display: block; width: 360rpx; margin: 24rpx auto 0; border-radius: 10rpx; border: 1px solid #d9ebe6; background: var(--card-bg, #fff); }
+.group-qr { display: block; width: 360rpx; height: 360rpx; margin: 24rpx auto 0; border-radius: 10rpx; border: 1px solid #d9ebe6; background: var(--card-bg, #fff); }
 .group-actions { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14rpx; margin-top: 20rpx; }
 .group-action { min-height: 72rpx; display: flex; align-items: center; justify-content: center; border: 1rpx solid #cfe4de; border-radius: 8rpx; color: #0f766e; background: #f3faf8; font-size: 25rpx; font-weight: 700; }
 .group-action.primary { border-color: #0f766e; color: #fff; background: #0f766e; }
@@ -871,8 +873,18 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
 .group-dialog-mask { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center; padding: 36rpx; background: rgba(15, 23, 42, 0.58); }
 .group-dialog { width: min(620rpx, 100%); padding: 34rpx 28rpx 28rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); text-align: center; box-shadow: 0 28rpx 80rpx rgba(15, 23, 42, 0.25); }
 .dialog-title { color: var(--text-color, #111827); font-size: 34rpx; font-weight: 900; }
-.dialog-qr { display: block; width: 420rpx; max-width: 100%; margin: 26rpx auto 0; border-radius: var(--card-radius, 8px); border: 1px solid #e5e7eb; background: var(--card-bg, #fff); }
+.dialog-qr { display: block; width: 420rpx; height: 420rpx; max-width: 100%; margin: 26rpx auto 0; border-radius: var(--card-radius, 8px); border: 1px solid #e5e7eb; background: var(--card-bg, #fff); }
 .dialog-copy { margin-top: 18rpx; color: var(--muted-color, #667085); font-size: 26rpx; line-height: 1.6; }
 .dialog-action { min-height: 72rpx; display: flex; align-items: center; justify-content: center; margin: 20rpx 0 14rpx; border-radius: 8rpx; background: #edf7f5; color: #0f766e; font-size: 25rpx; font-weight: 700; }
 @media (min-width: 900px) { .registration { max-width:760px; margin:0 auto; } }
+.registration{padding:24rpx 28rpx calc(160rpx + env(safe-area-inset-bottom));background:var(--app-page-bg)}
+.registration-hero{border-radius:16rpx;box-shadow:none;background:#16252d}
+.registration .card{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
+.status-card{border-left:0;border-top:6rpx solid #0f766e}
+.status-meta view,.notice,.step{border-radius:12rpx}
+.status-action{border-radius:14rpx;background:#16252d;color:#fff}
+.activity-space-entry{border-color:#cfe5d8;border-radius:16rpx;background:#eaf7f1}
+.line.strong text:last-child{color:var(--app-price)}
+.pay-actions .button{border-radius:14rpx}.pay-actions .button:not(.secondary){background:#16252d;color:#fff}
+.group-action,.mini-button,.dialog-action{border-radius:12rpx}
 </style>

@@ -1053,6 +1053,13 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
     "caution": "属于追踪或审计依据，优先归档，不要直接清空近期数据。"
   },
   {
+    "group": "课程共修与内容治理",
+    "name": "social_profiles",
+    "meaning": "社交档案相关业务数据。",
+    "business": "课程共修与内容治理模块中的社交档案查询、状态流转和关联记录。",
+    "caution": "可能包含个人或敏感信息，查询、导出和清理必须遵循最小权限与隐私要求。"
+  },
+  {
     "group": "平台治理与基础设施",
     "name": "admin_invites",
     "meaning": "管理员邀请相关业务数据。",

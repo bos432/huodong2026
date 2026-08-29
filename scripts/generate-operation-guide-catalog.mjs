@@ -24,7 +24,7 @@ const tokenLabels = {
   metric: "指标", miniprogram: "小程序", moderator: "版主", notification: "通知", official: "官方", operation: "操作", order: "订单", partner: "合作伙伴",
   payment: "支付", point: "积分", popup: "弹窗", preference: "偏好", product: "商品", profile: "档案", publication: "发布",
   post: "帖子", project: "项目", promotion: "推广", proof: "证明", qualification: "资质", qa: "答疑", question: "题目",
-  rate: "频控", record: "记录", redemption: "兑换", refund: "退款", region: "区域", registration: "报名", release: "发布",
+  rate: "频控", record: "记录", redemption: "兑换", refund: "退款", region: "区域", registration: "报名", release: "发布", social: "社交",
   reply: "回复", report: "举报", revenue: "收入", run: "任务",
   resource: "资源", review: "评价", risk: "风险", rule: "规则", sanction: "处罚", schedule: "计划",
   section: "模块", segment: "分群", service: "服务", setting: "设置", settlement: "结算", share: "分享", space: "空间",
@@ -55,7 +55,7 @@ const tableLabelOverrides = {
 function groupFor(name) {
   if (name.startsWith("mall_")) return "多商户商城";
   if (/^(charity_|aid_|ambassador_|partner_|volunteer_)/.test(name)) return "公益与合作生态";
-  if (/^(course_|courses$|community_|forum_|content_)/.test(name) || name === "checkin_tasks") return "课程共修与内容治理";
+  if (/^(course_|courses$|community_|forum_|content_|social_)/.test(name) || name === "checkin_tasks") return "课程共修与内容治理";
   if (/^(activity_|activities$|registration|ticket_|coupon_|waitlist|check_in|checkin_|conversion_|share_)/.test(name)) return "活动报名与核销";
   if (/^(order|refund|payment_|agent_|wallet_|user_wallet|fund_risk)/.test(name)) return "订单支付与财务";
   if (/^(user|member_|certificate|invite_|frequent_registrant)/.test(name)) return "用户会员与资产";

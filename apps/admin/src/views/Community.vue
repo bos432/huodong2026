@@ -103,6 +103,21 @@
           </el-table-column>
         </el-table>
       </el-tab-pane>
+      <el-tab-pane label="社交资料审核" name="social-profiles">
+        <div class="tab-toolbar"><span>用户资料审核通过后，才会在对应商家的“社交拓展”广场公开；公开接口不返回手机号等敏感信息。</span></div>
+        <el-table :data="socialProfiles" stripe style="width:100%;" empty-text="暂无社交资料">
+          <el-table-column prop="id" label="ID" width="70" />
+          <el-table-column label="用户" min-width="150"><template #default="{row}"><strong>{{ row.displayName }}</strong><div class="muted-line">用户ID {{ row.userId }}</div></template></el-table-column>
+          <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="150"><template #default="{row}">{{ tenantDisplayName(row) }}</template></el-table-column>
+          <el-table-column label="身份" min-width="180" show-overflow-tooltip><template #default="{row}">{{ [row.roleTitle, row.industry, row.city].filter(Boolean).join(' · ') || '-' }}</template></el-table-column>
+          <el-table-column prop="introduction" label="自我介绍" min-width="240" show-overflow-tooltip />
+          <el-table-column label="可提供" min-width="180" show-overflow-tooltip><template #default="{row}">{{ (row.offers || []).join('、') }}</template></el-table-column>
+          <el-table-column label="希望拓展" min-width="180" show-overflow-tooltip><template #default="{row}">{{ (row.needs || []).join('、') }}</template></el-table-column>
+          <el-table-column label="状态" width="100"><template #default="{row}"><el-tag :type="row.status === 'approved' ? 'success' : row.status === 'rejected' ? 'danger' : 'warning'">{{ statusText(row.status) }}</el-tag></template></el-table-column>
+          <el-table-column prop="reviewRemark" label="审核说明" min-width="150" show-overflow-tooltip />
+          <el-table-column label="操作" width="170"><template #default="{row}"><el-button size="small" type="success" :loading="actionKey === `social:approved:${row.id}`" :disabled="row.status === 'approved' || Boolean(actionKey)" @click="reviewSocialProfile(row, 'approved')">通过</el-button><el-button size="small" type="danger" :loading="actionKey === `social:rejected:${row.id}`" :disabled="row.status === 'rejected' || Boolean(actionKey)" @click="reviewSocialProfile(row, 'rejected')">拒绝</el-button></template></el-table-column>
+        </el-table>
+      </el-tab-pane>
       <el-tab-pane label="打卡审核" name="checkin-review"><el-button size="small" :loading="checkinReviewLoading" :disabled="Boolean(actionKey)" @click="loadCheckinReviews">刷新</el-button><el-alert v-if="checkinReviewError" type="error" :title="checkinReviewError" show-icon :closable="false" class="section-alert"><template #default><el-button size="small" @click="loadCheckinReviews">重试</el-button></template></el-alert><el-table v-loading="checkinReviewLoading" :data="checkinReviews" stripe><el-table-column prop="checkin_userId" label="用户ID" width="90" /><el-table-column prop="checkin_date" label="日期" width="120" /><el-table-column prop="checkin_content" label="内容" min-width="280" /><el-table-column prop="checkin_status" label="状态" width="100" /><el-table-column label="操作" width="150"><template #default="{row}"><el-button v-if="row.checkin_status==='pending'" link type="success" :loading="actionKey === `checkin-review:approve:${row.checkin_id}`" :disabled="Boolean(actionKey)" @click="reviewCheckin(row,'approve')">通过</el-button><el-button v-if="row.checkin_status==='pending'" link type="danger" :loading="actionKey === `checkin-review:reject:${row.checkin_id}`" :disabled="Boolean(actionKey)" @click="reviewCheckin(row,'reject')">拒绝</el-button></template></el-table-column></el-table></el-tab-pane>
       <el-tab-pane label="点赞评论/评论审核" name="comments">
         <el-table :data="comments" stripe style="width:100%;" empty-text="暂无评论">
@@ -487,6 +502,7 @@ const activities = ref<any[]>([]);
 const checkinTasks = ref<any[]>([]);
 const posts = ref<any[]>([]);
 const comments = ref<any[]>([]);
+const socialProfiles = ref<any[]>([]);
 const communityOverview = ref<any>({ kpis: {}, todos: [], alerts: [] });
 const forumOverview = ref<any>({ kpis: {}, todos: [], alerts: [] });
 const forumCategories = ref<any[]>([]);
@@ -607,12 +623,13 @@ async function load() {
       topicId: Number(forumFilters.topicId || 0) || undefined
     };
     const forumReportParams = { ...params, status: forumFilters.reportStatus || undefined };
-    const [communityOverviewData, actRows, chkRows, postRows, commentRows, communityReportRows, keywordRows, sanctionRows, appealRows] = await Promise.all([
+    const [communityOverviewData, actRows, chkRows, postRows, commentRows, socialRows, communityReportRows, keywordRows, sanctionRows, appealRows] = await Promise.all([
       api.get<any, any>("/admin/community/overview", { params }),
       api.get<any, any[]>("/admin/community-activities", { params }),
       api.get<any, any[]>("/admin/checkin-tasks", { params }),
       api.get<any, any[]>("/admin/community-posts", { params: postParams }),
       api.get<any, any[]>("/admin/community-post-comments", { params }),
+      api.get<any, any[]>("/admin/social-profiles", { params }),
       api.get<any, any[]>("/admin/community-content-reports", { params: { ...params, status: "pending" } }),
       api.get<any, any[]>("/admin/content-keyword-rules", { params }),
       api.get<any, any[]>("/admin/content-sanctions", { params }),
@@ -633,6 +650,7 @@ async function load() {
     checkinTasks.value = chkRows;
     posts.value = postRows;
     comments.value = commentRows;
+    socialProfiles.value = socialRows;
     forumCategories.value = forumValue(1, []);
     forumModerators.value = forumValue(2, []);
     forumTopics.value = forumValue(3, []);
@@ -1388,6 +1406,25 @@ async function reviewComment(row: any, status: "approved" | "rejected") {
     ElMessage.success(status === "approved" ? "评论已通过" : "评论已拒绝");
   } catch (error: any) {
     ElMessage.error(error.message || "审核评论失败");
+  } finally {
+    actionKey.value = "";
+  }
+}
+
+async function reviewSocialProfile(row: any, status: "approved" | "rejected") {
+  if (actionKey.value) return;
+  actionKey.value = `social:${status}:${row.id}`;
+  try {
+    let reviewRemark = "";
+    if (status === "rejected") {
+      const result = await ElMessageBox.prompt("请填写需要用户修改的内容", "拒绝社交资料", { inputType: "textarea", inputValidator: (value) => Boolean(String(value || "").trim()) || "请填写审核说明" });
+      reviewRemark = String(result.value || "").trim();
+    }
+    await api.patch(`/admin/social-profiles/${row.id}`, { status, visible: status === "approved", reviewRemark });
+    await load();
+    ElMessage.success(status === "approved" ? "社交资料已通过" : "社交资料已退回修改");
+  } catch (error: any) {
+    if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "审核社交资料失败");
   } finally {
     actionKey.value = "";
   }

@@ -26,6 +26,7 @@ import { CommunityPostComment } from "../../entities/community-post-comment.enti
 import { CommunityPostLike } from "../../entities/community-post-like.entity";
 import { CommunityPostFavorite } from "../../entities/community-post-favorite.entity";
 import { CommunityUserFollow } from "../../entities/community-user-follow.entity";
+import { SocialProfile } from "../../entities/social-profile.entity";
 import { CommunityNotification } from "../../entities/community-notification.entity";
 import { CommunityContentReport } from "../../entities/community-content-report.entity";
 import { ContentAppeal } from "../../entities/content-appeal.entity";
@@ -57,7 +58,7 @@ import { ReliabilityModule } from "../reliability/reliability.module";
 import { CredentialTemplateModule } from "../credential-templates/credential-template.module";
 
 @Module({
-  imports: [CredentialTemplateModule, TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CourseTeacher, CourseResourceAccessLog, MemberLevel, CourseAssessment, CourseQuestion, CourseAssessmentAttempt, CourseAssessmentAnswer, CourseAssessmentGrant, CourseReview, CourseQa, CourseAnnouncement, CourseCertificateTemplate, CourseRefund, CommunityActivity, CommunityActivityMember, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostFavorite, CommunityUserFollow, CommunityNotification, CommunityContentReport, CommunityPostComment, CommunityCheckIn, ContentKeywordRule, ContentUserSanction, ContentAppeal, ForumCategory, ForumCategoryModerator, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant]), PublicModule, ReliabilityModule, V1Module],
+  imports: [CredentialTemplateModule, TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CourseTeacher, CourseResourceAccessLog, MemberLevel, CourseAssessment, CourseQuestion, CourseAssessmentAttempt, CourseAssessmentAnswer, CourseAssessmentGrant, CourseReview, CourseQa, CourseAnnouncement, CourseCertificateTemplate, CourseRefund, CommunityActivity, CommunityActivityMember, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostFavorite, CommunityUserFollow, SocialProfile, CommunityNotification, CommunityContentReport, CommunityPostComment, CommunityCheckIn, ContentKeywordRule, ContentUserSanction, ContentAppeal, ForumCategory, ForumCategoryModerator, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant]), PublicModule, ReliabilityModule, V1Module],
   controllers: [CoursesController, PublicCoursesController],
   providers: [CoursesService],
   exports: [CoursesService]

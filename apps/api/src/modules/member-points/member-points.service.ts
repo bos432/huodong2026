@@ -1,4 +1,4 @@
-import { BadRequestException, Injectable } from "@nestjs/common";
+import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { DataSource, EntityManager, Repository } from "typeorm";
 import { MemberLevel } from "../../entities/member-level.entity";
 import { MemberPointLog } from "../../entities/member-point-log.entity";
@@ -45,6 +45,8 @@ export type AwardMemberPointEventInput = Omit<PostMemberPointsInput, "points" | 
 
 @Injectable()
 export class MemberPointsService {
+  private readonly logger = new Logger(MemberPointsService.name);
+
   constructor(private readonly dataSource: DataSource) {}
 
   post(input: PostMemberPointsInput, manager?: PointEntityManager) {
@@ -57,7 +59,12 @@ export class MemberPointsService {
     const tenantScopeKey = memberLevelScopeKey(input.tenant || null);
     const rule = await repo.findOne({ where: { tenantScopeKey, eventType: input.eventType } })
       || await repo.findOne({ where: { tenantScopeKey: "platform", eventType: input.eventType } });
-    if (!rule) throw new BadRequestException("积分规则不存在");
+    // Points are a post-commit benefit. A missing tenant rule must not turn a
+    // successful payment, check-in, or refund into a failed business action.
+    if (!rule) {
+      this.logger.warn(`Skipping member points award: rule missing scope=${tenantScopeKey} event=${input.eventType}`);
+      return { rule: null, award: { points: 0, growthValue: 0 }, result: null, skipped: true as const };
+    }
     const award = calculatePointRuleAward(rule, input.amountFen || 0);
     if (!award.points) return { rule, award, result: null };
     const occurredAt = input.occurredAt || new Date();

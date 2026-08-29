@@ -20,4 +20,9 @@ describe("launch configuration secret handling", () => {
     const cleared = secureLaunchConfigForStorage(preserved, { smtpPassword: "********" }, ["smtpPassword"]);
     expect(launchConfigToEnv(cleared).SMTP_PASSWORD).toBeUndefined();
   });
+
+  it("skips stale encrypted values so config inspection can report them as missing", () => {
+    process.env.CONFIG_ENCRYPTION_KEY = "current-key";
+    expect(launchConfigToEnv({ wechatAppId: "wx-app", wechatAppSecret: "enc:v1:stale.value" })).toMatchObject({ WECHAT_APP_ID: "wx-app" });
+  });
 });

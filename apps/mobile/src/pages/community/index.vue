@@ -1,25 +1,30 @@
 <template>
   <view class="container has-custom-nav">
     <view class="page-header">
-      <text class="title-lg">共修</text>
+      <text class="title-lg">社区</text>
+      <text class="page-subtitle">记录真实参与，认识一起做事的人</text>
     </view>
 
     <PageDecorationBlocks :sections="decorationSections" />
     <AdSlotRenderer slot-key="community_feed_inline" page-key="community_home" compact />
 
     <!-- 文化大使入口 -->
-    <view v-if="featureGates.ambassador" class="ambassador-card" @click="goAmbassador">
-      <text style="font-size:30rpx; color:#fff; font-weight:600;">🏮 加入文化大使计划</text>
-      <text style="font-size:24rpx; color:rgba(255,255,255,0.8); margin-top:6rpx;">让热爱发光 &gt;</text>
+    <view v-if="featureGates.ambassador" class="ambassador-card" role="button" tabindex="0" aria-label="加入文化大使计划" @click="goAmbassador" @keyup.enter="goAmbassador" @keyup.space.prevent="goAmbassador">
+      <text class="support-title">加入文化大使计划</text>
+      <text class="support-copy">参与城市文化共建 ›</text>
     </view>
-    <view v-if="canPublish" class="publish-card" @click="goPublish">
+    <view v-if="canPublish" class="publish-card" role="button" tabindex="0" aria-label="分享活动心得" @click="goPublish" @keyup.enter="goPublish" @keyup.space.prevent="goPublish">
       <view>
         <text class="publish-title">分享活动心得</text>
         <text class="publish-copy">上传照片和感悟，审核后展示给新同学</text>
       </view>
       <view class="button sm">去发布</view>
     </view>
-    <view v-if="featureGates.forum" class="forum-entry-card" @click="goForum">
+    <view class="social-entry" role="button" tabindex="0" aria-label="进入社交拓展" @click="goSocial" @keyup.enter="goSocial" @keyup.space.prevent="goSocial">
+      <view><text class="social-eyebrow">同城连接</text><text class="publish-title">社交拓展</text><text class="publish-copy">展示你能提供的资源，找到同行与合作伙伴</text></view>
+      <view class="social-action">立即拓展</view>
+    </view>
+    <view v-if="featureGates.forum" class="forum-entry-card" role="button" tabindex="0" aria-label="进入共修论坛" @click="goForum" @keyup.enter="goForum" @keyup.space.prevent="goForum">
       <view>
         <text class="publish-title">共修论坛</text>
         <text class="publish-copy">发起话题、回复同学、收藏精华内容</text>
@@ -28,13 +33,13 @@
     </view>
 
     <!-- 近期活动 -->
-    <view class="section-title"><text class="title-md">📅 近期活动</text></view>
-    <view v-if="activitiesLoading" class="section-state">近期活动加载中...</view>
+    <view class="section-title"><text class="title-md">近期共修</text></view>
+    <view v-if="activitiesLoading" class="section-state" role="status" aria-live="polite">近期活动加载中…</view>
     <view v-else-if="activitiesError" class="section-state error-state">
       <text>{{ activitiesError }}</text>
       <view class="state-retry" @click="loadActivities">重新加载</view>
     </view>
-    <view v-for="(act, idx) in activities" :key="idx" class="activity-card" @click="goActivity(act)">
+    <view v-for="(act, idx) in activities" :key="idx" class="activity-card" role="button" tabindex="0" :aria-label="`查看活动：${act.title}`" @click="goActivity(act)" @keyup.enter="goActivity(act)" @keyup.space.prevent="goActivity(act)">
       <view class="activity-date-block">
         <text class="date-month">{{ act.month }}</text>
         <text class="date-day">{{ act.day }}</text>
@@ -49,12 +54,12 @@
         </view>
       </view>
     </view>
-    <EmptyState v-if="!activitiesLoading && !activitiesError && !activities.length" icon="📅" text="暂无近期活动" />
+    <EmptyState v-if="!activitiesLoading && !activitiesError && !activities.length" icon="日" text="暂无近期活动" />
 
     <!-- 今日打卡 -->
     <view class="card checkin-card">
-      <text class="title-md">📝 今日打卡</text>
-      <view v-if="checkinLoading" class="inline-state">今日打卡任务加载中...</view>
+      <text class="title-md">今日共修</text>
+      <view v-if="checkinLoading" class="inline-state" role="status" aria-live="polite">今日打卡任务加载中…</view>
       <view v-else-if="checkinError" class="inline-state error-state">
         <text>{{ checkinError }}</text>
         <view class="state-retry" @click="loadCheckinTask">重新加载</view>
@@ -84,10 +89,10 @@
 
     <!-- 动态广场 -->
     <view class="section-title post-section-title" style="margin-top:8rpx;">
-      <text class="title-md">{{ activityFilterId ? "📖 活动口碑" : "📖 参与者动态" }}</text>
+      <text class="title-md">{{ activityFilterId ? "活动口碑" : "参与者动态" }}</text>
       <text v-if="activityFilterId" class="subtle">仅展示当前活动关联心得</text>
     </view>
-    <view v-if="postsLoading" class="section-state">参与者动态加载中...</view>
+    <view v-if="postsLoading" class="section-state" role="status" aria-live="polite">参与者动态加载中…</view>
     <view v-else-if="postsError" class="section-state error-state">
       <text>{{ postsError }}</text>
       <view class="state-retry" @click="loadPosts">重新加载</view>
@@ -346,17 +351,27 @@ function goForum() {
   }
   uni.navigateTo({ url: withTenantCode("/pages/forum/index") });
 }
+function goSocial() { uni.navigateTo({ url: withTenantCode("/pages/community/social") }); }
 function goPost(post: CommunityPost) { uni.navigateTo({ url: withTenantCode(`/pages/community/detail?id=${post.id}`) }); }
 </script>
 
 <style scoped>
-.page-header { padding: 20rpx 0 16rpx; }
+.container{padding:24rpx 28rpx;background:var(--app-page-bg)}
+.page-header { padding: 20rpx 0 24rpx; }
 .ambassador-card {
-  background: linear-gradient(135deg, #C43D3D, #A52A2A);
-  border-radius: 20rpx;
+  display:grid;
+  gap:6rpx;
+  background: #fff;
+  border:1rpx solid var(--app-border);
+  border-radius: 16rpx;
   padding: 24rpx;
   margin-bottom: 24rpx;
 }
+.support-title{color:var(--app-text);font-size:28rpx;font-weight:800}.support-copy{color:var(--app-text-muted);font-size:24rpx}
+.publish-card,.forum-entry-card{border:1rpx solid var(--app-border)!important;border-radius:16rpx!important;background:#fff!important;box-shadow:none!important}
+.social-entry{display:flex;align-items:center;justify-content:space-between;gap:20rpx;margin-bottom:24rpx;padding:28rpx;border:1rpx solid #cfe5d8;border-radius:16rpx;background:#eaf7f1}.social-entry>view:first-child{display:grid;gap:6rpx}.social-eyebrow{color:#0f766e;font-size:21rpx;font-weight:850}.social-action{flex:none;padding:15rpx 20rpx;border-radius:12rpx;background:#16252d;color:#fff;font-size:23rpx;font-weight:850}
+.page-subtitle{display:block;margin-top:6rpx;color:#667085;font-size:24rpx;line-height:1.5}
+.activity-card,.checkin-card,.post-card{border-color:var(--app-border)!important;border-radius:16rpx!important;box-shadow:none!important}
 .section-title { margin-bottom: 16rpx; }
 .post-section-title { display:grid; gap:4rpx; }
 .activity-card {

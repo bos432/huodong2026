@@ -14,24 +14,42 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   box-sizing: border-box;
 }
 
+button,
+[role="button"],
+[role="tab"] {
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+}
+
+button:focus-visible,
+[role="button"]:focus-visible,
+[role="tab"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible {
+  outline: 3rpx solid rgba(15, 118, 110, 0.38);
+  outline-offset: 3rpx;
+}
+
 /* ===== 城市文化活动设计系统 ===== */
 /* 背景暖白 #F4F8F7  主色青绿 #0F766E  提示色珊瑚 #C35240 */
 /* 主文字 #173F3A  次要文字 #54716C  浅色文字 #718A85 */
 :root {
-  --app-page-bg: #F4F8F7;
+  --app-page-bg: #F5F7F8;
   --app-surface: #FFFFFF;
-  --app-surface-muted: #EDF7F2;
-  --app-text: #173F3A;
-  --app-text-muted: #54716C;
-  --app-text-subtle: #718A85;
+  --app-surface-muted: #F0F4F3;
+  --app-text: #16252D;
+  --app-text-muted: #52636B;
+  --app-text-subtle: #78878D;
   --app-primary: #0F766E;
-  --app-primary-soft: #DFF5E8;
-  --app-price: #C35240;
-  --app-radius: 8rpx;
-  --app-space-1: 8rpx;
-  --app-space-2: 12rpx;
-  --app-space-3: 16rpx;
-  --app-space-4: 24rpx;
+  --app-primary-soft: #EAF7F1;
+  --app-action: #16252D;
+  --app-price: #D85C4A;
+  --app-border: #E3E9E8;
+  --app-radius: 16rpx;
+  --app-space-1: 16rpx;
+  --app-space-2: 24rpx;
+  --app-space-3: 32rpx;
+  --app-space-4: 48rpx;
   --app-font-page-title: 44rpx;
   --app-font-card-title: 34rpx;
   --app-font-body: 30rpx;
@@ -39,16 +57,17 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   --app-font-caption: 22rpx;
   --app-motion-fast: 180ms;
   --app-motion-standard: 280ms;
+  --app-motion-ease: cubic-bezier(.2, .7, .2, 1);
 }
 
 .container {
   min-height: 100vh;
   padding: 24rpx 32rpx;
-  background: var(--page-bg-layer, #F4F8F7);
+  background: var(--page-bg-layer, #F5F7F8);
   background-size: var(--page-bg-size, cover);
   background-position: var(--page-bg-position, center top);
-  background-attachment: fixed;
-  color: var(--text-color, #173F3A);
+  background-attachment: scroll;
+  color: var(--text-color, #16252D);
 }
 
 .has-custom-nav {
@@ -58,11 +77,11 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 /* ===== 卡片 ===== */
 .card {
   background: var(--card-bg, #FFFFFF);
-  border: 1rpx solid rgba(15, 118, 110, 0.1);
-  border-radius: 14rpx;
+  border: 1rpx solid var(--app-border);
+  border-radius: var(--app-radius);
   padding: 24rpx;
   margin-bottom: 24rpx;
-  box-shadow: 0 8rpx 22rpx rgba(20, 72, 64, 0.05);
+  box-shadow: none;
 }
 
 /* ===== 布局 ===== */
@@ -80,10 +99,10 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 }
 
 /* ===== 文字 ===== */
-.title-xxl { font-size: 48rpx; font-weight: 700; color: #173F3A; line-height: 1.3; }
-.title-xl { font-size: var(--app-font-page-title); font-weight: 700; color: #173F3A; }
-.title-lg { font-size: var(--app-font-card-title); font-weight: 700; color: #173F3A; }
-.title-md { font-size: 32rpx; font-weight: 600; color: #173F3A; }
+.title-xxl { font-size: 48rpx; font-weight: 800; color: var(--app-text); line-height: 1.3; }
+.title-xl { font-size: var(--app-font-page-title); font-weight: 800; color: var(--app-text); }
+.title-lg { font-size: var(--app-font-card-title); font-weight: 800; color: var(--app-text); }
+.title-md { font-size: 32rpx; font-weight: 750; color: var(--app-text); }
 .body-text { font-size: var(--app-font-body); color: #54716C; line-height: 1.6; }
 .subtle { color: #718A85; font-size: var(--app-font-helper); }
 .price { font-size: 36rpx; font-weight: 700; color: #C35240; }
@@ -92,8 +111,8 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 /* ===== 按钮 ===== */
 .button {
   height: 88rpx;
-  border-radius: 10rpx;
-  background: #0F766E;
+  border-radius: var(--app-radius);
+  background: var(--app-action);
   color: #FFFFFF;
   display: flex;
   align-items: center;
@@ -103,7 +122,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   border: none;
   transition: opacity 0.2s;
 }
-.button:active { opacity: 0.8; }
+.button:active { opacity: 0.86; transform: translateY(1rpx) scale(.99); }
 .button.secondary {
   background: transparent;
   color: #0F766E;
@@ -115,7 +134,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   border: none;
 }
 .button.sm { height: 64rpx; font-size: 26rpx; border-radius: 8rpx; }
-.button-lg { height: 96rpx; font-size: 34rpx; border-radius: 10rpx; }
+.button-lg { height: 96rpx; font-size: 34rpx; border-radius: var(--app-radius); }
 .button.block { width: 100%; }
 .button.disabled { opacity: 0.5; pointer-events: none; }
 
@@ -137,14 +156,15 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 .input {
   height: 80rpx;
   border: 1px solid #D9EBE6;
-  border-radius: 10rpx;
+  border-radius: var(--app-radius);
   padding: 0 24rpx;
-  background: #F7FBFA;
+  background: #FFFFFF;
   color: #173F3A;
   font-size: 28rpx;
   outline: none;
 }
 .input:focus { border-color: #0F766E; }
+.input:focus-visible { outline: 3rpx solid rgba(15, 118, 110, 0.32); outline-offset: 3rpx; }
 
 .textarea {
   min-height: 140rpx;
@@ -157,6 +177,7 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
   outline: none;
 }
 .textarea:focus { border-color: #0F766E; }
+.textarea:focus-visible { outline: 3rpx solid rgba(15, 118, 110, 0.32); outline-offset: 3rpx; }
 
 /* ===== 底部导航 ===== */
 .custom-tabbar {
@@ -383,15 +404,15 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 }
 
 .app-enter {
-  animation: app-fade-up 280ms cubic-bezier(.2, .7, .2, 1) both;
+  animation: app-fade-up var(--motion-duration, 280ms) var(--app-motion-ease) var(--motion-delay, 0ms) both;
 }
 
 .app-enter-soft {
-  animation: app-fade-in 220ms ease-out both;
+  animation: app-fade-in var(--motion-duration, 220ms) ease-out var(--motion-delay, 0ms) both;
 }
 
 .app-stagger {
-  animation: app-fade-up 300ms cubic-bezier(.2, .7, .2, 1) both;
+  animation: app-fade-up var(--motion-duration, 300ms) var(--app-motion-ease) var(--motion-delay, 0ms) both;
   /* WXSS does not support multiplication inside calc(). Pages pass a complete
      duration through --motion-delay so the same stagger remains portable. */
   animation-delay: var(--motion-delay, 0ms);
@@ -413,5 +434,29 @@ view, text, image, button, input, textarea, scroll-view, swiper, swiper-item, na
 }
 
 .app-sheet-enter {
-  animation: app-sheet-rise 240ms cubic-bezier(.2, .7, .2, 1) both;
+  animation: app-sheet-rise var(--motion-duration, 240ms) var(--app-motion-ease) var(--motion-delay, 0ms) both;
+}
+
+.motion-reduced { animation: none !important; transition: none !important; }
+
+.app-skeleton {
+  min-height: 24rpx;
+  border-radius: var(--app-radius);
+  background: linear-gradient(90deg, rgba(217, 235, 230, .55), rgba(255, 255, 255, .9), rgba(217, 235, 230, .55));
+  background-size: 200% 100%;
+  animation: app-skeleton-shimmer 1.3s linear infinite;
+}
+
+@keyframes app-skeleton-shimmer {
+  from { background-position: 200% 0; }
+  to { background-position: -200% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-enter,
+  .app-enter-soft,
+  .app-stagger,
+  .app-media-motion,
+  .app-sheet-enter,
+  .app-skeleton { animation: none !important; transition: none !important; }
 }

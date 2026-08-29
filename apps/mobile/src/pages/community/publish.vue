@@ -186,7 +186,9 @@ async function chooseImages() {
   if (!count) return;
   uploading.value = true;
   try {
-    const res = await new Promise<UniApp.ChooseImageSuccessCallbackResult>((resolve, reject) => uni.chooseImage({ count, sizeType: ["compressed"], sourceType: ["album", "camera"], success: resolve, fail: reject }));
+    const chooser = new Promise<UniApp.ChooseImageSuccessCallbackResult>((resolve, reject) => uni.chooseImage({ count, sizeType: ["compressed"], sourceType: ["album", "camera"], success: resolve, fail: reject }));
+    const timeout = new Promise<never>((_, reject) => setTimeout(() => reject(new Error("图片选择超时，请重试")), 15_000));
+    const res = await Promise.race([chooser, timeout]);
     const files = (res.tempFilePaths || []).slice(0, count);
     for (const filePath of files) {
       const uploaded = await uploadCommunityPostImage(filePath);
