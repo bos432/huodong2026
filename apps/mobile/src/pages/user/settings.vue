@@ -15,6 +15,8 @@
       <view v-if="featureGates.userContentSharing && featureGates.community" class="settings-item" role="button" tabindex="0" aria-label="我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="会员中心" @click="goMemberCenter" @keyup.enter="goMemberCenter" @keyup.space.prevent="goMemberCenter"><text>会员中心</text><text class="item-arrow">›</text></view>
       <view v-if="featureGates.userContentSharing && featureGates.community" class="settings-item" role="button" tabindex="0" aria-label="消息通知" @click="goNotifications" @keyup.enter="goNotifications" @keyup.space.prevent="goNotifications"><text>消息通知</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="用户协议" @click="goLegal('user-agreement')" @keyup.enter="goLegal('user-agreement')" @keyup.space.prevent="goLegal('user-agreement')"><text>用户协议</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="隐私政策" @click="goLegal('privacy-policy')" @keyup.enter="goLegal('privacy-policy')" @keyup.space.prevent="goLegal('privacy-policy')"><text>隐私政策</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="关于慢π" @click="showAbout" @keyup.enter="showAbout" @keyup.space.prevent="showAbout"><text>关于慢π</text><text class="item-arrow">{{ clientVersion }} ›</text></view>
     </view>
     <view class="logout-button" :class="{ disabled: activeAction }" role="button" tabindex="0" :aria-busy="activeAction === 'logout'" :aria-label="activeAction === 'logout' ? '正在确认退出登录' : '退出登录'" @click="logout" @keyup.enter="logout" @keyup.space.prevent="logout">{{ activeAction === "logout" ? "确认中..." : "退出登录" }}</view>
@@ -41,6 +43,7 @@ function goSecurity() { uni.navigateTo({ url:withTenantCode("/pages/user/securit
 function goCommunityPosts() { uni.navigateTo({ url:withTenantCode("/pages/user/community-posts") }); }
 function goMemberCenter() { uni.navigateTo({ url:withTenantCode("/pages/user/profile") }); }
 function goNotifications() { uni.navigateTo({ url:withTenantCode("/pages/user/community-social?tab=notifications") }); }
+function goLegal(page: "user-agreement" | "privacy-policy") { uni.navigateTo({ url:withTenantCode(`/pages/legal/${page}`) }); }
 function showAbout() {
   if (activeAction.value) return;
   activeAction.value = "about";

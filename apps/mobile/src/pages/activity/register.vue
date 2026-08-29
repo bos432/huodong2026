@@ -107,6 +107,10 @@ const seatsText = computed(() => {
 });
 const hasGroupQrCode = computed(() => Boolean(activity.value?.hasGroupQrCode));
 
+function openLegal(page: "user-agreement" | "privacy-policy") {
+  uni.navigateTo({ url: withTenantCode(`/pages/legal/${page}`) });
+}
+
 function isFilled(value: any) {
   if (Array.isArray(value)) return value.length > 0;
   return value !== undefined && value !== null && String(value).trim() !== "";
@@ -604,10 +608,10 @@ watch(couponCode, () => {
             <view class="remove-link" @click="removeCompanion(index)">删除</view>
           </view>
         </view>
-        <label v-if="activity.eligibilityRules?.requirePrivacyConsent" class="privacy-row">
+        <view v-if="activity.eligibilityRules?.requirePrivacyConsent" class="privacy-row">
           <checkbox :checked="privacyAccepted" @change="privacyAccepted = !privacyAccepted" />
-          <text>我已阅读并同意隐私政策，授权主办方仅用于本次报名与活动服务。</text>
-        </label>
+          <view class="privacy-copy">我已阅读并同意<text class="legal-link" role="button" tabindex="0" @click.stop="openLegal('user-agreement')">《用户协议》</text>和<text class="legal-link" role="button" tabindex="0" @click.stop="openLegal('privacy-policy')">《隐私政策》</text>，授权平台及主办方按约定处理本次报名信息。</view>
+        </view>
       </view>
       <view class="submit-bar" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || 'var(--card-bg, #fff)') }">
         <view class="submit-summary">
@@ -634,6 +638,8 @@ watch(couponCode, () => {
 .companion-row { display: grid; grid-template-columns: 1fr; gap: 12rpx; padding: 18rpx 0; border-bottom: 1px dashed var(--border-color, #eee); }
 .remove-link { color: #b42318; font-size: 24rpx; }
 .privacy-row { display: flex; gap: 12rpx; align-items: flex-start; margin-top: 24rpx; font-size: 24rpx; line-height: 1.6; color: var(--muted-color, #667085); }
+.privacy-copy { flex:1; min-width:0; }
+.legal-link { color:#0f766e; font-weight:700; }
 .datetime-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }
 .attachment-row { display: flex; align-items: center; gap: 16rpx; min-height: 72rpx; }
 .attachment-done { color: #067647; font-size: 24rpx; }

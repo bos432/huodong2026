@@ -148,6 +148,13 @@
       ]
     },
     {
+      "root": "pages/legal",
+      "pages": [
+        { "path": "user-agreement", "style": { "navigationBarTitleText": "用户协议" } },
+        { "path": "privacy-policy", "style": { "navigationBarTitleText": "隐私政策" } }
+      ]
+    },
+    {
       "root": "pages/partner",
       "pages": [
         { "path": "index", "style": { "navigationBarTitleText": "城市合伙人" } }
