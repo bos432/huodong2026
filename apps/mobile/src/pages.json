@@ -99,7 +99,7 @@
         { "path": "activity-reviews", "style": { "navigationBarTitleText": "我的评价" } },
         { "path": "frequent-registrants", "style": { "navigationBarTitleText": "常用报名人" } },
         { "path": "courses", "style": { "navigationBarTitleText": "我的内容" } },
-        { "path": "learning", "style": { "navigationBarTitleText": "浏览记录" } },
+        { "path": "learning", "style": { "navigationBarTitleText": "浏览足迹" } },
         { "path": "favorites", "style": { "navigationBarTitleText": "我的收藏" } },
         { "path": "community-posts", "style": { "navigationBarTitleText": "我的心得" } },
         { "path": "community-social", "style": { "navigationBarTitleText": "社区互动" } },

@@ -2401,6 +2401,62 @@ export class PublicService {
     }));
   }
 
+  async myActivityHistory(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const builder = this.activityViewLogs
+      .createQueryBuilder("viewLog")
+      .leftJoinAndSelect("viewLog.activity", "activity")
+      .leftJoinAndSelect("activity.category", "category")
+      .leftJoinAndSelect("activity.tenant", "activityTenant")
+      .where("viewLog.userId = :userId", { userId: user.id })
+      .andWhere("activity.status = :status", { status: ActivityStatus.Open })
+      .andWhere("(activity.tenantId IS NULL OR activityTenant.enabled = :tenantEnabled)", { tenantEnabled: true })
+      .orderBy("viewLog.createdAt", "DESC")
+      .addOrderBy("viewLog.id", "DESC")
+      .take(500);
+    if (tenant) builder.andWhere("(activity.tenantId = :tenantId OR activity.tenantId IS NULL)", { tenantId: tenant.id });
+
+    const rows = await builder.getMany();
+    const latestByActivity = new Map<number, ActivityViewLog>();
+    for (const row of rows) {
+      if (row.activity && !latestByActivity.has(row.activity.id)) latestByActivity.set(row.activity.id, row);
+    }
+
+    const endedActivityIds = Array.from(latestByActivity.values())
+      .filter((row) => new Date(row.activity.endTime).getTime() < Date.now())
+      .map((row) => row.activity.id);
+    const participatedActivityIds = new Set<number>();
+    if (endedActivityIds.length) {
+      const registrations = await this.registrations
+        .createQueryBuilder("registration")
+        .select("registration.activityId", "activityId")
+        .where("registration.userId = :userId", { userId: user.id })
+        .andWhere("registration.activityId IN (:...activityIds)", { activityIds: endedActivityIds })
+        .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
+        .getRawMany<{ activityId: string }>();
+      registrations.forEach((row) => participatedActivityIds.add(Number(row.activityId)));
+    }
+
+    return Array.from(latestByActivity.values())
+      .filter((row) => new Date(row.activity.endTime).getTime() >= Date.now() || participatedActivityIds.has(row.activity.id))
+      .slice(0, 100)
+      .map((row) => ({
+        id: row.id,
+        lastViewedAt: row.createdAt,
+        activity: {
+          id: row.activity.id,
+          title: row.activity.title,
+          coverUrl: row.activity.coverUrl,
+          startTime: row.activity.startTime,
+          endTime: row.activity.endTime,
+          location: row.activity.location,
+          price: row.activity.price,
+          status: new Date(row.activity.endTime).getTime() < Date.now() ? "ended" : "open",
+          category: row.activity.category ? { id: row.activity.category.id, name: row.activity.category.name } : null
+        }
+      }));
+  }
+
   private async myRegistrationsForTenant(userId: number, tenant: Tenant | null) {
     const builder = this.registrations
       .createQueryBuilder("registration")

@@ -367,6 +367,12 @@ export class PublicController {
     return this.service.myCourses(user, this.tenantContext(req, tenantCode));
   }
 
+  @Get("me/activity-history")
+  async myActivityHistory(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myActivityHistory(user, this.tenantContext(req, tenantCode));
+  }
+
   @Get("me/course-orders")
   async myCourseOrders(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);

@@ -719,6 +719,14 @@ describe("mobile client state consistency", () => {
     expect(learningHistory).toContain('from "../../tenant-load-guard"');
     expect(courseOrderConfirm).toContain("clientOrderKey.value = createClientOrderKey()");
     expect(courseOrderConfirm).toContain('const contextKey = `${token.tenantCode}:${id}`');
+    expect(learningHistory).toContain('request<any[]>("/public/me/activity-history")');
+    expect(learningHistory).toContain('error?.statusCode === 404');
+    expect(learningHistory).toContain('message.includes("Cannot GET /api/public/me/activity-history")');
+    expect(learningHistory).toContain("activeTab === 'activities'");
+    expect(publicController).toContain('Get("me/activity-history")');
+    expect(publicService).toContain("async myActivityHistory(user: User, context?: PublicTenantContext)");
+    expect(publicService).toContain('where("viewLog.userId = :userId", { userId: user.id })');
+    expect(publicService).toContain("RegistrationStatus.CheckedIn");
   });
 
   it("locks course order closing before confirmation and releases every dialog path", () => {

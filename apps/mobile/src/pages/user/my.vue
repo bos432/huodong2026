@@ -90,6 +90,13 @@
       <view class="member-shortcut app-press" role="button" tabindex="0" aria-label="查看优惠券" @click="goCoupons" @keyup.enter="goCoupons" @keyup.space.prevent="goCoupons"><text class="member-shortcut-kicker">可用权益</text><text class="member-shortcut-title">优惠券</text><text class="member-shortcut-copy">报名和商城下单时使用</text></view>
     </view>
 
+    <view class="history-entry app-enter app-press" style="animation-delay: 140ms" role="button" tabindex="0" aria-label="查看浏览足迹" @click="goBrowsingHistory" @keyup.enter="goBrowsingHistory" @keyup.space.prevent="goBrowsingHistory">
+      <view class="history-entry-icon">览</view>
+      <view class="history-entry-content"><text class="history-entry-title">浏览足迹</text><text class="history-entry-copy">查看最近浏览的活动和内容学习进度</text></view>
+      <text class="entry-arrow">›</text>
+    </view>
+
+
     <view class="profile-asset-grid app-enter" style="animation-delay: 144ms">
       <view class="asset-panel wallet-panel app-press" role="button" tabindex="0" aria-label="查看余额资产明细" @click="goWallet" @keyup.enter="goWallet" @keyup.space.prevent="goWallet"><text class="asset-label">余额资产</text><text class="asset-value">{{ walletBalanceText }}</text><text class="asset-action">查看明细</text></view>
       <view v-if="featureGates.charity" class="asset-panel charity-panel app-press" role="button" tabindex="0" aria-label="查看我的公益贡献" @click="goCharity" @keyup.enter="goCharity" @keyup.space.prevent="goCharity"><text class="asset-label">公益贡献</text><text class="asset-value">{{ charityAmountText }} 元</text><text class="asset-action">查看证书</text></view>
@@ -474,7 +481,7 @@ const defaultGridItems = [
   { icon:"评", label:"我的评价", page:"activityReviews" },
   { icon:"人", label:"常用报名人", page:"frequentRegistrants" },
   { icon:"学", label:"我的内容", page:"courses" },
-  { icon:"览", label:"浏览记录", page:"learning" },
+  { icon:"览", label:"浏览足迹", page:"learning" },
   { icon:"藏", label:"商城收藏", page:"mallFavorites" },
   { icon:"单", label:"商城订单", page:"mallOrders" },
   { icon:"服", label:"联系客服", page:"service" },
@@ -606,6 +613,7 @@ function goCharity() { goDecoratedLink("/pages/charity/index"); }
 function goAmbassador() { goDecoratedLink("/pages/ambassador/index"); }
 function goWallet() { navigateProtected("/pages/user/wallet"); }
 function goCoupons() { navigateProtected("/pages/mall/coupons"); }
+function goBrowsingHistory() { navigateProtected("/pages/user/learning"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
 function goCommunitySocial() { navigateProtected("/pages/user/community-social"); }
 function goContentAppeals() { navigateProtected("/pages/user/content-appeals"); }
@@ -1085,4 +1093,5 @@ function logoutUser() {
 
 /* Member centre uses the same restrained discovery palette as activity pages. */
 .profile-page { background:#f7f9f8; }.member-card { box-shadow:0 10rpx 26rpx rgba(20,98,58,.12); }.member-stat { border-radius:8rpx; }.profile-section { border-color:#e2eae6; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.profile-link-list { border-color:#e2eae6; border-radius:8rpx; }.profile-link-row { border-color:#e7eeea; }.profile-section-link { border-radius:6rpx; background:#eafbf1; color:#08753f; }.wallet-panel { background:#143a27; }.charity-panel { background:#fff2db; }.admin-entry { background:#effbf4; }.order-badge { background:#dc6900; }.logout-card { border-radius:8rpx; }
+.history-entry{display:flex;align-items:center;gap:20rpx;margin:0 28rpx 18rpx;padding:22rpx 24rpx;border:1rpx solid var(--app-border);border-radius:16rpx;background:#fff}.history-entry-icon{width:68rpx;height:68rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto;border-radius:50%;background:#eaf7f1;color:#08753f;font-size:27rpx;font-weight:900}.history-entry-content{min-width:0;flex:1}.history-entry-title,.history-entry-copy{display:block}.history-entry-title{color:var(--app-text);font-size:28rpx;font-weight:850}.history-entry-copy{margin-top:6rpx;color:var(--app-text-muted);font-size:23rpx;line-height:1.45}
 </style>
