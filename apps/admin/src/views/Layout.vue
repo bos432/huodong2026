@@ -146,8 +146,16 @@ function scopedQueryForTenant() {
   return nextQuery;
 }
 
-function syncSelectedTenantToRoute() {
+function syncSelectedTenantToRoute(preferRoute = true) {
   if (!isPlatformAdmin() || !tenantScopedRoutePaths.has(route.path)) return;
+  if (preferRoute && route.query.tenantId !== undefined) {
+    const requestedTenantId = typeof route.query.tenantId === 'string' ? Number(route.query.tenantId) : Number.NaN;
+    if (!Number.isSafeInteger(requestedTenantId) || requestedTenantId <= 0) return;
+    selectedPlatformTenantId.value = requestedTenantId;
+    localStorage.setItem('admin_selected_tenant_id', String(requestedTenantId));
+    if (!platformTenants.value.some(tenant => tenant.id === requestedTenantId)) void loadPlatformTenants();
+    return;
+  }
   const nextTenantId = selectedPlatformTenantId.value ? String(selectedPlatformTenantId.value) : undefined;
   const currentTenantId = typeof route.query.tenantId === "string" ? route.query.tenantId : undefined;
   if (currentTenantId === nextTenantId) return;
@@ -157,7 +165,7 @@ function syncSelectedTenantToRoute() {
 function handleSelectedTenantChanged() {
   if (selectedPlatformTenantId.value) localStorage.setItem("admin_selected_tenant_id", String(selectedPlatformTenantId.value));
   else localStorage.removeItem("admin_selected_tenant_id");
-  syncSelectedTenantToRoute();
+  syncSelectedTenantToRoute(false);
 }
 
 function goTenantQuickLink(path: string) {
@@ -248,7 +256,7 @@ onBeforeUnmount(() => {
 });
 
 watch(
-  () => route.path,
+  () => [route.path, route.query.tenantId],
   async () => {
     mobileMenuVisible.value = false;
     syncSelectedTenantToRoute();

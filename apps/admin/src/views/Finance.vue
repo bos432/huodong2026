@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Check, Close, Download, Refresh } from "@element-plus/icons-vue";
 import { api, downloadFile } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { isPlatformAdmin } from "../permissions";
 
 const route = useRoute();
@@ -418,8 +419,7 @@ function alertSeverityText(level: string) { return ({ critical: "紧急", high: 
 function alertStatusText(status: string) { return ({ open: "待处理", acknowledged: "跟进中", resolved: "已解决" } as any)[status] || status; }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function money(value?: string | number) {

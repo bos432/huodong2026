@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref, watch } from "vue";
 import { ElMessage } from "element-plus";
 import { useRoute } from "vue-router";
 import { api, downloadFile } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { hasPermission, isPlatformScopedAdmin } from "../permissions";
 
 const rows = ref<any[]>([]);
@@ -105,8 +106,7 @@ async function loadTenants() {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function renderAction(action: string) {

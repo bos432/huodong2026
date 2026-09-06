@@ -219,6 +219,8 @@ watch(
     <el-empty v-if="!selectedId" description="暂无活动" />
     <template v-else-if="data">
       <el-alert v-if="data.isHistorical" class="history-alert" type="info" show-icon :closable="false" :title="`正在查看不可变历史版本 v${data.version.versionNo}，生成于 ${data.version.createdAt}`" />
+      <el-alert v-if="data.legacyDefinition" type="warning" :closable="false" title="历史版本使用旧统计口径；保留供追溯，请切换实时数据查看新口径" />
+      <el-alert v-if="data.reportingScope === 'test'" type="warning" :closable="false" title="当前为测试活动复盘，不计正式经营业绩" />
       <div class="summary" v-loading="loading">
         <div class="hero-card">
           <span>活动</span>
@@ -237,13 +239,13 @@ watch(
           <div class="funnel-row"><span>浏览</span><strong>{{ data.funnel.viewCount }}</strong></div>
           <div class="funnel-row"><span>分享访问</span><strong>{{ data.funnel.shareVisitCount }}</strong></div>
           <div class="funnel-row"><span>报名</span><strong>{{ data.funnel.registrationCount }}</strong></div>
-          <div class="funnel-row"><span>付款</span><strong>{{ data.funnel.paidCount }}</strong></div>
+          <div class="funnel-row"><span>订单确认（含免费）</span><strong>{{ data.funnel.paidCount }}</strong></div>
           <div class="funnel-row"><span>报名成功</span><strong>{{ data.funnel.approvedCount }}</strong></div>
           <div class="funnel-row"><span>签到</span><strong>{{ data.funnel.checkInCount }}</strong></div>
           <div class="funnel-row"><span>评价</span><strong>{{ data.funnel.reviewCount }}</strong></div>
           <div class="funnel-row"><span>取消</span><strong>{{ data.funnel.cancelCount }}</strong></div>
           <div class="funnel-row"><span>退款</span><strong>{{ data.funnel.refundCount }}</strong></div>
-          <div class="funnel-row"><span>净收入</span><strong>¥{{ (Number(data.funnel.netAmountFen || 0) / 100).toFixed(2) }}</strong></div>
+          <div class="funnel-row"><span>净票款（非利润）</span><strong>¥{{ (Number(data.funnel.netAmountFen || 0) / 100).toFixed(2) }}</strong></div>
         </div>
 
         <div class="table-card">

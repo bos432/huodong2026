@@ -15,6 +15,8 @@ const pageError = ref("");
 let loadSerial = 0;
 const session = computed(() => getMobileAdminSession());
 const canWrite = computed(() => Boolean(bootstrap.value?.permissions?.canWriteActivities));
+const canViewDashboard = computed(() => Boolean(bootstrap.value?.admin?.permissions?.includes('dashboard.view')));
+const canReviewRegistrations = computed(() => Boolean(bootstrap.value?.permissions?.canReviewRegistrations));
 const canViewRegistrations = computed(() => Boolean(bootstrap.value?.permissions?.canViewRegistrations));
 const canViewOrders = computed(() => Boolean(bootstrap.value?.permissions?.canViewOrders));
 const canCheckIn = computed(() => Boolean(bootstrap.value?.permissions?.canCheckIn));
@@ -71,12 +73,14 @@ async function load() {
   pageError.value = "";
   dashboardError.value = "";
   activitiesError.value = "";
+  dashboard.value = null;
+  activities.value = [];
   try {
     const boot = await mobileAdminRequest<any>("/admin/mobile/bootstrap");
     if (serial !== loadSerial) return;
     bootstrap.value = boot;
     const [dashResult, listResult] = await Promise.allSettled([
-      mobileAdminRequest<any>("/admin/dashboard"),
+      boot.admin?.permissions?.includes('dashboard.view') ? mobileAdminRequest<any>("/admin/dashboard") : Promise.resolve(null),
       mobileAdminRequest<any>("/admin/activities?page=1&pageSize=5")
     ]);
     if (serial !== loadSerial) return;
@@ -114,7 +118,7 @@ onShow(load);
     <view class="top">
       <view class="top-glow"></view>
       <view>
-        <view class="eyebrow">MERCHANT CONSOLE</view>
+        <view class="eyebrow">商家工作台</view>
         <view class="hello">手机管理</view>
         <view class="sub">{{ bootstrap?.admin?.username || session?.role }} · {{ bootstrap?.admin?.tenant?.name || "平台管理员" }}</view>
       </view>
@@ -124,7 +128,7 @@ onShow(load);
     <view v-if="pageError" class="error-panel" role="alert"><text>{{ pageError }}</text><view class="retry" @click="load">重试</view></view>
     <view v-if="loading && !bootstrap" class="panel">加载中...</view>
     <template v-else>
-      <view class="stats">
+      <view v-if="canViewDashboard" class="stats">
         <view><text>{{ dashboard ? dashboard?.totals?.activityCount || 0 : "--" }}</text><text>活动总数</text></view>
         <view><text>{{ dashboard ? dashboard?.todos?.pendingActivityCount || 0 : "--" }}</text><text>待审活动</text></view>
         <view><text>{{ dashboard ? dashboard?.totals?.registrationCount || 0 : "--" }}</text><text>报名累计</text></view>
@@ -133,9 +137,9 @@ onShow(load);
       <view v-if="dashboardError" class="error-panel"><text>{{ dashboardError }}</text><view class="retry" @click="load">重试</view></view>
 
       <view class="actions">
-        <view class="action primary" :class="{ disabled: !canWrite }" @click="canWrite && goCreate()">发布活动</view>
+        <view v-if="canWrite" class="action primary" @click="goCreate">发布活动</view>
         <view class="action" @click="goList">活动管理</view>
-        <view v-if="canViewRegistrations" class="action" @click="goRegistrations">报名审核</view>
+        <view v-if="canViewRegistrations" class="action" @click="goRegistrations">{{ canReviewRegistrations ? '报名审核' : '报名查询' }}</view>
         <view v-if="canCheckIn" class="action" @click="goCheckIn">签到核销</view>
         <view v-if="canViewOrders" class="action" @click="goOrders">订单查看</view>
         <view v-if="canViewAnalytics" class="action" @click="goAnalytics">经营统计</view>

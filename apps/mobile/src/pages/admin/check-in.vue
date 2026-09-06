@@ -3,6 +3,7 @@ import { onBeforeUnmount, ref } from "vue";
 import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import { formatShanghaiDateTime } from '../../tenant-load-guard';
 
 const code = ref("");
 const remark = ref("");
@@ -181,6 +182,7 @@ async function submit() {
   }
   submitting.value = true;
   operationError.value = "";
+  result.value = null;
   try {
     result.value = await mobileAdminRequest("/admin/check-ins", { method: "POST", data: { code: value, remark: remark.value.trim() || undefined, expectedActivityId: selectedActivityId.value || undefined, pointId: selectedPointId.value || undefined } });
     uni.showToast({ title: "核销成功", icon: "success" });
@@ -189,8 +191,9 @@ async function submit() {
     await loadOverview();
   } catch (err: any) {
     try {
-      if (err?.statusCode === undefined && queueOffline(value)) { uni.showToast({ title: "已离线记录，联网后请同步", icon: "none" }); code.value = ""; }
-      else operationError.value = `${err.message || "请核对签到码"}。该票不在有效离线清单中。`;
+      if (err?.statusCode !== undefined) operationError.value = err.message || "核销失败，请核对签到码";
+      else if (queueOffline(value)) { uni.showToast({ title: "已离线记录，联网后请同步", icon: "none" }); code.value = ""; }
+      else operationError.value = `${err.message || "网络不可用"}。该票不在有效离线清单中。`;
     } catch (offlineError: any) { operationError.value = offlineError.message || "离线核销失败"; }
   } finally {
     submitting.value = false;
@@ -198,7 +201,7 @@ async function submit() {
 }
 
 function formatTime(value?: string) {
-  return value ? value.replace("T", " ").slice(0, 16) : "-";
+  return formatShanghaiDateTime(value);
 }
 
 function activityTime(row: any) {

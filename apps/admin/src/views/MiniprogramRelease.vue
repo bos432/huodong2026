@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { canAccess } from "../permissions";
 
 type ReleaseSetting = {
@@ -249,8 +250,7 @@ async function runAction(action: "upload") {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return String(value).replace("T", " ").slice(0, 19);
+  return formatShanghaiDateTime(value, '-', true);
 }
 
 function logDetail(row: ReleaseLog) {

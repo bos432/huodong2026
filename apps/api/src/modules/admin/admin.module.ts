@@ -1,4 +1,5 @@
 import { Module } from "@nestjs/common";
+import { AiOperationService } from './ai-operation.service';
 import { JwtModule } from "@nestjs/jwt";
 import { PassportModule } from "@nestjs/passport";
 import { ConfigModule, ConfigService } from "@nestjs/config";
@@ -141,7 +142,7 @@ import { CredentialTemplateModule } from "../credential-templates/credential-tem
     })
   ],
   controllers: [AdminController],
-  providers: [AdminService, MiniprogramReleaseService, FundRiskMonitorService, JwtStrategy, RolesGuard, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
+  providers: [AdminService, AiOperationService, MiniprogramReleaseService, FundRiskMonitorService, JwtStrategy, RolesGuard, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
   exports: [AdminService]
 })
 export class AdminModule {}

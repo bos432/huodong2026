@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { CircleClose, Refresh, RefreshRight, Search, VideoPlay } from "@element-plus/icons-vue";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { hasPermission, isPlatformAdmin } from "../permissions";
 
 type BusinessJob = {
@@ -48,7 +49,7 @@ function safeJson(value: unknown) {
   if (value == null) return "-";
   try { return JSON.stringify(value, null, 2); } catch { return "[无法展示]"; }
 }
-function formatTime(value?: string | null) { return value ? value.replace("T", " ").slice(0, 19) : "-"; }
+function formatTime(value?: string | null) { return formatShanghaiDateTime(value, '-', true); }
 function search() { filters.page = 1; load(); }
 function filterSnapshot() {
   return { status: filters.status, type: filters.type.trim(), keyword: filters.keyword.trim(), page: filters.page, pageSize: filters.pageSize };

@@ -83,6 +83,8 @@ onMounted(async () => {
 
 <template>
   <div class="page">
+    <el-alert type="info" :closable="false" title="订单确认包含免费单；付费复购仅计仍有净支付的订单。指定测试活动只展示测试口径，不计入整体增长分析。" />
+    <el-alert v-if="data?.reportingScope === 'test'" type="warning" :closable="false" title="当前为测试活动漏斗" />
     <div class="toolbar">
       <h2>增长分析</h2>
       <div class="toolbar-actions">
@@ -101,7 +103,7 @@ onMounted(async () => {
           <div class="metric-grid" v-loading="growthLoading">
             <div class="metric"><span>浏览</span><strong>{{ growth.funnel.view }}</strong><small>报名率 {{ growth.rates.signupRate }}%</small></div>
             <div class="metric"><span>报名</span><strong>{{ growth.funnel.register }}</strong><small>支付率 {{ growth.rates.paymentRate }}%</small></div>
-            <div class="metric"><span>支付</span><strong>{{ growth.funnel.pay }}</strong><small>退款率 {{ growth.rates.refundRate }}%</small></div>
+            <div class="metric"><span>订单确认</span><strong>{{ growth.funnel.pay }}</strong><small>含免费确认 · 退款率 {{ growth.rates.refundRate }}%</small></div>
             <div class="metric"><span>核销</span><strong>{{ growth.funnel.checkIn }}</strong><small>核销率 {{ growth.rates.checkInRate }}%</small></div>
             <div class="metric"><span>7 日留存</span><strong>{{ growth.cohort.retention7Rate }}%</strong><small>{{ growth.cohort.retained7 }} / {{ growth.cohort.retention7EligibleUsers ?? growth.cohort.users }}</small></div>
             <div class="metric"><span>30 日留存</span><strong>{{ growth.cohort.retention30Rate }}%</strong><small>{{ growth.cohort.retained30 }} / {{ growth.cohort.retention30EligibleUsers ?? growth.cohort.users }}</small></div>
@@ -125,7 +127,7 @@ onMounted(async () => {
         <div class="metric"><span>分享访问</span><strong>{{ data.funnel.shareVisitCount }}</strong></div>
         <div class="metric"><span>邀请码</span><strong>{{ data.funnel.inviteCount }}</strong></div>
         <div class="metric"><span>报名</span><strong>{{ data.funnel.registrationCount }}</strong></div>
-        <div class="metric"><span>付款</span><strong>{{ data.funnel.paidCount }}</strong></div>
+        <div class="metric"><span>订单确认（含免费）</span><strong>{{ data.funnel.paidCount }}</strong></div>
         <div class="metric"><span>成功</span><strong>{{ data.funnel.approvedCount }}</strong></div>
         <div class="metric"><span>签到</span><strong>{{ data.funnel.checkInCount }}</strong></div>
         <div class="metric"><span>评价</span><strong>{{ data.funnel.reviewCount }}</strong></div>

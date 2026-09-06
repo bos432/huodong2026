@@ -32,8 +32,11 @@ export function h5RoutePreviewUrl(tenantCode?: string | null, route = "/pages/in
   return `${base}#${normalizedPath}${query ? `?${query}` : ""}`;
 }
 
-export function activityH5PreviewUrl(activityId: number | string, tenantCode?: string | null) {
-  return h5RoutePreviewUrl(tenantCode, `/pages/activity/detail?id=${encodeURIComponent(String(activityId))}`);
+export function activityH5PreviewUrl(activityId: number | string, tenantCode?: string | null, attribution: { channelCode?: string; source?: string } = {}) {
+  const query = new URLSearchParams({ id: String(activityId) });
+  if (attribution.channelCode) query.set('channelCode', attribution.channelCode);
+  if (attribution.source) query.set('source', attribution.source);
+  return h5RoutePreviewUrl(tenantCode, `/pages/activity/detail?${query.toString()}`);
 }
 
 export function openH5Preview(tenantCode?: string | null) {

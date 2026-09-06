@@ -33,8 +33,8 @@ onShow(() => { if (getMobileAdminSession()) uni.redirectTo({ url: "/pages/admin/
   <view class="admin-login">
     <view class="hero">
       <view class="eyebrow">手机管理端</view>
-      <view class="title">活动发布</view>
-      <view class="copy">使用后台账号登录，在手机上创建、编辑和发布活动。</view>
+      <view class="title">管理端登录</view>
+      <view class="copy">商家管理员、运营、财务与签到员</view>
     </view>
     <view class="form">
       <view class="label">账号</view>

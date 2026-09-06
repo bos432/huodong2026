@@ -9,6 +9,7 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { motionStyle } from "../../motion/platform-adapter";
+import { activityPageAttribution } from '../../activity-attribution';
 
 const activity = ref<any>();
 const operationSetting = ref<any>();
@@ -86,6 +87,9 @@ const requiredTotal = computed(() => requiredFields.value.length);
 const formProgressText = computed(() => requiredTotal.value ? `必填 ${completedRequiredCount.value}/${requiredTotal.value}` : "无必填项");
 const selectedTicketName = computed(() => selectedTicket.value?.name || "标准报名");
 const payableText = computed(() => payableNumber.value > 0 ? `￥${currentPayable.value}` : "免费");
+const refundPolicyHint = computed(() => quote.value?.refundPolicy?.enabled
+  ? `按当前公益退款规则，退款时预计保留公益金￥${quote.value.refundPolicy.charityAmount}，预计可退￥${quote.value.refundPolicy.refundAmount}。具体以退款审核结果为准。`
+  : "");
 const registrationStep = computed(() => {
   if (!selectedTicketTypeId.value && hasTicketTypes.value) return 1;
   if (requiredTotal.value && completedRequiredCount.value < requiredTotal.value) return 2;
@@ -244,7 +248,7 @@ function submit() {
     uni.showToast({ title: "暂无可用支付方式，请联系主办方", icon: "none" });
     return;
   }
-  const content = `${selectedTicketName.value}，应付 ${payableText.value}。${paymentHint.value}`;
+  const content = `${selectedTicketName.value}，应付 ${payableText.value}。${paymentHint.value}${refundPolicyHint.value}`;
   confirming.value = true;
   uni.showModal({
     title: activity.value.remainingSeats <= 0 ? "确认加入候补" : "确认提交报名",
@@ -402,9 +406,10 @@ async function loadPage() {
     const pages = getCurrentPages();
     const options = (pages[pages.length - 1] as any).options || {};
     const id = Number(options.id);
-    channelCode.value = options.channelCode || "";
-    source.value = options.source || "";
-    inviteCode.value = options.inviteCode || "";
+    const attribution = activityPageAttribution(options);
+    channelCode.value = attribution.channelCode;
+    source.value = attribution.source;
+    inviteCode.value = attribution.inviteCode;
     userId.value = await ensureUser();
     const query = [
       channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
@@ -549,6 +554,7 @@ watch(couponCode, () => {
           <view><text>总优惠</text><text>-￥{{ quote?.discountAmount || "0.00" }}</text></view>
           <view class="payable"><text>应付</text><text>{{ Number(currentPayable) > 0 ? `￥${currentPayable}` : "免费" }}</text></view>
         </view>
+        <view v-if="refundPolicyHint" class="notice" role="status"><view class="discount-title">退款须知</view>{{ refundPolicyHint }}</view>
         <view v-if="payableNumber > 0" class="payment-methods">
           <view class="discount-title">支付方式</view>
           <view class="method-grid">
@@ -609,8 +615,13 @@ watch(couponCode, () => {
           </view>
         </view>
         <view v-if="activity.eligibilityRules?.requirePrivacyConsent" class="privacy-row">
-          <checkbox :checked="privacyAccepted" @change="privacyAccepted = !privacyAccepted" />
-          <view class="privacy-copy">我已阅读并同意<text class="legal-link" role="button" tabindex="0" @click.stop="openLegal('user-agreement')">《用户协议》</text>和<text class="legal-link" role="button" tabindex="0" @click.stop="openLegal('privacy-policy')">《隐私政策》</text>，授权平台及主办方按约定处理本次报名信息。</view>
+          <!-- #ifdef H5 -->
+          <component :is="'input'" class="privacy-checkbox" type="checkbox" :checked="privacyAccepted" aria-label="同意用户协议和隐私政策" @change="privacyAccepted = $event.target.checked" />
+          <!-- #endif -->
+          <!-- #ifndef H5 -->
+          <checkbox-group @change="privacyAccepted = $event.detail.value.includes('accepted')"><checkbox value="accepted" :checked="privacyAccepted" aria-label="同意用户协议和隐私政策" /></checkbox-group>
+          <!-- #endif -->
+          <view class="privacy-copy"><text @click="privacyAccepted = !privacyAccepted">我已阅读并同意</text><text class="legal-link" role="button" tabindex="0" @click.stop="openLegal('user-agreement')" @keyup.enter="openLegal('user-agreement')" @keyup.space.prevent="openLegal('user-agreement')">《用户协议》</text>和<text class="legal-link" role="button" tabindex="0" @click.stop="openLegal('privacy-policy')" @keyup.enter="openLegal('privacy-policy')" @keyup.space.prevent="openLegal('privacy-policy')">《隐私政策》</text>，授权平台及主办方按约定处理本次报名信息。</view>
         </view>
       </view>
       <view class="submit-bar" :style="{ background: String(innerPageLayout.actionBarBackgroundColor || 'var(--card-bg, #fff)') }">
@@ -638,6 +649,8 @@ watch(couponCode, () => {
 .companion-row { display: grid; grid-template-columns: 1fr; gap: 12rpx; padding: 18rpx 0; border-bottom: 1px dashed var(--border-color, #eee); }
 .remove-link { color: #b42318; font-size: 24rpx; }
 .privacy-row { display: flex; gap: 12rpx; align-items: flex-start; margin-top: 24rpx; font-size: 24rpx; line-height: 1.6; color: var(--muted-color, #667085); }
+.privacy-checkbox { width:22px; height:22px; margin:2px 0; flex:none; accent-color:#0f766e; }
+.privacy-checkbox:focus-visible { outline:2px solid #0f766e; outline-offset:3px; }
 .privacy-copy { flex:1; min-width:0; }
 .legal-link { color:#0f766e; font-weight:700; }
 .datetime-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12rpx; }

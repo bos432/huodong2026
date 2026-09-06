@@ -2,6 +2,7 @@
 import { computed, onMounted, ref } from "vue";
 import { ElMessage } from "element-plus";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 
 type CheckStatus = "ok" | "warning" | "error";
 
@@ -102,8 +103,7 @@ async function load() {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 19);
+  return formatShanghaiDateTime(value, '-', true);
 }
 
 function statusLabel(row: ConfigCheck) {

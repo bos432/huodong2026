@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { testActivityBookingMessage } from '../../shared/activity-test-policy';
 import { InjectRepository } from "@nestjs/typeorm";
 import ExcelJS from "exceljs";
 import { EntityManager, In, Repository } from "typeorm";
@@ -15,6 +16,10 @@ import { AdminOperationLog } from "../../entities/admin-operation-log.entity";
 import { ActivitySection } from "../../entities/activity-section.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { Activity } from "../../entities/activity.entity";
+import { Waitlist, WaitlistStatus } from '../../entities/waitlist.entity';
+import { isLegacySeedHost } from '../../shared/activity-host-evidence';
+import { scopedActivityEventSql, activityEventAmountSql, nonTestUserSql } from '../../shared/activity-report-sql';
+import { ANALYTICS_CALCULATION_VERSION } from '../../shared/analytics-metrics';
 import { AdminUser } from "../../entities/admin-user.entity";
 import { Announcement } from "../../entities/announcement.entity";
 import { CheckIn } from "../../entities/check-in.entity";
@@ -286,8 +291,8 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   private async assertPublicActivityTenantAccess(activity: Activity, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
-    if (activity.tenant && !activity.tenant.enabled) throw new NotFoundException("Activity not found");
-    assertTenantOwnedResourceAccess(activity, tenant, "Activity not found");
+    if (activity.tenant && !activity.tenant.enabled) throw new NotFoundException("活动不存在或暂不可查看");
+    assertTenantOwnedResourceAccess(activity, tenant, "活动不存在或暂不可查看");
     return tenant;
   }
 
@@ -319,23 +324,27 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (tracking?.inviteCode) await this.trackShare(id, { code: tracking.inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
 
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [hosts, sections, reviews, memberAccess, spaceSummary, organizerTrust, relatedActivities] = await Promise.all([
+    const [hosts, sections, reviews, memberAccess, spaceSummary, organizerTrust, relatedActivities, seriesActivities] = await Promise.all([
       this.hosts.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.sections.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.activityReviews(id, context),
       this.memberAccessSnapshot(activity, user || undefined),
       this.activitySpaceSummary(activity, user?.id || null),
       this.organizerTrustSnapshot(activity, user?.id || null),
-      this.relatedActivities(activity)
+      this.relatedActivities(activity),
+      this.relatedActivities(activity, true)
     ]);
 
     const reviewSummary = {
       count: reviews.length,
       averageRating: reviews.length ? Number((reviews.reduce((sum, row) => sum + Number(row.rating || 0), 0) / reviews.length).toFixed(1)) : 0
     };
+    const myRegistration = userId ? await this.registrations.findOne({ where: { activity: { id }, user: { id: userId }, status: In([RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn]) }, select: { id: true, status: true }, loadEagerRelations: false, order: { id: 'DESC' } }) : null;
+    const myWaitlist = userId && !myRegistration ? await this.registrations.manager.getRepository(Waitlist).findOne({ where: { activity: { id }, user: { id: userId }, status: WaitlistStatus.Waiting }, select: { id: true, status: true }, loadEagerRelations: false, order: { id: 'DESC' } }) : null;
     return {
-      ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts, sections, reviews,
-      reviewSummary, organizerTrust, relatedActivities, refundInstructions: operationSetting?.refundInstructions || null,
+      ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts: hosts.filter(host => !isLegacySeedHost(host)), sections, reviews,
+      myBooking: { registration: myRegistration, waitlist: myWaitlist },
+      reviewSummary, organizerTrust, relatedActivities, seriesActivities, refundInstructions: operationSetting?.refundInstructions || null,
       memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting), space: spaceSummary
     };
   }
@@ -371,6 +380,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .select("COUNT(*)", "scheduledCount")
       .addSelect("SUM(CASE WHEN pastActivity.status <> :cancelled THEN 1 ELSE 0 END)", "fulfilledCount")
       .where("pastActivity.tenantId = :tenantId", { tenantId: tenant.id })
+      .andWhere('pastActivity.isTest = 0')
       .andWhere("pastActivity.endTime <= :now", { now })
       .andWhere("pastActivity.status IN (:...statuses)", { statuses: [ActivityStatus.Open, ActivityStatus.Ended, ActivityStatus.Cancelled], cancelled: ActivityStatus.Cancelled });
     const reviewBuilder = this.reviews.createQueryBuilder("trustReview")
@@ -378,6 +388,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .select("COUNT(trustReview.id)", "reviewCount")
       .addSelect("COALESCE(AVG(trustReview.rating), 0)", "averageRating")
       .where("trustReview.status = :status", { status: "visible" })
+      .andWhere('trustActivity.isTest = 0')
       .andWhere("trustActivity.tenantId = :tenantId", { tenantId: tenant.id });
     const [past, review, followerCount, followed] = await Promise.all([
       pastBuilder.getRawOne<{ scheduledCount: string; fulfilledCount: string }>(),
@@ -389,7 +400,8 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const fulfilledCount = Number(past?.fulfilledCount || 0);
     const profile = this.publicOrganizerProfile(tenant);
     return {
-      verified: Boolean(tenant.enabled && (profile?.intro || profile?.servicePromise)),
+      verified: false,
+      profileComplete: Boolean(tenant.enabled && profile?.intro && profile?.servicePromise),
       historicalActivityCount: fulfilledCount,
       fulfillmentRate: scheduledCount ? Number((fulfilledCount / scheduledCount * 100).toFixed(1)) : null,
       reviewCount: Number(review?.reviewCount || 0),
@@ -399,7 +411,8 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     };
   }
 
-  private async relatedActivities(activity: Activity) {
+  private async relatedActivities(activity: Activity, sameSeries = false) {
+    if (sameSeries && !activity.seriesId) return [];
     const builder = this.activities.createQueryBuilder("related")
       .leftJoinAndSelect("related.tenant", "tenant")
       .leftJoinAndSelect("related.category", "category")
@@ -410,7 +423,11 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .addOrderBy("related.startTime", "ASC")
       .take(4);
     activity.tenant ? builder.andWhere("related.tenantId = :tenantId", { tenantId: activity.tenant.id }) : builder.andWhere("related.tenantId IS NULL");
-    if (activity.category?.id) builder.andWhere("related.categoryId = :categoryId", { categoryId: activity.category.id });
+    if (sameSeries) builder.andWhere('related.seriesId = :seriesId', { seriesId: activity.seriesId }).orderBy('related.startTime', 'ASC').take(12);
+    else {
+      if (activity.seriesId) builder.andWhere('(related.seriesId IS NULL OR related.seriesId <> :seriesId)', { seriesId: activity.seriesId });
+      if (activity.category?.id) builder.andWhere("related.categoryId = :categoryId", { categoryId: activity.category.id });
+    }
     const rows = await builder.getMany();
     return Promise.all(rows.map(async (row) => {
       const stats = await this.activityStats(row.id, row.capacity);
@@ -503,6 +520,8 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   private publicActivity(activity: Activity) {
     return {
       id: activity.id,
+      isTest: Boolean(activity.isTest),
+      bookingDisabledReason: testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV')),
       title: activity.title,
       tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region, organizerProfile: this.publicOrganizerProfile(activity.tenant) } : null,
       coverUrl: activity.coverUrl,
@@ -607,7 +626,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   async activityReviews(activityId: number, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(activityId);
-    if (!activity) throw new NotFoundException("Activity not found");
+    if (!activity) throw new NotFoundException("活动不存在或暂不可查看");
     await this.assertPublicActivityTenantAccess(activity, context);
     const rows = await this.reviews.find({
       where: { activity: { id: activityId }, status: "visible" },
@@ -619,9 +638,9 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   private async assertPublicRegistrationTenantAccess(registration: Registration, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
-    if (registration.tenant && !registration.tenant.enabled) throw new NotFoundException("Registration not found");
-    if (registration.activity?.tenant && !registration.activity.tenant.enabled) throw new NotFoundException("Registration not found");
-    if (tenant && registration.tenant?.id !== tenant.id && registration.activity?.tenant?.id !== tenant.id) throw new NotFoundException("Registration not found");
+    if (registration.tenant && !registration.tenant.enabled) throw new NotFoundException("报名记录不存在或暂不可查看");
+    if (registration.activity?.tenant && !registration.activity.tenant.enabled) throw new NotFoundException("报名记录不存在或暂不可查看");
+    if (tenant && registration.tenant?.id !== tenant.id && registration.activity?.tenant?.id !== tenant.id) throw new NotFoundException("报名记录不存在或暂不可查看");
     return tenant;
   }
 
@@ -1043,16 +1062,16 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   private async buildActivityFunnel(activity: Activity, manager: EntityManager) {
     const eventRepo = manager.getRepository(ConversionEvent);
     const eventRows = await eventRepo.createQueryBuilder("event")
-      .select("event.type", "type").addSelect("COUNT(event.id)", "count").addSelect("COALESCE(SUM(event.amount), 0)", "amount")
-      .where("event.activityId = :activityId", { activityId: activity.id }).groupBy("event.type").getRawMany<any>();
+      .select("event.type", "type").addSelect("COUNT(event.id)", "count").addSelect(`COALESCE(SUM(${activityEventAmountSql()}),0)`, "amount")
+      .where("event.activityId = :activityId", { activityId: activity.id }).andWhere(scopedActivityEventSql("event", Boolean(activity.isTest))).groupBy("event.type").getRawMany<any>();
     const eventMap = new Map(eventRows.map((row) => [String(row.type), { count: Number(row.count || 0), amountFen: yuanToFen(row.amount || 0) }]));
     const count = (type: ConversionEventType) => eventMap.get(type)?.count || 0;
     const amount = (type: ConversionEventType) => eventMap.get(type)?.amountFen || 0;
 
     const approvedCount = await manager.getRepository(Registration).createQueryBuilder("registration")
-      .where("registration.activityId = :activityId", { activityId: activity.id })
+      .where("registration.activityId = :activityId", { activityId: activity.id }).andWhere(activity.isTest ? "1 = 1" : nonTestUserSql("registration"))
       .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] }).getCount();
-    const inviteCount = await manager.getRepository(InviteCode).count({ where: { activity: { id: activity.id } } });
+    const inviteCount = await manager.getRepository(InviteCode).createQueryBuilder('invite').where('invite.activityId = :id', { id: activity.id }).andWhere(activity.isTest ? '1 = 1' : nonTestUserSql('invite')).getCount();
 
     const ticketEvents = await eventRepo.createQueryBuilder("event")
       .select("COALESCE(event.ticketTypeIdSnapshot, 0)", "dimensionId")
@@ -1063,15 +1082,15 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .addSelect("SUM(CASE WHEN event.type = 'review' THEN 1 ELSE 0 END)", "reviewCount")
       .addSelect("SUM(CASE WHEN event.type = 'cancel' THEN 1 ELSE 0 END)", "cancelCount")
       .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "grossAmount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
-      .where("event.activityId = :activityId", { activityId: activity.id })
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'pay' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, "grossAmount")
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'refund' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, "refundAmount")
+      .where("event.activityId = :activityId", { activityId: activity.id }).andWhere(scopedActivityEventSql("event", Boolean(activity.isTest)))
       .andWhere("event.type IN ('register','pay','check_in','review','cancel','refund')")
       .groupBy("COALESCE(event.ticketTypeIdSnapshot, 0)").getRawMany<any>();
     const approvedTickets = await manager.getRepository(Registration).createQueryBuilder("registration")
       .leftJoin(Order, "businessOrder", "businessOrder.registrationId = registration.id")
       .select("COALESCE(businessOrder.ticketTypeId, 0)", "dimensionId").addSelect("COUNT(DISTINCT registration.id)", "approvedCount")
-      .where("registration.activityId = :activityId", { activityId: activity.id })
+      .where("registration.activityId = :activityId", { activityId: activity.id }).andWhere(activity.isTest ? "1 = 1" : nonTestUserSql("registration"))
       .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
       .groupBy("COALESCE(businessOrder.ticketTypeId, 0)").getRawMany<any>();
     const approvedTicketMap = new Map(approvedTickets.map((row) => [Number(row.dimensionId || 0), Number(row.approvedCount || 0)]));
@@ -1088,13 +1107,13 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .addSelect("SUM(CASE WHEN event.type = 'review' THEN 1 ELSE 0 END)", "reviewCount")
       .addSelect("SUM(CASE WHEN event.type = 'cancel' THEN 1 ELSE 0 END)", "cancelCount")
       .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "grossAmount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
-      .where("event.activityId = :activityId", { activityId: activity.id })
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'pay' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, "grossAmount")
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'refund' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, "refundAmount")
+      .where("event.activityId = :activityId", { activityId: activity.id }).andWhere(scopedActivityEventSql("event", Boolean(activity.isTest)))
       .groupBy("COALESCE(event.channelCodeSnapshot, CONCAT('source:', COALESCE(event.source, 'direct')))").getRawMany<any>();
     const approvedChannels = await manager.getRepository(Registration).createQueryBuilder("registration")
       .select("COALESCE(registration.attributionChannelCode, CONCAT('source:', COALESCE(registration.attributionSource, 'direct')))", "dimensionKey")
-      .addSelect("COUNT(registration.id)", "approvedCount").where("registration.activityId = :activityId", { activityId: activity.id })
+      .addSelect("COUNT(registration.id)", "approvedCount").where("registration.activityId = :activityId", { activityId: activity.id }).andWhere(activity.isTest ? "1 = 1" : nonTestUserSql("registration"))
       .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
       .groupBy("COALESCE(registration.attributionChannelCode, CONCAT('source:', COALESCE(registration.attributionSource, 'direct')))").getRawMany<any>();
     const approvedChannelMap = new Map(approvedChannels.map((row) => [String(row.dimensionKey), Number(row.approvedCount || 0)]));
@@ -1109,13 +1128,13 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       .addSelect("SUM(CASE WHEN event.type = 'review' THEN 1 ELSE 0 END)", "reviewCount")
       .addSelect("SUM(CASE WHEN event.type = 'cancel' THEN 1 ELSE 0 END)", "cancelCount")
       .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "grossAmount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
-      .where("event.activityId = :activityId", { activityId: activity.id })
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'pay' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, "grossAmount")
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'refund' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, "refundAmount")
+      .where("event.activityId = :activityId", { activityId: activity.id }).andWhere(scopedActivityEventSql("event", Boolean(activity.isTest)))
       .groupBy("COALESCE(event.provinceSnapshot, '未知')").addGroupBy("COALESCE(event.citySnapshot, '未知')").addGroupBy("COALESCE(event.districtSnapshot, '未知')").getRawMany<any>();
     const approvedCities = await manager.getRepository(Registration).createQueryBuilder("registration")
       .select("COALESCE(registration.attributionProvince, '未知')", "province").addSelect("COALESCE(registration.attributionCity, '未知')", "city").addSelect("COALESCE(registration.attributionDistrict, '未知')", "district")
-      .addSelect("COUNT(registration.id)", "approvedCount").where("registration.activityId = :activityId", { activityId: activity.id })
+      .addSelect("COUNT(registration.id)", "approvedCount").where("registration.activityId = :activityId", { activityId: activity.id }).andWhere(activity.isTest ? "1 = 1" : nonTestUserSql("registration"))
       .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
       .groupBy("COALESCE(registration.attributionProvince, '未知')").addGroupBy("COALESCE(registration.attributionCity, '未知')").addGroupBy("COALESCE(registration.attributionDistrict, '未知')").getRawMany<any>();
     const cityKey = (row: any) => `${row.province}|${row.city}|${row.district}`;
@@ -1131,7 +1150,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const cities = cityEvents.map((row) => ({ province: row.province, city: row.city, district: row.district, ...dimensionRow(row, approvedCityMap.get(cityKey(row)) || 0) })).sort((a, b) => b.registrationCount - a.registrationCount || b.viewCount - a.viewCount);
 
     const attributionMismatchCount = await eventRepo.createQueryBuilder("event").innerJoin("event.registration", "registration")
-      .where("event.activityId = :activityId", { activityId: activity.id })
+      .where("event.activityId = :activityId", { activityId: activity.id }).andWhere(scopedActivityEventSql("event", Boolean(activity.isTest)))
       .andWhere("event.type IN ('register','pay','check_in','review','cancel','refund')")
       .andWhere("(NOT (event.source <=> registration.attributionSource) OR NOT (event.channelCodeSnapshot <=> registration.attributionChannelCode) OR NOT (event.citySnapshot <=> registration.attributionCity))").getCount();
 
@@ -1139,10 +1158,11 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const sum = (rows: any[], key: string) => rows.reduce((total, row) => total + Number(row[key] || 0), 0);
     const reconciles = (rows: any[], includeViews: boolean) => ({ view: !includeViews || sum(rows, "viewCount") === funnel.viewCount, shareVisit: !includeViews || sum(rows, "shareVisitCount") === funnel.shareVisitCount, register: sum(rows, "registrationCount") === funnel.registrationCount, pay: sum(rows, "paidCount") === funnel.paidCount, approved: sum(rows, "approvedCount") === funnel.approvedCount, checkIn: sum(rows, "checkInCount") === funnel.checkInCount, review: sum(rows, "reviewCount") === funnel.reviewCount, cancel: sum(rows, "cancelCount") === funnel.cancelCount, refund: sum(rows, "refundCount") === funnel.refundCount, grossAmount: sum(rows, "grossAmountFen") === funnel.grossAmountFen, refundAmount: sum(rows, "refundAmountFen") === funnel.refundAmountFen, netAmount: sum(rows, "netAmountFen") === funnel.netAmountFen });
 
-    const topInvites = (await manager.getRepository(InviteCode).find({ where: { activity: { id: activity.id } }, order: { registrationCount: "DESC", visitCount: "DESC" }, take: 10 }))
+    const topInvites = (await manager.getRepository(InviteCode).createQueryBuilder('invite').leftJoinAndSelect('invite.user', 'user').where('invite.activityId = :id', { id: activity.id }).andWhere(activity.isTest ? '1 = 1' : nonTestUserSql('invite')).orderBy('invite.registrationCount', 'DESC').addOrderBy('invite.visitCount', 'DESC').take(10).getMany())
       .map((row) => ({ id: row.id, code: row.code, user: row.user ? { id: row.user.id, nickname: row.user.nickname, phone: maskPhone(row.user.phone) } : null, visitCount: row.visitCount, registrationCount: row.registrationCount, createdAt: row.createdAt }));
     return {
       activity: { id: activity.id, title: activity.title, location: activity.location, locationProvince: activity.locationProvince, locationCity: activity.locationCity, locationDistrict: activity.locationDistrict, startTime: activity.startTime, endTime: activity.endTime, tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name } : null },
+      calculationVersion: ANALYTICS_CALCULATION_VERSION, reportingScope: activity.isTest ? "test" : "live",
       funnel,
       rates: { signupRate: boundedPercentage(funnel.registrationCount, funnel.viewCount).toFixed(1), paymentRate: boundedPercentage(funnel.paidCount, funnel.registrationCount).toFixed(1), checkInRate: boundedPercentage(funnel.checkInCount, funnel.approvedCount).toFixed(1), reviewRate: boundedPercentage(funnel.reviewCount, funnel.checkInCount).toFixed(1), refundRate: boundedPercentage(funnel.refundCount, funnel.paidCount).toFixed(1) },
       dimensions: { ticketTypes, channels, cities },
@@ -1158,7 +1178,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       this.assertAnalyticsActivityAccess(activity, admin);
       const version = await this.recapVersions.findOne({ where: { activity: { id: activityId }, versionNo } });
       if (!version) throw new NotFoundException("复盘版本不存在");
-      return { ...(version.metricSnapshot as any), version: this.publicRecapVersion(version, true), isHistorical: true };
+      return { ...(version.metricSnapshot as any), version: this.publicRecapVersion(version, true), isHistorical: true, legacyDefinition: version.metricSnapshot.calculationVersion !== ANALYTICS_CALCULATION_VERSION };
     }
     const funnel = await this.activityFunnel(activityId, admin);
     const reviews = await this.reviews.find({ where: { activity: { id: activityId }, status: "visible" }, order: { createdAt: "DESC" }, take: 20 });
@@ -2331,47 +2351,5 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       ]);
     }
 
-    const activities = await this.activities.find();
-    for (const activity of activities) {
-      if ((await this.hosts.count({ where: { activity: { id: activity.id } } })) === 0) {
-        await this.hosts.save(
-          this.hosts.create({
-            activity,
-            name: "林知夏",
-            title: "活动主理人",
-            avatarUrl: null,
-            bio: "长期策划读书会和创作者线下活动，关注知识分享与社群连接。",
-            sortOrder: 1
-          })
-        );
-      }
-
-      if ((await this.sections.count({ where: { activity: { id: activity.id } } })) === 0) {
-        await this.sections.save([
-          this.sections.create({ activity, type: "highlights", title: "活动亮点", content: "小班交流、现场案例、可带走的行动清单", sortOrder: 1 }),
-          this.sections.create({
-            activity,
-            type: "audience",
-            title: "适合人群",
-            content: "社群主理人、内容创作者、活动运营，以及希望认识同频朋友的人。",
-            sortOrder: 2
-          }),
-          this.sections.create({
-            activity,
-            type: "agenda",
-            title: "活动流程",
-            content: "签到入场 - 主题分享 - 分组讨论 - 自由交流 - 合影复盘",
-            sortOrder: 3
-          }),
-          this.sections.create({
-            activity,
-            type: "faq",
-            title: "常见问题",
-            content: "报名后可在我的活动中查看状态；如需取消，请在活动开始前操作。",
-            sortOrder: 4
-          })
-        ]);
-      }
-    }
   }
 }

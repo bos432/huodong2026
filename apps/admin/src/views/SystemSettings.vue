@@ -4,6 +4,8 @@ import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
+import { compareReleaseVersions } from '../release-versions';
 import { conservativeFeatureGates, defaultFeatureGates, featureGateDependencies, featureGateItems, normalizeFeatureGates, writeStoredFeatureGates, type FeatureGateKey } from "../feature-gates";
 import { currentTenantSettings, hasPermission, isPlatformScopedAdmin } from "../permissions";
 
@@ -662,12 +664,11 @@ const staticVersionCards = computed(() => {
   const apiCommit = apiRelease?.commit || "";
   const adminCommit = adminVersion.value?.commit || "";
   const h5Commit = h5Version.value?.commit || "";
-  const commits = [apiCommit, adminCommit, h5Commit].filter(Boolean);
-  const mismatch = commits.length >= 2 && new Set(commits).size > 1;
+  const comparison = compareReleaseVersions([apiRelease, adminVersion.value, h5Version.value]);
   return [
-    { key: "api", label: "API", commit: apiCommit || "-", buildTime: apiRelease?.buildTime || "-", status: apiRelease ? (mismatch ? "warning" : "ready") : "invalid", hint: "来自 /api/health/ready" },
-    { key: "admin", label: "Admin 静态包", commit: adminCommit || "-", buildTime: adminVersion.value?.buildTime || "-", status: adminVersion.value ? (mismatch ? "warning" : "ready") : "invalid", hint: "来自 /admin/version.json" },
-    { key: "h5", label: "H5 静态包", commit: h5Commit || "-", buildTime: h5Version.value?.buildTime || "-", status: h5Version.value ? (mismatch ? "warning" : "ready") : "invalid", hint: "来自 /version.json" }
+    { key: "api", label: "API", commit: apiCommit || "-", buildTime: apiRelease?.buildTime || "-", ...comparison[0], hint: "来自 /api/health/ready" },
+    { key: "admin", label: "Admin 静态包", commit: adminCommit || "-", buildTime: adminVersion.value?.buildTime || "-", ...comparison[1], hint: "来自 /admin/version.json" },
+    { key: "h5", label: "H5 静态包", commit: h5Commit || "-", buildTime: h5Version.value?.buildTime || "-", ...comparison[2], hint: "来自 /version.json" }
   ];
 });
 const staticVersionSummary = computed(() => buildStaticVersionSummary());
@@ -835,8 +836,7 @@ function pageThemeCardStyle() {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 19);
+  return formatShanghaiDateTime(value, '-', true);
 }
 
 function boolValue(value: boolean) {
@@ -1171,7 +1171,7 @@ function buildMiniprogramAcceptanceTemplate() {
 
 function buildStaticVersionSummary() {
   const rows = staticVersionCards.value.map((item) => {
-    const status = item.status === "ready" ? "一致" : item.status === "warning" ? "不一致" : "缺失";
+    const status = item.statusText;
     return `- ${item.label}：commit=${item.commit || "-"}；buildTime=${item.buildTime || "-"}；状态=${status}；来源=${item.hint}`;
   });
   const statuses = staticVersionCards.value.map((item) => item.status);
@@ -2409,7 +2409,7 @@ onMounted(async () => {
                 <div v-for="item in staticVersionCards" :key="item.key" class="static-version-card">
                   <div class="release-head">
                     <strong>{{ item.label }}</strong>
-                    <el-tag :type="releaseType(item.status as ReleaseReadiness['status'])">{{ item.status === "ready" ? "一致" : item.status === "warning" ? "不一致" : "缺失" }}</el-tag>
+                    <el-tag :type="releaseType(item.status as ReleaseReadiness['status'])">{{ item.statusText }}</el-tag>
                   </div>
                   <span>{{ item.hint }}</span>
                   <p>{{ item.commit }}</p>

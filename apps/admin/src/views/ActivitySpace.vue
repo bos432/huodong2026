@@ -3,8 +3,10 @@ import { computed, onMounted, ref, watch } from "vue";
 import { useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { api } from "../api";
+import { formatShanghaiDateTime, shanghaiDateTimeToIso } from '../date-time';
 
 type AnnouncementStatus = "draft" | "published" | "cancelled";
+const postStatusText: Record<string, string> = { pending: '待审核', visible: '已显示', hidden: '已隐藏' };
 
 const activities = ref<any[]>([]);
 const selectedId = ref<number>();
@@ -47,9 +49,7 @@ function statusType(status: AnnouncementStatus) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "未设置";
-  const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? value : date.toLocaleString("zh-CN", { hour12: false });
+  return formatShanghaiDateTime(value, '未设置', true);
 }
 
 async function loadOptions() {
@@ -106,7 +106,7 @@ function editAnnouncement(item: any) {
     content: item.content || "",
     status: item.status || "draft",
     pinned: Boolean(item.pinned),
-    publishAt: item.publishAt ? String(item.publishAt).replace("T", " ").slice(0, 19) : ""
+    publishAt: formatShanghaiDateTime(item.publishAt, '', true)
   };
 }
 
@@ -123,7 +123,7 @@ async function saveAnnouncement() {
       content: form.value.content.trim(),
       status: form.value.status,
       pinned: form.value.pinned,
-      publishAt: form.value.status === "published" ? form.value.publishAt || null : null
+      publishAt: form.value.status === "published" && form.value.publishAt ? shanghaiDateTimeToIso(form.value.publishAt) : null
     };
     const url = editingId.value
       ? `/admin/activities/${selectedId.value}/space/announcements/${editingId.value}`
@@ -248,7 +248,7 @@ onMounted(async () => {
             <el-input v-model="row.adminReply" type="textarea" :rows="2" maxlength="500" placeholder="可填写回复后通过" />
           </template>
         </el-table-column>
-        <el-table-column prop="status" label="状态" width="90" />
+        <el-table-column label="状态" width="90"><template #default="{ row }">{{ postStatusText[row.status] || row.status }}</template></el-table-column>
         <el-table-column label="操作" width="170">
           <template #default="{ row }">
             <el-button link type="success" @click="moderate(row, 'visible')">{{ row.status === "pending" ? "通过" : "保存回复" }}</el-button>

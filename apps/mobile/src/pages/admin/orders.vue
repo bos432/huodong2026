@@ -4,6 +4,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { OrderStatus, orderStatusText } from "@activity/shared";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import { formatShanghaiDateTime } from '../../tenant-load-guard';
 
 const rows = ref<any[]>([]);
 const bootstrap = ref<any>(null);
@@ -135,7 +136,7 @@ function confirmOfflinePayment(item: any) {
 }
 
 function formatTime(value?: string) {
-  return value ? value.replace("T", " ").slice(0, 16) : "-";
+  return formatShanghaiDateTime(value);
 }
 
 onShow(load);

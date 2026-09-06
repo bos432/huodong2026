@@ -122,6 +122,7 @@
       <view class="profile-section-head"><view><text class="profile-section-title">社区与共建</text><text class="profile-section-copy">记录参与，连接同好</text></view></view>
       <view class="profile-link-list">
         <view v-if="featureGates.userContentSharing && featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="进入社交拓展" @click="goSocialExpansion" @keyup.enter="goSocialExpansion" @keyup.space.prevent="goSocialExpansion"><view><text class="entry-title">社交拓展</text><text class="entry-copy">完善公开资料，发现同行与潜在合作伙伴。</text></view><text class="entry-arrow">›</text></view>
+        <view v-if="featureGates.userContentSharing && featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看同行连接" @click="goConnections" @keyup.enter="goConnections" @keyup.space.prevent="goConnections"><view><text class="entry-title">同行连接</text><text class="entry-copy">收到的申请、已连接与屏蔽记录</text></view><text class="entry-arrow">›</text></view>
         <view v-if="featureGates.userContentSharing && featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><view><text class="entry-title">我的活动心得</text><text class="entry-copy">查看审核状态，继续分享已通过的活动感悟。</text></view><text class="entry-arrow">›</text></view>
         <view v-if="featureGates.userContentSharing && featureGates.community" class="profile-link-row" role="button" tabindex="0" aria-label="查看收藏、关注与消息" @click="goCommunitySocial" @keyup.enter="goCommunitySocial" @keyup.space.prevent="goCommunitySocial"><view><text class="entry-title">收藏、关注与消息</text><text class="entry-copy">查看收藏动态、关注作者和互动提醒。</text></view><text class="entry-arrow">›</text></view>
         <view v-if="featureGates.userContentSharing && featureGates.forum" class="profile-link-row" role="button" tabindex="0" aria-label="查看我的论坛" @click="goForumPosts" @keyup.enter="goForumPosts" @keyup.space.prevent="goForumPosts"><view><text class="entry-title">我的论坛</text><text class="entry-copy">查看帖子、回复和收藏，继续参与讨论。</text></view><text class="entry-arrow">›</text></view>
@@ -623,6 +624,7 @@ function goBrowsingHistory() { navigateProtected("/pages/user/learning"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
 function goCommunitySocial() { navigateProtected("/pages/user/community-social"); }
 function goSocialExpansion() { navigateProtected("/pages/community/social"); }
+function goConnections() { navigateProtected('/pages/community/connections'); }
 function goContentAppeals() { navigateProtected("/pages/user/content-appeals"); }
 function goMerchantApply() { navigateProtected("/pages/mall/merchant-apply"); }
 function goForumPosts() { navigateProtected("/pages/user/forum-posts"); }

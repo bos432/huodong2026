@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { ChatLineSquare, Clock, Download, EditPen, Money, RefreshLeft, Search } from "@element-plus/icons-vue";
 import { OrderStatus, orderStatusText } from "@activity/shared";
 import { api, downloadFile } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { hasPermission, isPlatformAdmin } from "../permissions";
 
 type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
@@ -307,8 +308,7 @@ function maskedPhone(value?: string | null) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function money(value: string | number | undefined) {
@@ -443,7 +443,7 @@ watch(
         </el-table-column>
         <el-table-column label="金额" width="170">
           <template #default="{ row }">
-            <div>实付 ¥{{ money(row.amount) }}</div>
+            <div>{{ row.status === OrderStatus.PendingPayment ? '应付' : '订单金额' }} ¥{{ money(row.amount) }}</div>
             <small>原价 ¥{{ money(row.originalAmount || row.amount) }} / 优惠 ¥{{ money(row.discountAmount) }}</small>
           </template>
         </el-table-column>

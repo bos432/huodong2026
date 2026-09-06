@@ -655,10 +655,24 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
   },
   {
     "group": "活动报名与核销",
+    "name": "activity_followups",
+    "meaning": "活动参与跟进相关业务数据。",
+    "business": "活动报名与核销模块中的活动参与跟进查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "活动报名与核销",
     "name": "activity_hosts",
     "meaning": "活动主办方相关业务数据。",
     "business": "活动报名与核销模块中的活动主办方查询、状态流转和关联记录。",
     "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "活动报名与核销",
+    "name": "activity_operation_versions",
+    "meaning": "活动经营台账版本相关业务数据。",
+    "business": "活动报名与核销模块中的活动经营台账版本查询、状态流转和关联记录。",
+    "caution": "属于追踪或审计依据，优先归档，不要直接清空近期数据。"
   },
   {
     "group": "活动报名与核销",
@@ -686,6 +700,13 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
     "name": "activity_sections",
     "meaning": "活动模块相关业务数据。",
     "business": "活动报名与核销模块中的活动模块查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "活动报名与核销",
+    "name": "activity_series",
+    "meaning": "活动系列相关业务数据。",
+    "business": "活动报名与核销模块中的活动系列查询、状态流转和关联记录。",
     "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
   },
   {
@@ -1054,6 +1075,20 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
   },
   {
     "group": "课程共修与内容治理",
+    "name": "social_connection_events",
+    "meaning": "同行连接操作记录相关业务数据。",
+    "business": "课程共修与内容治理模块中的同行连接操作记录查询、状态流转和关联记录。",
+    "caution": "属于追踪或审计依据，优先归档，不要直接清空近期数据。"
+  },
+  {
+    "group": "课程共修与内容治理",
+    "name": "social_connections",
+    "meaning": "同行连接相关业务数据。",
+    "business": "课程共修与内容治理模块中的同行连接查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "课程共修与内容治理",
     "name": "social_profiles",
     "meaning": "社交档案相关业务数据。",
     "business": "课程共修与内容治理模块中的社交档案查询、状态流转和关联记录。",
@@ -1099,6 +1134,13 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
     "name": "agents",
     "meaning": "代理相关业务数据。",
     "business": "平台治理与基础设施模块中的代理查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "平台治理与基础设施",
+    "name": "ai_operation_drafts",
+    "meaning": "智能运营草稿相关业务数据。",
+    "business": "平台治理与基础设施模块中的智能运营草稿查询、状态流转和关联记录。",
     "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
   },
   {

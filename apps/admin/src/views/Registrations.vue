@@ -5,6 +5,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Bell, Check, CircleClose, Close, Download, Finished, PriceTag, Printer, Search } from "@element-plus/icons-vue";
 import { OrderStatus, RegistrationStatus, orderStatusText, registrationStatusText } from "@activity/shared";
 import { api, downloadExport } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { canAccess, isPlatformAdmin } from "../permissions";
 
 type PageResult<T> = { items: T[]; total: number; page: number; pageSize: number };
@@ -382,8 +383,7 @@ function answerText(row: any) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function activityTime(row: any) {

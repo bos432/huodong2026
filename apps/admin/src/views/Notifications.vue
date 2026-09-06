@@ -4,6 +4,7 @@ import { useRoute } from "vue-router";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { Plus } from "@element-plus/icons-vue";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { currentTenantId, hasPermission, isPlatformAdmin } from "../permissions";
 import { maskPhone } from "../privacy";
 
@@ -669,7 +670,7 @@ watch(
         <el-table-column label="渠道" width="100"><template #default="{ row }">{{ channelText(row.channel) }}</template></el-table-column>
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.subscribed ? 'success' : 'warning'">{{ row.subscribed ? "订阅" : "退订" }}</el-tag></template></el-table-column>
         <el-table-column prop="reason" label="原因" min-width="180" />
-        <el-table-column prop="updatedAt" label="更新时间" width="180" />
+        <el-table-column label="更新时间" width="180"><template #default="{ row }">{{ formatShanghaiDateTime(row.updatedAt, '-', true) }}</template></el-table-column>
       </el-table>
       <el-pagination v-if="preferenceTotal > preferencePageSize" class="records-pagination" layout="prev, pager, next, total" :current-page="preferencePage" :page-size="preferencePageSize" :total="preferenceTotal" @current-change="changePreferencePage" />
     </div>
@@ -701,7 +702,7 @@ watch(
         <el-table-column v-if="canViewSensitive" prop="errorMessage" label="错误" min-width="180" show-overflow-tooltip />
         <el-table-column prop="suppressedReason" label="抑制原因" min-width="180" show-overflow-tooltip />
         <el-table-column prop="remark" label="备注" min-width="160" show-overflow-tooltip />
-        <el-table-column prop="createdAt" label="发送时间" width="180" />
+        <el-table-column label="发送时间" width="180"><template #default="{ row }">{{ formatShanghaiDateTime(row.createdAt, '-', true) }}</template></el-table-column>
         <el-table-column v-if="canSend" label="操作" width="100">
           <template #default="{ row }">
             <el-button size="small" :loading="actionKey === `notification:retry:${row.id}`" :disabled="row.status !== 'failed' || Boolean(actionKey)" @click="retryNotification(row)">重试</el-button>

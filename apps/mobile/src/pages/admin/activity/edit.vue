@@ -3,6 +3,7 @@ import { computed, ref, watch } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ActivityStatus, FieldType, activityStatusText, checkActivityContentCompliance } from "@activity/shared";
 import { adminActivityPreviewUrl, mobileAdminRequest, requireMobileAdmin, uploadAdminImage } from "../../../mobile-admin";
+import { formatShanghaiDateTime } from '../../../tenant-load-guard';
 
 type FieldDraft = { label: string; type: FieldType; required: boolean; optionsText: string; sortOrder: number };
 type HostDraft = { name: string; title: string; avatarUrl: string; bio: string; sortOrder: number };
@@ -113,6 +114,7 @@ function defaultForm() {
     price: 0,
     status: ActivityStatus.Draft,
     featured: false,
+    isTest: false,
     requireReview: false,
     allowCancel: true,
     categoryId: undefined as number | undefined,
@@ -131,14 +133,7 @@ function defaultSection(): SectionDraft {
 }
 
 function toInputTime(value: Date | string) {
-  if (typeof value === "string") {
-    const parts = value.trim().match(/^(\d{4})-(\d{2})-(\d{2})[T ](\d{2}):(\d{2})/);
-    if (parts) return `${parts[1]}-${parts[2]}-${parts[3]} ${parts[4]}:${parts[5]}`;
-  }
-  const date = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(date.getTime())) return "";
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatShanghaiDateTime(value, '');
 }
 
 function numberOrUndefined(value: unknown) {
@@ -147,6 +142,7 @@ function numberOrUndefined(value: unknown) {
 }
 
 function setBoolean(key: string, value: boolean) {
+  if (key === 'isTest' && id.value) return;
   if (key === "requireReview" && value && !registrationReviewEnabled.value) {
     uni.showToast({ title: "当前商家未开启报名审核权限", icon: "none" });
     return;
@@ -250,8 +246,9 @@ function normalizeOptions(text: string) {
 
 function parsedTime(value: unknown) {
   const text = String(value || "").trim();
-  if (!text) return Number.NaN;
-  return new Date(text.replace(" ", "T")).getTime();
+  if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?$/.test(text)) return Number.NaN;
+  const date = new Date(`${text.replace(' ', 'T')}+08:00`);
+  return formatShanghaiDateTime(date, '') === text.replace('T', ' ').slice(0, 16) ? date.getTime() : Number.NaN;
 }
 
 function invalidHttpUrl(value: unknown) {
@@ -265,6 +262,9 @@ function payload(status: ActivityStatus) {
   return {
     ...form.value,
     status,
+    startTime: new Date(parsedTime(form.value.startTime)).toISOString(),
+    endTime: new Date(parsedTime(form.value.endTime)).toISOString(),
+    registrationDeadline: new Date(parsedTime(form.value.registrationDeadline)).toISOString(),
     requireReview: registrationReviewEnabled.value ? form.value.requireReview : false,
     tenantId: canSelectTenant.value ? numberOrUndefined(form.value.tenantId) : undefined,
     categoryId: numberOrUndefined(form.value.categoryId),
@@ -275,7 +275,7 @@ function payload(status: ActivityStatus) {
     price: Number(form.value.price || 0),
     locationLatitude: form.value.locationLatitude === "" ? undefined : form.value.locationLatitude,
     locationLongitude: form.value.locationLongitude === "" ? undefined : form.value.locationLongitude,
-    priorityRegistrationEndsAt: form.value.priorityMemberLevelId ? form.value.priorityRegistrationEndsAt : undefined,
+    priorityRegistrationEndsAt: form.value.priorityMemberLevelId ? new Date(parsedTime(form.value.priorityRegistrationEndsAt)).toISOString() : undefined,
     fields: fields.value.map((field, index) => ({ label: field.label, type: field.type, required: field.required, options: normalizeOptions(field.optionsText), sortOrder: index + 1 })),
     hosts: hosts.value.filter((host) => host.name.trim()).map((host, index) => ({ ...host, sortOrder: index + 1 })),
     sections: completeSections.map((section, index) => ({ ...section, type: section.type || "rich_text", sortOrder: index + 1 }))
@@ -462,6 +462,7 @@ async function loadActivity(expectedSerial = loadSerial) {
     price: Number(activity.price || 0),
     status: activity.status || ActivityStatus.Draft,
     featured: Boolean(activity.featured),
+    isTest: Boolean(activity.isTest),
     requireReview: registrationReviewEnabled.value ? Boolean(activity.requireReview) : false,
     allowCancel: Boolean(activity.allowCancel),
     categoryId: activity.category?.id,
@@ -561,6 +562,7 @@ onShow(() => {
           <view role="switch" tabindex="0" :aria-checked="form.requireReview" :aria-disabled="!registrationReviewEnabled" :class="{ on: form.requireReview, disabled: !registrationReviewEnabled }" @click="setBoolean('requireReview', !form.requireReview)" @keyup.enter="setBoolean('requireReview', !form.requireReview)" @keyup.space.prevent="setBoolean('requireReview', !form.requireReview)">报名审核</view>
           <view role="switch" tabindex="0" :aria-checked="form.allowCancel" :class="{ on: form.allowCancel }" @click="setBoolean('allowCancel', !form.allowCancel)" @keyup.enter="setBoolean('allowCancel', !form.allowCancel)" @keyup.space.prevent="setBoolean('allowCancel', !form.allowCancel)">允许取消</view>
           <view role="switch" tabindex="0" :aria-checked="form.featured" :class="{ on: form.featured }" @click="setBoolean('featured', !form.featured)" @keyup.enter="setBoolean('featured', !form.featured)" @keyup.space.prevent="setBoolean('featured', !form.featured)">推荐展示</view>
+          <view role="switch" tabindex="0" :aria-checked="form.isTest" :aria-disabled="Boolean(id)" :class="{ on: form.isTest, disabled: Boolean(id) }" @click="setBoolean('isTest', !form.isTest)" @keyup.enter="setBoolean('isTest', !form.isTest)" @keyup.space.prevent="setBoolean('isTest', !form.isTest)">测试活动（创建后不可更改）</view>
         </view>
         <view v-if="!registrationReviewEnabled" class="issue">当前商家未开通报名审核权限，活动报名将自动通过或进入付款流程。</view>
         <view class="field">

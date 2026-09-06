@@ -1,5 +1,6 @@
 import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, ParseIntPipe, Post, Query, Req, Res, UnauthorizedException, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { SocialConnectionService } from './social-connection.service';
 import { FileInterceptor } from "@nestjs/platform-express";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, In, IsNull, Repository } from "typeorm";
@@ -115,6 +116,7 @@ export class PublicCoursesController {
     @InjectRepository(CourseRefund) private courseRefunds: Repository<CourseRefund>,
     private readonly dataSource: DataSource,
     private readonly config: ConfigService,
+    private readonly socialConnections: SocialConnectionService,
     private readonly publicService: PublicService,
     private readonly objectStorage: ObjectStorageService,
     private readonly credentialTemplates: CredentialTemplateService
@@ -261,6 +263,19 @@ export class PublicCoursesController {
     return rows.map((row) => this.publicSocialProfile(row, viewerId, followedIds.has(row.userId)));
   }
 
+  @Get("social/profiles/:userId")
+  async socialProfileCard(@Param("userId", ParseIntPipe) userId: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
+    const viewerId = this.optionalUserId(req.headers?.authorization) || 0;
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
+    const row = await this.socialProfiles.createQueryBuilder("profile").leftJoinAndSelect("profile.user", "user")
+      .where("profile.userId = :userId", { userId }).andWhere("profile.tenantScopeKey = :tenantScopeKey", { tenantScopeKey })
+      .andWhere("profile.status = 'approved'").andWhere("profile.visible = 1").getOne();
+    if (!row) throw new NotFoundException("同行名片不存在或暂未公开");
+    return this.publicSocialProfile(row, viewerId);
+  }
+
   @Get("me/social-profile")
   async mySocialProfile(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     await this.assertCommunityEnabled(req, tenantCode);
@@ -269,6 +284,26 @@ export class PublicCoursesController {
     const tenantScopeKey = tenant ? `tenant:${tenant.id}` : "platform";
     const row = await this.socialProfiles.findOne({ where: { userId, tenantScopeKey } });
     return row ? this.publicSocialProfile(row, userId, false, true) : null;
+  }
+
+  @Get('me/social-connections')
+  async mySocialConnections(@Req() req: any, @Query('tenantCode') tenantCode?: string, @Query('page') page?: string, @Query('view') view?: string) {
+    const { userId, tenant } = await this.socialActor(req, tenantCode);
+    return this.socialConnections.list(userId, tenant?.id || null, Number(page || 1), view || 'all');
+  }
+
+  @Post('me/social-connections')
+  async requestSocialConnection(@Req() req: any, @Body() body: { targetUserId?: unknown; intent?: unknown }, @Query('tenantCode') tenantCode?: string) {
+    const { userId, tenant } = await this.socialActor(req, tenantCode);
+    await this.assertContentWriteAllowed(userId, tenant, 'community');
+    return this.socialConnections.request(userId, tenant?.id || null, body?.targetUserId, body?.intent);
+  }
+
+  @Post('me/social-connections/:id/actions')
+  async socialConnectionAction(@Req() req: any, @Param('id', ParseIntPipe) id: number, @Body() body: { action?: unknown; revision?: unknown }, @Query('tenantCode') tenantCode?: string) {
+    const { userId, tenant } = await this.socialActor(req, tenantCode);
+    if (body?.action === 'accept') await this.assertContentWriteAllowed(userId, tenant, 'community');
+    return this.socialConnections.act(userId, tenant?.id || null, id, body?.action, body?.revision);
   }
 
   @Post("me/social-profile")
@@ -2035,6 +2070,12 @@ export class PublicCoursesController {
 
   private assertCommunityEnabled(req: any, tenantCode?: string) {
     return this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), "community", "共修暂未开放");
+  }
+
+  private async socialActor(req: any, tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
+    await this.publicService.assertFeatureGateEnabled(this.featureGateContext(req, tenantCode), 'userContentSharing', '同行连接暂未开放');
+    return { userId: this.requireUserId(req.headers?.authorization), tenant: await this.resolveTenant(req, tenantCode) };
   }
 
   private async assertCommunityPublishEnabled(req: any, tenantCode?: string) {

@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { ArrowDown, ArrowRight, CopyDocument, Download, Edit, Grid, Money, Plus, Refresh, UserFilled, View } from "@element-plus/icons-vue";
 import { useRoute, useRouter } from "vue-router";
 import { api, downloadFile } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import H5QrDialog from "../components/H5QrDialog.vue";
 import { copyToClipboard, h5PreviewUrl, openH5Preview } from "../h5-preview";
 import { canAccess } from "../permissions";
@@ -697,8 +698,7 @@ function tenantReadinessKey(row: TenantRow) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function tenantReadinessStatus(row: TenantRow) {

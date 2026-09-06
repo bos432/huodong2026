@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Header, Param, ParseIntPipe, Patch, Post
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 import { AdminService } from "./admin.service";
+import { AiOperationService } from './ai-operation.service';
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
 import { ActivityApprovalDto, ActivityChannelDto, ActivityDto, ActivityQueryDto, AdAdvertiserDto, AdCampaignDto, AdCenterQueryDto, AdContractDto, AdOfficialRevenueImportDto, AdSettlementGenerateDto, AdSettlementStatusDto, AdminQueryDto, AgentDto, AgentPaymentAccountDto, AgentSettlementGenerateDto, AgentSettlementPayDto, AgentSettlementQueryDto, AgentSettlementSandboxTransferDto, AmbassadorApplicationFollowupDto, AmbassadorApplicationQueryDto, AmbassadorApplicationStatusDto, AmbassadorCaseDto, AmbassadorSettingDto, AnalyticsQueryDto, AnnouncementDto, BulkActivityTagDto, CategoryDto, ChangeOwnPasswordDto, CharityDisbursementDto, CharityDisbursementPayDto, CharityDisbursementReviewDto, CharityProjectActionDto, CharityProjectDto, CharityProjectReviewDto, CharityProjectUpdateDto, CharitySettingDto, CheckInDto, ConfirmPaymentDto, CopyAdminRoleDto, CouponDto, CouponRecordQueryDto, CreateAdminDto, CreateMemberDto, HomepageDecorationTemplateDto, HomepageDecorationVersionDto, HomepageReorderDto, HomepageReplaceDto, HomepageSectionDto, LoginDto, MarketingPopupDto, MemberLevelAdjustDto, MemberLevelDto, MemberPointAdjustDto, MemberPointRuleDto, MemberQueryDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto, OperationSettingDto, OrderQueryDto, OrderRemarkDto, PaymentStatementFetchDto, PaymentStatementImportDto, RedemptionCodeDto, RedemptionCodeUsageQueryDto, RefundDto, RefundQueryDto, RegistrationQueryDto, ResetMemberPasswordDto, ReviewDto, SmsTestDto, SupportQueryDto, TenantDto, TenantPermissionDto, TenantProfileDto, TenantRegionBulkImportDto, TenantRegionDto, TenantRegionHitLogQueryDto, TicketTypeDto, UpdateAdminDto, UpdateAdminPasswordDto, UpdateAdminStatusDto, UpdateMemberDto, UserTagDto, UserTagQueryDto, VolunteerCertificateDto, VolunteerProfileQueryDto, VolunteerProfileStatusDto, VolunteerServiceRecordDto, VolunteerServiceRecordQueryDto, VolunteerTaskApplicationStatusDto, VolunteerTaskDto, VolunteerTaskQueryDto, WaitlistCancelDto, WaitlistQueryDto, WalletAdjustDto } from "./dto";
@@ -88,7 +89,7 @@ const SETTLEMENT_PROOF_EXTENSION_BY_MIME: Record<string, string> = {
 
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly service: AdminService, private readonly miniprogramRelease: MiniprogramReleaseService, private readonly fundRisks: FundRiskMonitorService, private readonly aid: AidService, private readonly credentialTemplates: CredentialTemplateService) {}
+  constructor(private readonly service: AdminService, private readonly miniprogramRelease: MiniprogramReleaseService, private readonly fundRisks: FundRiskMonitorService, private readonly aid: AidService, private readonly credentialTemplates: CredentialTemplateService, private readonly aiOperations: AiOperationService) {}
 
   @AdminRoles(...OPERATION_ROLES)
   @Get("credential-templates")
@@ -418,6 +419,12 @@ export class AdminController {
   @Get("analytics/overview")
   analyticsOverview(@Query() query: AnalyticsQueryDto, @CurrentAdmin() admin?: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.service.analyticsOverview(query, admin);
+  }
+
+  @AdminRoles(...OVERVIEW_ROLES)
+  @Get('operations/workbench')
+  operatingWorkbench(@Query('tenantId') tenantId: string | undefined, @Query('weekStart') weekStart: string | undefined, @CurrentAdmin() admin?: any) {
+    return this.service.operatingWorkbench(tenantId === undefined ? undefined : Number(tenantId), weekStart, admin);
   }
 
   @AdminRoles(...OVERVIEW_ROLES)
@@ -1571,6 +1578,60 @@ export class AdminController {
   @Get("activities/:id/publish-check")
   activityPublishCheck(@Param("id", ParseIntPipe) id: number, @CurrentAdmin() admin?: { id: number; username?: string; role?: string; tenantId?: number | null }) {
     return this.service.activityPublishCheck(id, admin);
+  }
+
+  @AdminRoles(...FINANCE_ROLES)
+  @Get('activities/:id/operation')
+  activityOperation(@Param('id', ParseIntPipe) id: number, @CurrentAdmin() admin?: any) {
+    return this.service.activityOperation(id, admin);
+  }
+
+  @AdminRoles(...ACTIVITY_VIEW_ROLES)
+  @Get('activities/:id/series')
+  activitySeries(@Param('id', ParseIntPipe) id: number, @CurrentAdmin() admin?: any) {
+    return this.service.activitySeries(id, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Get('activities/:id/ai-drafts')
+  async aiDrafts(@Param('id', ParseIntPipe) id: number, @CurrentAdmin() admin?: any) {
+    return this.aiOperations.list(await this.service.getActivity(id, admin));
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post('activities/:id/ai-drafts/preview')
+  async aiDraftPreview(@Param('id', ParseIntPipe) id: number, @Body() body: unknown, @CurrentAdmin() admin?: any) {
+    return this.aiOperations.preview(await this.service.getActivity(id, admin), body);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post('activities/:id/ai-drafts')
+  async createAiDraft(@Param('id', ParseIntPipe) id: number, @Body() body: unknown, @CurrentAdmin() admin?: any) {
+    return this.aiOperations.generate(await this.service.getActivity(id, admin), body, admin);
+  }
+
+  @AdminRoles(...REGISTRATION_VIEW_ROLES)
+  @Get('activities/:id/followups')
+  activityFollowups(@Param('id', ParseIntPipe) id: number, @Query('page') page: string | undefined, @CurrentAdmin() admin?: any) {
+    return this.service.activityFollowups(id, Number(page || 1), admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Put('activities/:id/followups')
+  saveActivityFollowup(@Param('id', ParseIntPipe) id: number, @Body() body: unknown, @CurrentAdmin() admin?: any) {
+    return this.service.saveActivityFollowup(id, body, admin);
+  }
+
+  @AdminRoles(...OPERATION_ROLES)
+  @Post('activities/:id/series')
+  createSeriesSessions(@Param('id', ParseIntPipe) id: number, @Body() body: unknown, @CurrentAdmin() admin?: any) {
+    return this.service.createSeriesSessions(id, body, admin);
+  }
+
+  @AdminRoles(...FINANCE_ROLES)
+  @Put('activities/:id/operation')
+  saveActivityOperation(@Param('id', ParseIntPipe) id: number, @Body() body: { revision?: number; plan?: unknown }, @CurrentAdmin() admin?: any) {
+    return this.service.saveActivityOperation(id, body, admin);
   }
 
   @AdminRoles(...OPERATION_ROLES)

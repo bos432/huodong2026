@@ -21,7 +21,7 @@ export function applyTenantScopeToQuery(builder: { andWhere: (condition: string,
   if (isTenantScopedActor(actor)) builder.andWhere(`${alias}.tenantId = :tenantId`, { tenantId: actor?.tenantId });
 }
 
-export function assertTenantAccessForActor(row: TenantOwnedRow | null | undefined, actor?: TenantScopedActor | null, message = "Resource not found or not in current tenant") {
+export function assertTenantAccessForActor(row: TenantOwnedRow | null | undefined, actor?: TenantScopedActor | null, message = "记录不存在或暂无访问权限") {
   if (!row || !isTenantScopedActor(actor)) return;
   if (!row.tenant?.id) return;
   if (row.tenant.id !== actor?.tenantId) throw new NotFoundException(message);

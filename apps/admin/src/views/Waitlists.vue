@@ -2,6 +2,7 @@
 import { computed, onMounted, reactive, ref } from "vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { hasPermission } from "../permissions";
 import { maskPhone } from "../privacy";
 
@@ -148,8 +149,7 @@ function answerText(row: any) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function applyFilters() {

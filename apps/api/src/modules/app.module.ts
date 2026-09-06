@@ -17,6 +17,12 @@ import { ActivitySpaceAnnouncement } from "../entities/activity-space-announceme
 import { ActivitySpacePost } from "../entities/activity-space-post.entity";
 import { ActivitySpacePostReport } from "../entities/activity-space-post-report.entity";
 import { ActivityRecapVersion } from "../entities/activity-recap-version.entity";
+import { ActivityOperationVersion } from '../entities/activity-operation-version.entity';
+import { ActivitySeries } from '../entities/activity-series.entity';
+import { ActivityFollowup } from '../entities/activity-followup.entity';
+import { AiOperationDraft } from '../entities/ai-operation-draft.entity';
+import { SocialConnection } from '../entities/social-connection.entity';
+import { SocialConnectionEvent } from '../entities/social-connection-event.entity';
 import { ActivitySection } from "../entities/activity-section.entity";
 import { ActivityViewLog } from "../entities/activity-view-log.entity";
 import { AdminLoginLog } from "../entities/admin-login-log.entity";
@@ -229,6 +235,11 @@ entities.push(AmbassadorProfile as any, AmbassadorTask as any, AmbassadorContrib
 entities.push(AdminInvite as any);
 entities.push(ActivityReviewReport as any);
 entities.push(ActivityRecapVersion as any);
+entities.push(ActivityOperationVersion as any);
+entities.push(ActivitySeries as any);
+entities.push(ActivityFollowup as any);
+entities.push(AiOperationDraft as any);
+entities.push(SocialConnection as any, SocialConnectionEvent as any);
 entities.push(TenantSubscriptionEvent as any);
 entities.push(TenantFollower as any);
 entities.push(SocialProfile as any);

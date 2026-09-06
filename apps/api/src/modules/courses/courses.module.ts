@@ -54,13 +54,14 @@ import { V1Module } from "../v1/v1.module";
 import { CoursesController } from "./courses.controller";
 import { PublicCoursesController } from "./public-courses.controller";
 import { CoursesService } from "./courses.service";
+import { SocialConnectionService } from './social-connection.service';
 import { ReliabilityModule } from "../reliability/reliability.module";
 import { CredentialTemplateModule } from "../credential-templates/credential-template.module";
 
 @Module({
   imports: [CredentialTemplateModule, TypeOrmModule.forFeature([Course, CourseChapter, CourseLesson, CourseOrder, CourseTeacher, CourseResourceAccessLog, MemberLevel, CourseAssessment, CourseQuestion, CourseAssessmentAttempt, CourseAssessmentAnswer, CourseAssessmentGrant, CourseReview, CourseQa, CourseAnnouncement, CourseCertificateTemplate, CourseRefund, CommunityActivity, CommunityActivityMember, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostFavorite, CommunityUserFollow, SocialProfile, CommunityNotification, CommunityContentReport, CommunityPostComment, CommunityCheckIn, ContentKeywordRule, ContentUserSanction, ContentAppeal, ForumCategory, ForumCategoryModerator, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, UserLearning, UserFavorite, Certificate, AdminUser, Activity, Registration, Order, User, Tenant]), PublicModule, ReliabilityModule, V1Module],
   controllers: [CoursesController, PublicCoursesController],
-  providers: [CoursesService],
+  providers: [CoursesService, SocialConnectionService],
   exports: [CoursesService]
 })
 export class CoursesModule {}

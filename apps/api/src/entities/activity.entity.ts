@@ -11,6 +11,12 @@ export class Activity {
   @PrimaryGeneratedColumn()
   id!: number;
 
+  @Column({ type: 'int', nullable: true })
+  seriesId!: number | null;
+
+  @Column({ type: 'boolean', default: false })
+  isTest!: boolean;
+
   @Column({ type: "varchar", length: 200 })
   title!: string;
 

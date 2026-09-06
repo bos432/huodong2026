@@ -1,5 +1,6 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { testActivityBookingMessage } from '../../shared/activity-test-policy';
 import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -257,8 +258,8 @@ export class PublicService {
 
   private async assertPublicTenantAccess(activity: Activity, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
-    if (activity.tenant && !activity.tenant.enabled) throw new NotFoundException("Activity not found or not open");
-    assertTenantOwnedResourceAccess(activity, tenant, "Activity not found or not open");
+    if (activity.tenant && !activity.tenant.enabled) throw new NotFoundException("活动不存在或暂未开放");
+    assertTenantOwnedResourceAccess(activity, tenant, "活动不存在或暂未开放");
     return tenant;
   }
 
@@ -279,17 +280,7 @@ export class PublicService {
     const password = String(dto.password || "");
     if (password.length < 6 || password.length > 64) throw new BadRequestException("密码长度需为 6-64 位");
     let user = await this.users.findOne({ where: { phone } });
-    if (!user) {
-      user = this.users.create({
-        phone,
-        nickname: dto.nickname || `本地用户${phone.slice(-4)}`,
-        passwordHash: await bcrypt.hash(password, 10),
-        sourceChannel: "h5",
-        lastLoginChannel: "h5",
-        lastLoginAt: new Date()
-      });
-      return this.userLoginResponse(await this.users.save(user));
-    }
+    if (!user) throw new BadRequestException('请先使用验证码注册，再设置登录密码');
     if (!user.passwordHash) throw new BadRequestException("该手机号尚未设置密码，请联系管理员设置初始密码或使用验证码登录");
     if (!(await bcrypt.compare(password, user.passwordHash))) throw new BadRequestException("手机号或密码错误");
     if (dto.nickname && !user.nickname) {
@@ -2006,13 +1997,21 @@ export class PublicService {
   async quote(activityId: number, dto: QuoteDto, user: User, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(activityId, { status: ActivityStatus.Open });
     if (!activity) throw new NotFoundException("活动不存在或未开放");
+    const testBlock = testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV'));
+    if (testBlock) throw new BadRequestException(testBlock);
     await this.assertPublicTenantAccess(activity, context);
-    return this.publicQuote(await this.calculateQuote(activity, { ...dto, userId: user.id }));
+    const quote = await this.calculateQuote(activity, { ...dto, userId: user.id });
+    const refundPolicy = Number(quote.payableAmount) > 0
+      ? await this.charityFund.previewRetainedActivityRefund(this.orders.create({ tenant: activity.tenant, amount: quote.payableAmount, originalAmount: quote.originalAmount }))
+      : null;
+    return { ...this.publicQuote(quote), refundPolicy };
   }
 
   async register(activityId: number, dto: RegisterDto, user: User, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(activityId, { withFields: true });
     if (!activity || activity.status !== ActivityStatus.Open) throw new BadRequestException("活动暂不可报名");
+    const testBlock = testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV'));
+    if (testBlock) throw new BadRequestException(testBlock);
     const tenant = await this.assertPublicTenantAccess(activity, context);
     await this.assertRegistrationEnabled(tenant);
     if (new Date(activity.registrationDeadline).getTime() < Date.now()) throw new BadRequestException("报名已截止");
@@ -2353,11 +2352,11 @@ export class PublicService {
     this.assertOrderTenantEnabled(order);
     // Platform orders remain accessible to their owner after the client selects a tenant.
     if (!order.tenant?.id) return;
-    assertTenantOwnedResourceAccess(order, tenant, "Order not found");
+    assertTenantOwnedResourceAccess(order, tenant, "订单不存在或暂不可查看");
   }
 
   private assertOrderTenantEnabled(order: Order) {
-    if (order.tenant && !order.tenant.enabled) throw new NotFoundException("Order not found");
+    if (order.tenant && !order.tenant.enabled) throw new NotFoundException("订单不存在或暂不可查看");
   }
 
   private assertOrderUserAccess(order: Order, user: User) {
@@ -2709,10 +2708,10 @@ export class PublicService {
 
   private async assertRegistrationTenantAccess(registration: Registration, context?: PublicTenantContext) {
     const tenant = await this.resolveTenantContext(context);
-    if (registration.tenant && !registration.tenant.enabled) throw new NotFoundException("Registration not found");
-    if (registration.activity?.tenant && !registration.activity.tenant.enabled) throw new NotFoundException("Registration not found");
+    if (registration.tenant && !registration.tenant.enabled) throw new NotFoundException("报名记录不存在或暂不可查看");
+    if (registration.activity?.tenant && !registration.activity.tenant.enabled) throw new NotFoundException("报名记录不存在或暂不可查看");
     const platformRegistration = !registration.tenant?.id && !registration.activity?.tenant?.id;
-    if (tenant && !platformRegistration && registration.tenant?.id !== tenant.id && registration.activity?.tenant?.id !== tenant.id) throw new NotFoundException("Registration not found");
+    if (tenant && !platformRegistration && registration.tenant?.id !== tenant.id && registration.activity?.tenant?.id !== tenant.id) throw new NotFoundException("报名记录不存在或暂不可查看");
     if (platformRegistration) return null;
     return tenant || registration.tenant || registration.activity?.tenant || null;
   }
@@ -2766,7 +2765,7 @@ export class PublicService {
     const canRequest = Boolean(
       preview.enabled &&
       !terminalCharityRefund &&
-      order.registration?.status !== RegistrationStatus.Cancelled &&
+      ![RegistrationStatus.Cancelled, RegistrationStatus.CheckedIn].includes(order.registration?.status) &&
       !activeRefund &&
       [OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status) &&
       Number(preview.refundAmount || 0) > 0 &&
@@ -2775,6 +2774,7 @@ export class PublicService {
     return {
       ...preview,
       canRequest,
+      requestDisabledReason: order.registration?.status === RegistrationStatus.CheckedIn ? '已签到报名不能在线申请退款，如有问题请联系主办方。' : '',
       terminal: terminalCharityRefund,
       pendingRefund: this.publicRefund(activeRefund),
       completedRefundAmount: completedAmount.toFixed(2),
@@ -3818,6 +3818,8 @@ export class PublicService {
     const rules = activity.eligibilityRules || null;
     return {
       id: activity.id,
+      isTest: Boolean(activity.isTest),
+      bookingDisabledReason: testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV')),
       title: activity.title,
       tenant: this.publicHomepageTenant(activity.tenant),
       coverUrl: activity.coverUrl,

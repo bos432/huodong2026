@@ -24,6 +24,15 @@ describe("social profile contracts", () => {
     expect(block).not.toContain("wechat");
   });
 
+  it("exposes a tenant-scoped read-only card only for approved visible profiles", () => {
+    const block = publicController.slice(publicController.indexOf('@Get("social/profiles/:userId")'), publicController.indexOf('@Get("me/social-profile")'));
+    expect(block).toContain("tenantScopeKey");
+    expect(block).toContain("profile.status = 'approved'");
+    expect(block).toContain("profile.visible = 1");
+    expect(block).toContain("NotFoundException");
+    expect(block).not.toContain("requireUserId");
+  });
+
   it("resets edited profiles to pending and exposes tenant-scoped moderation", () => {
     const save = publicController.slice(publicController.indexOf('@Post("me/social-profile")'), publicController.indexOf('@Get("me/community/postable-activities")'));
     expect(save).toContain('status: "pending"');

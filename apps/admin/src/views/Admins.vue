@@ -4,6 +4,7 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { Edit, Key, Plus, Refresh, Search, Switch, UserFilled } from "@element-plus/icons-vue";
 import { useRoute } from "vue-router";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 import { AdminRole, availablePermissionGroups, defaultPermissionsForRole, hasPermission, isPlatformAdmin, isPlatformScopedAdmin, normalizePermissionList, roleOptions } from "../permissions";
 import { maskPhone } from "../privacy";
 
@@ -293,7 +294,7 @@ async function submit() {
       permissions: normalizePermissionList(form.permissions)
       , dataScope: dataScopePayload(form.dataScopeType, form.activityIds)
     });
-    Object.assign(form, { username: "", password: "", role: defaultCreateRole.value, tenantId: undefined, permissions: defaultPermissionsForRole(defaultCreateRole.value, !platformScoped.value), dataScopeType: "all", activityIds: [] });
+    Object.assign(form, { username: "", password: "", role: defaultCreateRole.value, tenantId: form.tenantId, permissions: defaultPermissionsForRole(defaultCreateRole.value, Boolean(form.tenantId) || !platformScoped.value), dataScopeType: "all", activityIds: [] });
     ElMessage.success(platformScoped.value ? "已创建管理员" : "已创建员工账号");
     await load();
   } catch (error: any) {
@@ -415,8 +416,7 @@ async function toggleStatus(row: AdminRow) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function canOperateRow(row: AdminRow) {

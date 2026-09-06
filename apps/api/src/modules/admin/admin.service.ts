@@ -1,5 +1,15 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, InternalServerErrorException, NotFoundException, NotImplementedException, OnModuleDestroy, OnModuleInit, UnauthorizedException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { ActivityOperationVersion } from '../../entities/activity-operation-version.entity';
+import { ActivitySeries } from '../../entities/activity-series.entity';
+import { validateSeriesBatch } from '../../shared/activity-series';
+import { ActivityFollowup } from '../../entities/activity-followup.entity';
+import { normalizeActivityFollowup } from '../../shared/activity-followup';
+import { isLegacySeedHost } from '../../shared/activity-host-evidence';
+import { channelEconomics, ChannelOrderFact } from '../../shared/activity-channel-economics';
+import { operatingWeek } from '../../shared/operating-week';
+import { liveActivityEventSql, activityEventAmountSql, nonTestUserSql } from '../../shared/activity-report-sql';
+import { defaultOperationPlan, normalizeOperationPlan, operationSummary } from '../../shared/activity-operation';
 import { JwtService } from "@nestjs/jwt";
 import { InjectRepository } from "@nestjs/typeorm";
 import * as bcrypt from "bcryptjs";
@@ -145,6 +155,7 @@ import { normalizeTenantPackageExpiresAt, normalizeTenantPackagePlan, TenantEnti
 import { PaymentProviderService, SupportedPaymentProvider } from "../public/payment-provider.service";
 import { BusinessJobService } from "../reliability/business-job.service";
 import { ActivityLifecycleAction, activityPublishReadinessIssues, canTransitionActivity, scheduledPublishWindowIssue } from "./activity-lifecycle";
+import { isPlanningActivity } from './activity-lifecycle';
 import { normalizeRefundPagination } from "./refund-pagination";
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { assessAgentTransferAccount, createAgentTransferAdapter, providerForPaymentMethod } from "../public/agent-transfer-adapters";
@@ -415,7 +426,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const row = await this.admins.findOne({ where: { id: admin.id } });
     if (!row || !row.enabled) throw new UnauthorizedException("当前账号不存在或已停用");
     if (row.tenant && !row.tenant.enabled) throw new UnauthorizedException("当前商家已停用，请联系平台管理员");
-    return this.publicAdmin(row);
+    const profile = this.publicAdmin(row);
+    return { ...profile, tenant: profile.tenant && row.tenant ? { ...profile.tenant, settings: this.publicTenant(row.tenant).settings } : null };
   }
 
   listBusinessJobs(query: { status?: string; type?: string; tenantId?: number; keyword?: string; page?: number; pageSize?: number }, admin?: AdminContext) {
@@ -1149,6 +1161,33 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const recentActivityBuilder = this.activities.createQueryBuilder("activity").leftJoinAndSelect("activity.tenant", "tenant").orderBy("activity.updatedAt", "DESC").take(8);
     if (isTenant) recentActivityBuilder.andWhere("activity.tenantId = :tenantId", { tenantId });
 
+    for (const builder of [activityCountBuilder, pendingActivityCountBuilder, registrationCountBuilder, pendingRegistrationCountBuilder,
+      monthRegistrationCountBuilder, todayRegistrationCountBuilder, pendingCheckInCountBuilder, orderCountBuilder, pendingOrderCountBuilder,
+      pendingOfflinePaymentCountBuilder, todayOrderCountBuilder, paidOrderCountBuilder, checkInCountBuilder, todayCheckInCountBuilder,
+      reviewCountBuilder, viewCountBuilder, recentActivityBuilder]) {
+      builder.andWhere('activity.isTest = 0');
+      applyAdminActivityDataScope(builder, 'activity', admin?.dataScope);
+    }
+    notificationCountBuilder.andWhere('(activity.id IS NULL OR activity.isTest = 0)');
+    applyAdminActivityDataScope(notificationCountBuilder, 'activity', admin?.dataScope);
+    for (const builder of [registrationCountBuilder, pendingRegistrationCountBuilder, monthRegistrationCountBuilder, todayRegistrationCountBuilder,
+      pendingCheckInCountBuilder, orderCountBuilder, pendingOrderCountBuilder, pendingOfflinePaymentCountBuilder, todayOrderCountBuilder,
+      paidOrderCountBuilder, checkInCountBuilder, todayCheckInCountBuilder]) {
+      builder.leftJoin('registration.user', 'metricUser').andWhere("(metricUser.sourceChannel IS NULL OR metricUser.sourceChannel <> 'test')");
+    }
+    for (const builder of [paidAmountBuilder, monthPaidAmountBuilder]) {
+      builder.innerJoin('transaction.order', 'scopedOrder').innerJoin('scopedOrder.registration', 'scopedRegistration').innerJoin('scopedRegistration.activity', 'activity').andWhere('activity.isTest = 0');
+      builder.leftJoin('scopedRegistration.user', 'metricUser').andWhere("(metricUser.sourceChannel IS NULL OR metricUser.sourceChannel <> 'test')");
+      applyAdminActivityDataScope(builder, 'activity', admin?.dataScope);
+    }
+    for (const builder of [refundAmountBuilder, monthRefundAmountBuilder, refundCountBuilder]) {
+      builder.innerJoin('refund.order', 'scopedOrder').innerJoin('scopedOrder.registration', 'scopedRegistration').innerJoin('scopedRegistration.activity', 'activity').andWhere('activity.isTest = 0');
+      builder.leftJoin('scopedRegistration.user', 'metricUser').andWhere("(metricUser.sourceChannel IS NULL OR metricUser.sourceChannel <> 'test')");
+      applyAdminActivityDataScope(builder, 'activity', admin?.dataScope);
+    }
+    applyAdminActivityDataScope(callbackRiskCountBuilder, 'callback', admin?.dataScope);
+    const canSeeMoney = effectivePermissionsForAdmin(admin || {}).includes('finance.view');
+
     const [tenantCount, disabledTenantCount, activityCount, pendingActivityCount, registrationCount, pendingRegistrationCount, monthRegistrationCount, todayRegistrationCount, pendingCheckInCount, orderCount, pendingOrderCount, pendingOfflinePaymentCount, todayOrderCount, paidOrderCount, checkInCount, todayCheckInCount, reviewCount, viewCount, notificationCount, paidAmount, monthPaidAmount, refundAmount, monthRefundAmount, pendingRefundCount, callbackRiskCount, recentActivities] = await Promise.all([
       isTenant ? Promise.resolve(1) : this.tenants.count(),
       isTenant ? Promise.resolve(0) : this.tenants.count({ where: { enabled: false } }),
@@ -1197,22 +1236,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         reviewCount,
         viewCount,
         notificationCount,
-        paidAmount: paidTotal.toFixed(2)
+        paidAmount: canSeeMoney ? paidTotal.toFixed(2) : null
       },
       operations: {
         paidOrderCount,
-        refundAmount: refundTotal.toFixed(2),
-        netAmount: (paidTotal - refundTotal).toFixed(2),
+        refundAmount: canSeeMoney ? refundTotal.toFixed(2) : null,
+        netAmount: canSeeMoney ? (paidTotal - refundTotal).toFixed(2) : null,
         monthRegistrationCount,
         todayRegistrationCount,
         todayOrderCount,
         todayCheckInCount,
-        monthPaidAmount: monthPaidTotal.toFixed(2),
-        monthRefundAmount: monthRefundTotal.toFixed(2),
-        monthNetAmount: (monthPaidTotal - monthRefundTotal).toFixed(2),
+        monthPaidAmount: canSeeMoney ? monthPaidTotal.toFixed(2) : null,
+        monthRefundAmount: canSeeMoney ? monthRefundTotal.toFixed(2) : null,
+        monthNetAmount: canSeeMoney ? (monthPaidTotal - monthRefundTotal).toFixed(2) : null,
         checkInRate,
         registrationConversionRate,
-        avgOrderAmount: avgOrderAmount.toFixed(2)
+        avgOrderAmount: canSeeMoney ? avgOrderAmount.toFixed(2) : null
       },
       todos: {
         pendingActivityCount,
@@ -1229,8 +1268,66 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         ...(pendingRefundCount > 0 ? [{ type: "danger", title: "待处理退款", count: pendingRefundCount, path: "/finance", message: "退款待办会影响用户体验和财务闭环。" }] : []),
         ...(callbackRiskCount > 0 ? [{ type: "danger", title: "支付回调异常", count: callbackRiskCount, path: "/finance", message: "存在验签失败或异常回调，请优先复核。" }] : [])
       ],
-      recentActivities: await Promise.all(recentActivities.map((activity: Activity) => this.dashboardActivityRow(activity)))
+      recentActivities: await Promise.all(recentActivities.map((activity: Activity) => this.dashboardActivityRow(activity, canSeeMoney)))
     };
+  }
+
+  async operatingWorkbench(requestedTenantId: number | undefined, weekStart: string | undefined, admin?: AdminContext) {
+    const tenantId = admin?.tenantId || requestedTenantId;
+    if (admin?.tenantId && requestedTenantId && requestedTenantId !== admin.tenantId) throw new ForbiddenException('不能查看其他商家的经营周报');
+    if (!admin?.tenantId) this.assertPlatformAdmin(admin);
+    if (!tenantId) return { selectTenant: true };
+    if (!Number.isSafeInteger(tenantId) || tenantId < 1) throw new BadRequestException('商家编号无效');
+    const tenant = await this.tenants.findOneBy({ id: tenantId });
+    if (!tenant) throw new NotFoundException('商家不存在');
+    this.assertTenantAccess({ tenant }, admin);
+    let week: ReturnType<typeof operatingWeek>;
+    try { week = operatingWeek(weekStart); } catch (e: any) { throw new BadRequestException(e.message); }
+    const permissions = effectivePermissionsForAdmin(admin || {});
+    const scoped = (builder: SelectQueryBuilder<any>, includeTest = false) => {
+      builder.andWhere('activity.tenantId = :workbenchTenantId', { workbenchTenantId: tenantId });
+      if (!includeTest) builder.andWhere('activity.isTest = 0');
+      applyAdminActivityDataScope(builder, 'activity', admin?.dataScope);
+      return builder;
+    };
+    const within = (builder: SelectQueryBuilder<any>, column: string) => builder.andWhere(`${column} >= :weekStart AND ${column} < :weekEnd`, { weekStart: week.start, weekEnd: week.end });
+    const excludeTestUser = (builder: SelectQueryBuilder<any>) => builder.leftJoin('registration.user', 'reportUser').andWhere("(reportUser.sourceChannel IS NULL OR reportUser.sourceChannel <> 'test')");
+    const registrationBase = () => excludeTestUser(scoped(this.registrations.createQueryBuilder('registration').innerJoin('registration.activity', 'activity')));
+    const paidBase = () => excludeTestUser(scoped(this.orders.createQueryBuilder('o').innerJoin('o.registration', 'registration').innerJoin('registration.activity', 'activity')))
+      .andWhere('o.status IN (:...paidStatuses)', { paidStatuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] });
+    const setting = await this.operationSettings.findOne({ where: { tenant: { id: tenantId } } });
+    const profile = this.publicTenantOrganizerProfile(tenant);
+    const firstActivities = await scoped(this.activities.createQueryBuilder('activity')).orderBy('activity.updatedAt', 'DESC').take(5).getMany();
+    const published = await scoped(this.activities.createQueryBuilder('activity')).andWhere('activity.status IN (:...states)', { states: [ActivityStatus.Open, ActivityStatus.Ended] }).getCount();
+    const stages = [
+      { key: 'profile', title: '主办方资料', configured: Boolean(profile?.intro && profile?.servicePromise), path: '/tenant-profile', permission: 'tenant_profile.manage' },
+      { key: 'service', title: '报名、客服与退款说明', configured: Boolean(setting?.registrationEnabled && (setting.customerServicePhone || setting.customerServiceWechat) && setting.refundInstructions), path: '/system-settings', permission: 'operation_settings.manage' },
+      { key: 'agreements', title: '用户协议与隐私政策', configured: Boolean(setting?.userAgreementUrl && setting.privacyPolicyUrl), path: '/system-settings', permission: 'operation_settings.manage' },
+      { key: 'payment', title: '收款方式', configured: ['wechat', 'alipay', 'offline', 'balance'].some(key => setting?.paymentMethods?.[key] === true), path: '/system-settings', permission: 'operation_settings.manage' },
+      { key: 'notifications', title: '报名通知', configured: Boolean(setting?.automaticWechat?.enabled || (setting?.smsProviderEnabled && setting?.automaticSms?.enabled)), path: '/notifications', permission: 'notification.view' },
+      { key: 'activity', title: '首场正式活动', configured: published > 0, path: '/activities', permission: 'activity.manage' }
+    ].map(item => ({ ...item, canOpen: Boolean(admin?.tenantId) && permissions.some(permission => permission === item.permission) }));
+    const newRegistrations = await within(registrationBase(), 'registration.createdAt').getCount();
+    const checkIns = await within(excludeTestUser(scoped(this.checkIns.createQueryBuilder('c').innerJoin('c.registration', 'registration').innerJoin('registration.activity', 'activity'))), 'c.createdAt')
+      .select('COUNT(DISTINCT registration.id)', 'count').getRawOne();
+    const scheduledActivities = await within(scoped(this.activities.createQueryBuilder('activity')), 'activity.startTime').andWhere('activity.status IN (:...states)', { states: [ActivityStatus.Open, ActivityStatus.Ended] }).getCount();
+    const testActivities = await within(scoped(this.activities.createQueryBuilder('activity'), true), 'activity.startTime').andWhere('activity.isTest = 1').getCount();
+    const freeOrders = await within(paidBase(), 'o.paidAt').andWhere('o.amount = 0').getCount();
+    let financial: { receivedFen: number; refundedFen: number; netCashFen: number } | null = null;
+    if (permissions.includes('finance.view')) {
+      const received = await within(paidBase(), 'o.paidAt').select('COALESCE(SUM(o.amount),0)', 'amount').getRawOne();
+      const refunded = await within(excludeTestUser(scoped(this.refunds.createQueryBuilder('f').innerJoin('f.order', 'o').innerJoin('o.registration', 'registration').innerJoin('registration.activity', 'activity'))), 'f.completedAt')
+        .andWhere("f.status = 'completed'").select('COALESCE(SUM(f.amount),0)', 'amount').getRawOne();
+      const receivedFen = yuanToFen(received?.amount || '0'); const refundedFen = yuanToFen(refunded?.amount || '0');
+      financial = { receivedFen, refundedFen, netCashFen: receivedFen - refundedFen };
+    }
+    const tasks = permissions.includes('registration.view') ? await scoped(this.dataSource.getRepository(ActivityFollowup).createQueryBuilder('task').innerJoin(Activity, 'activity', 'activity.id = task.activityId'))
+      .andWhere("task.status = 'pending'")
+      .orderBy('task.dueAt', 'ASC').take(10).getMany() : [];
+    return { selectTenant: false, tenant: { id: tenant.id, name: tenant.name }, week, stages,
+      weekly: { newRegistrations, checkIns: Number(checkIns?.count || 0), scheduledActivities, excludedTestActivities: testActivities, freeOrders, financial },
+      firstActivities: firstActivities.map(row => ({ id: row.id, title: row.title, status: row.status })),
+      tasks: tasks.map(row => ({ id: row.id, activityId: row.activityId, kind: row.kind, dueAt: row.dueAt })) };
   }
 
   async mobileBootstrap(admin?: AdminContext) {
@@ -3020,13 +3117,12 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async analyticsOverview(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
     const scope = await this.analyticsScope(query, admin);
     const builders = this.analyticsBuilders(scope, admin);
-    const [eventCounts, paidAmount, refundAmount, walletRechargeAmount, charitySummary, activeUserCount, tenantRanking, cityOperations, risk, metricRows] = await Promise.all([
-      builders.events.select("event.type", "type").addSelect("COUNT(1)", "count").groupBy("event.type").getRawMany<{ type: string; count: string }>(),
-      builders.payments.select("COALESCE(SUM(transaction.amount), 0)", "sum").andWhere("transaction.status = :status", { status: "success" }).getRawOne<{ sum: string }>(),
-      builders.refunds.select("COALESCE(SUM(refund.amount), 0)", "sum").andWhere("refund.status = :status", { status: "completed" }).getRawOne<{ sum: string }>(),
+    const ancillaryScopeAvailable = !scope.activityId && adminActivityScopeIds(admin?.dataScope) === null;
+    const [eventCounts, walletRechargeAmount, charitySummary, activeUserCount, tenantRanking, cityOperations, risk, metricRows] = await Promise.all([
+      builders.events.clone().select("event.type", "type").addSelect("COUNT(1)", "count").addSelect(`COALESCE(SUM(${activityEventAmountSql()}), 0)`, 'amount').groupBy("event.type").getRawMany<{ type: string; count: string; amount: string }>(),
       builders.walletTx.select("COALESCE(SUM(walletTx.amount), 0)", "sum").andWhere("walletTx.direction = :direction", { direction: "credit" }).andWhere("walletTx.type = :type", { type: "admin_recharge" }).getRawOne<{ sum: string }>(),
-      this.charityFund.adminSummary(admin),
-      builders.events.select("COUNT(DISTINCT event.userId)", "count").andWhere("event.userId IS NOT NULL").getRawOne<{ count: string }>(),
+      ancillaryScopeAvailable ? this.charityFund.adminSummary(scope.tenantId ? { ...admin, tenantId: scope.tenantId } : admin) : Promise.resolve(null),
+      builders.events.clone().select("COUNT(DISTINCT event.userId)", "count").andWhere("event.userId IS NOT NULL").getRawOne<{ count: string }>(),
       this.analyticsTenantRanking(scope, admin),
       this.analyticsCityOperations(scope, admin),
       this.analyticsRisk(scope, admin),
@@ -3040,8 +3136,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     }
     const metricPaidFen = metricRows.filter((row) => row.metricKey === "payments_succeeded").reduce((sum, row) => sum + Number(row.amountFen || 0), 0);
     const metricRefundFen = Math.abs(metricRows.filter((row) => row.metricKey === "refunds_succeeded").reduce((sum, row) => sum + Number(row.amountFen || 0), 0));
-    const paidTotal = metricRows.length ? metricPaidFen / 100 : Number(paidAmount?.sum || 0);
-    const refundTotal = metricRows.length ? metricRefundFen / 100 : Number(refundAmount?.sum || 0);
+    const paidTotal = metricRows.length ? metricPaidFen / 100 : Number(eventCounts.find(row => row.type === 'pay')?.amount || 0);
+    const refundTotal = metricRows.length ? metricRefundFen / 100 : Number(eventCounts.find(row => row.type === 'refund')?.amount || 0);
     const totals = {
       viewCount: counts.view || 0,
       registrationCount: counts.register || 0,
@@ -3051,12 +3147,12 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       activeUserCount: Number(activeUserCount?.count || 0),
       paidAmount: paidTotal.toFixed(2),
       refundAmount: refundTotal.toFixed(2),
-      netAmount: Math.max(0, paidTotal - refundTotal).toFixed(2),
-      walletRechargeAmount: Number(walletRechargeAmount?.sum || 0).toFixed(2),
-      charityAccruedAmount: charitySummary.totalAccrued,
-      charityAvailableAmount: charitySummary.availableAmount,
-      charityDisbursedAmount: charitySummary.totalDisbursed,
-      charityReversedAmount: charitySummary.totalReversed
+      netAmount: (paidTotal - refundTotal).toFixed(2),
+      walletRechargeAmount: ancillaryScopeAvailable ? Number(walletRechargeAmount?.sum || 0).toFixed(2) : null,
+      charityAccruedAmount: charitySummary?.totalAccrued ?? null,
+      charityAvailableAmount: charitySummary?.availableAmount ?? null,
+      charityDisbursedAmount: charitySummary?.totalDisbursed ?? null,
+      charityReversedAmount: charitySummary?.totalReversed ?? null
     };
     const rates = {
       signupRate: this.rate(counts.register || 0, counts.view || 0),
@@ -3066,6 +3162,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     };
     return {
       scope: scope.tenantId ? "tenant" : "platform",
+      ancillaryScopeAvailable,
+      reportDefinition: 'live_activity_events_v2',
       range: { startDate: scope.startDate?.toISOString() || null, endDate: scope.endDate?.toISOString() || null },
       totals,
       rates,
@@ -3095,10 +3193,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const eventBuilder = this.conversionEvents.createQueryBuilder("event").select("DATE(event.createdAt)", "date").addSelect("event.type", "type").addSelect("COUNT(1)", "count").groupBy("DATE(event.createdAt)").addGroupBy("event.type").orderBy("date", "ASC");
     this.applyAnalyticsScope(eventBuilder, "event", scope, admin);
     applyAdminActivityDataScope(eventBuilder, "event", admin?.dataScope);
-    const amountBuilder = this.paymentTransactions.createQueryBuilder("transaction").select("DATE(transaction.createdAt)", "date").addSelect("COALESCE(SUM(transaction.amount), 0)", "amount").where("transaction.status = :status", { status: "success" }).andWhere("transaction.businessType = :activityBusinessType", { activityBusinessType: "activity" }).groupBy("DATE(transaction.createdAt)").orderBy("date", "ASC");
-    this.applyAnalyticsScope(amountBuilder, "transaction", scope, admin);
-    applyAdminActivityDataScope(amountBuilder, "transaction", admin?.dataScope);
-    const [events, amounts] = await Promise.all([eventBuilder.getRawMany<{ date: string; type: string; count: string }>(), amountBuilder.getRawMany<{ date: string; amount: string }>()]);
+    const amountBuilder = this.conversionEvents.createQueryBuilder('event').select('DATE(event.createdAt)', 'date').addSelect(`COALESCE(SUM(CASE WHEN event.type = 'pay' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, 'amount').addSelect(`COALESCE(SUM(CASE WHEN event.type = 'refund' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, 'refundAmount').groupBy('DATE(event.createdAt)').orderBy('date', 'ASC');
+    this.applyAnalyticsScope(amountBuilder, 'event', scope, admin);
+    applyAdminActivityDataScope(amountBuilder, 'event', admin?.dataScope);
+    const [events, amounts] = await Promise.all([eventBuilder.getRawMany<{ date: string; type: string; count: string }>(), amountBuilder.getRawMany<{ date: string; amount: string; refundAmount: string }>()]);
     const byDate = new Map<string, Record<string, unknown>>();
     for (const row of events) {
       const item = byDate.get(row.date) || { date: row.date, view: 0, register: 0, pay: 0, check_in: 0, review: 0, paidAmount: "0.00" };
@@ -3108,6 +3206,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     for (const row of amounts) {
       const item = byDate.get(row.date) || { date: row.date, view: 0, register: 0, pay: 0, check_in: 0, review: 0, paidAmount: "0.00" };
       item.paidAmount = Number(row.amount || 0).toFixed(2);
+      item.refundAmount = Number(row.refundAmount || 0).toFixed(2);
       byDate.set(row.date, item);
     }
     return Array.from(byDate.values()).sort((a: any, b: any) => String(a.date).localeCompare(String(b.date)));
@@ -3117,13 +3216,13 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const scope = await this.analyticsScope(query, admin);
     const metricRows = await this.analyticsReportMetricRows(query, scope, "channel", undefined, admin);
     if (metricRows.length) {
-      const channelIds = Array.from(new Set(metricRows.map((row) => Number(row.dimensionKey)).filter(Boolean)));
-      const channels = channelIds.length ? await this.activityChannels.find({ where: { id: In(channelIds) }, relations: { activity: true } }) : [];
+      const channels = await this.activityChannels.find({ where: { activity: { isTest: false, ...(scope.activityId ? { id: scope.activityId } : {}) }, ...(scope.tenantId ? { tenant: { id: scope.tenantId } } : {}) }, relations: { activity: true } });
       const channelMap = new Map(channels.map((channel) => [channel.id, channel]));
       const grouped = new Map<number, Record<string, number>>();
+      for (const channel of channels) grouped.set(channel.id, { viewCount: 0, registrationCount: 0, paidCount: 0, checkInCount: 0, paidAmountFen: 0 });
       const metricNames: Record<string, string> = { activity_views: "viewCount", registrations_submitted: "registrationCount", payments_succeeded: "paidCount", check_ins: "checkInCount" };
       for (const row of metricRows) {
-        const id = Number(row.dimensionKey); const item = grouped.get(id) || { viewCount: 0, registrationCount: 0, paidCount: 0, checkInCount: 0, paidAmountFen: 0 };
+        const id = Number(row.dimensionKey); if (!channelMap.has(id)) continue; const item = grouped.get(id)!;
         const field = metricNames[row.metricKey]; if (field) item[field] += Number(row.value || 0);
         if (row.metricKey === "payments_succeeded") item.paidAmountFen += Number(row.amountFen || 0);
         grouped.set(id, item);
@@ -3164,10 +3263,13 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .limit(200);
     this.applyTenantScope(venueBuilder, "activity", admin);
     this.applyTenantScope(hostBuilder, "activity", admin);
+    for (const builder of [venueBuilder, hostBuilder]) { builder.andWhere('activity.isTest = 0'); applyAdminActivityDataScope(builder, 'activity', admin?.dataScope); }
+    hostBuilder.andWhere("NOT (host.name = :seedName AND COALESCE(host.title,'') = :seedTitle AND COALESCE(host.bio,'') = :seedBio AND COALESCE(host.avatarUrl,'') = '')", { seedName: '林知夏', seedTitle: '活动主理人', seedBio: '长期策划读书会和创作者线下活动，关注知识分享与社群连接。' });
     if (scope.tenantId) {
       venueBuilder.andWhere("activity.tenantId = :resourceTenantId", { resourceTenantId: scope.tenantId });
       hostBuilder.andWhere("activity.tenantId = :resourceTenantId", { resourceTenantId: scope.tenantId });
     }
+    if (scope.activityId) { venueBuilder.andWhere('activity.id = :resourceActivityId', { resourceActivityId: scope.activityId }); hostBuilder.andWhere('activity.id = :resourceActivityId', { resourceActivityId: scope.activityId }); }
     if (scope.startDate) {
       venueBuilder.andWhere("activity.startTime >= :resourceStartDate", { resourceStartDate: scope.startDate });
       hostBuilder.andWhere("activity.startTime >= :resourceStartDate", { resourceStartDate: scope.startDate });
@@ -3207,6 +3309,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const newUserBuilder = scope.tenantId
       ? this.memberProfiles.createQueryBuilder("newProfile").where("newProfile.tenantScopeKey = :memberScopeKey", { memberScopeKey })
       : this.users.createQueryBuilder("newUser");
+    if (scope.tenantId) newUserBuilder.andWhere(nonTestUserSql('newProfile'));
+    else newUserBuilder.andWhere("(newUser.sourceChannel IS NULL OR newUser.sourceChannel <> 'test')");
+    if (scope.activityId) newUserBuilder.andWhere(`${scope.tenantId ? 'newProfile.userId' : 'newUser.id'} IN (SELECT report_registration.userId FROM registrations report_registration JOIN activities report_activity ON report_activity.id = report_registration.activityId WHERE report_activity.id = :newUserActivityId AND report_activity.isTest = 0)`, { newUserActivityId: scope.activityId });
     if (scopedActivityIds !== null) {
       if (!scopedActivityIds.length) newUserBuilder.andWhere("1 = 0");
       else newUserBuilder.andWhere(`${scope.tenantId ? "newProfile.userId" : "newUser.id"} IN (SELECT scoped_member_registration.userId FROM registrations scoped_member_registration WHERE scoped_member_registration.activityId IN (:...memberScopeActivityIds))`, { memberScopeActivityIds: scopedActivityIds });
@@ -3220,6 +3325,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .andWhere("repeatRegistration.status IN (:...participationStatuses)", { participationStatuses })
       .groupBy("repeatRegistration.userId")
       .having("COUNT(repeatRegistration.id) > 1");
+    repeatUserBuilder.andWhere('repeatActivity.isTest = 0').andWhere(nonTestUserSql('repeatRegistration'));
+    if (scope.activityId) repeatUserBuilder.andWhere('repeatActivity.id = :repeatActivityId', { repeatActivityId: scope.activityId });
     if (scope.tenantId) repeatUserBuilder.andWhere("(repeatRegistration.tenantId = :repeatTenantId OR repeatActivity.tenantId = :repeatTenantId)", { repeatTenantId: scope.tenantId });
     if (scope.startDate) repeatUserBuilder.andWhere("repeatRegistration.createdAt >= :repeatStartDate", { repeatStartDate: scope.startDate });
     if (scope.endDate) repeatUserBuilder.andWhere("repeatRegistration.createdAt < :repeatEndDate", { repeatEndDate: scope.endDate });
@@ -3231,6 +3338,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .select("COALESCE(level.name, '普通用户')", "level").addSelect("COUNT(1)", "count")
       .where("profile.tenantScopeKey = :memberScopeKey", { memberScopeKey })
       .groupBy("COALESCE(level.name, '普通用户')");
+    memberLevelBuilder.andWhere(nonTestUserSql('profile'));
+    if (scope.activityId) memberLevelBuilder.andWhere('profile.userId IN (SELECT r.userId FROM registrations r JOIN activities a ON a.id = r.activityId WHERE a.id = :levelActivityId AND a.isTest = 0)', { levelActivityId: scope.activityId });
     if (scopedActivityIds !== null) {
       if (!scopedActivityIds.length) memberLevelBuilder.andWhere("1 = 0");
       else memberLevelBuilder.andWhere("profile.userId IN (SELECT scoped_level_registration.userId FROM registrations scoped_level_registration WHERE scoped_level_registration.activityId IN (:...memberLevelScopeActivityIds))", { memberLevelScopeActivityIds: scopedActivityIds });
@@ -3249,6 +3358,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .groupBy("COALESCE(category.name, '未分类')")
       .orderBy("count", "DESC")
       .limit(8);
+    categoryPreferenceBuilder.andWhere('activity.isTest = 0').andWhere(nonTestUserSql('registration'));
+    if (scope.activityId) categoryPreferenceBuilder.andWhere('activity.id = :preferenceActivityId', { preferenceActivityId: scope.activityId });
     if (scope.tenantId) categoryPreferenceBuilder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId: scope.tenantId });
     if (scope.startDate) categoryPreferenceBuilder.andWhere("registration.createdAt >= :categoryStartDate", { categoryStartDate: scope.startDate });
     if (scope.endDate) categoryPreferenceBuilder.andWhere("registration.createdAt < :categoryEndDate", { categoryEndDate: scope.endDate });
@@ -3499,6 +3610,9 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       activityBuilder.where("activity.tenantId = :tenantId", { tenantId }); activityOrderBuilder.andWhere("businessActivity.tenantId = :tenantId", { tenantId }); activityRefundBuilder.andWhere("businessRefundActivity.tenantId = :tenantId", { tenantId }); courseBuilder.where("course.tenantId = :tenantId", { tenantId }); courseOrderBuilder.where("course.tenantId = :tenantId", { tenantId }); courseRefundBuilder.andWhere("courseRefundCourse.tenantId = :tenantId", { tenantId }); charityBuilder.where("project.tenantId = :tenantId", { tenantId }); mallMerchantBuilder.where("merchant.tenantId = :tenantId", { tenantId }); mallOrderBuilder.where("merchant.tenantId = :tenantId", { tenantId }); mallRefundBuilder.andWhere("refundMerchant.tenantId = :tenantId", { tenantId });
     }
     if (scope.activityId) { activityBuilder.andWhere("activity.id = :activityId", { activityId: scope.activityId }); activityOrderBuilder.andWhere("businessActivity.id = :activityId", { activityId: scope.activityId }); activityRefundBuilder.andWhere("businessRefundActivity.id = :activityId", { activityId: scope.activityId }); }
+    activityBuilder.andWhere('activity.isTest = 0');
+    activityOrderBuilder.andWhere('businessActivity.isTest = 0').andWhere(nonTestUserSql('businessRegistration'));
+    activityRefundBuilder.andWhere('businessRefundActivity.isTest = 0').andWhere(nonTestUserSql('businessRefundRegistration'));
     applyAdminActivityDataScope(activityBuilder, "activity", admin?.dataScope);
     const scopedActivityIds = adminActivityScopeIds(admin?.dataScope);
     if (scopedActivityIds !== null) {
@@ -3597,7 +3711,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const participationStatuses = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
 
     if (query.module === "activity") {
-      const builder = this.activities.createQueryBuilder("activity");
+      const builder = this.activities.createQueryBuilder("activity").where('activity.isTest = 0');
       if (scope.tenantId) builder.andWhere("activity.tenantId = :tenantId", { tenantId: scope.tenantId });
       if (scope.activityId) builder.andWhere("activity.id = :activityId", { activityId: scope.activityId });
       applyAdminActivityDataScope(builder, "activity", admin?.dataScope);
@@ -3607,6 +3721,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       const registrationBuilder = this.registrations.createQueryBuilder("registration").select("registration.activityId", "id").addSelect("COUNT(1)", "activeCount").where(ids.length ? "registration.activityId IN (:...ids)" : "1 = 0", { ids }).andWhere("registration.status IN (:...participationStatuses)", { participationStatuses }).groupBy("registration.activityId");
       const orderBuilder = this.orders.createQueryBuilder("businessOrder").leftJoin("businessOrder.registration", "businessRegistration").select("businessRegistration.activityId", "id").addSelect("COUNT(DISTINCT businessOrder.id)", "orderCount").addSelect("COALESCE(SUM(businessOrder.amountFen),0)", "grossAmountFen").where(ids.length ? "businessRegistration.activityId IN (:...ids)" : "1 = 0", { ids }).andWhere("businessOrder.status IN (:...orderStatuses)", { orderStatuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] }).groupBy("businessRegistration.activityId");
       const refundBuilder = this.refunds.createQueryBuilder("businessRefund").leftJoin("businessRefund.order", "refundOrder").leftJoin("refundOrder.registration", "refundRegistration").select("refundRegistration.activityId", "id").addSelect("COALESCE(SUM(businessRefund.amountFen),0)", "refundAmountFen").where(ids.length ? "refundRegistration.activityId IN (:...ids)" : "1 = 0", { ids }).andWhere("businessRefund.status = 'completed'").groupBy("refundRegistration.activityId");
+      registrationBuilder.andWhere(nonTestUserSql('registration')); orderBuilder.andWhere(nonTestUserSql('businessRegistration')); refundBuilder.andWhere(nonTestUserSql('refundRegistration'));
       if (scope.startDate) { registrationBuilder.andWhere("registration.createdAt >= :startDate", { startDate: scope.startDate }); orderBuilder.andWhere("COALESCE(businessOrder.paidAt, businessOrder.createdAt) >= :startDate", { startDate: scope.startDate }); refundBuilder.andWhere("COALESCE(businessRefund.completedAt, businessRefund.createdAt) >= :startDate", { startDate: scope.startDate }); }
       if (scope.endDate) { registrationBuilder.andWhere("registration.createdAt < :endDate", { endDate: scope.endDate }); orderBuilder.andWhere("COALESCE(businessOrder.paidAt, businessOrder.createdAt) < :endDate", { endDate: scope.endDate }); refundBuilder.andWhere("COALESCE(businessRefund.completedAt, businessRefund.createdAt) < :endDate", { endDate: scope.endDate }); }
       const [registrationRows, orderRows, refundRows] = await Promise.all([registrationBuilder.getRawMany<any>(), orderBuilder.getRawMany<any>(), refundBuilder.getRawMany<any>()]);
@@ -3693,10 +3808,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .leftJoin("registration.activity", "activity").leftJoin("registration.user", "growthUser")
       .leftJoin(Order, "growthOrder", "growthOrder.registrationId = registration.id")
       .select("growthUser.id", "userId").addSelect("registration.createdAt", "occurredAt")
-      .addSelect("MAX(CASE WHEN growthOrder.status IN ('paid','partially_refunded') THEN 1 ELSE 0 END)", "paid")
+      .addSelect("MAX(CASE WHEN growthOrder.status IN ('paid','partially_refunded') AND growthOrder.amount > (SELECT COALESCE(SUM(growthRefund.amount),0) FROM refunds growthRefund WHERE growthRefund.orderId = growthOrder.id AND growthRefund.status = 'completed') THEN 1 ELSE 0 END)", "paid")
       .where("registration.status IN (:...growthParticipationStatuses)", { growthParticipationStatuses: [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
       .groupBy("registration.id").addGroupBy("growthUser.id").addGroupBy("registration.createdAt").orderBy("registration.createdAt", "ASC").take(100001);
     if (scope.tenantId) activityPointsBuilder.andWhere("activity.tenantId = :growthTenantId", { growthTenantId: scope.tenantId });
+    activityPointsBuilder.andWhere('activity.isTest = 0').andWhere(nonTestUserSql('registration'));
     if (scope.activityId) activityPointsBuilder.andWhere("activity.id = :growthActivityId", { growthActivityId: scope.activityId });
     if (scope.endDate) activityPointsBuilder.andWhere("registration.createdAt < :growthEndDate", { growthEndDate: scope.endDate });
     applyAdminActivityDataScope(activityPointsBuilder, "registration", admin?.dataScope);
@@ -3715,6 +3831,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (scope.tenantId) regionBuilder.andWhere("(hit.tenantId = :regionTenantId OR regionTenant.id = :regionTenantId)", { regionTenantId: scope.tenantId });
     if (scope.startDate) regionBuilder.andWhere("hit.createdAt >= :regionStartDate", { regionStartDate: scope.startDate });
     if (scope.endDate) regionBuilder.andWhere("hit.createdAt < :regionEndDate", { regionEndDate: scope.endDate });
+    if (scope.activityId || adminActivityScopeIds(admin?.dataScope) !== null) regionBuilder.andWhere('1 = 0');
 
     const [eventRows, pointRows, sourceRows, regionRows, channels] = await Promise.all([
       eventBuilder.getRawMany<any>(), activityPointsBuilder.getRawMany<any>(), sourceBuilder.getRawMany<any>(), regionBuilder.getRawMany<any>(), this.analyticsChannels(query, admin)
@@ -3737,7 +3854,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       rates: { signupRate: rate(funnel.register, funnel.view), paymentRate: rate(funnel.pay, funnel.register), checkInRate: rate(funnel.checkIn, funnel.pay), reviewRate: rate(funnel.review, funnel.checkIn), refundRate: rate(funnel.refund, funnel.pay) },
       cohort: growthCohortSummary(
         pointRows.map((row) => ({ userId: Number(row.userId), occurredAt: row.occurredAt, paid: Number(row.paid || 0) > 0 })),
-        { asOf: scope.endDate ? new Date(scope.endDate.getTime() - 1) : new Date(), cohortStart: scope.startDate, cohortEnd: scope.endDate }
+        { asOf: scope.endDate ? new Date(Math.min(Date.now(), scope.endDate.getTime() - 1)) : new Date(), cohortStart: scope.startDate, cohortEnd: scope.endDate }
       ),
       sources: Array.from(sourceMap.entries()).map(([source, values]) => ({ source, view: values.view || 0, register: values.register || 0, pay: values.pay || 0, checkIn: values.check_in || 0, signupRate: rate(values.register || 0, values.view || 0), paymentRate: rate(values.pay || 0, values.register || 0) })).sort((a, b) => b.pay - a.pay || b.register - a.register),
       regions: regionRows.map((row) => ({ province: row.province, city: row.city, district: row.district, count: Number(row.count || 0), matchedCount: Number(row.matchedCount || 0) })),
@@ -3776,6 +3893,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .where("run.tenantScopeKey = :tenantScopeKey", { tenantScopeKey })
       .andWhere("run.status = :status", { status: "completed" })
       .andWhere("run.mismatchCount = 0")
+      .andWhere("JSON_UNQUOTE(JSON_EXTRACT(run.validationSummary, '$.calculationVersion')) = :calculationVersion", { calculationVersion: ANALYTICS_CALCULATION_VERSION })
       .andWhere("run.startDate <= :startDate", { startDate: query.startDate })
       .andWhere("run.endDate >= :endDate", { endDate: query.endDate })
       .orderBy("run.id", "DESC")
@@ -3787,13 +3905,21 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   async analyticsMetricRows(query: AnalyticsMetricQueryDto = {}, admin?: AdminContext) {
     const scope = await this.analyticsScope(query, admin);
     const tenantScopeKey = homepagePublicationScopeKey(scope.tenantId || null);
-    const builder = this.analyticsDailyMetrics.createQueryBuilder("metric").where("metric.tenantScopeKey = :tenantScopeKey", { tenantScopeKey }).orderBy("metric.metricDate", "ASC").addOrderBy("metric.metricKey", "ASC").take(5000);
+    const builder = this.analyticsDailyMetrics.createQueryBuilder("metric").where("metric.tenantScopeKey = :tenantScopeKey", { tenantScopeKey }).andWhere('metric.calculationVersion = :calculationVersion', { calculationVersion: ANALYTICS_CALCULATION_VERSION }).orderBy("metric.metricDate", "ASC").addOrderBy("metric.metricKey", "ASC").take(5001);
+    const allowed = adminActivityScopeIds(admin?.dataScope);
+    const activityIds = scope.activityId ? (allowed === null || allowed.includes(scope.activityId) ? [scope.activityId] : []) : allowed;
+    if (activityIds !== null) {
+      if (!activityIds.length) return [];
+      builder.andWhere("(metric.dimensionType = 'activity' AND metric.dimensionKey IN (:...metricActivityKeys) OR metric.dimensionType = 'channel' AND metric.dimensionKey IN (SELECT CAST(id AS CHAR) FROM activity_channels WHERE activityId IN (:...metricActivityIds)))", { metricActivityKeys: activityIds.map(String), metricActivityIds: activityIds });
+    }
     if (scope.startDate) builder.andWhere("metric.metricDate >= :startDate", { startDate: analyticsDateText(scope.startDate) });
     if (scope.endDate) builder.andWhere("metric.metricDate < :endDate", { endDate: analyticsDateText(scope.endDate) });
     if (query.metricKey) builder.andWhere("metric.metricKey = :metricKey", { metricKey: query.metricKey });
     if (query.dimensionType) builder.andWhere("metric.dimensionType = :dimensionType", { dimensionType: query.dimensionType });
     if (query.dimensionKey) builder.andWhere("metric.dimensionKey = :dimensionKey", { dimensionKey: query.dimensionKey });
-    return builder.getMany();
+    const rows = await builder.getMany();
+    if (rows.length > 5000) throw new BadRequestException('指标明细超过5000条，请缩小日期或维度范围');
+    return rows;
   }
 
   async analyticsMetricDrilldown(query: AnalyticsMetricQueryDto, admin?: AdminContext) {
@@ -3806,16 +3932,21 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (scope.tenantId) builder.andWhere("event.tenantId = :tenantId", { tenantId: scope.tenantId });
     if (scope.activityId) builder.andWhere("event.activityId = :activityId", { activityId: scope.activityId });
     applyAdminActivityDataScope(builder, "event", admin?.dataScope);
+    builder.andWhere(liveActivityEventSql());
+    if (query.dimensionType === 'activity') builder.andWhere('event.activityId = :dimensionActivityId', { dimensionActivityId: Number(query.dimensionKey || 0) });
+    if (query.dimensionType === 'channel') builder.andWhere('event.channelId = :dimensionChannelId', { dimensionChannelId: Number(query.dimensionKey || 0) });
     const rows = await builder.getMany();
-    return rows.map((row) => ({ id: row.id, type: row.type, amount: row.amount, source: row.source, createdAt: row.createdAt, activity: row.activity ? { id: row.activity.id, title: row.activity.title } : null, user: row.user ? { id: row.user.id, phone: maskPhone(row.user.phone), nickname: row.user.nickname } : null, registrationId: row.registration?.id || null, orderNo: row.order?.orderNo || null, channel: row.channel ? { id: row.channel.id, name: row.channel.name, code: row.channel.code } : null, payload: row.payload }));
+    return rows.map((row) => ({ id: row.id, type: row.type, amount: row.type === 'pay' ? row.order?.amount ?? row.amount : row.amount, source: row.source, createdAt: row.createdAt, activity: row.activity ? { id: row.activity.id, title: row.activity.title } : null, user: row.user ? { id: row.user.id, phone: maskPhone(row.user.phone), nickname: row.user.nickname } : null, registrationId: row.registration?.id || null, orderNo: row.order?.orderNo || null, channel: row.channel ? { id: row.channel.id, name: row.channel.name, code: row.channel.code } : null, payload: row.payload }));
   }
 
   listAnalyticsCalculationRuns(admin?: AdminContext, tenantId?: number) {
+    if (adminActivityScopeIds(admin?.dataScope) !== null) return Promise.resolve([]);
     const tenantScopeKey = homepagePublicationScopeKey(this.isTenantScoped(admin) ? admin?.tenantId : tenantId);
     return this.analyticsCalculationRuns.find({ where: { tenantScopeKey }, order: { id: "DESC" }, take: 50 });
   }
 
   async recomputeAnalytics(dto: AnalyticsRecomputeDto, admin?: AdminContext) {
+    if (adminActivityScopeIds(admin?.dataScope) !== null) throw new ForbiddenException('仅有部分活动权限时不能重算商家整体指标');
     const tenantId = this.isTenantScoped(admin) ? Number(admin?.tenantId || 0) : Number(dto.tenantId || 0);
     if (tenantId && !(await this.tenants.findOneBy({ id: tenantId }))) throw new NotFoundException("商家不存在");
     let start: Date;
@@ -3862,7 +3993,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       for (let cursor = new Date(start); cursor <= finalRange.start; cursor = new Date(cursor.getTime() + 86400000)) {
         const metricDate = analyticsDateText(cursor);
         const range = analyticsDayRange(metricDate);
-        const builder = this.conversionEvents.createQueryBuilder("event").leftJoin("event.tenant", "tenant").leftJoin("event.activity", "activity").select("event.type", "type").addSelect("COALESCE(event.tenantId, 0)", "tenantId").addSelect("COALESCE(event.activityId, 0)", "activityId").addSelect("COALESCE(event.channelId, 0)", "channelId").addSelect("COUNT(1)", "count").addSelect("COALESCE(SUM(event.amount), 0)", "amount").where("event.createdAt >= :start AND event.createdAt < :end", range).groupBy("event.type").addGroupBy("event.tenantId").addGroupBy("event.activityId").addGroupBy("event.channelId");
+        const builder = this.conversionEvents.createQueryBuilder("event").leftJoin("event.tenant", "tenant").leftJoin("event.activity", "activity").select("event.type", "type").addSelect("COALESCE(event.tenantId, 0)", "tenantId").addSelect("COALESCE(event.activityId, 0)", "activityId").addSelect("COALESCE(event.channelId, 0)", "channelId").addSelect("COUNT(1)", "count").addSelect(`COALESCE(SUM(${activityEventAmountSql()}), 0)`, "amount").where("event.createdAt >= :start AND event.createdAt < :end", range).andWhere(liveActivityEventSql()).groupBy("event.type").addGroupBy("event.tenantId").addGroupBy("event.activityId").addGroupBy("event.channelId");
         if (tenantId) builder.andWhere("event.tenantId = :tenantId", { tenantId });
         const rows = await builder.getRawMany<{ type: string; tenantId: string; activityId: string; channelId: string; count: string; amount: string }>();
         const buckets = new Map<string, { value: number; amountFen: number }>();
@@ -5506,6 +5637,218 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return this.withActivityStats({ ...activity, hosts, sections } as any);
   }
 
+  async activityOperation(id: number, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id });
+    if (!activity) throw new NotFoundException('活动不存在');
+    this.assertActivityAccess(activity, admin);
+    const versions = await this.dataSource.getRepository(ActivityOperationVersion).find({ where: { activity: { id } }, order: { revision: 'DESC' }, take: 20 });
+    const plan = versions[0]?.plan || defaultOperationPlan();
+    const channels = await this.activityChannels.find({ where: { activity: { id } }, loadEagerRelations: false, order: { id: 'ASC' } });
+    const channelMetrics = await this.activityChannelEconomics(activity, plan.entries, channels, admin);
+    const gross = await this.orders.createQueryBuilder('o').innerJoin('o.registration', 'r')
+      .select('COALESCE(SUM(o.amount),0)', 'amount').where('r.activityId = :id', { id })
+      .andWhere('o.status IN (:...statuses)', { statuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded] }).getRawOne();
+    const refunds = await this.refunds.createQueryBuilder('f').innerJoin('f.order', 'o').innerJoin('o.registration', 'r')
+      .select('COALESCE(SUM(f.amount),0)', 'amount').where('r.activityId = :id', { id }).andWhere("f.status = 'completed'").getRawOne();
+    return { activityId: id, title: activity.title, isTest: activity.isTest, revision: versions[0]?.revision || 0, plan,
+      channels: channels.map(row => ({ id: row.id, name: row.name })), channelMetrics,
+      summary: operationSummary(plan, yuanToFen(gross?.amount || '0'), yuanToFen(refunds?.amount || '0')),
+      versions: versions.map(v => ({ revision: v.revision, updatedBy: v.updatedBy, createdAt: v.createdAt, plan: v.plan })) };
+  }
+
+  private async activityChannelEconomics(activity: Activity, entries: ReturnType<typeof normalizeOperationPlan>['entries'], channels: ActivityChannel[], admin?: AdminContext) {
+    const eligible = [RegistrationStatus.Approved, RegistrationStatus.CheckedIn, RegistrationStatus.PendingReview];
+    const paidStatuses = [OrderStatus.Paid, OrderStatus.PartiallyRefunded, OrderStatus.Refunded];
+    const rows = await this.orders.createQueryBuilder('o').innerJoin('o.registration', 'r').leftJoin('r.user', 'user')
+      .select('o.id', 'id').addSelect('r.userId', 'userId').addSelect('r.channelId', 'channelId').addSelect('r.status', 'registrationStatus')
+      .addSelect('user.sourceChannel', 'userSource')
+      .addSelect('o.amount', 'amount').addSelect('o.paidAt', 'paidAt')
+      .addSelect(sub => sub.select('COALESCE(SUM(f.amount), 0)').from(Refund, 'f').where('f.orderId = o.id').andWhere("f.status = 'completed'"), 'refundAmount')
+      .where('r.activityId = :activityId', { activityId: activity.id }).andWhere('o.status IN (:...paidStatuses)', { paidStatuses }).getRawMany();
+    const includedRows = activity.isTest ? rows : rows.filter(row => row.userSource !== 'test');
+    const facts: ChannelOrderFact[] = includedRows.map(row => ({ id: Number(row.id), userId: Number(row.userId), channelId: Number(row.channelId || 0),
+      amountFen: yuanToFen(row.amount), refundFen: yuanToFen(row.refundAmount || '0'), eligible: eligible.includes(row.registrationStatus), paidAt: row.paidAt ? new Date(row.paidAt) : null }));
+    const fullScope = normalizeAdminDataScope(admin?.dataScope).type === 'all';
+    let firstIds: Set<number> | null = fullScope ? new Set() : null;
+    const userIds = Array.from(new Set(facts.filter(row => row.eligible && row.amountFen > row.refundFen).map(row => row.userId)));
+    if (fullScope && userIds.length) {
+      const first = this.orders.createQueryBuilder('o').innerJoin('o.registration', 'r').innerJoin('r.activity', 'a')
+        .select('o.id', 'orderId').addSelect('ROW_NUMBER() OVER (PARTITION BY r.userId ORDER BY o.paidAt, o.id)', 'firstRank')
+        .where('r.userId IN (:...userIds)', { userIds }).andWhere('o.status IN (:...paidStatuses)', { paidStatuses })
+        .andWhere('r.status IN (:...eligible)', { eligible }).andWhere('o.paidAt IS NOT NULL')
+        .andWhere('a.isTest = :isTest', { isTest: Boolean(activity.isTest) })
+        .andWhere("o.amount > (SELECT COALESCE(SUM(first_refund.amount),0) FROM refunds first_refund WHERE first_refund.orderId = o.id AND first_refund.status = 'completed')");
+      activity.tenant ? first.andWhere('a.tenantId = :tenantId', { tenantId: activity.tenant.id }) : first.andWhere('a.tenantId IS NULL');
+      const [sql, parameters] = first.getQueryAndParameters();
+      const firstRows = await this.dataSource.query(`SELECT first_orders.orderId FROM (${sql}) first_orders WHERE first_orders.firstRank = 1`, parameters);
+      firstIds = new Set(firstRows.map((row: any) => Number(row.orderId)));
+    }
+    return { scope: activity.isTest ? 'test' : 'live', asOf: new Date(), fullCustomerHistoryVisible: fullScope, excludedTestOrders: rows.length - includedRows.length,
+      rows: channelEconomics(channels, entries, facts, firstIds),
+      unallocatedCostFen: entries.filter(entry => entry.kind === 'cost' && entry.channelId == null).reduce((sum, entry) => sum + entry.amountFen, 0) };
+  }
+
+  async activitySeries(id: number, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id });
+    if (!activity) throw new NotFoundException('活动不存在');
+    this.assertActivityAccess(activity, admin);
+    const series = activity.seriesId ? await this.dataSource.getRepository(ActivitySeries).findOne({ where: { id: activity.seriesId }, relations: { tenant: true } }) : null;
+    if (series && (series.tenant?.id || 0) !== (activity.tenant?.id || 0)) throw new NotFoundException('系列不属于当前商家');
+    const sessions = series ? await this.activities.find({ where: { seriesId: series.id, tenant: activity.tenant ? { id: activity.tenant.id } : IsNull() }, order: { startTime: 'ASC', id: 'ASC' } }) : [activity];
+    return { sourceActivityId: id, seriesId: series?.id || null, title: series?.title || activity.title, revision: series?.revision || 0,
+      sessions: sessions.filter(row => adminCanAccessActivity(admin?.dataScope, row.id)).map(row => ({ id: row.id, title: row.title, status: row.status, startTime: row.startTime, endTime: row.endTime, location: row.location, capacity: row.capacity })) };
+  }
+
+  async activityFollowups(id: number, page: number, admin?: AdminContext) {
+    const activity = await this.activities.findOneBy({ id });
+    if (!activity) throw new NotFoundException('活动不存在');
+    this.assertActivityAccess(activity, admin);
+    const currentPage = Number.isSafeInteger(page) ? Math.max(1, Math.min(page, 10000)) : 1;
+    const [rows, total] = await this.dataSource.getRepository(ActivityFollowup).findAndCount({ where: { activityId: id }, order: { dueAt: 'ASC', id: 'ASC' }, take: 50, skip: (currentPage - 1) * 50 });
+    const candidates = await this.registrations.createQueryBuilder('r').leftJoin('r.user', 'u')
+      .select('r.id', 'id').addSelect('u.nickname', 'name').where('r.activityId = :id', { id }).andWhere('r.status = :status', { status: RegistrationStatus.CheckedIn }).orderBy('r.id', 'DESC').take(200).getRawMany();
+    const owners = await this.admins.find({ where: activity.tenant ? [{ tenant: { id: activity.tenant.id }, enabled: true }, { id: admin?.id || 0, enabled: true }] : { tenant: IsNull(), enabled: true } });
+    const allowedOwners = owners.filter(row => adminCanAccessActivity(row.dataScope, id) && effectivePermissionsForAdmin({ ...row, tenantId: row.tenant?.id || null }).includes('registration.manage'));
+    const subsequent = await this.followupSubsequentActivity(activity, rows.map(row => row.registrationId), admin);
+    return { title: activity.title, activityId: id, isTest: activity.isTest, ready: activity.status !== ActivityStatus.Cancelled && +activity.endTime <= Date.now(), items: rows.map(row => ({ ...row, subsequent: subsequent.get(row.registrationId) || { registrations: 0, paidActivities: 0 } })), total, page: currentPage, pageSize: 50,
+      candidates: candidates.map(row => ({ id: Number(row.id), name: row.name || `报名${row.id}` })), candidateLimit: 200,
+      assignees: allowedOwners.map(row => ({ id: row.id, name: row.username })) };
+  }
+
+  private async followupSubsequentActivity(activity: Activity, registrationIds: number[], admin?: AdminContext) {
+    const result = new Map<number, { registrations: number; paidActivities: number }>();
+    if (!registrationIds.length || +activity.endTime > Date.now()) return result;
+    const sources = await this.registrations.createQueryBuilder('r').select('r.id', 'id').addSelect('r.userId', 'userId')
+      .where('r.id IN (:...ids)', { ids: registrationIds }).andWhere('r.activityId = :id', { id: activity.id }).getRawMany();
+    const userIds = Array.from(new Set(sources.map(row => Number(row.userId))));
+    if (!userIds.length) return result;
+    const from = activity.endTime; const until = new Date(Math.min(Date.now(), +from + 30 * 86400000));
+    const base = this.registrations.createQueryBuilder('r').innerJoin('r.activity', 'activity').innerJoin('r.user', 'subsequentUser')
+      .select('r.userId', 'userId').addSelect('COUNT(DISTINCT activity.id)', 'count')
+      .where('r.userId IN (:...userIds)', { userIds }).andWhere('activity.id <> :activityId', { activityId: activity.id })
+      .andWhere('activity.isTest = :isTest', { isTest: Boolean(activity.isTest) }).andWhere('activity.status <> :cancelled', { cancelled: ActivityStatus.Cancelled });
+    activity.tenant ? base.andWhere('activity.tenantId = :tenantId', { tenantId: activity.tenant.id }) : base.andWhere('activity.tenantId IS NULL');
+    applyAdminActivityDataScope(base, 'activity', admin?.dataScope);
+    if (!activity.isTest) base.andWhere("(subsequentUser.sourceChannel IS NULL OR subsequentUser.sourceChannel <> 'test')");
+    base.groupBy('r.userId');
+    const registrations = await base.clone().andWhere('r.createdAt >= :from AND r.createdAt <= :until', { from, until })
+      .andWhere('r.status IN (:...statuses)', { statuses: [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn] }).getRawMany();
+    const paid = await base.clone().innerJoin(Order, 'o', 'o.registrationId = r.id').andWhere('o.paidAt >= :from AND o.paidAt <= :until', { from, until })
+      .andWhere('o.status IN (:...paidStatuses)', { paidStatuses: [OrderStatus.Paid, OrderStatus.PartiallyRefunded] })
+      .andWhere('r.status IN (:...statuses)', { statuses: [RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
+      .andWhere("o.amount > (SELECT COALESCE(SUM(f.amount),0) FROM refunds f WHERE f.orderId = o.id AND f.status = 'completed')").getRawMany();
+    const byUser = new Map(registrations.map(row => [Number(row.userId), Number(row.count)]));
+    const paidByUser = new Map(paid.map(row => [Number(row.userId), Number(row.count)]));
+    for (const row of sources) result.set(Number(row.id), { registrations: byUser.get(Number(row.userId)) || 0, paidActivities: paidByUser.get(Number(row.userId)) || 0 });
+    return result;
+  }
+
+  async saveActivityFollowup(id: number, value: unknown, admin?: AdminContext) {
+    if (!admin?.id) throw new ForbiddenException('请先登录');
+    let input: ReturnType<typeof normalizeActivityFollowup>;
+    try { input = normalizeActivityFollowup(value); } catch (e: any) { throw new BadRequestException(e.message); }
+    const activity = await this.activities.findOneBy({ id });
+    if (!activity) throw new NotFoundException('活动不存在');
+    this.assertActivityAccess(activity, admin);
+    if (activity.status === ActivityStatus.Cancelled || +activity.endTime > Date.now()) throw new BadRequestException('活动结束后才能建立参与跟进');
+    const assignee = await this.admins.findOne({ where: { id: input.assigneeId, enabled: true } });
+    if (!assignee || ((assignee.tenant?.id || 0) !== (activity.tenant?.id || 0) && !(assignee.id === admin.id && !admin.tenantId)) || !adminCanAccessActivity(assignee.dataScope, id)
+      || !effectivePermissionsForAdmin({ ...assignee, tenantId: assignee.tenant?.id || null }).includes('registration.manage')) throw new BadRequestException('负责人不可处理当前商家的报名');
+    const saved = await this.dataSource.transaction(async manager => {
+      const registration = await manager.getRepository(Registration).createQueryBuilder('r').where('r.id = :registrationId', { registrationId: input.registrationId }).andWhere('r.activityId = :id', { id }).setLock('pessimistic_write').getOne();
+      if (!registration || registration.status !== RegistrationStatus.CheckedIn) throw new NotFoundException('报名未到场或不属于此活动');
+      const repo = manager.getRepository(ActivityFollowup);
+      const old = await repo.findOneBy({ registrationId: input.registrationId, kind: input.kind });
+      if ((old?.revision || 0) !== input.revision) throw new ConflictException('跟进记录已更新，请重新加载');
+      if (old?.status === 'declined' && input.status !== 'declined') throw new BadRequestException('用户已拒绝本项跟进，不可重新开启');
+      return repo.save(repo.create({ ...old, ...input, activityId: id, revision: input.revision + 1 }));
+    });
+    await this.logOperation(admin, 'activity.followup_save', 'activity_followup', saved.id, '保存活动后跟进', { activityId: id, kind: saved.kind, status: saved.status, assigneeId: saved.assigneeId, revision: saved.revision });
+    return saved;
+  }
+
+  async createSeriesSessions(id: number, input: unknown, admin?: AdminContext) {
+    if (!admin?.id) throw new ForbiddenException('请先登录');
+    if (normalizeAdminDataScope(admin.dataScope).type !== 'all') throw new ForbiddenException('当前账号仅能操作指定活动，请由商家管理员创建新场次');
+    let batch: ReturnType<typeof validateSeriesBatch>;
+    try { batch = validateSeriesBatch(input); } catch (e: any) { throw new BadRequestException(e.message); }
+    const newIds = await this.dataSource.transaction(async manager => {
+      const activities = manager.getRepository(Activity);
+      const locked = await activities.createQueryBuilder('activity').where('activity.id = :id', { id }).setLock('pessimistic_write').getOne();
+      if (!locked) throw new NotFoundException('活动不存在');
+      const source = await activities.findOneOrFail({ where: { id }, relations: { tenant: true, fields: true, category: true, agent: true, minMemberLevel: true }, loadEagerRelations: false });
+      this.assertActivityAccess(source, admin);
+      this.assertTenantSubscriptionWritable(source.tenant, admin);
+      if (source.tenant) {
+        await manager.getRepository(Tenant).createQueryBuilder('tenant').where('tenant.id = :id', { id: source.tenant.id }).setLock('pessimistic_write').getOne();
+        this.assertTenantFeature(source.tenant, 'activities');
+        await this.assertTenantQuota(source.tenant, 'activities', await activities.count({ where: { tenant: { id: source.tenant.id } } }), batch.sessions.length);
+      }
+      const seriesRepo = manager.getRepository(ActivitySeries);
+      let series = source.seriesId ? await seriesRepo.findOne({ where: { id: source.seriesId }, relations: { tenant: true } }) : null;
+      if (source.seriesId && !series) throw new NotFoundException('系列不存在');
+      if (series) {
+        await seriesRepo.createQueryBuilder('series').where('series.id = :id', { id: series.id }).setLock('pessimistic_write').getOne();
+        series = await seriesRepo.findOneOrFail({ where: { id: series.id }, relations: { tenant: true } });
+        if ((series.tenant?.id || 0) !== (source.tenant?.id || 0)) throw new NotFoundException('系列不属于当前商家');
+      }
+      if ((series?.revision || 0) !== batch.revision) throw new ConflictException('系列已更新，请重新加载；本次未重复创建场次');
+      const existing = series ? await activities.find({ where: { seriesId: series.id }, loadEagerRelations: false }) : [source];
+      for (const session of batch.sessions) {
+        if (existing.some(row => row.status !== ActivityStatus.Cancelled && +new Date(session.startTime) < +row.endTime && +new Date(session.endTime) > +row.startTime)) throw new BadRequestException('排期与现有同系列场次重叠');
+      }
+      series = await seriesRepo.save(seriesRepo.create({ ...(series || {}), title: batch.title, tenant: source.tenant, revision: batch.revision + 1 }));
+      if (!source.seriesId) await activities.update(id, { seriesId: series.id });
+      const hosts = await manager.getRepository(ActivityHost).find({ where: { activity: { id } }, loadEagerRelations: false });
+      const sections = await manager.getRepository(ActivitySection).find({ where: { activity: { id } }, loadEagerRelations: false });
+      const result: number[] = [];
+      for (let index = 0; index < batch.sessions.length; index++) {
+        const session = batch.sessions[index];
+        const { id: sourceId, createdAt, updatedAt, fields, ...content } = source;
+        const copy = activities.create({ ...content, title: `${batch.title} · 第${existing.length + index + 1}场`, seriesId: series.id,
+          location: session.location, locationLatitude: null, locationLongitude: null, locationMapUrl: null,
+          startTime: new Date(session.startTime), endTime: new Date(session.endTime), registrationDeadline: new Date(session.registrationDeadline),
+          status: ActivityStatus.Draft, featured: false, scheduledPublishAt: null, cancelledAt: null, cancellationReason: null,
+          priorityMemberLevel: null, priorityRegistrationEndsAt: null, shareTitle: null, shareDescription: null, shareImageUrl: null, groupQrCodeUrl: null });
+        const saved = await activities.save(copy);
+        for (const field of fields || []) { const { id: fieldId, ...value } = field; await manager.getRepository(ActivityField).save({ ...value, activity: saved }); }
+        for (const host of hosts.filter(host => !isLegacySeedHost(host))) { const { id: hostId, ...value } = host; await manager.getRepository(ActivityHost).save({ ...value, activity: saved }); }
+        for (const section of sections) { const { id: sectionId, ...value } = section; await manager.getRepository(ActivitySection).save({ ...value, activity: saved }); }
+        result.push(saved.id);
+      }
+      return result;
+    });
+    for (const newId of newIds) {
+      const activity = await this.getActivity(newId, admin);
+      await this.recordActivityVersion(activity, admin, 'series_create', '系列排期创建草稿');
+      await this.logOperation(admin, 'activity.series_create', 'activity', newId, '系列排期创建草稿', { sourceActivityId: id });
+    }
+    return { ...(await this.activitySeries(id, admin)), createdActivityIds: newIds };
+  }
+
+  async saveActivityOperation(id: number, body: { revision?: number; plan?: unknown }, admin?: AdminContext) {
+    if (!admin?.id) throw new ForbiddenException('请先登录');
+    if (!effectivePermissionsForAdmin(admin).includes('finance.view')) throw new ForbiddenException('保存经营台账还需要财务查看权限');
+    if (!Number.isSafeInteger(body?.revision) || Number(body.revision) < 0) throw new BadRequestException('台账版本无效，请重新加载');
+    let plan: ReturnType<typeof normalizeOperationPlan>;
+    try { plan = normalizeOperationPlan(body.plan); } catch (e: any) { throw new BadRequestException(e.message); }
+    await this.dataSource.transaction(async manager => {
+      const activity = await manager.getRepository(Activity).createQueryBuilder('activity').where('activity.id = :id', { id }).setLock('pessimistic_write').getOne();
+      if (!activity) throw new NotFoundException('活动不存在');
+      activity.tenant = await manager.getRepository(Activity).findOne({ where: { id }, relations: { tenant: true } }).then(row => row?.tenant || null);
+      this.assertActivityAccess(activity, admin);
+      this.assertTenantSubscriptionWritable(activity.tenant, admin);
+      const repo = manager.getRepository(ActivityOperationVersion);
+      const channelIds = Array.from(new Set(plan.entries.map(entry => entry.channelId).filter((value): value is number => typeof value === 'number' && value > 0)));
+      if (channelIds.length && await manager.getRepository(ActivityChannel).count({ where: { id: In(channelIds), activity: { id } } }) !== channelIds.length) throw new BadRequestException('成本渠道不属于当前活动');
+      const current = await repo.findOne({ where: { activity: { id } }, order: { revision: 'DESC' } });
+      if ((current?.revision || 0) !== body.revision) throw new ConflictException('台账已被更新，请重新加载后再保存');
+      await repo.save(repo.create({ activity, revision: Number(body.revision) + 1, plan, updatedBy: String(admin.username || admin.id) }));
+    });
+    await this.logOperation(admin, 'activity.operation_save', 'activity', id, '保存活动经营台账', { revision: Number(body.revision) + 1 });
+    return this.activityOperation(id, admin);
+  }
+
   async listActivityApprovalLogs(activityId: number, admin?: AdminContext) {
     const activity = await this.activities.findOne({ where: { id: activityId } });
     if (!activity) throw new NotFoundException("活动不存");
@@ -5530,6 +5873,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!activity) throw new NotFoundException("活动不存");
     this.assertActivityAccess(activity, admin);
     const before = id ? this.activityAuditSnapshot(activity) : null;
+    if (id && dto.isTest !== undefined && dto.isTest !== Boolean(activity.isTest)) throw new BadRequestException('测试标记创建后不可更改；请新建正式活动，避免历史经营口径变化');
+    activity.isTest = dto.isTest === undefined ? Boolean(activity.isTest) : dto.isTest;
     const tenant = await this.resolveActivityTenant(admin, activity.tenant, dto.tenantId);
     this.assertTenantSubscriptionWritable(tenant, admin);
     const levelScopeKey = memberLevelScopeKey(tenant);
@@ -5547,6 +5892,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (dto.requireReview && tenant && !permissions.registrationReviewEnabled) throw new BadRequestException("当前商家未开启报名审核权限");
     const fromStatus = id ? activity.status : null;
     const nextStatus = this.resolveActivitySaveStatus(dto.status, activity.status, permissions, admin);
+    if ([ActivityStatus.Open, ActivityStatus.PendingApproval].includes(nextStatus) && isPlanningActivity(dto)) throw new BadRequestException('请先确认策划草稿的场地、时间、价格与须知，再发布活动');
     const scheduleOrLocationChanged = Boolean(id && (
       activity.startTime.getTime() !== this.parseDate(dto.startTime).getTime()
       || activity.endTime.getTime() !== this.parseDate(dto.endTime).getTime()
@@ -5580,6 +5926,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async copyActivity(id: number, admin?: AdminContext) {
     const activity = await this.getActivity(id, admin) as any;
+    activity.hosts = (activity.hosts || []).filter((host: ActivityHost) => !isLegacySeedHost(host));
     const dto = this.activityDtoFromSnapshot({ ...activity, title: `${activity.title}（副本）`, status: ActivityStatus.Draft, tenantId: activity.tenant?.id || null });
     const copied = await this.saveActivity(dto, undefined, admin);
     await this.logOperation(admin, "activity.copy", "activity", copied.id, `复制活动：${activity.title}`, { sourceActivityId: id });
@@ -5606,13 +5953,14 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       title: activity.title,
       coverUrl: activity.coverUrl,
       description: activity.description,
+      notice: activity.notice,
       location: activity.location,
       startTime: activity.startTime,
       endTime: activity.endTime,
       registrationDeadline: activity.registrationDeadline,
       fields: activity.fields,
       sections: activity.sections,
-      hosts: activity.hosts,
+      hosts: (activity.hosts || []).filter((host: ActivityHost) => !isLegacySeedHost(host)),
       price: activity.price,
       paymentMethods: setting?.paymentMethods,
       hasOrganizerProfile: activity.tenant ? Boolean(organizerProfile?.intro || organizerProfile?.servicePromise) : undefined,
@@ -5625,6 +5973,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const result = await this.activityVersions.createQueryBuilder("version").select("COALESCE(MAX(version.versionNo), 0)", "max").where("version.activityId = :activityId", { activityId: activity.id }).getRawOne<{ max: string }>();
     const snapshot = {
       title: activity.title, tenantId: activity.tenant?.id || null, coverUrl: activity.coverUrl, shareTitle: activity.shareTitle, shareDescription: activity.shareDescription, shareImageUrl: activity.shareImageUrl, description: activity.description, notice: activity.notice,
+      isTest: activity.isTest,
       location: activity.location, locationProvince: activity.locationProvince, locationCity: activity.locationCity, locationDistrict: activity.locationDistrict, locationLatitude: activity.locationLatitude, locationLongitude: activity.locationLongitude, locationMapUrl: activity.locationMapUrl, groupQrCodeUrl: activity.groupQrCodeUrl,
       startTime: activity.startTime, endTime: activity.endTime, registrationDeadline: activity.registrationDeadline, capacity: activity.capacity, price: activity.price, status: activity.status,
       featured: activity.featured, requireReview: activity.requireReview, allowCancel: activity.allowCancel, categoryId: activity.category?.id || null, agentId: activity.agent?.id || null,
@@ -5638,6 +5987,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   private activityDtoFromSnapshot(snapshot: any): ActivityDto {
     return {
       tenantId: snapshot.tenantId || snapshot.tenant?.id || undefined,
+      isTest: snapshot.isTest === undefined ? undefined : Boolean(snapshot.isTest),
       title: String(snapshot.title || "").trim(), coverUrl: snapshot.coverUrl || undefined, shareTitle: snapshot.shareTitle || undefined, shareDescription: snapshot.shareDescription || undefined, shareImageUrl: snapshot.shareImageUrl || undefined, description: String(snapshot.description || "").trim(), notice: snapshot.notice || undefined,
       location: String(snapshot.location || "").trim(), locationProvince: snapshot.locationProvince || undefined, locationCity: snapshot.locationCity || undefined, locationDistrict: snapshot.locationDistrict || undefined, locationLatitude: snapshot.locationLatitude === null || snapshot.locationLatitude === undefined ? undefined : Number(snapshot.locationLatitude), locationLongitude: snapshot.locationLongitude === null || snapshot.locationLongitude === undefined ? undefined : Number(snapshot.locationLongitude), locationMapUrl: snapshot.locationMapUrl || undefined, groupQrCodeUrl: snapshot.groupQrCodeUrl || undefined,
       startTime: new Date(snapshot.startTime).toISOString(), endTime: new Date(snapshot.endTime).toISOString(), registrationDeadline: new Date(snapshot.registrationDeadline).toISOString(),
@@ -5679,6 +6029,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (!activity) throw new NotFoundException("活动不存");
     this.assertActivityContentCompliance(activity);
     if (activity.status !== ActivityStatus.PendingApproval) throw new BadRequestException("只有待平台审核活动可以通过");
+    const publishCheck = await this.activityPublishCheck(id, admin);
+    if (!publishCheck.passed) throw new BadRequestException(`活动发布检查未通过：${publishCheck.issues.filter(item => item.blocking).map(item => item.message).join('；')}`);
     const fromStatus = activity.status;
     activity.status = ActivityStatus.Open;
     const saved = await this.activities.save(activity);
@@ -8513,7 +8865,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (ticket.signed && ticket.valid && (registration.activity.id !== ticket.activityId || checkInNonce(registration.checkInCode, secret) !== ticket.nonce)) throw new BadRequestException("签到二维码与报名记录不匹配或已失效");
     if (expectedActivityId && registration.activity.id !== expectedActivityId) throw new BadRequestException(`该票属于“${registration.activity.title}”，不能在当前活动核销`);
     this.assertActivityAccess(registration.activity, currentAdmin);
-    if (this.isTenantScoped(currentAdmin) && registration.tenant?.id !== currentAdmin?.tenantId && registration.activity.tenant?.id !== currentAdmin?.tenantId) throw new NotFoundException("Resource not found or not in current tenant");
+    if (this.isTenantScoped(currentAdmin) && registration.tenant?.id !== currentAdmin?.tenantId && registration.activity.tenant?.id !== currentAdmin?.tenantId) throw new NotFoundException("记录不存在或暂无访问权限");
     if (registration.status === RegistrationStatus.CheckedIn) throw new BadRequestException("该报名已签到，请勿重复核销");
     if (registration.status !== RegistrationStatus.Approved) throw new BadRequestException("只有报名成功可以签到");
     const eligibilityOrder = await this.orders.findOne({ where: { registration: { id: registration.id } } });
@@ -10416,7 +10768,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     return admin?.username || "system";
   }
 
-  private async dashboardActivityRow(activity: Activity) {
+  private async dashboardActivityRow(activity: Activity, canSeeMoney = false) {
     const [registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount, paidOrderCount, paidAmount, refundAmount] = await Promise.all([
       this.registrations.count({ where: { activity: { id: activity.id } } }),
       this.checkIns.createQueryBuilder("checkIn").leftJoin("checkIn.registration", "registration").where("registration.activityId = :activityId", { activityId: activity.id }).getCount(),
@@ -10432,22 +10784,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const checkInRate = boundedPercentage(checkInCount, registeredCount);
     const registrationConversionRate = boundedPercentage(registeredCount, viewCount);
     const netAmount = paidTotal - refundTotal;
-    const operationAdvice = this.dashboardActivityAdvice({ registeredCount, netAmount, checkInRate, registrationConversionRate });
+    const operationAdvice = canSeeMoney ? this.dashboardActivityAdvice({ registeredCount, netAmount, checkInRate, registrationConversionRate }) : { level: 'muted', label: '参与情况', message: '可查看报名、签到及评价；财务指标需相应权限。' };
     return {
       id: activity.id,
       title: activity.title,
       status: activity.status,
-      tenant: activity.tenant ? this.publicTenant(activity.tenant) : null,
+      tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name } : null,
       registeredCount,
       checkInCount,
       reviewCount,
       viewCount,
       shareVisitCount,
       paidOrderCount,
-      paidAmount: paidTotal.toFixed(2),
-      refundAmount: refundTotal.toFixed(2),
-      netAmount: netAmount.toFixed(2),
-      avgOrderAmount: (paidOrderCount > 0 ? paidTotal / paidOrderCount : 0).toFixed(2),
+      paidAmount: canSeeMoney ? paidTotal.toFixed(2) : null,
+      refundAmount: canSeeMoney ? refundTotal.toFixed(2) : null,
+      netAmount: canSeeMoney ? netAmount.toFixed(2) : null,
+      avgOrderAmount: canSeeMoney ? (paidOrderCount > 0 ? paidTotal / paidOrderCount : 0).toFixed(2) : null,
       checkInRate,
       registrationConversionRate,
       operationAdvice,
@@ -10457,6 +10809,11 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private async analyticsScope(query: AnalyticsQueryDto = {}, admin?: AdminContext) {
     const tenantId = this.isTenantScoped(admin) ? admin?.tenantId || undefined : query.tenantId;
+    if (query.activityId) {
+      const activity = await this.activities.findOneBy({ id: query.activityId });
+      if (!activity || tenantId && activity.tenant?.id !== tenantId) throw new NotFoundException('活动不存在或不属于当前商家');
+      this.assertActivityAccess(activity, admin);
+    }
     if (tenantId && !this.isTenantScoped(admin)) {
       const tenant = await this.tenants.findOneBy({ id: tenantId });
       if (!tenant) throw new NotFoundException("商家不存在");
@@ -10488,10 +10845,13 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     if (scope.tenantId) walletTx.andWhere("walletTx.tenantId = :walletTenantId", { walletTenantId: scope.tenantId });
     if (scope.startDate) walletTx.andWhere("walletTx.createdAt >= :walletStartDate", { walletStartDate: scope.startDate });
     if (scope.endDate) walletTx.andWhere("walletTx.createdAt < :walletEndDate", { walletEndDate: scope.endDate });
+    if (scope.activityId || adminActivityScopeIds(admin?.dataScope) !== null) walletTx.andWhere('1 = 0');
     return { events, payments, refunds, walletTx };
   }
 
   private applyAnalyticsScope(builder: { andWhere: (condition: string, parameters?: Record<string, unknown>) => unknown }, alias: string, scope: { tenantId?: number; activityId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
+    if (alias === 'event') builder.andWhere(liveActivityEventSql(alias));
+    else if (alias === 'transaction' || alias === 'refund') { builder.andWhere('activity.isTest = 0'); builder.andWhere(nonTestUserSql('registration')); }
     const tenantId = this.isTenantScoped(admin) ? admin?.tenantId : scope.tenantId;
     if (tenantId) builder.andWhere(`${alias}.tenantId = :analyticsTenantId`, { analyticsTenantId: tenantId });
     if (scope.activityId) {
@@ -10503,34 +10863,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private channelReportBuilder(scope: { tenantId?: number; activityId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
-    const builder = this.activityChannels
-      .createQueryBuilder("channel")
-      .leftJoin("channel.activity", "activity")
-      .leftJoin("channel.tenant", "tenant")
-      .leftJoin("conversion_events", "event", "event.channelId = channel.id")
-      .select("channel.id", "id")
-      .addSelect("channel.name", "name")
-      .addSelect("channel.code", "code")
-      .addSelect("channel.source", "source")
-      .addSelect("channel.enabled", "enabled")
-      .addSelect("activity.id", "activityId")
-      .addSelect("activity.title", "activityTitle")
-      .addSelect("tenant.name", "tenantName")
-      .addSelect("SUM(CASE WHEN event.type = 'view' THEN 1 ELSE 0 END)", "viewCount")
-      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
-      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", "paidCount")
-      .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", "checkInCount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "paidAmount")
-      .groupBy("channel.id")
-      .addGroupBy("activity.id")
-      .addGroupBy("tenant.name")
-      .orderBy("paidAmount", "DESC");
+    const eventJoin = ['event.channelId = channel.id', liveActivityEventSql(), ...(scope.startDate ? ['event.createdAt >= :channelStartDate'] : []), ...(scope.endDate ? ['event.createdAt < :channelEndDate'] : [])].join(' AND ');
+    const builder = this.activityChannels.createQueryBuilder('channel')
+      .leftJoin('channel.activity', 'activity').leftJoin('channel.tenant', 'tenant')
+      .leftJoin('conversion_events', 'event', eventJoin, { channelStartDate: scope.startDate, channelEndDate: scope.endDate })
+      .select('channel.id', 'id').addSelect('channel.name', 'name').addSelect('channel.code', 'code').addSelect('channel.source', 'source').addSelect('channel.enabled', 'enabled')
+      .addSelect('activity.id', 'activityId').addSelect('activity.title', 'activityTitle').addSelect('tenant.name', 'tenantName')
+      .addSelect("SUM(CASE WHEN event.type = 'view' THEN 1 ELSE 0 END)", 'viewCount')
+      .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", 'registrationCount')
+      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", 'paidCount')
+      .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", 'checkInCount')
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'pay' THEN ${activityEventAmountSql()} ELSE 0 END),0)`, 'paidAmount')
+      .where('activity.isTest = 0').groupBy('channel.id').addGroupBy('activity.id').addGroupBy('tenant.name').orderBy('paidAmount', 'DESC');
     const tenantId = this.isTenantScoped(admin) ? admin?.tenantId : scope.tenantId;
-    if (tenantId) builder.andWhere("channel.tenantId = :channelTenantId", { channelTenantId: tenantId });
-    if (scope.activityId) builder.andWhere("activity.id = :channelActivityId", { channelActivityId: scope.activityId });
-    if (scope.startDate) builder.andWhere("(event.createdAt IS NULL OR event.createdAt >= :channelStartDate)", { channelStartDate: scope.startDate });
-    if (scope.endDate) builder.andWhere("(event.createdAt IS NULL OR event.createdAt < :channelEndDate)", { channelEndDate: scope.endDate });
-    applyAdminActivityDataScope(builder, "channel", admin?.dataScope);
+    if (tenantId) builder.andWhere('channel.tenantId = :channelTenantId', { channelTenantId: tenantId });
+    if (scope.activityId) builder.andWhere('activity.id = :channelActivityId', { channelActivityId: scope.activityId });
+    applyAdminActivityDataScope(builder, 'channel', admin?.dataScope);
     return builder;
   }
 
@@ -10580,7 +10928,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       provinceSnapshot: registration?.attributionProvince || activity?.locationProvince || null,
       citySnapshot: registration?.attributionCity || activity?.locationCity || null,
       districtSnapshot: registration?.attributionDistrict || activity?.locationDistrict || null,
-      amount: Number(input.amount || 0).toFixed(2),
+      amount: Number(input.amount ?? (type === 'pay' ? input.order?.amount : 0) ?? 0).toFixed(2),
       source: registration?.attributionSource || input.source || "admin",
       idempotencyKey: input.idempotencyKey || null,
       clientIp: null,
@@ -10594,15 +10942,16 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   private async analyticsTenantRanking(scope: { tenantId?: number; startDate?: Date; endDate?: Date }, admin?: AdminContext) {
     if (this.isTenantScoped(admin) || scope.tenantId) return [];
+    if (adminActivityScopeIds(admin?.dataScope) !== null) return [];
     const builder = this.tenants
       .createQueryBuilder("tenant")
-      .leftJoin("activities", "activity", "activity.tenantId = tenant.id")
-      .leftJoin("conversion_events", "event", "event.tenantId = tenant.id")
+      .leftJoin("activities", "activity", "activity.tenantId = tenant.id AND activity.isTest = 0")
+      .leftJoin("conversion_events", "event", `event.activityId = activity.id AND ${liveActivityEventSql()}`)
       .select("tenant.id", "tenantId")
       .addSelect("tenant.name", "tenantName")
       .addSelect("COUNT(DISTINCT activity.id)", "activityCount")
       .addSelect("SUM(CASE WHEN event.type = 'register' THEN 1 ELSE 0 END)", "registrationCount")
-      .addSelect("SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END)", "paidAmount")
+      .addSelect(`SUM(CASE WHEN event.type = 'pay' THEN ${activityEventAmountSql()} ELSE 0 END)`, "paidAmount")
       .groupBy("tenant.id")
       .orderBy("paidAmount", "DESC")
       .limit(10);
@@ -10623,8 +10972,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       .addSelect("SUM(CASE WHEN event.type = 'pay' THEN 1 ELSE 0 END)", "paidCount")
       .addSelect("SUM(CASE WHEN event.type = 'check_in' THEN 1 ELSE 0 END)", "checkInCount")
       .addSelect("SUM(CASE WHEN event.type = 'refund' THEN 1 ELSE 0 END)", "refundCount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'pay' THEN event.amount ELSE 0 END), 0)", "paidAmount")
-      .addSelect("COALESCE(SUM(CASE WHEN event.type = 'refund' THEN event.amount ELSE 0 END), 0)", "refundAmount")
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'pay' THEN ${activityEventAmountSql()} ELSE 0 END), 0)`, "paidAmount")
+      .addSelect(`COALESCE(SUM(CASE WHEN event.type = 'refund' THEN ${activityEventAmountSql()} ELSE 0 END), 0)`, "refundAmount")
       .groupBy(cityExpression)
       .orderBy("paidCount", "DESC")
       .addOrderBy("registrationCount", "DESC")
@@ -11722,7 +12071,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private assertTenantAccess(row: { tenant?: Tenant | null } | null | undefined, admin?: AdminContext) {
-    assertTenantAccessForActor(row, admin, "Resource not found or not in current tenant");
+    assertTenantAccessForActor(row, admin, "记录不存在或暂无访问权限");
     const activityId = activityIdFromScopedRow(row);
     if (activityId && !adminCanAccessActivity(admin?.dataScope, activityId)) throw new NotFoundException("Resource not found or outside current data scope");
   }

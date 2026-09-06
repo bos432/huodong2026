@@ -35,6 +35,12 @@ const tokenLabels = {
 };
 
 const tableLabelOverrides = {
+  ai_operation_drafts: "智能运营草稿",
+  social_connections: "同行连接",
+  social_connection_events: "同行连接操作记录",
+  activity_series: "活动系列",
+  activity_followups: "活动参与跟进",
+  activity_operation_versions: "活动经营台账版本",
   activity_recap_versions: "活动复盘版本",
   ad_advertisers: "广告主",
   check_ins: "核销记录",

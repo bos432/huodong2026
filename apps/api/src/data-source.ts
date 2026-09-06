@@ -1,4 +1,10 @@
 import "reflect-metadata";
+import { AiOperationDraft } from './entities/ai-operation-draft.entity';
+import { SocialConnection } from './entities/social-connection.entity';
+import { SocialConnectionEvent } from './entities/social-connection-event.entity';
+import { ActivityOperationVersion } from './entities/activity-operation-version.entity';
+import { ActivitySeries } from './entities/activity-series.entity';
+import { ActivityFollowup } from './entities/activity-followup.entity';
 import { config } from "dotenv";
 import { DataSource } from "typeorm";
 import { ActivityCategory } from "./entities/activity-category.entity";
@@ -223,6 +229,11 @@ export default new DataSource({
   password: process.env.DB_PASSWORD || "activitypass",
   database: process.env.DB_DATABASE || "activity_registration",
   entities: [
+    AiOperationDraft,
+    SocialConnection, SocialConnectionEvent,
+    ActivityOperationVersion,
+    ActivitySeries,
+    ActivityFollowup,
     User,
     UserWallet,
     WalletTransaction,

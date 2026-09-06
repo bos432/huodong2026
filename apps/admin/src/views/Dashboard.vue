@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from "vue";
 import { useRouter } from "vue-router";
 import { ActivityStatus, OrderStatus, RegistrationStatus } from "@activity/shared";
 import { api } from "../api";
+import OperatingWorkbench from '../components/OperatingWorkbench.vue';
 import { canAccess, currentTenantName, currentTenantSettings, isPlatformAdmin } from "../permissions";
 
 const router = useRouter();
@@ -15,7 +16,7 @@ const selectedMallMerchantId = ref<number>();
 const canViewActivities = computed(() => canAccess(["activity.view", "activity.manage"]));
 const canViewRegistrations = computed(() => canAccess(["registration.view", "registration.manage"]));
 const canViewOrders = computed(() => canAccess(["order.view", "order.manage"]));
-const canViewFinance = computed(() => canAccess(["finance.view", "finance.manage"]));
+const canViewFinance = computed(() => canAccess(["finance.view"]));
 const hasMallAccess = computed(() => canAccess(["mall.merchant.view", "mall.product.manage", "mall.order.view", "mall.finance.view", "mall.statistics.view"]));
 const mallWorkbenchMode = computed(() => !isPlatformAdmin() && hasMallAccess.value && !canViewActivities.value && !canViewRegistrations.value && !canViewOrders.value && !canViewFinance.value);
 const pageTitle = computed(() => (mallWorkbenchMode.value ? "商城运营工作台" : isPlatformAdmin() ? "全局数据看板" : `${currentTenantName() || "商家"}数据看板`));
@@ -43,7 +44,7 @@ const metricCards = computed(() => {
     { label: "评价数", value: totals.reviewCount || 0 },
     { label: "浏览量", value: totals.viewCount || 0 },
     { label: "通知数", value: totals.notificationCount || 0 },
-    { label: "实收金额", value: `¥${totals.paidAmount || "0.00"}` }
+    ...(canViewFinance.value ? [{ label: "票款实收", value: `¥${totals.paidAmount || "0.00"}` }] : [])
   ];
   return isPlatformAdmin() ? [{ label: "商家数", value: totals.tenantCount || 0 }, { label: "停用商家", value: totals.disabledTenantCount || 0 }, ...base.slice(0, 6)] : base;
 });
@@ -55,10 +56,10 @@ const operationCards = computed(() => {
     { label: "今日订单", value: operations.todayOrderCount || 0, sub: `待付款 ${todos.pendingOrderCount || 0}` },
     { label: "待确认收款", value: todos.pendingOfflinePaymentCount || 0, sub: "线下收款需后台确认" },
     { label: "待核销", value: todos.pendingCheckInCount || 0, sub: `今日核销 ${operations.todayCheckInCount || 0}` },
-    { label: "净收入", value: `¥${operations.netAmount || "0.00"}`, sub: `退款 ¥${operations.refundAmount || "0.00"}` },
-    { label: "本月净收入", value: `¥${operations.monthNetAmount || "0.00"}`, sub: `本月报名 ${operations.monthRegistrationCount || 0}` },
+    ...(canViewFinance.value ? [{ label: "票款净流入", value: `¥${operations.netAmount || "0.00"}`, sub: `非平台利润 · 退款 ¥${operations.refundAmount || "0.00"}` },
+    { label: "本月票款净流入", value: `¥${operations.monthNetAmount || "0.00"}`, sub: `非平台利润 · 本月报名 ${operations.monthRegistrationCount || 0}` }] : []),
     { label: "签到率", value: `${operations.checkInRate || 0}%`, sub: "签到 / 报名" },
-    { label: "浏览转报名", value: `${operations.registrationConversionRate || 0}%`, sub: `客单价 ¥${operations.avgOrderAmount || "0.00"}` }
+    { label: "浏览转报名", value: `${operations.registrationConversionRate || 0}%`, sub: canViewFinance.value ? `客单价 ¥${operations.avgOrderAmount || "0.00"}` : '报名 / 浏览' }
   ];
 });
 const mallOperationCards = computed(() => {
@@ -355,6 +356,7 @@ onMounted(load);
       <template #default><el-button size="small" @click="load">重试</el-button></template>
     </el-alert>
 
+    <OperatingWorkbench v-if="!mallWorkbenchMode && !isPlatformAdmin()" />
     <template v-if="mallWorkbenchMode">
       <el-alert v-if="!loading && !mallMerchants.length" type="warning" show-icon :closable="false" title="当前账号还没有可运营的商城店铺" description="请联系平台管理员在商城店铺中为此账号授权店铺后再进入工作台。" />
 
@@ -533,9 +535,9 @@ onMounted(load);
         <el-table-column prop="checkInCount" label="签到" width="90" />
         <el-table-column label="签到率" width="90"><template #default="{ row }">{{ row.checkInRate || 0 }}%</template></el-table-column>
         <el-table-column label="转化率" width="90"><template #default="{ row }">{{ row.registrationConversionRate || 0 }}%</template></el-table-column>
-        <el-table-column label="净收入" width="110"><template #default="{ row }">¥{{ row.netAmount || "0.00" }}</template></el-table-column>
-        <el-table-column label="实收/退款" width="140"><template #default="{ row }">¥{{ row.paidAmount || "0.00" }} / ¥{{ row.refundAmount || "0.00" }}</template></el-table-column>
-        <el-table-column label="客单价" width="100"><template #default="{ row }">¥{{ row.avgOrderAmount || "0.00" }}</template></el-table-column>
+        <el-table-column v-if="canViewFinance" label="票款净流入" width="110"><template #default="{ row }">¥{{ row.netAmount || "0.00" }}</template></el-table-column>
+        <el-table-column v-if="canViewFinance" label="实收/退款" width="140"><template #default="{ row }">¥{{ row.paidAmount || "0.00" }} / ¥{{ row.refundAmount || "0.00" }}</template></el-table-column>
+        <el-table-column v-if="canViewFinance" label="客单价" width="100"><template #default="{ row }">¥{{ row.avgOrderAmount || "0.00" }}</template></el-table-column>
         <el-table-column label="经营建议" min-width="190" show-overflow-tooltip>
           <template #default="{ row }">
             <el-tag :type="adviceTagType(row.operationAdvice?.level)" effect="light">{{ row.operationAdvice?.label || "观察中" }}</el-tag>

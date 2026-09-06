@@ -5,12 +5,17 @@ import { ElMessage, ElMessageBox } from "element-plus";
 import { ArrowDown, ArrowUp, Check, Clock, Close, CopyDocument, Delete, Edit, Grid, Hide, MoreFilled, Picture, Plus, Upload, UploadFilled, View } from "@element-plus/icons-vue";
 import { ActivityStatus, FieldType, checkActivityContentCompliance } from "@activity/shared";
 import { api } from "../api";
+import { formatShanghaiDateTime, shanghaiDateTimeToIso } from '../date-time';
 import ActivityPosterDialog from "../components/ActivityPosterDialog.vue";
+import ActivityOperationDrawer from '../components/ActivityOperationDrawer.vue';
+import ActivitySeriesDrawer from '../components/ActivitySeriesDrawer.vue';
+import ActivityFollowupDrawer from '../components/ActivityFollowupDrawer.vue';
+import AiOperationDrawer from '../components/AiOperationDrawer.vue';
 import H5QrDialog from "../components/H5QrDialog.vue";
 import MarkdownContentEditor from "../components/MarkdownContentEditor.vue";
 import { activityTemplates, type ActivityTemplate } from "../activity-templates";
 import { activityH5PreviewUrl, copyToClipboard } from "../h5-preview";
-import { canAccess, currentTenantCode, currentTenantSettings, isPlatformAdmin } from "../permissions";
+import { canAccess, currentTenantCode, currentTenantId, currentTenantSettings, isPlatformAdmin } from "../permissions";
 
 const activityStatusText: Record<ActivityStatus, string> = {
   [ActivityStatus.Draft]: "草稿",
@@ -33,6 +38,10 @@ const loading = ref(false);
 const errorMessage = ref("");
 const metaErrorMessage = ref("");
 const drawer = ref(false);
+const operationActivityId = ref<number | null>(null);
+const seriesActivityId = ref<number | null>(null);
+const followupActivityId = ref<number | null>(null);
+const aiActivityId = ref<number | null>(null);
 const templateDialogVisible = ref(false);
 const activityEditorReturnFocus = ref<HTMLElement | null>(null);
 const saving = ref(false);
@@ -227,8 +236,7 @@ const uploadHeaders = () => {
 };
 
 function formatLocal(date: Date) {
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+  return formatShanghaiDateTime(date, '', true);
 }
 
 function defaultForm() {
@@ -257,6 +265,7 @@ function defaultForm() {
     price: 0,
     status: ActivityStatus.Draft,
     featured: false,
+    isTest: false,
     requireReview: true,
     allowCancel: true,
     categoryId: undefined,
@@ -271,12 +280,7 @@ function defaultForm() {
       { label: "备注", type: FieldType.Remark, required: false, sortOrder: 4, options: [] }
     ],
     hosts: [{ name: "", title: "", avatarUrl: "", bio: "", sortOrder: 1 }],
-    sections: [
-      { type: "highlights", title: "活动亮点", content: "", imageUrl: "", sortOrder: 1 },
-      { type: "audience", title: "适合人群", content: "", imageUrl: "", sortOrder: 2 },
-      { type: "agenda", title: "活动流程", content: "", imageUrl: "", sortOrder: 3 },
-      { type: "faq", title: "常见问题", content: "", imageUrl: "", sortOrder: 4 }
-    ],
+    sections: [] as Array<{ type: string; title: string; content: string; imageUrl: string; sortOrder: number }>,
     eligibilityRules: { minAge: undefined, maxAge: undefined, allowedRegionsText: "", maxRegistrationsPerUser: 1, requirePrivacyConsent: true, allowCompanions: false, maxCompanions: 0, blacklistPhonesText: "" }
   };
 }
@@ -402,6 +406,7 @@ function createFromTemplate(template: ActivityTemplate) {
   Object.assign(form, {
     ...nextForm,
     title: template.title,
+    description: template.sections.map(section => `## ${section.title}\n\n${section.content}`).join('\n\n'),
     capacity: template.capacity,
     fields: template.fields.map((field) => ({ ...field, options: field.options.map((option) => ({ ...option })) })),
     sections: template.sections.map((section) => ({ ...section })),
@@ -448,11 +453,11 @@ function openActivityEditor(data: any) {
     shareTitle: data.shareTitle || "",
     shareDescription: data.shareDescription || "",
     shareImageUrl: data.shareImageUrl || "",
-    priorityRegistrationEndsAt: data.priorityRegistrationEndsAt?.slice(0, 19).replace("T", " ") || "",
+    priorityRegistrationEndsAt: formatShanghaiDateTime(data.priorityRegistrationEndsAt, '', true),
     price: Number(data.price),
-    startTime: data.startTime?.slice(0, 19).replace("T", " "),
-    endTime: data.endTime?.slice(0, 19).replace("T", " "),
-    registrationDeadline: data.registrationDeadline?.slice(0, 19).replace("T", " "),
+    startTime: formatShanghaiDateTime(data.startTime, '', true),
+    endTime: formatShanghaiDateTime(data.endTime, '', true),
+    registrationDeadline: formatShanghaiDateTime(data.registrationDeadline, '', true),
     fields: data.fields?.length ? data.fields.map(normalizeActivityField) : defaultForm().fields,
     hosts: data.hosts?.length ? data.hosts : [{ name: "", title: "", avatarUrl: "", bio: "", sortOrder: 1 }],
     sections: data.sections?.length ? data.sections.map((section: any) => ({ ...section, imageUrl: section.imageUrl || "" })) : defaultForm().sections
@@ -465,7 +470,7 @@ function openActivityEditor(data: any) {
 }
 
 function activityDraftKey() {
-  const tenantId = Number(form.tenantId || form.tenant?.id || filters.tenantId || 0);
+  const tenantId = Number(form.tenantId || form.tenant?.id || filters.tenantId || currentTenantId() || 0);
   return `activity-editor-draft:${tenantId}:${editingId.value || "new"}`;
 }
 
@@ -796,11 +801,12 @@ function cleanPayload() {
     locationDistrict: form.locationDistrict?.trim() || undefined,
     requireReview: registrationReviewEnabled.value ? form.requireReview : false,
     featured: Boolean(form.featured),
+    isTest: Boolean(form.isTest),
     allowCancel: Boolean(form.allowCancel),
     status: form.status,
-    startTime: form.startTime,
-    endTime: form.endTime,
-    registrationDeadline: form.registrationDeadline,
+    startTime: shanghaiDateTimeToIso(form.startTime),
+    endTime: shanghaiDateTimeToIso(form.endTime),
+    registrationDeadline: shanghaiDateTimeToIso(form.registrationDeadline),
     capacity: Number(form.capacity),
     categoryId: optionalNumber(form.categoryId),
     agentId: optionalNumber(form.agentId),
@@ -810,7 +816,7 @@ function cleanPayload() {
     locationLongitude: form.locationLongitude === "" || form.locationLongitude === null || form.locationLongitude === undefined ? undefined : Number(form.locationLongitude),
     locationMapUrl: form.locationMapUrl?.trim() || undefined,
     groupQrCodeUrl: form.groupQrCodeUrl?.trim() || undefined,
-    priorityRegistrationEndsAt: form.priorityRegistrationEndsAt || undefined,
+    priorityRegistrationEndsAt: form.priorityRegistrationEndsAt ? shanghaiDateTimeToIso(form.priorityRegistrationEndsAt) : undefined,
     price: Number(form.price),
     fields: form.fields.map((field: any, index: number) => ({
       label: field.label.trim(),
@@ -1101,10 +1107,7 @@ async function createChannel() {
 
 function channelUrl(row: any) {
   if (!channelActivity.value) return "";
-  const url = new URL(activityPreviewUrl(channelActivity.value), window.location.origin);
-  url.searchParams.set("channelCode", row.code);
-  if (row.source) url.searchParams.set("source", row.source);
-  return url.toString();
+  return activityH5PreviewUrl(channelActivity.value.id, activityTenantCode(channelActivity.value), { channelCode: row.code, source: row.source });
 }
 
 async function copyChannelUrl(row: any) {
@@ -1126,8 +1129,7 @@ function money(value: string | number | undefined) {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 watch(
@@ -1162,6 +1164,8 @@ watch([form, drawer, activeActivityStep], () => {
 onMounted(async () => {
   await load();
   await focusRouteActivity();
+  const followupId = Number(route.query.followupActivityId);
+  if (Number.isSafeInteger(followupId) && followupId > 0 && canAccess(['registration.view'])) followupActivityId.value = followupId;
 });
 </script>
 
@@ -1268,6 +1272,10 @@ onMounted(async () => {
                   <el-dropdown-item :icon="Grid" @click="showActivityH5Qr(row)">二维码</el-dropdown-item>
                   <el-dropdown-item :icon="Picture" @click="showActivityPoster(row)">海报</el-dropdown-item>
                   <el-dropdown-item :icon="Check" @click="showPublishCheck(row)">发布检查</el-dropdown-item>
+                  <el-dropdown-item v-if="canOperateActivities" :icon="Edit" @click="aiActivityId = row.id">AI运营草稿</el-dropdown-item>
+                  <el-dropdown-item v-if="canAccess(['finance.view'])" :icon="Grid" @click="operationActivityId = row.id">经营台账</el-dropdown-item>
+                  <el-dropdown-item :icon="Clock" @click="seriesActivityId = row.id">系列排期</el-dropdown-item>
+                  <el-dropdown-item v-if="canAccess(['registration.view'])" :icon="Check" @click="followupActivityId = row.id">活动后跟进</el-dropdown-item>
                   <el-dropdown-item :icon="Grid" @click="showActivityChannels(row)">渠道</el-dropdown-item>
                   <el-dropdown-item :icon="Clock" @click="loadApprovalLogs(row)">审核记录</el-dropdown-item>
                   <el-dropdown-item v-if="canOperateActivities" :icon="CopyDocument" @click="copyActivity(row)">复制活动</el-dropdown-item>
@@ -1302,6 +1310,10 @@ onMounted(async () => {
       </div>
     </div>
 
+    <ActivityOperationDrawer :activity-id="operationActivityId" @close="operationActivityId = null" />
+    <ActivitySeriesDrawer :activity-id="seriesActivityId" @close="seriesActivityId = null" @changed="loadActivities" />
+    <ActivityFollowupDrawer :activity-id="followupActivityId" @close="followupActivityId = null" />
+    <AiOperationDrawer :activity-id="aiActivityId" @close="aiActivityId = null" />
     <el-dialog v-model="templateDialogVisible" class="activity-template-dialog" title="从活动模板开始" width="760px" destroy-on-close>
       <p class="activity-template-intro">模板会带入推荐的报名字段、详情模块和报名须知，不会自动发布活动；时间、地点、封面和收费仍需由主办方确认。</p>
       <div class="activity-template-grid">
@@ -1509,6 +1521,7 @@ onMounted(async () => {
               <el-alert v-if="registrationReviewDisabledReason" class="permission-alert full" type="warning" show-icon :closable="false" :title="registrationReviewDisabledReason" />
               <el-form-item class="switches">
                 <el-checkbox v-model="form.featured">首页推荐</el-checkbox>
+                <el-checkbox v-model="form.isTest" :disabled="Boolean(editingId)">测试活动（创建后不可更改）</el-checkbox>
                 <el-checkbox v-model="form.requireReview" :disabled="!registrationReviewEnabled">需要审核</el-checkbox>
                 <el-checkbox v-model="form.allowCancel">允许取消</el-checkbox>
               </el-form-item>

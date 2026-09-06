@@ -625,7 +625,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
         <view class="line"><text>会员优惠</text><text>-¥{{ money(detail.order.memberDiscountAmount) }}</text></view>
         <view class="line"><text>积分抵扣</text><text>{{ detail.order.pointsUsed || 0 }} 分 · -¥{{ money(detail.order.pointsDiscountAmount) }}</text></view>
         <view class="line"><text>总优惠</text><text>-¥{{ money(detail.order.discountAmount) }}</text></view>
-        <view class="line strong"><text>实付</text><text>{{ Number(detail.order.amount) > 0 ? `¥${money(detail.order.amount)}` : "免费" }}</text></view>
+        <view class="line strong"><text>{{ detail.order.status === OrderStatus.PendingPayment ? '应付' : '订单金额' }}</text><text>{{ Number(detail.order.amount) > 0 ? `¥${money(detail.order.amount)}` : "免费" }}</text></view>
         <view class="line"><text>状态</text><text>{{ orderStatusText[detail.order.status as OrderStatus] }}</text></view>
         <view v-if="detail.order.expiresAt" class="line"><text>付款截止</text><text>{{ formatTime(detail.order.expiresAt) }}</text></view>
         <view v-if="detail.order.status === OrderStatus.PendingPayment && detail.order.paymentMethod !== 'offline'" class="notice">请选择当前订单对应的支付方式完成付款。余额不足时可联系后台充值后再支付。</view>
@@ -644,6 +644,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
           <view v-else class="charity-refund-copy">该订单公益金 ¥{{ money(charityRefund.charityAmount) }} 会保留到你的公益基金，预计可退 ¥{{ money(charityRefund.actualRefundAmount || charityRefund.refundAmount) }}。</view>
           <view v-if="charityRefund.pendingRefund" class="notice">退款申请处理中：¥{{ money(charityRefund.pendingRefund.amount) }}，请等待后台审核。</view>
           <view v-else-if="charityRefund.canRequest" class="button secondary" :class="{ disabled: refunding }" role="button" tabindex="0" :aria-disabled="refunding" :aria-busy="refunding" @click="requestRefund" @keyup.enter="requestRefund" @keyup.space.prevent="requestRefund">{{ refunding ? "提交中…" : "申请退款并保留公益金" }}</view>
+          <view v-else-if="charityRefund.requestDisabledReason" class="notice">{{ charityRefund.requestDisabledReason }}</view>
         </view>
         <view v-if="detail.order.status === OrderStatus.Closed" class="notice muted">订单已关闭：{{ detail.order.closeReason || "订单已关闭，名额已释放" }}</view>
         <view v-if="detail.order.status === OrderStatus.PartiallyRefunded" class="notice">该订单已有部分退款，具体金额请联系主办方确认。</view>

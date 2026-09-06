@@ -1,0 +1,8 @@
+[
+  {"id":"reading-weekend","category":"阅读交流","title":"【演示】周末共读：交换一本书的灵感","dayOffset":0,"time":"14:00","price":0,"location":"演示空间·共读区（虚拟地点）","featured":true,"image":"https://images.unsplash.com/photo-1507842217343-583bb7270b66?auto=format&fit=crop&w=1200&h=800&q=85"},
+  {"id":"city-walk","category":"城市漫游","title":"【演示】绿道慢行：发现身边的自然","dayOffset":1,"time":"09:30","price":39,"location":"演示城市公园·绿道入口（虚拟集合点）","featured":true,"intro":"沿公园绿道轻松步行，在树影、水面与季节变化中练习观察。演示路线约3公里，安排途中休息和自由交流；本页不是已确认的真实路线。","image":"https://images.unsplash.com/photo-1441974231531-c6227db76b6e?auto=format&fit=crop&w=1200&h=800&q=85"},
+  {"id":"tea-table","category":"文化体验","title":"【演示】一桌茶事：留一段慢时光","dayOffset":7,"time":"14:30","price":69,"location":"演示空间·茶席区（虚拟地点）","featured":true,"image":"https://images.unsplash.com/photo-1544787219-7f47ccb76574?auto=format&fit=crop&w=1200&h=800&q=85"},
+  {"id":"craft-bookmark","category":"手作时光","title":"【演示】纸艺书签：把喜欢留在书页间","dayOffset":8,"time":"14:00","price":49,"location":"演示空间·手作区（虚拟地点）","featured":false,"image":"https://images.unsplash.com/photo-1513364776144-60967b0f800f?auto=format&fit=crop&w=1200&h=800&q=85"},
+  {"id":"phone-photo","category":"城市漫游","title":"【演示】手机摄影：寻找日常里的光","dayOffset":14,"time":"09:30","price":59,"location":"演示城市公园·观察区（虚拟集合点）","featured":false,"image":"https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?auto=format&fit=crop&w=1200&h=800&q=85"},
+  {"id":"handwriting","category":"阅读交流","title":"【演示】手写时光：给未来的自己一封信","dayOffset":15,"time":"14:00","price":0,"location":"演示空间·书写区（虚拟地点）","featured":false,"image":"https://images.unsplash.com/photo-1455390582262-044cdead277a?auto=format&fit=crop&w=1200&h=800&q=85"}
+]

@@ -4,6 +4,7 @@ import { Camera, Finished, RefreshLeft } from "@element-plus/icons-vue";
 import QrScanDialog from "../components/QrScanDialog.vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { api } from "../api";
+import { formatShanghaiDateTime } from '../date-time';
 
 const form = reactive({ code: "", remark: "" });
 const scanDialogVisible = ref(false);
@@ -99,8 +100,7 @@ function reset() {
 }
 
 function formatTime(value?: string) {
-  if (!value) return "-";
-  return value.replace("T", " ").slice(0, 16);
+  return formatShanghaiDateTime(value);
 }
 
 function registrationOf(row: any) {

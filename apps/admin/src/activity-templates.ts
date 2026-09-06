@@ -1,4 +1,5 @@
 import { FieldType } from "@activity/shared";
+import starterPack from './data/activity-starter-pack.json';
 
 type ActivityFieldPreset = {
   label: string;
@@ -42,6 +43,15 @@ const basicSections = (audience: string, agenda: string): ActivitySectionPreset[
 ];
 
 export const activityTemplates: ActivityTemplate[] = [
+  ...starterPack.map(item => ({
+    id: `starter-${item.id}`, name: item.name, description: item.intro, title: `【策划草稿】${item.title}`, capacity: item.capacity,
+    fields: basicFields(), sections: [
+      { type: 'highlights', title: '活动介绍', content: item.intro, imageUrl: '', sortOrder: 1 },
+      { type: 'audience', title: '适合人群', content: item.audience, imageUrl: '', sortOrder: 2 },
+      { type: 'agenda', title: '活动流程', content: item.agenda, imageUrl: '', sortOrder: 3 },
+      { type: 'faq', title: '参与收获', content: item.outcome, imageUrl: '', sortOrder: 4 }
+    ], notice: '本活动为策划草稿，尚未开放报名。发布前须确认时间、场地、带领者、价格、费用包含项目、取消及退款规则。照片与作品公开使用须征得本人同意。'
+  })),
   {
     id: "parent-child",
     name: "亲子共读",

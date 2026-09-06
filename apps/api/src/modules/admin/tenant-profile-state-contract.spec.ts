@@ -36,7 +36,7 @@ describe("tenant profile state contract", () => {
     expect(service).toContain('settings: { ...(this.isPlainObject(tenant.settings) ? tenant.settings : {}), organizerProfile }');
     expect(service).toContain('主办方头像必须使用 HTTPS 或站内上传路径');
     expect(publicService).toContain('organizerProfile: this.publicTenantOrganizerProfile(tenant)');
-    expect(activityDetail).toContain('class="card organizer-card"');
+    expect(activityDetail).toContain('class="detail-section organizer-card"');
     expect(activityDetail).toContain('activity.tenant?.organizerProfile?.servicePromise');
   });
 });

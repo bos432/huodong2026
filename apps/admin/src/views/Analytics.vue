@@ -41,12 +41,12 @@ const metricCards = computed(() => {
   return [
     { label: "浏览", value: totals.viewCount || 0, sub: `报名转化 ${rates.signupRate || 0}%` },
     { label: "报名", value: totals.registrationCount || 0, sub: `支付转化 ${rates.paymentRate || 0}%` },
-    { label: "支付", value: totals.paidCount || 0, sub: `签到转化 ${rates.checkInRate || 0}%` },
-    { label: "净收入", value: `¥${totals.netAmount || "0.00"}`, sub: `退款 ¥${totals.refundAmount || "0.00"}` },
+    { label: "订单确认", value: totals.paidCount || 0, sub: `含免费确认 · 签到转化 ${rates.checkInRate || 0}%` },
+    { label: "事件净票款", value: `¥${totals.netAmount || "0.00"}`, sub: `非利润 · 退款 ¥${totals.refundAmount || "0.00"}` },
     { label: "活跃用户", value: totals.activeUserCount || 0, sub: `新增 ${users.value?.newUserCount || 0}` },
-    { label: "余额充值", value: `¥${totals.walletRechargeAmount || "0.00"}`, sub: "后台充值余额" },
+    ...(overview.value?.ancillaryScopeAvailable === false ? [] : [{ label: "余额充值", value: `¥${totals.walletRechargeAmount || "0.00"}`, sub: "后台充值余额" },
     { label: "公益池", value: `¥${totals.charityAvailableAmount || "0.00"}`, sub: `累计 ¥${totals.charityAccruedAmount || "0.00"}` },
-    { label: "公益拨付", value: `¥${totals.charityDisbursedAmount || "0.00"}`, sub: `冲回 ¥${totals.charityReversedAmount || "0.00"}` },
+    { label: "公益拨付", value: `¥${totals.charityDisbursedAmount || "0.00"}`, sub: `冲回 ¥${totals.charityReversedAmount || "0.00"}` }]),
     { label: "评价", value: totals.reviewCount || 0, sub: `评价转化 ${rates.reviewRate || 0}%` },
     { label: "风险待办", value: riskTotal.value, sub: "退款/回调/对账" }
   ];
@@ -231,6 +231,7 @@ onMounted(load);
 
 <template>
   <div class="page">
+    <el-alert type="info" :closable="false" title="活动事件统计排除测试活动与测试账号；订单确认包含免费单，付费复购不包含免费或全退单。金额为事件口径，不是平台利润或财务对账。" />
     <div class="toolbar">
       <h2>{{ isPlatformAdmin() ? "平台数据中心" : "商家数据中心" }}</h2>
       <div class="toolbar-actions">

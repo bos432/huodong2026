@@ -389,6 +389,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
   const verb = method.toUpperCase();
   const write = ["POST", "PATCH", "PUT", "DELETE"].includes(verb);
   if (path === "dashboard") return "dashboard.view";
+  if (path === 'operations/workbench') return 'dashboard.view';
   if (path === "resource-network") return "analytics.view";
   if (path === "business-jobs" && verb === "GET") return "business_job.view";
   if (path.startsWith("business-jobs")) return "business_job.manage";
@@ -509,6 +510,10 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
   if (path.startsWith("ad-advertisers") || path.startsWith("ad-contracts") || path.startsWith("ad-campaigns")) return write ? "ad_center.manage" : "ad_center.view";
   if (path.startsWith("homepage/")) return "homepage.manage";
   if (path === "activities" && verb === "GET") return "activity.view";
+  if (path.startsWith('activities/') && path.includes('/ai-drafts')) return 'activity.manage';
+  if (path.startsWith('activities/') && path.endsWith('/followups')) return write ? 'registration.manage' : 'registration.view';
+  if (path.startsWith('activities/') && path.endsWith('/series')) return write ? 'activity.manage' : 'activity.view';
+  if (path.startsWith('activities/') && path.endsWith('/operation')) return write ? 'finance.manage' : 'finance.view';
   if (path === "activities/:id" && verb === "GET") return "activity.view";
   if (path.includes("approval-logs") || path.includes("channel-report") || path.endsWith("/channels") && verb === "GET") return "activity.view";
   if (path === "agent-settlements" || path === "agent-settlements/options" || path.includes("transfer-capability") || path.includes("/details")) return "agent_settlement.view";

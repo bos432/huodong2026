@@ -4,6 +4,7 @@ import { onShow } from "@dcloudio/uni-app";
 import { RegistrationStatus, registrationStatusText } from "@activity/shared";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import { formatShanghaiDateTime } from '../../tenant-load-guard';
 
 const rows = ref<any[]>([]);
 const bootstrap = ref<any>(null);
@@ -143,7 +144,7 @@ function statusLabel(value: RegistrationStatus) {
 }
 
 function formatTime(value?: string) {
-  return value ? value.replace("T", " ").slice(0, 16) : "-";
+  return formatShanghaiDateTime(value);
 }
 
 function maskPhone(value: unknown) {

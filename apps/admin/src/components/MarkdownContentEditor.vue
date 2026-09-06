@@ -6,7 +6,7 @@ import { markdownToRichTextHtml } from "@activity/shared";
 import { api } from "../api";
 
 const props = withDefaults(defineProps<{
-  modelValue: string;
+  modelValue?: string | null;
   disabled?: boolean;
   rows?: number;
   placeholder?: string;
@@ -21,7 +21,8 @@ const props = withDefaults(defineProps<{
 const emit = defineEmits<{ "update:modelValue": [value: string] }>();
 const inputRef = ref<any>();
 const uploading = ref(false);
-const previewHtml = computed(() => markdownToRichTextHtml(props.modelValue));
+const sourceText = computed(() => props.modelValue ?? "");
+const previewHtml = computed(() => markdownToRichTextHtml(sourceText.value));
 
 function setValue(value: string) {
   emit("update:modelValue", value);
@@ -34,13 +35,13 @@ function textarea() {
 function insertInline(prefix: string, suffix = "", placeholder = "") {
   const element = textarea();
   if (!element) {
-    setValue(props.modelValue + (props.modelValue ? "\n" : "") + prefix + placeholder + suffix);
+    setValue(sourceText.value + (sourceText.value ? "\n" : "") + prefix + placeholder + suffix);
     return;
   }
-  const start = element.selectionStart ?? props.modelValue.length;
+  const start = element.selectionStart ?? sourceText.value.length;
   const end = element.selectionEnd ?? start;
-  const selected = props.modelValue.slice(start, end) || placeholder;
-  setValue(props.modelValue.slice(0, start) + prefix + selected + suffix + props.modelValue.slice(end));
+  const selected = sourceText.value.slice(start, end) || placeholder;
+  setValue(sourceText.value.slice(0, start) + prefix + selected + suffix + sourceText.value.slice(end));
   requestAnimationFrame(() => {
     element.focus();
     element.setSelectionRange(start + prefix.length, start + prefix.length + selected.length);
@@ -48,7 +49,7 @@ function insertInline(prefix: string, suffix = "", placeholder = "") {
 }
 
 function insertBlock(block: string) {
-  const text = props.modelValue.trimEnd();
+  const text = sourceText.value.trimEnd();
   setValue(text + (text ? "\n\n" : "") + block);
 }
 
@@ -128,7 +129,7 @@ async function uploadImage(file: File) {
 }
 
 function applyTemplate(content: string) {
-  if (props.modelValue.trim()) {
+  if (sourceText.value.trim()) {
     insertBlock(content);
     return;
   }
@@ -161,10 +162,10 @@ function applyTemplate(content: string) {
       </el-dropdown>
     </div>
     <div class="editor-workbench">
-      <el-input ref="inputRef" :model-value="modelValue" class="editor-source" type="textarea" :rows="rows" :disabled="disabled" :placeholder="placeholder" maxlength="50000" show-word-limit resize="vertical" @update:model-value="setValue" />
+      <el-input ref="inputRef" :model-value="sourceText" class="editor-source" type="textarea" :rows="rows" :disabled="disabled" :placeholder="placeholder" maxlength="50000" show-word-limit resize="vertical" @update:model-value="setValue" />
       <div class="editor-preview" aria-live="polite">
         <div class="preview-heading">用户端预览</div>
-        <div v-if="modelValue.trim()" class="preview-body" v-html="previewHtml"></div>
+        <div v-if="sourceText.trim()" class="preview-body" v-html="previewHtml"></div>
         <el-empty v-else description="开始输入后显示排版预览" :image-size="64" />
       </div>
     </div>

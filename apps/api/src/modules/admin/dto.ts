@@ -1006,6 +1006,10 @@ export class ActivityDto {
   @IsBoolean()
   featured!: boolean;
 
+  @IsOptional()
+  @IsBoolean()
+  isTest?: boolean;
+
   @IsBoolean()
   requireReview!: boolean;
 

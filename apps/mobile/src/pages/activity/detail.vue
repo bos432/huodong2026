@@ -10,10 +10,12 @@ import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import { addActivityToCalendar } from "../../activity-calendar";
-import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { createTenantLoadGuard, formatShanghaiDateTime } from "../../tenant-load-guard";
 import { showMiniProgramShareMenu } from "../../share";
 import { isLinkAllowedByFeature } from "../../feature-gates";
 import { motionStyle } from "../../motion/platform-adapter";
+import { existingActivityBooking } from '../../activity-booking-action';
+import { activityPageAttribution } from '../../activity-attribution';
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -98,12 +100,18 @@ function memberLoginRequired() {
 }
 
 function canRegister() {
+  const existing = existingActivityBooking(activity.value);
+  if (existing) return Boolean(existing.registrationId);
+  if (activity.value?.bookingDisabledReason) return false;
   const status = activity.value?.displayStatus;
   const access = activity.value?.memberAccess;
   return !registrationPaused() && (status === "open" || status === "full") && (!access || access.eligible || memberLoginRequired());
 }
 
 function registerButtonText() {
+  const existing = existingActivityBooking(activity.value);
+  if (existing) return existing.label;
+  if (activity.value?.bookingDisabledReason) return '测试活动';
   if (registrationPaused()) return "报名暂停";
   if (activity.value?.displayStatus === "ended") return "报名已结束";
   if (activity.value?.displayStatus !== "open" && activity.value?.displayStatus !== "full") return "暂不可报名";
@@ -114,6 +122,9 @@ function registerButtonText() {
 }
 
 function actionHint() {
+  const existing = existingActivityBooking(activity.value);
+  if (existing) return existing.hint;
+  if (activity.value?.bookingDisabledReason) return activity.value.bookingDisabledReason;
   if (registrationPaused()) return registrationPausedMessage();
   if (activity.value?.displayStatus === "ended") return "报名已结束，可以查看活动信息或联系主办方。";
   if (memberLoginRequired()) return activity.value?.memberAccess?.message || "登录后可查看会员等级和报名资格。";
@@ -123,8 +134,10 @@ function actionHint() {
 }
 
 function register() {
+  const existing = existingActivityBooking(activity.value);
+  if (existing?.registrationId) { uni.navigateTo({ url: withTenantCode(`/pages/user/registration?id=${existing.registrationId}`) }); return; }
   if (!canRegister()) {
-    uni.showToast({ title: reviewSafeText(registrationPaused() ? registrationPausedMessage() : activity.value?.memberAccess?.message || "暂不可报名"), icon: "none" });
+    uni.showToast({ title: reviewSafeText(actionHint()), icon: "none" });
     return;
   }
   const query = [
@@ -147,10 +160,6 @@ function statusText(status: string) {
   return "报名中";
 }
 
-function deadlineText() {
-  return `报名截止 ${formatTime(activity.value?.registrationDeadline)}`;
-}
-
 function seatsText() {
   if (!activity.value) return "";
   if (activity.value.remainingSeats <= 0) return `已报 ${activity.value.registeredCount} 人，候补 ${activity.value.waitingCount || 0} 人`;
@@ -162,29 +171,23 @@ function priceText(price: string | number) {
 }
 
 function formatTime(value: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return value.replace("T", " ").slice(0, 16);
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return formatShanghaiDateTime(value);
 }
 
 function locationLatitude() {
+  if (activity.value?.locationLatitude == null || activity.value.locationLatitude === '') return undefined;
   const value = Number(activity.value?.locationLatitude);
-  return Number.isFinite(value) ? value : undefined;
+  return Number.isFinite(value) && value >= -90 && value <= 90 ? value : undefined;
 }
 
 function locationLongitude() {
+  if (activity.value?.locationLongitude == null || activity.value.locationLongitude === '') return undefined;
   const value = Number(activity.value?.locationLongitude);
-  return Number.isFinite(value) ? value : undefined;
+  return Number.isFinite(value) && value >= -180 && value <= 180 ? value : undefined;
 }
 
 function hasMapPoint() {
   return locationLatitude() !== undefined && locationLongitude() !== undefined;
-}
-
-function hasMapInfo() {
-  return hasMapPoint() || Boolean(activity.value?.locationMapUrl);
 }
 
 function canUseNativeMap() {
@@ -226,11 +229,17 @@ function copyText(text?: string) {
 }
 
 function goMy() {
+  const existing = existingActivityBooking(activity.value);
+  if (existing?.registrationId) { uni.navigateTo({ url: withTenantCode(`/pages/user/registration?id=${existing.registrationId}`) }); return; }
   uni.reLaunch({ url: withTenantCode("/pages/user/my") });
 }
 
 function goService() {
   uni.navigateTo({ url: withTenantCode("/pages/service/index") });
+}
+
+function goHome() {
+  uni.reLaunch({ url: withTenantCode('/pages/index/index') });
 }
 
 function goCommunity() {
@@ -511,9 +520,10 @@ async function load() {
     const pages = getCurrentPages();
     const options = (pages[pages.length - 1] as any).options || {};
     const id = Number(options.id);
-    inviteCode.value = options.inviteCode || "";
-    channelCode.value = options.channelCode || "";
-    source.value = options.source || defaultSource();
+    const attribution = activityPageAttribution(options);
+    inviteCode.value = attribution.inviteCode;
+    channelCode.value = attribution.channelCode;
+    source.value = attribution.source || defaultSource();
     const query = [
       inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : "",
       channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
@@ -548,15 +558,16 @@ onShow(() => {
     <view v-else-if="error" class="card">
       <view class="subtle">{{ error }}</view>
       <view class="button secondary retry" role="button" tabindex="0" aria-label="重新加载活动详情" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view>
+      <view class="button secondary retry" role="button" tabindex="0" aria-label="返回当前商家首页" @click="goHome" @keyup.enter="goHome" @keyup.space.prevent="goHome">返回首页</view>
     </view>
 
     <template v-else-if="activity">
+      <view v-if="activity.isTest" class="test-activity-banner" role="status">测试活动 · 不代表真实举办安排</view>
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="活动归属" />
 
       <view class="detail-hero app-enter">
-        <image v-if="activity.coverUrl" class="hero-image app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
-        <view v-else class="hero-image hero-fallback">雅集</view>
-        <view class="hero-mask"></view>
+        <image v-if="activity.coverUrl" class="hero-image app-media-motion" :src="activity.coverUrl" mode="aspectFit" />
+        <view v-else class="hero-image hero-fallback">活动</view>
         <view class="hero-head">
           <text class="hero-kicker">{{ activity.category?.name || "城市文化活动" }}</text>
           <text class="hero-status">{{ statusText(activity.displayStatus) }}</text>
@@ -564,82 +575,38 @@ onShow(() => {
         <view class="hero-bottom">
           <view class="detail-head">
             <view class="detail-head-title">{{ activity.title }}</view>
-            <view class="detail-head-copy">{{ innerPageConfig.subtitle || "查看活动介绍、报名规则、服务说明和现场信息。" }}</view>
           </view>
         </view>
       </view>
 
       <view class="detail-decision-panel app-enter" :style="motionStyle(92)">
-        <view class="decision-time"><text class="decision-label">活动时间</text><text class="decision-value">{{ formatTime(activity.startTime) }}</text><text class="decision-helper">{{ formatTime(activity.endTime) }}</text></view>
-        <view class="decision-place"><text class="decision-label">集合地点</text><text class="decision-value">{{ activity.location || "地点待确认" }}</text><text class="decision-helper">{{ activity.registeredCount || 0 }} 人已报名 · 余 {{ activity.remainingSeats }} 个名额</text></view>
-        <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text></view>
+        <view class="decision-time"><text class="decision-label">活动时间（北京时间）</text><text class="decision-value">{{ formatTime(activity.startTime) }} 开始</text><text class="decision-helper">{{ formatTime(activity.endTime) }} 结束</text></view>
+        <view class="decision-place"><text class="decision-label">集合地点</text><text class="decision-value">{{ activity.location || "地点待确认" }}</text><view class="decision-map-action" role="button" tabindex="0" @click="openLocation" @keyup.enter="openLocation">{{ mapActionText() }}</view></view>
+        <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text><text class="decision-helper">余 {{ activity.remainingSeats }} 个名额</text></view>
+        <view class="decision-deadline"><text>报名截止 {{ formatTime(activity.registrationDeadline) }}</text><text>{{ activity.registeredCount || 0 }} 人已报名</text></view>
       </view>
+      <view v-if="activity.myBooking?.registration || activity.myBooking?.waitlist || !canRegister()" class="booking-notice" role="status">{{ actionHint() }}</view>
 
       <view v-if="activity.organizerTrust" class="trust-strip app-enter" :style="motionStyle(112)">
-        <view><text>{{ activity.organizerTrust.verified ? "已认证" : "主办方" }}</text><text>主体信息</text></view>
+        <view><text>{{ activity.organizerTrust.profileComplete ? "资料已完善" : "主办方" }}</text><text>主体信息</text></view>
         <view><text>{{ organizerMetric(activity.organizerTrust.historicalActivityCount, " 场") }}</text><text>历史活动</text></view>
         <view><text>{{ activity.organizerTrust.reviewCount ? organizerMetric(activity.organizerTrust.averageRating, " 分") : "暂无" }}</text><text>真实评价</text></view>
-        <view><text>{{ organizerMetric(activity.organizerTrust.fulfillmentRate, "%") }}</text><text>活动履约</text></view>
+        <view><text>{{ organizerMetric(activity.organizerTrust.fulfillmentRate, "%") }}</text><text>历史未取消率</text></view>
       </view>
 
       <PageDecorationBlocks :sections="bodyDecorationSections" />
 
-      <view class="card head app-enter" :style="motionStyle(132)">
-        <view class="decision-box">
-          <view>
-            <view class="decision-title">{{ registerButtonText() }}</view>
-            <view class="body-text decision-copy">{{ actionHint() }}</view>
-          </view>
-          <view class="decision-status">{{ statusText(activity.displayStatus) }}</view>
-        </view>
-        <view class="content-heading">
-          <view><text class="content-kicker">活动内容</text><view class="section-title">活动亮点</view></view>
-          <text class="content-status">{{ activity.requireReview ? "需审核" : "即时确认" }}</text>
-        </view>
-        <view class="row"><text class="tag tag-secondary">{{ activity.category?.name || "活动" }}</text><text class="tag tag-primary">{{ priceText(activity.price) }}</text></view>
-        <rich-text class="activity-description activity-rich" :nodes="richActivityContent(activity.description || '主办方正在完善活动介绍，欢迎先查看活动信息和报名规则。')" />
-        <view class="stats">
-          <view><text>{{ activity.registeredCount }}</text><text>已报名</text></view>
-          <view><text>{{ activity.remainingSeats }}</text><text>剩余名额</text></view>
-          <view><text>{{ activity.viewCount }}</text><text>浏览</text></view>
-          <view><text>{{ activity.shareVisitCount }}</text><text>分享访问</text></view>
-        </view>
+      <view class="detail-section app-enter" :style="motionStyle(132)">
+        <view class="title small">活动介绍</view>
+        <rich-text class="activity-description activity-rich" :nodes="richActivityContent(activity.description || '活动介绍待补充')" />
       </view>
 
       <AdSlotRenderer slot-key="activity_detail_middle" page-key="activity_detail" />
 
-      <view class="card info app-enter" :style="motionStyle(164)">
-        <view class="section-title">活动信息</view>
-        <view class="info-summary">
-          <view><text>状态</text><text>{{ statusText(activity.displayStatus) }}</text></view>
-          <view><text>名额</text><text>{{ seatsText() }}</text></view>
-          <view><text>截止</text><text>{{ deadlineText() }}</text></view>
-        </view>
-        <view class="line"><text>时间</text><text>{{ formatTime(activity.startTime) }} - {{ formatTime(activity.endTime) }}</text></view>
-        <view class="line"><text>地点</text><text>{{ activity.location }}</text></view>
-        <view v-if="hasMapInfo()" class="location-map">
-          <map
-            v-if="canUseNativeMap()"
-            class="map-view"
-            :latitude="locationLatitude()"
-            :longitude="locationLongitude()"
-            :markers="[{ id: 1, latitude: locationLatitude(), longitude: locationLongitude(), title: activity.location }]"
-            :scale="16"
-            @click="openLocation"
-          />
-          <view v-else class="map-link" role="button" tabindex="0" aria-label="打开活动地点" @click="openLocation" @keyup.enter="openLocation" @keyup.space.prevent="openLocation">
-            <view class="map-pin">地</view>
-            <view>
-              <view class="name">查看地图</view>
-              <view class="subtle">{{ activity.location }}</view>
-            </view>
-          </view>
-        <view class="map-action" role="button" tabindex="0" aria-label="打开地图导航" @click="openLocation" @keyup.enter="openLocation" @keyup.space.prevent="openLocation">{{ mapActionText() }}</view>
-        </view>
-        <view class="line"><text>费用</text><text>{{ priceText(activity.price) }}</text></view>
+      <view v-if="activity.minMemberLevel || activity.memberAccess?.priorityMemberLevel || showMemberAccess() || registrationPaused() || hasGroupQrCode" class="detail-section info app-enter" :style="motionStyle(164)">
+        <view class="section-title">报名规则</view>
         <view v-if="activity.minMemberLevel" class="line"><text>门槛</text><text>{{ activity.minMemberLevel.name }}及以上会员</text></view>
         <view v-if="activity.memberAccess?.priorityMemberLevel" class="line"><text>优先</text><text>{{ activity.memberAccess.priorityMemberLevel.name }}优先报名至 {{ formatTime(activity.memberAccess.priorityRegistrationEndsAt) }}</text></view>
-        <view class="line"><text>截止</text><text>{{ formatTime(activity.registrationDeadline) }}</text></view>
         <view v-if="showMemberAccess()" class="member-access" :class="{ blocked: !activity.memberAccess?.eligible }">
           <view class="name">{{ activity.memberAccess?.priorityActive ? "会员优先报名中" : "会员报名规则" }}</view>
           <view class="subtle">{{ activity.memberAccess?.message }}</view>
@@ -651,12 +618,11 @@ onShow(() => {
         </view>
         <view v-if="hasGroupQrCode" class="group-flow">
           <view class="name">报名成功后可加入活动群</view>
-          <view class="subtle">群二维码不会在公开活动页展示；报名提交并进入报名详情后，可查看入群入口和后续通知。</view>
+          <view class="subtle">入群信息仅向合格报名用户开放。</view>
         </view>
       </view>
 
-      <view class="card action-card app-enter" :style="motionStyle(196)">
-        <view class="section-title">快捷操作</view>
+      <view class="detail-section action-card app-enter" :style="motionStyle(196)" aria-label="活动操作">
         <view class="action-item app-press" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :aria-busy="activeAction === 'invite'" aria-label="邀请好友" :class="{ disabled: Boolean(activeAction) }" @click="makeInvite" @keyup.enter="makeInvite" @keyup.space.prevent="makeInvite">
           <text>邀</text>
           <view>邀请好友</view>
@@ -678,12 +644,6 @@ onShow(() => {
           <text>···</text>
           <view>更多操作</view>
         </view>
-        <!-- #ifdef MP-WEIXIN -->
-        <button v-if="invite?.code" class="action-item action-share app-press" open-type="share" aria-label="分享活动给微信好友"><text>享</text><view>微信分享</view></button>
-        <!-- #endif -->
-        <!-- #ifdef H5 -->
-        <view v-if="invite?.code" class="action-item app-press" role="button" tabindex="0" aria-label="复制活动邀请链接" @click="copyText(activityPosterLink())" @keyup.enter="copyText(activityPosterLink())" @keyup.space.prevent="copyText(activityPosterLink())"><text>链</text><view>复制邀请链接</view></view>
-        <!-- #endif -->
       </view>
 
       <view v-if="moreActionsVisible" class="more-actions-mask" role="presentation" @click.self="closeMoreActions">
@@ -698,9 +658,8 @@ onShow(() => {
         </view>
       </view>
 
-      <view class="card invite-card">
+      <view v-if="invite" class="detail-section invite-card">
         <view class="row"><view class="title small">邀请好友</view><view class="mini-button" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :class="{ disabled: Boolean(activeAction) }" @click="makeInvite" @keyup.enter="makeInvite" @keyup.space.prevent="makeInvite">{{ activeAction === "invite" ? "生成中" : "生成" }}</view></view>
-        <view class="body-text invite-copy">生成专属邀请码，用于追踪分享访问和后续邀请报名。</view>
         <view v-if="invite" class="invite-box">
           <view class="name">邀请码：{{ invite.code }}</view>
           <view class="subtle">{{ invite.inviteText }}</view>
@@ -726,8 +685,8 @@ onShow(() => {
       <canvas canvas-id="activityPosterCanvas" id="activityPosterCanvas" class="poster-canvas"></canvas>
       <!-- #endif -->
 
-      <view class="card service-card" v-if="operationSetting">
-        <view class="title small">主办方服务</view>
+      <view class="detail-section service-card" v-if="operationSetting">
+        <view class="title small">客服与退款规则</view>
         <view v-if="operationSetting.customerServiceName" class="service-line"><text>客服</text><text>{{ operationSetting.customerServiceName }}</text></view>
         <view v-if="operationSetting.customerServicePhone" class="service-line" @click="copyText(operationSetting.customerServicePhone)"><text>电话</text><text>{{ operationSetting.customerServicePhone }}</text></view>
         <view v-if="operationSetting.customerServiceWechat" class="service-line" @click="copyText(operationSetting.customerServiceWechat)"><text>微信</text><text>{{ operationSetting.customerServiceWechat }}</text></view>
@@ -737,7 +696,7 @@ onShow(() => {
         <view v-if="operationSetting.refundInstructions" class="service-note">{{ operationSetting.refundInstructions }}</view>
       </view>
 
-      <view class="card organizer-card" v-if="activity.tenant">
+      <view class="detail-section organizer-card" v-if="activity.tenant">
         <view class="organizer-title-row"><view class="title small">主办方</view><view class="organizer-follow app-press" :class="{ active: activity.organizerTrust?.followed, disabled: organizerFollowLoading }" role="button" tabindex="0" :aria-busy="organizerFollowLoading" @click="toggleOrganizerFollow" @keyup.enter="toggleOrganizerFollow" @keyup.space.prevent="toggleOrganizerFollow">{{ organizerFollowLoading ? "处理中" : activity.organizerTrust?.followed ? "已关注" : "+ 关注" }}</view></view>
         <view class="organizer-head">
           <image v-if="activity.tenant?.organizerProfile?.logoUrl" :src="activity.tenant.organizerProfile.logoUrl" mode="aspectFill" />
@@ -746,10 +705,10 @@ onShow(() => {
         </view>
         <view v-if="activity.tenant?.organizerProfile?.intro" class="organizer-intro">{{ activity.tenant.organizerProfile.intro }}</view>
         <view v-if="activity.tenant?.organizerProfile?.servicePromise" class="organizer-promise"><text>服务承诺</text><text>{{ activity.tenant.organizerProfile.servicePromise }}</text></view>
-        <view v-if="activity.organizerTrust" class="organizer-proof"><text>{{ activity.organizerTrust.followerCount || 0 }} 人关注</text><text v-if="activity.organizerTrust.reviewCount">{{ activity.organizerTrust.reviewCount }} 条已审核评价</text><text v-if="activity.organizerTrust.fulfillmentRate !== null">履约率 {{ activity.organizerTrust.fulfillmentRate }}%</text></view>
+        <view v-if="activity.organizerTrust" class="organizer-proof"><text>{{ activity.organizerTrust.followerCount || 0 }} 人关注</text><text v-if="activity.organizerTrust.reviewCount">{{ activity.organizerTrust.reviewCount }} 条已审核评价</text><text v-if="activity.organizerTrust.fulfillmentRate !== null">历史活动未取消率 {{ activity.organizerTrust.fulfillmentRate }}%</text></view>
       </view>
 
-      <view class="card" v-if="activity.hosts?.length">
+      <view class="detail-section" v-if="activity.hosts?.length">
         <view class="title small">讲师 / 主理人</view>
         <view v-for="host in activity.hosts" :key="host.id" class="host">
           <image v-if="host.avatarUrl" :src="host.avatarUrl" mode="aspectFill" />
@@ -757,23 +716,30 @@ onShow(() => {
         </view>
       </view>
 
-      <view class="card" v-for="section in activity.sections" :key="section.id">
+      <view class="detail-section" v-for="section in activity.sections" :key="section.id">
         <view class="title small">{{ section.title }}</view>
         <image v-if="section.imageUrl" class="section-image" :src="section.imageUrl" mode="widthFix" />
         <rich-text class="section-content activity-rich" :nodes="richActivityContent(section.content)" />
       </view>
-      <view class="card" v-if="activity.notice"><view class="title small">报名须知</view><rich-text class="section-content activity-rich" :nodes="richActivityContent(activity.notice)" /></view>
-      <view class="card refund-rule-card" v-if="activity.refundInstructions && !operationSetting?.refundInstructions"><view class="title small">退款规则</view><view class="section-content">{{ activity.refundInstructions }}</view></view>
-      <view class="card" v-if="activity.reviews?.length">
+      <view class="detail-section" v-if="activity.notice"><view class="title small">报名须知</view><rich-text class="section-content activity-rich" :nodes="richActivityContent(activity.notice)" /></view>
+      <view class="detail-section refund-rule-card" v-if="activity.refundInstructions && !operationSetting?.refundInstructions"><view class="title small">退款规则</view><view class="section-content">{{ activity.refundInstructions }}</view></view>
+      <view class="detail-section" v-if="activity.reviews?.length">
         <view class="title small">活动评价</view>
         <view v-for="review in activity.reviews" :key="review.id" class="review"><view class="review-head"><view class="name">{{ "★".repeat(review.rating) }}<text v-if="review.featured" class="featured-review">精选</text></view><view class="report-link" role="button" tabindex="0" :aria-disabled="Boolean(activeAction)" :class="{ disabled: Boolean(activeAction) }" @click="reportReview(review)" @keyup.enter="reportReview(review)" @keyup.space.prevent="reportReview(review)">{{ activeAction === `report:${review.id}` ? "提交中" : "举报" }}</view></view><view>{{ review.content }}</view><view v-if="review.adminReply" class="subtle reply">主办方回复：{{ review.adminReply }}</view></view>
       </view>
 
-      <view class="card related-card" v-if="activity.relatedActivities?.length">
-        <view class="title small">系列活动</view>
+      <view class="detail-section related-card" v-if="activity.relatedActivities?.length">
+        <view class="title small">更多活动</view>
         <scroll-view scroll-x class="related-scroll" :show-scrollbar="false"><view class="related-track"><view v-for="item in activity.relatedActivities" :key="item.id" class="related-item app-press" role="button" tabindex="0" @click="goRelatedActivity(item)" @keyup.enter="goRelatedActivity(item)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="related-cover-fallback">活动</view><view class="related-copy"><text>{{ item.title }}</text><text>{{ formatTime(item.startTime) }}</text><text>{{ item.location || "地点待确认" }} · {{ priceText(item.price) }}</text></view></view></view></scroll-view>
       </view>
 
+      <view v-if="activity.seriesActivities?.length" class="series-sessions">
+        <view class="title small">同系列场次</view>
+        <view v-for="item in activity.seriesActivities" :key="item.id" class="series-session app-press" role="button" tabindex="0" @click="goRelatedActivity(item)" @keyup.enter="goRelatedActivity(item)">
+          <view><text>{{ item.title }}</text><text class="subtle">{{ formatTime(item.startTime) }} · {{ item.location }}</text></view>
+          <text>{{ priceText(item.price) }} ›</text>
+        </view>
+      </view>
       <view class="bottom-bar app-enter" :style="{ ...motionStyle(180), background: String(innerPageLayout.actionBarBackgroundColor || '#ffffff') }">
         <view class="bottom-info"><text>{{ priceText(activity.price) }}</text><text>{{ activity.displayStatus === "full" ? "候补开放" : statusText(activity.displayStatus) }}</text></view>
         <view class="button action-button app-press" role="button" tabindex="0" :aria-disabled="!canRegister()" :aria-label="registerButtonText()" :class="{ secondary: !canRegister() }" @click="register" @keyup.enter="register" @keyup.space.prevent="register">{{ registerButtonText() }}</view>
@@ -783,6 +749,8 @@ onShow(() => {
 </template>
 
 <style scoped>
+.test-activity-banner{margin:16rpx 24rpx;padding:18rpx;border:1rpx solid #e2c879;background:#fff7dc;color:#745114;font-size:26rpx;line-height:1.5}
+.series-sessions{margin:24rpx;padding:24rpx 0;border-top:1rpx solid #e2e9e5}.series-session{display:flex;justify-content:space-between;gap:16rpx;padding:22rpx 0;border-bottom:1rpx solid #e2e9e5;font-size:26rpx;line-height:1.6}.series-session>view{flex:1;min-width:0;display:grid;gap:6rpx}.series-session>text{flex:none;color:#0f766e}
 .detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(16rpx + env(safe-area-inset-top)) 0 calc(168rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; background:#f6f8f7; }
 .more-actions-mask{position:fixed;inset:0;z-index:30;display:flex;align-items:flex-end;background:rgba(15,23,42,.46)}
 .more-actions-sheet{width:100%;box-sizing:border-box;padding:28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom));border-radius:18rpx 18rpx 0 0;background:#fff}
@@ -1009,4 +977,24 @@ onShow(() => {
 .detail-page .bottom-bar{border-color:var(--app-border);box-shadow:0 -8rpx 24rpx rgba(22,37,45,.06)}
 .detail-page .bottom-info text:first-child{color:var(--app-price)}
 .detail-page .action-button{border-radius:14rpx;background:#16252d;color:#fff}
+/* Normal-flow title and fixed cover size prevent long names from covering the image. */
+.detail-page .detail-hero{margin:0;border-radius:0;min-height:0;background:#fff;box-shadow:none}
+.detail-page .hero-image{position:relative;inset:auto;display:block;width:100%;height:360rpx;background:#edf2f0}
+.detail-page .hero-fallback{height:200rpx;display:flex;align-items:center;justify-content:center;color:#0f766e;font-size:36rpx}
+.detail-page .hero-head{position:static;inset:auto;padding:22rpx 24rpx 12rpx;gap:16rpx}
+.detail-page .hero-bottom{position:static;inset:auto;min-height:0;padding:0 24rpx 28rpx}
+.detail-page .detail-head-title{color:var(--app-text,#16252d);font-size:36rpx;line-height:1.45;overflow-wrap:anywhere}
+.detail-page .hero-kicker{color:#607176}.detail-page .hero-status{color:#0f766e;background:#e6f4ee}
+.detail-page .detail-decision-panel{margin:0;padding:24rpx;grid-template-columns:minmax(0,1fr) minmax(120rpx,200rpx);gap:20rpx;border:0;border-bottom:1rpx solid var(--app-border,#e3e9e8);border-radius:0;box-shadow:none}
+.decision-time,.decision-place{min-width:0;grid-column:1}.decision-price-panel{grid-column:2;grid-row:1 / 3;min-width:0;display:grid;align-content:center;gap:10rpx}
+.detail-page .decision-value{white-space:normal;overflow:visible;text-overflow:clip;overflow-wrap:anywhere;line-height:1.5}
+.decision-deadline{grid-column:1 / -1;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10rpx;font-size:24rpx;color:#687a7d}
+.decision-map-action{width:max-content;min-height:52rpx;display:flex;align-items:center;margin-top:8rpx;color:#0f766e;font-size:25rpx;font-weight:700}
+.booking-notice{margin:18rpx 24rpx;padding:18rpx;background:#eaf6f0;color:#215d47;font-size:26rpx;line-height:1.5}
+.detail-section{margin:0 24rpx;padding:26rpx 0;border-bottom:1rpx solid var(--app-border,#e3e9e8);background:transparent}
+.detail-section .title,.detail-section .section-title{margin:0 0 16rpx;font-size:30rpx;line-height:1.4}
+.detail-page .action-card{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12rpx}
+.detail-page .trust-strip{margin:0 24rpx 12rpx;padding:24rpx 0;border:0;border-bottom:1rpx solid var(--app-border,#e3e9e8);border-radius:0;background:transparent}
+.detail-page .more-actions-mask{z-index:1200}.detail-page .poster-mask{z-index:1210}
+.detail-page .bottom-bar{z-index:100}.detail-page .action-button{min-width:220rpx;min-height:80rpx;display:flex;align-items:center;justify-content:center;line-height:1.3;white-space:normal;text-align:center}
 </style>

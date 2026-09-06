@@ -36,6 +36,7 @@ export type ActivityPublishReadinessInput = {
   title?: string | null;
   coverUrl?: string | null;
   description?: string | null;
+  notice?: string | null;
   location?: string | null;
   startTime: Date | string;
   endTime: Date | string;
@@ -104,6 +105,7 @@ export function activityContentConsistencyIssues(input: Pick<ActivityPublishRead
 
 export function activityPublishReadinessIssues(input: ActivityPublishReadinessInput): ActivityPublishIssue[] {
   const issues: ActivityPublishIssue[] = [];
+  if (isPlanningActivity(input)) issues.push({ field: 'planning', message: '策划草稿不可发布，请确认场地、时间、价格及须知并移除草稿标记', blocking: true });
   const startAt = new Date(input.startTime);
   const endAt = new Date(input.endTime);
   const deadlineAt = new Date(input.registrationDeadline);
@@ -123,4 +125,8 @@ export function activityPublishReadinessIssues(input: ActivityPublishReadinessIn
   if (Number(input.price || 0) > 0 && !hasPaidPaymentMethod(input.paymentMethods)) issues.push({ field: "paymentMethods", message: "付费活动尚未配置可用支付方式", blocking: true });
   issues.push(...activityContentConsistencyIssues(input));
   return issues;
+}
+
+export function isPlanningActivity(input: { title?: string | null; location?: string | null; description?: string | null; notice?: string | null }) {
+  return [input.title, input.location, input.description, input.notice].some(value => /【策划草稿】|场地待确认|尚未开放报名/.test(value || ''));
 }

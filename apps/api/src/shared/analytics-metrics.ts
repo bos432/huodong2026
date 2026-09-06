@@ -1,6 +1,6 @@
 import { yuanToFen } from "./money";
 
-export const ANALYTICS_CALCULATION_VERSION = "activity-metrics-v1";
+export const ANALYTICS_CALCULATION_VERSION = "activity-metrics-v2-live-population";
 export const ANALYTICS_TIMEZONE_OFFSET = "+08:00";
 const ANALYTICS_DATE_PATTERN = /^\d{4}-\d{2}-\d{2}$/;
 
