@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { describe, expect, it } from 'vitest';
 import { assertDemoTarget, assertOwnedDemoTenant, demoActivity, demoMarker, demoTenantCode } from './seed-production-demo.mjs';
+import { ActivityStatus, FieldType } from '../apps/api/src/shared/domain';
 
 describe('production demo safeguards', () => {
   it('requires exact database identity and explicit confirmation', () => {
@@ -23,7 +24,9 @@ describe('production demo safeguards', () => {
     for (const item of items) {
       const activity = demoActivity(item, templates.find(template => template.id === item.id), new Date('2026-09-12T00:00:00Z'));
       expect(activity.isTest).toBe(true);
-      expect(activity.status).toBe('published');
+      expect(activity.status).toBe(ActivityStatus.Open);
+      expect(Object.values(ActivityStatus)).toContain(activity.status);
+      for (const field of activity.fields) expect(Object.values(FieldType)).toContain(field.type);
       expect(activity.description).toContain('不开放报名或付款');
       expect(activity.location).toContain('虚拟');
       expect(+activity.endTime).toBeGreaterThan(+activity.startTime);

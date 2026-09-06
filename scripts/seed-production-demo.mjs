@@ -31,7 +31,7 @@ export function demoActivity(item, template, saturday) {
     endTime: new Date(+start + template.durationMinutes * 60000),
     registrationDeadline: new Date(+start - 86400000), price: String(item.price),
     capacity: template.capacity, featured: item.featured, isTest: true,
-    requireReview: false, allowCancel: true, status: 'published',
+    requireReview: false, allowCancel: true, status: 'open',
     eligibilityRules: { requirePrivacyConsent: true, maxRegistrationsPerUser: 1 },
     fields: [
       { label: '姓名', type: 'text', required: true, sortOrder: 1, options: [] },
