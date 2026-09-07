@@ -46,4 +46,12 @@ describe('guofeng mobile journey', () => {
     expect(source('pages/activity/register.vue')).not.toContain('<view class="hero-mask">');
     expect(source('styles.css')).toContain(':root, page {');
   });
+  it('loads the profile before protected member panels and keeps one shared five-item nav', () => {
+    const my = source('pages/user/my.vue');
+    expect(my.indexOf('const profileResult = await request<any>("/public/me/profile");')).toBeLessThan(my.indexOf('const results = await Promise.allSettled(['));
+    const nav = source('components/AppBottomNav.vue');
+    expect(nav).toContain('.slice(0, 5)');
+    expect(nav).toContain('class="custom-tabbar"');
+    expect(nav).toContain('grid-template-columns: repeat(var(--nav-columns), minmax(0, 1fr))');
+  });
 });

@@ -395,8 +395,9 @@ async function loadProfile() {
       courseOrders.value = [];
     }
     if (!gates.mall) mallOrders.value = [];
+    const profileResult = await request<any>("/public/me/profile");
+    if (!profileResult || typeof profileResult !== "object" || !Number(profileResult.id)) throw new Error("会员资料格式异常，请重新加载");
     const results = await Promise.allSettled([
-      request<any>("/public/me/profile"),
       request<any>("/public/me/wallet"),
       gates.charity ? request<any>("/public/me/charity") : Promise.resolve(null),
       request<any>("/public/me/admin-access"),
@@ -405,10 +406,7 @@ async function loadProfile() {
       request<any>("/public/activities?page=1&pageSize=8&status=open")
     ]);
     if (!isCurrentLoad()) return;
-    const profileResult = results[0];
-    if (profileResult.status === "rejected") throw profileResult.reason;
-    if (!profileResult.value || typeof profileResult.value !== "object" || !Number(profileResult.value.id)) throw new Error("会员资料格式异常，请重新加载");
-    profile.value = profileResult.value;
+    profile.value = profileResult;
     const failures: string[] = [];
     const failedLabels: string[] = [];
     const applyResult = <T,>(index: number, key: string, label: string, validate: (value: unknown) => boolean, apply: (value: T) => void, reset: () => void) => {
@@ -421,10 +419,10 @@ async function loadProfile() {
       }
     };
     const isObject = (value: unknown) => Boolean(value && typeof value === "object" && !Array.isArray(value));
-    applyResult<any>(1, "wallet", "钱包", isObject, (value) => { wallet.value = value; }, () => { wallet.value = null; });
-    if (gates.charity) applyResult<any>(2, "charity", "公益贡献", isObject, (value) => { charity.value = value; }, () => { charity.value = null; });
-    applyResult<any>(3, "adminAccess", "管理权限", isObject, (value) => { adminAccess.value = value; }, () => { adminAccess.value = { canAccess: false }; });
-    const orderOverviewResult = results[4];
+    applyResult<any>(0, "wallet", "钱包", isObject, (value) => { wallet.value = value; }, () => { wallet.value = null; });
+    if (gates.charity) applyResult<any>(1, "charity", "公益贡献", isObject, (value) => { charity.value = value; }, () => { charity.value = null; });
+    applyResult<any>(2, "adminAccess", "管理权限", isObject, (value) => { adminAccess.value = value; }, () => { adminAccess.value = { canAccess: false }; });
+    const orderOverviewResult = results[3];
     if (orderOverviewResult.status === "fulfilled") {
       registrations.value = orderOverviewResult.value.registrations;
       courses.value = gates.courses ? orderOverviewResult.value.courses : [];
@@ -440,8 +438,8 @@ async function loadProfile() {
       failures.push("registrations", "courses", "courseOrders");
       failedLabels.push("报名与订单");
     }
-    if (gates.mall) applyResult<any[]>(5, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
-    const activityResult = results[6];
+    if (gates.mall) applyResult<any[]>(4, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
+    const activityResult = results[5];
     recommendedActivities.value = activityResult.status === "fulfilled" ? safeList<any>(Array.isArray(activityResult.value) ? activityResult.value : activityResult.value?.items) : [];
     assetFailures.value = failures;
     assetWarning.value = failedLabels.length ? `部分会员资产同步失败：${failedLabels.join("、")}。对应数值暂不作为真实数据展示。` : "";
