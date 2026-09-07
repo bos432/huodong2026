@@ -2,12 +2,21 @@
   <view class="container discovery-page has-custom-nav">
     <view class="discovery-topbar">
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
+      <view class="home-brand-title"><text>{{ pageBrand.name || "慢π" }}</text><small>五行雅集</small></view>
       <view class="topbar-actions">
         <view v-if="pageBrand.logoUrl" class="brand-mark"><image :src="pageBrand.logoUrl" mode="aspectFit" /></view>
         <view class="scan-btn app-press" role="button" tabindex="0" aria-label="扫一扫" @click="goScan" @keyup.enter="goScan" @keyup.space.prevent="goScan"><view class="scan-glyph" aria-hidden="true" /></view>
         <view class="search-btn app-press" role="button" tabindex="0" aria-label="搜索活动" @click="goSearch" @keyup.enter="goSearch" @keyup.space.prevent="goSearch"><view class="search-glyph" aria-hidden="true" /></view>
       </view>
     </view>
+
+    <scroll-view class="wuxing-strip" scroll-x :show-scrollbar="false" role="tablist" aria-label="五行主题活动入口">
+      <view class="wuxing-track">
+        <view v-for="item in [{ key: 'metal', glyph: '金', label: '手作' }, { key: 'wood', glyph: '木', label: '漫游' }, { key: 'water', glyph: '水', label: '共读' }, { key: 'fire', glyph: '火', label: '雅集' }, { key: 'earth', glyph: '土', label: '茶事' }]" :key="item.key" class="wuxing-item app-press" :class="item.key" role="tab" tabindex="0" :aria-label="`${item.glyph} · ${item.label}`" @click="goActivityList()" @keyup.enter="goActivityList()">
+          <text class="wuxing-seal">{{ item.glyph }}</text><text>{{ item.label }}</text>
+        </view>
+      </view>
+    </scroll-view>
 
     <template v-for="section in homeSections" :key="section.id">
       <template v-if="section.id === featuredSection?.id">
@@ -297,17 +306,26 @@ function activityDateParts(value: string) {
 
 <style scoped>
 .discovery-page { padding: 20rpx 28rpx 0; background: var(--app-page-bg); font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif; }
-.discovery-topbar { display: flex; align-items: center; justify-content: space-between; gap: 20rpx; min-height: 82rpx; }
+.discovery-topbar { display: flex; align-items: center; justify-content: space-between; gap: 12rpx; min-height: 82rpx; }
+.home-brand-title { display: grid; gap: 2rpx; min-width: 0; flex: 1; text-align: center; font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; }
+.home-brand-title text { overflow: hidden; color: var(--app-text); font-size: 34rpx; font-weight: 600; text-overflow: ellipsis; white-space: nowrap; }
+.home-brand-title small { color: var(--app-primary); font: 20rpx -apple-system,BlinkMacSystemFont,"PingFang SC",sans-serif; }
 .topbar-actions { flex: 0 0 auto; display: flex; align-items: center; gap: 12rpx; }
 .brand-mark { width: 52rpx; height: 52rpx; overflow: hidden; border-radius: 50%; background: #e9f9f0; }
 .brand-mark image { width: 100%; height: 100%; }
 .search-btn { min-width: 70rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 14rpx; border-radius: 8rpx; color: #27362f; font-size: var(--app-font-helper); font-weight: 800; }
 .search-btn { background: #eef2f0; }
+.wuxing-strip { width: 100%; margin: 4rpx 0 24rpx; white-space: nowrap; }
+.wuxing-track { display: inline-flex; width: 100%; justify-content: space-between; gap: 12rpx; }
+.wuxing-item { display: flex; min-width: 84rpx; flex-direction: column; align-items: center; gap: 7rpx; color: var(--app-text-muted); font-size: 21rpx; }
+.wuxing-seal { width: 52rpx; height: 52rpx; display: grid; place-items: center; border: 1rpx solid currentColor; font: 30rpx "STSong", "SimSun", serif; }
+.wuxing-item.metal { color: #9B813E; }.wuxing-item.wood { color: #386151; }.wuxing-item.water { color: #526F79; }.wuxing-item.fire { color: #A33D36; }.wuxing-item.earth { color: #857456; }
+.wuxing-item:focus-visible { outline: 3rpx solid var(--app-primary); outline-offset: 3rpx; }
 .feature-showcase{display:grid;gap:14rpx;margin:8rpx 0 24rpx}.feature-lead,.feature-side-card{position:relative;overflow:hidden;border-radius:8rpx;background:#143a27}.feature-lead{height:364rpx}.feature-lead image,.feature-side-card image,.feature-shade{position:absolute;inset:0;width:100%;height:100%}.feature-lead image,.feature-side-card image{transition:transform 360ms ease}.feature-lead:active image,.feature-side-card:active image{transform:scale(1.09)}.feature-side-rail{width:100%;white-space:nowrap}.feature-side-track{display:inline-flex;gap:14rpx;padding-right:28rpx}.feature-side-card{width:264rpx;height:196rpx;white-space:normal}.feature-shade{background:linear-gradient(180deg,rgba(8,24,15,.08),rgba(8,24,15,.78))}.feature-fallback{height:100%;display:grid;place-items:center;background:#dff8e7;color:#08753f;font-size:28rpx;font-weight:900}.feature-copy{position:absolute;left:16rpx;right:16rpx;bottom:16rpx;display:grid;gap:5rpx;color:#fff}.feature-copy text:first-child{color:#baf5ca;font-size:var(--app-font-helper);font-weight:800}.feature-copy text:nth-child(2){display:-webkit-box;overflow:hidden;font-size:30rpx;font-weight:900;line-height:1.28;-webkit-box-orient:vertical;-webkit-line-clamp:2}.feature-copy text:last-child{color:#fff3c4;font-size:var(--app-font-helper);font-weight:900}.feature-side-card .feature-copy text:nth-child(2){font-size:27rpx}.feature-lead-copy text:nth-child(2){font-size:38rpx}.discovery-empty-hero{display:grid;align-content:center;justify-items:start;min-height:300rpx;margin:8rpx 0 24rpx;padding:32rpx;border:1rpx solid #d8eee1;border-radius:8rpx;background:#effbf4}.discovery-empty-kicker{color:#078347;font-size:var(--app-font-helper);font-weight:900}.discovery-empty-title{margin-top:12rpx;color:#143a27;font-size:36rpx;font-weight:950}.discovery-empty-copy{margin-top:10rpx;color:#607169;font-size:var(--app-font-helper)}.discovery-empty-action{min-height:58rpx;display:flex;align-items:center;margin-top:22rpx;padding:0 22rpx;border-radius:8rpx;background:#143a27;color:#fff;font-size:var(--app-font-helper);font-weight:900}
 .discovery-categories { width: 100%; margin: 24rpx 0 28rpx; white-space: nowrap; }
 .category-track { display: inline-flex; gap: 12rpx; padding-right: 28rpx; }
 .category-tab { min-width: 96rpx; height: 64rpx; display: inline-flex; align-items: center; justify-content: center; padding: 0 22rpx; border: 1rpx solid #e0e8e4; border-radius: 8rpx; background: #fff; color: #56635d; font-size: 26rpx; font-weight: 700; transition: background-color 180ms ease, border-color 180ms ease, color 180ms ease, transform 180ms ease; }
-.category-tab.active { border-color: #0f766e; background: #0f766e; color: #fff; }
+.category-tab.active { border-color: #386151; background: #386151; color: #fff; }
 .discovery-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 20rpx; margin-bottom: 18rpx; }
 .heading-title { display: block; color: var(--app-text); font-size: 36rpx; font-weight: 850; line-height: 1.25; }
 .heading-copy { display: block; margin-top: 6rpx; color: #839189; font-size: 26rpx; }
@@ -343,5 +361,12 @@ function activityDateParts(value: string) {
 .discovery-empty-copy { line-height:1.55; }
 .discovery-empty-action { margin-top:20rpx; }
 .home-social-entry{display:flex;align-items:center;justify-content:space-between;gap:20rpx;margin:28rpx 0 4rpx;padding:28rpx;border:1rpx solid #d5e9dc;border-radius:16rpx;background:#eaf7f1}.home-social-copy{min-width:0;display:grid;gap:6rpx}.home-social-eyebrow{color:#08753f;font-size:22rpx;font-weight:850}.home-social-title{color:#16252d;font-size:32rpx;font-weight:900}.home-social-description{color:#52636b;font-size:24rpx;line-height:1.5}.home-social-action{flex:none;min-height:58rpx;display:flex;align-items:center;padding:0 20rpx;border-radius:12rpx;background:#16252d;color:#fff;font-size:24rpx;font-weight:850}
+.discovery-page .feature-lead,.discovery-page .feature-side-card { background: #386151; border-radius: 8rpx; }
+.discovery-page .feature-copy text:first-child { color: #E7D8A8; }
+.discovery-page .feature-copy text:last-child { color: #F2E7C2; }
+.discovery-page .activity-price { color: var(--app-price); }
+.discovery-page .activity-category { background: #F0F3EE; color: #65736A; }
+.discovery-page .activity-status { background: #EAF0E9; color: #386151; }
+.discovery-page .heading-title { font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; font-weight: 600; }
 
 </style>

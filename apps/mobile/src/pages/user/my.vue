@@ -228,7 +228,7 @@ function safeList<T>(value: unknown): T[] {
 }
 const myPageSection = computed(() => safeList<any>(sections.value).find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
-const warmHeaderBackground = "#16252D";
+const warmHeaderBackground = "#386151";
 const warmHeaderTextColor = "#FFFFFF";
 const warmHeaderMutedColor = "rgba(255, 255, 255, 0.68)";
 const profileHeaderBackground = computed(() => {
@@ -1104,4 +1104,7 @@ function logoutUser() {
 .profile-page { background:#f7f9f8; }.member-card { box-shadow:0 10rpx 26rpx rgba(20,98,58,.12); }.member-stat { border-radius:8rpx; }.profile-section { border-color:#e2eae6; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.profile-link-list { border-color:#e2eae6; border-radius:8rpx; }.profile-link-row { border-color:#e7eeea; }.profile-section-link { border-radius:6rpx; background:#eafbf1; color:#08753f; }.wallet-panel { background:#143a27; }.charity-panel { background:#fff2db; }.admin-entry { background:#effbf4; }.order-badge { background:#dc6900; }.logout-card { border-radius:8rpx; }
 .profile-page{background:var(--app-page-bg)}.member-card{box-shadow:none}.profile-section,.more-services-toggle{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}.profile-link-list{border-color:var(--app-border);border-radius:16rpx}.member-shortcut{border-radius:16rpx}.more-services-toggle{display:flex;align-items:center;justify-content:space-between;gap:20rpx;margin:0 28rpx 18rpx;padding:24rpx;border:1rpx solid var(--app-border);background:#fff}.more-services-title,.more-services-copy{display:block}.more-services-title{color:var(--app-text);font-size:28rpx;font-weight:850}.more-services-copy{margin-top:6rpx;color:var(--app-text-muted);font-size:23rpx}
 .history-entry{display:flex;align-items:center;gap:20rpx;margin:0 28rpx 18rpx;padding:22rpx 24rpx;border:1rpx solid var(--app-border);border-radius:16rpx;background:#fff}.history-entry-icon{width:68rpx;height:68rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto;border-radius:50%;background:#eaf7f1;color:#08753f;font-size:27rpx;font-weight:900}.history-entry-content{min-width:0;flex:1}.history-entry-title,.history-entry-copy{display:block}.history-entry-title{color:var(--app-text);font-size:28rpx;font-weight:850}.history-entry-copy{margin-top:6rpx;color:var(--app-text-muted);font-size:23rpx;line-height:1.45}
+.profile-page .profile-section-title,.profile-page .member-shortcut-title { font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; font-weight: 600; }
+.profile-page .profile-section-link { background: var(--app-primary-soft); color: var(--app-primary); }
+.profile-page .member-card { background: var(--app-primary) !important; }
 </style>

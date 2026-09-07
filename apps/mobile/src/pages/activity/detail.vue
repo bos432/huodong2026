@@ -997,4 +997,8 @@ onShow(() => {
 .detail-page .trust-strip{margin:0 24rpx 12rpx;padding:24rpx 0;border:0;border-bottom:1rpx solid var(--app-border,#e3e9e8);border-radius:0;background:transparent}
 .detail-page .more-actions-mask{z-index:1200}.detail-page .poster-mask{z-index:1210}
 .detail-page .bottom-bar{z-index:100}.detail-page .action-button{min-width:220rpx;min-height:80rpx;display:flex;align-items:center;justify-content:center;line-height:1.3;white-space:normal;text-align:center}
+.detail-page .detail-head-title,.detail-page .detail-section .title,.detail-page .detail-section .section-title { font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; font-weight: 600; }
+.detail-page .decision-status { background: var(--app-primary); }
+.detail-page .content-kicker,.detail-page .map-action,.detail-page .organizer-follow { color: var(--app-primary); }
+.detail-page .bottom-info text:first-child { color: var(--app-price); }
 </style>
