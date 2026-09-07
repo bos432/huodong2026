@@ -1,4 +1,5 @@
-import { API_BASE } from "./api-base";
+import { API_BASE, ASSET_API_BASE } from "./api-base";
+import { normalizeAssetResponse } from "./asset-response";
 import { clientError, describeError } from "./error-reporting";
 
 const ADMIN_TOKEN_KEY = "mobile_admin_token";
@@ -84,7 +85,7 @@ export function mobileAdminRequest<T>(url: string, options: UniApp.RequestOption
       success(res) {
         const body = res.data as any;
         if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) {
-          resolve(body.data as T);
+          resolve(normalizeAssetResponse(body.data as T, ASSET_API_BASE));
           return;
         }
         if (res.statusCode === 401) clearMobileAdminSession();
@@ -134,7 +135,7 @@ export function uploadAdminImage(filePath: string): Promise<{ url: string; path:
             body = null;
           }
         }
-        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(body.data);
+        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(normalizeAssetResponse(body.data, ASSET_API_BASE));
         else reject(new MobileAdminError(body?.message || "上传失败", res.statusCode));
       },
       fail(error) {

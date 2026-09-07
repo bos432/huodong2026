@@ -1,4 +1,5 @@
-import { API_BASE } from "./api-base";
+import { API_BASE, ASSET_API_BASE } from "./api-base";
+import { normalizeAssetResponse } from "./asset-response";
 import { clientError, describeError } from "./error-reporting";
 import { queryFromUrl, queryParam, stringifyQuery } from "./query";
 
@@ -242,7 +243,7 @@ export function request<T>(url: string, options: ApiRequestOptions = {}): Promis
       success(res) {
         const body = res.data as any;
         if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) {
-          resolve(body.data as T);
+          resolve(normalizeAssetResponse(body.data as T, ASSET_API_BASE));
           return;
         }
         if (res.statusCode === 401) clearUser();
@@ -513,7 +514,7 @@ export function uploadMyAvatar(filePath: string): Promise<{ url: string; path: s
             body = null;
           }
         }
-        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(body.data);
+        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(normalizeAssetResponse(body.data, ASSET_API_BASE));
         else reject(new ApiClientError(body?.message || "上传失败", body?.requestId || headerValue(res.header, "x-request-id")));
       },
       fail(error) {
@@ -566,7 +567,7 @@ function uploadPublicImage(path: string, filePath: string, formData?: Record<str
             body = null;
           }
         }
-        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(body.data);
+        if (res.statusCode >= 200 && res.statusCode < 300 && body?.code === 0) resolve(normalizeAssetResponse(body.data, ASSET_API_BASE));
         else reject(new ApiClientError(body?.message || "上传失败", body?.requestId || headerValue(res.header, "x-request-id")));
       },
       fail(error) {

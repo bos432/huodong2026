@@ -16,3 +16,9 @@ function buildApiBase() {
 }
 
 export const API_BASE = buildApiBase();
+
+let assetApiBase = "";
+// #ifdef MP-WEIXIN
+assetApiBase = API_BASE;
+// #endif
+export const ASSET_API_BASE = assetApiBase;
