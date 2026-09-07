@@ -38,8 +38,8 @@ async function submit() {
 </template>
 
 <style scoped>
-.login-page { min-height: 100vh; display: grid; place-items: center; background: #edf2f7; }
-.login-panel { width: 360px; background: #fff; border: 1px solid #dde4ee; border-radius: 8px; padding: 28px; }
-h1 { margin: 0 0 24px; font-size: 24px; }
+.login-page { min-height: 100vh; display: grid; place-items: center; background: #f0f2ef; padding: 20px; }
+.login-panel { width: min(360px, 100%); background: #fff; border: 1px solid #d6dfd5; border-top: 3px solid #a33d36; border-radius: 4px; padding: 28px; }
+h1 { margin: 0 0 24px; font-family: "STSong", "SimSun", serif; font-size: 25px; font-weight: 500; }
 .el-button { width: 100%; }
 </style>

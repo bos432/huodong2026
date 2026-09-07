@@ -280,9 +280,10 @@ watch(
     <el-aside width="248px" class="aside">
       <div class="brand">
         <img v-if="shellBrand.brandLogoUrl" class="brand-logo" :src="shellBrand.brandLogoUrl" alt="Logo" />
-        <div class="brand-copy"><span>{{ shellTitle }}</span><small>东方生活运营后台</small></div>
+        <span v-else class="brand-seal" aria-hidden="true">慢</span>
+        <div class="brand-copy"><strong>{{ shellBrand.brandName || '慢π' }}</strong><small :title="shellTitle">{{ shellTitle }}</small></div>
       </div>
-      <el-menu router :default-active="route.path" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened>
+      <el-menu router :default-active="route.path" background-color="#f7f9f5" text-color="#5e6b61" active-text-color="#386151" unique-opened>
         <el-sub-menu v-for="group in visibleMenuGroups" :key="group.index" :index="group.index">
           <template #title>
             <el-icon><component :is="group.icon" /></el-icon>
@@ -294,12 +295,13 @@ watch(
           </el-menu-item>
         </el-sub-menu>
       </el-menu>
+      <div class="five-elements" aria-hidden="true"><span>金</span><span>木</span><span>水</span><span>火</span><span>土</span></div>
     </el-aside>
     <el-container>
       <el-header class="header">
         <div class="header-title">
           <span>{{ shellTitle }} · {{ roleLabel }}</span>
-          <small>{{ roleCapabilityText }}</small>
+          <small :title="roleCapabilityText">{{ isPlatformAdmin() ? selectedScopeName : currentTenantName() }}</small>
         </div>
         <div class="header-actions">
           <div v-if="isPlatformAdmin()" class="tenant-switcher">
@@ -318,10 +320,10 @@ watch(
             </template>
           </el-dropdown>
           <el-button :icon="View" @click="openCurrentH5Preview">打开{{ currentH5PreviewLabel }}</el-button>
-          <el-button :icon="CopyDocument" @click="copyCurrentH5PreviewUrl">复制{{ currentH5PreviewLabel }}</el-button>
-          <el-button :icon="Grid" @click="openCurrentH5QrDialog">{{ currentH5PreviewLabel }}二维码</el-button>
-          <el-button :icon="Key" @click="openPasswordDialog">修改密码</el-button>
-          <el-button :icon="SwitchButton" @click="logout">退出</el-button>
+          <el-tooltip :content="`复制${currentH5PreviewLabel}链接`"><el-button :icon="CopyDocument" :aria-label="`复制${currentH5PreviewLabel}链接`" @click="copyCurrentH5PreviewUrl" /></el-tooltip>
+          <el-tooltip :content="`${currentH5PreviewLabel}二维码`"><el-button :icon="Grid" :aria-label="`${currentH5PreviewLabel}二维码`" @click="openCurrentH5QrDialog" /></el-tooltip>
+          <el-tooltip content="修改密码"><el-button :icon="Key" aria-label="修改密码" @click="openPasswordDialog" /></el-tooltip>
+          <el-tooltip content="退出登录"><el-button :icon="SwitchButton" aria-label="退出登录" @click="logout" /></el-tooltip>
         </div>
       </el-header>
       <el-main ref="mainContent" tabindex="-1" :aria-label="pageAnnouncement" :class="{ 'homepage-builder-main': route.path === '/homepage-builder' }">
@@ -342,7 +344,7 @@ watch(
       </div>
       <el-button :icon="Close" circle title="关闭主导航" aria-label="关闭主导航" @click="mobileMenuVisible = false" />
     </div>
-    <el-menu router :default-active="route.path" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened @select="mobileMenuVisible = false">
+    <el-menu router :default-active="route.path" background-color="#f7f9f5" text-color="#5e6b61" active-text-color="#386151" unique-opened @select="mobileMenuVisible = false">
       <el-sub-menu v-for="group in visibleMenuGroups" :key="`mobile-${group.index}`" :index="`mobile-${group.index}`">
         <template #title>
           <el-icon><component :is="group.icon" /></el-icon>
@@ -389,16 +391,25 @@ watch(
 .aside { background: #f7f9f5; border-right: 1px solid #d6dfd5; overflow-x: hidden; }
 .brand { height: 82px; display: flex; align-items: center; gap: 11px; padding: 0 20px; color: #28332d; font-size: 20px; font-weight: 700; }
 .brand-copy { min-width: 0; display: grid; gap: 5px; }
+.brand-copy strong { font-family: "STSong", "SimSun", serif; font-size: 27px; }
 .brand-copy span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.brand-copy small { color: #707a73; font-size: 10px; font-weight: 400; }
+.brand-copy small { color: #707a73; font-size: 11px; font-weight: 400; overflow-wrap: anywhere; }
 .brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .brand-logo { width: 36px; height: 40px; object-fit: contain; border: 3px double #a33d36; border-radius: 2px; background: #fff; padding: 3px; flex: 0 0 auto; }
-.brand::after { content: "金  木  水  火  土"; position: absolute; top: 67px; left: 21px; color: #9b813e; font: 9px "STSong", "SimSun", serif; letter-spacing: 3px; opacity: .8; }
-.header { background: #fff; border-bottom: 1px solid #e2e7e1; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.brand-seal { display: grid; place-items: center; width: 34px; height: 39px; border: 3px double #a33d36; color: #a33d36; font: 23px "STSong", "SimSun", serif; flex-shrink: 0; }
+.five-elements { display: flex; gap: 10px; padding: 24px 22px; }
+.five-elements span { display: grid; place-items: center; width: 24px; height: 26px; border: 1px solid currentColor; font: 14px "STSong", "SimSun", serif; color: #9b813e; }
+.five-elements span:nth-child(2) { color: #386151; }
+.five-elements span:nth-child(3) { color: #526f79; }
+.five-elements span:nth-child(4) { color: #a33d36; }
+.five-elements span:nth-child(5) { color: #857456; }
+.header { height: auto; min-height: 68px; padding: 12px 24px; background: #fff; border-bottom: 1px solid #e2e7e1; display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px; }
 .header-title { min-width: 0; display: grid; gap: 3px; }
 .header-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; font-size: 16px; }
 .header-title small { color: #707a73; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
+.header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 8px; }
+.header-actions :deep(.el-button + .el-button) { margin-left: 0; }
+:deep(.el-main) { min-width: 0; padding: 0; background: #fff; }
 .tenant-switcher { display: flex; align-items: center; gap: 8px; color: #475569; font-size: 12px; }
 .tenant-switcher .el-select { width: 220px; }
 .homepage-builder-main { overflow: visible; }

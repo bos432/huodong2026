@@ -35,6 +35,7 @@ const agents = ref<any[]>([]);
 const tenants = ref<any[]>([]);
 const memberLevels = ref<any[]>([]);
 const loading = ref(false);
+const showExtendedColumns = ref(false);
 const errorMessage = ref("");
 const metaErrorMessage = ref("");
 const drawer = ref(false);
@@ -1170,9 +1171,9 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page">
+  <div class="page activity-management">
     <div class="toolbar">
-      <h2>{{ pageTitle }}</h2>
+      <div><div class="activity-breadcrumb">{{ isPlatformAdmin() ? '平台运营' : '商家运营' }} / {{ pageTitle }}</div><h2>{{ pageTitle }}</h2></div>
       <div class="toolbar-actions">
         <el-button v-if="isPlatformAdmin()" :icon="Check" :disabled="Boolean(activityActionKey) || saving" @click="showPendingApproval">待审核活动</el-button>
         <el-button v-if="canOperateActivities && !isPlatformAdmin()" :disabled="Boolean(activityActionKey) || saving" @click="showTemplatePicker($event)">使用模板</el-button>
@@ -1218,6 +1219,7 @@ onMounted(async () => {
         </el-select>
         <el-button type="primary" :loading="loading" :disabled="Boolean(activityActionKey)" @click="search">查询</el-button>
         <el-button :disabled="Boolean(activityActionKey)" @click="resetFilters">重置</el-button>
+        <el-checkbox v-model="showExtendedColumns">扩展字段</el-checkbox>
       </div>
 
       <div class="status-summary">
@@ -1230,36 +1232,35 @@ onMounted(async () => {
           title="已从复盘行动进入活动编辑"
           description="当前已自动打开对应活动，可直接优化标题、封面、讲师介绍、活动流程和报名说明。"
         />
-        <el-tag
+        <button type="button" class="status-summary-item" :class="{ active: !activeStatusFilter }" :aria-pressed="!activeStatusFilter" :disabled="Boolean(activityActionKey) || loading" @click="setStatusFilter('')">全部活动</button>
+        <button
           v-for="item in statusSummary"
           :key="item.value"
-          :type="item.active ? 'primary' : 'info'"
-          effect="light"
+          type="button"
           class="status-summary-item"
-          role="button"
-          tabindex="0"
+          :class="{ active: item.active }"
+          :aria-pressed="item.active"
+          :disabled="Boolean(activityActionKey) || loading"
           @click="setStatusFilter(item.value)"
-          @keydown.enter.prevent="setStatusFilter(item.value)"
-          @keydown.space.prevent="setStatusFilter(item.value)"
         >
-          {{ item.label }}：{{ item.count }}
-        </el-tag>
-        <el-tag v-if="activeStatusFilter" class="status-summary-item" effect="plain" role="button" tabindex="0" @click="setStatusFilter('')" @keydown.enter.prevent="setStatusFilter('')" @keydown.space.prevent="setStatusFilter('')">清除状态</el-tag>
+          {{ item.label }} <small>{{ item.count }}</small>
+        </button>
       </div>
       <el-table :data="rows" stripe empty-text="暂无活动" v-loading="loading">
-        <el-table-column prop="title" label="活动" min-width="260" show-overflow-tooltip />
+        <el-table-column prop="title" label="活动" min-width="290">
+          <template #default="{ row }"><div class="activity-title-cell"><el-image v-if="row.coverUrl" class="activity-thumbnail" :src="row.coverUrl" fit="cover"><template #error><el-icon><Picture /></el-icon></template></el-image><div><strong>{{ row.title }}</strong><small>#{{ row.id }} · {{ row.category?.name || '未分类' }}<span v-if="row.isTest"> · 测试活动</span></small></div></div></template>
+        </el-table-column>
         <el-table-column v-if="isPlatformAdmin()" label="所属商家" min-width="160" show-overflow-tooltip>
           <template #default="{ row }">{{ tenantDisplayName(row) }}</template>
         </el-table-column>
-        <el-table-column label="分类" width="120"><template #default="{ row }">{{ row.category?.name || "-" }}</template></el-table-column>
-        <el-table-column label="代理" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ row.agent?.name || "平台自营" }}</template></el-table-column>
+        <el-table-column v-if="showExtendedColumns" label="代理" min-width="150" show-overflow-tooltip><template #default="{ row }">{{ row.agent?.name || "平台自营" }}</template></el-table-column>
         <el-table-column label="状态" width="110"><template #default="{ row }"><el-tag>{{ activityStatusText[row.status as ActivityStatus] }}</el-tag></template></el-table-column>
         <el-table-column prop="registeredCount" label="已报" width="80" />
-        <el-table-column prop="remainingSeats" label="余量" width="80" />
+        <el-table-column v-if="showExtendedColumns" prop="remainingSeats" label="余量" width="80" />
         <el-table-column label="费用" width="110"><template #default="{ row }">{{ Number(row.price) > 0 ? `¥${money(row.price)}` : "免费" }}</template></el-table-column>
-        <el-table-column label="会员门槛" width="130"><template #default="{ row }">{{ row.minMemberLevel?.name || "不限" }}</template></el-table-column>
-        <el-table-column label="优先报名" width="190"><template #default="{ row }">{{ row.priorityMemberLevel ? `${row.priorityMemberLevel.name} / ${formatTime(row.priorityRegistrationEndsAt)}` : "未设置" }}</template></el-table-column>
-        <el-table-column label="开始时间" width="170"><template #default="{ row }">{{ formatTime(row.startTime) }}</template></el-table-column>
+        <el-table-column v-if="showExtendedColumns" label="会员门槛" width="130"><template #default="{ row }">{{ row.minMemberLevel?.name || "不限" }}</template></el-table-column>
+        <el-table-column v-if="showExtendedColumns" label="优先报名" width="190"><template #default="{ row }">{{ row.priorityMemberLevel ? `${row.priorityMemberLevel.name} / ${formatTime(row.priorityRegistrationEndsAt)}` : "未设置" }}</template></el-table-column>
+        <el-table-column label="开始时间" width="150"><template #default="{ row }">{{ formatTime(row.startTime) }}</template></el-table-column>
         <el-table-column label="操作" width="260" fixed="right">
           <template #default="{ row }">
             <el-button size="small" :icon="View" :disabled="Boolean(activityActionKey)" @click="openActivityH5(row)">预览H5</el-button>
@@ -1632,9 +1633,25 @@ onMounted(async () => {
 </template>
 
 <style scoped>
-.filter-bar { display: grid; grid-template-columns: minmax(220px, 1fr) 160px 160px auto auto; gap: 10px; align-items: center; margin-bottom: 14px; }
-.status-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
-.status-summary-item { cursor: pointer; user-select: none; }
+.filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 16px; }
+.filter-bar > :deep(.el-input), .filter-bar > :deep(.el-select) { width: 160px; max-width: 100%; }
+.filter-bar > :deep(.el-input:first-child) { width: 240px; }
+.filter-bar > :deep(.el-button + .el-button) { margin-left: 0; }
+.activity-breadcrumb { font-size: 12px; color: #707a73; margin-bottom: 9px; }
+.toolbar-actions { display: flex; flex-wrap: wrap; gap: 8px; }
+.toolbar-actions :deep(.el-button + .el-button) { margin-left: 0; }
+.status-summary { display: flex; flex-wrap: wrap; gap: 0 22px; margin-bottom: 16px; border-bottom: 1px solid #e2e7e1; }
+.status-summary-item { cursor: pointer; user-select: none; border: 0; border-bottom: 2px solid transparent; background: none; color: #707a73; padding: 12px 0; font: inherit; font-size: 13px; }
+.status-summary-item.active { border-bottom-color: #386151; color: #386151; font-weight: 600; }
+.status-summary-item small { margin-left: 5px; font-size: 11px; font-weight: 400; }
+.status-summary-item:disabled { cursor: default; opacity: .65; }
+.status-summary-item:focus-visible { outline: 2px solid #386151; outline-offset: 2px; }
+.route-focus-alert { width: 100%; }
+.activity-title-cell { display: flex; align-items: center; gap: 12px; min-height: 54px; padding: 4px 0; }
+.activity-title-cell > div { min-width: 0; }
+.activity-thumbnail { width: 48px; height: 40px; border-radius: 3px; flex-shrink: 0; background: #f2f6ef; }
+.activity-title-cell strong { display: block; font-weight: 500; overflow-wrap: anywhere; line-height: 1.5; }
+.activity-title-cell small { display: block; color: #707a73; font-size: 11px; margin-top: 4px; }
 .pager-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding-top: 14px; color: #64748b; font-size: 13px; }
 .compliance-alert { margin-bottom: 14px; }
 .compliance-issues { display: grid; gap: 8px; line-height: 1.6; }

@@ -11,8 +11,8 @@ const bundle = path.join(output, 'bundle');
 await fs.mkdir(bundle, { recursive: true });
 for (const [source, target] of [
   ['apps/api/dist', 'api'], ['apps/admin/dist', 'admin'], ['apps/mobile/dist/build/h5', 'h5'], ['uploads/demo-activities', 'covers']
-]) await fs.cp(path.join(root, source), path.join(bundle, target), { recursive: true, force: true });
-await fs.mkdir(path.join(bundle, 'scripts'), { recursive: true });
+]) await fs.cp(path.join(root, source), path.join(bundle, target), { recursive: true, force: false, errorOnExist: true });
+await fs.mkdir(path.join(bundle, 'scripts'));
 await fs.copyFile(path.join(root, 'scripts/deploy-scoped-release.mjs'), path.join(bundle, 'scripts/deploy-scoped-release.mjs'));
 const files = {};
 async function hashTree(directory) {
@@ -26,7 +26,7 @@ await hashTree(bundle);
 const adminVersion = JSON.parse(await fs.readFile(path.join(bundle, 'admin/version.json'), 'utf8'));
 const h5Version = JSON.parse(await fs.readFile(path.join(bundle, 'h5/version.json'), 'utf8'));
 if (adminVersion.commit !== commit || h5Version.commit !== commit) throw new Error('Static artifacts do not match release commit.');
-const manifest = { releaseId, commit, previousCommit: 'cecdb8912baf95e59b033322ef32aa6bf3a5b13b', buildTime: adminVersion.buildTime, files };
+const manifest = { releaseId, commit, previousCommit: '67002a96bf1455af4a77cdc54bcea2587b4b3728', buildTime: adminVersion.buildTime, files };
 await fs.writeFile(path.join(bundle, 'release.json'), JSON.stringify(manifest, null, 2));
 const archive = path.join(output, `${releaseId}.tar.gz`);
 execFileSync('tar', ['-czf', archive, '-C', output, 'bundle']);
