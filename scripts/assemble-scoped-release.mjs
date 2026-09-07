@@ -11,8 +11,8 @@ const bundle = path.join(output, 'bundle');
 await fs.mkdir(bundle, { recursive: true });
 for (const [source, target] of [
   ['apps/api/dist', 'api'], ['apps/admin/dist', 'admin'], ['apps/mobile/dist/build/h5', 'h5'], ['uploads/demo-activities', 'covers']
-]) await fs.cp(path.join(root, source), path.join(bundle, target), { recursive: true, force: false, errorOnExist: true });
-await fs.mkdir(path.join(bundle, 'scripts'));
+]) await fs.cp(path.join(root, source), path.join(bundle, target), { recursive: true, force: true });
+await fs.mkdir(path.join(bundle, 'scripts'), { recursive: true });
 await fs.copyFile(path.join(root, 'scripts/deploy-scoped-release.mjs'), path.join(bundle, 'scripts/deploy-scoped-release.mjs'));
 const files = {};
 async function hashTree(directory) {
