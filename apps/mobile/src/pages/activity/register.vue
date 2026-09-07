@@ -466,7 +466,6 @@ watch(couponCode, () => {
       <view class="register-hero">
         <image v-if="activity.coverUrl" class="hero-image" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="hero-image hero-fallback">报名</view>
-        <view class="hero-mask"></view>
         <view class="hero-head">
           <text class="hero-kicker">慢π · 报名确认</text>
           <text class="hero-status">{{ seatsText }}</text>
@@ -845,5 +844,22 @@ watch(couponCode, () => {
 .summary{border-radius:14rpx;background:#f5f7f8}
 .summary .payable text:last-child,.ticket-price,.submit-summary text:last-child{color:var(--app-price)}
 .register .submit-bar{border-color:var(--app-border);box-shadow:0 -8rpx 24rpx rgba(22,37,45,.06)}
-.register .submit-bar .button{border-radius:14rpx;background:#16252d;color:#fff}
+.register .submit-bar .button{border-radius:6rpx;background:#a33d36;color:#fff}
+.register { background: #fff; }
+.register .register-hero { min-height: 0; margin-bottom: 0; border: 0; border-bottom: 1rpx solid #e1e6de; border-radius: 0; background: #fff; box-shadow: none; }
+.register .hero-image { position: relative; inset: auto; display: block; width: 100%; height: 340rpx; border-radius: 6rpx; }
+.register .hero-fallback { color: #386151; background: #f0f3ee; }
+.register .hero-head { padding: 20rpx 0 0; }
+.register .hero-bottom { min-height: 0; padding: 20rpx 0 26rpx; }
+.register .hero-kicker { color: #65736a; }
+.register .hero-status { background: #eaf0e9; color: #386151; }
+.register .page-head-title { color: #28332d; font: 36rpx "STSong", "SimSun", "Noto Serif CJK SC", serif; line-height: 1.5; }
+.register .page-head-copy { color: #65736a; }
+.register .hero-summary view { padding: 8rpx 12rpx; border: 0; border-right: 1rpx solid #e1e6de; border-radius: 0; background: transparent; }
+.register .hero-summary view:last-child { border: 0; }
+.register .hero-summary text:first-child { color: #65736a; }
+.register .hero-summary text:last-child { color: #28332d; white-space: normal; }
+.register .card { padding: 26rpx 0; margin-bottom: 0; border: 0; border-bottom: 1rpx solid #e1e6de; border-radius: 0; background: #fff; }
+.register .ticket.active,.register .method.active,.register .available-coupon.selected { border-color: #386151; background: #eaf0e9; }
+.register .submit-bar .button.secondary,.register .submit-bar .button.disabled { background: #e6ebe3; color: #65736a; border-color: #d4dfd2; }
 </style>

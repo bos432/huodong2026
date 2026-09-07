@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GuofengPageHeading from '../../components/GuofengPageHeading.vue';
 import { computed, onUnmounted, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getCurrentTenantCode, loginH5, loginH5Password, loginWechat, requestH5Code, uploadMyAvatar, withTenantCode } from "../../api";
@@ -268,13 +269,7 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
   <view class="container login-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantContextBadge :tenant="tenant" label="当前城市" hint="登录后沿用" />
 
-    <view class="login-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
-      <view class="hero-mark">慢π</view>
-      <view class="hero-copy">
-        <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "手机号登录" }}</view>
-        <view class="subtle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "用于查看报名、订单、签到码和会员权益。" }}</view>
-      </view>
-    </view>
+    <GuofengPageHeading :title="innerPageConfig.title || '手机号登录'" :subtitle="innerPageConfig.subtitle" :background="innerPageLayout.headerBackgroundColor" :text-color="innerPageLayout.headerTextColor" :muted-color="innerPageLayout.headerSubtitleColor" />
 
     <PageDecorationBlocks :sections="bodyDecorationSections" />
 
@@ -370,58 +365,9 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
 
 <style scoped>
 .login-page { display: grid; align-content: start; gap: 20rpx; padding-bottom: 160rpx; }
-.login-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 300rpx;
-  display: flex;
-  align-items: flex-end;
-  gap: 22rpx;
-  padding: 34rpx 28rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
-}
-.login-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(34, 24, 19, 0.04), rgba(34, 24, 19, 0.24));
-  pointer-events: none;
-}
-.hero-mark,
-.hero-copy {
-  position: relative;
-  z-index: 1;
-}
-.hero-mark {
-  flex: 0 0 auto;
-  width: 96rpx;
-  height: 96rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 28rpx;
-  background: rgba(255, 248, 240, 0.16);
-  color: #fff8f0;
-  font-size: 30rpx;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-}
-.hero-copy { min-width: 0; }
-.hero-copy .title {
-  font-size: 48rpx;
-  line-height: 1.22;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-}
-.hero-copy .subtle {
-  margin-top: 12rpx;
-  font-size: 25rpx;
-  line-height: 1.6;
-}
-.login-card { display: grid; gap: 24rpx; border-radius: 24rpx; }
+.login-card { display: grid; gap: 24rpx; padding: 24rpx 0; border: 0; border-radius: 0; background: #fff; }
 .card-kicker {
-  color: #4a6b8a;
+  color: #386151;
   font-size: 24rpx;
   font-weight: 800;
 }
@@ -445,11 +391,11 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
 .field { display: grid; gap: 12rpx; }
 .field .input { min-width:0; width:100%; box-sizing:border-box; font-family:inherit; }
 .label { font-size: 28rpx; font-weight: 650; }
-.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8rpx; padding: 8rpx; border-radius: 18rpx; background: #f9f4ee; }
+.login-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 8rpx; padding: 6rpx; border-radius: 6rpx; background: #f0f3ee; }
 .login-tab { min-height: 88rpx; padding: 8rpx; box-sizing: border-box; display: flex; align-items: center; justify-content: center; border-radius: 14rpx; color: #666666; font-size: 26rpx; font-weight: 800; text-align: center; }
-.login-tab.active { background: #fff; color: #c43d3d; box-shadow: 0 8rpx 22rpx rgba(91, 47, 36, 0.08); }
+.login-tab.active { background: #fff; color: #386151; box-shadow: none; border-bottom: 3rpx solid #386151; }
 .code-row { display: grid; grid-template-columns: 1fr 190rpx; gap: 12rpx; align-items: center; }
-.mini-button { height: 78rpx; border-radius: 16rpx; background: #4a6b8a; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 700; }
+.mini-button { height: 78rpx; border-radius: 6rpx; background: #386151; color: #fff; display: flex; align-items: center; justify-content: center; font-size: 26rpx; font-weight: 500; }
 .mini-button.disabled { background: #9ca3af; }
 .login-error { padding:18rpx; border:1rpx solid #f0b8b0; border-radius:12rpx; background:#fff4f2; color:#b42318; font-size:25rpx; line-height:1.6; overflow-wrap:anywhere; }
 .notice { padding: 18rpx; border-radius: 18rpx; background: rgba(74, 107, 138, 0.08); color: #4a6b8a; font-size: 26rpx; }
@@ -457,7 +403,7 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
 .native-button { width: 100%; margin: 0; padding: 0; border: 0; line-height: normal; }
 .native-button::after { border: 0; }
 .native-button[disabled] { color: #fff; opacity: .68; }
-.admin-login-entry { display: flex; align-items: center; justify-content: center; min-height: 68rpx; padding: 8rpx 18rpx; border-radius: 16rpx; background: #f9f4ee; color: #4a6b8a; font-size: 24rpx; font-weight: 800; }
+.admin-login-entry { display: flex; align-items: center; justify-content: center; min-height: 68rpx; padding: 8rpx 18rpx; border-top: 1rpx solid #e1e6de; background: #fff; color: #386151; font-size: 24rpx; font-weight: 500; }
 .home-entry { display: flex; align-items: center; justify-content: center; min-height: 64rpx; color: #8b3f32; font-size: 24rpx; font-weight: 900; }
 .wechat-auth-mask {
   position: fixed;
@@ -528,7 +474,7 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
 .auth-action.reject { background: #f3f4f6; color: #111827; }
 .auth-action.allow { background: #16a34a; color: #fff; }
 .auth-action[disabled] { opacity: .62; }
-.login-page { min-height:100vh; box-sizing:border-box; padding-bottom:calc(42rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; }
+.login-page { min-height:100vh; box-sizing:border-box; padding-bottom:calc(42rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; background: #fff; }
 .login-page [role="button"]:focus-visible { outline:2px solid #0f766e; outline-offset:3px; }
 .login-page input:focus-visible { outline:2px solid #0f766e; outline-offset:2px; }
 @media (min-width:900px) { .login-page { max-width:760px; margin:0 auto; } }

@@ -976,7 +976,8 @@ onShow(() => {
 .detail-page .action-item text{border-radius:12rpx;background:#eaf7f1;color:#0f766e}
 .detail-page .bottom-bar{border-color:var(--app-border);box-shadow:0 -8rpx 24rpx rgba(22,37,45,.06)}
 .detail-page .bottom-info text:first-child{color:var(--app-price)}
-.detail-page .action-button{border-radius:14rpx;background:#16252d;color:#fff}
+.detail-page .action-button{border-radius:6rpx;background:#a33d36;color:#fff}
+.detail-page .action-button.secondary { background: #e6ebe3; color: #65736a; border-color: #d4dfd2; }
 /* Normal-flow title and fixed cover size prevent long names from covering the image. */
 .detail-page .detail-hero{margin:0;border-radius:0;min-height:0;background:#fff;box-shadow:none}
 .detail-page .hero-image{position:relative;inset:auto;display:block;width:100%;height:360rpx;background:#edf2f0}
@@ -1001,4 +1002,6 @@ onShow(() => {
 .detail-page .decision-status { background: var(--app-primary); }
 .detail-page .content-kicker,.detail-page .map-action,.detail-page .organizer-follow { color: var(--app-primary); }
 .detail-page .bottom-info text:first-child { color: var(--app-price); }
+.detail-page { background: #fff; }
+.detail-page .detail-section .title,.detail-page .detail-section .section-title { border-left: 4rpx solid #a33d36; padding-left: 14rpx; }
 </style>

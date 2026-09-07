@@ -116,7 +116,7 @@ function navLabel(item: { link?: string; label?: string }) {
       :key="item.link"
       class="custom-tabbar-item app-press"
       :class="{ active: isCurrent(item.link) }"
-      :style="{ color: isCurrent(item.link) ? String(item.color || activeSection?.layout?.activeColor || '#0f766e') : String(activeSection?.layout?.textColor || '#667085') }"
+      :style="{ color: isCurrent(item.link) ? String(item.color || activeSection?.layout?.activeColor || '#a33d36') : String(activeSection?.layout?.textColor || '#65736a') }"
       @click="goDecoratedLink(item.link, item.action)"
     >
       <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
@@ -147,7 +147,7 @@ function navLabel(item: { link?: string; label?: string }) {
 .custom-tabbar-icon, .custom-tabbar-image { width: 44rpx; height: 44rpx; display: grid; place-items: center; border-radius: 50%; font-size: 25rpx; transition: transform 180ms ease, background-color 180ms ease; }
 .custom-tabbar-image { background: transparent; }
 .custom-tabbar-item.active { font-weight: 800; }
-.custom-tabbar-item.active .custom-tabbar-icon { transform: translateY(-2rpx) scale(1.06); color: #0F766E; }
+.custom-tabbar-item.active .custom-tabbar-icon { transform: translateY(-2rpx) scale(1.06); color: inherit; }
 .custom-tabbar-symbol { position: relative; box-sizing: border-box; color: currentColor; background: transparent !important; }
 .custom-tabbar-symbol::before, .custom-tabbar-symbol::after { position: absolute; content: ""; box-sizing: border-box; }
 .is-home::before { left: 9rpx; top: 15rpx; width: 26rpx; height: 22rpx; border: 3rpx solid currentColor; border-top: 0; border-radius: 3rpx; }
@@ -161,7 +161,7 @@ function navLabel(item: { link?: string; label?: string }) {
 .is-profile::before { left: 15rpx; top: 7rpx; width: 14rpx; height: 14rpx; border: 3rpx solid currentColor; border-radius: 50%; }
 .is-profile::after { left: 8rpx; top: 25rpx; width: 28rpx; height: 14rpx; border: 3rpx solid currentColor; border-bottom: 0; border-radius: 16rpx 16rpx 0 0; }
 .custom-tabbar-fallback { background: #edf5f1; }
-.custom-tabbar-item.active .custom-tabbar-symbol { filter: drop-shadow(0 4rpx 6rpx rgba(15, 118, 110, .18)); }
+.custom-tabbar-item.active .custom-tabbar-symbol { filter: none; }
 @media (min-width: 900px) {
   .custom-tabbar { right: auto; left: 50%; width: 760px; max-width: 100%; border-right: 1rpx solid #e3ebe6; border-left: 1rpx solid #e3ebe6; transform: translateX(-50%); }
 }

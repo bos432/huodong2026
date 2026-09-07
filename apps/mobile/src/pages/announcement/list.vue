@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GuofengPageHeading from '../../components/GuofengPageHeading.vue';
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { request } from "../../api";
@@ -60,13 +61,7 @@ onShow(async () => {
   <view class="notice-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
 
-    <view class="notice-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#8e2d28') }">
-      <view class="hero-mark">告</view>
-      <view class="hero-copy">
-        <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "公告中心" }}</view>
-        <view class="subtle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "活动通知、报名提醒和现场须知都会集中展示在这里。" }}</view>
-      </view>
-    </view>
+    <GuofengPageHeading stamp="告" :title="innerPageConfig.title || '公告中心'" :subtitle="innerPageConfig.subtitle" :background="innerPageLayout.headerBackgroundColor" :text-color="innerPageLayout.headerTextColor" :muted-color="innerPageLayout.headerSubtitleColor" />
 
     <PageDecorationBlocks :sections="bodyDecorationSections" />
 
@@ -96,62 +91,17 @@ onShow(async () => {
 </template>
 
 <style scoped>
-.notice-page { min-height: 100vh; box-sizing:border-box; padding: 24rpx; background: var(--page-bg-layer, #f5f0e8); background-size: var(--page-bg-size, cover); background-position: var(--page-bg-position, center top); background-attachment: fixed; color: var(--text-color, #333333); overflow-wrap:anywhere; }
+.notice-page { min-height: 100vh; max-width: 760px; margin: 0 auto; padding: 24rpx 28rpx; background: #fff; color: #28332d; overflow-wrap: anywhere; }
 .notice-page.has-custom-nav { padding-bottom: calc(160rpx + env(safe-area-inset-bottom)); }
-.notice-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 320rpx;
-  display: flex;
-  align-items: flex-end;
-  gap: 22rpx;
-  margin-bottom: 20rpx;
-  padding: 34rpx 28rpx;
-  border-radius: 24rpx;
-  box-shadow: 0 18rpx 44rpx rgba(91, 47, 36, 0.16);
-}
-.notice-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(34, 24, 19, 0.04), rgba(34, 24, 19, 0.24));
-  pointer-events: none;
-}
-.hero-mark,
-.hero-copy {
-  position: relative;
-  z-index: 1;
-}
-.hero-mark {
-  flex: 0 0 auto;
-  width: 96rpx;
-  height: 96rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 28rpx;
-  background: rgba(255, 248, 240, 0.16);
-  color: #fff8f0;
-  font-size: 38rpx;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-}
-.hero-copy { min-width: 0; }
-.title { font-size: 48rpx; line-height: 1.22; font-weight: 700; font-family: "STKaiti", "KaiTi", serif; }
-.subtle { margin-top: 12rpx; color: var(--muted-color, #999999); font-size: 26rpx; line-height: 1.5; }
-.hero-copy .subtle { font-size: 25rpx; line-height: 1.6; }
-.notice-card, .state-card, .empty { padding: 26rpx; border-radius: 24rpx; background: var(--card-bg, #fff); box-shadow: 0 12rpx 34rpx rgba(91, 47, 36, 0.07); }
-.notice-card { margin-bottom: 20rpx; }
-.notice-top { display: flex; align-items: center; justify-content: space-between; gap: 18rpx; }
-.tag { padding: 6rpx 14rpx; border-radius: 999px; background: rgba(196, 61, 61, 0.12); color: #c43d3d; font-size: 23rpx; font-weight: 800; }
-.time { color: #999999; font-size: 23rpx; }
-.notice-title { margin-top: 18rpx; color: var(--text-color, #333333); font-size: 34rpx; font-weight: 900; line-height: 1.35; font-family: "STKaiti", "KaiTi", serif; }
-.notice-content { display: block; margin-top: 12rpx; color: #666666; font-size: 27rpx; line-height: 1.65; }
+.notice-card,.state-card,.empty { padding: 28rpx 0; border-bottom: 1rpx solid #e1e6de; border-radius: 0; background: #fff; }
+.notice-top { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12rpx; }
+.tag { padding: 5rpx 12rpx; border: 1rpx solid #d9c1bd; border-radius: 5rpx; color: #a33d36; font-size: 22rpx; }
+.time { color: #65736a; font-size: 23rpx; }
+.notice-title,.empty-title { margin-top: 18rpx; color: #28332d; font: 34rpx "STSong", "SimSun", "Noto Serif CJK SC", serif; line-height: 1.5; }
+.notice-content { display: block; margin-top: 14rpx; color: #65736a; font-size: 27rpx; line-height: 1.8; }
 .empty { text-align: center; }
-.empty-title { font-size: 32rpx; font-weight: 900; font-family: "STKaiti", "KaiTi", serif; }
-.empty-copy { margin-top: 10rpx; color: var(--muted-color, #999999); font-size: 25rpx; }
-.error-state { border:1rpx solid #f0b8b0; background:#fff4f2; color:#b42318; }
-.retry { display: inline-flex; width:max-content; min-height:60rpx; margin: 18rpx 0 0; padding: 0 24rpx; border:0; border-radius: 8rpx; background: rgba(74, 107, 138, 0.12); color: #4a6b8a; font-size:24rpx; font-weight: 800; }
-.retry::after { border:0; }
-@media (min-width: 900px) { .notice-page { max-width:760px; margin:0 auto; } }
+.empty-copy { margin-top: 12rpx; color: #65736a; font-size: 25rpx; line-height: 1.6; }
+.error-state { color: #a33d36; }
+.retry { display: inline-flex; align-items: center; justify-content: center; min-height: 64rpx; margin: 18rpx 0 0; padding: 0 24rpx; border: 1rpx solid #386151; border-radius: 6rpx; background: #fff; color: #386151; font-size: 24rpx; }
+.retry::after { border: 0; }
 </style>

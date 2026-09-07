@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import GuofengPageHeading from '../../components/GuofengPageHeading.vue';
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { request, withTenantCode } from "../../api";
@@ -76,13 +77,7 @@ onShow(async () => {
   <view class="service-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantSwitcher :tenant="tenant" title="当前城市" @changed="handleTenantChanged" />
 
-    <view class="service-hero" :style="{ background: String(innerPageLayout.headerBackgroundColor || '#0f766e') }">
-      <view class="hero-mark">服</view>
-      <view class="hero-copy">
-        <view class="title" :style="{ color: String(innerPageLayout.headerTextColor || '#fff8f0') }">{{ innerPageConfig.title || "服务中心" }}</view>
-        <view class="subtle" :style="{ color: String(innerPageLayout.headerSubtitleColor || 'rgba(255,248,240,0.82)') }">{{ innerPageConfig.subtitle || "付款、退款、发票和客服信息，都可以在这里快速找到。" }}</view>
-      </view>
-    </view>
+    <GuofengPageHeading stamp="服" :title="innerPageConfig.title || '服务中心'" :subtitle="innerPageConfig.subtitle" :background="innerPageLayout.headerBackgroundColor" :text-color="innerPageLayout.headerTextColor" :muted-color="innerPageLayout.headerSubtitleColor" />
 
     <PageDecorationBlocks :sections="bodyDecorationSections" />
 
@@ -140,65 +135,17 @@ onShow(async () => {
 </template>
 
 <style scoped>
-.service-page { min-height:100vh; box-sizing:border-box; padding:24rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); background:var(--page-bg-layer,#f4f8f7); background-size:var(--page-bg-size,cover); background-position:var(--page-bg-position,center top); background-attachment:fixed; color:var(--text-color,#173f3a); }
-.service-page.has-custom-nav { padding-bottom: 160rpx; }
-.service-hero {
-  position: relative;
-  overflow: hidden;
-  min-height: 238rpx;
-  display: flex;
-  align-items: flex-end;
-  gap: 22rpx;
-  margin-bottom: 20rpx;
-  padding: 34rpx 28rpx;
-  border-radius: 14rpx;
-  box-shadow: 0 16rpx 34rpx rgba(15,118,110,.16);
-}
-.service-hero::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: linear-gradient(180deg, rgba(7,36,32,.02), rgba(7,36,32,.24));
-  pointer-events: none;
-}
-.hero-mark,
-.hero-copy {
-  position: relative;
-  z-index: 1;
-}
-.hero-mark {
-  flex: 0 0 auto;
-  width: 96rpx;
-  height: 96rpx;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 12rpx;
-  background: rgba(255,255,255,.16);
-  color: #fff;
-  font-size: 38rpx;
-  font-weight: 700;
-  font-family: "STKaiti", "KaiTi", serif;
-}
-.hero-copy { min-width: 0; }
-.title { font-size:42rpx; line-height:1.22; font-weight:900; }
-.subtle { color: var(--muted-color, #999999); font-size: 26rpx; line-height: 1.5; }
-.hero-copy .subtle { margin-top: 12rpx; font-size: 25rpx; line-height: 1.6; }
-.card { margin-bottom:18rpx; padding:26rpx; border:1rpx solid rgba(15,118,110,.1); border-radius:14rpx; background:var(--card-bg,#fff); box-shadow:0 8rpx 22rpx rgba(20,72,64,.05); }
-.card-kicker { color:#0f766e; font-size:22rpx; font-weight:800; margin-bottom:8rpx; }
-.card-title { color:var(--text-color,#173f3a); font-size:30rpx; font-weight:900; margin-bottom:14rpx; }
-.line { display:grid; grid-template-columns:110rpx 1fr; gap:16rpx; padding:16rpx 0; border-bottom:1px solid #e1eeeb; }
-.line:last-child { border-bottom: 0; }
-.line text:first-child { color: var(--muted-color, #999999); }
-.line text:last-child { color: var(--text-color, #333333); font-weight: 700; overflow-wrap: anywhere; }
-.customer-service-button { width: 100%; min-height: 80rpx; margin-top: 18rpx; border: 0; border-radius: 8rpx; background: #0f766e; color: #fff; font-size: 26rpx; font-weight: 700; line-height: 80rpx; }
+.service-page { min-height: 100vh; max-width: 760px; margin: 0 auto; padding: 24rpx 28rpx; background: #fff; color: #28332d; overflow-wrap: anywhere; }
+.service-page .card { padding: 26rpx 0; margin-bottom: 0; border: 0; border-bottom: 1rpx solid #e1e6de; border-radius: 0; background: #fff; box-shadow: none; }
+.card-kicker { color: #65736a; font-size: 22rpx; margin-bottom: 8rpx; }
+.card-title { color: #28332d; font: 34rpx "STSong", "SimSun", "Noto Serif CJK SC", serif; line-height: 1.5; margin-bottom: 18rpx; }
+.line { display: grid; grid-template-columns: 100rpx minmax(0,1fr); gap: 16rpx; padding: 16rpx 0; font-size: 26rpx; line-height: 1.5; border-bottom: 1rpx solid #edf0eb; }
+.line text:first-child { color: #65736a; }
+.line text:last-child { color: #386151; overflow-wrap: anywhere; }
+.content { color: #65736a; font-size: 27rpx; line-height: 1.8; }
+.service-copy { margin-top: 18rpx; font-size: 23rpx; color: #65736a; line-height: 1.6; }
+.partner-entry { display: flex; justify-content: space-between; align-items: center; margin-top: 18rpx; min-height: 72rpx; color: #386151; font-size: 26rpx; border-top: 1rpx solid #e1e6de; }
+.customer-service-button { margin: 20rpx 0 0; min-height: 76rpx; border: 1rpx solid #386151; border-radius: 6rpx; background: #386151; color: #fff; font-size: 26rpx; }
 .customer-service-button::after { border: 0; }
-.service-copy { margin-top: 18rpx; padding: 16rpx; border-radius: 8rpx; background: #f3faf8; color: #54716c; font-size: 24rpx; line-height: 1.55; }
-.content { color:#54716c; font-size:26rpx; line-height:1.7; white-space:pre-wrap; }
-.partner-entry { margin-top:22rpx; min-height:80rpx; padding:0 22rpx; border-radius:10rpx; background:#eaf7f3; color:#0f766e; display:flex; align-items:center; justify-content:space-between; gap:16rpx; font-size:26rpx; font-weight:800; }
-.error-card { color:#b42318; border:1rpx solid #f0b8b0; background:#fff4f2; line-height:1.6; }
-.error-card .button { margin-top:18rpx; }
-@media (min-width: 900px) {
-  .service-page { max-width:760px; margin:0 auto; }
-}
+.error-card { color: #a33d36; }
 </style>

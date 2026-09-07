@@ -10,9 +10,10 @@
       </view>
     </view>
 
-    <scroll-view class="wuxing-strip" scroll-x :show-scrollbar="false" role="tablist" aria-label="五行主题活动入口">
+    <view class="home-intro"><text>循五行，赴一场相聚</text><view class="intro-rule" aria-hidden="true" /></view>
+    <scroll-view class="wuxing-strip" scroll-x :show-scrollbar="false" aria-label="五行主题活动入口">
       <view class="wuxing-track">
-        <view v-for="item in [{ key: 'metal', glyph: '金', label: '手作' }, { key: 'wood', glyph: '木', label: '漫游' }, { key: 'water', glyph: '水', label: '共读' }, { key: 'fire', glyph: '火', label: '雅集' }, { key: 'earth', glyph: '土', label: '茶事' }]" :key="item.key" class="wuxing-item app-press" :class="item.key" role="tab" tabindex="0" :aria-label="`${item.glyph} · ${item.label}`" @click="goActivityList()" @keyup.enter="goActivityList()">
+        <view v-for="item in wuxingThemes" :key="item.key" class="wuxing-item app-press" :class="item.key" role="button" tabindex="0" :aria-label="`${item.glyph} · ${item.label}`" @click="goWuxing(item.key)" @keyup.enter="goWuxing(item.key)" @keyup.space.prevent="goWuxing(item.key)">
           <text class="wuxing-seal">{{ item.glyph }}</text><text>{{ item.label }}</text>
         </view>
       </view>
@@ -87,6 +88,7 @@ import MarketingPopup from "../../components/MarketingPopup.vue";
 import SplashAd from "../../components/SplashAd.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import ActivityPreviewRow from "../../components/ActivityPreviewRow.vue";
+import { wuxingActivityFilter, wuxingThemes } from '../../wuxing-navigation';
 import { usePageDecoration } from "../../decoration";
 import { reviewSafeText } from "../../review-safe-text";
 import { motionStyle } from "../../motion/platform-adapter";
@@ -258,9 +260,15 @@ async function loadOperationSetting() {
   }
 }
 
-function goActivityList(categoryId?: number) {
-  const suffix = categoryId ? `?categoryId=${categoryId}` : "";
+function goActivityList(categoryId?: number, keyword = '') {
+  const params = [categoryId ? `categoryId=${categoryId}` : '', keyword ? `keyword=${encodeURIComponent(keyword)}` : ''].filter(Boolean);
+  const suffix = params.length ? `?${params.join('&')}` : '';
   uni.navigateTo({ url: withTenantCode(`/pages/activity/list${suffix}`) });
+}
+
+function goWuxing(key: string) {
+  const filter = wuxingActivityFilter(key, categories.value);
+  goActivityList(filter.categoryId, filter.keyword);
 }
 
 function goMyRegistrations() {
@@ -316,6 +324,9 @@ function formatActivityHour(value: string) { return formatActivityDate(value, "t
 .search-btn { min-width: 70rpx; height: 52rpx; display: flex; align-items: center; justify-content: center; padding: 0 14rpx; border-radius: 8rpx; color: #27362f; font-size: var(--app-font-helper); font-weight: 800; }
 .search-btn { background: #eef2f0; }
 .wuxing-strip { width: 100%; margin: 4rpx 0 24rpx; white-space: nowrap; }
+.home-intro { display: flex; align-items: center; gap: 20rpx; margin: 16rpx 0 24rpx; color: #386151; font: 27rpx "STSong", "SimSun", "Noto Serif CJK SC", serif; line-height: 1.6; }
+.home-intro text { flex-shrink: 0; }
+.intro-rule { height: 1rpx; background: #e1e6de; flex: 1; }
 .wuxing-track { display: inline-flex; width: 100%; justify-content: space-between; gap: 12rpx; }
 .wuxing-item { display: flex; min-width: 84rpx; flex-direction: column; align-items: center; gap: 7rpx; color: var(--app-text-muted); font-size: 21rpx; }
 .wuxing-seal { width: 52rpx; height: 52rpx; display: grid; place-items: center; border: 1rpx solid currentColor; font: 30rpx "STSong", "SimSun", serif; }

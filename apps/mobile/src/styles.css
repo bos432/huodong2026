@@ -32,8 +32,8 @@ textarea:focus-visible {
 
 /* ===== 慢π 国风五行设计系统 ===== */
 /* 宣纸白为底，墨色为字，青绿与朱砂承担主操作和价格信息。 */
-:root {
-  --app-page-bg: #F5F6F2;
+:root, page {
+  --app-page-bg: #FFFFFF;
   --app-surface: #FFFFFF;
   --app-surface-muted: #F0F3EE;
   --app-text: #28332D;
@@ -41,7 +41,7 @@ textarea:focus-visible {
   --app-text-subtle: #879188;
   --app-primary: #386151;
   --app-primary-soft: #EAF0E9;
-  --app-action: #28332D;
+  --app-action: #A33D36;
   --app-price: #A33D36;
   --app-border: #E1E6DE;
   --app-radius: 8rpx;

@@ -181,6 +181,7 @@ import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { clearUser, getCurrentTenantCode, getUserId, getUserToken, request, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
 import { loadPageTheme, pageBrand } from "../../theme";
+import { profileHeaderPalette } from '../../profile-header-palette';
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { featureGatesState, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
@@ -228,20 +229,10 @@ function safeList<T>(value: unknown): T[] {
 }
 const myPageSection = computed(() => safeList<any>(sections.value).find((item) => item.enabled && item.type === "my_page") || null);
 const myPageGreeting = computed(() => String(myPageSection.value?.config?.greeting || "我的"));
-const warmHeaderBackground = "#386151";
-const warmHeaderTextColor = "#FFFFFF";
-const warmHeaderMutedColor = "rgba(255, 255, 255, 0.68)";
-const profileHeaderBackground = computed(() => {
-  const layout = myPageSection.value?.layout || {};
-  const background = String(layout.heroBackgroundColor || "");
-  return !background || background === "#111827" ? warmHeaderBackground : background;
-});
-const profileHeaderTextColor = computed(() => {
-  const layout = myPageSection.value?.layout || {};
-  const textColor = String(layout.heroTextColor || "");
-  return !textColor || (textColor === "#ffffff" && String(layout.heroBackgroundColor || "") === "#111827") ? warmHeaderTextColor : textColor;
-});
-const profileHeaderMutedColor = computed(() => String(myPageSection.value?.layout?.heroMutedTextColor || warmHeaderMutedColor));
+const profilePalette = computed(() => profileHeaderPalette(myPageSection.value?.layout));
+const profileHeaderBackground = computed(() => profilePalette.value.background);
+const profileHeaderTextColor = computed(() => profilePalette.value.text);
+const profileHeaderMutedColor = computed(() => profilePalette.value.muted);
 const displayName = computed(() => profile.value?.nickname || profile.value?.phone || (profile.value?.wechatBound ? `平台用户${profile.value.id}` : loadingProfile.value ? "加载中…" : getUserToken() && profileError.value ? "资料同步失败" : "未登录"));
 const memberLevelName = computed(() => profile.value?.memberLevel?.name || (getUserToken() ? "普通会员" : "游客"));
 const profileIdentityText = computed(() => {
@@ -1106,5 +1097,31 @@ function logoutUser() {
 .history-entry{display:flex;align-items:center;gap:20rpx;margin:0 28rpx 18rpx;padding:22rpx 24rpx;border:1rpx solid var(--app-border);border-radius:16rpx;background:#fff}.history-entry-icon{width:68rpx;height:68rpx;display:flex;align-items:center;justify-content:center;flex:0 0 auto;border-radius:50%;background:#eaf7f1;color:#08753f;font-size:27rpx;font-weight:900}.history-entry-content{min-width:0;flex:1}.history-entry-title,.history-entry-copy{display:block}.history-entry-title{color:var(--app-text);font-size:28rpx;font-weight:850}.history-entry-copy{margin-top:6rpx;color:var(--app-text-muted);font-size:23rpx;line-height:1.45}
 .profile-page .profile-section-title,.profile-page .member-shortcut-title { font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; font-weight: 600; }
 .profile-page .profile-section-link { background: var(--app-primary-soft); color: var(--app-primary); }
-.profile-page .member-card { background: var(--app-primary) !important; }
+.profile-page { background: #fff; }
+.profile-page .member-card { border-radius: 0; box-shadow: none; margin-bottom: 0; }
+.profile-page .member-card-top { grid-template-columns: 108rpx minmax(0,1fr) 64rpx; }
+.profile-page .avatar-lg { width: 108rpx; height: 108rpx; border-radius: 6rpx; border: 4rpx double #a9bda7; }
+.profile-page .avatar-fallback { background: #e0e9df; color: #386151; font: 54rpx "STSong", "SimSun", serif; }
+.profile-page .profile-nickname { font-family: "STSong", "SimSun", serif; font-size: 38rpx; font-weight: 500; }
+.profile-page .phone-state,.profile-page .phone-state.missing { padding: 0; border: 0; background: transparent; color: var(--profile-header-muted); font-weight: 400; }
+.profile-page .profile-badge { padding: 0; background: transparent; color: var(--profile-header-text); font-weight: 500; }
+.profile-page .member-stat { border: 0; border-right: 1rpx solid #cddacc; background: transparent; border-radius: 0; }
+.profile-page .member-stat:last-child { border-right: 0; }
+.profile-page .member-stat .member-stat-value { color: var(--profile-header-text); font-size: 32rpx; font-weight: 500; }
+.profile-page .member-rights { padding: 20rpx 0 0; border: 0; border-top: 1rpx solid #cddacc; background: transparent; border-radius: 0; }
+.profile-page .member-growth-fill { background: #386151; }
+.profile-page .profile-edit-btn { position: static; min-width: 0; border: 0; border-bottom: 1rpx solid currentColor; border-radius: 0; color: var(--profile-header-text); font-weight: 400; }
+.profile-page .member-action { color: var(--profile-header-text); border-color: currentColor; background: transparent; border-radius: 6rpx; }
+.profile-page .member-action.primary { color: #fff; background: #a33d36; border-color: #a33d36; }
+.profile-page .profile-section,.profile-page .more-services-toggle,.profile-page .history-entry { margin: 0; padding: 26rpx 0; border: 0; border-bottom: 1rpx solid #e1e6de; background: #fff; border-radius: 0; box-shadow: none; }
+.profile-page .profile-section-copy,.profile-page .member-shortcut-copy,.profile-page .member-shortcut-kicker,.profile-page .history-entry-copy,.profile-page .more-services-copy { display: none; }
+.profile-page .profile-section-link { padding: 0; background: transparent; }
+.profile-page .member-shortcuts { display: block; margin: 0; }
+.profile-page .member-shortcut,.profile-page .member-shortcut:first-child { min-height: 96rpx; padding: 22rpx 0; border: 0; border-bottom: 1rpx solid #e1e6de; background: #fff; border-radius: 0; }
+.profile-page .member-shortcut-title,.profile-page .history-entry-title,.profile-page .more-services-title { color: #28332d; font-size: 28rpx; font-weight: 500; }
+.profile-page .history-entry-icon { width: 44rpx; height: 44rpx; color: #386151; background: transparent; border-radius: 0; }
+.profile-page .order-tab-icon { color: #386151; }
+.profile-page .profile-link-list { border: 0; border-radius: 0; }
+.profile-page .profile-link-row { padding-left: 0; padding-right: 0; }
+.profile-page .logout-card { border: 0; border-radius: 0; background: #fff; color: #65736a; font-size: 25rpx; font-weight: 400; }
 </style>
