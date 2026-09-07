@@ -280,7 +280,7 @@ watch(
     <el-aside width="248px" class="aside">
       <div class="brand">
         <img v-if="shellBrand.brandLogoUrl" class="brand-logo" :src="shellBrand.brandLogoUrl" alt="Logo" />
-        <span>{{ shellTitle }}</span>
+        <div class="brand-copy"><span>{{ shellTitle }}</span><small>东方生活运营后台</small></div>
       </div>
       <el-menu router :default-active="route.path" background-color="#162033" text-color="#d8dee9" active-text-color="#ffffff" unique-opened>
         <el-sub-menu v-for="group in visibleMenuGroups" :key="group.index" :index="group.index">
@@ -386,14 +386,18 @@ watch(
 .shell { min-height: 100vh; }
 .sr-only { position: fixed; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0; }
 .mobile-nav { display: none; }
-.aside { background: #162033; overflow-x: hidden; }
-.brand { height: 60px; display: flex; align-items: center; gap: 10px; padding: 0 20px; color: #fff; font-size: 20px; font-weight: 700; }
+.aside { background: #f7f9f5; border-right: 1px solid #d6dfd5; overflow-x: hidden; }
+.brand { height: 82px; display: flex; align-items: center; gap: 11px; padding: 0 20px; color: #28332d; font-size: 20px; font-weight: 700; }
+.brand-copy { min-width: 0; display: grid; gap: 5px; }
+.brand-copy span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.brand-copy small { color: #707a73; font-size: 10px; font-weight: 400; }
 .brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.brand-logo { width: 34px; height: 34px; object-fit: contain; border-radius: 10px; background: rgba(255,255,255,0.12); padding: 3px; flex: 0 0 auto; }
-.header { background: #fff; border-bottom: 1px solid #e5e7eb; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
+.brand-logo { width: 36px; height: 40px; object-fit: contain; border: 3px double #a33d36; border-radius: 2px; background: #fff; padding: 3px; flex: 0 0 auto; }
+.brand::after { content: "金  木  水  火  土"; position: absolute; top: 67px; left: 21px; color: #9b813e; font: 9px "STSong", "SimSun", serif; letter-spacing: 3px; opacity: .8; }
+.header { background: #fff; border-bottom: 1px solid #e2e7e1; display: flex; justify-content: space-between; align-items: center; gap: 16px; }
 .header-title { min-width: 0; display: grid; gap: 3px; }
-.header-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.header-title small { color: #64748b; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.header-title span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; font-size: 16px; }
+.header-title small { color: #707a73; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .header-actions { display: flex; align-items: center; justify-content: flex-end; flex-wrap: wrap; gap: 10px; }
 .tenant-switcher { display: flex; align-items: center; gap: 8px; color: #475569; font-size: 12px; }
 .tenant-switcher .el-select { width: 220px; }
@@ -402,20 +406,20 @@ watch(
 .admin-page-leave-active { transition: opacity 180ms ease, transform 180ms cubic-bezier(.2, .7, .2, 1); }
 .admin-page-enter-from { opacity: 0; transform: translateY(8px); }
 .admin-page-leave-to { opacity: 0; transform: translateY(-4px); }
-.el-menu { border-right: 0; }
-:deep(.el-sub-menu__title) { height: 46px; color: #b7c2d6; font-weight: 700; }
-:deep(.el-sub-menu__title:hover), :deep(.el-menu-item:hover) { background-color: #1e2b43; }
-:deep(.el-menu-item) { height: 42px; padding-left: 44px !important; }
-:deep(.el-menu-item.is-active) { background: #243653; font-weight: 700; }
-.drawer-head { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; color: #fff; background: #162033; border-bottom: 1px solid rgba(255,255,255,0.12); }
+.el-menu { border-right: 0; background: transparent !important; }
+:deep(.el-sub-menu__title) { height: 46px; color: #68756b; font-weight: 700; }
+:deep(.el-sub-menu__title:hover), :deep(.el-menu-item:hover) { background-color: #eaf1e8; }
+:deep(.el-menu-item) { height: 42px; padding-left: 44px !important; color: #5e6b61; }
+:deep(.el-menu-item.is-active) { background: #e1ece0; color: #386151; border-left: 3px solid #a33d36; font-weight: 700; }
+.drawer-head { min-height: 60px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 14px; color: #28332d; background: #f7f9f5; border-bottom: 1px solid #d6dfd5; }
 .mobile-brand { min-width: 0; display: flex; align-items: center; gap: 10px; font-size: 17px; font-weight: 700; }
 .mobile-brand span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-:global(.mobile-menu-drawer .el-drawer__body) { padding: 0; background: #162033; overflow-y: auto; }
+:global(.mobile-menu-drawer .el-drawer__body) { padding: 0; background: #f7f9f5; overflow-y: auto; }
 :global(.mobile-menu-drawer .el-menu) { border-right: 0; }
 
 @media (max-width: 768px) {
   .shell { display: block; }
-  .mobile-nav { height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px 0 14px; color: #fff; background: #162033; }
+  .mobile-nav { height: 54px; display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 0 12px 0 14px; color: #28332d; background: #f7f9f5; border-bottom: 1px solid #d6dfd5; }
   .mobile-nav .mobile-brand { flex: 1; }
   .mobile-menu-button { flex: 0 0 auto; }
   .aside { display: none; }
