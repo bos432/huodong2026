@@ -10,7 +10,7 @@
         '--profile-header-muted': profileHeaderMutedColor
       }"
     >
-      <view class="member-card-top app-enter">
+      <view class="member-card-top app-enter" :class="{ guest: !isLoggedIn }">
         <image v-if="profile?.avatarUrl" class="avatar-lg" :src="profile.avatarUrl" mode="aspectFill" aria-label="会员头像" />
         <view v-else class="avatar-lg avatar-fallback">{{ displayName.slice(0, 1) }}</view>
         <view class="member-main">
@@ -22,7 +22,7 @@
           </view>
           <text class="profile-expire">{{ profileIdentityText }}</text>
         </view>
-        <view class="profile-edit-btn" role="button" tabindex="0" aria-label="编辑会员资料" @click="goEdit" @keyup.enter="goEdit" @keyup.space.prevent="goEdit">编辑</view>
+        <view v-if="isLoggedIn" class="profile-edit-btn" role="button" tabindex="0" aria-label="编辑会员资料" @click="goEdit" @keyup.enter="goEdit" @keyup.space.prevent="goEdit">编辑</view>
       </view>
       <view class="member-stats app-enter" :style="motionStyle(72)">
         <view v-for="(item, index) in memberStats" :key="item.label" class="member-stat app-stagger" :style="{ '--motion-delay': `${index * 42}ms` }">
@@ -1098,6 +1098,7 @@ function logoutUser() {
 .profile-page { background: #fff; }
 .profile-page .member-card { border-radius: 0; box-shadow: none; margin-bottom: 0; }
 .profile-page .member-card-top { grid-template-columns: 108rpx minmax(0,1fr) 64rpx; }
+.profile-page .member-card-top.guest { grid-template-columns: 108rpx minmax(0,1fr); }
 .profile-page .avatar-lg { width: 108rpx; height: 108rpx; border-radius: 6rpx; border: 4rpx double #a9bda7; }
 .profile-page .avatar-fallback { background: #e0e9df; color: #386151; font: 54rpx "STSong", "SimSun", serif; }
 .profile-page .profile-nickname { font-family: "STSong", "SimSun", serif; font-size: 38rpx; font-weight: 500; }

@@ -59,7 +59,7 @@
         </view>
       </view>
     </view>
-    <empty-state v-else icon="📚" text="暂无专题内容，请先在后台新增并发布内容" />
+    <EmptyState v-else icon="📚" text="暂无专题内容，请先在后台新增并发布内容" />
 
     <view style="height:120rpx;"></view>
     <TabBar current="courses" />

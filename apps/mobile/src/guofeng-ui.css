@@ -1,0 +1,1098 @@
+:root, page {
+  --guo-page-bg: #f4f6f3;
+  --guo-surface: #ffffff;
+  --guo-surface-soft: #f0f3ee;
+  --guo-border: #dfe6df;
+  --guo-ink: #28332d;
+  --guo-muted: #65736a;
+  --guo-subtle: #879188;
+  --guo-primary: #386151;
+  --guo-primary-soft: #eaf0e9;
+  --guo-vermilion: #a33d36;
+  --guo-vermilion-soft: #fbefec;
+  --guo-radius: 8rpx;
+}
+
+page {
+  background: var(--guo-page-bg);
+  color: var(--guo-ink);
+}
+
+.container,
+.profile-page,
+.service-page,
+.notice-page,
+.space-page,
+.partner-page,
+.mall-page,
+.merchant-page,
+.charity-page,
+.page,
+.admin-page,
+.admin-login,
+.edit-page,
+.admin-list,
+.preview-page,
+.ambassador-page,
+.aid-page,
+.apply-page,
+.story-page,
+.card-page,
+.connections-page,
+.form-page,
+.social-page,
+.verify-page,
+.legal-page,
+.address-page,
+.cart-page,
+.checkout-page,
+.coupon-page,
+.detail-page,
+.list-page,
+.logistics-page,
+.merchant-apply-page,
+.payment-result-page,
+.search-page,
+.scan-page,
+.reviews-page,
+.registrants-page,
+.history-page,
+.login-page,
+.orders-page,
+.security-page,
+.wallet-page,
+.assessment-page,
+.course-detail-page,
+.course-player-page,
+.community-detail-page,
+.program-page,
+.publish-page,
+.forum-page,
+.forum-detail-page,
+.my-forum-page,
+.appeal-page,
+.user-subpage,
+.registration,
+.review-page {
+  color: var(--guo-ink);
+  background: var(--guo-page-bg) !important;
+  font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+
+.discovery-page {
+  background: var(--guo-surface) !important;
+  color: var(--guo-ink);
+}
+
+.card,
+.section,
+.panel,
+.state-card,
+.state,
+.empty-card,
+.empty-state,
+.topic-card,
+.course-card,
+.product-card,
+.profile-section,
+.profile-link-list,
+.activity-card,
+.checkin-card,
+.post-card,
+.forum-entry-card,
+.publish-card,
+.social-entry,
+.summary-card,
+.question-card,
+.result-card,
+.status-card,
+.notice-card,
+.store-section,
+.address-card,
+.order-card,
+.form-card,
+.project-card,
+.case-card {
+  border: 1rpx solid var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: none !important;
+}
+
+.page-header,
+.page-head,
+.section-head,
+.section-title,
+.heading-title,
+.profile-section-title,
+.topic-title,
+.course-title,
+.product-title,
+.activity-name,
+.entry-title {
+  color: var(--guo-ink);
+}
+
+.page-subtitle,
+.head-sub,
+.subtle,
+.body-text,
+.section-desc,
+.topic-content,
+.course-teacher,
+.activity-meta,
+.entry-copy,
+.empty-copy,
+.state-card,
+.state,
+.state-retry {
+  color: var(--guo-muted);
+}
+
+.custom-nav,
+.connections-nav,
+.social-nav,
+.form-nav,
+.card-nav,
+.reviews-topbar,
+.activity-list-topbar,
+.orders-topbar,
+.notice-nav,
+.search-bar {
+  border-color: var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: none !important;
+  color: var(--guo-ink);
+}
+
+.button,
+.button.secondary,
+.button.ghost,
+.primary-action,
+.secondary-action,
+.cta,
+.search-btn,
+.search-button,
+.state-retry,
+.retry-button,
+.login-link,
+.load-more,
+.submit-button,
+.save-button,
+.action-button {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.button,
+.primary-action,
+.cta,
+.submit-button,
+.save-button {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.button.secondary,
+.button.ghost,
+.secondary-action,
+.retry-button,
+.search-button,
+.load-more {
+  border: 1rpx solid var(--guo-primary) !important;
+  background: var(--guo-primary-soft) !important;
+  color: var(--guo-primary) !important;
+}
+
+input,
+textarea,
+.search-input,
+.redemption-input,
+.auth-nickname-input {
+  border-color: var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  color: var(--guo-ink) !important;
+}
+
+.tag,
+.badge,
+.category-pill,
+.category-chip,
+.sort-chip,
+.recent-chip,
+.card-tag,
+.topic-badge,
+.status,
+.profile-badge,
+.merchant-tag,
+.brand,
+.hero-badge {
+  border-radius: var(--guo-radius) !important;
+}
+
+.tag-primary,
+.category-pill.active,
+.category-chip.active,
+.sort-chip.active,
+.profile-badge,
+.merchant-tag {
+  background: var(--guo-primary-soft) !important;
+  color: var(--guo-primary) !important;
+  border-color: var(--guo-primary) !important;
+}
+
+.category-pill,
+.category-chip,
+.sort-chip,
+.recent-chip {
+  border: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+  color: var(--guo-muted) !important;
+}
+
+.activity-date-block,
+.progress-fill,
+.checkin-status-badge,
+.order-badge {
+  background: var(--guo-vermilion) !important;
+}
+
+.activity-card,
+.checkin-card,
+.post-card,
+.publish-card,
+.forum-entry-card,
+.social-entry,
+.empty-post-card,
+.section-state,
+.inline-state {
+  border-radius: var(--guo-radius) !important;
+}
+
+.publish-card,
+.forum-entry-card,
+.social-entry,
+.empty-post-card,
+.checkin-status,
+.inline-state {
+  background: var(--guo-surface-soft) !important;
+  border-color: var(--guo-border) !important;
+}
+
+.publish-title,
+.empty-title,
+.checkin-status-title,
+.social-eyebrow,
+.social-action {
+  color: var(--guo-primary) !important;
+}
+
+.social-action {
+  background: var(--guo-primary) !important;
+  border-radius: var(--guo-radius) !important;
+  color: #ffffff !important;
+}
+
+.mall-page .mall-hero,
+.mall-page .flash-section,
+.mall-page .group-section,
+.merchant-page .merchant-hero,
+.charity-page .hero,
+.partner-page .hero,
+.scan-page .scan-hero,
+.orders-page .orders-hero,
+.registrants-page .registrants-hero {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.mall-page .mall-hero,
+.mall-page .flash-section,
+.mall-page .group-section {
+  background: var(--guo-primary) !important;
+}
+
+.mall-page .category-chip,
+.mall-page .recent-chip,
+.mall-page .sort-chip,
+.mall-page .merchant-chip,
+.mall-page .product-card,
+.mall-page .store-section,
+.mall-page .notice-card {
+  border-color: var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.mall-page .merchant-chip.active,
+.mall-page .search-btn,
+.mall-page .flash-btn,
+.mall-page .featured-badge,
+.mall-page .hot-badge {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.charity-page .hero,
+.partner-page .hero,
+.ambassador-page .hero,
+.aid-page .hero,
+.apply-page .hero,
+.story-page .hero,
+.scan-page .scan-hero,
+.orders-page .orders-hero,
+.registrants-page .registrants-hero {
+  background-color: var(--guo-primary) !important;
+  box-shadow: none !important;
+}
+
+.charity-page .card,
+.charity-page .empty-card,
+.charity-page .ambassador-card,
+.partner-page .section,
+.ambassador-page .section,
+.aid-page .section,
+.apply-page .section,
+.story-page .section {
+  border-color: var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: none !important;
+}
+
+.charity-page .stats view,
+.charity-page .tx-grid view,
+.charity-page .target-item,
+.partner-page .target-item,
+.partner-page .activity-card,
+.partner-page .benefit,
+.ambassador-page .pain-item,
+.ambassador-page .feature-item,
+.ambassador-page .benefit-item,
+.ambassador-page .faq-item {
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface-soft) !important;
+  border-color: var(--guo-border) !important;
+  box-shadow: none !important;
+}
+
+.admin-page,
+.admin-login,
+.admin-list,
+.edit-page,
+.preview-page {
+  background: var(--guo-page-bg) !important;
+}
+
+.admin-page .card,
+.admin-page .panel,
+.admin-page .section,
+.admin-list .card,
+.admin-list .panel,
+.edit-page .card,
+.edit-page .panel,
+.preview-page .card,
+.preview-page .panel {
+  border-color: var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: none !important;
+}
+
+.error-state,
+.error-card,
+.activity-error,
+.personal-error {
+  border-color: #e7b5ae !important;
+  background: var(--guo-vermilion-soft) !important;
+  color: #8f342f !important;
+}
+
+.profile-section,
+.profile-link-list,
+.profile-section-link,
+.member-shortcut,
+.history-entry,
+.logout-card {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.profile-section-link,
+.profile-page .profile-link-row,
+.profile-page .member-shortcut {
+  border-color: var(--guo-border) !important;
+}
+
+.profile-page .profile-section-title,
+.profile-page .member-shortcut-title,
+.profile-page .history-entry-title,
+.profile-page .more-services-title {
+  color: var(--guo-ink) !important;
+}
+
+.profile-page .profile-section-link,
+.profile-page .entry-arrow,
+.profile-page .history-entry-icon,
+.profile-page .order-tab-icon {
+  color: var(--guo-primary) !important;
+}
+
+.custom-tabbar {
+  border-top-color: var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: 0 -6rpx 18rpx rgba(40, 51, 45, .05) !important;
+}
+
+.custom-tabbar-fallback {
+  background: var(--guo-primary-soft) !important;
+}
+
+.story-page.story-page .hero,
+.page.page .hero,
+.admin-login.admin-login .hero,
+.admin-page.admin-page .top,
+.admin-list.admin-list .head,
+.edit-page.edit-page .head,
+.preview-page.preview-page .head,
+.user-subpage.user-subpage .page-hero,
+.mall-page.mall-page .mall-hero,
+.merchant-page.merchant-page .merchant-hero,
+.social-page.social-page .social-hero,
+.community-detail-page.community-detail-page .hero,
+.program-page.program-page .hero,
+.charity-page.charity-page .hero,
+.partner-page.partner-page .hero,
+.ambassador-page.ambassador-page .hero,
+.aid-page.aid-page .hero,
+.apply-page.apply-page .hero,
+.scan-page.scan-page .scan-hero,
+.orders-page.orders-page .orders-hero,
+.registrants-page.registrants-page .registrants-hero {
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-primary) !important;
+  background-image: none !important;
+  border: 1rpx solid var(--guo-primary) !important;
+  box-shadow: none !important;
+}
+
+.story-page.story-page .section,
+.story-page.story-page .join-card,
+.story-page.story-page .flow-item,
+.page.page .card,
+.page.page .hero,
+.user-subpage.user-subpage .settings-card,
+.admin-login.admin-login .form,
+.admin-page.admin-page .stats view,
+.admin-page.admin-page .panel,
+.admin-page.admin-page .activity,
+.admin-list.admin-list .card,
+.admin-list.admin-list .panel,
+.edit-page.edit-page .card,
+.edit-page.edit-page .panel,
+.preview-page.preview-page .card,
+.preview-page.preview-page .panel,
+.container.container .checkin-card,
+.container.container .activity-card,
+.container.container .post-card,
+.container.container .empty-post-card,
+.container.container .topic-card,
+.container.container .empty-card {
+  border: 1rpx solid var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: none !important;
+}
+
+.story-page.story-page .section.warm,
+.story-page.story-page .flow-item,
+.page.page .card,
+.admin-page.admin-page .panel,
+.admin-list.admin-list .panel,
+.edit-page.edit-page .panel,
+.preview-page.preview-page .panel {
+  background: var(--guo-surface-soft) !important;
+}
+
+.story-page.story-page .section-title,
+.story-page.story-page .belief-title,
+.story-page.story-page .belief-copy,
+.story-page.story-page .section,
+.user-subpage.user-subpage .settings-item,
+.user-subpage.user-subpage .nav-title,
+.admin-page.admin-page .section-title,
+.admin-page.admin-page .name,
+.admin-page.admin-page .meta,
+.admin-list.admin-list .name,
+.admin-list.admin-list .meta,
+.edit-page.edit-page .title,
+.preview-page.preview-page .title {
+  color: var(--guo-ink) !important;
+}
+
+.story-page.story-page .copy,
+.admin-login.admin-login .copy,
+.admin-page.admin-page .sub,
+.admin-page.admin-page .notice,
+.admin-page.admin-page .panel,
+.admin-list.admin-list .sub,
+.admin-list.admin-list .panel,
+.edit-page.edit-page .sub,
+.preview-page.preview-page .sub {
+  color: var(--guo-muted) !important;
+}
+
+.story-page.story-page .primary,
+.story-page.story-page .ghost,
+.admin-login.admin-login .button.primary,
+.admin-page.admin-page .action,
+.admin-list.admin-list .create,
+.admin-list.admin-list .search-btn,
+.admin-list.admin-list .pager view,
+.edit-page.edit-page .action,
+.preview-page.preview-page .action,
+.page.page .submit,
+.page.page .task-button,
+.page.page .login,
+.aid-page.aid-page .submit,
+.apply-page.apply-page .submit,
+.volunteer-page.volunteer-page .submit {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.story-page.story-page .primary,
+.admin-login.admin-login .button.primary,
+.admin-page.admin-page .action.primary,
+.admin-list.admin-list .create,
+.admin-list.admin-list .search-btn,
+.page.page .submit,
+.page.page .task-button,
+.page.page .login,
+.aid-page.aid-page .submit,
+.apply-page.apply-page .submit,
+.volunteer-page.volunteer-page .submit {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.story-page.story-page .ghost,
+.admin-page.admin-page .action,
+.edit-page.edit-page .action,
+.preview-page.preview-page .action,
+.page.page .link-button,
+.page.page .picker,
+.user-subpage.user-subpage .logout-button {
+  border: 1rpx solid var(--guo-primary) !important;
+  background: var(--guo-primary-soft) !important;
+  color: var(--guo-primary) !important;
+}
+
+.admin-page.admin-page .top,
+.admin-list.admin-list .head,
+.edit-page.edit-page .head,
+.preview-page.preview-page .head,
+.admin-login.admin-login .hero,
+.user-subpage.user-subpage .page-hero {
+  color: #ffffff !important;
+}
+
+.admin-page.admin-page .action.primary {
+  border-color: var(--guo-vermilion) !important;
+}
+
+.admin-page.admin-page .error-panel,
+.admin-list.admin-list .error-panel,
+.admin-login.admin-login .action-error,
+.edit-page.edit-page .error-panel,
+.preview-page.preview-page .error-panel,
+.user-subpage.user-subpage .state-warning {
+  border: 1rpx solid #e7b5ae !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-vermilion-soft) !important;
+  color: #8f342f !important;
+  box-shadow: none !important;
+}
+
+.admin-page.admin-page .retry,
+.admin-list.admin-list .retry,
+.edit-page.edit-page .retry,
+.preview-page.preview-page .retry,
+.user-subpage.user-subpage .logout-button {
+  border-radius: var(--guo-radius) !important;
+}
+
+.user-subpage.user-subpage .custom-nav {
+  border-bottom: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+}
+
+.user-subpage.user-subpage .settings-item {
+  border-bottom-color: var(--guo-border) !important;
+}
+
+.user-subpage.user-subpage .item-arrow,
+.admin-page.admin-page .link,
+.admin-list.admin-list .ops,
+.admin-list.admin-list .link {
+  color: var(--guo-primary) !important;
+}
+
+.mall-page.mall-page .mall-hero,
+.mall-page.mall-page .flash-section,
+.mall-page.mall-page .group-section,
+.mall-page.mall-page .store-section,
+.mall-page.mall-page .product-card,
+.mall-page.mall-page .flash-card,
+.mall-page.mall-page .merchant-chip,
+.mall-page.mall-page .category-chip,
+.mall-page.mall-page .recent-chip,
+.mall-page.mall-page .sort-chip,
+.mall-page.mall-page .search-row input,
+.mall-page.mall-page .search-btn,
+.mall-page.mall-page .hero-action,
+.mall-page.mall-page .merchant-entry,
+.mall-page.mall-page .flash-btn,
+.mall-page.mall-page .featured-badge,
+.mall-page.mall-page .hot-badge,
+.mall-page.mall-page .soldout-badge,
+.mall-page.mall-page .brand,
+.mall-page.mall-page .merchant-tag {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.mall-page.mall-page .flash-section,
+.mall-page.mall-page .group-section,
+.mall-page.mall-page .mall-hero {
+  background: var(--guo-primary) !important;
+  background-image: none !important;
+}
+
+.mall-page.mall-page .category-chip.active,
+.mall-page.mall-page .merchant-chip.active,
+.mall-page.mall-page .search-btn,
+.mall-page.mall-page .flash-btn,
+.mall-page.mall-page .featured-badge,
+.mall-page.mall-page .hot-badge {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.mall-page.mall-page .category-chip,
+.mall-page.mall-page .recent-chip,
+.mall-page.mall-page .sort-chip,
+.mall-page.mall-page .merchant-chip,
+.mall-page.mall-page .brand,
+.mall-page.mall-page .merchant-tag {
+  border: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+  color: var(--guo-primary) !important;
+}
+
+.mall-page.mall-page .section-title.dark,
+.mall-page.mall-page .section-kicker.dark,
+.mall-page.mall-page .section-more.dark {
+  color: var(--guo-ink) !important;
+}
+
+.container.container .checkin-card,
+.container.container .activity-card,
+.container.container .post-card,
+.container.container .empty-post-card,
+.container.container .topic-card,
+.container.container .empty-card,
+.container.container .state-card {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.container.container .category-pill,
+.container.container .category-chip,
+.container.container .sort-chip,
+.container.container .topic-badge,
+.container.container .status,
+.container.container .profile-badge,
+.container.container .social-action,
+.container.container .state-retry,
+.container.container .retry-button {
+  border-radius: var(--guo-radius) !important;
+}
+
+.container.container .category-pill.active,
+.container.container .category-chip.active,
+.container.container .sort-chip.active {
+  background: var(--guo-primary-soft) !important;
+  color: var(--guo-primary) !important;
+  border-color: var(--guo-primary) !important;
+}
+
+.page.page .hero,
+.aid-page.aid-page .hero,
+.apply-page.apply-page .hero,
+.charity-page.charity-page .hero,
+.partner-page.partner-page .hero,
+.ambassador-page.ambassador-page .hero {
+  background: var(--guo-primary) !important;
+  background-image: none !important;
+}
+
+.page.page .input,
+.page.page .textarea,
+.volunteer-page.volunteer-page .input,
+.volunteer-page.volunteer-page .textarea,
+.aid-page.aid-page .input,
+.aid-page.aid-page .textarea,
+.apply-page.apply-page .input,
+.apply-page.apply-page .textarea,
+.admin-login.admin-login .input {
+  border: 1rpx solid var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  color: var(--guo-ink) !important;
+}
+
+.admin-nav-wrap.admin-nav-wrap {
+  padding: 0 16rpx calc(12rpx + env(safe-area-inset-bottom)) !important;
+}
+
+.admin-bottom-nav.admin-bottom-nav {
+  gap: 4rpx !important;
+  padding: 8rpx !important;
+  border: 1rpx solid var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: 0 -6rpx 18rpx rgba(40, 51, 45, .05) !important;
+  backdrop-filter: none !important;
+}
+
+.admin-bottom-nav.admin-bottom-nav .nav-item {
+  height: 78rpx !important;
+  border-radius: var(--guo-radius) !important;
+  color: var(--guo-muted) !important;
+  background: transparent !important;
+}
+
+.admin-bottom-nav.admin-bottom-nav .nav-item.active {
+  color: var(--guo-primary) !important;
+  background: var(--guo-primary-soft) !important;
+}
+
+.admin-bottom-nav.admin-bottom-nav .nav-dot {
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface-soft) !important;
+  color: var(--guo-primary) !important;
+  box-shadow: none !important;
+}
+
+.admin-bottom-nav.admin-bottom-nav .nav-item.active .nav-dot {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.admin-page.admin-page .top-glow {
+  display: none !important;
+}
+
+.admin-page.admin-page .head,
+.admin-page.admin-page .top {
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-primary) !important;
+  background-image: none !important;
+  border: 1rpx solid var(--guo-primary) !important;
+  box-shadow: none !important;
+}
+
+.admin-page.admin-page .head::after,
+.edit-page.edit-page .head::after {
+  display: none !important;
+}
+
+.admin-page.admin-page .head-actions .scan,
+.admin-page.admin-page .head-actions .refresh,
+.admin-page.admin-page > .refresh,
+.admin-page.admin-page .search-btn,
+.admin-page.admin-page .pager view {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.admin-page.admin-page .head-actions .scan,
+.admin-page.admin-page .search-btn,
+.admin-page.admin-page .pager view {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.admin-page.admin-page .head-actions .refresh,
+.admin-page.admin-page > .refresh {
+  border: 1rpx solid rgba(255, 255, 255, .35) !important;
+  background: rgba(255, 255, 255, .14) !important;
+  color: #ffffff !important;
+}
+
+.admin-page.admin-page .search input,
+.admin-page.admin-page .tabs .tab,
+.admin-page.admin-page .types .track > view,
+.admin-page.admin-page .tabs .track > view,
+.admin-page.admin-page .panel,
+.admin-page.admin-page .card,
+.admin-page.admin-page .error-panel,
+.admin-page.admin-page .action-error {
+  border: 1rpx solid var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: none !important;
+}
+
+.admin-page.admin-page .tabs .tab.active,
+.admin-page.admin-page .types .track > view.active,
+.admin-page.admin-page .tabs .track > view.active {
+  border-color: var(--guo-primary) !important;
+  background: var(--guo-primary-soft) !important;
+  color: var(--guo-primary) !important;
+}
+
+.admin-page.admin-page .pill,
+.admin-page.admin-page .severity,
+.admin-page.admin-page .status,
+.admin-page.admin-page .ops > view,
+.admin-page.admin-page .retry,
+.admin-page.admin-page .action-error > view {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.admin-page.admin-page .pill,
+.admin-page.admin-page .status,
+.admin-page.admin-page .severity.low,
+.admin-page.admin-page .follow {
+  border: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-primary-soft) !important;
+  color: var(--guo-primary) !important;
+}
+
+.admin-page.admin-page .ops .ok,
+.admin-page.admin-page .ops .resolve {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.admin-page.admin-page .ops .danger,
+.admin-page.admin-page .ops .reopen,
+.admin-page.admin-page .action-error {
+  border-color: #e7b5ae !important;
+  background: var(--guo-vermilion-soft) !important;
+  color: #8f342f !important;
+}
+
+.edit-page.edit-page .steps .step,
+.edit-page.edit-page .toggles view,
+.edit-page.edit-page .panel,
+.edit-page.edit-page .sub-card,
+.edit-page.edit-page .input,
+.edit-page.edit-page .picker,
+.edit-page.edit-page .textarea,
+.edit-page.edit-page .upload,
+.edit-page.edit-page .issue,
+.edit-page.edit-page .link,
+.edit-page.edit-page .preview,
+.edit-page.edit-page .bottom view,
+.edit-page.edit-page .action-notice {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.edit-page.edit-page .steps .step,
+.edit-page.edit-page .toggles view,
+.edit-page.edit-page .panel,
+.edit-page.edit-page .sub-card,
+.edit-page.edit-page .input,
+.edit-page.edit-page .picker,
+.edit-page.edit-page .textarea,
+.edit-page.edit-page .upload {
+  border-color: var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+  color: var(--guo-ink) !important;
+}
+
+.edit-page.edit-page .steps .step.active,
+.edit-page.edit-page .toggles view.on,
+.edit-page.edit-page .link,
+.edit-page.edit-page .bottom .save {
+  border-color: var(--guo-primary) !important;
+  background: var(--guo-primary-soft) !important;
+  color: var(--guo-primary) !important;
+}
+
+.edit-page.edit-page .bottom {
+  border-top-color: var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+  box-shadow: none !important;
+  backdrop-filter: none !important;
+}
+
+.edit-page.edit-page .bottom .ghost {
+  border: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-surface-soft) !important;
+  color: var(--guo-primary) !important;
+}
+
+.edit-page.edit-page .bottom .publish {
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.coupon-page.coupon-page .hero,
+.coupon-page.coupon-page .coupon-card,
+.coupon-page.coupon-page .tabs .tab,
+.coupon-page.coupon-page button,
+.coupon-page.coupon-page .state-card {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.coupon-page.coupon-page .hero {
+  border: 1rpx solid var(--guo-primary) !important;
+  background: var(--guo-primary) !important;
+  background-image: none !important;
+}
+
+.coupon-page.coupon-page .tabs .tab,
+.coupon-page.coupon-page .coupon-card,
+.coupon-page.coupon-page .state-card {
+  border: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+}
+
+.coupon-page.coupon-page .tabs .tab.active,
+.coupon-page.coupon-page button {
+  border-color: var(--guo-vermilion) !important;
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+}
+
+.coupon-page.coupon-page .coupon-rule,
+.coupon-page.coupon-page .coupon-code {
+  color: var(--guo-vermilion) !important;
+}
+
+.orders-page.orders-page .tab,
+.orders-page.orders-page .checkout-group-focus,
+.orders-page.orders-page .summary-chip,
+.orders-page.orders-page .focus-clear,
+.orders-page.orders-page .card,
+.orders-page.orders-page .merchant-line,
+.orders-page.orders-page .status-tip,
+.orders-page.orders-page .deadline,
+.orders-page.orders-page .refund-pill,
+.orders-page.orders-page .logistics,
+.orders-page.orders-page .state-card {
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.orders-page.orders-page .tab,
+.orders-page.orders-page .checkout-group-focus,
+.orders-page.orders-page .card,
+.orders-page.orders-page .state-card {
+  border: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-surface) !important;
+}
+
+.orders-page.orders-page .tab.active {
+  border-color: var(--guo-vermilion) !important;
+  background: var(--guo-vermilion) !important;
+  color: #ffffff !important;
+  box-shadow: none !important;
+}
+
+.orders-page.orders-page .status-tip,
+.orders-page.orders-page .deadline,
+.orders-page.orders-page .logistics,
+.orders-page.orders-page .summary-chip,
+.orders-page.orders-page .focus-clear,
+.orders-page.orders-page .merchant-line,
+.orders-page.orders-page .refund-pill {
+  border: 1rpx solid var(--guo-border) !important;
+  background: var(--guo-surface-soft) !important;
+  color: var(--guo-primary) !important;
+}
+
+/* Keep legacy page-local selectors on the same visual system. */
+.form-page.form-page .form-head,
+.social-page.social-page .social-hero,
+.mall-page.mall-page .mall-hero,
+.admin-page.admin-page .top,
+.admin-list.admin-list .head,
+.edit-page.edit-page .head {
+  border: 1rpx solid var(--guo-primary) !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-primary) !important;
+  background-image: none !important;
+  box-shadow: none !important;
+}
+
+.form-page.form-page .form-head {
+  color: #ffffff !important;
+}
+
+.form-page.form-page .form-nav,
+.form-page.form-page .visibility,
+.form-page.form-page .state,
+.container.container .tenant-entry,
+.partner-page.partner-page .tenant-entry,
+.forum-page.forum-page .tenant-entry,
+.profile-page.profile-page .member-card,
+.container.container .ambassador-card,
+.container.container .publish-card,
+.container.container .forum-entry-card,
+.container.container .home-social-entry,
+.container.container .filter-card,
+.activity-page.activity-page .filter-card {
+  border: 1rpx solid var(--guo-border) !important;
+  border-radius: var(--guo-radius) !important;
+  box-shadow: none !important;
+}
+
+.container.container .tenant-entry,
+.partner-page.partner-page .tenant-entry,
+.forum-page.forum-page .tenant-entry,
+.container.container .ambassador-card,
+.container.container .publish-card,
+.container.container .forum-entry-card,
+.container.container .home-social-entry,
+.container.container .filter-card,
+.activity-page.activity-page .filter-card {
+  background: var(--guo-surface) !important;
+}
+
+.profile-page.profile-page .member-card {
+  background: var(--guo-primary-soft) !important;
+}
+
+.activity-page.activity-page .filter-error,
+.story-page.story-page .state-warning,
+.container.container .filter-error,
+.container.container .state-warning,
+.user-subpage.user-subpage .state-warning {
+  border: 1rpx solid #e7b5ae !important;
+  border-radius: var(--guo-radius) !important;
+  background: var(--guo-vermilion-soft) !important;
+  color: #8f342f !important;
+  box-shadow: none !important;
+}
+
+.form-page.form-page input,
+.form-page.form-page textarea,
+.form-page.form-page .visibility,
+.activity-page.activity-page input,
+.activity-page.activity-page textarea,
+.activity-page.activity-page .filter-option,
+.activity-page.activity-page .filter-select,
+.activity-page.activity-page .filter-chip {
+  border-radius: var(--guo-radius) !important;
+  border-color: var(--guo-border) !important;
+}

@@ -3,6 +3,7 @@ import App from "./App.vue";
 import { installH5ErrorReporting } from "./error-reporting";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare } from "./share";
 import "./styles.css";
+import "./guofeng-ui.css";
 
 export function createApp() {
   const app = createSSRApp(App);
