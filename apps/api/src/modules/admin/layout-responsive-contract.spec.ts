@@ -19,7 +19,7 @@ describe("admin layout responsive navigation contract", () => {
     expect(layout).toContain('.mobile-nav { height: 54px; display: flex;');
     expect(layout).toContain('.aside { display: none; }');
     expect(layout).toContain(':global(.mobile-menu-drawer .el-drawer__body)');
-    expect(layout).toContain('background: #162033; overflow-y: auto;');
+    expect(layout).toContain('background: #f7f9f5; overflow-y: auto;');
   });
 
   it("closes the mobile menu on route changes", () => {

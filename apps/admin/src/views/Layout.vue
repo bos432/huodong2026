@@ -320,10 +320,10 @@ watch(
             </template>
           </el-dropdown>
           <el-button :icon="View" @click="openCurrentH5Preview">打开{{ currentH5PreviewLabel }}</el-button>
-          <el-tooltip :content="`复制${currentH5PreviewLabel}链接`"><el-button :icon="CopyDocument" :aria-label="`复制${currentH5PreviewLabel}链接`" @click="copyCurrentH5PreviewUrl" /></el-tooltip>
-          <el-tooltip :content="`${currentH5PreviewLabel}二维码`"><el-button :icon="Grid" :aria-label="`${currentH5PreviewLabel}二维码`" @click="openCurrentH5QrDialog" /></el-tooltip>
-          <el-tooltip content="修改密码"><el-button :icon="Key" aria-label="修改密码" @click="openPasswordDialog" /></el-tooltip>
-          <el-tooltip content="退出登录"><el-button :icon="SwitchButton" aria-label="退出登录" @click="logout" /></el-tooltip>
+          <el-tooltip :content="`复制${currentH5PreviewLabel}链接`"><el-button :icon="CopyDocument" :aria-label="`复制${currentH5PreviewLabel}链接`" :title="`复制${currentH5PreviewLabel}链接`" @click="copyCurrentH5PreviewUrl" /></el-tooltip>
+          <el-tooltip :content="`${currentH5PreviewLabel}二维码`"><el-button :icon="Grid" :aria-label="`${currentH5PreviewLabel}二维码`" :title="`${currentH5PreviewLabel}二维码`" @click="openCurrentH5QrDialog" /></el-tooltip>
+          <el-tooltip content="修改密码"><el-button :icon="Key" aria-label="修改密码" title="修改密码" @click="openPasswordDialog" /></el-tooltip>
+          <el-tooltip content="退出登录"><el-button :icon="SwitchButton" aria-label="退出登录" title="退出登录" @click="logout" /></el-tooltip>
         </div>
       </el-header>
       <el-main ref="mainContent" tabindex="-1" :aria-label="pageAnnouncement" :class="{ 'homepage-builder-main': route.path === '/homepage-builder' }">

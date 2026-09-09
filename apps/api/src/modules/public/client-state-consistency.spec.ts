@@ -65,6 +65,7 @@ describe("mobile client state consistency", () => {
   const activityDetail = readPage("activity/detail.vue");
   const activityRegister = readPage("activity/register.vue");
   const activityList = readPage("activity/list.vue");
+  const activityPreviewRow = readFileSync("../mobile/src/components/ActivityPreviewRow.vue", "utf8");
   const courseDetail = readPage("course/detail.vue");
   const mallIndex = readPage("mall/index.vue");
   const mallCart = readPage("mall/cart.vue");
@@ -158,7 +159,7 @@ describe("mobile client state consistency", () => {
     expect(activityList).toContain("date.getTime() + 8 * 60 * 60 * 1000");
     expect(activityList).toContain("shifted.getUTCMonth()");
     expect(activityList).toContain('role="tablist"');
-    expect(activityList).toContain(':aria-label="`查看活动：${item.title}`"');
+    expect(activityPreviewRow).toContain(':aria-label="`查看活动：${activity.title}`"');
   });
 
   it("keeps decoration-backed mobile pages safe when an old client returns a non-array section payload", () => {
@@ -314,7 +315,7 @@ describe("mobile client state consistency", () => {
     expect(userMy).toContain("loadMemberOrderOverview(requestedSession)");
     expect(userMy).toContain("orderOverviewResult.value.registrations");
     expect(userMy).toContain("orderOverviewResult.value.failedSources");
-    expect(userMy).toContain("applyResult<any[]>(5, \"mallOrders\", \"商城订单\", Array.isArray");
+    expect(userMy).toContain("applyResult<any[]>(4, \"mallOrders\", \"商城订单\", Array.isArray");
     expect(userMy).toContain("learningOnlyCourses()");
     expect(userMy).not.toContain("member-order-cache");
     expect(userMy).toContain('label:"待处理"');

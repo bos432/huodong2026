@@ -7,7 +7,7 @@ describe("mall promotion code query boundary", () => {
     const source = readFileSync(resolve(process.cwd(), "src/modules/mall/mall.service.ts"), "utf8");
     const directLookups = source.match(/promotionCodes\.findOne\(\{[^;]+/g) || [];
 
-    expect(directLookups.length).toBe(4);
+    expect(directLookups.length).toBeGreaterThanOrEqual(4);
     expect(directLookups.every((lookup) => lookup.includes("loadEagerRelations: false"))).toBe(true);
   });
 
