@@ -44,7 +44,9 @@ async function ensureMember(adminToken, phone, nickname) {
 }
 
 async function ensureAddress(token, phone, label) {
-  const rows = await request("/public/me/mall/addresses", { token });
+  const result = await raw("/public/me/mall/addresses", { token });
+  if (!result.ok && result.status !== 404) throw new Error(`GET /public/me/mall/addresses failed (${result.status}): ${JSON.stringify(result.data)}`);
+  const rows = result.ok ? (Array.isArray(result.data) ? result.data : result.data?.items || []) : [];
   if (rows[0]) return rows[0];
   return request("/public/me/mall/addresses", {
     method: "POST",
