@@ -235,6 +235,14 @@ describe("migration contracts", () => {
     for (const token of ["tenant_followers", "tenantId", "userId", "UQ_tenant_followers_tenant_user", "isUnique: true"]) expect(migration).toContain(token);
   });
 
+  it("adds store memberships and removes legacy multi-level commission settings", () => {
+    const migration = readFileSync(join(migrationDirectory, "1788653300000-MallMembershipAndDirectReferral.ts"), "utf8");
+    for (const token of ["mall_membership_purchases", "membershipProduct", "membershipValidityDays", "membershipEnabled", "memberDiscountRate", "memberDiscountAmount", "directFixedAmount"]) {
+      expect(migration).toContain(token);
+    }
+    expect(migration).toContain("UPDATE mall_commission_rules SET agentLevelRatesBps = NULL");
+  });
+
   it("closes historical registrations after completed charity-retained refunds", () => {
     const migration = readFileSync(join(migrationDirectory, "1784160000000-TerminalCharityRefundRegistrations.ts"), "utf8");
     for (const token of ["refund.status = 'completed'", "[charity_retained]", "registration.status = 'cancelled'", "公益保留退款已完成，报名资格已关闭"]) {

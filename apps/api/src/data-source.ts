@@ -146,6 +146,7 @@ import { MallMerchantApplication } from "./entities/mall-merchant-application.en
 import { MallMerchantQualification } from "./entities/mall-merchant-qualification.entity";
 import { MallMerchantContract } from "./entities/mall-merchant-contract.entity";
 import { MallMerchantPaymentAccount } from "./entities/mall-merchant-payment-account.entity";
+import { MallMembershipPurchase } from "./entities/mall-membership-purchase.entity";
 import { MallOrderItem } from "./entities/mall-order-item.entity";
 import { MallOrderEvent } from "./entities/mall-order-event.entity";
 import { MallShipment } from "./entities/mall-shipment.entity";
@@ -347,6 +348,7 @@ export default new DataSource({
     MallMerchantQualification,
     MallMerchantContract,
     MallMerchantPaymentAccount,
+    MallMembershipPurchase,
     MallCheckoutGroup,
     MallCommissionAdjustment,
     MallCommissionRule,

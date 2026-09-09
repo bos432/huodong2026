@@ -250,7 +250,7 @@ async function main() {
   console.log("\n线上演示商家数据已准备完成。");
   console.log(`H5 演示入口：https://rd.chaimen666.com/?tenantCode=${TENANT_CODE}#/`);
   console.log(`后台账号：${accounts.map((item) => item.username).join(" / ")}`);
-  console.log("演示用户手机号：13990000001 - 13990000005，密码使用 SHOWCASE_PASSWORD。");
+  console.log("演示用户手机号：13990000001 - 13990000005；多商户验收账号：13990008991，密码使用 SHOWCASE_PASSWORD。");
 }
 
 async function ensureTenant(token) {

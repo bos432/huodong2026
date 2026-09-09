@@ -11,6 +11,7 @@ export type MallOrderQuoteTokenPayload = {
   promotionCode: string | null;
   pointsUsed: number;
   goodsAmount: string;
+  memberDiscountAmount?: string;
   discountAmount: string;
   freightAmount: string;
   payableAmount: string;

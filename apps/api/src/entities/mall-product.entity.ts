@@ -57,6 +57,12 @@ export class MallProduct {
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   originalPrice!: string;
 
+  @Column({ type: "boolean", default: false })
+  membershipProduct!: boolean;
+
+  @Column({ type: "int", nullable: true })
+  membershipValidityDays!: number | null;
+
   @Column({ type: "varchar", length: 32, default: "draft" })
   status!: MallProductStatus;
 

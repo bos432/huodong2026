@@ -40,6 +40,7 @@
           </view>
           <view class="amount-col">
             <text>× {{ item.quantity }}</text>
+            <text v-if="Number(item.memberDiscountAmount || 0) > 0" class="original-price">原价 ¥{{ money(Number(item.originalUnitPrice || item.price) * item.quantity) }}</text>
             <text>¥{{ money(item.price * item.quantity) }}</text>
           </view>
         </view>
@@ -47,6 +48,7 @@
         <view class="store-allocation-row"><text>店铺应付</text><text>¥{{ money(group.payableAmount) }}</text></view>
       </view>
       <view class="amount-row"><text>商品金额</text><text>¥{{ money(totalAmount) }}</text></view>
+      <view class="amount-row discount" v-if="memberDiscountAmount > 0"><text>商城会员优惠</text><text>-¥{{ money(memberDiscountAmount) }}</text></view>
       <view class="amount-row" v-if="freightAmount > 0"><text>运费</text><text>+¥{{ money(freightAmount) }}</text></view>
       <view class="amount-row discount" v-if="couponDiscountAmount > 0"><text>优惠券抵扣</text><text>-¥{{ money(couponDiscountAmount) }}</text></view>
       <view class="amount-row discount" v-if="pointsQuote.pointsUsed > 0"><text>积分抵扣</text><text>{{ pointsQuote.pointsUsed }} 分 -¥{{ money(pointsQuote.pointsDiscountAmount) }}</text></view>
@@ -192,6 +194,7 @@ const submitGuard = createTenantLoadGuard();
 const availablePaymentMethods = computed(() => paymentMethods.value.filter((item) => item.enabled));
 const selectedAddress = computed(() => addresses.value.find((item) => item.id === selectedAddressId.value) || addresses.value.find((item) => item.isDefault) || addresses.value[0] || null);
 const totalAmount = computed(() => checkoutItems.value.reduce((sum, item) => sum + Number(item.price || 0) * Number(item.quantity || 0), 0));
+const memberDiscountAmount = computed(() => Number(quote.value?.memberDiscountAmount || checkoutItems.value.reduce((sum, item) => sum + Number(item.memberDiscountAmount || 0), 0)));
 const merchantAllocationMap = computed(() => new Map((quote.value?.allocations || []).map((item: any) => [Number(item.merchantId || 0), item])));
 const checkoutMerchantGroups = computed(() => {
   const groups = new Map<string, { key: string; merchantId: number; name: string; ownerText: string; amount: number; items: any[] }>();
@@ -672,6 +675,7 @@ onLoad((query) => {
   joinTeamNo.value = String(query?.joinTeamNo || "").trim();
   quantity.value = Math.max(Number(query?.quantity || 1), 1);
   cartItemIds.value = String(query?.cartItemIds || "").split(",").map(Number).filter(Boolean);
+  promotionCode.value = String(query?.promotionCode || uni.getStorageSync(`mall_promotion_code:${getCurrentTenantCode()}`) || "").trim();
   clientOrderKey.value = createClientOrderKey();
 });
 onShow(load);
@@ -704,6 +708,7 @@ onShow(load);
 .item-sku { display:block; margin-top:6rpx; color:#94a3b8; font-size:24rpx; }
 .item-sku.danger { color:#dc2626; font-weight:800; }
 .amount-col { display:grid; justify-items:end; gap:8rpx; color:#64748b; }
+.original-price { color:#94a3b8; font-size:22rpx; text-decoration:line-through; }
 .amount-row { display:flex; justify-content:space-between; align-items:center; margin-top:14rpx; color:#64748b; font-size:26rpx; }
 .amount-row.discount { color:#16a34a; font-weight:800; }
 .amount { margin-top:16rpx; color:#c2410c; font-size:38rpx; font-weight:900; text-align:right; }

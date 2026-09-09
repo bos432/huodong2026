@@ -64,6 +64,7 @@
       <el-table-column label="所属商家" min-width="180"><template #default="{ row }">{{ row.tenant?.name || row.tenant?.code || "-" }}</template></el-table-column>
       <el-table-column label="代理" min-width="160"><template #default="{ row }">{{ row.agent?.name || "商家默认店铺" }}</template></el-table-column>
       <el-table-column label="商城" width="100"><template #default="{ row }"><el-tag :type="row.mallEnabled ? 'success' : 'warning'">{{ row.mallEnabled ? "已开通" : "未开通" }}</el-tag></template></el-table-column>
+      <el-table-column label="会员权益" width="120"><template #default="{ row }"><el-tag :type="row.membershipEnabled !== false ? 'success' : 'info'">{{ row.membershipEnabled !== false ? `${Math.round(Number(row.memberDiscountRate || 1) * 100)} 折扣率` : "未开启" }}</el-tag></template></el-table-column>
       <el-table-column label="入驻治理" min-width="150"><template #default="{ row }"><el-tag :type="onboardingTag(row.onboardingStatus)">{{ onboardingText(row.onboardingStatus) }}</el-tag><small class="governance-fee">{{ rateText(row.serviceFeeBps) }} 服务费</small></template></el-table-column>
       <el-table-column label="商品审核" width="110"><template #default="{ row }">{{ row.productAuditRequired ? "需要审核" : "免审核" }}</template></el-table-column>
       <el-table-column label="收款模式" width="130"><template #default="{ row }">{{ paymentModeText(row.paymentMode) }}</template></el-table-column>
@@ -172,6 +173,11 @@
             <el-radio-button value="merchant_direct">商户直收</el-radio-button>
           </el-radio-group>
           <span class="form-hint">商户直收需先完成店铺支付配置和上线验收。</span>
+        </el-form-item>
+        <el-form-item label="商城会员">
+          <el-switch v-model="form.membershipEnabled" active-text="开启会员权益" inactive-text="关闭" />
+          <el-input-number v-model="form.memberDiscountRate" :min="0.01" :max="1" :step="0.05" :precision="2" :disabled="!form.membershipEnabled" style="margin-left:12px" />
+          <span class="form-hint">折扣率，例如 0.80 表示普通商品按八折结算；会员商品、秒杀和拼团不叠加。</span>
         </el-form-item>
         <el-form-item label="运费规则">
           <el-switch v-model="form.freightEnabled" active-text="启用运费" inactive-text="免运费" />
@@ -348,6 +354,8 @@ type Merchant = {
   settlementCycleDays?: number;
   suspensionReason?: string | null;
   mallEnabled: boolean;
+  membershipEnabled?: boolean;
+  memberDiscountRate?: string | number;
   productAuditRequired: boolean;
   paymentMode: "platform_collect" | "merchant_direct";
   region?: string | null;
@@ -443,6 +451,8 @@ const form = reactive({
   name: "",
   status: "active" as "active" | "disabled",
   mallEnabled: true,
+  membershipEnabled: true,
+  memberDiscountRate: 0.8,
   productAuditRequired: true,
   paymentMode: "platform_collect" as "platform_collect" | "merchant_direct",
   region: "",
@@ -1008,6 +1018,8 @@ function resetForm() {
     name: "",
     status: "disabled",
     mallEnabled: false,
+    membershipEnabled: true,
+    memberDiscountRate: 0.8,
     productAuditRequired: true,
     paymentMode: "platform_collect",
     region: "",
@@ -1209,6 +1221,8 @@ async function openEdit(row: Merchant) {
     name: row.name || "",
     status: row.status || "active",
     mallEnabled: row.mallEnabled !== false,
+    membershipEnabled: row.membershipEnabled !== false,
+    memberDiscountRate: Number(row.memberDiscountRate || 1),
     productAuditRequired: row.productAuditRequired !== false,
     paymentMode: row.paymentMode || "platform_collect",
     region: row.region || "",
@@ -1262,6 +1276,8 @@ async function saveMerchant() {
       name: form.name.trim(),
       status: form.status,
       mallEnabled: form.mallEnabled,
+      membershipEnabled: form.membershipEnabled,
+      memberDiscountRate: Number(form.memberDiscountRate || 1),
       productAuditRequired: form.productAuditRequired,
       paymentMode: form.paymentMode,
       region: form.region.trim() || undefined,

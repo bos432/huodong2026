@@ -8,7 +8,8 @@ export const demoUsers = [
   { key: "paid", phone: "13990000002", nickname: "演示用户B-余额支付" },
   { key: "refund", phone: "13990000003", nickname: "演示用户C-退款验收" },
   { key: "comment", phone: "13990000004", nickname: "演示用户D-动态互动" },
-  { key: "course", phone: "13990000005", nickname: "演示用户E-课程学习" }
+  { key: "course", phone: "13990000005", nickname: "演示用户E-课程学习" },
+  { key: "multiMerchant", phone: "13990008991", nickname: "多商户验收用户" }
 ];
 
 export function assert(condition, message) {

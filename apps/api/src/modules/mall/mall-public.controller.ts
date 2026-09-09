@@ -86,6 +86,18 @@ export class MallPublicController {
     return this.service.publicProductReviews(id, this.tenantContext(req, tenantCode));
   }
 
+  @Get("me/mall/membership")
+  async myMallMembership(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
+    const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myMallMembership(user, this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);
+  }
+
+  @Post("me/mall/membership/referral")
+  async myMallMembershipReferral(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
+    const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.ensureMallMembershipReferral(user, this.tenantContext(req, tenantCode), Number(merchantId || 0));
+  }
+
   @Get("mall/flash-sales")
   flashSales(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
     return this.service.publicFlashSales(this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);

@@ -29,6 +29,18 @@
         <text class="price">¥{{ money(currentSku?.price || product.price) }}</text>
         <text v-if="Number(currentSku?.originalPrice || product.originalPrice) > 0" class="origin">¥{{ money(currentSku?.originalPrice || product.originalPrice) }}</text>
       </view>
+      <view v-if="product.membershipProduct" class="membership-panel">
+        <text class="membership-title">本店会员权益商品</text>
+        <text>支付成功后开通 {{ product.membershipValidityDays || 365 }} 天会员，普通商品按 {{ product.merchant?.memberDiscountPercent || 100 }}% 结算，并可进行本店单层真实订单推广。</text>
+      </view>
+      <view v-else-if="membership?.isMember" class="membership-panel active">
+        <text class="membership-title">本店会员价已生效</text>
+        <text>结算页按 {{ membership.memberDiscountPercent }}% 核算，最终价格以订单报价为准。</text>
+      </view>
+      <view v-if="membership?.isMember" class="referral-panel">
+        <view><text class="membership-title">我的单层推广</text><text class="referral-copy">仅直接分享产生的真实支付订单可计佣，自购不计佣。</text></view>
+        <view class="referral-action" @click="ensureReferral">{{ referralLoading ? "生成中" : referral?.code ? `推广码 ${referral.code}` : "生成推广码" }}</view>
+      </view>
       <view class="sku-list">
         <view v-for="sku in product.skus || []" :key="sku.id" class="sku" :class="{ active: sku.id === skuId, disabled: !availableStock(sku) }" @click="selectSku(sku)"><text>{{ sku.name }} · {{ availableStock(sku) ? `库存 ${availableStock(sku)}` : "已售罄" }}</text><text v-if="attributeText(sku.attributes)" class="sku-attrs">{{ attributeText(sku.attributes) }}</text></view>
       </view>
@@ -128,7 +140,7 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
-import { ensureUser, request, withTenantCode } from "../../api";
+import { ensureUser, getCurrentTenantCode, getUserToken, request, withTenantCode } from "../../api";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
@@ -146,6 +158,10 @@ const loading = ref(true);
 const loadError = ref("");
 const promotionWarning = ref("");
 const activeAction = ref("");
+const membership = ref<any>(null);
+const referral = ref<any>(null);
+const referralLoading = ref(false);
+const inboundPromotionCode = ref("");
 const productLoadGuard = createTenantLoadGuard();
 const promotionLoadGuard = createTenantLoadGuard();
 const teamLoadGuard = createTenantLoadGuard();
@@ -161,7 +177,7 @@ const currentGroupBuy = computed(() => groupBuys.value.find((item) => (item.sku?
 const canBuy = computed(() => currentStock.value > 0);
 const shareOptions = {
   title: () => product.value?.title || "慢π严选好物",
-  path: () => product.value?.id ? `/pages/mall/detail?id=${product.value.id}` : "/pages/mall/index",
+  path: () => product.value?.id ? `/pages/mall/detail?id=${product.value.id}${referral.value?.code ? `&promotionCode=${encodeURIComponent(referral.value.code)}` : ""}` : "/pages/mall/index",
   imageUrl: () => product.value?.coverUrl || ""
 };
 onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
@@ -233,11 +249,27 @@ async function load(id: number) {
     void recordBrowse(id);
     void loadFavoriteStatus(id);
     void loadPromotions();
+    void loadMembership();
   } catch (error: any) {
     if (productLoadGuard.isCurrent(token)) loadError.value = error.message || "商品详情加载失败，请稍后重试。";
   } finally {
     if (productLoadGuard.isCurrent(token)) loading.value = false;
   }
+}
+async function loadMembership() {
+  membership.value = null;
+  referral.value = null;
+  if (!getUserToken() || !product.value?.merchant?.id) return;
+  try { membership.value = await request<any>(`/public/me/mall/membership?merchantId=${product.value.merchant.id}`); } catch { membership.value = null; }
+}
+async function ensureReferral() {
+  if (!membership.value?.isMember || !product.value?.merchant?.id || referralLoading.value) return;
+  referralLoading.value = true;
+  try {
+    referral.value = await request<any>(`/public/me/mall/membership/referral?merchantId=${product.value.merchant.id}`, { method: "POST" });
+    uni.setClipboardData({ data: referral.value.code, success: () => uni.showToast({ title: "推广码已复制", icon: "none" }) });
+  } catch (error: any) { uni.showToast({ title: error.message || "推广码生成失败", icon: "none" }); }
+  finally { referralLoading.value = false; }
 }
 async function loadPromotions() {
   if (!product.value?.id) return;
@@ -325,7 +357,8 @@ function increaseQty() {
 function goCheckout() {
   if (!currentSku.value) return uni.showToast({ title: "暂无可购买规格", icon: "none" });
   if (availableStock(currentSku.value) < quantity.value) return uni.showToast({ title: "库存不足", icon: "none" });
-  uni.navigateTo({ url: withTenantCode(`/pages/mall/checkout?skuId=${currentSku.value.id}&quantity=${quantity.value}`) });
+  const promotion = inboundPromotionCode.value ? `&promotionCode=${encodeURIComponent(inboundPromotionCode.value)}` : "";
+  uni.navigateTo({ url: withTenantCode(`/pages/mall/checkout?skuId=${currentSku.value.id}&quantity=${quantity.value}${promotion}`) });
 }
 function goMerchant() {
   if (!product.value.merchant?.id) return;
@@ -368,7 +401,11 @@ async function addCart() {
 function reload() {
   void load(productId.value);
 }
-onLoad((query) => { productId.value = Number(query?.id || 0); });
+onLoad((query) => {
+  productId.value = Number(query?.id || 0);
+  inboundPromotionCode.value = String(query?.promotionCode || "").trim();
+  if (inboundPromotionCode.value) uni.setStorageSync(`mall_promotion_code:${getCurrentTenantCode()}`, inboundPromotionCode.value);
+});
 onShow(reload);
 </script>
 
@@ -400,6 +437,12 @@ onShow(reload);
 .merchant-link { flex:0 0 auto; padding:8rpx 14rpx; border-radius:999rpx; background:#d1fae5; color:#047857; font-size:22rpx; font-weight:900; }
 .price-row { display:flex; gap:14rpx; align-items:baseline; margin-top:18rpx; }
 .price { color:#c2410c; font-size:44rpx; font-weight:900; }
+.membership-panel, .referral-panel { margin-top:18rpx; padding:20rpx; border-radius:8rpx; background:#fff7ed; color:#7c2d12; font-size:24rpx; line-height:1.55; border:1rpx solid #fed7aa; }
+.membership-panel.active { background:#ecfdf5; color:#065f46; border-color:#a7f3d0; }
+.membership-title { display:block; margin-bottom:6rpx; font-size:27rpx; font-weight:900; }
+.referral-panel { display:flex; justify-content:space-between; align-items:center; gap:18rpx; }
+.referral-copy { display:block; }
+.referral-action { flex:0 0 auto; padding:12rpx 16rpx; border-radius:8rpx; background:#7f1d1d; color:#fff; font-size:23rpx; font-weight:900; }
 .origin { color:#94a3b8; text-decoration:line-through; }
 .sku-list { display:flex; flex-wrap:wrap; gap:12rpx; margin:24rpx 0; }
 .sku { padding:12rpx 18rpx; border-radius:999px; background:#fff7ed; color:#9a3412; border:1rpx solid #fed7aa; font-size:24rpx; }

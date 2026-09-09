@@ -60,7 +60,14 @@ try {
     "SELECT s.id,s.price,p.id productId,p.merchantId FROM mall_skus s JOIN mall_products p ON p.id=s.productId WHERE p.tenantId=? AND p.status='published' AND (s.stock-s.lockedStock)>=2 ORDER BY (s.stock-s.lockedStock) DESC LIMIT 1",
     [tenant.id]
   );
-  const [[address]] = await db.query("SELECT id FROM mall_addresses WHERE tenantId=? AND userId=? ORDER BY isDefault DESC,id DESC LIMIT 1", [tenant.id, buyer.id]);
+  let [[address]] = await db.query("SELECT id FROM mall_addresses WHERE tenantId=? AND userId=? ORDER BY isDefault DESC,id DESC LIMIT 1", [tenant.id, buyer.id]);
+  if (!address) {
+    address = await request("/public/me/mall/addresses", {
+      method: "POST",
+      token: userToken,
+      body: { receiverName: "09.09 佣金验收", receiverPhone: BUYER_PHONE, province: "重庆市", city: "重庆市", district: "铜梁区", detail: "单层佣金治理验收地址", isDefault: true }
+    });
+  }
   assert(tenant?.id && buyer?.id && sku?.id && address?.id, "缺少佣金验收租户、会员地址或可售库存");
 
   const stamp = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
@@ -88,12 +95,28 @@ try {
       merchantId: sku.merchantId,
       agentId: directAgent.id,
       code: `C${Date.now()}`,
-      name: `09.09 多级代理推广 ${stamp}`,
+      name: `09.09 单层直接推广 ${stamp}`,
       commissionRate: 0,
       enabled: true,
       remark: `佣金治理保留数据 ${stamp}`
     }
   });
+
+  const rejectedMultiLevelRule = await raw("/admin/mall/commission-rules", {
+    method: "POST",
+    token: adminToken,
+    body: {
+      tenantId: tenant.id,
+      promotionCodeId: promotionCode.id,
+      ruleKey: `acceptance-rejected-multi-level-${promotionCode.id}`,
+      name: `09.09 非法多层佣金规则 ${stamp}`,
+      scopeType: "channel",
+      priority: 999,
+      directRateBps: 500,
+      agentLevelRatesBps: [200, 100]
+    }
+  });
+  assert(!rejectedMultiLevelRule.ok && rejectedMultiLevelRule.status === 400, "后端应拒绝任何非零多层佣金配置");
 
   const rule = await request("/admin/mall/commission-rules", {
     method: "POST",
@@ -106,7 +129,6 @@ try {
       scopeType: "channel",
       priority: 999,
       directRateBps: 500,
-      agentLevelRatesBps: [200, 100],
       remark: `保留验收版本 ${stamp}`
     }
   });
@@ -129,9 +151,9 @@ try {
   const paidOrder = await request(`/admin/mall/orders/${order.id}/confirm-offline-payment`, { method: "POST", token: adminToken, body: {} });
 
   let commissions = await request(`/admin/mall/commissions?tenantId=${tenant.id}&merchantId=${sku.merchantId}&keyword=${encodeURIComponent(order.orderNo)}`, { token: adminToken });
-  assert(commissions.length === 3, `多级代理应生成 3 条佣金，实际 ${commissions.length}`);
+  assert(commissions.length === 1, `单层推广只能生成 1 条直接佣金，实际 ${commissions.length}`);
   assert(commissions.every((row) => row.ruleSnapshot?.version === rule.version && row.calculationSnapshot?.orderItemId), "佣金未冻结规则版本和商品行计算快照");
-  assert(new Set(commissions.map((row) => row.beneficiarySnapshot?.level ?? row.calculationSnapshot?.beneficiaryLevel)).size === 3, "佣金受益层级快照不完整");
+  assert(commissions[0].beneficiarySnapshot?.level === 0 || commissions[0].calculationSnapshot?.beneficiaryLevel === 0, "佣金必须只归属直接受益人");
 
   for (const row of commissions.filter((itemRow) => itemRow.status === "risk_review")) {
     await request(`/admin/mall/commissions/${row.id}/risk-review`, { method: "POST", token: adminToken, body: { decision: "approve", remark: `验收风险放行 ${stamp}` } });

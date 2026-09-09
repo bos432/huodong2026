@@ -17,7 +17,8 @@ export function mallOrderProductSnapshot(product: any) {
     brand: product.brand ? { id: product.brand.id, code: product.brand.code, name: product.brand.name } : product.brandName ? { name: product.brandName } : null,
     platformCategory: product.platformCategory ? { id: product.platformCategory.id, code: product.platformCategory.code, name: product.platformCategory.name } : null,
     storeCategory: product.category ? { id: product.category.id, code: product.category.code, name: product.category.name } : null,
-    coverUrl: product.coverUrl || null, galleryUrls: product.galleryUrls || [], attributes: product.attributes || {}, deliveryNote: product.deliveryNote || null, afterSaleNote: product.afterSaleNote || null
+    coverUrl: product.coverUrl || null, galleryUrls: product.galleryUrls || [], attributes: product.attributes || {}, deliveryNote: product.deliveryNote || null, afterSaleNote: product.afterSaleNote || null,
+    membershipProduct: product.membershipProduct === true, membershipValidityDays: product.membershipValidityDays || null
   };
 }
 

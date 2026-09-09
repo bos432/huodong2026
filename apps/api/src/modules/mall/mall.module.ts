@@ -29,6 +29,7 @@ import { MallMerchantApplication } from "../../entities/mall-merchant-applicatio
 import { MallMerchantQualification } from "../../entities/mall-merchant-qualification.entity";
 import { MallMerchantContract } from "../../entities/mall-merchant-contract.entity";
 import { MallMerchantPaymentAccount } from "../../entities/mall-merchant-payment-account.entity";
+import { MallMembershipPurchase } from "../../entities/mall-membership-purchase.entity";
 import { MallOrderItem } from "../../entities/mall-order-item.entity";
 import { MallOrderEvent } from "../../entities/mall-order-event.entity";
 import { MallShipment } from "../../entities/mall-shipment.entity";
@@ -71,7 +72,7 @@ import { MallService } from "./mall.service";
 import { MemberPointsModule } from "../member-points/member-points.module";
 import { ReliabilityModule } from "../reliability/reliability.module";
 
-const mallEntities = [Tenant, User, AdminUser, Agent, AgentPaymentAccount, OperationSetting, AdminOperationLog, AdminMallMerchantAccess, UserWallet, WalletTransaction, MemberLevel, MemberProfile, MemberPointLog, MallMerchant, MallMerchantApplication, MallMerchantQualification, MallMerchantContract, MallMerchantPaymentAccount, MallCheckoutGroup, MallCategory, MallBrand, MallCoupon, MallCouponClaim, MallCouponUsage, MallCommission, MallCommissionRule, MallCommissionAdjustment, MallPromotionCode, MallPromotionRateLimit, MallPromotionRiskEvent, MallPromotionRiskAlert, MallFavorite, MallBrowseHistory, MallFlashSale, MallGroupBuy, MallGroupBuyRecord, MallLogisticsCompany, MallProduct, MallProductAuditLog, MallSku, MallInventoryLog, MallInventoryAnomaly, MallAddress, MallCartItem, MallOrder, MallOrderItem, MallOrderEvent, MallShipment, MallShipmentItem, MallShipmentTrackingEvent, MallPaymentCallbackLog, MallPaymentTransaction, MallPaymentStatementRecord, MallRefund, MallRefundItem, MallRefundMessage, MallRefundLog, MallReview, MallReviewReport, MallSettlement, MallSettlementLine, MallSettlementEvent];
+const mallEntities = [Tenant, User, AdminUser, Agent, AgentPaymentAccount, OperationSetting, AdminOperationLog, AdminMallMerchantAccess, UserWallet, WalletTransaction, MemberLevel, MemberProfile, MemberPointLog, MallMerchant, MallMerchantApplication, MallMerchantQualification, MallMerchantContract, MallMerchantPaymentAccount, MallMembershipPurchase, MallCheckoutGroup, MallCategory, MallBrand, MallCoupon, MallCouponClaim, MallCouponUsage, MallCommission, MallCommissionRule, MallCommissionAdjustment, MallPromotionCode, MallPromotionRateLimit, MallPromotionRiskEvent, MallPromotionRiskAlert, MallFavorite, MallBrowseHistory, MallFlashSale, MallGroupBuy, MallGroupBuyRecord, MallLogisticsCompany, MallProduct, MallProductAuditLog, MallSku, MallInventoryLog, MallInventoryAnomaly, MallAddress, MallCartItem, MallOrder, MallOrderItem, MallOrderEvent, MallShipment, MallShipmentItem, MallShipmentTrackingEvent, MallPaymentCallbackLog, MallPaymentTransaction, MallPaymentStatementRecord, MallRefund, MallRefundItem, MallRefundMessage, MallRefundLog, MallReview, MallReviewReport, MallSettlement, MallSettlementLine, MallSettlementEvent];
 
 @Module({
   imports: [TypeOrmModule.forFeature(mallEntities), MemberPointsModule, PublicModule, ReliabilityModule, V1Module],

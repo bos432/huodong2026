@@ -92,6 +92,17 @@ export class MallSkuDto {
   originalPrice?: number;
 
   @IsOptional()
+  @IsBoolean()
+  membershipProduct?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(36500)
+  membershipValidityDays?: number | null;
+
+  @IsOptional()
   @Type(() => Number)
   @IsInt()
   stock?: number;
@@ -174,6 +185,17 @@ export class MallProductDto {
   @Type(() => Number)
   @IsNumber()
   originalPrice?: number;
+
+  @IsOptional()
+  @IsBoolean()
+  membershipProduct?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(36500)
+  membershipValidityDays?: number | null;
 
   @IsOptional()
   @IsIn(["draft", "pending_review", "published", "offline"])
@@ -383,6 +405,17 @@ export class MallMerchantDto {
   @IsOptional()
   @IsBoolean()
   mallEnabled?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  membershipEnabled?: boolean;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0.01)
+  @Max(1)
+  memberDiscountRate?: number;
 
   @IsOptional()
   @IsBoolean()
@@ -1223,6 +1256,13 @@ export class MallCommissionRuleDto {
   @Min(0)
   @Max(10000)
   directRateBps!: number;
+
+  @IsOptional()
+  @Type(() => Number)
+  @IsNumber()
+  @Min(0)
+  @Max(99999999.99)
+  directFixedAmount?: number | null;
 
   @IsOptional()
   @IsArray()

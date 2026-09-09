@@ -415,12 +415,10 @@
               <el-form-item v-if="commissionRuleForm.scopeType === 'channel'" label="推广渠道" required>
                 <el-select v-model="commissionRuleForm.promotionCodeId" filterable style="width:100%" placeholder="选择推广码"><el-option v-for="item in promotionCodes" :key="item.id" :label="`${item.code} · ${item.name}`" :value="item.id" /></el-select>
               </el-form-item>
-              <el-form-item label="直接佣金"><el-input-number v-model="commissionRuleForm.directRatePercent" :min="0" :max="100" :precision="2" /><span class="form-hint">%</span></el-form-item>
-              <el-form-item label="代理层级">
-                <div class="inline-fields commission-levels">
-                  <el-input-number v-for="(_, index) in commissionRuleForm.agentLevelRatesPercent" :key="index" v-model="commissionRuleForm.agentLevelRatesPercent[index]" :min="0" :max="100" :precision="2" :placeholder="`L${index + 1}%`" />
-                </div>
-              </el-form-item>
+              <el-form-item label="佣金方式"><el-segmented v-model="commissionRuleForm.rewardMode" :options="[{ label: '固定金额', value: 'fixed' }, { label: '按比例', value: 'rate' }]" /></el-form-item>
+              <el-form-item v-if="commissionRuleForm.rewardMode === 'fixed'" label="每件佣金"><el-input-number v-model="commissionRuleForm.directFixedAmount" :min="0" :precision="2" /><span class="form-hint">元/件，不超过商品行实付金额</span></el-form-item>
+              <el-form-item v-else label="直接佣金"><el-input-number v-model="commissionRuleForm.directRatePercent" :min="0" :max="100" :precision="2" /><span class="form-hint">%</span></el-form-item>
+              <el-alert type="info" show-icon :closable="false" title="仅支持单层真实订单推广" description="佣金只结算给推广码直接绑定的会员或代理，不计算上级、团队奖、注册奖或自购佣金。" />
               <el-form-item label="优先级/有效期">
                 <div class="inline-fields">
                   <el-input-number v-model="commissionRuleForm.priority" :precision="0" placeholder="同范围优先级" />
@@ -438,7 +436,7 @@
             <el-table v-loading="commissionRuleLoading" :data="commissionRules" stripe empty-text="暂无佣金规则">
               <el-table-column label="规则/版本" min-width="210"><template #default="{ row }"><strong>{{ row.name }}</strong><small>{{ row.ruleKey }} · v{{ row.version }}</small></template></el-table-column>
               <el-table-column label="范围" min-width="180"><template #default="{ row }">{{ commissionScopeText(row) }}</template></el-table-column>
-              <el-table-column label="直接/代理" min-width="190"><template #default="{ row }">{{ bpsPercent(row.directRateBps) }}%<small>代理 {{ (row.agentLevelRatesBps || []).map(bpsPercent).join('% / ') || '无' }}{{ row.agentLevelRatesBps?.length ? '%' : '' }}</small></template></el-table-column>
+              <el-table-column label="单层直接佣金" min-width="190"><template #default="{ row }">{{ Number(row.directFixedAmount || 0) > 0 ? `每件 ¥${Number(row.directFixedAmount).toFixed(2)}` : `${bpsPercent(row.directRateBps)}%` }}<small>仅真实支付订单，禁止自购佣金</small></template></el-table-column>
               <el-table-column label="有效期" min-width="220"><template #default="{ row }">{{ promotionValidityText(row) }}</template></el-table-column>
               <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'active' ? 'success' : 'info'">{{ row.status === "active" ? "生效中" : "已停用" }}</el-tag></template></el-table-column>
               <el-table-column label="操作" width="180" fixed="right"><template #default="{ row }"><el-button size="small" :disabled="writeLocked" @click="versionCommissionRule(row)">新版本</el-button><el-button v-if="row.status === 'active'" size="small" type="warning" plain :loading="actionKey === `rule:retire:${row.id}`" :disabled="writeLocked" @click="retireCommissionRule(row)">停用</el-button></template></el-table-column>
@@ -551,7 +549,7 @@ const couponForm = reactive<any>({ id: null, code: "", name: "", issuerScope: "m
 const flashSaleForm = reactive<any>({ id: null, title: "", originalTitle: "", productId: null, skuId: null, originalSkuId: null, salePrice: 0, saleStock: 1, lockedStock: 0, soldStock: 0, perUserLimit: 1, startsAt: "", endsAt: "", status: "draft", sortOrder: 0 });
 const groupBuyForm = reactive<any>({ id: null, title: "", originalTitle: "", productId: null, skuId: null, originalSkuId: null, groupPrice: 0, minPeople: 2, groupStock: 1, lockedStock: 0, soldStock: 0, perUserLimit: 1, startsAt: "", endsAt: "", status: "draft", sortOrder: 0 });
 const promotionForm = reactive<any>({ id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, startsAt: "", endsAt: "", enabled: true, remark: "", orderCount: 0, originalCode: "", originalAgentId: null, originalPromoterUserId: null, originalCommissionRatePercent: 0 });
-const commissionRuleForm = reactive<any>({ sourceId: null, ruleKey: "", name: "", scopeType: "channel", productId: null, promotionCodeId: null, directRatePercent: 0, agentLevelRatesPercent: [0, 0, 0], priority: 0, startsAt: "", endsAt: "", remark: "" });
+const commissionRuleForm = reactive<any>({ sourceId: null, ruleKey: "", name: "", scopeType: "channel", productId: null, promotionCodeId: null, rewardMode: "fixed", directFixedAmount: 0, directRatePercent: 0, priority: 0, startsAt: "", endsAt: "", remark: "" });
 const commissionScopeOptions = [{ label: "租户", value: "tenant" }, { label: "店铺", value: "merchant" }, { label: "推广渠道", value: "channel" }, { label: "商品", value: "product" }];
 const selectedMerchant = computed(() => merchants.value.find((merchant) => merchant.id === filters.merchantId));
 const selectedMerchantOpen = computed(() => merchantOperational(selectedMerchant.value));
@@ -1316,9 +1314,9 @@ async function loadCommissionRules() {
 async function saveCommissionRule() {
   if (!canManageCommissionRules.value) return ElMessage.error("当前账号无商城结算规则管理权限");
   if (!canSaveCommissionRule.value) return ElMessage.warning("请补齐佣金规则范围和名称");
-  const levels = commissionRuleForm.agentLevelRatesPercent.map((value: number) => Math.round(Number(value || 0) * 100));
-  const directRateBps = Math.round(Number(commissionRuleForm.directRatePercent || 0) * 100);
-  if (directRateBps + levels.reduce((sum: number, value: number) => sum + value, 0) > 10000) return ElMessage.error("直接佣金和多级代理佣金合计不能超过 100%");
+  const directRateBps = commissionRuleForm.rewardMode === "rate" ? Math.round(Number(commissionRuleForm.directRatePercent || 0) * 100) : 0;
+  const directFixedAmount = commissionRuleForm.rewardMode === "fixed" ? Number(commissionRuleForm.directFixedAmount || 0) : 0;
+  if (directRateBps > 10000) return ElMessage.error("直接佣金不能超过 100%");
   if (!validateMarketingTimeRange(commissionRuleForm.startsAt, commissionRuleForm.endsAt, "佣金规则", false)) return;
   const sourceRow = commissionRuleForm.sourceId ? commissionRules.value.find((row) => Number(row.id) === Number(commissionRuleForm.sourceId)) : null;
   const sourceTarget = sourceRow ? captureMarketingTarget("rule", sourceRow) : null;
@@ -1340,7 +1338,7 @@ async function saveCommissionRule() {
       scopeType: commissionRuleForm.scopeType,
       priority: Number(commissionRuleForm.priority || 0),
       directRateBps,
-      agentLevelRatesBps: levels.filter((value: number) => value > 0),
+      directFixedAmount,
       startsAt: commissionRuleForm.startsAt || undefined,
       endsAt: commissionRuleForm.endsAt || undefined,
       remark: commissionRuleForm.remark.trim() || undefined
@@ -1473,7 +1471,7 @@ function resetPromotionForm() {
   Object.assign(promotionForm, { id: null, code: "", name: "", commissionRatePercent: 0, promoterUserId: null, agentId: null, startsAt: "", endsAt: "", enabled: true, remark: "", orderCount: 0, originalCode: "", originalAgentId: null, originalPromoterUserId: null, originalCommissionRatePercent: 0 });
 }
 function resetCommissionRuleForm() {
-  Object.assign(commissionRuleForm, { sourceId: null, ruleKey: "", name: "", scopeType: "channel", productId: null, promotionCodeId: null, directRatePercent: 0, agentLevelRatesPercent: [0, 0, 0], priority: 0, startsAt: "", endsAt: "", remark: "" });
+  Object.assign(commissionRuleForm, { sourceId: null, ruleKey: "", name: "", scopeType: "channel", productId: null, promotionCodeId: null, rewardMode: "fixed", directFixedAmount: 0, directRatePercent: 0, priority: 0, startsAt: "", endsAt: "", remark: "" });
 }
 function handleCommissionScopeChange() {
   commissionRuleForm.productId = null;
@@ -1487,8 +1485,9 @@ function versionCommissionRule(row: any) {
     scopeType: row.scopeType,
     productId: row.product?.id || null,
     promotionCodeId: row.promotionCode?.id || null,
+    rewardMode: Number(row.directFixedAmount || 0) > 0 ? "fixed" : "rate",
+    directFixedAmount: Number(row.directFixedAmount || 0),
     directRatePercent: Number(row.directRateBps || 0) / 100,
-    agentLevelRatesPercent: [...(row.agentLevelRatesBps || []), 0, 0, 0].slice(0, 3).map((value: number) => Number(value || 0) / 100),
     priority: Number(row.priority || 0),
     startsAt: row.startsAt || "",
     endsAt: row.endsAt || "",

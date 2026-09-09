@@ -9,6 +9,7 @@ export type MallCommissionRuleCandidate = {
   priority?: number | null;
   version?: number | null;
   directRateBps: number;
+  directFixedAmountFen?: number | null;
   agentLevelRatesBps?: number[] | null;
 };
 
@@ -23,6 +24,7 @@ export type MallCommissionBeneficiary = {
   beneficiaryId: number;
   level: number;
   rateBps: number;
+  fixedAmountFen: number;
 };
 
 const SCOPE_PRECEDENCE: Record<MallCommissionRuleScope, number> = {
@@ -68,32 +70,29 @@ export function buildMallCommissionBeneficiaries(input: {
   directAgentId?: number | null;
   parentAgentIds?: number[] | null;
   directRateBps: number;
+  directFixedAmountFen?: number | null;
   agentLevelRatesBps?: number[] | null;
 }) {
   const rows: MallCommissionBeneficiary[] = [];
   const directRateBps = normalizeBps(input.directRateBps);
+  const fixedAmountFen = Math.max(Math.trunc(Number(input.directFixedAmountFen || 0)), 0);
   const directAgentId = Number(input.directAgentId || 0) || null;
-  if (input.promoterUserId && directRateBps > 0) {
-    rows.push({ beneficiaryType: "promoter", beneficiaryId: Number(input.promoterUserId), level: 0, rateBps: directRateBps });
-  } else if (directAgentId && directRateBps > 0) {
-    rows.push({ beneficiaryType: "agent", beneficiaryId: directAgentId, level: 0, rateBps: directRateBps });
+  if (input.promoterUserId && (directRateBps > 0 || fixedAmountFen > 0)) {
+    rows.push({ beneficiaryType: "promoter", beneficiaryId: Number(input.promoterUserId), level: 0, rateBps: directRateBps, fixedAmountFen });
+  } else if (directAgentId && (directRateBps > 0 || fixedAmountFen > 0)) {
+    rows.push({ beneficiaryType: "agent", beneficiaryId: directAgentId, level: 0, rateBps: directRateBps, fixedAmountFen });
   }
-
-  const agentChain = input.promoterUserId
-    ? [directAgentId, ...(input.parentAgentIds || [])]
-    : [...(input.parentAgentIds || [])];
-  (input.agentLevelRatesBps || []).forEach((rate, index) => {
-    const agentId = Number(agentChain[index] || 0);
-    const rateBps = normalizeBps(rate);
-    if (agentId && rateBps > 0 && !rows.some((row) => row.beneficiaryType === "agent" && row.beneficiaryId === agentId)) {
-      rows.push({ beneficiaryType: "agent", beneficiaryId: agentId, level: index + 1, rateBps });
-    }
-  });
   return rows;
 }
 
 export function commissionAmountFen(baseAmountFen: number, rateBps: number) {
   return Math.floor(Math.max(Math.trunc(baseAmountFen || 0), 0) * normalizeBps(rateBps) / 10000);
+}
+
+export function fixedCommissionAmountFen(baseAmountFen: number, fixedAmountFen: number, quantity = 1) {
+  const base = Math.max(Math.trunc(baseAmountFen || 0), 0);
+  const fixed = Math.max(Math.trunc(fixedAmountFen || 0), 0);
+  return Math.min(base, fixed * Math.max(Math.trunc(quantity || 0), 1));
 }
 
 export function refundedCommissionFen(originalCommissionFen: number, originalOrderFen: number, approvedRefundFen: number) {

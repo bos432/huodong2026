@@ -57,6 +57,15 @@
       <view class="state-retry" role="button" tabindex="0" aria-label="重新同步会员资产" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新同步资产</view>
     </view>
 
+    <view v-if="mallMemberships.length" class="profile-section app-enter" :style="motionStyle(98)">
+      <view class="profile-section-head"><view><text class="profile-section-title">商城会员权益</text><text class="profile-section-copy">会员价与单层真实订单推广</text></view></view>
+      <view class="profile-link-list">
+        <view v-for="item in mallMemberships" :key="item.merchant?.id" class="profile-link-row" role="button" tabindex="0" @click="goMallMembership(item)">
+          <view><text class="entry-title">{{ item.merchant?.name || "商城店铺" }} · {{ item.memberDiscountText }}</text><text class="entry-copy">有效期至 {{ formatMembershipDate(item.expiresAt) }}，进入店铺查看会员价和推广码。</text></view><text class="entry-arrow">›</text>
+        </view>
+      </view>
+    </view>
+
     <view v-if="isLoggedIn && (nextRegistration || memberTodos.length)" class="profile-section next-action-panel app-enter" :style="motionStyle(102)">
       <view class="profile-section-head compact"><view><text class="profile-section-title">接下来</text><text class="profile-section-copy">先处理最重要的活动事项</text></view></view>
       <view v-if="nextRegistration" class="next-activity app-press" role="button" tabindex="0" :aria-label="`查看${nextRegistration.activity?.title || '下一场活动'}`" @click="openRegistration(nextRegistration.id)" @keyup.enter="openRegistration(nextRegistration.id)" @keyup.space.prevent="openRegistration(nextRegistration.id)">
@@ -202,6 +211,7 @@ const courses = ref<any[]>([]);
 const registrations = ref<any[]>([]);
 const courseOrders = ref<any[]>([]);
 const mallOrders = ref<any[]>([]);
+const mallMemberships = ref<any[]>([]);
 const recommendedActivities = ref<any[]>([]);
 const loadingProfile = ref(false);
 const profileError = ref("");
@@ -403,7 +413,8 @@ async function loadProfile() {
       request<any>("/public/me/admin-access"),
       loadMemberOrderOverview(requestedSession),
       gates.mall ? request<any[]>("/public/me/mall/orders") : Promise.resolve([]),
-      request<any>("/public/activities?page=1&pageSize=8&status=open")
+      request<any>("/public/activities?page=1&pageSize=8&status=open"),
+      gates.mall ? request<any>("/public/me/mall/membership") : Promise.resolve({ memberships: [] })
     ]);
     if (!isCurrentLoad()) return;
     profile.value = profileResult;
@@ -441,6 +452,8 @@ async function loadProfile() {
     if (gates.mall) applyResult<any[]>(4, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
     const activityResult = results[5];
     recommendedActivities.value = activityResult.status === "fulfilled" ? safeList<any>(Array.isArray(activityResult.value) ? activityResult.value : activityResult.value?.items) : [];
+    const membershipResult = results[6];
+    mallMemberships.value = membershipResult.status === "fulfilled" ? safeList<any>(membershipResult.value?.memberships).filter((item) => item.isMember) : [];
     assetFailures.value = failures;
     assetWarning.value = failedLabels.length ? `部分会员资产同步失败：${failedLabels.join("、")}。对应数值暂不作为真实数据展示。` : "";
     loadedContextKey.value = sessionKey(requestedSession);
@@ -635,6 +648,8 @@ async function handlePhoneBound(profileData: any) {
   profile.value = profileData;
   await loadProfile();
 }
+function formatMembershipDate(value: any) { return value ? String(value).slice(0, 10) : "长期"; }
+function goMallMembership(item: any) { if (item?.merchant?.id) uni.navigateTo({ url: withTenantCode(`/pages/mall/merchant?id=${item.merchant.id}`) }); }
 function resetUserState() {
   loadingProfile.value = false;
   profile.value = null;
@@ -645,6 +660,7 @@ function resetUserState() {
   registrations.value = [];
   courseOrders.value = [];
   mallOrders.value = [];
+  mallMemberships.value = [];
   recommendedActivities.value = [];
   wechatProfilePanelVisible.value = false;
   syncingWechatProfile.value = false;

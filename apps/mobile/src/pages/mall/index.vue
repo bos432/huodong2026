@@ -113,6 +113,7 @@
     <view class="product-grid">
       <view v-for="item in products" :key="item.id" class="product-card" @click="goDetail(item)">
         <view v-if="item.featured" class="featured-badge">推荐</view>
+        <view v-if="item.membershipProduct" class="member-badge">会员权益</view>
         <view v-if="sort === 'hot' && Number(item.salesCount || 0) > 0" class="hot-badge">已售 {{ item.salesCount }}</view>
         <view v-if="!availableProductStock(item)" class="soldout-badge">售罄</view>
         <image v-if="item.coverUrl" class="cover" :src="item.coverUrl" mode="aspectFill" />
@@ -120,6 +121,8 @@
         <text v-if="item.brandName" class="brand">{{ item.brandName }}</text>
         <text v-if="item.merchant?.name" class="merchant-tag">{{ item.merchant.name }}</text>
         <text class="title">{{ item.title }}</text>
+        <text v-if="item.membershipProduct" class="member-copy">购买即开通本店会员 · 有效 {{ item.membershipValidityDays || 365 }} 天</text>
+        <text v-else-if="item.merchant?.membershipEnabled && Number(item.merchant?.memberDiscountRate || 1) < 1" class="member-copy">会员价按 {{ item.merchant.memberDiscountPercent }}% 结算</text>
         <view class="row">
           <view class="price-stack">
             <text class="price">¥{{ money(item.price) }}</text>
@@ -316,6 +319,8 @@ onShow(() => {
 .cover { width: 100%; height: 230rpx; border-radius: 18rpx; background: #fed7aa; display: grid; place-items: center; color: #9a3412; font-size: 26rpx; font-weight: 900; }
 .brand { display: inline-flex; width: fit-content; margin-top: 14rpx; padding: 6rpx 12rpx; border-radius: 999rpx; color: #9a3412; background: #fff7ed; font-size: 21rpx; font-weight: 800; }
 .merchant-tag { display:inline-flex; width:fit-content; margin-top:10rpx; padding:5rpx 11rpx; border-radius:999rpx; color:#0f766e; background:#ecfdf5; font-size:21rpx; font-weight:800; }
+.member-badge { position:absolute; left:14rpx; top:14rpx; z-index:2; padding:7rpx 13rpx; border-radius:8rpx; background:#7f1d1d; color:#fff7ed; font-size:21rpx; font-weight:900; }
+.member-copy { display:block; margin-top:8rpx; color:#9a3412; font-size:22rpx; line-height:1.45; font-weight:800; }
 .title { display: block; margin-top: 14rpx; font-size: 28rpx; font-weight: 800; color: #1f2937; min-height: 72rpx; line-height: 1.3; }
 .row { display:flex; justify-content:space-between; align-items:center; margin-top: 10rpx; }
 .price-stack { display:flex; align-items:baseline; gap:8rpx; flex-wrap:wrap; }

@@ -113,6 +113,7 @@
             <div v-else class="cover-placeholder">商</div>
             <div>
               <strong>{{ row.title }}</strong>
+              <el-tag v-if="row.membershipProduct" size="small" type="warning" effect="dark">会员商品 · {{ row.membershipValidityDays || 365 }} 天</el-tag>
               <small>{{ row.productCode || `P${row.id}` }} · {{ row.brand?.name || row.brandName || "未设品牌" }} · {{ row.platformCategory?.name || "未设平台类目" }}</small>
               <small>{{ row.category?.name || "未设店铺分类" }} · 库存 {{ row.stock || 0 }}</small>
             </div>
@@ -176,6 +177,11 @@
           <span v-if="productStatusHint" class="form-hint">{{ productStatusHint }}</span>
         </el-form-item>
         <el-form-item label="推荐"><el-switch v-model="form.featured" /></el-form-item>
+        <el-form-item label="会员商品">
+          <el-switch v-model="form.membershipProduct" active-text="购买后开通本店会员" />
+          <el-input-number v-if="form.membershipProduct" v-model="form.membershipValidityDays" :min="1" :max="3650" :precision="0" style="margin-left:12px" />
+          <span class="form-hint">有效期按支付成功日起算；该商品自身不再叠加会员折扣。</span>
+        </el-form-item>
         <el-form-item label="排序"><el-input-number v-model="form.sortOrder" :precision="0" /><span class="form-hint">数字越小越靠前，推荐商品仍优先展示</span></el-form-item>
         <el-form-item label="配送说明"><el-input v-model="form.deliveryNote" /></el-form-item>
         <el-form-item label="售后说明"><el-input v-model="form.afterSaleNote" /></el-form-item>
@@ -764,6 +770,8 @@ function editableProductForm(row: any) {
     reviewRemark: row.reviewRemark || "",
     status: row.status || "draft",
     featured: !!row.featured,
+    membershipProduct: !!row.membershipProduct,
+    membershipValidityDays: Number(row.membershipValidityDays || 365),
     sortOrder: Number(row.sortOrder || 0),
     deliveryNote: row.deliveryNote || "默认快递发货，偏远地区请联系客服",
     afterSaleNote: row.afterSaleNote || "支持未发货退款，已发货请联系运营方处理",
@@ -786,6 +794,8 @@ function productPayload(status: string) {
     brandName: form.brandName?.trim() || undefined,
     status,
     featured: !!form.featured,
+    membershipProduct: !!form.membershipProduct,
+    membershipValidityDays: form.membershipProduct ? Number(form.membershipValidityDays || 365) : null,
     sortOrder: Number(form.sortOrder || 0),
     deliveryNote: form.deliveryNote?.trim() || undefined,
     afterSaleNote: form.afterSaleNote?.trim() || undefined,
@@ -1096,7 +1106,7 @@ async function handleFormMerchantChange() {
   await loadCategories();
 }
 function resetForm() {
-  Object.assign(form, { id: null, tenantId: filters.tenantId || selectedMerchant.value?.tenant?.id, merchantId: filters.merchantId, productCode: "", title: "", brandId: undefined, brandName: "", platformCategoryId: undefined, categoryId: undefined, coverUrl: "", galleryUrlsText: "", attributesText: "{}", description: "", reviewRemark: "", status: "draft", featured: false, sortOrder: 0, deliveryNote: "默认快递发货，偏远地区请联系客服", afterSaleNote: "支持未发货退款，已发货请联系运营方处理", skus: [{ name: "默认规格", skuCode: "", barcode: "", attributesText: "{}", weightGrams: 0, price: 0, originalPrice: 0, stock: 100, enabled: true }] });
+  Object.assign(form, { id: null, tenantId: filters.tenantId || selectedMerchant.value?.tenant?.id, merchantId: filters.merchantId, productCode: "", title: "", brandId: undefined, brandName: "", platformCategoryId: undefined, categoryId: undefined, coverUrl: "", galleryUrlsText: "", attributesText: "{}", description: "", reviewRemark: "", status: "draft", featured: false, membershipProduct: false, membershipValidityDays: 365, sortOrder: 0, deliveryNote: "默认快递发货，偏远地区请联系客服", afterSaleNote: "支持未发货退款，已发货请联系运营方处理", skus: [{ name: "默认规格", skuCode: "", barcode: "", attributesText: "{}", weightGrams: 0, price: 0, originalPrice: 0, stock: 100, enabled: true }] });
 }
 async function createProduct() {
   if (!requireOpenMerchant("发布商品")) return;

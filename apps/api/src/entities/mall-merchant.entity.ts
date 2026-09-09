@@ -57,6 +57,12 @@ export class MallMerchant {
   mallEnabled!: boolean;
 
   @Column({ type: "boolean", default: true })
+  membershipEnabled!: boolean;
+
+  @Column({ type: "decimal", precision: 5, scale: 2, default: "1.00" })
+  memberDiscountRate!: string;
+
+  @Column({ type: "boolean", default: true })
   productAuditRequired!: boolean;
 
   @Column({ type: "varchar", length: 24, default: "platform_collect" })

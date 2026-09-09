@@ -50,6 +50,9 @@ export class MallOrder {
   @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
   discountAmount!: string;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, default: 0 })
+  memberDiscountAmount!: string;
+
   @Column({ type: "int", default: 0 })
   pointsUsed!: number;
 
@@ -144,6 +147,6 @@ export class MallOrder {
   @BeforeInsert()
   freezeBusinessMoney() {
     this.amountFen = yuanToFen(this.amount);
-    this.businessSnapshot ||= { amount: this.amount, goodsAmount: this.goodsAmount, discountAmount: this.discountAmount, freightAmount: this.freightAmount, pointsDiscountAmount: this.pointsDiscountAmount, pointsUsed: this.pointsUsed, paymentMethod: this.paymentMethod, couponSnapshot: this.couponSnapshot, promotionSnapshot: this.promotionSnapshot, addressSnapshot: this.addressSnapshot, allocationSnapshot: this.allocationSnapshot, merchantId: this.merchant?.id || null, checkoutGroupId: this.checkoutGroup?.id || null };
+    this.businessSnapshot ||= { amount: this.amount, goodsAmount: this.goodsAmount, discountAmount: this.discountAmount, memberDiscountAmount: this.memberDiscountAmount, freightAmount: this.freightAmount, pointsDiscountAmount: this.pointsDiscountAmount, pointsUsed: this.pointsUsed, paymentMethod: this.paymentMethod, couponSnapshot: this.couponSnapshot, promotionSnapshot: this.promotionSnapshot, addressSnapshot: this.addressSnapshot, allocationSnapshot: this.allocationSnapshot, merchantId: this.merchant?.id || null, checkoutGroupId: this.checkoutGroup?.id || null };
   }
 }

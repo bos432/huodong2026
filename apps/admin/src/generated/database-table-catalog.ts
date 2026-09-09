@@ -214,6 +214,13 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
   },
   {
     "group": "多商户商城",
+    "name": "mall_membership_purchases",
+    "meaning": "商城MEMBERSHIPPURCHASES相关业务数据。",
+    "business": "多商户商城模块中的商城MEMBERSHIPPURCHASES查询、状态流转和关联记录。",
+    "caution": "可能包含个人或敏感信息，查询、导出和清理必须遵循最小权限与隐私要求。"
+  },
+  {
+    "group": "多商户商城",
     "name": "mall_merchant_applications",
     "meaning": "商城商户申请相关业务数据。",
     "business": "多商户商城模块中的商城商户申请查询、状态流转和关联记录。",

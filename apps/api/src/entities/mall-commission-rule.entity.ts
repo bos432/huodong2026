@@ -44,6 +44,9 @@ export class MallCommissionRule {
   @Column({ type: "int", default: 0 })
   directRateBps!: number;
 
+  @Column({ type: "decimal", precision: 10, scale: 2, nullable: true })
+  directFixedAmount!: string | null;
+
   @Column({ type: "json", nullable: true })
   agentLevelRatesBps!: number[] | null;
 

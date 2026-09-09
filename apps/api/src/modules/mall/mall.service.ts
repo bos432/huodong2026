@@ -34,6 +34,7 @@ import { MallMerchantApplication } from "../../entities/mall-merchant-applicatio
 import { MallMerchantQualification } from "../../entities/mall-merchant-qualification.entity";
 import { MallMerchantContract } from "../../entities/mall-merchant-contract.entity";
 import { MallMerchantPaymentAccount } from "../../entities/mall-merchant-payment-account.entity";
+import { MallMembershipPurchase } from "../../entities/mall-membership-purchase.entity";
 import { MallOrderItem } from "../../entities/mall-order-item.entity";
 import { MallOrderEvent } from "../../entities/mall-order-event.entity";
 import { MallShipment } from "../../entities/mall-shipment.entity";
@@ -82,7 +83,8 @@ import { mallCheckoutCouponReleaseEligible } from "../../shared/mall-checkout-co
 import { resolveMallFulfillmentState } from "../../shared/mall-fulfillment-policy";
 import { allocateMallAfterSaleAmount, assertMallAfterSaleTransition, nextMallOrderStatusAfterRefund } from "../../shared/mall-after-sale-policy";
 import { parseMallTrackingPayload } from "../../shared/mall-logistics-tracking";
-import { allocateMallCommissionBaseFen, buildMallCommissionBeneficiaries, commissionAmountFen, refundedCommissionFen, selectMallCommissionRule } from "../../shared/mall-commission-policy";
+import { allocateMallCommissionBaseFen, buildMallCommissionBeneficiaries, commissionAmountFen, fixedCommissionAmountFen, refundedCommissionFen, selectMallCommissionRule } from "../../shared/mall-commission-policy";
+import { mallMemberPriceFen, mallMembershipEffective, mallMembershipPurchaseExpiresAt, normalizeMallMemberDiscountRate } from "../../shared/mall-membership-policy";
 import { calculateMallSettlementAmounts, mallSettlementConsistency } from "../../shared/mall-settlement-policy";
 import { isSelfPurchasePromotion, mallAppendReviewError, mallCouponCategoryMatches, mallCouponClaimError, mallCouponIdentityRisk, mallGroupBuyJoinError, MallMarketingRiskDecision, mallPromotionAttributionRisk, mallPromotionOrderError, mallPromotionRateLimitError, mallPromotionValidityError, publicMallReviewAppend, saveWithUniqueReplay, shouldReleaseMallCouponAfterRefund } from "../../shared/mall-review-marketing-governance";
 import { assertRefundCapacity } from "../../shared/refund-capacity";
@@ -102,8 +104,8 @@ import { BusinessJobService } from "../reliability/business-job.service";
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
 type MallRiskContext = { clientIp?: string | null; userAgent?: string | null; requestId?: string | null; deviceId?: string | null };
-type MallOrderPreviewItem = { productId: number; categoryId: number | null; platformCategoryId: number | null; merchantId: number | null; amount: number };
-type MallOrderPreviewLine = { skuId: number; productId: number; productTitle: string; productVersion: number; skuName: string; quantity: number; unitPrice: string; lineAmount: string; availableStock: number; merchant: Record<string, unknown> | null; flashSaleId: number | null; groupBuyId: number | null };
+type MallOrderPreviewItem = { productId: number; categoryId: number | null; platformCategoryId: number | null; merchantId: number | null; amount: number; originalAmount: number; memberDiscountAmount: number };
+type MallOrderPreviewLine = { skuId: number; productId: number; productTitle: string; productVersion: number; skuName: string; quantity: number; unitPrice: string; originalUnitPrice: string; lineAmount: string; memberDiscountAmount: string; memberDiscountRate: number | null; membershipApplied: boolean; availableStock: number; merchant: Record<string, unknown> | null; flashSaleId: number | null; groupBuyId: number | null };
 type MallOrderInputItem = { skuId: number; quantity: number; flashSaleId?: number; groupBuyId?: number; joinTeamNo?: string };
 type MallOrderWithItemsResult = Omit<MallOrder, "freezeBusinessMoney" | "user"> & {
   user: { id: number; nickname: string | null; phone: string | null } | null;
@@ -120,6 +122,7 @@ type MallCreateOrderResult = MallOrderPublicResult | MallCheckoutGroupResult;
 type MallCalculatedQuote = {
   items: MallOrderPreviewLine[];
   goodsAmount: string;
+  memberDiscountAmount: string;
   coupon: { id: number; code: string; name: string; minAmount: string; discountAmount: string; scope: string; scopeCategoryId: number | null; scopeProductId: number | null } | null;
   couponDiscountAmount: string;
   availablePoints: number;
@@ -175,6 +178,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     @InjectRepository(MallMerchantQualification) private readonly merchantQualifications: Repository<MallMerchantQualification>,
     @InjectRepository(MallMerchantContract) private readonly merchantContracts: Repository<MallMerchantContract>,
     @InjectRepository(MallMerchantPaymentAccount) private readonly merchantPaymentAccounts: Repository<MallMerchantPaymentAccount>,
+    @InjectRepository(MallMembershipPurchase) private readonly membershipPurchases: Repository<MallMembershipPurchase>,
     @InjectRepository(MallCheckoutGroup) private readonly checkoutGroups: Repository<MallCheckoutGroup>,
     @InjectRepository(MallCategory) private readonly categories: Repository<MallCategory>,
     @InjectRepository(MallBrand) private readonly brands: Repository<MallBrand>,
@@ -515,6 +519,8 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     row.suspendedAt = row.suspendedAt || null;
     row.suspensionReason = row.suspensionReason || null;
     row.mallEnabled = nextMallEnabled;
+    row.membershipEnabled = dto.membershipEnabled ?? row.membershipEnabled ?? true;
+    row.memberDiscountRate = normalizeMallMemberDiscountRate(dto.memberDiscountRate === undefined ? row.memberDiscountRate : dto.memberDiscountRate).toFixed(2);
     row.productAuditRequired = dto.productAuditRequired !== false;
     row.paymentMode = nextPaymentMode;
     row.region = this.optionalString(dto.region) || agent?.region || tenant.region || null;
@@ -1141,8 +1147,6 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
   async claimCoupon(user: User, id: number, context?: PublicTenantContext, merchantId?: number, riskContext?: MallRiskContext) {
     const tenant = await this.requirePublicTenant(context);
     const merchant = merchantId ? await this.publicTargetMerchant(tenant, merchantId) : null;
-    const replay = await this.couponClaims.findOne({ where: { tenant: { id: tenant.id }, coupon: { id }, user: { id: user.id } } });
-    if (replay) return this.publicCouponClaim(replay);
     const riskCoupon = await this.resolveCoupon(tenant, id, 0, [], undefined, user, "id", merchant);
     await this.consumeCouponClaimRisk(tenant, user, riskCoupon, riskContext);
     const claim = await this.dataSource.transaction(async (manager) => {
@@ -1165,7 +1169,8 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
   async validatePublicCoupon(context: PublicTenantContext | undefined, code: unknown, amount: number, merchantId?: number) {
     const tenant = await this.requirePublicTenant(context);
     const merchant = merchantId ? await this.publicTargetMerchant(tenant, merchantId) : null;
-    const previewItems = merchant ? [{ productId: 0, categoryId: null, platformCategoryId: null, merchantId: merchant.id, amount: Number(amount || 0) }] : [];
+    const previewAmount = Number(amount || 0);
+    const previewItems: MallOrderPreviewItem[] = merchant ? [{ productId: 0, categoryId: null, platformCategoryId: null, merchantId: merchant.id, amount: previewAmount, originalAmount: previewAmount, memberDiscountAmount: 0 }] : [];
     const coupon = await this.resolveCoupon(tenant, code, amount, previewItems, undefined, undefined, "code", merchant);
     if (coupon.scope && coupon.scope !== "all") throw new BadRequestException("该优惠券需在确认订单页按商品范围校验");
     const discountAmount = this.computeCouponDiscount(coupon, amount, previewItems);
@@ -1369,6 +1374,11 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     row.sortOrder = Number(dto.sortOrder || 0);
     row.deliveryNote = this.optionalString(dto.deliveryNote);
     row.afterSaleNote = this.optionalString(dto.afterSaleNote);
+    row.membershipProduct = dto.membershipProduct ?? row.membershipProduct ?? false;
+    row.membershipValidityDays = row.membershipProduct
+      ? Math.max(Math.trunc(Number(dto.membershipValidityDays ?? row.membershipValidityDays ?? 365)), 1)
+      : null;
+    if (row.membershipProduct && merchant.membershipEnabled === false) throw new BadRequestException("请先在店铺设置中开启商城会员权益，再发布会员商品");
     const skuInputs = Array.isArray(dto.skus) && dto.skus.length ? dto.skus : [{ name: "默认规格", price: Number(dto.price || 0), originalPrice: Number(dto.originalPrice || 0), stock: 0, enabled: true }];
     const minPrice = Math.min(...skuInputs.map((sku) => Number(sku.price || 0)).filter((price) => Number.isFinite(price)));
     row.price = (Number.isFinite(minPrice) ? minPrice : Number(dto.price || 0)).toFixed(2);
@@ -1556,6 +1566,39 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     return rows.map((row) => this.publicReview(row));
   }
 
+  async myMallMembership(user: User, context?: PublicTenantContext, merchantId?: number) {
+    const tenant = await this.requirePublicTenant(context);
+    const merchant = merchantId ? await this.publicTargetMerchant(tenant, merchantId) : null;
+    const membershipMap = await this.activeMallMembershipMap(user, tenant);
+    if (merchant) {
+      const current = membershipMap.get(merchant.id) || null;
+      return this.publicMallMembership(merchant, current);
+    }
+    const memberships = [...membershipMap.values()].map((row) => this.publicMallMembership(row.merchant, row));
+    return { enabled: true, isMember: memberships.some((item) => item.isMember), status: memberships.length ? "active" : "none", memberships };
+  }
+
+  async ensureMallMembershipReferral(user: User, context: PublicTenantContext | undefined, merchantId: number) {
+    const tenant = await this.requirePublicTenant(context);
+    if (!merchantId) throw new BadRequestException("请选择要推广的店铺");
+    const merchant = await this.publicTargetMerchant(tenant, merchantId);
+    if (!merchant) throw new NotFoundException("商城店铺不存在或未开放");
+    const membership = (await this.activeMallMembershipMap(user, tenant)).get(merchant.id);
+    if (!membership) throw new BadRequestException("购买并生效该店铺会员商品后才可推广");
+    let row = await this.promotionCodes.findOne({ where: { tenant: { id: tenant.id }, merchant: { id: merchant.id }, promoterUser: { id: user.id } }, relations: ["tenant", "merchant", "promoterUser", "agent"], loadEagerRelations: false });
+    if (!row) {
+      const code = `M${merchant.id}U${user.id}`;
+      await this.assertPromotionCodeAvailable(code);
+      row = this.promotionCodes.create({ tenant, merchant, promoterUser: user, agent: null, code, name: `${merchant.name}会员推广`, commissionRate: "0.0000", enabled: true, startsAt: null, endsAt: membership.expiresAt, orderCount: 0, orderAmount: "0.00", remark: "商城会员自动生成，仅限单层真实订单推广" });
+      row = await this.promotionCodes.save(row);
+    } else if (!row.enabled || !row.endsAt || row.endsAt < membership.expiresAt) {
+      row.enabled = true;
+      row.endsAt = membership.expiresAt;
+      row = await this.promotionCodes.save(row);
+    }
+    return { code: row.code, merchant: this.publicMerchantSummary(merchant), expiresAt: row.endsAt, mode: "direct_order_only", orderCount: row.orderCount, orderAmount: row.orderAmount };
+  }
+
   async favoriteStatus(user: User, productId: number, context?: PublicTenantContext) {
     const tenant = await this.requirePublicTenant(context);
     const product = await this.findPublicProductRow(Number(productId), tenant.id);
@@ -1740,9 +1783,10 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     const promotion = await this.resolvePromotionForQuote(tenant, items, dto.promotionCode);
     const issuedAt = Date.now();
     const expiresAt = issuedAt + this.configNumber("MALL_ORDER_QUOTE_EXPIRE_MINUTES", 10) * MINUTE_MS;
-    const payload: MallOrderQuoteTokenPayload = { version: 1, tenantId: tenant.id, userId: user.id, issuedAt, expiresAt, items: quote.items.map((item) => ({ skuId: item.skuId, quantity: item.quantity, unitPrice: item.unitPrice, productVersion: item.productVersion, flashSaleId: item.flashSaleId, groupBuyId: item.groupBuyId })), couponCode: quote.coupon?.code || null, promotionCode: promotion?.code || null, pointsUsed: quote.pointsUsed, goodsAmount: quote.goodsAmount, discountAmount: quote.discountAmount, freightAmount: quote.freightAmount, payableAmount: quote.payableAmount, allocations: quote.allocations.map((item) => ({ merchantId: item.merchantId, goodsFen: item.goodsFen, freightFen: item.freightFen, discountFen: item.discountFen, payableFen: item.payableFen })) };
+    const payload: MallOrderQuoteTokenPayload = { version: 1, tenantId: tenant.id, userId: user.id, issuedAt, expiresAt, items: quote.items.map((item) => ({ skuId: item.skuId, quantity: item.quantity, unitPrice: item.unitPrice, productVersion: item.productVersion, flashSaleId: item.flashSaleId, groupBuyId: item.groupBuyId })), couponCode: quote.coupon?.code || null, promotionCode: promotion?.code || null, pointsUsed: quote.pointsUsed, goodsAmount: quote.goodsAmount, memberDiscountAmount: quote.memberDiscountAmount, discountAmount: quote.discountAmount, freightAmount: quote.freightAmount, payableAmount: quote.payableAmount, allocations: quote.allocations.map((item) => ({ merchantId: item.merchantId, goodsFen: item.goodsFen, freightFen: item.freightFen, discountFen: item.discountFen, payableFen: item.payableFen })) };
     return {
       ...quote,
+      memberDiscountAmount: quote.memberDiscountAmount,
       promotion: promotion ? {
         code: promotion.code,
         name: promotion.name,
@@ -1790,6 +1834,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     return {
       items: preview.lines,
       goodsAmount: goodsAmount.toFixed(2),
+      memberDiscountAmount: preview.memberDiscountAmount.toFixed(2),
       coupon: coupon ? { id: coupon.id, code: coupon.code, name: coupon.name, minAmount: coupon.minAmount, discountAmount: couponDiscountAmount.toFixed(2), scope: coupon.scope, scopeCategoryId: coupon.scopeCategoryId, scopeProductId: coupon.scopeProductId } : null,
       couponDiscountAmount: couponDiscountAmount.toFixed(2),
       availablePoints: pointsQuote.availablePoints,
@@ -1814,7 +1859,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     if (quoted.tenantId !== tenant.id || quoted.userId !== user.id) throw new BadRequestException("订单报价不属于当前账号或商家，请刷新后重试");
     const current = await this.calculateMallOrderQuote(user, tenant, items, dto);
     const promotion = await this.resolvePromotionForQuote(tenant, items, dto.promotionCode);
-    const currentPayload: MallOrderQuoteTokenPayload = { version: 1, tenantId: tenant.id, userId: user.id, issuedAt: quoted.issuedAt, expiresAt: quoted.expiresAt, items: current.items.map((item) => ({ skuId: item.skuId, quantity: item.quantity, unitPrice: item.unitPrice, productVersion: item.productVersion, flashSaleId: item.flashSaleId, groupBuyId: item.groupBuyId })), couponCode: current.coupon?.code || null, promotionCode: promotion?.code || null, pointsUsed: current.pointsUsed, goodsAmount: current.goodsAmount, discountAmount: current.discountAmount, freightAmount: current.freightAmount, payableAmount: current.payableAmount, allocations: current.allocations.map((item) => ({ merchantId: item.merchantId, goodsFen: item.goodsFen, freightFen: item.freightFen, discountFen: item.discountFen, payableFen: item.payableFen })) };
+    const currentPayload: MallOrderQuoteTokenPayload = { version: 1, tenantId: tenant.id, userId: user.id, issuedAt: quoted.issuedAt, expiresAt: quoted.expiresAt, items: current.items.map((item) => ({ skuId: item.skuId, quantity: item.quantity, unitPrice: item.unitPrice, productVersion: item.productVersion, flashSaleId: item.flashSaleId, groupBuyId: item.groupBuyId })), couponCode: current.coupon?.code || null, promotionCode: promotion?.code || null, pointsUsed: current.pointsUsed, goodsAmount: current.goodsAmount, memberDiscountAmount: current.memberDiscountAmount, discountAmount: current.discountAmount, freightAmount: current.freightAmount, payableAmount: current.payableAmount, allocations: current.allocations.map((item) => ({ merchantId: item.merchantId, goodsFen: item.goodsFen, freightFen: item.freightFen, discountFen: item.discountFen, payableFen: item.payableFen })) };
     if (JSON.stringify(comparableMallOrderQuote(quoted)) !== JSON.stringify(comparableMallOrderQuote(currentPayload))) throw new BadRequestException("商品价格、库存或优惠已变化，请刷新确认订单后重新提交");
     return { ...quoted, currentQuote: current };
   }
@@ -1874,6 +1919,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       const orderItems: MallOrderItem[] = [];
       const couponItems: MallOrderPreviewItem[] = [];
       let amount = 0;
+      let memberDiscountAmount = 0;
       const savedOrder = await orderRepo.save(orderRepo.create({
         orderNo: this.generateOrderNo(),
         tenant,
@@ -1883,6 +1929,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         amount: "0.00",
         goodsAmount: "0.00",
         discountAmount: "0.00",
+        memberDiscountAmount: "0.00",
         coupon: null,
         couponSnapshot: null,
         freightAmount: "0.00",
@@ -1897,6 +1944,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         adminRemark: null,
         expiresAt
       }));
+      const membershipMap = await this.activeMallMembershipMap(user, tenant, manager);
       const groupBuyRecords: MallGroupBuyRecord[] = [];
       for (const [lineIndex, input] of items.entries()) {
         const quantity = Math.max(Number(input.quantity || 0), 0);
@@ -1928,12 +1976,17 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
           await manager.getRepository(MallGroupBuy).save(groupBuy);
           await inventoryRepo.save(inventoryRepo.create({ tenant, merchant, sku, order: savedOrder, type: "lock", operationKey: `order-line:${orderLineKey}:group:${groupBuy.id}:lock`, sourceType: "group_buy", sourceId: String(groupBuy.id), quantity, stockBefore: groupBuy.groupStock - groupBuy.soldStock, stockAfter: groupBuy.groupStock - groupBuy.soldStock, lockedBefore: beforeGroupLocked, lockedAfter: groupBuy.lockedStock, remark: `商城拼团锁库存：${groupBuy.title}` }));
         }
-        const itemPrice = flashSale ? Number(flashSale.salePrice || 0) : groupBuy ? Number(groupBuy.groupPrice || 0) : Number(sku.price);
+        const originalItemPriceFen = yuanToFen(flashSale ? Number(flashSale.salePrice || 0) : groupBuy ? Number(groupBuy.groupPrice || 0) : Number(sku.price));
+        const membership = !flashSale && !groupBuy && !sku.product.membershipProduct && skuMerchant.membershipEnabled !== false ? membershipMap.get(skuMerchant.id) || null : null;
+        const memberDiscountRate = membership ? normalizeMallMemberDiscountRate(skuMerchant.memberDiscountRate) : 1;
+        const itemPriceFen = membership ? mallMemberPriceFen(originalItemPriceFen, memberDiscountRate) : originalItemPriceFen;
+        const itemPrice = itemPriceFen / 100;
         const quotedLine = quotedOrder?.items[lineIndex];
         if (quotedLine && (quotedLine.skuId !== sku.id || quotedLine.quantity !== quantity || quotedLine.unitPrice !== itemPrice.toFixed(2) || quotedLine.productVersion !== Number(sku.product.contentVersion || 1) || quotedLine.flashSaleId !== (flashSale?.id || null) || quotedLine.groupBuyId !== (groupBuy?.id || null))) throw new BadRequestException("商品价格或规格信息已变化，请刷新确认订单后重新提交");
         const itemTotal = itemPrice * quantity;
         amount += itemTotal;
-        couponItems.push({ productId: sku.product.id, categoryId: sku.product.category?.id || null, platformCategoryId: sku.product.platformCategory?.id || null, merchantId: skuMerchant.id, amount: itemTotal });
+        memberDiscountAmount += Math.max(originalItemPriceFen - itemPriceFen, 0) * quantity / 100;
+        couponItems.push({ productId: sku.product.id, categoryId: sku.product.category?.id || null, platformCategoryId: sku.product.platformCategory?.id || null, merchantId: skuMerchant.id, amount: itemTotal, originalAmount: originalItemPriceFen * quantity / 100, memberDiscountAmount: Math.max(originalItemPriceFen - itemPriceFen, 0) * quantity / 100 });
         const skuName = flashSale ? `${sku.name}（秒杀：${flashSale.title}）` : groupBuy ? `${sku.name}（拼团：${groupBuy.title}）` : sku.name;
         orderItems.push(itemRepo.create({ tenant, merchant, order: savedOrder, product: sku.product, sku, flashSale, groupBuy, productTitle: sku.product.title, skuName, coverUrl: sku.product.coverUrl, price: itemPrice.toFixed(2), quantity, totalAmount: itemTotal.toFixed(2), productSnapshot: this.orderProductSnapshot(sku.product), skuSnapshot: this.orderSkuSnapshot(sku, skuName, itemPrice) }));
         if (groupBuy) {
@@ -1958,17 +2011,18 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       savedOrder.amount = fenToYuan(payableFen);
       savedOrder.goodsAmount = amount.toFixed(2);
       savedOrder.discountAmount = discountAmount.toFixed(2);
+      savedOrder.memberDiscountAmount = memberDiscountAmount.toFixed(2);
       savedOrder.freightAmount = fenToYuan(freightFen);
       savedOrder.pointsUsed = pointsQuote.pointsUsed;
       savedOrder.pointsDiscountAmount = pointsQuote.pointsDiscountAmount.toFixed(2);
       savedOrder.totalQuantity = orderItems.reduce((sum, item) => sum + Number(item.quantity || 0), 0);
       savedOrder.shippedQuantity = 0;
       savedOrder.fulfillmentStatus = "unshipped";
-      savedOrder.businessSnapshot = { ...(savedOrder.businessSnapshot || {}), totalQuantity: savedOrder.totalQuantity, shippedQuantity: 0, fulfillmentStatus: savedOrder.fulfillmentStatus };
-      savedOrder.allocationSnapshot = { source: checkoutGroup ? "checkout_group_child" : "single_order", merchantId: merchant.id, goodsFen: yuanToFen(savedOrder.goodsAmount), freightFen, discountFen: yuanToFen(savedOrder.discountAmount), payableFen };
+      savedOrder.businessSnapshot = { ...(savedOrder.businessSnapshot || {}), totalQuantity: savedOrder.totalQuantity, shippedQuantity: 0, fulfillmentStatus: savedOrder.fulfillmentStatus, memberDiscountAmount: savedOrder.memberDiscountAmount };
+      savedOrder.allocationSnapshot = { source: checkoutGroup ? "checkout_group_child" : "single_order", merchantId: merchant.id, goodsFen: yuanToFen(savedOrder.goodsAmount), freightFen, discountFen: yuanToFen(savedOrder.discountAmount), memberDiscountFen: yuanToFen(savedOrder.memberDiscountAmount), payableFen };
       // The order is inserted as a zero placeholder before SKU pricing is known.
       savedOrder.amountFen = yuanToFen(savedOrder.amount);
-      if (quotedOrder && (quotedOrder.goodsAmount !== savedOrder.goodsAmount || quotedOrder.discountAmount !== savedOrder.discountAmount || quotedOrder.freightAmount !== savedOrder.freightAmount || quotedOrder.payableAmount !== savedOrder.amount || quotedOrder.pointsUsed !== savedOrder.pointsUsed || quotedOrder.couponCode !== (coupon?.code || null))) throw new BadRequestException("订单金额、运费或优惠已变化，请刷新确认订单后重新提交");
+      if (quotedOrder && (quotedOrder.goodsAmount !== savedOrder.goodsAmount || quotedOrder.memberDiscountAmount !== savedOrder.memberDiscountAmount || quotedOrder.discountAmount !== savedOrder.discountAmount || quotedOrder.freightAmount !== savedOrder.freightAmount || quotedOrder.payableAmount !== savedOrder.amount || quotedOrder.pointsUsed !== savedOrder.pointsUsed || quotedOrder.couponCode !== (coupon?.code || null))) throw new BadRequestException("订单金额、运费或优惠已变化，请刷新确认订单后重新提交");
       await orderRepo.save(savedOrder);
       await itemRepo.save(orderItems);
       if (groupBuyRecords.length) await manager.getRepository(MallGroupBuyRecord).save(groupBuyRecords);
@@ -2518,6 +2572,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       await this.recordMallOrderEvent(manager, lockedOrder, { eventKey: `paid:balance:${tx.transactionNo}`, eventType: "payment_confirmed", fromStatus: "pending_payment", toStatus: "paid", source: "user", operator: String(user.id), remark: "用户余额支付商城订单", detail: { transactionNo: tx.transactionNo, amount: lockedOrder.amount } });
       await this.updateGroupBuyRecordsForOrder(manager, lockedOrder, "paid");
       await this.deductLockedInventory(manager, lockedOrder);
+      await this.activateMallMembershipForOrder(manager, lockedOrder);
       await this.awardMallPurchasePoints(lockedOrder, manager);
       await this.createMallCommissionForOrder(manager, lockedOrder);
     });
@@ -3248,8 +3303,10 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     const scopeMerchant = dto.scopeType === "merchant" ? merchant : dto.scopeType === "product" ? product?.merchant || null : dto.scopeType === "channel" ? promotionCode?.merchant || null : null;
     if (merchant && scopeMerchant && merchant.id !== scopeMerchant.id) throw new BadRequestException("规则店铺与商品或推广渠道所属店铺不一致");
     const directRateBps = Math.max(Math.trunc(Number(dto.directRateBps || 0)), 0);
-    const agentLevelRatesBps = (dto.agentLevelRatesBps || []).map((rate) => Math.max(Math.trunc(Number(rate || 0)), 0)).slice(0, 10);
-    if (directRateBps + agentLevelRatesBps.reduce((sum, rate) => sum + rate, 0) > 10000) throw new BadRequestException("同一佣金规则的直接佣金和多级代理佣金合计不能超过 100%");
+    const directFixedAmount = Math.max(Number(dto.directFixedAmount || 0), 0);
+    if (directRateBps > 0 && directFixedAmount > 0) throw new BadRequestException("固定佣金与比例佣金只能选择一种");
+    const agentLevelRatesBps = (dto.agentLevelRatesBps || []).map((rate) => Math.max(Math.trunc(Number(rate || 0)), 0));
+    if (agentLevelRatesBps.some((rate) => rate > 0)) throw new BadRequestException("商城推广仅支持单层直接佣金，不能配置上级或多级代理佣金");
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
     const endsAt = dto.endsAt ? new Date(dto.endsAt) : null;
     if (startsAt && endsAt && startsAt >= endsAt) throw new BadRequestException("佣金规则结束时间必须晚于开始时间");
@@ -3271,7 +3328,8 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       version: Number(latest?.version || 0) + 1,
       priority: Math.trunc(Number(dto.priority || 0)),
       directRateBps,
-      agentLevelRatesBps,
+      directFixedAmount: directFixedAmount > 0 ? directFixedAmount.toFixed(2) : null,
+      agentLevelRatesBps: null,
       status: "active",
       startsAt,
       endsAt,
@@ -4826,6 +4884,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       await this.recordMallOrderEvent(manager, lockedOrder, { eventKey: `paid:offline:${lockedOrder.transactionNo}`, eventType: "payment_confirmed", fromStatus: "pending_confirm", toStatus: "paid", source: "admin", operator: admin?.username || String(admin?.id || "admin"), remark: "后台确认线下收款", detail: { transactionNo: lockedOrder.transactionNo, amount: lockedOrder.amount } });
       await this.updateGroupBuyRecordsForOrder(manager, lockedOrder, "paid");
       await this.deductLockedInventory(manager, lockedOrder);
+      await this.activateMallMembershipForOrder(manager, lockedOrder);
       await this.awardMallPurchasePoints(lockedOrder, manager);
       await this.createMallCommissionForOrder(manager, lockedOrder);
       return lockedOrder;
@@ -5805,6 +5864,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       await this.recordMallOrderEvent(manager, savedOrder, { eventKey: `paid:${provider}:${transactionNo}`, eventType: "payment_confirmed", fromStatus: "pending_payment", toStatus: "paid", source: "payment_callback", operator: provider, remark, detail: { provider, transactionNo, amount: savedOrder.amount } });
       await this.updateGroupBuyRecordsForOrder(manager, savedOrder, "paid");
       await this.deductLockedInventory(manager, savedOrder);
+      await this.activateMallMembershipForOrder(manager, savedOrder);
       await this.awardMallPurchasePoints(savedOrder, manager);
       await this.createMallCommissionForOrder(manager, savedOrder);
       const paymentTransaction = await paymentTxRepo.save(paymentTxRepo.create({
@@ -5863,6 +5923,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         await this.recordMallOrderEvent(manager, order, { eventKey: `paid:${provider}:${transactionNo}`, eventType: "payment_confirmed", fromStatus: "pending_payment", toStatus: "paid", source: "payment_callback", operator: provider, remark, detail: { checkoutGroupId: group.id, groupNo: group.groupNo, providerTransactionNo: transactionNo, amount: order.amount } });
         await this.updateGroupBuyRecordsForOrder(manager, order, "paid");
         await this.deductLockedInventory(manager, order);
+        await this.activateMallMembershipForOrder(manager, order);
         await this.awardMallPurchasePoints(order, manager);
         await this.createMallCommissionForOrder(manager, order);
         const childTransactionNo = `${transactionNo}:G${group.id}:O${order.id}`;
@@ -6350,6 +6411,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       }
     }
     await this.adjustMallCommissionForRefund(manager, order, approvedFen, refund.refundNo);
+    await this.revokeMallMembershipForRefund(manager, order, refund, approvedFen);
     await this.handleMallRefundPoints(order, refund, approvedFen, manager);
   }
 
@@ -6644,7 +6706,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         order.coupon = coupon;
         order.couponSnapshot = coupon ? { id: coupon.id, code: coupon.code, name: coupon.name, issuerScope: coupon.issuerScope, refundReleasePolicy: coupon.refundReleasePolicy, minAmount: coupon.minAmount, totalDiscountAmount: fenToYuan(couponDiscountFen), allocatedDiscountAmount: fenToYuan(allocation.couponDiscountFen), scope: coupon.scope, scopeCategoryId: coupon.scopeCategoryId, scopeProductId: coupon.scopeProductId, checkoutGroupId: group.id, checkoutGroupNo: group.groupNo } : null;
         order.allocationSnapshot = { version: 2, source: "checkout_group", checkoutGroupId: group.id, checkoutGroupNo: group.groupNo, merchantId: order.merchant?.id || null, goodsFen: allocation.goodsFen, freightFen: allocation.freightFen, couponDiscountFen: allocation.couponDiscountFen, pointsDiscountFen: allocation.pointsDiscountFen, discountFen: allocation.discountFen, payableFen: allocation.payableFen };
-        order.businessSnapshot = { ...(order.businessSnapshot || {}), amount: order.amount, goodsAmount: order.goodsAmount, discountAmount: order.discountAmount, freightAmount: order.freightAmount, pointsUsed: order.pointsUsed, pointsDiscountAmount: order.pointsDiscountAmount, couponSnapshot: order.couponSnapshot, allocationSnapshot: order.allocationSnapshot, checkoutGroupId: group.id };
+        order.businessSnapshot = { ...(order.businessSnapshot || {}), amount: order.amount, goodsAmount: order.goodsAmount, discountAmount: order.discountAmount, memberDiscountAmount: order.memberDiscountAmount, freightAmount: order.freightAmount, pointsUsed: order.pointsUsed, pointsDiscountAmount: order.pointsDiscountAmount, couponSnapshot: order.couponSnapshot, allocationSnapshot: order.allocationSnapshot, checkoutGroupId: group.id };
       }
       await orderRepo.save(orders);
 
@@ -6663,7 +6725,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       };
       group.status = this.computeCheckoutGroupStatus(orders);
       group.paymentTasks = await Promise.all(orders.map((order) => this.buildCheckoutPaymentTask(tenant, order)));
-      group.businessSnapshot = { amount: group.amount, goodsAmount: group.goodsAmount, discountAmount: group.discountAmount, freightAmount: group.freightAmount, paymentMethod: group.paymentMethod, coupon: group.allocationSnapshot.coupon, points: group.allocationSnapshot.points, allocationSnapshot: group.allocationSnapshot };
+      group.businessSnapshot = { amount: group.amount, goodsAmount: group.goodsAmount, discountAmount: group.discountAmount, memberDiscountAmount: quote.memberDiscountAmount, freightAmount: group.freightAmount, paymentMethod: group.paymentMethod, coupon: group.allocationSnapshot.coupon, points: group.allocationSnapshot.points, allocationSnapshot: group.allocationSnapshot };
       await groupRepo.save(group);
       return { group, orders };
     });
@@ -6713,6 +6775,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         await this.recordMallOrderEvent(manager, order, { eventKey: `paid:balance:group:${group.id}`, eventType: "payment_confirmed", fromStatus: "pending_payment", toStatus: "paid", source: "user", operator: String(user.id), remark: "跨店结算组余额统一支付", detail: { checkoutGroupId: group.id, groupNo: group.groupNo, transactionNo, amount: order.amount } });
         await this.updateGroupBuyRecordsForOrder(manager, order, "paid");
         await this.deductLockedInventory(manager, order);
+        await this.activateMallMembershipForOrder(manager, order);
         await this.awardMallPurchasePoints(order, manager);
         await this.createMallCommissionForOrder(manager, order);
       }
@@ -6890,11 +6953,121 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     return "请按该子订单的支付方式继续处理。";
   }
 
+  private async activeMallMembershipMap(user: User, tenant: Tenant, manager?: Pick<DataSource["manager"], "getRepository">) {
+    const repo = manager ? manager.getRepository(MallMembershipPurchase) : this.membershipPurchases;
+    const rows = await repo.createQueryBuilder("membership")
+      .leftJoinAndSelect("membership.merchant", "membershipMerchant")
+      .innerJoinAndSelect("membership.order", "membershipOrder")
+      .where("membership.tenantId = :tenantId", { tenantId: tenant.id })
+      .andWhere("membership.userId = :userId", { userId: user.id })
+      .andWhere("membership.status = :status", { status: "active" })
+      .orderBy("membership.expiresAt", "DESC")
+      .addOrderBy("membership.id", "DESC")
+      .getMany();
+    const result = new Map<number, MallMembershipPurchase>();
+    for (const row of rows) if (row.merchant?.id && mallMembershipEffective(row) && !result.has(row.merchant.id)) result.set(row.merchant.id, row);
+    return result;
+  }
+
+  private publicMallMembership(merchant: MallMerchant | null | undefined, purchase: MallMembershipPurchase | null) {
+    const enabled = Boolean(merchant && merchant.membershipEnabled !== false);
+    const effective = enabled && mallMembershipEffective(purchase);
+    const rate = normalizeMallMemberDiscountRate(merchant?.memberDiscountRate);
+    return {
+      enabled,
+      isMember: effective,
+      status: effective ? "active" : purchase ? "expired" : "none",
+      merchant: this.publicMerchantSummary(merchant),
+      startsAt: purchase?.startsAt || null,
+      expiresAt: purchase?.expiresAt || null,
+      sourceOrderNo: purchase?.order?.orderNo || null,
+      validityDays: purchase?.validityDays || null,
+      discountRate: rate,
+      memberDiscountPercent: Math.round(rate * 100),
+      memberDiscountText: `${rate * 10}折`,
+      benefits: effective ? ["店铺会员价", "单层真实订单推广资格"] : []
+    };
+  }
+
+  private async activateMallMembershipForOrder(manager: Pick<DataSource["manager"], "getRepository">, order: MallOrder) {
+    const itemRepo = manager.getRepository(MallOrderItem);
+    const purchaseRepo = manager.getRepository(MallMembershipPurchase);
+    const items = await itemRepo.find({ where: { order: { id: order.id } }, relations: ["product", "merchant"], loadEagerRelations: false, order: { id: "ASC" } });
+    const activated: MallMembershipPurchase[] = [];
+    for (const item of items) {
+      if (!item.product?.membershipProduct) continue;
+      const merchant = item.merchant || item.product.merchant || order.merchant;
+      if (!merchant) continue;
+      const existing = await purchaseRepo.createQueryBuilder("membership")
+        .where("membership.orderItemId = :orderItemId", { orderItemId: item.id })
+        .setLock("pessimistic_write")
+        .getOne();
+      if (existing) {
+        activated.push(existing);
+        continue;
+      }
+      const currentRows = await purchaseRepo.createQueryBuilder("membership")
+        .where("membership.tenantId = :tenantId", { tenantId: order.tenant.id })
+        .andWhere("membership.userId = :userId", { userId: order.user.id })
+        .andWhere("membership.merchantId = :merchantId", { merchantId: merchant.id })
+        .andWhere("membership.status = :status", { status: "active" })
+        .orderBy("membership.expiresAt", "DESC")
+        .addOrderBy("membership.id", "DESC")
+        .getMany();
+      const now = new Date();
+      const current = currentRows.find((row) => mallMembershipEffective(row));
+      const startsAt = current?.expiresAt && current.expiresAt > now ? current.expiresAt : now;
+      const validityDays = Math.max(Math.trunc(Number(item.product.membershipValidityDays || 365)), 1);
+      const purchase = await purchaseRepo.save(purchaseRepo.create({
+        tenant: order.tenant,
+        merchant,
+        user: order.user,
+        order,
+        orderItem: item,
+        product: item.product,
+        price: item.totalAmount,
+        validityDays,
+        startsAt,
+        expiresAt: mallMembershipPurchaseExpiresAt(startsAt, validityDays),
+        status: "active",
+        revokedAt: null,
+        revokeReason: null
+      }));
+      activated.push(purchase);
+      await this.recordMallOrderEvent(manager, order, { eventKey: `membership:activated:item:${item.id}`, eventType: "mall_membership_activated", fromStatus: order.status, toStatus: order.status, source: "system", operator: "mall_membership", remark: `已开通店铺会员，有效期 ${validityDays} 天`, detail: { membershipPurchaseId: purchase.id, merchantId: merchant.id, orderItemId: item.id, startsAt, expiresAt: purchase.expiresAt, validityDays } });
+    }
+    return activated;
+  }
+
+  private async revokeMallMembershipForRefund(manager: Pick<DataSource["manager"], "getRepository">, order: MallOrder, refund: MallRefund, approvedRefundFen: number) {
+    const purchaseRepo = manager.getRepository(MallMembershipPurchase);
+    const refundItemRepo = manager.getRepository(MallRefundItem);
+    const refs = await refundItemRepo.find({ where: { refund: { id: refund.id } }, relations: ["orderItem"], loadEagerRelations: false });
+    const orderItemIds = new Set(refs.filter((row) => Number(row.approvedQuantity || 0) > 0).map((row) => row.orderItem.id));
+    const fullyRefunded = approvedRefundFen >= yuanToFen(order.amount);
+    const rows = await purchaseRepo.createQueryBuilder("membership")
+      .innerJoinAndSelect("membership.orderItem", "membershipOrderItem")
+      .where("membership.orderId = :orderId", { orderId: order.id })
+      .andWhere("membership.status = :status", { status: "active" })
+      .setLock("pessimistic_write")
+      .getMany();
+    for (const purchase of rows) {
+      if (!fullyRefunded && !orderItemIds.has(purchase.orderItem.id)) continue;
+      purchase.status = "revoked";
+      purchase.revokedAt = new Date();
+      purchase.revokeReason = `售后退款 ${refund.refundNo}`;
+      await purchaseRepo.save(purchase);
+      await this.recordMallOrderEvent(manager, order, { eventKey: `membership:revoked:refund:${refund.id}:purchase:${purchase.id}`, eventType: "mall_membership_revoked", fromStatus: order.status, toStatus: order.status, source: "system", operator: "mall_membership", remark: `退款后撤销店铺会员权益：${refund.refundNo}`, detail: { membershipPurchaseId: purchase.id, refundId: refund.id, approvedRefundFen } });
+    }
+  }
+
   private async previewGoodsAmount(tenant: Tenant, items: MallOrderInputItem[], user?: User) {
     if (!items.length) throw new BadRequestException("请选择要购买的商品");
     const previewItems: MallOrderPreviewItem[] = [];
     const lines: MallOrderPreviewLine[] = [];
     let goodsAmount = 0;
+    let memberDiscountAmount = 0;
+    const membershipMap = user ? await this.activeMallMembershipMap(user, tenant) : new Map<number, MallMembershipPurchase>();
     for (const input of items) {
       const quantity = Math.max(Number(input.quantity || 0), 0);
       if (!quantity) throw new BadRequestException("购买数量必须大于 0");
@@ -6903,17 +7076,24 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       if (!sku || sku.product.status !== "published") throw new NotFoundException("商品规格不存在或已下架");
       const available = Number(sku.stock || 0) - Number(sku.lockedStock || 0);
       if (available < quantity) throw new BadRequestException(`「${sku.product.title}」库存不足`);
-      const flashSale = input.flashSaleId ? await this.resolveActiveFlashSale(undefined, tenant, input.flashSaleId, sku, user, quantity) : null;
-      const groupBuy = input.groupBuyId ? await this.resolveActiveGroupBuy(undefined, tenant, input.groupBuyId, sku, user, quantity) : null;
-      const unitPrice = flashSale ? Number(flashSale.salePrice || 0) : groupBuy ? Number(groupBuy.groupPrice || 0) : Number(sku.price || 0);
-      const amount = unitPrice * quantity;
-      goodsAmount += amount;
       const merchant = sku.merchant || sku.product.merchant || await this.ensureDefaultMerchant(tenant);
       if (merchant.tenant.id !== tenant.id || merchant.status !== "active" || !merchant.mallEnabled) throw new BadRequestException(`「${sku.product.title}」所属店铺暂未开放`);
-      previewItems.push({ productId: sku.product.id, categoryId: sku.product.category?.id || null, platformCategoryId: sku.product.platformCategory?.id || null, merchantId: merchant.id, amount });
-      lines.push({ skuId: sku.id, productId: sku.product.id, productTitle: sku.product.title, productVersion: Number(sku.product.contentVersion || 1), skuName: flashSale ? `${sku.name}（秒杀：${flashSale.title}）` : groupBuy ? `${sku.name}（拼团：${groupBuy.title}）` : sku.name, quantity, unitPrice: unitPrice.toFixed(2), lineAmount: amount.toFixed(2), availableStock: Math.max(available, 0), merchant: this.publicMerchantSummary(merchant), flashSaleId: flashSale?.id || null, groupBuyId: groupBuy?.id || null });
+      const flashSale = input.flashSaleId ? await this.resolveActiveFlashSale(undefined, tenant, input.flashSaleId, sku, user, quantity) : null;
+      const groupBuy = input.groupBuyId ? await this.resolveActiveGroupBuy(undefined, tenant, input.groupBuyId, sku, user, quantity) : null;
+      const originalUnitPriceFen = yuanToFen(flashSale ? Number(flashSale.salePrice || 0) : groupBuy ? Number(groupBuy.groupPrice || 0) : Number(sku.price || 0));
+      const membership = !flashSale && !groupBuy && !sku.product.membershipProduct && merchant.membershipEnabled !== false ? membershipMap.get(merchant.id) || null : null;
+      const memberDiscountRate = membership ? normalizeMallMemberDiscountRate(merchant.memberDiscountRate) : 1;
+      const unitPriceFen = membership ? mallMemberPriceFen(originalUnitPriceFen, memberDiscountRate) : originalUnitPriceFen;
+      const unitPrice = unitPriceFen / 100;
+      const originalAmount = originalUnitPriceFen * quantity / 100;
+      const amount = unitPrice * quantity;
+      const lineMemberDiscountAmount = Math.max(originalAmount - amount, 0);
+      goodsAmount += amount;
+      memberDiscountAmount += lineMemberDiscountAmount;
+      previewItems.push({ productId: sku.product.id, categoryId: sku.product.category?.id || null, platformCategoryId: sku.product.platformCategory?.id || null, merchantId: merchant.id, amount, originalAmount, memberDiscountAmount: lineMemberDiscountAmount });
+      lines.push({ skuId: sku.id, productId: sku.product.id, productTitle: sku.product.title, productVersion: Number(sku.product.contentVersion || 1), skuName: flashSale ? `${sku.name}（秒杀：${flashSale.title}）` : groupBuy ? `${sku.name}（拼团：${groupBuy.title}）` : sku.name, quantity, unitPrice: unitPrice.toFixed(2), originalUnitPrice: (originalUnitPriceFen / 100).toFixed(2), lineAmount: amount.toFixed(2), memberDiscountAmount: lineMemberDiscountAmount.toFixed(2), memberDiscountRate: membership ? memberDiscountRate : null, membershipApplied: Boolean(lineMemberDiscountAmount), availableStock: Math.max(available, 0), merchant: this.publicMerchantSummary(merchant), flashSaleId: flashSale?.id || null, groupBuyId: groupBuy?.id || null });
     }
-    return { goodsAmount, items: previewItems, lines };
+    return { goodsAmount, memberDiscountAmount, items: previewItems, lines };
   }
 
   private async computeMallPointsQuote(user: User, tenant: Tenant, amountAfterCoupon: number, requestedPoints?: number, manager?: Pick<DataSource["manager"], "getRepository">) {
@@ -7010,14 +7190,13 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     const goodsFen = items.map((item) => yuanToFen(item.totalAmount));
     const commissionablePaidFen = Math.min(Math.max(yuanToFen(order.amount) - yuanToFen(order.freightAmount || 0), 0), goodsFen.reduce((sum, value) => sum + value, 0));
     const baseAmountsFen = allocateMallCommissionBaseFen(goodsFen, commissionablePaidFen);
-    const parentAgentIds = await this.mallAgentParentChain(manager, agent, order.tenant.id);
     const savedRows: MallCommission[] = [];
     for (const [index, item] of items.entries()) {
-      const selected = selectMallCommissionRule(rules.map((rule) => ({ ...rule, merchantId: rule.merchant?.id || null, productId: rule.product?.id || null, promotionCodeId: rule.promotionCode?.id || null })), { merchantId: order.merchant?.id || item.merchant?.id || null, productId: item.product.id, promotionCodeId: promotion?.id || null });
+      const selected = selectMallCommissionRule(rules.map((rule) => ({ ...rule, merchantId: rule.merchant?.id || null, productId: rule.product?.id || null, promotionCodeId: rule.promotionCode?.id || null, directFixedAmountFen: yuanToFen(rule.directFixedAmount || 0) })), { merchantId: order.merchant?.id || item.merchant?.id || null, productId: item.product.id, promotionCodeId: promotion?.id || null });
       const legacyRateBps = Math.round(Math.min(Math.max(Number(snapshot?.commissionRate ?? promotion?.commissionRate ?? 0), 0), 1) * 10000);
       const directRateBps = selected?.directRateBps ?? legacyRateBps;
-      const agentLevelRatesBps = selected?.agentLevelRatesBps || [];
-      const beneficiaries = buildMallCommissionBeneficiaries({ promoterUserId, directAgentId: agent?.id || null, parentAgentIds, directRateBps, agentLevelRatesBps });
+      const directFixedAmountFen = selected?.directFixedAmountFen || 0;
+      const beneficiaries = buildMallCommissionBeneficiaries({ promoterUserId, directAgentId: agent?.id || null, directRateBps, directFixedAmountFen });
       const baseAmountFen = baseAmountsFen[index] || 0;
       if (!baseAmountFen || !beneficiaries.length) continue;
       for (const beneficiary of beneficiaries) {
@@ -7031,9 +7210,11 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
           savedRows.push(replay);
           continue;
         }
-        const amountFen = commissionAmountFen(baseAmountFen, beneficiary.rateBps);
+        const amountFen = beneficiary.fixedAmountFen > 0
+          ? fixedCommissionAmountFen(baseAmountFen, beneficiary.fixedAmountFen, item.quantity)
+          : commissionAmountFen(baseAmountFen, beneficiary.rateBps);
         if (!amountFen) continue;
-        const ruleSnapshot = selected ? { id: selected.id, ruleKey: selected.ruleKey, name: selected.name, version: selected.version, scopeType: selected.scopeType, priority: selected.priority, directRateBps: selected.directRateBps, agentLevelRatesBps: selected.agentLevelRatesBps || [], startsAt: selected.startsAt, endsAt: selected.endsAt } : { id: null, ruleKey: "legacy-promotion-rate", name: "历史推广码比例兼容规则", version: 1, scopeType: "channel", priority: 0, directRateBps: legacyRateBps, agentLevelRatesBps: [] };
+        const ruleSnapshot = selected ? { id: selected.id, ruleKey: selected.ruleKey, name: selected.name, version: selected.version, scopeType: selected.scopeType, priority: selected.priority, directRateBps: selected.directRateBps, directFixedAmount: selected.directFixedAmount, distributionLevel: 1, startsAt: selected.startsAt, endsAt: selected.endsAt } : { id: null, ruleKey: "legacy-promotion-rate", name: "历史推广码比例兼容规则", version: 1, scopeType: "channel", priority: 0, directRateBps: legacyRateBps, directFixedAmount: null, distributionLevel: 1 };
         const status = snapshot?.riskDecision === "review" ? "risk_review" : "pending";
         const row = await commissionRepo.save(commissionRepo.create({
           tenant: order.tenant,
@@ -7055,7 +7236,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
           commissionAmount: fenToYuan(amountFen),
           originalCommissionAmount: fenToYuan(amountFen),
           ruleSnapshot,
-          calculationSnapshot: { orderAmountFen: yuanToFen(order.amount), freightAmountFen: yuanToFen(order.freightAmount || 0), goodsAmountFen: goodsFen.reduce((sum, value) => sum + value, 0), baseAmountFen, rateBps: beneficiary.rateBps, commissionAmountFen: amountFen, productId: item.product.id, orderItemId: item.id, beneficiaryType: beneficiary.beneficiaryType, beneficiaryId: beneficiary.beneficiaryId, beneficiaryLevel: beneficiary.level },
+          calculationSnapshot: { orderAmountFen: yuanToFen(order.amount), freightAmountFen: yuanToFen(order.freightAmount || 0), goodsAmountFen: goodsFen.reduce((sum, value) => sum + value, 0), baseAmountFen, rateBps: beneficiary.rateBps, fixedAmountFen: beneficiary.fixedAmountFen, quantity: item.quantity, commissionAmountFen: amountFen, productId: item.product.id, orderItemId: item.id, beneficiaryType: beneficiary.beneficiaryType, beneficiaryId: beneficiary.beneficiaryId, beneficiaryLevel: beneficiary.level },
           refundedOrderAmount: "0.00",
           clawbackAmount: "0.00",
           clawbackSettledAmount: "0.00",
@@ -7100,22 +7281,6 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     }
     await repo.save(rows);
     return rows[0];
-  }
-
-  private async mallAgentParentChain(manager: Pick<DataSource["manager"], "getRepository">, directAgent: Agent | null, tenantId: number) {
-    if (!directAgent?.id) return [];
-    const repo = manager.getRepository(Agent);
-    let cursor = await repo.findOne({ where: { id: directAgent.id }, relations: ["parentAgent"] });
-    const ids: number[] = [];
-    const visited = new Set<number>([directAgent.id]);
-    while (cursor?.parentAgent?.id && ids.length < 10 && !visited.has(cursor.parentAgent.id)) {
-      const parent = await repo.findOne({ where: { id: cursor.parentAgent.id }, relations: ["parentAgent"] });
-      if (!parent || !parent.enabled || parent.tenant?.id !== tenantId) break;
-      ids.push(parent.id);
-      visited.add(parent.id);
-      cursor = parent;
-    }
-    return ids;
   }
 
   private async saveCommissionAdjustment(manager: Pick<DataSource["manager"], "getRepository">, commission: MallCommission, input: {
@@ -7964,9 +8129,9 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     const shipments = includeFulfillmentDetails ? await this.shipments.find({ where: { order: { id: order.id } }, loadEagerRelations: false, order: { shippedAt: "ASC", id: "ASC" } }) : [];
     const shipmentRows = includeFulfillmentDetails && shipments.length ? await this.shipmentItems.find({ where: { shipment: { id: In(shipments.map((shipment) => shipment.id)) } }, relations: ["shipment", "orderItem"], loadEagerRelations: false }) : [];
     const trackingRows = includeFulfillmentDetails && shipments.length ? await this.shipmentTrackingEvents.find({ where: { shipment: { id: In(shipments.map((shipment) => shipment.id)) } }, relations: ["shipment"], loadEagerRelations: false, order: { eventAt: "ASC", id: "ASC" } }) : [];
-    const publicShipments = shipments.map((shipment) => ({ id: shipment.id, shipmentNo: shipment.shipmentNo, shipmentType: shipment.shipmentType, refundId: shipment.refund?.id || null, expressCompany: shipment.expressCompany, expressNo: shipment.expressNo, status: shipment.status, createdBy: shipment.createdBy, remark: shipment.remark, shippedAt: shipment.shippedAt, deliveredAt: shipment.deliveredAt, createdAt: shipment.createdAt, updatedAt: shipment.updatedAt, items: shipmentRows.filter((row) => row.shipment.id === shipment.id).map((row) => ({ id: row.id, orderItemId: row.orderItem.id, quantity: row.quantity, itemSnapshot: row.itemSnapshot })), trackingEvents: trackingRows.filter((row) => row.shipment.id === shipment.id).map((row) => ({ id: row.id, status: row.status, description: row.description, location: row.location, source: row.source, eventAt: row.eventAt })) }));
+    const publicShipments = shipments.map((shipment) => ({ id: shipment.id, shipmentNo: shipment.shipmentNo, shipmentType: shipment.shipmentType, refundId: shipment.refund?.id || null, expressCompany: shipment.expressCompany, expressNo: shipment.expressNo, status: shipment.status, description: shipment.remark, shippedAt: shipment.shippedAt, deliveredAt: shipment.deliveredAt, createdAt: shipment.createdAt, updatedAt: shipment.updatedAt, items: shipmentRows.filter((row) => row.shipment.id === shipment.id).map((row) => ({ id: row.id, orderItemId: row.orderItem.id, quantity: row.quantity, itemSnapshot: row.itemSnapshot })), trackingEvents: trackingRows.filter((row) => row.shipment.id === shipment.id).map((row) => ({ id: row.id, status: row.status, description: row.description, location: row.location, source: row.source, eventAt: row.eventAt })) }));
     const orderEvents = includeFulfillmentDetails ? await this.orderEvents.find({ where: { order: { id: order.id } }, loadEagerRelations: false, order: { occurredAt: "ASC", id: "ASC" } }) : [];
-    const publicEvents = orderEvents.map((event) => ({ id: event.id, eventType: event.eventType, fromStatus: event.fromStatus, toStatus: event.toStatus, source: event.source, operator: event.operator, remark: event.remark, detail: event.detail, occurredAt: event.occurredAt }));
+    const publicEvents = orderEvents.map((event) => ({ id: event.id, eventType: event.eventType, fromStatus: event.fromStatus, toStatus: event.toStatus, source: event.source, operator: event.operator, description: event.remark, occurredAt: event.occurredAt }));
     const publicOrderUser = order.user ? { id: order.user.id, nickname: order.user.nickname, phone: order.user.phone } : null;
     const groupBuyTeams = groupBuyRecords.map((record) => ({
       id: record.id,
@@ -8012,6 +8177,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       amount: order.amount,
       goodsAmount: order.goodsAmount,
       discountAmount: order.discountAmount,
+      memberDiscountAmount: order.memberDiscountAmount,
       pointsUsed: order.pointsUsed,
       pointsDiscountAmount: order.pointsDiscountAmount,
       freightAmount: order.freightAmount,
@@ -8230,12 +8396,14 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
   }
 
   private publicCheckoutGroup(checkoutGroup: MallCheckoutGroup, orders: MallOrderPublicResult[]): MallCheckoutGroupResult {
+    const snapshot = checkoutGroup.businessSnapshot as Record<string, unknown> | null;
     return {
       id: checkoutGroup.id,
       groupNo: checkoutGroup.groupNo,
       amount: checkoutGroup.amount,
       goodsAmount: checkoutGroup.goodsAmount,
       discountAmount: checkoutGroup.discountAmount,
+      memberDiscountAmount: String(snapshot?.memberDiscountAmount || "0.00"),
       freightAmount: checkoutGroup.freightAmount,
       allocationSnapshot: checkoutGroup.allocationSnapshot,
       paymentMethod: checkoutGroup.paymentMethod,
@@ -8352,8 +8520,8 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       notice: "订单状态历史由服务端事件账本记录；物流承运轨迹当前使用后台单号和查询网址，后续可接入快递鸟/快递100自动订阅。",
       addressSnapshot: order.addressSnapshot,
       timeline,
-      shipments: shipments.map((shipment) => ({ id: shipment.id, shipmentNo: shipment.shipmentNo, shipmentType: shipment.shipmentType, refundId: shipment.refund?.id || null, expressCompany: shipment.expressCompany, expressNo: shipment.expressNo, status: shipment.status, remark: shipment.remark, shippedAt: shipment.shippedAt, deliveredAt: shipment.deliveredAt, items: packageItems.filter((row) => row.shipment.id === shipment.id).map((row) => ({ orderItemId: row.orderItem.id, quantity: row.quantity, itemSnapshot: row.itemSnapshot })), trackingEvents: trackingEvents.filter((row) => row.shipment.id === shipment.id).map((row) => ({ id: row.id, status: row.status, description: row.description, location: row.location, source: row.source, eventAt: row.eventAt })) })),
-      events: events.map((event) => ({ id: event.id, eventType: event.eventType, fromStatus: event.fromStatus, toStatus: event.toStatus, source: event.source, operator: event.operator, remark: event.remark, detail: event.detail, occurredAt: event.occurredAt }))
+      shipments: shipments.map((shipment) => ({ id: shipment.id, shipmentNo: shipment.shipmentNo, shipmentType: shipment.shipmentType, refundId: shipment.refund?.id || null, expressCompany: shipment.expressCompany, expressNo: shipment.expressNo, status: shipment.status, description: shipment.remark, shippedAt: shipment.shippedAt, deliveredAt: shipment.deliveredAt, items: packageItems.filter((row) => row.shipment.id === shipment.id).map((row) => ({ orderItemId: row.orderItem.id, quantity: row.quantity, itemSnapshot: row.itemSnapshot })), trackingEvents: trackingEvents.filter((row) => row.shipment.id === shipment.id).map((row) => ({ id: row.id, status: row.status, description: row.description, location: row.location, source: row.source, eventAt: row.eventAt })) })),
+      events: events.map((event) => ({ id: event.id, eventType: event.eventType, fromStatus: event.fromStatus, toStatus: event.toStatus, source: event.source, operator: event.operator, description: event.remark, occurredAt: event.occurredAt }))
     };
   }
 
@@ -8376,6 +8544,8 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       attributes: product.attributes || {},
       price: product.price,
       originalPrice: product.originalPrice,
+      membershipProduct: product.membershipProduct === true,
+      membershipValidityDays: product.membershipValidityDays || null,
       status: product.status,
       featured: product.featured,
       sortOrder: product.sortOrder,
@@ -8404,6 +8574,9 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       region: merchant.region,
       logoUrl: merchant.logoUrl,
       notice: merchant.notice,
+      membershipEnabled: merchant.membershipEnabled !== false,
+      memberDiscountRate: normalizeMallMemberDiscountRate(merchant.memberDiscountRate),
+      memberDiscountPercent: Math.round(normalizeMallMemberDiscountRate(merchant.memberDiscountRate) * 100),
       ...extra
     };
   }
@@ -8991,11 +9164,20 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         .getOne();
       if (!lockedSku) return null;
     }
-    const sku = await repository.findOne({
-      where: { id, tenant: { id: tenantId }, enabled: true },
-      relations: ["merchant", "merchant.tenant", "product", "product.merchant", "product.merchant.tenant", "product.category", "product.platformCategory", "product.brand"],
-      loadEagerRelations: false
-    });
+    const sku = await repository.createQueryBuilder("sku")
+      .leftJoinAndSelect("sku.tenant", "skuTenant")
+      .leftJoinAndSelect("sku.merchant", "skuMerchant")
+      .leftJoinAndSelect("skuMerchant.tenant", "skuMerchantTenant")
+      .innerJoinAndSelect("sku.product", "skuProduct")
+      .leftJoinAndSelect("skuProduct.merchant", "skuProductMerchant")
+      .leftJoinAndSelect("skuProductMerchant.tenant", "skuProductMerchantTenant")
+      .leftJoinAndSelect("skuProduct.category", "skuProductCategory")
+      .leftJoinAndSelect("skuProduct.platformCategory", "skuProductPlatformCategory")
+      .leftJoinAndSelect("skuProduct.brand", "skuProductBrand")
+      .where("sku.id = :id", { id })
+      .andWhere("sku.tenantId = :tenantId", { tenantId })
+      .andWhere("sku.enabled = :enabled", { enabled: true })
+      .getOne();
     if (sku && lockedSku) {
       sku.stock = lockedSku.stock;
       sku.lockedStock = lockedSku.lockedStock;

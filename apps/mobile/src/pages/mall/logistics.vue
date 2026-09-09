@@ -39,7 +39,7 @@
       <text class="section-title">订单履约记录</text>
       <view v-for="event in logistics.events" :key="event.id" class="event-row">
         <text class="line">{{ eventText(event.eventType) }}</text>
-        <text class="muted">{{ dateText(event.occurredAt) }} · {{ event.remark || `${event.fromStatus || "-"} → ${event.toStatus}` }}</text>
+        <text class="muted">{{ dateText(event.occurredAt) }} · {{ event.description || `${event.fromStatus || "-"} → ${event.toStatus}` }}</text>
       </view>
     </view>
 

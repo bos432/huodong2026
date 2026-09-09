@@ -1,4 +1,4 @@
-import { allocateMallCommissionBaseFen, buildMallCommissionBeneficiaries, commissionAmountFen, refundedCommissionFen, selectMallCommissionRule } from "./mall-commission-policy";
+import { allocateMallCommissionBaseFen, buildMallCommissionBeneficiaries, commissionAmountFen, fixedCommissionAmountFen, refundedCommissionFen, selectMallCommissionRule } from "./mall-commission-policy";
 import { describe, expect, it } from "vitest";
 
 describe("mall commission policy", () => {
@@ -21,21 +21,22 @@ describe("mall commission policy", () => {
     expect(allocated.reduce((sum, value) => sum + value, 0)).toBe(1000);
   });
 
-  it("builds promoter and multi-level agent beneficiaries without duplicates", () => {
+  it("builds exactly one direct beneficiary and ignores all parent levels", () => {
     expect(buildMallCommissionBeneficiaries({ promoterUserId: 5, directAgentId: 10, parentAgentIds: [11, 12], directRateBps: 500, agentLevelRatesBps: [200, 100, 50] })).toEqual([
-      { beneficiaryType: "promoter", beneficiaryId: 5, level: 0, rateBps: 500 },
-      { beneficiaryType: "agent", beneficiaryId: 10, level: 1, rateBps: 200 },
-      { beneficiaryType: "agent", beneficiaryId: 11, level: 2, rateBps: 100 },
-      { beneficiaryType: "agent", beneficiaryId: 12, level: 3, rateBps: 50 }
+      { beneficiaryType: "promoter", beneficiaryId: 5, level: 0, rateBps: 500, fixedAmountFen: 0 }
     ]);
     expect(buildMallCommissionBeneficiaries({ directAgentId: 10, parentAgentIds: [11], directRateBps: 500, agentLevelRatesBps: [200] })).toEqual([
-      { beneficiaryType: "agent", beneficiaryId: 10, level: 0, rateBps: 500 },
-      { beneficiaryType: "agent", beneficiaryId: 11, level: 1, rateBps: 200 }
+      { beneficiaryType: "agent", beneficiaryId: 10, level: 0, rateBps: 500, fixedAmountFen: 0 }
+    ]);
+    expect(buildMallCommissionBeneficiaries({ promoterUserId: 5, directRateBps: 0, directFixedAmountFen: 20000 })).toEqual([
+      { beneficiaryType: "promoter", beneficiaryId: 5, level: 0, rateBps: 0, fixedAmountFen: 20000 }
     ]);
   });
 
   it("calculates integer-fen commission and cumulative refund reductions", () => {
     expect(commissionAmountFen(999, 333)).toBe(33);
+    expect(fixedCommissionAmountFen(39900, 20000)).toBe(20000);
+    expect(fixedCommissionAmountFen(30000, 20000, 2)).toBe(30000);
     expect(refundedCommissionFen(500, 10000, 2500)).toBe(375);
     expect(refundedCommissionFen(500, 10000, 10000)).toBe(0);
   });
