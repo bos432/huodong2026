@@ -47,6 +47,7 @@ npm --prefix apps/mobile run build:h5
 | 螺丝帽短信接口 | `988f88f0` | `apps/api/src/modules/v1/notification-provider.service.ts`、后台系统设置短信字段 |
 | Codex 维护笔记 | `b48dd8a5` | 本文件和 `AGENTS.md` |
 | 小程序审核被判教育/课程销售 | 本次提交 | 小程序前台文案、默认装修、演示 seed；避免“课程/题库/答案/培训/教育/售价”等审核敏感表达 |
+| 商城会员单层推广 | 本次提交 | `mall.service.ts`、`mall-commission-policy.ts`、会员推广收益页；不得恢复上级佣金或默认店铺代理计佣 |
 
 ## 功能排查重点
 

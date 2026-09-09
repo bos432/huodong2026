@@ -60,8 +60,9 @@
     <view v-if="mallMemberships.length" class="profile-section app-enter" :style="motionStyle(98)">
       <view class="profile-section-head"><view><text class="profile-section-title">商城会员权益</text><text class="profile-section-copy">会员价与单层真实订单推广</text></view></view>
       <view class="profile-link-list">
-        <view v-for="item in mallMemberships" :key="item.merchant?.id" class="profile-link-row" role="button" tabindex="0" @click="goMallMembership(item)">
-          <view><text class="entry-title">{{ item.merchant?.name || "商城店铺" }} · {{ item.memberDiscountText }}</text><text class="entry-copy">有效期至 {{ formatMembershipDate(item.expiresAt) }}，进入店铺查看会员价和推广码。</text></view><text class="entry-arrow">›</text>
+        <view v-for="item in mallMemberships" :key="item.merchant?.id" class="profile-link-row membership-entry">
+          <view class="membership-entry-main" role="button" tabindex="0" @click="goMallMembership(item)" @keyup.enter="goMallMembership(item)" @keyup.space.prevent="goMallMembership(item)"><text class="entry-title">{{ item.merchant?.name || "商城店铺" }} · {{ item.memberDiscountText }}</text><text class="entry-copy">有效期至 {{ formatMembershipDate(item.expiresAt) }}，进入店铺查看会员价和推广码。</text></view>
+          <view class="membership-income-link" role="button" tabindex="0" aria-label="查看推广收益" @click.stop="goMallReferralCommissions(item)" @keyup.enter.stop="goMallReferralCommissions(item)" @keyup.space.stop.prevent="goMallReferralCommissions(item)">收益明细</view>
         </view>
       </view>
     </view>
@@ -650,6 +651,7 @@ async function handlePhoneBound(profileData: any) {
 }
 function formatMembershipDate(value: any) { return value ? String(value).slice(0, 10) : "长期"; }
 function goMallMembership(item: any) { if (item?.merchant?.id) uni.navigateTo({ url: withTenantCode(`/pages/mall/merchant?id=${item.merchant.id}`) }); }
+function goMallReferralCommissions(item: any) { if (item?.merchant?.id) navigateProtected(`/pages/user/mall-referral-commissions?merchantId=${item.merchant.id}`); }
 function resetUserState() {
   loadingProfile.value = false;
   profile.value = null;
@@ -964,6 +966,8 @@ function logoutUser() {
 .profile-link-list { overflow: hidden; border: 1rpx solid #e2eeeb; border-radius: 10rpx; }
 .profile-link-row { min-height: 112rpx; display: flex; align-items: center; justify-content: space-between; gap: 18rpx; padding: 18rpx 20rpx; border-bottom: 1rpx solid #e2eeeb; }
 .profile-link-row:last-child { border-bottom: 0; }
+.membership-entry-main { min-width: 0; flex: 1; }
+.membership-income-link { flex: 0 0 auto; padding: 12rpx 16rpx; border: 1rpx solid #b9d8ce; border-radius: 999rpx; color: #275f52; font-size: 23rpx; font-weight: 800; }
 .admin-entry { display: flex; align-items: center; justify-content: space-between; background: #edf7f5; }
 .entry-title {
   display: block;

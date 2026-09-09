@@ -98,6 +98,12 @@ export class MallPublicController {
     return this.service.ensureMallMembershipReferral(user, this.tenantContext(req, tenantCode), Number(merchantId || 0));
   }
 
+  @Get("me/mall/referral-commissions")
+  async myMallReferralCommissions(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string, @Query("status") status?: string) {
+    const user = await this.publicService.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myMallReferralCommissions(user, this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined, status);
+  }
+
   @Get("mall/flash-sales")
   flashSales(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Query("merchantId") merchantId?: string) {
     return this.service.publicFlashSales(this.tenantContext(req, tenantCode), merchantId ? Number(merchantId) : undefined);

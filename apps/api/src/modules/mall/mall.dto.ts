@@ -1265,13 +1265,6 @@ export class MallCommissionRuleDto {
   directFixedAmount?: number | null;
 
   @IsOptional()
-  @IsArray()
-  @IsInt({ each: true })
-  @Min(0, { each: true })
-  @Max(10000, { each: true })
-  agentLevelRatesBps?: number[];
-
-  @IsOptional()
   @IsDateString()
   startsAt?: string | null;
 

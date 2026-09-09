@@ -39,11 +39,11 @@ describe("mall checkout dto", () => {
     await expect(pipe.transform({ expressNo: "SF456" }, { type: "body", metatype: MallShipmentUpdateDto })).rejects.toThrow();
   });
 
-  it("transforms commission rule basis points and agent levels", async () => {
+  it("transforms direct commission rules and strips legacy level fields", async () => {
     const result = await pipe.transform({ name: "渠道佣金", scopeType: "channel", promotionCodeId: "8", directRateBps: "500", agentLevelRatesBps: [200, 100] }, { type: "body", metatype: MallCommissionRuleDto });
     expect(result.promotionCodeId).toBe(8);
     expect(result.directRateBps).toBe(500);
-    expect(result.agentLevelRatesBps).toEqual([200, 100]);
+    expect((result as any).agentLevelRatesBps).toBeUndefined();
   });
 
   it("rejects commission rates above one hundred percent", async () => {

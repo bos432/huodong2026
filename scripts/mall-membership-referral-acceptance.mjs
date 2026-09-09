@@ -157,6 +157,12 @@ try {
   const commissions = await request(`/admin/mall/commissions?tenantId=${tenant.id}&merchantId=${merchant.id}&keyword=${encodeURIComponent(referredPurchase.order.orderNo)}`, { token: adminToken });
   assert(commissions.length === 1, `真实推广订单必须只产生 1 条佣金，实际 ${commissions.length}`);
   assert(Number(commissions[0].commissionAmount) === 200 && commissions[0].beneficiaryType === "promoter", "真实推广订单未产生固定 200 元会员佣金");
+  const promoterIncome = await request(`/public/me/mall/referral-commissions?merchantId=${merchant.id}`, { token: promoter.token });
+  assert(promoterIncome.mode === "direct_order_only" && promoterIncome.items.some((row) => row.id === commissions[0].id), "推广会员端未显示本人佣金");
+  assert(Number(promoterIncome.summary.pendingAmount) >= 200, "推广会员端待结算汇总不正确");
+  assert(!JSON.stringify(promoterIncome).includes("13990009102"), "推广收益接口不应暴露买家手机号");
+  const buyerIncome = await request(`/public/me/mall/referral-commissions?merchantId=${merchant.id}`, { token: buyer.token });
+  assert(!buyerIncome.items.some((row) => row.id === commissions[0].id), "购买人不应看到推广人的佣金记录");
 
   const selfPurchase = await createOfflineOrder(promoter.token, promoterAddress.id, regularSku.id, `self-${stamp}`, referral.code);
   await request(`/admin/mall/orders/${selfPurchase.order.id}/confirm-offline-payment`, { method: "POST", token: adminToken, body: {} });
@@ -190,6 +196,8 @@ try {
     memberPrice: memberQuote.goodsAmount,
     memberDiscount: memberQuote.memberDiscountAmount,
     directCommission: commissions[0].commissionAmount,
+    promoterIncomeVisible: promoterIncome.items.some((row) => row.id === commissions[0].id),
+    buyerIncomeCount: buyerIncome.items.length,
     selfPurchaseCommissionCount: selfCommissions.length,
     membershipRevoked: !revokedMembership.isMember,
     passed: true

@@ -97,6 +97,7 @@
         { "path": "login", "style": { "navigationBarTitleText": "登录" } },
         { "path": "orders", "style": { "navigationBarTitleText": "我的订单" } },
         { "path": "mall-orders", "style": { "navigationBarTitleText": "商城订单" } },
+        { "path": "mall-referral-commissions", "style": { "navigationBarTitleText": "推广收益" } },
         { "path": "mall-order-detail", "style": { "navigationBarTitleText": "商城订单详情" } },
         { "path": "registration", "style": { "navigationBarTitleText": "报名详情" } },
         { "path": "review", "style": { "navigationBarTitleText": "活动评价" } },

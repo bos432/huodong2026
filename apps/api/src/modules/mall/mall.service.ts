@@ -1599,6 +1599,61 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     return { code: row.code, merchant: this.publicMerchantSummary(merchant), expiresAt: row.endsAt, mode: "direct_order_only", orderCount: row.orderCount, orderAmount: row.orderAmount };
   }
 
+  async myMallReferralCommissions(user: User, context?: PublicTenantContext, merchantId?: number, status?: string) {
+    const tenant = await this.requirePublicTenant(context);
+    const normalizedStatus = String(status || "").trim();
+    if (normalizedStatus && !["risk_review", "pending", "settled", "void"].includes(normalizedStatus)) throw new BadRequestException("推广收益状态不正确");
+    const base = this.commissions.createQueryBuilder("commission")
+      .leftJoin("commission.tenant", "tenant")
+      .leftJoin("commission.promoterUser", "promoterUser")
+      .where("tenant.id = :tenantId", { tenantId: tenant.id })
+      .andWhere("promoterUser.id = :userId", { userId: user.id });
+    if (merchantId) base.leftJoin("commission.merchant", "merchantFilter").andWhere("merchantFilter.id = :merchantId", { merchantId: Number(merchantId) });
+    const summaryRow = await base.clone()
+      .select("COUNT(commission.id)", "count")
+      .addSelect("COALESCE(SUM(CASE WHEN commission.status = 'pending' THEN commission.commissionAmount ELSE 0 END), 0)", "pendingAmount")
+      .addSelect("COALESCE(SUM(CASE WHEN commission.status = 'risk_review' THEN commission.commissionAmount ELSE 0 END), 0)", "riskReviewAmount")
+      .addSelect("COALESCE(SUM(CASE WHEN commission.status = 'settled' THEN commission.commissionAmount ELSE 0 END), 0)", "settledAmount")
+      .addSelect("COALESCE(SUM(CASE WHEN commission.clawbackStatus = 'pending' THEN GREATEST(commission.clawbackAmount - commission.clawbackSettledAmount, 0) ELSE 0 END), 0)", "pendingClawbackAmount")
+      .getRawOne<Record<string, string>>();
+    const list = base.clone()
+      .leftJoinAndSelect("commission.merchant", "merchant")
+      .leftJoinAndSelect("commission.order", "order")
+      .leftJoinAndSelect("commission.orderItem", "orderItem")
+      .leftJoinAndSelect("commission.product", "product")
+      .leftJoinAndSelect("commission.promotionCode", "promotionCode")
+      .orderBy("commission.createdAt", "DESC")
+      .take(100);
+    if (normalizedStatus) list.andWhere("commission.status = :commissionStatus", { commissionStatus: normalizedStatus });
+    const rows = await list.getMany();
+    return {
+      mode: "direct_order_only",
+      notice: "仅直接分享产生的真实支付订单可计佣；自购不计佣，退款将按规则扣回。佣金由平台审核后结算。",
+      summary: {
+        count: Number(summaryRow?.count || 0),
+        pendingAmount: Number(summaryRow?.pendingAmount || 0).toFixed(2),
+        riskReviewAmount: Number(summaryRow?.riskReviewAmount || 0).toFixed(2),
+        settledAmount: Number(summaryRow?.settledAmount || 0).toFixed(2),
+        pendingClawbackAmount: Number(summaryRow?.pendingClawbackAmount || 0).toFixed(2)
+      },
+      items: rows.map((row) => ({
+        id: row.id,
+        merchant: row.merchant ? this.publicMerchantSummary(row.merchant) : null,
+        orderNo: row.order?.orderNo || null,
+        productTitle: row.product?.title || row.orderItem?.productTitle || "商城商品",
+        promotionCode: row.promotionCode?.code || row.code,
+        orderAmount: row.orderAmount,
+        commissionAmount: row.commissionAmount,
+        originalCommissionAmount: row.originalCommissionAmount,
+        clawbackAmount: fenToYuan(Math.max(yuanToFen(row.clawbackAmount) - yuanToFen(row.clawbackSettledAmount), 0)),
+        status: row.status,
+        statusText: this.mallCommissionStatusText(row.status),
+        createdAt: row.createdAt,
+        settledAt: row.settledAt
+      }))
+    };
+  }
+
   async favoriteStatus(user: User, productId: number, context?: PublicTenantContext) {
     const tenant = await this.requirePublicTenant(context);
     const product = await this.findPublicProductRow(Number(productId), tenant.id);
@@ -3305,8 +3360,6 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     const directRateBps = Math.max(Math.trunc(Number(dto.directRateBps || 0)), 0);
     const directFixedAmount = Math.max(Number(dto.directFixedAmount || 0), 0);
     if (directRateBps > 0 && directFixedAmount > 0) throw new BadRequestException("固定佣金与比例佣金只能选择一种");
-    const agentLevelRatesBps = (dto.agentLevelRatesBps || []).map((rate) => Math.max(Math.trunc(Number(rate || 0)), 0));
-    if (agentLevelRatesBps.some((rate) => rate > 0)) throw new BadRequestException("商城推广仅支持单层直接佣金，不能配置上级或多级代理佣金");
     const startsAt = dto.startsAt ? new Date(dto.startsAt) : null;
     const endsAt = dto.endsAt ? new Date(dto.endsAt) : null;
     if (startsAt && endsAt && startsAt >= endsAt) throw new BadRequestException("佣金规则结束时间必须晚于开始时间");
@@ -3546,7 +3599,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
       { header: "代理", key: "agent", width: 18 },
       { header: "商品", key: "product", width: 24 },
       { header: "规则", key: "rule", width: 26 },
-      { header: "受益层级", key: "beneficiary", width: 16 },
+      { header: "佣金归属", key: "beneficiary", width: 16 },
       { header: "计佣基数", key: "orderAmount", width: 12 },
       { header: "佣金比例", key: "commissionRate", width: 12 },
       { header: "原始佣金", key: "originalCommissionAmount", width: 12 },
@@ -3574,7 +3627,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         agent: row.agent?.name || "",
         product: row.product?.title || row.orderItem?.productTitle || "",
         rule: row.rule ? `${row.rule.name} v${row.rule.version}` : String(row.ruleSnapshot?.name || "历史推广码比例"),
-        beneficiary: `${row.beneficiaryType === "promoter" ? "推广人" : row.beneficiaryType === "agent" ? "代理" : "未绑定"} / L${row.beneficiaryLevel}`,
+        beneficiary: row.beneficiaryType === "promoter" ? "直接推广会员" : row.beneficiaryType === "agent" ? "直接推广代理" : "未绑定",
         orderAmount: row.orderAmount,
         commissionRate: `${(Number(row.commissionRate || 0) * 100).toFixed(2)}%`,
         originalCommissionAmount: row.originalCommissionAmount,
@@ -7163,7 +7216,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     const snapshotPromoterUserId = Number(snapshot?.promoterUserId || 0) || null;
     const snapshotAgentId = Number(snapshot?.agentId || 0) || null;
     const promoterUser = snapshotPromoterUserId ? await manager.getRepository(User).findOne({ where: { id: snapshotPromoterUserId } }) : promotion?.promoterUser || null;
-    const agent = snapshotAgentId ? await manager.getRepository(Agent).findOne({ where: { id: snapshotAgentId }, relations: ["parentAgent"] }) : promotion?.agent || order.merchant?.agent || null;
+    const agent = snapshotAgentId ? await manager.getRepository(Agent).findOne({ where: { id: snapshotAgentId } }) : promotion?.agent || null;
     const promoterUserId = promoterUser?.id || null;
     if (snapshot?.riskDecision === "blocked") {
       await this.recordMallOrderEvent(manager, order, { eventKey: `promotion:risk:${promotion?.id || "none"}`, eventType: "promotion_attribution_blocked", fromStatus: order.status, toStatus: order.status, source: "system", operator: "mall_commission", remark: String(snapshot.riskMessage || "推广归因风险已拦截佣金"), detail: { promotionCodeId: promotion?.id || null, riskRuleCode: snapshot.riskRuleCode || null, riskSeverity: snapshot.riskSeverity || null } });

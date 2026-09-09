@@ -10,7 +10,6 @@ export type MallCommissionRuleCandidate = {
   version?: number | null;
   directRateBps: number;
   directFixedAmountFen?: number | null;
-  agentLevelRatesBps?: number[] | null;
 };
 
 export type MallCommissionRuleContext = {
@@ -68,10 +67,8 @@ export function allocateMallCommissionBaseFen(lineAmountsFen: number[], paidAmou
 export function buildMallCommissionBeneficiaries(input: {
   promoterUserId?: number | null;
   directAgentId?: number | null;
-  parentAgentIds?: number[] | null;
   directRateBps: number;
   directFixedAmountFen?: number | null;
-  agentLevelRatesBps?: number[] | null;
 }) {
   const rows: MallCommissionBeneficiary[] = [];
   const directRateBps = normalizeBps(input.directRateBps);

@@ -21,11 +21,11 @@ describe("mall commission policy", () => {
     expect(allocated.reduce((sum, value) => sum + value, 0)).toBe(1000);
   });
 
-  it("builds exactly one direct beneficiary and ignores all parent levels", () => {
-    expect(buildMallCommissionBeneficiaries({ promoterUserId: 5, directAgentId: 10, parentAgentIds: [11, 12], directRateBps: 500, agentLevelRatesBps: [200, 100, 50] })).toEqual([
+  it("builds exactly one direct beneficiary", () => {
+    expect(buildMallCommissionBeneficiaries({ promoterUserId: 5, directAgentId: 10, directRateBps: 500 })).toEqual([
       { beneficiaryType: "promoter", beneficiaryId: 5, level: 0, rateBps: 500, fixedAmountFen: 0 }
     ]);
-    expect(buildMallCommissionBeneficiaries({ directAgentId: 10, parentAgentIds: [11], directRateBps: 500, agentLevelRatesBps: [200] })).toEqual([
+    expect(buildMallCommissionBeneficiaries({ directAgentId: 10, directRateBps: 500 })).toEqual([
       { beneficiaryType: "agent", beneficiaryId: 10, level: 0, rateBps: 500, fixedAmountFen: 0 }
     ]);
     expect(buildMallCommissionBeneficiaries({ promoterUserId: 5, directRateBps: 0, directFixedAmountFen: 20000 })).toEqual([
