@@ -196,7 +196,7 @@ checkSourceIncludesAll(mobileActivityEdit, [
   "结束时间必须晚于开始时间",
   "价格必须是非负金额",
   "保存成功，但刷新失败",
-  "const parts = value.trim().match",
+  "const parts = text.trim().match",
   "pointer-events: none",
   ".preview { position: relative; z-index: 1"
 ], "mobile activity editor state guard");

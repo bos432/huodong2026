@@ -52,6 +52,7 @@ const tableLabelOverrides = {
   mall_flash_sales: "商城秒杀活动",
   mall_group_buys: "商城拼团活动",
   mall_group_buy_records: "商城拼团记录",
+  mall_membership_purchases: "商城会员购买记录",
   miniprogram_release_logs: "小程序发布日志",
   miniprogram_release_settings: "小程序发布设置",
   support_work_orders: "客服工单",

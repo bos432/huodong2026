@@ -246,7 +246,8 @@ function normalizeOptions(text: string) {
 
 function parsedTime(value: unknown) {
   const text = String(value || "").trim();
-  if (!/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(?::\d{2})?$/.test(text)) return Number.NaN;
+  const parts = text.trim().match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (!parts) return Number.NaN;
   const date = new Date(`${text.replace(' ', 'T')}+08:00`);
   return formatShanghaiDateTime(date, '') === text.replace('T', ' ').slice(0, 16) ? date.getTime() : Number.NaN;
 }
