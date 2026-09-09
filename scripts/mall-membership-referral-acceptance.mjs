@@ -6,6 +6,8 @@ const mysql = require("mysql2/promise");
 const API_BASE = String(process.env.API_BASE_URL || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const TENANT_CODE = process.env.TENANT_CODE || "qiwai-showcase";
 const PASSWORD = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
+const ADMIN_USERNAME = process.env.SHOWCASE_ADMIN_USERNAME || "admin";
+const ADMIN_PASSWORD = process.env.SHOWCASE_ADMIN_PASSWORD || (ADMIN_USERNAME === "admin" ? "Admin123456" : PASSWORD);
 
 function assert(value, message) {
   if (!value) throw new Error(message);
@@ -73,7 +75,7 @@ const db = await mysql.createConnection({
 
 try {
   const stamp = `${Date.now()}-${Math.random().toString(16).slice(2, 8)}`;
-  const admin = await request("/admin/auth/login", { method: "POST", body: { username: "admin", password: "Admin123456" } });
+  const admin = await request("/admin/auth/login", { method: "POST", body: { username: ADMIN_USERNAME, password: ADMIN_PASSWORD } });
   const adminToken = admin.token;
   assert(adminToken, "平台管理员登录失败");
 

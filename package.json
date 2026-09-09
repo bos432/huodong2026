@@ -77,6 +77,7 @@
     "audit:member-level-migration": "node scripts/member-level-migration-audit.mjs",
     "browser:tenant-region": "node scripts/browser-tenant-region-acceptance.cjs",
     "smoke:mall-multi-merchant": "node scripts/smoke-mall-multi-merchant.mjs",
+    "acceptance:mall-membership-referral": "node scripts/mall-membership-referral-acceptance.mjs",
     "cleanup:online-showcase": "node scripts/cleanup-online-showcase.mjs",
     "prelaunch:online-showcase": "node scripts/prelaunch-online-showcase.mjs",
     "smoke:tenant": "node scripts/tenant-smoke.mjs",
