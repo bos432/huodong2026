@@ -204,6 +204,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     label: "系统与安全",
     scope: "platform",
     items: [
+      { index: "/brand-settings", icon: "Setting", label: "品牌设置", roles: ["system.view"], scope: "platform" },
       { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.view"], scope: "platform" },
       { index: "/config-check", icon: "Monitor", label: "上线体检", roles: ["system.view"], scope: "platform" },
       { index: "/miniprogram-release", icon: "Promotion", label: "小程序发布", roles: ["miniprogram_release.view"], scope: "platform" },
@@ -339,6 +340,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     label: "设置",
     scope: "tenant",
     items: [
+      { index: "/brand-settings", icon: "Setting", label: "品牌设置", roles: ["operation_settings.view"], scope: "tenant" },
       { index: "/system-settings", icon: "Tools", label: "运营设置", roles: ["operation_settings.view"], scope: "tenant" },
       { index: "/operation-flow", icon: "Connection", label: "操作流程图", roles: ["dashboard.view"], scope: "tenant" },
       { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["dashboard.view"], scope: "tenant" },

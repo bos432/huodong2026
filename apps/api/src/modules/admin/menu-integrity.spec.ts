@@ -304,7 +304,7 @@ describe("admin and mobile menu integrity", () => {
     expect(settingsPage).toContain('const canViewLogs = computed(() => hasPermission("logs.view"))');
     expect(settingsPage).toContain('const canViewSecurityLogs = computed(() => hasPermission("security_log.view"))');
     expect(settingsPage).toContain('const hasManagementLinks = computed(() => canManageCategories.value');
-    expect(settingsPage).toContain('v-if="hasManagementLinks" label="管理入口"');
+    expect(settingsPage).toContain('v-if="hasManagementLinks && !brandSettingsMode" label="管理入口"');
     expect(settingsPage).toContain('const canUploadImages = computed(() => canEditSettings.value && hasPermission("upload.image"))');
     expect(settingsPage).toContain('if (!canUploadImages.value)');
     expect(settingsPage).toContain('v-if="canViewSecurityLogs" text @click="go(\'/h5-code-logs\')"');

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { useRouter } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
@@ -128,8 +128,10 @@ const defaultPageTheme = {
 };
 
 const router = useRouter();
+const route = useRoute();
+const brandSettingsMode = computed(() => route.path === "/brand-settings");
 const activeTab = ref("operation");
-const operationSection = ref("registration");
+const operationSection = ref(brandSettingsMode.value ? "theme" : "registration");
 const operationSectionOptions = [
   { label: "报名与功能", value: "registration" },
   { label: "支付与客服", value: "payment" },
@@ -137,6 +139,11 @@ const operationSectionOptions = [
   { label: "品牌主题", value: "theme" },
   { label: "协议隐私", value: "agreements" }
 ];
+watch(() => route.path, (path) => {
+  if (path !== "/brand-settings") return;
+  activeTab.value = "operation";
+  operationSection.value = "theme";
+});
 const canManagePlatformSettings = computed(() => isPlatformScopedAdmin());
 const canEditSettings = computed(() => canManagePlatformSettings.value ? hasPermission("system.manage") : hasPermission("operation_settings.manage"));
 const canManageCategories = computed(() => hasPermission("category.manage"));
@@ -1817,9 +1824,9 @@ onMounted(async () => {
   <div class="page">
     <div class="toolbar">
       <div>
-        <h2>{{ canManagePlatformSettings ? "系统设置" : "运营设置" }}</h2>
+        <h2>{{ brandSettingsMode ? "品牌设置" : canManagePlatformSettings ? "系统设置" : "运营设置" }}</h2>
         <p class="subtitle">
-          {{ canManagePlatformSettings ? "集中管理平台运营开关、部署配置、上线体检和关键管理入口。" : "配置本商家的报名开关、收款说明、客服信息、入群二维码和 H5 页面主题。" }}
+          {{ brandSettingsMode ? "统一设置品牌名称、后台名称、Logo 与前台视觉主题。" : canManagePlatformSettings ? "集中管理平台运营开关、部署配置、上线体检和关键管理入口。" : "配置本商家的报名开关、收款说明、客服信息、入群二维码和 H5 页面主题。" }}
         </p>
       </div>
       <div class="toolbar-actions">
@@ -1857,7 +1864,7 @@ onMounted(async () => {
     </div>
 
     <el-tabs v-model="activeTab" class="system-tabs">
-      <el-tab-pane label="运营设置" name="operation">
+      <el-tab-pane :label="brandSettingsMode ? '品牌设置' : '运营设置'" name="operation">
         <div class="table-card" v-loading="loadingOperation">
           <el-form-item v-if="canManagePlatformSettings && canManageTenants" label="配置对象" class="operation-scope-field">
             <el-select v-model="operationTenantId" class="operation-scope-select" filterable :disabled="operationBusy" @change="changeOperationTenant">
@@ -1883,7 +1890,7 @@ onMounted(async () => {
             :closable="false"
             class="panel-alert"
           />
-          <el-segmented v-model="operationSection" class="operation-sections" :options="operationSectionOptions" />
+          <el-segmented v-if="!brandSettingsMode" v-model="operationSection" class="operation-sections" :options="operationSectionOptions" />
           <el-form label-width="128px" class="setting-form" :disabled="!canEditSettings || operationBusy">
             <template v-if="operationSection === 'registration'">
             <el-form-item label="报名通道">
@@ -2196,7 +2203,7 @@ onMounted(async () => {
         </div>
       </el-tab-pane>
 
-      <el-tab-pane v-if="canManagePlatformSettings" label="部署配置" name="deployment">
+      <el-tab-pane v-if="canManagePlatformSettings && !brandSettingsMode" label="部署配置" name="deployment">
         <el-alert
           type="info"
           title="部署级资料会保存到后台，用于上线体检和商城支付就绪检查；右侧仍可生成 deploy/.env.production 作为部署兜底。"
@@ -2599,7 +2606,7 @@ onMounted(async () => {
         </fieldset>
       </el-tab-pane>
 
-      <el-tab-pane v-if="canManagePlatformSettings" label="配置体检" name="config">
+      <el-tab-pane v-if="canManagePlatformSettings && !brandSettingsMode" label="配置体检" name="config">
         <div v-if="configLoadError" class="error-recovery">
           <el-alert type="error" :title="configLoadError" show-icon :closable="false" />
           <el-button :loading="loadingConfig" @click="loadConfig">重试体检</el-button>
@@ -2643,7 +2650,7 @@ onMounted(async () => {
         </div>
       </el-tab-pane>
 
-      <el-tab-pane v-if="hasManagementLinks" label="管理入口" name="links">
+      <el-tab-pane v-if="hasManagementLinks && !brandSettingsMode" label="管理入口" name="links">
         <div class="link-grid">
           <div v-if="!canManagePlatformSettings && canManageCategories" class="link-card" role="button" tabindex="0" @click="go('/categories')" @keydown.enter.prevent="go('/categories')" @keydown.space.prevent="go('/categories')">
             <strong>分类管理</strong>
