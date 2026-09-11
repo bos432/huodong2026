@@ -11,6 +11,7 @@ import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
+import { chooseAvatarImage } from "../../avatar-picker";
 
 type WechatProfilePayload = {
   nickname?: string;
@@ -34,6 +35,7 @@ let cooldownTimer: ReturnType<typeof setInterval> | null = null;
 const wechatAuthVisible = ref(false);
 const wechatAuthNickname = ref("");
 const wechatAuthAvatarPath = ref("");
+const choosingAvatar = ref(false);
 const wechatAuthMessage = ref("");
 const phoneBindVisible = ref(false);
 const { tenant, bottomNavSection, contentSections, innerPageConfig, innerPageLayout, showBottomNav, loadDecoration } = usePageDecoration("login_page", "/pages/user/login");
@@ -178,13 +180,18 @@ function closeWechatAuthPanel() {
   wechatAuthMessage.value = "";
 }
 
-function chooseWechatLoginAvatar(event: any) {
-  const filePath = String(event?.detail?.avatarUrl || "");
-  if (!filePath) {
-    uni.showToast({ title: "未选择头像", icon: "none" });
-    return;
+async function chooseWechatLoginAvatar() {
+  if (choosingAvatar.value || loggingIn.value) return;
+  choosingAvatar.value = true;
+  try {
+    const filePath = await chooseAvatarImage();
+    if (filePath) wechatAuthAvatarPath.value = filePath;
+  } catch (error: any) {
+    wechatAuthMessage.value = error.message || "选择头像失败，请重试";
+    uni.showToast({ title: wechatAuthMessage.value, icon: "none" });
+  } finally {
+    choosingAvatar.value = false;
   }
-  wechatAuthAvatarPath.value = filePath;
 }
 
 function updateWechatAuthNickname(event: any) {
@@ -336,7 +343,7 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
         <view class="wechat-auth-brand">慢π</view>
         <view class="wechat-auth-title">获取你的昵称、头像和登录权限</view>
         <view v-if="wechatAuthMessage" class="wechat-auth-message">{{ wechatAuthMessage }}</view>
-        <button class="wechat-auth-row avatar-select" open-type="chooseAvatar" @chooseavatar="chooseWechatLoginAvatar">
+        <button class="wechat-auth-row avatar-select" :disabled="choosingAvatar || loggingIn" @tap="chooseWechatLoginAvatar">
           <text class="auth-label">头像</text>
           <image v-if="wechatAuthAvatarPath" class="auth-avatar" :src="wechatAuthAvatarPath" mode="aspectFill" />
           <view v-else class="auth-avatar auth-avatar-empty">头像</view>

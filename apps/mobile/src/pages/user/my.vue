@@ -11,8 +11,10 @@
       }"
     >
       <view class="member-card-top app-enter" :class="{ guest: !isLoggedIn }">
-        <image v-if="profile?.avatarUrl" class="avatar-lg" :src="profile.avatarUrl" mode="aspectFill" aria-label="会员头像" />
-        <view v-else class="avatar-lg avatar-fallback">{{ displayName.slice(0, 1) }}</view>
+        <view role="button" tabindex="0" aria-label="编辑头像和资料" @click="goEdit" @keyup.enter="goEdit" @keyup.space.prevent="goEdit">
+          <image v-if="profile?.avatarUrl" class="avatar-lg" :src="profile.avatarUrl" mode="aspectFill" aria-label="会员头像" />
+          <view v-else class="avatar-lg avatar-fallback">{{ displayName.slice(0, 1) }}</view>
+        </view>
         <view class="member-main">
           <view class="profile-greeting" :style="{ color: profileHeaderTextColor }">{{ myPageGreeting }}</view>
           <text class="profile-nickname">{{ displayName }}</text>
@@ -152,21 +154,21 @@
     <view v-if="wechatProfilePanelVisible" class="wechat-auth-mask">
       <view class="wechat-auth-sheet">
         <view class="wechat-auth-brand">慢π</view>
-        <view class="wechat-auth-title">获取你的昵称、头像和会员权限</view>
+        <view class="wechat-auth-title">完善头像和昵称</view>
         <view class="wechat-auth-message">{{ wechatProfilePanelMessage }}</view>
-        <button class="wechat-auth-row avatar-select" open-type="chooseAvatar" @chooseavatar="chooseWechatProfileAvatar">
+        <button class="wechat-auth-row avatar-select" :disabled="choosingWechatAvatar || syncingWechatProfile" @tap="chooseWechatProfileAvatar">
           <text class="auth-label">头像</text>
           <image v-if="wechatProfileAvatarPath" class="auth-avatar" :src="wechatProfileAvatarPath" mode="aspectFill" />
           <view v-else class="auth-avatar auth-avatar-empty">头像</view>
-          <text class="auth-arrow">›</text>
+          <text class="auth-arrow">{{ choosingWechatAvatar ? "选择中" : "选择图片 ›" }}</text>
         </button>
         <view class="wechat-auth-row">
           <text class="auth-label">昵称</text>
           <input v-model="wechatProfileNickname" type="nickname" class="auth-nickname-input" maxlength="40" placeholder="请选择或填写昵称" @input="updateWechatProfileNickname" />
         </view>
         <view class="wechat-auth-actions">
-          <button class="auth-action reject" :disabled="syncingWechatProfile || requestingWechatProfile" @tap="closeWechatProfilePanel">稍后再说</button>
-          <button class="auth-action allow" :disabled="syncingWechatProfile || requestingWechatProfile" @tap="saveWechatProfilePanel">{{ syncingWechatProfile ? "同步中" : requestingWechatProfile ? "获取中" : "允许" }}</button>
+          <button class="auth-action reject" :disabled="syncingWechatProfile || choosingWechatAvatar" @tap="closeWechatProfilePanel">稍后再说</button>
+          <button class="auth-action allow" :disabled="syncingWechatProfile || choosingWechatAvatar" @tap="saveWechatProfilePanel">{{ syncingWechatProfile ? "保存中" : "保存资料" }}</button>
         </view>
       </view>
     </view>
@@ -194,7 +196,7 @@ import { loadPageTheme, pageBrand } from "../../theme";
 import { profileHeaderPalette } from '../../profile-header-palette';
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { featureGatesState, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
-import { hasWechatProfilePayload, requestWechatProfile, type WechatProfilePayload } from "../../wechat-profile";
+import { chooseAvatarImage, isStoredAvatar } from "../../avatar-picker";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { loadMemberOrderOverview, type MemberOrderSession } from "../../member-order-overview";
 import TabBar from "../../components/TabBar.vue";
@@ -223,7 +225,7 @@ const wechatProfileNickname = ref("");
 const wechatProfileAvatarPath = ref("");
 const wechatProfilePanelMessage = ref("请选择头像和昵称后继续。");
 const syncingWechatProfile = ref(false);
-const requestingWechatProfile = ref(false);
+const choosingWechatAvatar = ref(false);
 const phoneBindVisible = ref(false);
 const redemptionCode = ref("");
 const redeeming = ref(false);
@@ -666,7 +668,7 @@ function resetUserState() {
   recommendedActivities.value = [];
   wechatProfilePanelVisible.value = false;
   syncingWechatProfile.value = false;
-  requestingWechatProfile.value = false;
+  choosingWechatAvatar.value = false;
   phoneBindVisible.value = false;
   profileError.value = "";
   assetWarning.value = "";
@@ -680,69 +682,41 @@ function resetUserState() {
 function inputValue(event: any) {
   return String(event?.detail?.value ?? event?.target?.value ?? "");
 }
-function isRemoteAvatar(value: string) {
-  return /^https?:\/\//i.test(value) || value.startsWith("/uploads/");
-}
-function applyWechatProfilePayload(payload: WechatProfilePayload) {
-  let changed = false;
-  const nickname = String(payload.nickname || "").trim();
-  if (nickname && isDefaultWechatNicknameValue(wechatProfileNickname.value)) {
-    wechatProfileNickname.value = nickname.slice(0, 40);
-    changed = true;
-  }
-  const avatarUrl = String(payload.avatarUrl || "").trim();
-  if (avatarUrl && !wechatProfileAvatarPath.value.trim()) {
-    wechatProfileAvatarPath.value = avatarUrl;
-    changed = true;
-  }
-  return changed;
-}
-async function tryRequestWechatProfile() {
-  if (requestingWechatProfile.value || syncingWechatProfile.value) return false;
-  requestingWechatProfile.value = true;
-  try {
-    const payload = await requestWechatProfile();
-    const changed = payload.authorized && hasWechatProfilePayload(payload) && applyWechatProfilePayload(payload);
-    wechatProfilePanelMessage.value = changed
-      ? "已读取头像昵称，请确认后允许同步。"
-      : payload.unavailable
-        ? "当前环境未自动返回资料，请点击头像并选择昵称。"
-        : "未自动返回头像昵称，请点击头像并选择昵称。";
-    return changed;
-  } catch {
-    wechatProfilePanelMessage.value = "资料读取失败，请点击头像并选择昵称。";
-    return false;
-  } finally {
-    requestingWechatProfile.value = false;
-  }
-}
-async function openWechatProfilePanel(auto = false, row: any = profile.value) {
+function openWechatProfilePanel(auto = false, row: any = profile.value) {
   if (!row?.wechatBound) return;
   wechatProfileNickname.value = isDefaultWechatNicknameValue(row.nickname) ? "" : String(row.nickname || "");
   wechatProfileAvatarPath.value = String(row.avatarUrl || "");
   wechatProfilePanelMessage.value = auto ? "检测到当前仍是默认资料，请补充头像和昵称后继续使用会员中心。" : "请选择头像和昵称，保存后后台会员资料会同步更新。";
   wechatProfilePanelVisible.value = true;
-  if (!auto) await tryRequestWechatProfile();
 }
 function closeWechatProfilePanel() {
-  if (syncingWechatProfile.value || requestingWechatProfile.value) return;
+  if (syncingWechatProfile.value || choosingWechatAvatar.value) return;
   wechatProfilePanelVisible.value = false;
 }
-function chooseWechatProfileAvatar(event: any) {
-  const filePath = String(event?.detail?.avatarUrl || "");
-  if (!filePath) {
-    uni.showToast({ title: "未选择头像", icon: "none" });
-    return;
+async function chooseWechatProfileAvatar() {
+  if (choosingWechatAvatar.value || syncingWechatProfile.value) return;
+  const session = memberSession();
+  choosingWechatAvatar.value = true;
+  try {
+    const filePath = await chooseAvatarImage();
+    if (filePath && isCurrentSession(session)) {
+      wechatProfileAvatarPath.value = filePath;
+      wechatProfilePanelMessage.value = "头像已选择，点击保存资料完成更新。";
+    }
+  } catch (error: any) {
+    if (isCurrentSession(session)) {
+      wechatProfilePanelMessage.value = error.message || "选择头像失败，请重试";
+      uni.showToast({ title: wechatProfilePanelMessage.value, icon: "none" });
+    }
+  } finally {
+    choosingWechatAvatar.value = false;
   }
-  wechatProfileAvatarPath.value = filePath;
 }
 function updateWechatProfileNickname(event: any) {
   wechatProfileNickname.value = inputValue(event).slice(0, 40);
 }
 async function saveWechatProfilePanel() {
-  if ((!wechatProfileNickname.value.trim() || !wechatProfileAvatarPath.value.trim()) && !requestingWechatProfile.value) {
-    await tryRequestWechatProfile();
-  }
+  if (syncingWechatProfile.value || choosingWechatAvatar.value) return;
   const nickname = wechatProfileNickname.value.trim();
   let avatarUrl = wechatProfileAvatarPath.value.trim();
   if (!nickname || !avatarUrl) {
@@ -752,7 +726,7 @@ async function saveWechatProfilePanel() {
   const session = memberSession();
   syncingWechatProfile.value = true;
   try {
-    if (avatarUrl && !isRemoteAvatar(avatarUrl)) {
+    if (avatarUrl && !isStoredAvatar(avatarUrl)) {
       const uploaded = await uploadMyAvatar(avatarUrl);
       if (!isCurrentSession(session)) return;
       avatarUrl = uploaded.url;

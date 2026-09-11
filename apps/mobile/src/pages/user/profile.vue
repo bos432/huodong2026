@@ -5,6 +5,7 @@ import { ensureUser, fetchMyProfile, getCurrentTenantCode, updateMyProfile, uplo
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { chooseAvatarImage } from "../../avatar-picker";
 
 const profile = ref<any>(null);
 const nickname = ref("");
@@ -14,7 +15,6 @@ const loading = ref(true);
 const loadError = ref("");
 const saveError = ref("");
 const uploadingLocalAvatar = ref(false);
-const uploadingWechatAvatar = ref(false);
 const phoneBindVisible = ref(false);
 const profileLoadGuard = createTenantLoadGuard();
 
@@ -44,53 +44,32 @@ async function load() {
 }
 
 async function chooseLocalAvatar() {
-  if (uploadingLocalAvatar.value || uploadingWechatAvatar.value || saving.value || loading.value || loadError.value) return;
+  if (uploadingLocalAvatar.value || saving.value || loading.value || loadError.value) return;
   const tenantCode = getCurrentTenantCode();
   uploadingLocalAvatar.value = true;
   try {
-    const res = await new Promise<UniApp.ChooseImageSuccessCallbackResult>((resolve, reject) => uni.chooseImage({ count: 1, sizeType: ["compressed"], sourceType: ["album", "camera"], success: resolve, fail: reject }));
-    const filePath = res.tempFilePaths[0];
-    if (!filePath) return;
+    saveError.value = "";
+    const filePath = await chooseAvatarImage();
+    if (!filePath || getCurrentTenantCode() !== tenantCode) return;
     uni.showLoading({ title: "上传中" });
     const uploaded = await uploadMyAvatar(filePath);
     if (getCurrentTenantCode() !== tenantCode) return;
     avatarUrl.value = uploaded.url;
-    await load();
+    profile.value = { ...profile.value, avatarUrl: uploaded.url };
     uni.showToast({ title: "头像已更新", icon: "success" });
   } catch (error: any) {
-    if (!String(error?.errMsg || "").includes("cancel") && getCurrentTenantCode() === tenantCode) uni.showToast({ title: error.message || "上传失败", icon: "none" });
+    if (getCurrentTenantCode() === tenantCode) {
+      saveError.value = error.message || "头像上传失败，请重试";
+      uni.showToast({ title: saveError.value, icon: "none" });
+    }
   } finally {
     uploadingLocalAvatar.value = false;
     uni.hideLoading();
   }
 }
 
-async function chooseWechatAvatar(event: any) {
-  if (uploadingWechatAvatar.value || uploadingLocalAvatar.value || saving.value || loading.value || loadError.value) return;
-  const tenantCode = getCurrentTenantCode();
-  const filePath = String(event?.detail?.avatarUrl || "");
-  if (!filePath) {
-    uni.showToast({ title: "未选择头像", icon: "none" });
-    return;
-  }
-  uploadingWechatAvatar.value = true;
-  try {
-    uni.showLoading({ title: "上传中" });
-    const uploaded = await uploadMyAvatar(filePath);
-    if (getCurrentTenantCode() !== tenantCode) return;
-    avatarUrl.value = uploaded.url;
-    await load();
-    uni.showToast({ title: "头像已更新", icon: "success" });
-  } catch (error: any) {
-    if (getCurrentTenantCode() === tenantCode) uni.showToast({ title: error.message || "上传失败", icon: "none" });
-  } finally {
-    uploadingWechatAvatar.value = false;
-    uni.hideLoading();
-  }
-}
-
 async function save() {
-  if (saving.value || uploadingLocalAvatar.value || uploadingWechatAvatar.value || loading.value || loadError.value) return;
+  if (saving.value || uploadingLocalAvatar.value || loading.value || loadError.value) return;
   if (nickname.value.trim().length > 40) {
     uni.showToast({ title: "昵称不能超过 40 个字", icon: "none" });
     return;
@@ -133,7 +112,7 @@ async function handlePhoneBound(profileData: any) {
   await load();
 }
 
-onShow(() => { void load(); });
+onShow(() => { if (!uploadingLocalAvatar.value) void load(); });
 </script>
 
 <template>
@@ -142,8 +121,10 @@ onShow(() => { void load(); });
     <view v-else-if="loadError" class="card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载会员资料" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
     <template v-else-if="profile">
       <view class="hero">
-        <image v-if="avatarUrl" class="avatar" :src="avatarUrl" mode="aspectFill" />
-        <view v-else class="avatar fallback">{{ displayName().slice(0, 1) }}</view>
+        <view role="button" tabindex="0" aria-label="更换头像" @click="chooseLocalAvatar" @keyup.enter="chooseLocalAvatar" @keyup.space.prevent="chooseLocalAvatar">
+          <image v-if="avatarUrl" class="avatar" :src="avatarUrl" mode="aspectFill" />
+          <view v-else class="avatar fallback">{{ displayName().slice(0, 1) }}</view>
+        </view>
         <view>
           <view class="name">{{ displayName() }}</view>
           <view class="sub">{{ profile?.phone || "未绑定手机号" }} · {{ profile?.memberLevel?.name || "普通会员" }}</view>
@@ -154,12 +135,11 @@ onShow(() => { void load(); });
         <view class="field">
           <view class="label">头像</view>
           <view class="avatar-row">
-            <image v-if="avatarUrl" class="small-avatar" :src="avatarUrl" mode="aspectFill" />
-            <view v-else class="small-avatar fallback">{{ displayName().slice(0, 1) }}</view>
-            <!-- #ifdef MP-WEIXIN -->
-            <button class="mini-button wechat-button" open-type="chooseAvatar" :class="{ disabled: uploadingWechatAvatar }" @chooseavatar="chooseWechatAvatar">{{ uploadingWechatAvatar ? "上传中" : "选择头像" }}</button>
-            <!-- #endif -->
-            <view class="mini-button" :class="{ disabled: uploadingLocalAvatar || uploadingWechatAvatar || saving }" @click="chooseLocalAvatar">{{ uploadingLocalAvatar ? "上传中" : "上传头像" }}</view>
+            <button class="mini-button" :disabled="uploadingLocalAvatar || saving" @click="chooseLocalAvatar">
+              <image v-if="avatarUrl" class="small-avatar" :src="avatarUrl" mode="aspectFill" />
+              <view v-else class="small-avatar fallback">{{ displayName().slice(0, 1) }}</view>
+              <text>{{ uploadingLocalAvatar ? "上传中" : "选择头像" }}</text>
+            </button>
           </view>
         </view>
         <view class="field">
@@ -172,7 +152,7 @@ onShow(() => { void load(); });
           <!-- #endif -->
         </view>
         <view v-if="saveError" class="save-error">{{ saveError }}</view>
-        <view class="button" role="button" tabindex="0" :aria-disabled="saving || uploadingLocalAvatar || uploadingWechatAvatar" :aria-busy="saving" :aria-label="saving ? '保存中' : '保存资料'" :class="{ disabled: saving || uploadingLocalAvatar || uploadingWechatAvatar }" @click="save" @keyup.enter="save" @keyup.space.prevent="save">{{ saving ? "保存中..." : "保存资料" }}</view>
+        <view class="button" role="button" tabindex="0" :aria-disabled="saving || uploadingLocalAvatar" :aria-busy="saving" :aria-label="saving ? '保存中' : '保存资料'" :class="{ disabled: saving || uploadingLocalAvatar }" @click="save" @keyup.enter="save" @keyup.space.prevent="save">{{ saving ? "保存中..." : "保存资料" }}</view>
       </view>
 
       <view class="card security-entry" role="button" tabindex="0" aria-label="打开账号安全" @click="goSecurity" @keyup.enter="goSecurity" @keyup.space.prevent="goSecurity">
@@ -304,6 +284,9 @@ onShow(() => { void load(); });
 }
 
 .mini-button {
+  display: flex;
+  align-items: center;
+  gap: 18rpx;
   padding: 14rpx 22rpx;
   border-radius: 999rpx;
   background: #f1e3d0;
