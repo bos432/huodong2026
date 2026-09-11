@@ -29,6 +29,8 @@ describe("mobile login accessibility contract", () => {
   });
 
   it("keeps H5 phone and verification inputs named and autofillable", () => {
+    expect(login).toContain('<!-- #ifdef H5 -->\n      <view class="phone-login-section">');
+    expect(login).toContain('</view>\n      <!-- #endif -->\n      <view class="admin-login-entry"');
     expect(login).toContain('type="tel" inputmode="numeric" name="phone" autocomplete="username"');
     expect(login).toContain('name="code" autocomplete="one-time-code"');
     expect(login).toContain('name="password" autocomplete="current-password"');

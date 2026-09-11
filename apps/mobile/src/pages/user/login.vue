@@ -277,8 +277,9 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
       <view class="card-kicker">欢迎回来</view>
       <!-- #ifndef H5 -->
       <button class="button wechat-button native-button primary-wechat" :disabled="loggingIn" @tap="submitWechat">{{ loggingIn ? "登录中..." : "快捷登录" }}</button>
-      <view class="login-divider"><text>手机号登录</text></view>
+      <view class="wechat-login-hint">使用微信账号安全登录</view>
       <!-- #endif -->
+      <!-- #ifdef H5 -->
       <view class="phone-login-section">
         <view class="field">
           <view class="label">手机号</view>
@@ -321,6 +322,7 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
         <view v-if="actionError" class="login-error" role="alert" aria-live="assertive">{{ actionError }}</view>
         <view class="button" :class="{ secondary: !canLogin, disabled: loggingIn }" role="button" tabindex="0" :aria-disabled="loggingIn" :aria-busy="loggingIn" aria-label="登录" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">{{ loggingIn ? "登录中…" : "登录" }}</view>
       </view>
+      <!-- #endif -->
       <view class="admin-login-entry" role="button" tabindex="0" aria-label="进入管理端登录" @click="goAdminLogin" @keyup.enter="goAdminLogin" @keyup.space.prevent="goAdminLogin">
         <text>管理端入口</text>
       </view>
@@ -372,6 +374,7 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
   font-weight: 800;
 }
 .primary-wechat { height: 92rpx; font-size: 30rpx; }
+.wechat-login-hint { color: #7f7467; font-size: 24rpx; line-height: 1.6; text-align: center; }
 .login-divider {
   display: flex;
   align-items: center;
