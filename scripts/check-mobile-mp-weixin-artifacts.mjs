@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import vm from "node:vm";
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const output = path.resolve(root, process.env.MP_WEIXIN_DIST || "apps/mobile/dist/build/mp-weixin");
@@ -47,6 +48,17 @@ function checkComponentWxssSelectors() {
 }
 
 if (!fs.existsSync(output)) throw new Error(`mp-weixin output does not exist: ${output}`);
+
+// Inspect the effective export, not the fallback string also present in the bundle.
+const apiModule = { exports: {} };
+vm.runInNewContext(fs.readFileSync(path.join(output, "api-base.js"), "utf8"),
+  { exports: apiModule.exports, module: apiModule }, { timeout: 1000 });
+const apiUrl = new URL(apiModule.exports.API_BASE);
+if (apiUrl.protocol !== "https:" || apiUrl.username || apiUrl.password || apiUrl.search || apiUrl.hash
+  || apiUrl.hostname === "localhost" || /^[\d.]+$/.test(apiUrl.hostname) || apiUrl.hostname.includes(":")) {
+  throw new Error("mp-weixin requires a public HTTPS API domain; refusing to upload this build");
+}
+console.log(`mp-weixin request domain: ${apiUrl.origin}`);
 
 const retiredArtifacts = ["shanghai-date.js"];
 const stale = retiredArtifacts.filter((file) => fs.existsSync(path.join(output, file)));

@@ -12,7 +12,7 @@
       }
     },
     "setting": {
-      "urlCheck": false
+      "urlCheck": true
     },
     "networkTimeout": {
       "request": 15000,
