@@ -2,6 +2,7 @@ import { BadRequestException, ConflictException, ForbiddenException, Injectable,
 import { ConfigService } from "@nestjs/config";
 import { testActivityBookingMessage } from '../../shared/activity-test-policy';
 import { toPublicActivity } from "../activity/public-activity.mapper";
+import { toPublicRegistration } from "../registration/public-registration.mapper";
 import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -3564,20 +3565,7 @@ export class PublicService {
   }
 
   private publicRegistration(registration: Registration) {
-    return {
-      id: registration.id,
-      activity: this.publicActivity(registration.activity),
-      status: registration.status,
-      answers: registration.answers || [],
-      formSchemaVersion: registration.formSchemaVersion,
-      formSnapshot: registration.formSnapshot || [],
-      companions: registration.companions || [],
-      privacyConsentAt: registration.privacyConsentAt,
-      reviewRemark: registration.reviewRemark,
-      cancelReason: registration.cancelReason,
-      createdAt: registration.createdAt,
-      updatedAt: registration.updatedAt
-    };
+    return toPublicRegistration(registration, (activity) => this.publicActivity(activity));
   }
 
   private publicOrder(order: Order) {
