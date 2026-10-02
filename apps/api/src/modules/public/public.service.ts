@@ -1,6 +1,7 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { testActivityBookingMessage } from '../../shared/activity-test-policy';
+import { toPublicActivity } from "../activity/public-activity.mapper";
 import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -3815,54 +3816,11 @@ export class PublicService {
   }
 
   private publicActivity(activity: Activity) {
-    const rules = activity.eligibilityRules || null;
-    return {
-      id: activity.id,
-      isTest: Boolean(activity.isTest),
-      bookingDisabledReason: testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV')),
-      title: activity.title,
-      tenant: this.publicHomepageTenant(activity.tenant),
-      coverUrl: activity.coverUrl,
-      shareTitle: activity.shareTitle,
-      shareDescription: activity.shareDescription,
-      shareImageUrl: activity.shareImageUrl,
-      description: activity.description,
-      notice: activity.notice,
-      location: activity.location,
-      locationProvince: activity.locationProvince,
-      locationCity: activity.locationCity,
-      locationDistrict: activity.locationDistrict,
-      locationLatitude: activity.locationLatitude,
-      locationLongitude: activity.locationLongitude,
-      locationMapUrl: activity.locationMapUrl,
-      startTime: activity.startTime,
-      endTime: activity.endTime,
-      registrationDeadline: activity.registrationDeadline,
-      capacity: activity.capacity,
-      price: activity.price,
-      status: activity.status,
-      cancelledAt: activity.cancelledAt,
-      cancellationReason: activity.cancellationReason,
-      featured: activity.featured,
-      requireReview: activity.requireReview,
-      allowCancel: activity.allowCancel,
-      category: activity.category ? { id: activity.category.id, name: activity.category.name, iconUrl: activity.category.iconUrl, coverUrl: activity.category.coverUrl } : null,
-      agent: activity.agent ? { id: activity.agent.id, name: activity.agent.name, region: activity.agent.region } : null,
-      minMemberLevel: this.publicMemberLevel(activity.minMemberLevel),
-      priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel),
-      priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt,
-      fields: (activity.fields || []).map((field) => ({ id: field.id, label: field.label, type: field.type, required: field.required, options: field.options || [], sortOrder: field.sortOrder })),
-      formSchemaVersion: activity.formSchemaVersion,
-      eligibilityRules: rules ? {
-        minAge: rules.minAge,
-        maxAge: rules.maxAge,
-        allowedRegions: rules.allowedRegions || [],
-        maxRegistrationsPerUser: rules.maxRegistrationsPerUser,
-        requirePrivacyConsent: rules.requirePrivacyConsent,
-        allowCompanions: rules.allowCompanions,
-        maxCompanions: rules.maxCompanions
-      } : null
-    };
+    return toPublicActivity(activity, {
+      environment: this.config.get('NODE_ENV'),
+      toTenant: (tenant) => this.publicHomepageTenant(tenant),
+      toMemberLevel: (level) => this.publicMemberLevel(level)
+    });
   }
 
   private hasGroupQrCode(activity: Activity, setting?: OperationSetting | null) {
