@@ -3,6 +3,7 @@ import { ConfigService } from "@nestjs/config";
 import { testActivityBookingMessage } from '../../shared/activity-test-policy';
 import { toPublicActivity } from "../activity/public-activity.mapper";
 import { toPublicRegistration } from "../registration/public-registration.mapper";
+import { toPublicOrderSummary } from "../commerce/public-order.mapper";
 import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -3573,30 +3574,11 @@ export class PublicService {
   }
 
   private publicOrderSummary(order?: Order | null) {
-    if (!order) return null;
-    return {
-      id: order.id,
-      orderNo: order.orderNo,
-      amount: order.amount,
-      amountFen: Number(order.amountFen || 0),
-      originalAmount: order.originalAmount,
-      discountAmount: order.discountAmount,
-      memberDiscountAmount: order.memberDiscountAmount,
-      pointsUsed: order.pointsUsed,
-      pointsDiscountAmount: order.pointsDiscountAmount,
-      paymentMethod: order.paymentMethod,
-      status: order.status,
-      transactionNo: order.transactionNo,
-      paidAt: order.paidAt,
-      expiresAt: order.expiresAt,
-      closedAt: order.closedAt,
-      closeReason: order.closeReason,
-      createdAt: order.createdAt,
-      updatedAt: order.updatedAt,
-      ticketType: this.publicTicketType(order.ticketType),
-      coupon: this.publicCoupon(order.coupon),
-      memberLevel: this.publicMemberLevel(order.memberLevel)
-    };
+    return toPublicOrderSummary(order, {
+      toTicketType: (ticketType) => this.publicTicketType(ticketType),
+      toCoupon: (coupon) => this.publicCoupon(coupon),
+      toMemberLevel: (level) => this.publicMemberLevel(level)
+    });
   }
 
   private publicRefund(refund?: Refund | null) {
