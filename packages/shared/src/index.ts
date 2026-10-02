@@ -176,6 +176,113 @@ function safeRichTextUrl(value: unknown) {
   return "";
 }
 
+/** Public activity fields used by discovery cards; intentionally excludes private registration data. */
+export interface PublicActivitySummary {
+  id: number;
+  title: string;
+  coverUrl?: string | null;
+  startTime?: string | null;
+  endTime?: string | null;
+  location?: string | null;
+  price?: number | string | null;
+  capacity?: number | null;
+  registeredCount?: number | null;
+  remainingSeats?: number | null;
+  displayStatus?: string | null;
+  status?: ActivityStatus | string | null;
+  isTest?: boolean;
+  category?: { id?: number; name?: string | null } | null;
+}
+
+/** Tenant context carried across public requests; it never contains credentials. */
+export interface TenantContext {
+  id?: number | null;
+  code?: string | null;
+  name?: string | null;
+  host?: string | null;
+}
+
+/** Masked member identity used by activity spaces and organizer summaries. */
+export interface MemberSnapshot {
+  id: number;
+  displayName?: string | null;
+  avatarUrl?: string | null;
+  role?: string | null;
+  maskedPhone?: string | null;
+  tenant?: TenantContext | null;
+}
+
+/** Public registration state used by the member center and activity-space gates. */
+export interface PublicRegistrationSummary {
+  id: number;
+  activityId?: number | null;
+  activity?: PublicActivitySummary | null;
+  status: RegistrationStatus | string;
+  orderId?: number | null;
+  orderStatus?: OrderStatus | string | null;
+  checkedInAt?: string | null;
+  canEnterSpace?: boolean;
+  canReview?: boolean;
+  tenant?: TenantContext | null;
+}
+
+/** Public order state; payment credentials and provider secrets are intentionally excluded. */
+export interface PublicOrderSummary {
+  id: number;
+  orderNo?: string | null;
+  activityId?: number | null;
+  registrationId?: number | null;
+  status: OrderStatus | string;
+  paymentMethod?: PaymentMethod | string | null;
+  totalAmount?: number | string | null;
+  payableAmount?: number | string | null;
+  paidAt?: string | null;
+  refundStatus?: string | null;
+  tenant?: TenantContext | null;
+}
+
+export type NotificationChannel = "site" | "sms" | "wechat" | "email";
+
+export type NotificationScene =
+  | "registrationSubmitted"
+  | "registrationApproved"
+  | "registrationRejected"
+  | "paymentSucceeded"
+  | "refundSucceeded"
+  | "refundRejected"
+  | "activityCancelled"
+  | "activityChanged"
+  | "checkInSucceeded"
+  | "activityReminder"
+  | "reviewInvitation"
+  | "certificateAvailable"
+  | "activityRecommendations"
+  | "returnVisitReminder";
+
+/** Sanitized notification record shown in the member center or admin monitor. */
+export interface PublicNotificationRecord {
+  id: number;
+  scene: NotificationScene | string;
+  channel: NotificationChannel | string;
+  status: "pending" | "sent" | "failed" | "cancelled" | string;
+  title?: string | null;
+  content?: string | null;
+  sentAt?: string | null;
+  errorMessage?: string | null;
+  retryCount?: number;
+  tenant?: TenantContext | null;
+}
+
+export interface PostEventAutomationSettings {
+  enabled: boolean;
+  reviewInvitation: boolean;
+  certificateAvailable: boolean;
+  activityRecommendations: boolean;
+  returnVisitReminders: boolean;
+  recallDays: number[];
+  delayHours: number;
+}
+
 const SAFE_RICH_TEXT_HTML_TAGS = new Set([
   "a", "article", "b", "blockquote", "br", "caption", "code", "div", "em", "figcaption", "figure", "h1", "h2", "h3", "h4", "hr", "i", "img", "li", "ol", "p", "pre", "s", "small", "span", "strong", "sub", "sup", "table", "tbody", "td", "th", "thead", "tr", "u", "ul"
 ]);
