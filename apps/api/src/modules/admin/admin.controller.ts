@@ -2,6 +2,7 @@ import { Body, Controller, Delete, Get, Header, Param, ParseIntPipe, Patch, Post
 import { FileInterceptor } from "@nestjs/platform-express";
 import { Response } from "express";
 import { AdminService } from "./admin.service";
+import { PaymentSettingsService } from "./payment-settings.service";
 import { AiOperationService } from './ai-operation.service';
 import { AdminRole, AdminRoles } from "./admin-roles";
 import { CurrentAdmin } from "./current-admin.decorator";
@@ -89,7 +90,7 @@ const SETTLEMENT_PROOF_EXTENSION_BY_MIME: Record<string, string> = {
 
 @Controller("admin")
 export class AdminController {
-  constructor(private readonly service: AdminService, private readonly miniprogramRelease: MiniprogramReleaseService, private readonly fundRisks: FundRiskMonitorService, private readonly aid: AidService, private readonly credentialTemplates: CredentialTemplateService, private readonly aiOperations: AiOperationService) {}
+  constructor(private readonly service: AdminService, private readonly paymentSettings: PaymentSettingsService, private readonly miniprogramRelease: MiniprogramReleaseService, private readonly fundRisks: FundRiskMonitorService, private readonly aid: AidService, private readonly credentialTemplates: CredentialTemplateService, private readonly aiOperations: AiOperationService) {}
 
   @AdminRoles(...OPERATION_ROLES)
   @Get("credential-templates")
@@ -2229,6 +2230,26 @@ export class AdminController {
   connectivityCheck(@Query("tenantId") tenantId: string | undefined, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null; permissions?: string[] }) {
     return this.service.checkConfigurationConnectivity(admin, tenantId);
   }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Get("settings/payment")
+  paymentSettingsGet(@CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.paymentSettings.get(admin); }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Put("settings/payment")
+  paymentSettingsUpdate(@Body() body: Record<string, unknown>, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.paymentSettings.update(admin, body); }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("settings/payment/validate")
+  paymentSettingsValidate(@CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.paymentSettings.validate(admin); }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("settings/payment/enable")
+  paymentSettingsEnable(@Body() body: { confirmation?: string }, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.paymentSettings.enable(admin, body); }
+
+  @AdminRoles(...SUPER_ADMIN)
+  @Post("settings/payment/disable")
+  paymentSettingsDisable(@CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) { return this.paymentSettings.disable(admin); }
 
   @AdminRoles(...CHECK_IN_ROLES)
   @Get("check-ins/overview")

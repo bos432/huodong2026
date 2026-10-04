@@ -474,6 +474,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
     if (scope?.tenantId) return write ? "operation_settings.manage" : "operation_settings.view";
     return write ? "system.manage" : "system.view";
   }
+  if (path === "settings/payment" || path.startsWith("settings/payment/")) return "system.manage";
   if (path === "settings/sms/test" || path === "settings/connectivity-check") return scope?.tenantId ? "operation_settings.manage" : "system.manage";
   if (path === "settings/charity") return write ? "charity.manage" : "charity.view";
   if (path.startsWith("credential-templates")) return write ? "certificate_template.manage" : "certificate_template.view";

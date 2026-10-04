@@ -8450,6 +8450,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       setting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
     }
     if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined) {
+      const requestedLaunchConfig = dto.launchConfig as Record<string, unknown>;
+      if (requestedLaunchConfig.realPaymentEnabled === true || requestedLaunchConfig.wechatPayEnabled === true) {
+        throw new BadRequestException("真实支付必须通过平台统一支付配置接口完成门禁校验和二次确认");
+      }
       setting.launchConfig = secureLaunchConfigForStorage(setting.launchConfig, dto.launchConfig, dto.clearLaunchConfigSecrets);
     }
     if (!scope.tenant && dto.defaultTenantCode !== undefined) {

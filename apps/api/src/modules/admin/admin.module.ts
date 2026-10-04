@@ -101,6 +101,7 @@ import { VolunteerTrainingRecord } from "../../entities/volunteer-training-recor
 import { VolunteerServiceProof } from "../../entities/volunteer-service-proof.entity";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
+import { PaymentSettingsService } from "./payment-settings.service";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 import { JwtStrategy } from "./jwt.strategy";
 import { RolesGuard } from "./roles.guard";
@@ -142,7 +143,7 @@ import { CredentialTemplateModule } from "../credential-templates/credential-tem
     })
   ],
   controllers: [AdminController],
-  providers: [AdminService, AiOperationService, MiniprogramReleaseService, FundRiskMonitorService, JwtStrategy, RolesGuard, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
+  providers: [AdminService, PaymentSettingsService, AiOperationService, MiniprogramReleaseService, FundRiskMonitorService, JwtStrategy, RolesGuard, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
   exports: [AdminService]
 })
 export class AdminModule {}

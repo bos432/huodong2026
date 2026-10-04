@@ -4,6 +4,7 @@ import { useRoute, useRouter } from "vue-router";
 import { ElMessage } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
+import UnifiedPaymentSettings from "../components/UnifiedPaymentSettings.vue";
 import { formatShanghaiDateTime } from '../date-time';
 import { compareReleaseVersions } from '../release-versions';
 import { conservativeFeatureGates, defaultFeatureGates, featureGateDependencies, featureGateItems, normalizeFeatureGates, writeStoredFeatureGates, type FeatureGateKey } from "../feature-gates";
@@ -186,6 +187,17 @@ const paymentReadiness = computed(() => [
   { key: "wechat", label: "微信支付", status: "需服务商配置", type: "warning", note: "真实 SDK、回调验签、退款和对账未完整配置前不建议开启。" },
   { key: "alipay", label: "支付宝", status: "自动化未完成", type: "warning", note: "保留配置入口，生产使用前需要完成真实支付和退款链路。" }
 ]);
+
+const unifiedPaymentConfigKeys = [
+  "wechatPayEnabled", "wechatPayAppId", "wechatPayMchId", "wechatPayApiV3Key", "wechatPayPrivateKeyPath",
+  "wechatPayCertSerialNo", "wechatPayPlatformCertPath", "wechatPayNotifyUrl", "mallWechatPayNotifyUrl",
+  "mallWechatPayRefundNotifyUrl", "mallWechatPayDirectNotifyUrlTemplate", "mallWechatPayDirectRefundNotifyUrlTemplate",
+  "alipayEnabled", "alipayAppId", "alipayPrivateKeyPath", "alipayPublicCertPath", "alipayRootCertPath", "alipayNotifyUrl",
+  "realPaymentSdkImplemented", "realPaymentCallbackVerificationImplemented", "realRefundQueryImplemented",
+  "realPaymentStatementFetchImplemented", "mallRealWechatPaymentImplemented", "mallMerchantDirectPaymentImplemented",
+  "realPaymentPreflightPassed", "realPaymentPreflightResultFile", "realPaymentPreflightMaxAgeHours",
+  "mallMultiMerchantPreflightPassed", "mallMultiMerchantSmokeResultFile", "mallMultiMerchantSmokeMaxAgeHours"
+] as const;
 
 function tenantOptionLabel(item: TenantOption) {
   return item.region ? `${item.region} · ${item.name}（${item.code}）` : `${item.name}（${item.code}）`;
@@ -1590,7 +1602,12 @@ function operationPayload() {
 }
 
 function operationLaunchConfigPayload() {
-  if (editingPlatformOperation.value) return deploymentPayload();
+  if (editingPlatformOperation.value) {
+    const payload = deploymentPayload();
+    for (const key of unifiedPaymentConfigKeys) delete payload[key];
+    delete payload.realPaymentEnabled;
+    return payload;
+  }
   return {
     deliveryMode: deployment.deliveryMode,
     reviewSafeMode: deployment.reviewSafeMode,
@@ -1978,6 +1995,7 @@ onMounted(async () => {
             </template>
             </template>
             <template v-if="operationSection === 'payment'">
+            <UnifiedPaymentSettings v-if="canManagePlatformSettings" :can-edit="canEditSettings" />
             <el-form-item label="线下付款说明" required>
               <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit :disabled="!canEditSettings || !paymentSettingsEditable" />
             </el-form-item>
@@ -2543,7 +2561,7 @@ onMounted(async () => {
                 <el-form-item label="沙箱密钥"><el-input v-model="deployment.paymentSandboxSecret" show-password /></el-form-item>
                 <el-form-item label="微信支付沙箱"><el-input v-model="deployment.wechatPaySandboxSecret" show-password /></el-form-item>
                 <el-form-item label="支付宝沙箱"><el-input v-model="deployment.alipayPaySandboxSecret" show-password /></el-form-item>
-                <el-form-item label="真实支付"><el-switch v-model="deployment.realPaymentEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="真实支付"><el-switch :model-value="deployment.realPaymentEnabled" active-text="由统一支付配置控制" inactive-text="关闭" disabled /></el-form-item>
                 <el-form-item label="下单实现"><el-switch v-model="deployment.realPaymentSdkImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="回调验签"><el-switch v-model="deployment.realPaymentCallbackVerificationImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="退款查询"><el-switch v-model="deployment.realRefundQueryImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
@@ -2565,7 +2583,7 @@ onMounted(async () => {
                 <el-form-item label="商城预发"><el-switch v-model="deployment.mallMultiMerchantPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
                 <el-form-item label="商城验收文件"><el-input v-model="deployment.mallMultiMerchantSmokeResultFile" /></el-form-item>
                 <el-form-item label="商城有效期"><el-input-number v-model="deployment.mallMultiMerchantSmokeMaxAgeHours" :min="1" :disabled="!canEditSettings || operationBusy" /><span class="unit">小时</span></el-form-item>
-                <el-form-item label="微信支付"><el-switch v-model="deployment.wechatPayEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="微信支付"><el-switch :model-value="deployment.wechatPayEnabled" active-text="由统一支付配置控制" inactive-text="未配置" disabled /></el-form-item>
                 <el-form-item label="微信 AppId"><el-input v-model="deployment.wechatPayAppId" /></el-form-item>
                 <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" /></el-form-item>
                 <el-form-item label="微信 APIv3 Key"><el-input v-model="deployment.wechatPayApiV3Key" show-password /></el-form-item>
