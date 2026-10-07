@@ -364,7 +364,10 @@ function goActivity(act: any) {
   if (act?.id) uni.navigateTo({ url: withTenantCode(`/pages/community/program?id=${act.id}`) });
 }
 function goCheckin() {
-  uni.navigateTo({ url:"/pages/community/checkin" });
+  // Keep every user-facing check-in entry on the local, testable challenge flow.
+  // The legacy page depends on the production check-in API and can otherwise look empty
+  // while the API is unavailable or still being configured.
+  uni.navigateTo({ url: withTenantCode("/pages/checkin/index") });
 }
 function goAmbassador() { uni.navigateTo({ url:"/pages/ambassador/index" }); }
 function goPublish() {
