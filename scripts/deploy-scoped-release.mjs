@@ -6,11 +6,13 @@ import { execFileSync, spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 import { createHash } from 'node:crypto';
+import { isReleaseId, releaseIdentifiersMatch } from './release-metadata.mjs';
+import { isAllowedDatabaseIdentity } from './deploy-database-identity.mjs';
 
 const root = '/www/wwwroot/rd.chaimen666.com';
 const releaseId = process.env.RELEASE_ID;
 const mode = process.argv[2];
-if (process.cwd() !== root || !/^20260906-[a-f0-9]{8}$/.test(releaseId || '') || !['prepare', 'migrate', 'publish', 'verify'].includes(mode)) throw new Error('Expected scoped project, release ID and explicit mode.');
+if (process.cwd() !== root || !isReleaseId(releaseId) || !['prepare', 'migrate', 'publish', 'verify'].includes(mode)) throw new Error('Expected scoped project, release ID and explicit mode.');
 const privateDir = `/www/backup/activity-releases/${releaseId}`;
 const bundle = path.join(privateDir, 'bundle');
 const nextApi = path.join(root, 'apps/api', `.release-${releaseId}`, 'dist');
@@ -19,7 +21,9 @@ const manifest = JSON.parse(await fs.readFile(path.join(bundle, 'release.json'),
 const expectedMigrations = [
   'ActivityOperationVersions1788566400000', 'ActivitySeries1788652800000',
   'ActivityFollowups1788652900000', 'ActivityTestFlag1788653000000',
-  'SocialConnections1788653100000', 'AiOperationDrafts1788653200000'
+  'SocialConnections1788653100000', 'AiOperationDrafts1788653200000',
+  'CreateReleaseReadinessCenter1788653500000',
+  'AddRefundFailureReason1788653600000'
 ];
 const pm2 = '/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2';
 const node = '/www/server/nodejs/v22.22.3/bin/node';
@@ -38,13 +42,13 @@ function ownedProcesses(rows) {
 }
 async function databaseAt(directory) {
   const database = require(path.join(directory, 'data-source.js')).default;
-  if (database.options.database !== 'reader' || database.options.host !== '127.0.0.1' || Number(database.options.port) !== 3306) throw new Error('Database identity mismatch.');
+  if (!isAllowedDatabaseIdentity(database.options)) throw new Error('Database identity mismatch.');
   await database.initialize();
   return database;
 }
 async function writeRecord(name, value) { await fs.writeFile(path.join(privateDir, name), JSON.stringify(value, null, 2), { mode: 0o600, flag: 'wx' }); }
 async function verifyBundle() {
-  if (manifest.commit.slice(0, 8) !== releaseId.slice(9) || !/^[a-f0-9]{40}$/.test(manifest.commit)) throw new Error('Release metadata mismatch.');
+  if (!releaseIdentifiersMatch(manifest.commit, releaseId.slice(9)) || !/^[a-f0-9]{40}$/.test(manifest.commit)) throw new Error('Release metadata mismatch.');
   for (const [relative, expected] of Object.entries(manifest.files)) {
     const filename = path.resolve(bundle, relative);
     if (!filename.startsWith(`${bundle}/`)) throw new Error('Unsafe artifact path.');
@@ -99,7 +103,8 @@ if (mode === 'prepare') {
   try {
     const { MigrationExecutor } = require('typeorm');
     const pending = (await new MigrationExecutor(database).getPendingMigrations()).map(migration => migration.name);
-    if (JSON.stringify(pending) !== JSON.stringify(expectedMigrations)) throw new Error(`Unexpected pending migrations: ${JSON.stringify(pending)}`);
+    const expectedPending = expectedMigrations.slice(Math.max(0, expectedMigrations.length - pending.length));
+    if (JSON.stringify(pending) !== JSON.stringify(expectedPending)) throw new Error(`Unexpected pending migrations: ${JSON.stringify(pending)}`);
     const applied = await database.runMigrations({ transaction: 'each' });
     await writeRecord('migrations-complete.json', { names: applied.map(migration => migration.name), time: new Date().toISOString() });
     console.log('MIGRATIONS_OK', JSON.stringify(applied.map(migration => migration.name)));
