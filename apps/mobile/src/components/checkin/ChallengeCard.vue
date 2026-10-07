@@ -6,7 +6,7 @@ const emit = defineEmits<{ open: [number] }>();
 </script>
 
 <template>
-  <view class="challenge-card" @click="emit('open', challenge.id)">
+  <view class="challenge-card" role="button" tabindex="0" :aria-label="`打开演示挑战：${challenge.title}`" @click="emit('open', challenge.id)" @keyup.enter="emit('open', challenge.id)" @keyup.space.prevent="emit('open', challenge.id)">
     <view class="challenge-title">
       <view class="badge">慢</view>
       <view><b>{{ challenge.title }}</b><small>{{ challenge.startDate }} - {{ challenge.endDate }} · {{ challenge.distanceText }}</small><em v-if="challenge.isDemo">演示任务</em></view>
@@ -16,7 +16,7 @@ const emit = defineEmits<{ open: [number] }>();
       <view v-else class="media-fallback">慢π示例任务</view>
       <span>{{ challenge.checkpointCount }}个点位</span>
     </view>
-    <view class="challenge-progress"><view><small>当前进度</small><b>{{ challenge.isDemo ? "—" : `${challenge.progress} / ${challenge.checkpointCount}` }}</b></view><i><em :style="{ width: challenge.isDemo ? '0%' : `${Math.round((challenge.progress / challenge.checkpointCount) * 100)}%` }" /></i></view><view class="challenge-foot"><small>{{ challenge.isDemo ? "暂无真实参与记录" : (challenge.participantCount ? challenge.participantCount + " 人已完成" : "暂未产生真实参与记录") }} · 完成可得纪念章</small><button class="challenge-action" @click.stop="emit('open', challenge.id)">去打卡</button></view>
+    <view class="challenge-progress"><view><small>本地演示进度</small><b>{{ challenge.progress }} / {{ challenge.checkpointCount }}</b></view><i><em :style="{ width: `${Math.round((challenge.progress / Math.max(1, challenge.checkpointCount)) * 100)}%` }" /></i></view><view class="challenge-foot"><small>{{ challenge.status === "completed" ? "演示挑战已完成" : challenge.progress ? "演示挑战进行中" : "点击任务开始体验" }} · 不代表真实活动记录</small><button class="challenge-action" @click.stop="emit('open', challenge.id)">{{ challenge.status === "completed" ? "查看记录" : "去打卡" }}</button></view>
   </view>
 </template>
 

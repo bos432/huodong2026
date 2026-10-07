@@ -13,4 +13,12 @@ export interface Challenge {
   progress: number;
   status: ChallengeStatus;
   isDemo?: boolean;
+  tasks?: ChallengeTask[];
+}
+
+export interface ChallengeTask {
+  id: string;
+  title: string;
+  description: string;
+  reward: string;
 }

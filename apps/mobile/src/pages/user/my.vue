@@ -1139,4 +1139,77 @@ function logoutUser() {
 .profile-page .history-entry-icon { color: var(--app-primary); }
 .profile-page .order-tab-icon { color: var(--app-primary); }
 .profile-page .profile-section-link { color: var(--app-primary); }
+
+/* Keep the production member centre visually aligned with the slowπ discovery surfaces. */
+.profile-page {
+  background: var(--mp-bg-page) !important;
+  padding: 0 14px calc(112px + env(safe-area-inset-bottom)) !important;
+  font-family: var(--mp-font-family);
+}
+.profile-page .member-card {
+  margin: 0 -14px 14px !important;
+  padding: 24px 18px 20px !important;
+  border-bottom: 1px solid var(--mp-border) !important;
+  border-radius: 0 0 18px 18px !important;
+  background: #fffaf3 !important;
+  color: var(--mp-text-primary) !important;
+  --profile-header-text: var(--mp-text-primary) !important;
+  --profile-header-muted: var(--mp-text-muted) !important;
+}
+.profile-page .member-card-top { grid-template-columns: 76px minmax(0, 1fr) auto !important; gap: 14px !important; }
+.profile-page .avatar-lg,
+.profile-page .avatar-fallback { width: 76px !important; height: 76px !important; border: 0 !important; border-radius: 20px !important; }
+.profile-page .avatar-fallback { background: var(--mp-brand-soft) !important; color: var(--mp-brand-primary) !important; font: 32px var(--mp-font-family) !important; }
+.profile-page .member-main { gap: 5px !important; }
+.profile-page .profile-greeting { color: var(--mp-text-muted) !important; font-size: 12px !important; font-weight: 600 !important; }
+.profile-page .profile-nickname { color: var(--mp-text-primary) !important; font: 700 22px var(--mp-font-family) !important; }
+.profile-page .identity-line { gap: 7px !important; }
+.profile-page .profile-badge { color: var(--mp-brand-primary) !important; font-size: 12px !important; font-weight: 700 !important; }
+.profile-page .phone-state { color: var(--mp-text-muted) !important; font-size: 11px !important; }
+.profile-page .profile-expire { color: var(--mp-text-muted) !important; font-size: 11px !important; }
+.profile-page .profile-edit-btn { min-height: 32px !important; padding: 0 10px !important; border: 1px solid var(--mp-border) !important; border-radius: 999px !important; background: #fff !important; color: var(--mp-text-secondary) !important; font-size: 11px !important; }
+.profile-page .member-stats { gap: 8px !important; margin-top: 20px !important; }
+.profile-page .member-stat { min-height: 64px !important; border: 1px solid var(--mp-border) !important; border-radius: 12px !important; background: #fff !important; }
+.profile-page .member-stat text { color: var(--mp-text-muted) !important; font-size: 11px !important; }
+.profile-page .member-stat .member-stat-value { color: var(--mp-text-primary) !important; font-size: 20px !important; font-weight: 800 !important; }
+.profile-page .member-rights { border-color: var(--mp-border) !important; background: transparent !important; }
+.profile-page .member-growth-fill { background: var(--mp-brand-primary) !important; }
+.profile-page .profile-section,
+.profile-page .member-shortcut,
+.profile-page .history-entry,
+.profile-page .more-services-toggle {
+  margin: 0 0 12px !important;
+  padding: 16px !important;
+  border: 1px solid var(--mp-border) !important;
+  border-radius: 16px !important;
+  background: var(--mp-bg-surface) !important;
+  box-shadow: var(--mp-shadow-card) !important;
+}
+.profile-page .profile-section-title,
+.profile-page .member-shortcut-title,
+.profile-page .history-entry-title,
+.profile-page .more-services-title { color: var(--mp-text-primary) !important; font: 700 16px var(--mp-font-family) !important; }
+.profile-page .profile-section-copy,
+.profile-page .member-shortcut-copy,
+.profile-page .history-entry-copy,
+.profile-page .more-services-copy { display: block !important; color: var(--mp-text-muted) !important; font-size: 11px !important; }
+.profile-page .profile-section-head { margin-bottom: 14px !important; }
+.profile-page .profile-section-link { padding: 6px 9px !important; border-radius: 8px !important; background: var(--mp-brand-soft) !important; color: var(--mp-brand-primary) !important; font-size: 11px !important; }
+.profile-page .member-shortcuts { display: grid !important; gap: 10px !important; margin-bottom: 12px !important; }
+.profile-page .member-shortcut { min-height: 108px !important; margin: 0 !important; padding: 14px !important; background: #fff !important; }
+.profile-page .member-shortcut:first-child { background: #fff5eb !important; border-color: #efd6bf !important; }
+.profile-page .member-shortcut-kicker { color: var(--mp-text-muted) !important; font-size: 10px !important; }
+.profile-page .member-shortcut-title { font-size: 15px !important; }
+.profile-page .member-shortcut-copy { font-size: 11px !important; }
+.profile-page .history-entry { display: flex !important; margin-bottom: 12px !important; }
+.profile-page .history-entry-icon { width: 36px !important; height: 36px !important; border-radius: 10px !important; background: var(--mp-brand-soft) !important; color: var(--mp-brand-primary) !important; font-size: 13px !important; }
+.profile-page .history-entry-copy { margin-top: 4px !important; }
+.profile-page .profile-link-list { border: 0 !important; border-radius: 0 !important; }
+.profile-page .profile-link-row { min-height: 64px !important; padding: 12px 0 !important; border-color: var(--mp-border) !important; }
+.profile-page .entry-title { color: var(--mp-text-primary) !important; font-size: 13px !important; }
+.profile-page .entry-copy { color: var(--mp-text-muted) !important; font-size: 11px !important; }
+.profile-page .entry-arrow { color: var(--mp-brand-primary) !important; }
+.profile-page .more-services-toggle { display: flex !important; align-items: center !important; margin: 0 0 12px !important; }
+.profile-page .profile-asset-grid { margin-bottom: 12px !important; }
+.profile-page .logout-card { margin: 12px 0 0 !important; border: 1px solid var(--mp-border) !important; border-radius: 12px !important; background: #fff !important; color: var(--mp-text-muted) !important; }
 </style>

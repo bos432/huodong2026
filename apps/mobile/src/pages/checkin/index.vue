@@ -1,21 +1,38 @@
 <script setup lang="ts">
 import { ref } from "vue";
+import { onShow } from "@dcloudio/uni-app";
 import MobileShell from "../../components/layout/MobileShell.vue";
 import ChallengeCard from "../../components/checkin/ChallengeCard.vue";
 import IconGlyph from "../../components/ui/IconGlyph.vue";
 import { mockChallenges } from "../../mock/challenge";
 import { mobileTabRoute } from "../../mobile-tab-routes";
 import { withTenantCode } from "../../api";
+import { getChallengeProgress } from "../../mock/challenge-flow";
+import type { Challenge } from "../../types/challenge";
 import "../../styles/tokens.css";
 
 const mode = ref<"challenges" | "records">("challenges");
-function openChallenge(id: number) { uni.navigateTo({ url: `/pages/prototype/detail?id=${id}&from=checkin` }); }
+const challengeCards = ref<Challenge[]>([]);
+const challengeStorageKey = (id: number) => `manpi-demo-challenge-${id}`;
+function readChallengeProgress(id: number, total: number) {
+  const raw = uni.getStorageSync(challengeStorageKey(id));
+  const progress = raw && Array.isArray(raw.completedTaskIds) ? raw : { completedTaskIds: [] };
+  return getChallengeProgress(progress, total);
+}
+function refreshChallengeCards() {
+  challengeCards.value = mockChallenges.map((challenge) => {
+    const progress = readChallengeProgress(challenge.id, challenge.tasks?.length || challenge.checkpointCount);
+    return { ...challenge, progress: progress.completed, status: progress.status, checkpointCount: progress.total };
+  });
+}
+function openChallenge(id: number) { uni.navigateTo({ url: `/pages/checkin/detail?id=${id}` }); }
 function selectTab(tab: "home" | "checkin" | "messages" | "me" | "publish") {
   if (tab === "home") uni.reLaunch({ url: withTenantCode(mobileTabRoute("home")) });
   if (tab === "messages") uni.reLaunch({ url: withTenantCode(mobileTabRoute("messages")) });
   if (tab === "me") uni.reLaunch({ url: withTenantCode(mobileTabRoute("me")) });
   if (tab === "publish") return;
 }
+onShow(refreshChallengeCards);
 </script>
 
 <template>
@@ -25,13 +42,13 @@ function selectTab(tab: "home" | "checkin" | "messages" | "me" | "publish") {
         <view><b>打卡挑战</b><small>把一次出发，变成自己的记录</small></view>
         <view class="record-toggle" :class="{ active: mode === 'records' }" @click="mode = mode === 'challenges' ? 'records' : 'challenges'"><text>{{ mode === 'challenges' ? '我的记录' : '挑战列表' }}</text><IconGlyph name="calendar" :size="14" /></view>
       </view>
-      <view class="demo-note"><IconGlyph name="calendar" :size="15" label="演示任务" /><text>当前为演示任务，进度和完成记录尚未接入</text></view>
+      <view class="demo-note"><IconGlyph name="calendar" :size="15" label="演示任务" /><text>当前为本地演示任务，完成进度会保存在当前设备</text></view>
       <view v-if="mode === 'records'" class="records">
         <view class="record-empty"><IconGlyph name="calendar" :size="30" label="暂无记录" /><b>暂无真实打卡记录</b><small>完成报名、签到后，活动记录会出现在这里。</small></view>
       </view>
       <template v-else>
-        <view class="challenge-cover"><image :src="mockChallenges[0].cover" mode="aspectFill" /><view><small>慢π · 一起去挑战</small><b>把每一次出发，走成自己的路线</b></view></view>
-        <ChallengeCard v-for="challenge in mockChallenges" :key="challenge.id" :challenge="challenge" @open="openChallenge" />
+        <view class="challenge-cover"><image :src="challengeCards[0]?.cover || mockChallenges[0].cover" mode="aspectFill" /><view><small>慢π · 一起去挑战</small><b>把每一次出发，走成自己的路线</b></view></view>
+        <ChallengeCard v-for="challenge in challengeCards" :key="challenge.id" :challenge="challenge" @open="openChallenge" />
       </template>
     </view>
   </MobileShell>

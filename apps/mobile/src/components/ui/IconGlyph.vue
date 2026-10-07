@@ -18,6 +18,8 @@ withDefaults(defineProps<{ name: string; size?: number; label?: string }>(), { s
 .icon-user::before { top: 8%; left: 34%; width: 32%; height: 32%; border: 1.8px solid currentColor; border-radius: 50%; }
 .icon-user::after { right: 13%; bottom: 8%; left: 13%; height: 42%; border: 1.8px solid currentColor; border-radius: 50% 50% 25% 25%; }
 .icon-plus::before { top: 44%; right: 17%; left: 17%; border-top: 2px solid currentColor; }.icon-plus::after { top: 17%; bottom: 17%; left: 49%; border-left: 2px solid currentColor; }
+.icon-edit::before { top: 39%; left: 17%; width: 63%; height: 25%; border: 1.8px solid currentColor; border-radius: 2px; transform: rotate(-45deg); }
+.icon-edit::after { top: 23%; right: 13%; width: 19%; height: 19%; border-top: 1.8px solid currentColor; border-right: 1.8px solid currentColor; transform: rotate(45deg); }
 .icon-search::before { top: 8%; left: 8%; width: 58%; height: 58%; border: 1.8px solid currentColor; border-radius: 50%; }.icon-search::after { right: 8%; bottom: 10%; width: 38%; border-top: 1.8px solid currentColor; transform: rotate(45deg); transform-origin: right center; }
 .icon-pin::before { top: 6%; left: 24%; width: 52%; height: 52%; border: 1.8px solid currentColor; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); }.icon-pin::after { top: 28%; left: 43%; width: 14%; height: 14%; border: 1.4px solid currentColor; border-radius: 50%; }
 .icon-host::before { top: 8%; left: 29%; width: 42%; height: 42%; border: 1.6px solid currentColor; border-radius: 50%; }.icon-host::after { right: 12%; bottom: 8%; left: 12%; height: 38%; border: 1.6px solid currentColor; border-radius: 50% 50% 20% 20%; }
