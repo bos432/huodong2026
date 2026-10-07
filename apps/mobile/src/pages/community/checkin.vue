@@ -6,7 +6,14 @@
       <view class="nav-action" role="button" tabindex="0" aria-label="刷新今日打卡" @click="loadCheckin" @keyup.enter="loadCheckin" @keyup.space.prevent="loadCheckin">刷新</view>
     </view>
     <LoadingState v-if="loading" title="正在加载今日打卡" description="请稍候，正在同步任务和本月打卡记录。" />
-    <EmptyState v-else-if="loadError" variant="error" title="今日打卡加载失败" :description="loadError" action-text="重新加载" @action="loadCheckin" />
+    <view v-else-if="loadError" class="checkin-card demo-fallback-card" role="status" aria-live="polite">
+      <text class="subtle demo-kicker">本地演示入口</text>
+      <text class="title-lg demo-title">{{ demoFallback?.title || "演示挑战已准备" }}</text>
+      <text class="body-text demo-copy">{{ demoFallback?.description }}</text>
+      <view class="button block button-lg demo-button" role="button" tabindex="0" aria-label="进入演示挑战" @click="openDemoCheckin" @keyup.enter="openDemoCheckin" @keyup.space.prevent="openDemoCheckin">进入演示挑战</view>
+      <view class="demo-reload" role="button" tabindex="0" aria-label="重新加载真实任务" @click="loadCheckin" @keyup.enter="loadCheckin" @keyup.space.prevent="loadCheckin">重新加载真实任务</view>
+      <text class="subtle demo-error">真实任务状态：{{ demoFallback?.errorMessage || loadError }}</text>
+    </view>
     <EmptyState v-else-if="!task" variant="checkin" title="暂无今日任务" description="请等待慢π运营发布今天的打卡任务。" />
     <view v-else class="checkin-card task-card">
       <text class="subtle task-date">{{ dateTitle }}</text>
@@ -45,17 +52,19 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { ensureUser, getCurrentTenantCode, request } from "../../api";
+import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { formatShanghaiChineseDate, formatShanghaiChineseMonth, shanghaiDateString } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
 import LoadingState from "../../components/LoadingState.vue";
+import { getDemoCheckinFallback } from "./checkin-demo";
 const checkedIn = ref(false);
 const loading = ref(true);
 const submitting = ref(false);
 const loadError = ref("");
+const demoFallback = ref<ReturnType<typeof getDemoCheckinFallback> | null>(null);
 const task = ref<any>(null);
 const today = ref("");
 const checkedDays = ref<number[]>([]);
@@ -84,6 +93,7 @@ async function loadCheckin() {
   const token = loadGuard.begin();
   loading.value = true;
   loadError.value = "";
+  demoFallback.value = null;
   task.value = null;
   checkedIn.value = false;
   checkedDays.value = [];
@@ -96,10 +106,17 @@ async function loadCheckin() {
     checkedIn.value = Boolean(data?.checkedToday);
     checkedDays.value = Array.isArray(data?.checkedDays) ? data.checkedDays : [];
   } catch (error: any) {
-    if (loadGuard.isCurrent(token)) loadError.value = reviewSafeText(error?.message || "今日打卡加载失败");
+    if (loadGuard.isCurrent(token)) {
+      loadError.value = reviewSafeText(error?.message || "今日打卡加载失败");
+      demoFallback.value = getDemoCheckinFallback(loadError.value);
+    }
   } finally {
     if (loadGuard.isCurrent(token)) loading.value = false;
   }
+}
+
+function openDemoCheckin() {
+  uni.navigateTo({ url: withTenantCode(demoFallback.value?.route || "/pages/checkin/index") });
 }
 
 async function doCheckin() {
@@ -131,6 +148,13 @@ onShow(async () => {
 .nav-action { justify-content:flex-end; }
 .nav-title { flex:1; text-align:center; color:#333333; font-size:32rpx; font-weight:900; font-family:"STKaiti","KaiTi",serif; }
 .checkin-card { margin-top:24rpx; background:#fff; border-radius:24rpx; padding:40rpx; box-shadow:0 12rpx 34rpx rgba(91,47,36,0.07); }
+.demo-fallback-card { display:grid; gap:18rpx; text-align:center; border:1rpx solid #eadac6; background:linear-gradient(180deg,#fffaf3 0%,#fff 100%); }
+.demo-kicker { color:#a36b45; font-weight:800; }
+.demo-title { display:block; font-family:"STKaiti","KaiTi",serif; }
+.demo-copy { display:block; color:#6f6259; line-height:1.7; }
+.demo-button { margin-top:6rpx; background:#c43d3d; color:#fff; }
+.demo-reload { color:#4a6b8a; font-size:25rpx; font-weight:800; min-height:54rpx; display:flex; align-items:center; justify-content:center; }
+.demo-error { color:#a18d7d; font-size:22rpx; line-height:1.5; }
 .state-card { text-align:center; }
 .error-state { color:#b42318; border:1rpx solid #f0b8b0; background:#fff4f2; }
 .state-title { text-align:center; display:block; font-family:"STKaiti","KaiTi",serif; }
