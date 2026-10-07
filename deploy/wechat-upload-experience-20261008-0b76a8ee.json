@@ -1,0 +1,95 @@
+{
+  "size": {
+    "total": 3189399,
+    "packages": [
+      {
+        "name": "TOTAL",
+        "size": 3189399
+      },
+      {
+        "name": "main",
+        "size": 958250
+      },
+      {
+        "name": "/pages/admin/",
+        "size": 326060
+      },
+      {
+        "name": "/pages/ambassador/",
+        "size": 26166
+      },
+      {
+        "name": "/pages/announcement/",
+        "size": 10875
+      },
+      {
+        "name": "/pages/apply/",
+        "size": 50817
+      },
+      {
+        "name": "/pages/brand/",
+        "size": 10771
+      },
+      {
+        "name": "/pages/charity/",
+        "size": 33709
+      },
+      {
+        "name": "/pages/community/",
+        "size": 282642
+      },
+      {
+        "name": "/pages/course/",
+        "size": 112811
+      },
+      {
+        "name": "/pages/credential/",
+        "size": 16635
+      },
+      {
+        "name": "/pages/experience/",
+        "size": 28454
+      },
+      {
+        "name": "/pages/forum/",
+        "size": 68133
+      },
+      {
+        "name": "/pages/legal/",
+        "size": 15474
+      },
+      {
+        "name": "/pages/mall/",
+        "size": 366890
+      },
+      {
+        "name": "/pages/order/",
+        "size": 47249
+      },
+      {
+        "name": "/pages/partner/",
+        "size": 17857
+      },
+      {
+        "name": "/pages/recruit/",
+        "size": 12281
+      },
+      {
+        "name": "/pages/search/",
+        "size": 14083
+      },
+      {
+        "name": "/pages/service/",
+        "size": 16288
+      },
+      {
+        "name": "/pages/user/",
+        "size": 728545
+      },
+      {
+        "name": "/pages/volunteer/",
+        "size": 45409
+      }
+    ]
+  }
+}
