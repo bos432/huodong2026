@@ -7,7 +7,9 @@ export function compareReleaseVersions(releases: readonly ReleaseMetadata[]) {
     && typeof release?.buildTime === 'string' && Number.isFinite(Date.parse(release.buildTime))
   ));
   const allComplete = releases.length === 3 && complete.every(Boolean);
-  const mismatch = new Set(commits.filter((_, index) => complete[index])).size > 1;
+  const knownCommits = commits.filter((_, index) => complete[index]);
+  const canonicalCommit = knownCommits.reduce((longest, commit) => commit.length > longest.length ? commit : longest, '');
+  const mismatch = knownCommits.some(commit => !canonicalCommit.startsWith(commit) && !commit.startsWith(canonicalCommit));
   return releases.map((_, index) => {
     if (!complete[index]) return { status: 'invalid' as const, statusText: '缺失或占位' };
     if (mismatch) return { status: 'warning' as const, statusText: '不一致' };

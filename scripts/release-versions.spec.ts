@@ -17,4 +17,8 @@ describe('three-surface release evidence', () => {
   it('flags different known commits', () => {
     expect(compareReleaseVersions([release, release, { ...release, commit: 'def5678' }]).every(result => result.statusText === '不一致')).toBe(true);
   });
+  it('treats a short artifact commit as matching its full API commit', () => {
+    const full = { ...release, commit: 'abc1234567890def' };
+    expect(compareReleaseVersions([full, release, release]).every(result => result.status === 'ready')).toBe(true);
+  });
 });
