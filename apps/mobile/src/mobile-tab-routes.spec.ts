@@ -2,16 +2,14 @@ import { describe, expect, it } from "vitest";
 import { mobileTabRoute } from "./mobile-tab-routes";
 
 describe("mobile bottom navigation routes", () => {
-  it("uses production pages for every user-facing tab", () => {
+  it("uses the slowpi user-facing pages for every bottom tab", () => {
     expect(mobileTabRoute("home")).toBe("/pages/home/index");
     expect(mobileTabRoute("checkin")).toBe("/pages/checkin/index");
     expect(mobileTabRoute("messages")).toBe("/pages/user/notifications");
-    expect(mobileTabRoute("me")).toBe("/pages/user/my");
+    expect(mobileTabRoute("me")).toBe("/pages/prototype/me");
   });
 
-  it("does not route user tabs through prototype pages", () => {
-    for (const tab of ["checkin", "messages", "me"] as const) {
-      expect(mobileTabRoute(tab)).not.toContain("/pages/prototype/");
-    }
+  it("keeps the activity record center as the canonical slowpi profile surface", () => {
+    expect(mobileTabRoute("me")).toBe("/pages/prototype/me");
   });
 });

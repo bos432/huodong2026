@@ -7,12 +7,12 @@
     </view>
     <LoadingState v-if="loading" title="正在加载今日打卡" description="请稍候，正在同步任务和本月打卡记录。" />
     <view v-else-if="loadError" class="checkin-card demo-fallback-card" role="status" aria-live="polite">
-      <text class="subtle demo-kicker">本地演示入口</text>
+      <text class="subtle demo-kicker">今日正式任务暂未开放</text>
       <text class="title-lg demo-title">{{ demoFallback?.title || "演示挑战已准备" }}</text>
       <text class="body-text demo-copy">{{ demoFallback?.description }}</text>
       <view class="button block button-lg demo-button" role="button" tabindex="0" aria-label="进入演示挑战" @click="openDemoCheckin" @keyup.enter="openDemoCheckin" @keyup.space.prevent="openDemoCheckin">进入演示挑战</view>
-      <view class="demo-reload" role="button" tabindex="0" aria-label="重新加载真实任务" @click="loadCheckin" @keyup.enter="loadCheckin" @keyup.space.prevent="loadCheckin">重新加载真实任务</view>
-      <text class="subtle demo-error">真实任务状态：{{ demoFallback?.errorMessage || loadError }}</text>
+      <view class="demo-reload" role="button" tabindex="0" aria-label="重新加载今日任务" @click="loadCheckin" @keyup.enter="loadCheckin" @keyup.space.prevent="loadCheckin">重新加载今日任务</view>
+      <text class="subtle demo-error">{{ demoFallback?.errorMessage || loadError }}</text>
     </view>
     <EmptyState v-else-if="!task" variant="checkin" title="暂无今日任务" description="请等待慢π运营发布今天的打卡任务。" />
     <view v-else class="checkin-card task-card">

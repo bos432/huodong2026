@@ -1,6 +1,6 @@
 export type MobileUserTab = "home" | "checkin" | "messages" | "me";
 
-/** Canonical user-facing routes. Prototype pages remain available only for design review. */
+/** Canonical slowpi user-facing routes. */
 export function mobileTabRoute(tab: MobileUserTab): string {
   switch (tab) {
     case "home":
@@ -10,6 +10,6 @@ export function mobileTabRoute(tab: MobileUserTab): string {
     case "messages":
       return "/pages/user/notifications";
     case "me":
-      return "/pages/user/my";
+      return "/pages/prototype/me";
   }
 }
