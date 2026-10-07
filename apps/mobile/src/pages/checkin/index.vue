@@ -13,6 +13,8 @@ import type { Challenge } from "../../types/challenge";
 import "../../styles/tokens.css";
 
 const mode = ref<"challenges" | "records">("challenges");
+const isLoading = ref(true);
+const loadError = ref("");
 const challengeCards = ref<Challenge[]>([]);
 const recordSummaries = computed(() => challengeCards.value
   .map((challenge) => getChallengeRecordSummary({
@@ -29,10 +31,19 @@ function readChallengeProgress(id: number, total: number) {
   return getChallengeProgress(progress, total);
 }
 function refreshChallengeCards() {
-  challengeCards.value = mockChallenges.map((challenge) => {
-    const progress = readChallengeProgress(challenge.id, challenge.tasks?.length || challenge.checkpointCount);
-    return { ...challenge, progress: progress.completed, status: progress.status, checkpointCount: progress.total };
-  });
+  isLoading.value = true;
+  loadError.value = "";
+  try {
+    challengeCards.value = mockChallenges.map((challenge) => {
+      const progress = readChallengeProgress(challenge.id, challenge.tasks?.length || challenge.checkpointCount);
+      return { ...challenge, progress: progress.completed, status: progress.status, checkpointCount: progress.total };
+    });
+  } catch (error) {
+    challengeCards.value = [];
+    loadError.value = error instanceof Error ? error.message : "演示任务暂时无法加载";
+  } finally {
+    isLoading.value = false;
+  }
 }
 function openChallenge(id: number) {
   uni.navigateTo({ url: withTenantCode(`/pages/checkin/detail?id=${encodeURIComponent(String(id))}`) });
@@ -64,10 +75,14 @@ onShow(refreshChallengeCards);
         </template>
         <view v-else class="record-empty"><IconGlyph name="calendar" :size="30" label="暂无记录" /><b>暂无本地演示记录</b><small>打开一个演示挑战，完成任意任务后会出现在这里。</small></view>
       </view>
-      <template v-else>
-        <view class="challenge-cover"><image :src="challengeCards[0]?.cover || mockChallenges[0].cover" mode="aspectFill" /><view><small>慢π · 一起去挑战</small><b>把每一次出发，走成自己的路线</b></view></view>
-        <ChallengeCard v-for="challenge in challengeCards" :key="challenge.id" :challenge="challenge" @open="openChallenge" />
-      </template>
+       <template v-else>
+        <view v-if="isLoading" class="state-card"><IconGlyph name="calendar" :size="26" label="加载中" /><b>正在准备演示任务</b><small>很快就可以开始体验。</small></view>
+        <view v-else-if="loadError || !challengeCards.length" class="state-card error"><IconGlyph name="help" :size="26" label="暂无任务" /><b>暂时没有可体验的任务</b><small>{{ loadError || "演示任务正在整理中，请稍后再试。" }}</small><view class="state-action" role="button" tabindex="0" @click="refreshChallengeCards" @keyup.enter="refreshChallengeCards">重新加载</view></view>
+        <template v-else>
+          <view class="challenge-cover"><image :src="challengeCards[0].cover" mode="aspectFill" /><view><small>慢π · 本地演示挑战</small><b>把每一次出发，走成自己的路线</b><view class="hero-action" role="button" tabindex="0" aria-label="开始第一个演示挑战" @click.stop="openChallenge(challengeCards[0].id)" @keyup.enter="openChallenge(challengeCards[0].id)">开始演示挑战 <IconGlyph name="chevron" :size="13" label="进入" /></view></view></view>
+          <ChallengeCard v-for="challenge in challengeCards" :key="challenge.id" :challenge="challenge" @open="openChallenge" />
+        </template>
+       </template>
     </view>
   </MobileShell>
 </template>
@@ -76,6 +91,7 @@ onShow(refreshChallengeCards);
 @import "../../styles/tokens.css";
 .checkin-page{min-height:100vh;background:var(--mp-bg-page);font-family:var(--mp-font-family)}.topline{display:flex;align-items:center;justify-content:space-between;padding:22px 18px 14px;background:#effcf7}.topline b,.topline small{display:block}.topline b{font-size:22px}.topline small{margin-top:4px;color:var(--mp-text-muted);font-size:11px}.record-toggle{display:flex;align-items:center;gap:5px;min-height:44px;color:#2c7a5d;font-size:12px}.record-toggle.active{font-weight:700}.challenge-cover{position:relative;height:170px;margin:0 14px 12px;overflow:hidden;border-radius:16px;background:#c7faed}.challenge-cover image{display:block;width:100%;height:100%;object-fit:cover}.challenge-cover view{position:absolute;right:18px;bottom:18px;left:18px;color:#fff;text-shadow:0 2px 8px #0005}.challenge-cover small,.challenge-cover b{display:block}.challenge-cover b{max-width:230px;margin-top:4px;font-size:20px}.records{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;margin:0 14px;padding:14px;border-radius:16px;background:#fff}.score{padding:10px 12px;border-radius:12px;background:#f3fbf7}.score b,.score small{display:block}.score b{font-size:24px;color:#16a86c}.score small{margin-top:3px;color:#83928a;font-size:11px}.progress{grid-column:1/-1;padding-top:7px}.progress>view{display:flex;justify-content:space-between;font-size:12px}.progress b{color:#13a86a}.progress>i{display:block;height:8px;margin:10px 0 7px;border-radius:8px;background:#e7f0eb}.progress em{display:block;width:0;height:100%;border-radius:inherit;background:#18e789}.progress>small{color:#9ba8a0;font-size:11px}
 .demo-note{display:flex;align-items:center;gap:6px;margin:10px 14px;padding:9px 11px;border-radius:10px;background:#f3eee5;color:#8a6847;font-size:11px}.record-empty{display:grid;grid-column:1/-1;justify-items:center;gap:8px;padding:48px 18px;color:var(--mp-brand-primary);text-align:center}.record-empty b{color:var(--mp-text-primary);font-size:14px}.record-empty small{color:var(--mp-text-muted);font-size:11px}.record-row{display:flex;align-items:center;gap:10px;min-height:64px;padding:10px 0;border-bottom:1px solid var(--mp-border);color:var(--mp-brand-primary-dark)}.record-row:last-child{border-bottom:0}.record-mark{display:grid;width:34px;height:34px;flex:0 0 34px;place-items:center;border-radius:11px;background:var(--mp-brand-soft)}.record-copy{display:grid;min-width:0;flex:1;gap:3px}.record-copy b{overflow:hidden;color:var(--mp-text-primary);font-size:13px;text-overflow:ellipsis;white-space:nowrap}.record-copy small,.record-copy em{color:var(--mp-text-muted);font-size:10px;font-style:normal}.record-copy em{color:#9b7458}
+.state-card{display:grid;justify-items:center;gap:8px;margin:14px;padding:34px 20px;border:1px solid var(--mp-border);border-radius:var(--mp-radius-lg);background:var(--mp-bg-surface);box-shadow:var(--mp-shadow-card);color:var(--mp-brand-primary);text-align:center}.state-card b{color:var(--mp-text-primary);font-size:14px}.state-card small{color:var(--mp-text-muted);font-size:11px;line-height:1.45}.state-card.error{color:var(--mp-danger)}.state-action{min-height:36px;margin-top:5px;padding:0 14px;border-radius:var(--mp-radius-pill);background:var(--mp-brand-primary);color:var(--mp-text-inverse);font-size:11px;line-height:36px}.hero-action{display:flex;align-items:center;gap:3px;width:max-content;min-height:34px;margin-top:10px;padding:0 10px;border:1px solid rgb(255 255 255 / 60%);border-radius:var(--mp-radius-pill);background:rgb(29 36 48 / 24%);color:#fff;font-size:11px;text-shadow:none}
 </style>
 <style scoped>
 .page-heading{display:flex;align-items:flex-start;justify-content:space-between;padding:22px 18px 16px;color:var(--mp-text-primary)}
