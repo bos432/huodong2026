@@ -2,10 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { commitMatchesArtifact, isReleaseId } from './release-metadata.mjs';
 
 const root = '/www/wwwroot/rd.chaimen666.com';
 const releaseId = process.env.H5_RELEASE_ID;
-if (process.cwd() !== root || !/^20260907-[a-f0-9]{8}$/.test(releaseId || '')) throw new Error('Expected scoped production root and H5 release ID.');
+if (process.cwd() !== root || !isReleaseId(releaseId)) throw new Error('Expected scoped production root and H5 release ID.');
 const privateDir = `/www/backup/activity-releases/${releaseId}`;
 const bundle = path.join(privateDir, 'bundle');
 const destination = path.join(root, 'apps/mobile/dist/build/h5');
@@ -18,7 +19,7 @@ const health = (await response.json()).data;
 if (!health?.ready) throw new Error('Existing API is not ready.');
 if (manifest.commit !== run('git', ['rev-parse', 'HEAD']) || manifest.commit.slice(0, 8) !== releaseId.slice(9)) throw new Error('Source and artifact commit mismatch.');
 const version = JSON.parse(await fs.readFile(path.join(bundle, 'h5/version.json'), 'utf8'));
-if (version.commit !== manifest.commit) throw new Error('H5 version mismatch.');
+if (!commitMatchesArtifact(version.commit, manifest.commit)) throw new Error('H5 version mismatch.');
 for (const [relative, expected] of Object.entries(manifest.files)) {
   const filename = path.resolve(bundle, relative);
   if (!filename.startsWith(`${bundle}/`) || hash(await fs.readFile(filename)) !== expected) throw new Error(`Invalid artifact: ${relative}`);

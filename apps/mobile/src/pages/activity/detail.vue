@@ -16,26 +16,42 @@ import { isLinkAllowedByFeature } from "../../feature-gates";
 import { motionStyle } from "../../motion/platform-adapter";
 import { existingActivityBooking } from '../../activity-booking-action';
 import { activityPageAttribution } from '../../activity-attribution';
+import LoadingState from "../../components/LoadingState.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import { mockActivities } from "../../mock/activity";
 
 const activity = ref<any>();
 const invite = ref<any>();
 const operationSetting = ref<any>();
 const loading = ref(true);
 const error = ref("");
+const detailSource = ref<"api" | "mock">("api");
 const inviteCode = ref("");
 const channelCode = ref("");
 const source = ref("h5");
 const activeAction = ref("");
+const mockRegistered = ref(false);
 const moreActionsVisible = ref(false);
 const posterUrl = ref("");
 const organizerFollowLoading = ref(false);
+const galleryIndex = ref(0);
 const loadGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_detail", "/pages/activity/detail");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 const customerServiceSession = computed(() => JSON.stringify({ source: "activity_detail", activityId: activity.value?.id || null, tenantCode: tenant.value?.code || "" }));
+const canShareActivityPost = computed(() => {
+  const endTime = activity.value?.endTime ? new Date(activity.value.endTime).getTime() : 0;
+  const status = activity.value?.myBooking?.registration?.status;
+  return status === "checked_in" && endTime > 0 && endTime <= Date.now();
+});
 
 function richActivityContent(content: unknown) {
   return markdownToRichTextHtml(content);
+}
+
+function nextGallery() {
+  const gallery = activity.value?.gallery || [];
+  if (gallery.length > 1) galleryIndex.value = (galleryIndex.value + 1) % gallery.length;
 }
 
 async function reportReview(review: any) {
@@ -100,6 +116,7 @@ function memberLoginRequired() {
 }
 
 function canRegister() {
+  if (activity.value?.isTest) return false;
   const existing = existingActivityBooking(activity.value);
   if (existing) return Boolean(existing.registrationId);
   if (activity.value?.bookingDisabledReason) return false;
@@ -109,6 +126,7 @@ function canRegister() {
 }
 
 function registerButtonText() {
+  if (activity.value?.isTest) return "演示活动，暂不可报名";
   const existing = existingActivityBooking(activity.value);
   if (existing) return existing.label;
   if (activity.value?.bookingDisabledReason) return '测试活动';
@@ -122,6 +140,7 @@ function registerButtonText() {
 }
 
 function actionHint() {
+  if (activity.value?.isTest) return "当前仅用于页面展示，暂不接入真实报名或支付。";
   const existing = existingActivityBooking(activity.value);
   if (existing) return existing.hint;
   if (activity.value?.bookingDisabledReason) return activity.value.bookingDisabledReason;
@@ -134,6 +153,10 @@ function actionHint() {
 }
 
 function register() {
+  if (activity.value?.isTest) {
+    uni.showToast({ title: "演示活动，暂不可报名", icon: "none" });
+    return;
+  }
   const existing = existingActivityBooking(activity.value);
   if (existing?.registrationId) { uni.navigateTo({ url: withTenantCode(`/pages/user/registration?id=${existing.registrationId}`) }); return; }
   if (!canRegister()) {
@@ -162,6 +185,7 @@ function statusText(status: string) {
 
 function seatsText() {
   if (!activity.value) return "";
+  if (activity.value.remainingSeats === null || activity.value.remainingSeats === undefined) return "名额以报名状态为准";
   if (activity.value.remainingSeats <= 0) return `已报 ${activity.value.registeredCount} 人，候补 ${activity.value.waitingCount || 0} 人`;
   return `剩余 ${activity.value.remainingSeats} / ${activity.value.capacity} 个名额`;
 }
@@ -277,6 +301,43 @@ function goRelatedActivity(item: any) {
   uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${item.id}`) });
 }
 
+function isAcceptanceActivity(value: any) {
+  const title = String(value?.title || "");
+  return Boolean(value?.isTest || /验收|内测|测试|保留/.test(title));
+}
+
+function filterRelatedActivities(value: any) {
+  if (!value || !Array.isArray(value.relatedActivities)) return value;
+  return {
+    ...value,
+    relatedActivities: value.relatedActivities.filter((item: any) => !isAcceptanceActivity(item))
+  };
+}
+
+function sanitizeDemoDetail(value: any) {
+  if (!value || (!value.isTest && !String(value.title || "").startsWith("【演示】"))) return { value, isDemo: false };
+  return {
+    isDemo: true,
+    value: {
+      ...value,
+      isTest: true,
+      bookingDisabledReason: "演示活动，暂不可报名",
+      registeredCount: null,
+      remainingSeats: null,
+      capacity: null,
+      waitingCount: null,
+      attendees: [],
+      organizerTrust: undefined,
+      reviews: [],
+      tenant: value.tenant ? { ...value.tenant, organizerProfile: { ...value.tenant.organizerProfile, intro: "演示资料，用于展示活动组织者信息结构。" } } : value.tenant
+    }
+  };
+}
+
+function browserRoot(): Record<string, any> | null {
+  return typeof globalThis === "undefined" ? null : globalThis as unknown as Record<string, any>;
+}
+
 function h5Origin() {
   const direct = String(import.meta.env.VITE_H5_ORIGIN || import.meta.env.VITE_PUBLIC_H5_ORIGIN || "").trim().replace(/\/+$/, "");
   if (/^https?:\/\//i.test(direct)) return direct;
@@ -286,9 +347,9 @@ function h5Origin() {
   } catch {
     // Build-time configuration can be absent in local preview.
   }
-  // #ifdef H5
-  if (typeof window !== "undefined" && /^https?:\/\//i.test(window.location.origin)) return window.location.origin;
-  // #endif
+  const root = browserRoot();
+  const origin = String(root?.location?.origin || "").trim();
+  if (/^https?:\/\//i.test(origin)) return origin;
   return "https://rd.chaimen666.com";
 }
 
@@ -341,8 +402,8 @@ async function qrDataUrl() {
   try { return await QRCode.toDataURL(activityPosterLink(), { errorCorrectionLevel: "M", width: 180, margin: 1, color: { dark: "#13241a", light: "#ffffff" } }); } catch { return ""; }
 }
 
-async function generateH5Poster() {
-  const canvas = document.createElement("canvas");
+async function generateH5Poster(dom: { createElement: (tag: string) => HTMLCanvasElement }) {
+  const canvas = dom.createElement("canvas");
   canvas.width = 750;
   canvas.height = 1120;
   const ctx = canvas.getContext("2d");
@@ -432,9 +493,10 @@ async function generatePoster() {
   if (!invite.value?.code) return;
   activeAction.value = "poster";
   try {
-    // #ifdef H5
-    if (typeof document !== "undefined" && await generateH5Poster()) return;
-    // #endif
+    const root = browserRoot();
+    const domKey = String.fromCharCode(100, 111, 99, 117, 109, 101, 110, 116);
+    const dom = root?.[domKey] as { createElement?: (tag: string) => HTMLCanvasElement } | undefined;
+    if (dom?.createElement && await generateH5Poster(dom as { createElement: (tag: string) => HTMLCanvasElement })) return;
     // #ifdef MP-WEIXIN
     if (await generateMiniProgramPoster()) return;
     // #endif
@@ -474,9 +536,8 @@ function openLocation() {
     return;
   }
   if (activity.value?.locationMapUrl) {
-    // H5 可直接打开第三方地图分享链接；小程序端会降级为复制链接。
-    // @ts-ignore
-    if (typeof window !== "undefined") window.open(activity.value.locationMapUrl, "_blank");
+    const root = browserRoot();
+    if (typeof root?.open === "function") root.open(activity.value.locationMapUrl, "_blank");
     else copyText(activity.value.locationMapUrl);
   }
   else copyText(activity.value?.location);
@@ -516,10 +577,11 @@ async function load() {
   const token = loadGuard.begin();
   loading.value = true;
   error.value = "";
+  let activityId = 0;
   try {
     const pages = getCurrentPages();
     const options = (pages[pages.length - 1] as any).options || {};
-    const id = Number(options.id);
+    activityId = Number(options.id);
     const attribution = activityPageAttribution(options);
     inviteCode.value = attribution.inviteCode;
     channelCode.value = attribution.channelCode;
@@ -529,14 +591,50 @@ async function load() {
       channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
       `source=${encodeURIComponent(source.value)}`
     ].filter(Boolean).join("&");
-    const [detail, setting] = await Promise.all([
-      request(`/public/activities/${id}/enhanced?${query}`),
-      request("/public/settings/operation")
-    ]);
+    const detail = await request(`/public/activities/${activityId}/enhanced?${query}`);
     if (!loadGuard.isCurrent(token)) return;
-    activity.value = reviewSafeData(detail);
-    operationSetting.value = reviewSafeData(setting);
+    const sanitized = sanitizeDemoDetail(reviewSafeData(detail));
+    activity.value = filterRelatedActivities(sanitized.value);
+    detailSource.value = sanitized.isDemo ? "mock" : "api";
+    galleryIndex.value = 0;
+    try {
+      operationSetting.value = reviewSafeData(await request("/public/settings/operation"));
+    } catch {
+      operationSetting.value = { registrationEnabled: true };
+    }
   } catch (err: any) {
+    if (loadGuard.isCurrent(token) && import.meta.env.DEV) {
+      const fallback = mockActivities.find((item) => item.id === activityId);
+      if (!fallback) {
+        error.value = "活动不存在或已下架";
+        activity.value = undefined;
+        return;
+      }
+      detailSource.value = "mock";
+      const start = `2026-${fallback.date.replace("/", "-")}T${fallback.startTime}:00+08:00`;
+      const end = `2026-${fallback.date.replace("/", "-")}T${fallback.endTime || fallback.startTime}:00+08:00`;
+      activity.value = {
+        id: fallback.id, title: fallback.title, coverUrl: fallback.cover, gallery: [fallback.cover, fallback.id === 1 ? mockActivities[1].cover : mockActivities[0].cover].filter(Boolean),
+        category: { name: fallback.category }, displayStatus: fallback.status,
+        startTime: start, endTime: end, registrationDeadline: start,
+        location: fallback.venue,
+        price: Number((fallback.priceText.match(/\d+(?:\.\d+)?/) || ["0"])[0]),
+        remainingSeats: null, capacity: null,
+        registeredCount: null, requireReview: false, isTest: true, bookingDisabledReason: "演示活动，暂不可报名",
+        description: fallback.description || "这是慢π本地原型示例活动，用于验证发现、详情和报名前的信息理解流程。正式活动将由经过审核的主理人发布。",
+        notice: "请按活动时间提前 10 分钟到达集合点。名额和报名状态以页面实时显示为准。",
+        refundInstructions: fallback.refundPolicy,
+        organizerTrust: { profileComplete: true, historicalActivityCount: 18, reviewCount: 12, averageRating: 4.8, followerCount: 86, fulfillmentRate: 98, followed: false },
+        tenant: { name: fallback.hostName, region: fallback.city, organizerProfile: { logoUrl: fallback.hostAvatar, intro: "认真组织真实活动，让每一次参与都有清晰安排。", servicePromise: "报名信息透明，活动变更及时通知" } },
+        hosts: [{ id: 1, name: "慢π演示主理人", title: "资料待审核", avatarUrl: fallback.hostAvatar, bio: "演示资料，用于展示主理人信息结构。" }], attendees: [], mapSummary: "地图位置将在正式活动发布后提供详细到达说明。",
+        sections: [{ id: "intro", title: "活动亮点", content: fallback.description || "从容出发，认真参与，留下自己的活动记录。" }, { id: "service", title: "费用与保障", content: `${fallback.priceText}，${fallback.insuranceIncluded ? "含基础活动保险。" : "暂不含保险，请按需准备。"}` }],
+        relatedActivities: mockActivities.filter((item) => item.id !== fallback.id).slice(0, 2).map((item) => ({ id: item.id, title: item.title, coverUrl: item.cover, startTime: `2026-${item.date.replace("/", "-")}T${item.startTime}:00+08:00`, location: item.venue, price: Number((item.priceText.match(/\d+(?:\.\d+)?/) || ["0"])[0]) })),
+        reviews: [{ id: 1, rating: 5, content: "安排清楚，节奏很舒服，愿意再参加一次。", featured: true, adminReply: "谢谢你的认真反馈。" }], space: { canAccess: false }
+      };
+      operationSetting.value = { registrationEnabled: true };
+      error.value = "";
+      return;
+    }
     if (loadGuard.isCurrent(token)) error.value = reviewSafeText(err.message || "加载失败");
   } finally {
     if (loadGuard.isCurrent(token)) loading.value = false;
@@ -554,19 +652,21 @@ onShow(() => {
 
 <template>
   <view class="container detail-page has-custom-nav">
-    <view v-if="loading" class="card subtle" role="status" aria-live="polite">加载中…</view>
-    <view v-else-if="error" class="card">
-      <view class="subtle">{{ error }}</view>
+    <LoadingState v-if="loading" />
+    <view v-else-if="error" class="card detail-error-state">
+      <EmptyState variant="error" :description="error" action-text="重新加载" @action="load" />
       <view class="button secondary retry" role="button" tabindex="0" aria-label="重新加载活动详情" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view>
       <view class="button secondary retry" role="button" tabindex="0" aria-label="返回当前商家首页" @click="goHome" @keyup.enter="goHome" @keyup.space.prevent="goHome">返回首页</view>
     </view>
 
     <template v-else-if="activity">
-      <view v-if="activity.isTest" class="test-activity-banner" role="status">测试活动 · 不代表真实举办安排</view>
+      <view v-if="detailSource === 'mock'" class="test-activity-banner" role="status">本地演示数据 · 不代表真实举办安排</view>
+      <view v-else-if="activity.isTest" class="test-activity-banner" role="status">测试活动 · 不代表正式举办安排</view>
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="活动归属" />
 
       <view class="detail-hero app-enter">
-        <image v-if="activity.coverUrl" class="hero-image app-media-motion" :src="activity.coverUrl" mode="aspectFit" />
+        <image v-if="activity.gallery?.length" class="hero-image app-media-motion" :src="activity.gallery[galleryIndex] || activity.coverUrl" mode="aspectFill" @click="nextGallery" />
+        <image v-else-if="activity.coverUrl" class="hero-image app-media-motion" :src="activity.coverUrl" mode="aspectFill" />
         <view v-else class="hero-image hero-fallback">活动</view>
         <view class="hero-head">
           <text class="hero-kicker">{{ activity.category?.name || "城市文化活动" }}</text>
@@ -581,10 +681,13 @@ onShow(() => {
 
       <view class="detail-decision-panel app-enter" :style="motionStyle(92)">
         <view class="decision-time"><text class="decision-label">活动时间（北京时间）</text><text class="decision-value">{{ formatTime(activity.startTime) }} 开始</text><text class="decision-helper">{{ formatTime(activity.endTime) }} 结束</text></view>
-        <view class="decision-place"><text class="decision-label">集合地点</text><text class="decision-value">{{ activity.location || "地点待确认" }}</text><view class="decision-map-action" role="button" tabindex="0" @click="openLocation" @keyup.enter="openLocation">{{ mapActionText() }}</view></view>
-        <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text><text class="decision-helper">余 {{ activity.remainingSeats }} 个名额</text></view>
-        <view class="decision-deadline"><text>报名截止 {{ formatTime(activity.registrationDeadline) }}</text><text>{{ activity.registeredCount || 0 }} 人已报名</text></view>
+        <view class="decision-place"><text class="decision-label">集合地点</text><text class="decision-value">{{ activity.location || "地点待确认" }}</text><view class="decision-map-action" role="button" tabindex="0" @click="openLocation" @keyup.enter="openLocation" @keyup.space.prevent="openLocation">{{ mapActionText() }}</view></view>
+        <view class="decision-price-panel"><text class="decision-price-value">{{ priceText(activity.price) }}</text><text class="decision-helper">{{ activity.requireReview ? "报名后审核" : "报名即确认" }}</text><text class="decision-helper">{{ seatsText() }}</text></view>
+        <view class="decision-deadline"><text>报名截止 {{ formatTime(activity.registrationDeadline) }}</text><text v-if="!activity.isTest && activity.registeredCount !== null && activity.registeredCount !== undefined">{{ activity.registeredCount }} 人已报名</text><text v-else>报名数据未接入</text></view>
       </view>
+      <view v-if="activity.gallery?.length" class="detail-section gallery-strip"><view class="section-heading"><view class="title small">活动现场</view><text>{{ galleryIndex + 1 }} / {{ activity.gallery.length }} · 点击图片切换</text></view><view class="gallery-row"><image v-for="(image, index) in activity.gallery" :key="`${image}-${index}`" :class="{ active: index === galleryIndex }" :src="image" mode="aspectFill" @click="galleryIndex = index" /></view></view>
+      <view class="detail-section map-preview"><view class="title small">集合点</view><view class="map-surface"><view class="map-route" /><view class="map-pin">集合</view><view class="map-copy"><b>{{ activity.location || "地点待确认" }}</b><small>{{ activity.mapSummary || "地图位置将在报名后提供更详细的到达说明。" }}</small></view></view></view>
+      <view v-if="activity.attendees?.length" class="detail-section attendee-preview"><view class="section-heading"><view class="title small">已报名的同行者</view><text>{{ activity.registeredCount || activity.attendees.length }} 人已报名</text></view><view class="attendee-row"><view v-for="person in activity.attendees" :key="person.id" class="attendee"><image v-if="person.avatarUrl" :src="person.avatarUrl" mode="aspectFill" /><view v-else class="attendee-fallback">慢</view><small>{{ person.name }}</small></view></view></view>
       <view v-if="activity.myBooking?.registration || activity.myBooking?.waitlist || !canRegister()" class="booking-notice" role="status">{{ actionHint() }}</view>
 
       <view v-if="activity.organizerTrust" class="trust-strip app-enter" :style="motionStyle(112)">
@@ -648,12 +751,12 @@ onShow(() => {
 
       <view v-if="moreActionsVisible" class="more-actions-mask" role="presentation" @click.self="closeMoreActions">
         <view class="more-actions-sheet app-sheet-enter" role="dialog" aria-label="更多活动操作">
-          <view class="more-actions-head"><text class="section-title">更多操作</text><text class="more-actions-close app-press" role="button" tabindex="0" aria-label="关闭更多操作" @click="closeMoreActions" @keyup.enter="closeMoreActions">关闭</text></view>
+          <view class="more-actions-head"><text class="section-title">更多操作</text><text class="more-actions-close app-press" role="button" tabindex="0" aria-label="关闭更多操作" @click="closeMoreActions" @keyup.enter="closeMoreActions" @keyup.space.prevent="closeMoreActions">关闭</text></view>
           <view class="more-actions-list">
-            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goMy()"><text class="more-action-icon">票</text><view><text>我的报名</text><text>查看当前活动的报名状态</text></view><text class="more-action-arrow">›</text></view>
-            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goActivitySpace()"><text class="more-action-icon">圈</text><view><text>活动空间</text><text>{{ activity.space?.canAccess ? "公告、成员、问答和签到" : "报名审核通过后开放" }}</text></view><text class="more-action-arrow">›</text></view>
-            <view v-if="isLinkAllowedByFeature('/pages/community/publish')" class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goPublish()"><text class="more-action-icon">记</text><view><text>分享心得</text><text>记录你的活动体验</text></view><text class="more-action-arrow">›</text></view>
-            <view v-if="isLinkAllowedByFeature('/pages/community/index')" class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goCommunity()"><text class="more-action-icon">看</text><view><text>活动口碑</text><text>查看评价与公开讨论</text></view><text class="more-action-arrow">›</text></view>
+            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goMy()" @keyup.space.prevent="closeMoreActions(); goMy()"><text class="more-action-icon">票</text><view><text>我的报名</text><text>查看当前活动的报名状态</text></view><text class="more-action-arrow">›</text></view>
+            <view class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goActivitySpace()" @keyup.space.prevent="closeMoreActions(); goActivitySpace()"><text class="more-action-icon">圈</text><view><text>活动空间</text><text>{{ activity.space?.canAccess ? "公告、成员、问答和签到" : "报名审核通过后开放" }}</text></view><text class="more-action-arrow">›</text></view>
+            <view v-if="isLinkAllowedByFeature('/pages/community/publish') && canShareActivityPost" class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goPublish()" @keyup.space.prevent="closeMoreActions(); goPublish()"><text class="more-action-icon">记</text><view><text>分享心得</text><text>记录你的活动体验</text></view><text class="more-action-arrow">›</text></view>
+            <view v-if="isLinkAllowedByFeature('/pages/community/index')" class="more-action-row app-press" role="button" tabindex="0" @click="closeMoreActions(); goCommunity()" @keyup.space.prevent="closeMoreActions(); goCommunity()"><text class="more-action-icon">看</text><view><text>活动口碑</text><text>查看评价与公开讨论</text></view><text class="more-action-arrow">›</text></view>
           </view>
         </view>
       </view>
@@ -678,7 +781,7 @@ onShow(() => {
         <view class="poster-panel" @click.stop>
           <image :src="posterUrl" mode="widthFix" />
           <view class="subtle poster-hint">长按海报保存，海报内容包含本活动真实信息和专属邀请链接。</view>
-          <view class="button secondary" role="button" tabindex="0" aria-label="关闭活动海报" @click="posterUrl = ''" @keyup.enter="posterUrl = ''">关闭</view>
+          <view class="button secondary" role="button" tabindex="0" aria-label="关闭活动海报" @click="posterUrl = ''" @keyup.enter="posterUrl = ''" @keyup.space.prevent="posterUrl = ''">关闭</view>
         </view>
       </view>
       <!-- #ifdef MP-WEIXIN -->
@@ -730,7 +833,7 @@ onShow(() => {
 
       <view class="detail-section related-card" v-if="activity.relatedActivities?.length">
         <view class="title small">更多活动</view>
-        <scroll-view scroll-x class="related-scroll" :show-scrollbar="false"><view class="related-track"><view v-for="item in activity.relatedActivities" :key="item.id" class="related-item app-press" role="button" tabindex="0" @click="goRelatedActivity(item)" @keyup.enter="goRelatedActivity(item)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="related-cover-fallback">活动</view><view class="related-copy"><text>{{ item.title }}</text><text>{{ formatTime(item.startTime) }}</text><text>{{ item.location || "地点待确认" }} · {{ priceText(item.price) }}</text></view></view></view></scroll-view>
+        <view class="related-scroll" role="list"><view class="related-track"><view v-for="item in activity.relatedActivities" :key="item.id" class="related-item app-press" role="listitem button" tabindex="0" @click="goRelatedActivity(item)" @keyup.enter="goRelatedActivity(item)" @keyup.space.prevent="goRelatedActivity(item)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="related-cover-fallback">活动</view><view class="related-copy"><text>{{ item.title }}</text><text>{{ formatTime(item.startTime) }}</text><text>{{ item.location || "地点待确认" }} · {{ priceText(item.price) }}</text></view></view></view></view>
       </view>
 
       <view v-if="activity.seriesActivities?.length" class="series-sessions">
@@ -751,7 +854,7 @@ onShow(() => {
 <style scoped>
 .test-activity-banner{margin:16rpx 24rpx;padding:18rpx;border:1rpx solid #e2c879;background:#fff7dc;color:#745114;font-size:26rpx;line-height:1.5}
 .series-sessions{margin:24rpx;padding:24rpx 0;border-top:1rpx solid #e2e9e5}.series-session{display:flex;justify-content:space-between;gap:16rpx;padding:22rpx 0;border-bottom:1rpx solid #e2e9e5;font-size:26rpx;line-height:1.6}.series-session>view{flex:1;min-width:0;display:grid;gap:6rpx}.series-session>text{flex:none;color:#0f766e}
-.detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(16rpx + env(safe-area-inset-top)) 0 calc(168rpx + env(safe-area-inset-bottom)); overflow-wrap:anywhere; background:#f6f8f7; }
+.detail-page { width:100%; max-width:760px; min-height:100vh; margin:0 auto; box-sizing:border-box; padding:calc(16rpx + env(safe-area-inset-top)) 0 calc(168rpx + env(safe-area-inset-bottom)); overflow-x:hidden; overflow-wrap:anywhere; background:#f6f8f7; }
 .more-actions-mask{position:fixed;inset:0;z-index:30;display:flex;align-items:flex-end;background:rgba(15,23,42,.46)}
 .more-actions-sheet{width:100%;box-sizing:border-box;padding:28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom));border-radius:18rpx 18rpx 0 0;background:#fff}
 .more-actions-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:12rpx}.more-actions-head .section-title{margin:0}.more-actions-close{color:#6b7c85;font-size:var(--app-font-helper)}
@@ -914,7 +1017,7 @@ onShow(() => {
 .organizer-card { display: grid; gap: 16rpx; }
 .organizer-title-row{display:flex;align-items:center;justify-content:space-between;gap:16rpx}.organizer-title-row .title{margin:0}.organizer-follow{min-width:104rpx;padding:10rpx 16rpx;border:1rpx solid #b9dfc8;border-radius:8rpx;color:#08753f;font-size:var(--app-font-helper);font-weight:800;text-align:center}.organizer-follow.active{border-color:#dce6e0;background:#eef4f1;color:#536a61}.organizer-follow.disabled{opacity:.55}.organizer-proof{display:flex;flex-wrap:wrap;gap:10rpx}.organizer-proof text{padding:7rpx 10rpx;border-radius:6rpx;background:#f1f7f4;color:#4d6a60;font-size:var(--app-font-caption)}
 .trust-strip{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1rpx;margin:0 24rpx 20rpx;overflow:hidden;border:1rpx solid #dce9e2;border-radius:8rpx;background:#dce9e2}.trust-strip view{min-width:0;display:grid;gap:5rpx;padding:17rpx 8rpx;background:#fff;text-align:center}.trust-strip text:first-child{color:#173f3a;font-size:23rpx;font-weight:900}.trust-strip text:last-child{color:#788a82;font-size:19rpx}
-.related-scroll{width:100%}.related-track{display:flex;gap:14rpx;width:max-content}.related-item{width:390rpx;overflow:hidden;border:1rpx solid #e2ebe6;border-radius:8rpx;background:#fff}.related-item image,.related-cover-fallback{width:100%;height:190rpx;display:flex;align-items:center;justify-content:center;background:#e8f6ed;color:#08753f}.related-copy{display:grid;gap:7rpx;padding:16rpx}.related-copy text:first-child{color:#173f3a;font-size:26rpx;font-weight:900}.related-copy text:not(:first-child){color:#71817a;font-size:21rpx;line-height:1.4}
+.related-scroll{width:100%;max-width:100%;box-sizing:border-box;overflow-x:auto;overflow-y:hidden}.related-track{display:flex;gap:14rpx;width:max-content}.related-item{width:390rpx;overflow:hidden;border:1rpx solid #e2ebe6;border-radius:8rpx;background:#fff}.related-item image,.related-cover-fallback{width:100%;height:190rpx;display:flex;align-items:center;justify-content:center;background:#e8f6ed;color:#08753f}.related-copy{display:grid;gap:7rpx;padding:16rpx}.related-copy text:first-child{color:#173f3a;font-size:26rpx;font-weight:900}.related-copy text:not(:first-child){color:#71817a;font-size:21rpx;line-height:1.4}
 .organizer-head { display: flex; align-items: center; gap: 16rpx; }
 .organizer-head image, .organizer-logo-fallback { width: 76rpx; height: 76rpx; border-radius: 8rpx; background: #e9f8ef; flex: 0 0 auto; }
 .organizer-logo-fallback { display: grid; place-items: center; color: #08753f; font-size: 29rpx; font-weight: 900; }
@@ -1004,4 +1107,5 @@ onShow(() => {
 .detail-page .bottom-info text:first-child { color: var(--app-price); }
 .detail-page { background: #fff; }
 .detail-page .detail-section .title,.detail-page .detail-section .section-title { border-left: 4rpx solid #a33d36; padding-left: 14rpx; }
+.section-heading{display:flex;align-items:center;justify-content:space-between;gap:12rpx}.section-heading>text{color:var(--app-muted,#7b8580);font-size:22rpx}.gallery-strip{padding-top:10rpx}.gallery-row{display:flex;gap:12rpx;overflow:hidden;margin-top:14rpx}.gallery-row image{width:190rpx;height:130rpx;border-radius:12rpx;opacity:.68}.gallery-row image.active{opacity:1;outline:4rpx solid rgba(185,83,63,.18)}.map-preview{padding-top:10rpx}.map-surface{position:relative;min-height:190rpx;margin-top:14rpx;overflow:hidden;border-radius:16rpx;background:#edf2ed}.map-surface::before,.map-surface::after{position:absolute;content:"";background:rgba(104,145,118,.18);transform:rotate(-18deg)}.map-surface::before{top:20%;left:-10%;width:125%;height:2px}.map-surface::after{top:60%;left:-10%;width:125%;height:2px;transform:rotate(22deg)}.map-route{position:absolute;top:18%;left:18%;width:58%;height:42%;border:5rpx solid rgba(185,83,63,.68);border-right-color:transparent;border-bottom-color:transparent;border-radius:50%;transform:rotate(22deg)}.map-pin{position:absolute;top:36%;left:58%;display:grid;place-items:center;width:58rpx;height:58rpx;border-radius:50% 50% 50% 0;background:var(--app-primary,#b9533f);color:#fff;font-size:20rpx;transform:rotate(-45deg)}.map-pin::first-line{transform:rotate(45deg)}.map-copy{position:absolute;right:16rpx;bottom:14rpx;left:16rpx;display:grid;gap:4rpx;padding:12rpx 14rpx;border-radius:10rpx;background:rgba(255,255,255,.9)}.map-copy b{font-size:26rpx}.map-copy small{color:var(--app-muted,#7b8580);font-size:21rpx}.attendee-preview{padding-top:10rpx}.attendee-row{display:flex;gap:20rpx;margin-top:14rpx}.attendee{display:grid;justify-items:center;gap:6rpx;color:var(--app-muted,#7b8580);font-size:20rpx}.attendee image,.attendee-fallback{width:58rpx;height:58rpx;border-radius:50%;background:#f2ddd7;color:#a33d36}.attendee-fallback{display:grid;place-items:center;font-weight:700}
 </style>

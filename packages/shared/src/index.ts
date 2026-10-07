@@ -105,6 +105,63 @@ export interface ApiResult<T> {
   data: T;
 }
 
+/** Operator-facing lifecycle semantics for legacy business-job statuses. */
+export type BusinessJobLifecycleState =
+  | "queued"
+  | "processing"
+  | "succeeded"
+  | "retrying"
+  | "dead"
+  | "cancelled";
+
+export function businessJobLifecycleState(input: {
+  status?: string | null;
+  attemptCount?: number | null;
+  lastError?: string | null;
+}): BusinessJobLifecycleState {
+  switch (input.status) {
+    case "processing": return "processing";
+    case "completed": return "succeeded";
+    case "dead_letter": return "dead";
+    case "cancelled": return "cancelled";
+    case "pending":
+      return Number(input.attemptCount ?? 0) > 0 || Boolean(String(input.lastError ?? "").trim())
+        ? "retrying"
+        : "queued";
+    default: return "queued";
+  }
+}
+
+export interface AdminBusinessJob {
+  id: number;
+  tenantId: number;
+  type: string;
+  idempotencyKey: string;
+  status: string;
+  payload?: Record<string, unknown> | null;
+  result?: Record<string, unknown> | null;
+  attemptCount: number;
+  maxAttempts: number;
+  nextAttemptAt?: string | null;
+  lockedUntil?: string | null;
+  lockedBy?: string | null;
+  lastWorkerId?: string | null;
+  lastStartedAt?: string | null;
+  lastFinishedAt?: string | null;
+  lastError?: string | null;
+  requestId?: string | null;
+  completedAt?: string | null;
+  deadLetteredAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface AdminBusinessJobPage {
+  items: AdminBusinessJob[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export type HomepageSectionType =
   | "search_bar"
   | "hero"
@@ -138,6 +195,30 @@ export interface HomepageSectionView {
   config: Record<string, unknown>;
   layout: Record<string, unknown>;
   data?: Record<string, unknown>;
+}
+
+/**
+ * The persisted decoration order is authoritative across admin, H5 and
+ * mini-program clients. Keep the id tie-breaker for legacy rows that share a
+ * sort value, and place malformed/missing values after valid rows.
+ */
+export function sortHomepageSections<T extends { id?: number | string | null; sortOrder?: number | string | null }>(sections: T[]): T[] {
+  return sections
+    .map((section, index) => ({ section, index }))
+    .sort((left, right) => {
+      const leftSortValue = left.section.sortOrder;
+      const rightSortValue = right.section.sortOrder;
+      const leftSort = leftSortValue === null || leftSortValue === undefined || String(leftSortValue).trim() === "" ? Number.NaN : Number(leftSortValue);
+      const rightSort = rightSortValue === null || rightSortValue === undefined || String(rightSortValue).trim() === "" ? Number.NaN : Number(rightSortValue);
+      const leftValue = Number.isFinite(leftSort) ? leftSort : Number.MAX_SAFE_INTEGER;
+      const rightValue = Number.isFinite(rightSort) ? rightSort : Number.MAX_SAFE_INTEGER;
+      if (leftValue !== rightValue) return leftValue - rightValue;
+      const leftId = Number(left.section.id);
+      const rightId = Number(right.section.id);
+      if (Number.isFinite(leftId) && Number.isFinite(rightId) && leftId !== rightId) return leftId - rightId;
+      return left.index - right.index;
+    })
+    .map(({ section }) => section);
 }
 
 export interface HomepageTenantView {
@@ -194,6 +275,402 @@ export interface PublicActivitySummary {
   category?: { id?: number; name?: string | null } | null;
 }
 
+/** Category data used by the public discovery filters. */
+export interface PublicCategorySummary {
+  id: number;
+  name: string;
+  sortOrder?: number | null;
+  enabled?: boolean;
+}
+
+/** Backward-compatible list envelope; older deployments may return a bare array. */
+export interface PublicActivityListResponse {
+  items: PublicActivitySummary[];
+  page?: number;
+  pageSize?: number;
+  total?: number;
+  hasMore?: boolean;
+}
+
+/** Public operation switches consumed by discovery and booking pages. */
+export interface PublicOperationSettings {
+  registrationEnabled?: boolean;
+  registrationDisabledMessage?: string | null;
+  publicActivityArchiveEnabled?: boolean;
+  paymentMethods?: Record<string, boolean>;
+  offlinePaymentInstructions?: string | null;
+}
+
+export type PublicTicketSaleStatus = "available" | "sold_out" | "not_started" | "ended" | string;
+
+export interface PublicTicketTypeSummary {
+  id: number;
+  name: string;
+  price?: number | string | null;
+  capacity?: number | null;
+  remainingSeats?: number | null;
+  perUserLimit?: number | null;
+  saleStatus?: PublicTicketSaleStatus;
+  active?: boolean;
+  disabled?: boolean;
+  earlyBirdPrice?: number | string | null;
+  memberPrice?: number | string | null;
+  tierPrices?: Array<Record<string, unknown>>;
+}
+
+export interface PublicQuoteResult {
+  originalAmount?: number | string | null;
+  payableAmount?: number | string | null;
+  discountAmount?: number | string | null;
+  memberDiscountAmount?: number | string | null;
+  couponDiscountAmount?: number | string | null;
+  pointsUsed?: number | null;
+  pointsDiscountAmount?: number | string | null;
+  availablePoints?: number | null;
+  memberLevel?: { name?: string | null; [key: string]: unknown } | null;
+  refundPolicy?: { enabled?: boolean; charityAmount?: number | string; refundAmount?: number | string; [key: string]: unknown } | null;
+}
+
+export interface PublicRegistrationSubmissionResult {
+  waitlisted?: boolean;
+  registration?: PublicRegistrationSummary | null;
+  order?: PublicOrderSummary | null;
+  waitlist?: Record<string, unknown> | null;
+}
+
+export interface PublicCouponSummary {
+  id: number;
+  code?: string | null;
+  name?: string | null;
+  remainingUses?: number | null;
+  discountType?: string | null;
+  discountValue?: number | string | null;
+  minAmount?: number | string | null;
+}
+
+export interface PublicRefundSummary {
+  id: number;
+  orderId?: number | null;
+  refundNo?: string | null;
+  amount?: number | string | null;
+  amountFen?: number | null;
+  status?: string | null;
+  reviewRemark?: string | null;
+  failureReason?: string | null;
+  createdAt?: string | null;
+}
+
+export interface PublicCharityRefundSummary {
+  enabled?: boolean;
+  terminal?: boolean;
+  canRequest?: boolean;
+  charityAmount?: number | string | null;
+  refundAmount?: number | string | null;
+  actualRefundAmount?: number | string | null;
+  pendingRefund?: PublicRefundSummary | null;
+  [key: string]: unknown;
+}
+
+export interface PublicRegistrationDetailResponse {
+  registration: PublicMemberRegistrationRecord;
+  order?: PublicMemberOrderRecord | null;
+  refunds?: PublicRefundSummary[];
+  charityRefund?: PublicCharityRefundSummary | null;
+  operationSetting?: PublicOperationSettings | null;
+  groupQrCodeUrl?: string | null;
+}
+
+export interface PublicCheckInCodeResult {
+  code: string;
+  expiresAt?: string | null;
+  activityId: number;
+  registrationId: number;
+}
+
+export interface PublicPaymentMutationResult {
+  order?: PublicMemberOrderRecord | null;
+  transaction?: Record<string, unknown> | null;
+  walletTransaction?: Record<string, unknown> | null;
+  idempotent?: boolean;
+}
+
+export interface PublicPaymentRequestResult {
+  mode?: string;
+  amount?: number | string | null;
+  payParams?: {
+    h5Url?: string;
+    formBody?: string;
+    gatewayUrl?: string;
+    tradeType?: string;
+    package?: string;
+    codeUrl?: string;
+    [key: string]: unknown;
+  } | null;
+  [key: string]: unknown;
+}
+
+export interface PublicPaymentStatusResult {
+  provider?: string | null;
+  mode?: string | null;
+  orderNo?: string | null;
+  transactionNo?: string | null;
+  amount?: number | string | null;
+  amountFen?: number | null;
+  status?: "success" | "pending" | "closed" | string;
+  localOrder?: PublicMemberOrderRecord | null;
+}
+
+export interface PublicMemberOrderRecord extends PublicOrderSummary {
+  amount?: number | string | null;
+  amountFen?: number | null;
+  originalAmount?: number | string | null;
+  expiresAt?: string | null;
+  closedAt?: string | null;
+  closeReason?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  ticketType?: Record<string, unknown> | null;
+  coupon?: Record<string, unknown> | null;
+  memberLevel?: Record<string, unknown> | null;
+}
+
+/** Minimal public course fields consumed by the member learning/order surfaces. */
+export interface PublicLearningSummary {
+  id?: number;
+  progress?: number | string | null;
+  completedAt?: string | null;
+  updatedAt?: string | null;
+  completionThreshold?: number | null;
+  recentLesson?: { id?: number; title?: string | null; progress?: number | string | null; updatedAt?: string | null } | null;
+}
+
+export interface PublicCourseSummary {
+  id: number;
+  title: string;
+  description?: string | null;
+  coverUrl?: string | null;
+  teacherName?: string | null;
+  teacherAvatar?: string | null;
+  categoryId?: number | null;
+  price?: number | string | null;
+  originalPrice?: number | string | null;
+  accessMode?: string | null;
+  completionThreshold?: number | null;
+  rating?: number | string | null;
+  reviewCount?: number | null;
+  status?: string | null;
+  tags?: string[] | null;
+  learning?: PublicLearningSummary | null;
+  tenant?: TenantContext | null;
+}
+
+/** Public course order fields; payment provider credentials are intentionally absent. */
+export interface PublicCourseOrderRecord {
+  id: number;
+  orderNo?: string | null;
+  amount?: number | string | null;
+  amountFen?: number | null;
+  paymentMethod?: PaymentMethod | string | null;
+  status: string;
+  transactionNo?: string | null;
+  paidAt?: string | null;
+  expiresAt?: string | null;
+  closedAt?: string | null;
+  closeReason?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  course?: PublicCourseSummary | null;
+  owned?: boolean;
+  latestRefund?: PublicRefundSummary | null;
+  refundedAmountFen?: number | null;
+  refundableAmountFen?: number | null;
+}
+
+export interface PublicMemberRegistrationRecord extends PublicRegistrationSummary {
+  answers?: RegistrationAnswer[];
+  formSchemaVersion?: number | null;
+  formSnapshot?: Array<Record<string, unknown>>;
+  companions?: Array<Record<string, unknown>>;
+  reviewRemark?: string | null;
+  cancelReason?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  order?: PublicMemberOrderRecord | null;
+  latestRefund?: PublicRefundSummary | null;
+}
+
+export interface PublicMemberAccessSnapshot {
+  eligible?: boolean;
+  loginRequired?: boolean;
+  message?: string | null;
+  requiredLevel?: unknown;
+  currentLevel?: unknown;
+  priorityActive?: boolean;
+}
+
+export interface PublicActivitySpaceAccess {
+  canAccess?: boolean;
+  [key: string]: unknown;
+}
+
+export interface PublicOrganizerTrust {
+  followed?: boolean;
+  followerCount?: number;
+  [key: string]: unknown;
+}
+
+export interface PublicActivityDetail extends PublicActivitySummary {
+  gallery?: string[];
+  attendees?: Array<{ id: number; name: string; avatarUrl?: string | null; checkedIn?: boolean }>;
+  description?: string | null;
+  notice?: string | null;
+  shareTitle?: string | null;
+  shareImageUrl?: string | null;
+  registrationDeadline?: string | null;
+  waitingCount?: number | null;
+  bookingDisabledReason?: string | null;
+  hasGroupQrCode?: boolean;
+  minMemberLevel?: unknown;
+  memberAccess?: PublicMemberAccessSnapshot | null;
+  organizerTrust?: PublicOrganizerTrust | null;
+  refundInstructions?: string | null;
+  requireReview?: boolean;
+  space?: PublicActivitySpaceAccess | null;
+  hosts?: Array<Record<string, unknown>>;
+  sections?: Array<Record<string, unknown>>;
+  reviews?: Array<Record<string, unknown>>;
+  relatedActivities?: PublicActivitySummary[];
+  seriesActivities?: PublicActivitySummary[];
+  myBooking?: PublicRegistrationSummary | null;
+  tenant?: TenantContext | null;
+  fields?: ActivityFieldDefinition[];
+  ticketTypes?: PublicTicketTypeSummary[];
+  eligibilityRules?: {
+    requirePrivacyConsent?: boolean;
+    allowCompanions?: boolean;
+    maxCompanions?: number | null;
+    [key: string]: unknown;
+  } | null;
+  locationLatitude?: number | string | null;
+  locationLongitude?: number | string | null;
+  locationMapUrl?: string | null;
+}
+
+export interface PublicInvitePosterResult {
+  code?: string | null;
+  inviteText?: string | null;
+}
+
+export interface PublicOrganizerFollowResult {
+  followed: boolean;
+  followerCount?: number | null;
+}
+
+export interface PublicActivitySpaceResponse {
+  activity: {
+    id: number;
+    title: string;
+    coverUrl?: string | null;
+    startTime?: string | null;
+    endTime?: string | null;
+    location?: string | null;
+    locationLatitude?: number | string | null;
+    locationLongitude?: number | string | null;
+    locationMapUrl?: string | null;
+    groupQrCodeUrl?: string | null;
+    hasGroupQrCode?: boolean;
+    hosts?: Array<Record<string, unknown>>;
+  };
+  stats: { participantCount?: number; remainingSeats?: number | null };
+  announcements: Array<{ id: number; title: string; content: string; pinned?: boolean; publishAt?: string | null; createdAt?: string | null }>;
+  participants: Array<{ nickname: string; avatarUrl?: string | null; checkedIn?: boolean }>;
+  posts: PublicActivitySpacePost[];
+  checkIn: { available: boolean; checkedIn?: boolean; registrationId?: number | null };
+}
+
+export interface PublicActivitySpacePost {
+  id: number;
+  content: string;
+  createdAt?: string | null;
+  adminReply?: string | null;
+  mine?: boolean;
+  status?: string;
+  user: { nickname: string; avatarUrl?: string | null };
+}
+
+/** Public community records returned by the member interaction pages. */
+export interface PublicCommunityPostSummary {
+  id: number;
+  userId?: number | null;
+  content: string;
+  images?: string[];
+  likes?: number;
+  comments?: number;
+  shareCount?: number;
+  favoriteCount?: number;
+  source?: string | null;
+  status?: string | null;
+  city?: string | null;
+  tags?: string[];
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  liked?: boolean;
+  favorited?: boolean;
+  following?: boolean;
+  activity?: Pick<PublicActivitySummary, "id" | "title" | "coverUrl" | "startTime" | "endTime" | "location"> | null;
+}
+
+export interface PublicCommunityNotificationRecord {
+  id: number;
+  type?: string | null;
+  postId?: number | null;
+  commentId?: number | null;
+  title: string;
+  content: string;
+  readAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface PublicCommunityFollowRecord {
+  id: number;
+  followedName: string;
+  createdAt?: string | null;
+}
+
+export interface PublicContentSanctionRecord {
+  id: number;
+  scope?: string | null;
+  type?: string | null;
+  status: string;
+  reason: string;
+  sourceType?: string | null;
+  sourceId?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  revokedAt?: string | null;
+  revokeRemark?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface PublicContentAppealRecord {
+  id: number;
+  sanctionId?: number | null;
+  targetType?: string | null;
+  targetId?: number | null;
+  reason: string;
+  evidenceUrls?: string[];
+  status: string;
+  handleRemark?: string | null;
+  handledAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface PublicContentAppealSubmissionResult extends PublicContentAppealRecord {
+  idempotent?: boolean;
+}
+
 /** Tenant context carried across public requests; it never contains credentials. */
 export interface TenantContext {
   id?: number | null;
@@ -224,6 +701,71 @@ export interface PublicRegistrationSummary {
   canEnterSpace?: boolean;
   canReview?: boolean;
   tenant?: TenantContext | null;
+}
+
+export interface PublicMemberBenefit {
+  key?: string | null;
+  name?: string | null;
+  [key: string]: unknown;
+}
+
+export interface PublicMemberProfile {
+  id: number;
+  phone?: string | null;
+  nickname?: string | null;
+  avatarUrl?: string | null;
+  sourceChannel?: string | null;
+  lastLoginChannel?: string | null;
+  wechatBound?: boolean;
+  wechatAppId?: string | null;
+  hasPassword?: boolean;
+  memberLevel?: { id?: number; name?: string | null; benefits?: PublicMemberBenefit[] | null; [key: string]: unknown } | null;
+  points?: number;
+  growthValue?: number;
+  nextLevel?: { id?: number; name?: string | null; minGrowth?: number; remainingGrowth?: number } | null;
+  memberScope?: TenantContext & { tenantId?: number | null };
+}
+
+export interface PublicWalletSummary {
+  id?: number | null;
+  tenant?: TenantContext | null;
+  availableBalance?: string | number | null;
+  frozenBalance?: string | number | null;
+  giftBalance?: string | number | null;
+  frozenGiftBalance?: string | number | null;
+  totalRecharge?: string | number | null;
+  totalSpent?: string | number | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface PublicAdminAccess {
+  canAccess: boolean;
+  role?: string | null;
+  tenantId?: number | null;
+  tenantName?: string | null;
+}
+
+export interface PublicCharitySummary {
+  totalAmount?: string | number | null;
+  totalCount?: number;
+  [key: string]: unknown;
+}
+
+export interface PublicMallMembershipSummary {
+  id?: number;
+  merchant?: { id?: number; name?: string | null; [key: string]: unknown } | null;
+  memberDiscountText?: string | null;
+  expiresAt?: string | null;
+  isMember?: boolean;
+  [key: string]: unknown;
+}
+
+export interface PublicMallMembershipResponse {
+  enabled?: boolean;
+  isMember?: boolean;
+  status?: string | null;
+  memberships: PublicMallMembershipSummary[];
 }
 
 /** Public order state; payment credentials and provider secrets are intentionally excluded. */
@@ -271,6 +813,185 @@ export interface PublicNotificationRecord {
   errorMessage?: string | null;
   retryCount?: number;
   tenant?: TenantContext | null;
+}
+
+/** Shared admin notification center contracts. Sensitive delivery fields are nullable when masked. */
+export interface AdminNotificationUser {
+  id: number;
+  nickname?: string | null;
+  phone?: string | null;
+  sensitiveMasked?: boolean;
+}
+
+export interface AdminNotificationActivityOption {
+  id: number;
+  title: string;
+  status?: string | null;
+  tenant?: TenantContext | null;
+}
+
+export interface AdminNotificationTagOption {
+  name: string;
+  color?: string | null;
+  count: number;
+}
+
+export interface AdminNotificationOptions {
+  activities: AdminNotificationActivityOption[];
+  tags: AdminNotificationTagOption[];
+}
+
+export type NotificationApprovalStatus = "draft" | "pending" | "approved" | "rejected" | "retired";
+
+export interface AdminNotificationTemplate {
+  id: number;
+  name: string;
+  channel: NotificationChannel | string;
+  scene?: NotificationScene | string | null;
+  title: string;
+  content: string;
+  enabled: boolean;
+  providerTemplateId?: string | null;
+  approvalStatus?: NotificationApprovalStatus | string | null;
+  version?: number;
+  dataKeys?: Record<string, string> | null;
+  page?: string | null;
+  versionCount?: number;
+  tenant?: TenantContext | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+}
+
+export interface AdminNotificationScheduleActivity extends AdminNotificationActivityOption {}
+
+export interface AdminNotificationScheduleTemplate {
+  id: number;
+  name: string;
+  channel: NotificationChannel | string;
+  enabled: boolean;
+}
+
+export interface AdminNotificationSchedule {
+  id: number;
+  name: string;
+  channel: NotificationChannel | string;
+  beforeHours: number;
+  enabled: boolean;
+  title?: string | null;
+  content?: string | null;
+  remark?: string | null;
+  lastRunAt?: string | null;
+  lastSentCount?: number;
+  lastFailedCount?: number;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  activity?: AdminNotificationScheduleActivity | null;
+  template?: AdminNotificationScheduleTemplate | null;
+}
+
+export interface AdminNotificationProviderStatus {
+  channel: NotificationChannel | string;
+  provider: string;
+  enabled: boolean;
+  ready: boolean;
+  missing: string[];
+}
+
+export interface AdminNotificationRecord {
+  id: number;
+  channel: NotificationChannel | string;
+  scene?: NotificationScene | string | null;
+  tenantScopeKey?: string | null;
+  title: string;
+  content: string;
+  status: "pending" | "sent" | "failed" | "suppressed" | "cancelled" | string;
+  provider?: string | null;
+  providerMessageId?: string | null;
+  errorMessage?: string | null;
+  providerTemplateId?: string | null;
+  templateVersion?: number | null;
+  suppressedReason?: string | null;
+  variablesSnapshot?: Record<string, string>;
+  retryCount?: number;
+  sentAt?: string | null;
+  failedAt?: string | null;
+  user?: AdminNotificationUser | null;
+  activity?: AdminNotificationActivityOption | null;
+  remark?: string | null;
+  sensitiveMasked?: boolean;
+  createdAt?: string | null;
+}
+
+export interface AdminNotificationsPage {
+  items: AdminNotificationRecord[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sensitiveMasked?: boolean;
+}
+
+export interface AdminNotificationPreference {
+  id: number;
+  user?: AdminNotificationUser | null;
+  tenantScopeKey: string;
+  channel: NotificationChannel | string;
+  subscribed: boolean;
+  reason?: string | null;
+  unsubscribedAt?: string | null;
+  createdAt?: string | null;
+  updatedAt?: string | null;
+  sensitiveMasked?: boolean;
+}
+
+export interface AdminNotificationPreferencesPage {
+  items: AdminNotificationPreference[];
+  total: number;
+  page: number;
+  pageSize: number;
+  sensitiveMasked?: boolean;
+}
+
+export interface AdminNotificationMonitor {
+  status: Record<string, number>;
+  channels: Record<string, number>;
+  retries: number;
+  recent24h: number;
+  jobs: Record<string, number>;
+  generatedAt?: string | null;
+}
+
+export interface AdminNotificationPreview {
+  channel: NotificationChannel | string;
+  title: string;
+  content: string;
+  variables: Record<string, string>;
+  sensitiveMasked?: boolean;
+}
+
+export interface AdminNotificationDeliveryResult {
+  id?: number;
+  status: string;
+  channel: NotificationChannel | string;
+  provider?: string | null;
+  errorMessage?: string | null;
+  suppressedReason?: string | null;
+  providerMessageId?: string | null;
+}
+
+export interface AdminNotificationBatchResult {
+  matchedCount: number;
+  sentCount: number;
+  failedCount: number;
+}
+
+export interface AdminNotificationScheduleRunResult {
+  dueCount: number;
+}
+
+export interface AdminNotificationTemplateVersions {
+  templateId: number;
+  currentVersion?: number;
+  versions: Array<Partial<AdminNotificationTemplate> & { changedAt?: string; changedBy?: string }>;
 }
 
 export interface PostEventAutomationSettings {

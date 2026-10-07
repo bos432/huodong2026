@@ -6,11 +6,8 @@
       <view class="nav-placeholder" />
     </view>
 
-    <view v-if="loading" class="card state">考核加载中...</view>
-    <view v-else-if="error" class="card state error-state">
-      <text>{{ error }}</text>
-      <view class="button block" @click="load">重试</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载课程考核" description="请稍候，正在同步题目和作答状态。" />
+    <EmptyState v-else-if="error" variant="error" title="课程考核加载失败" :description="error" action-text="重新加载" @action="load" />
 
     <template v-else-if="assessment && attempt">
       <view class="summary-card">
@@ -54,16 +51,15 @@
       </view>
     </template>
 
-    <view v-else class="card state error-state" role="alert" aria-live="assertive">
-      <text>当前考核内容不可用，请返回课程后重试。</text>
-      <view class="button block" role="button" tabindex="0" aria-label="重新加载课程考核" @click="load">重新加载</view>
-    </view>
+    <EmptyState v-else variant="error" title="当前考核内容不可用" description="请返回课程后重试。" action-text="重新加载" @action="load" />
   </view>
 </template>
 
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { ensureUser, request } from "../../api";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";

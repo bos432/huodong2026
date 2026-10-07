@@ -76,13 +76,16 @@ const channelErrorMessage = ref("");
 const channels = ref<any[]>([]);
 const channelReport = ref<any[]>([]);
 const channelForm = reactive({ name: "", code: "", source: "", remark: "" });
+type ImageUploadState = { status: "idle" | "uploading" | "success" | "error"; message: string };
+const imageUploadStates = reactive<Record<string, ImageUploadState>>({});
+let activityLoadSerial = 0;
 const form = reactive<any>(defaultForm());
 const activityFormSteps = [
-  { name: "base", label: "基础信息" },
-  { name: "fields", label: "报名字段" },
-  { name: "hosts", label: "主理人" },
-  { name: "sections", label: "详情模块" },
-  { name: "rules", label: "报名规则" }
+  { name: "base", label: "基础信息", description: "标题、时间地点、封面、价格与报名入口" },
+  { name: "fields", label: "报名字段", description: "用户报名时需要填写的信息" },
+  { name: "hosts", label: "主理人", description: "组织者身份、简介与信任信息" },
+  { name: "sections", label: "详情模块", description: "活动亮点、流程、图片与详细介绍" },
+  { name: "rules", label: "报名规则", description: "资格、隐私、同行人和取消规则" }
 ];
 const activeActivityStep = ref(activityFormSteps[0].name);
 const activeActivityStepIndex = computed(() => Math.max(activityFormSteps.findIndex((item) => item.name === activeActivityStep.value), 0));
@@ -297,10 +300,12 @@ function activityQueryParams() {
 }
 
 async function loadActivities() {
+  const serial = ++activityLoadSerial;
   loading.value = true;
   errorMessage.value = "";
   try {
     const data = await api.get<any, any>("/admin/activities", { params: activityQueryParams() });
+    if (serial !== activityLoadSerial) return;
     rows.value = Array.isArray(data) ? data : data.items || [];
     statusCounts.value = Array.isArray(data) ? {} : data.counts || {};
     pagination.total = Array.isArray(data) ? data.length : Number(data.total || 0);
@@ -309,10 +314,12 @@ async function loadActivities() {
       pagination.pageSize = Number(data.pageSize || pagination.pageSize);
     }
   } catch (error: any) {
+    if (serial !== activityLoadSerial) return;
+    rows.value = [];
     errorMessage.value = error.message || "加载活动失败";
     ElMessage.error(errorMessage.value);
   } finally {
-    loading.value = false;
+    if (serial === activityLoadSerial) loading.value = false;
   }
 }
 
@@ -727,33 +734,66 @@ function beforeCoverUpload(file: File) {
   return true;
 }
 
+function imageUploadState(key: string) {
+  return imageUploadStates[key] || { status: "idle", message: "" };
+}
+
+function sectionUploadState(index: number) {
+  return imageUploadState(`section-${index}`);
+}
+
+function setImageUploadState(key: string, status: ImageUploadState["status"], message: string) {
+  imageUploadStates[key] = { status, message };
+}
+
+function imageUploadProgressHandler(key: string, label: string) {
+  return () => setImageUploadState(key, "uploading", `${label}上传中，请勿关闭编辑器`);
+}
+
+function imageUploadErrorHandler(key: string, label: string) {
+  return (error: Error) => {
+    const message = error?.message || `${label}上传失败，请重试`;
+    setImageUploadState(key, "error", message);
+    ElMessage.error(message);
+  };
+}
+
 function handleCoverSuccess(response: any) {
   const data = response?.data || response;
-  if (!data?.url) return ElMessage.error("上传成功但未返回图片地址");
+  if (!data?.url) {
+    setImageUploadState("cover", "error", "封面上传完成，但服务端未返回图片地址，请重试");
+    return ElMessage.error("上传成功但未返回图片地址");
+  }
   form.coverUrl = data.url;
+  setImageUploadState("cover", "success", "封面上传成功，保存活动后生效");
   ElMessage.success("封面已上传");
 }
 
 function handleGroupQrSuccess(response: any) {
   const data = response?.data || response;
-  if (!data?.url) return ElMessage.error("上传成功但未返回图片地址");
+  if (!data?.url) {
+    setImageUploadState("group-qr", "error", "二维码上传完成，但服务端未返回图片地址，请重试");
+    return ElMessage.error("上传成功但未返回图片地址");
+  }
   form.groupQrCodeUrl = data.url;
+  setImageUploadState("group-qr", "success", "群二维码上传成功，保存活动后生效");
   ElMessage.success("活动群二维码已上传");
 }
 
-function handleCoverError(error: Error) {
-  ElMessage.error(error.message || "图片上传失败");
-}
-
-function handleSectionImageSuccess(response: any, section: any) {
+function handleSectionImageSuccess(response: any, section: any, index: number) {
+  const key = `section-${index}`;
   const data = response?.data || response;
-  if (!data?.url) return ElMessage.error("上传成功但未返回图片地址");
+  if (!data?.url) {
+    setImageUploadState(key, "error", "详情图片上传完成，但服务端未返回图片地址，请重试");
+    return ElMessage.error("上传成功但未返回图片地址");
+  }
   section.imageUrl = data.url;
+  setImageUploadState(key, "success", "详情图片上传成功，保存活动后生效");
   ElMessage.success("模块图片已上传");
 }
 
-function sectionImageSuccessHandler(section: any) {
-  return (response: any) => handleSectionImageSuccess(response, section);
+function sectionImageSuccessHandler(section: any, index: number) {
+  return (response: any) => handleSectionImageSuccess(response, section, index);
 }
 
 
@@ -1147,6 +1187,9 @@ watch(
     }
   }
 );
+const publishCheckIssues = computed(() => publishCheck.value?.issues || []);
+const publishCheckBlockingIssues = computed(() => publishCheckIssues.value.filter((issue: any) => issue.blocking));
+const publishCheckWarningIssues = computed(() => publishCheckIssues.value.filter((issue: any) => !issue.blocking));
 
 watch(formTenantId, () => {
   if (!isPlatformAdmin()) return;
@@ -1171,7 +1214,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="page activity-management">
+  <div class="page activity-management" :aria-busy="loading">
     <div class="toolbar">
       <div><div class="activity-breadcrumb">{{ isPlatformAdmin() ? '平台运营' : '商家运营' }} / {{ pageTitle }}</div><h2>{{ pageTitle }}</h2></div>
       <div class="toolbar-actions">
@@ -1182,6 +1225,9 @@ onMounted(async () => {
     </div>
 
     <div class="table-card">
+      <div v-if="loading && !rows.length" class="page-loading" role="status" aria-live="polite">
+        正在加载活动列表，请稍候…
+      </div>
       <el-alert
         v-if="isPlatformAdmin()"
         class="permission-alert"
@@ -1246,7 +1292,10 @@ onMounted(async () => {
           {{ item.label }} <small>{{ item.count }}</small>
         </button>
       </div>
-      <el-table :data="rows" stripe empty-text="暂无活动" v-loading="loading">
+      <el-empty v-if="!loading && !errorMessage && !rows.length" description="暂无符合条件的活动">
+        <el-button :disabled="Boolean(activityActionKey)" @click="resetFilters">清除筛选并重新加载</el-button>
+      </el-empty>
+      <el-table v-else :data="rows" stripe empty-text="暂无活动" v-loading="loading">
         <el-table-column prop="title" label="活动" min-width="290">
           <template #default="{ row }"><div class="activity-title-cell"><el-image v-if="row.coverUrl" class="activity-thumbnail" :src="row.coverUrl" fit="cover"><template #error><el-icon><Picture /></el-icon></template></el-image><div><strong>{{ row.title }}</strong><small>#{{ row.id }} · {{ row.category?.name || '未分类' }}<span v-if="row.isTest"> · 测试活动</span></small></div></div></template>
         </el-table-column>
@@ -1296,7 +1345,7 @@ onMounted(async () => {
         </el-table-column>
       </el-table>
 
-      <div class="pager-row">
+      <div v-if="rows.length" class="pager-row">
         <span>共 {{ pagination.total }} 个活动</span>
         <el-pagination
           background
@@ -1341,10 +1390,18 @@ onMounted(async () => {
       </el-alert>
       <template v-else-if="publishCheck">
         <el-alert v-if="publishCheck.passed" type="success" show-icon :closable="false" title="基础发布条件已满足，可继续提交平台审核" />
-        <div v-if="publishCheck.issues?.length" class="publish-check-list">
-          <div v-for="issue in publishCheck.issues" :key="`${issue.field}-${issue.message}`" class="publish-check-item" :class="{ blocking: issue.blocking }">
+        <div class="publish-check-summary" aria-label="发布检查摘要">
+          <span class="publish-check-summary-item is-danger"><strong>{{ publishCheckBlockingIssues.length }}</strong> 个阻断问题</span>
+          <span class="publish-check-summary-item is-warning"><strong>{{ publishCheckWarningIssues.length }}</strong> 条完善建议</span>
+          <span class="publish-check-summary-item is-success"><strong>{{ publishCheck.passed ? "已通过" : "待修复" }}</strong></span>
+        </div>
+        <div v-if="publishCheckIssues.length" class="publish-check-list">
+          <div v-for="issue in publishCheckIssues" :key="`${issue.field}-${issue.message}`" class="publish-check-item" :class="{ blocking: issue.blocking }">
             <el-tag size="small" :type="issue.blocking ? 'danger' : 'warning'">{{ issue.blocking ? "必须修复" : "建议完善" }}</el-tag>
-            <span>{{ issue.message }}</span>
+            <div class="publish-check-item-copy">
+              <strong v-if="issue.field">{{ issue.field }}</strong>
+              <span>{{ issue.message }}</span>
+            </div>
           </div>
         </div>
         <el-empty v-else description="没有发现发布问题" :image-size="72" />
@@ -1472,29 +1529,47 @@ onMounted(async () => {
           </div>
         </el-alert>
         <el-steps class="activity-wizard" :active="activeActivityStepIndex" finish-status="success" simple>
-          <el-step v-for="item in activityFormSteps" :key="item.name" :title="item.label" />
+          <el-step v-for="item in activityFormSteps" :key="item.name" :title="item.label" :description="item.description" />
         </el-steps>
+        <div class="activity-editor-context" role="status">
+          <strong>{{ activityFormSteps[activeActivityStepIndex]?.label }}</strong>
+          <span>{{ activityFormSteps[activeActivityStepIndex]?.description }}</span>
+          <span class="activity-editor-context-hint">保存后可继续编辑，发布前请完成发布检查</span>
+        </div>
         <el-tabs v-model="activeActivityStep">
           <el-tab-pane label="基础信息" name="base">
             <div class="form-grid">
+              <div class="form-section-heading full">
+                <strong>基本信息</strong>
+                <span>先明确活动是什么、由谁负责，以及面向哪类会员</span>
+              </div>
               <el-form-item label="标题" required><el-input v-model="form.title" maxlength="100" show-word-limit /></el-form-item>
               <el-form-item label="分类"><el-select v-model="form.categoryId" clearable><el-option v-for="category in formCategories" :key="category.id" :label="category.name" :value="category.id" /></el-select></el-form-item>
               <el-form-item label="所属代理"><el-select v-model="form.agentId" clearable filterable placeholder="平台自营"><el-option v-for="agent in formAgents" :key="agent.id" :label="agent.name" :value="agent.id" /></el-select></el-form-item>
               <el-form-item label="会员门槛"><el-select v-model="form.minMemberLevelId" clearable><el-option v-for="level in formMemberLevels" :key="level.id" :label="level.name" :value="level.id" /></el-select></el-form-item>
               <el-form-item label="优先报名会员"><el-select v-model="form.priorityMemberLevelId" clearable><el-option v-for="level in formMemberLevels" :key="level.id" :label="level.name" :value="level.id" /></el-select></el-form-item>
               <el-form-item label="优先报名截止"><el-date-picker v-model="form.priorityRegistrationEndsAt" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" clearable /></el-form-item>
+              <div class="form-section-heading full">
+                <strong>封面与分享</strong>
+                <span>封面用于活动卡片，分享信息用于微信转发和活动海报</span>
+              </div>
               <el-form-item class="full" label="封面地址">
                 <div class="cover-field">
                   <el-input v-model="form.coverUrl" placeholder="可填写图片 URL，也可上传本地图片" />
-                  <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeCoverUpload" :on-success="handleCoverSuccess" :on-error="handleCoverError">
-                    <el-button :icon="UploadFilled">上传封面</el-button>
+                  <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeCoverUpload" :on-progress="imageUploadProgressHandler('cover', '封面')" :on-success="handleCoverSuccess" :on-error="imageUploadErrorHandler('cover', '封面')">
+                    <el-button :icon="UploadFilled" :loading="imageUploadState('cover').status === 'uploading'">上传封面</el-button>
                   </el-upload>
+                  <span class="upload-status" :class="`is-${imageUploadState('cover').status}`" role="status">{{ imageUploadState('cover').message || "支持 JPG、PNG、WebP、GIF，最大 5MB" }}</span>
                   <img v-if="form.coverUrl" class="cover-preview" :src="form.coverUrl" alt="活动封面预览" />
                 </div>
               </el-form-item>
               <el-form-item class="full" label="分享标题"><el-input v-model="form.shareTitle" maxlength="200" show-word-limit placeholder="不填则使用活动标题" /></el-form-item>
               <el-form-item class="full" label="分享摘要"><el-input v-model="form.shareDescription" type="textarea" :rows="2" maxlength="500" show-word-limit placeholder="用于微信分享卡片和转发说明" /></el-form-item>
               <el-form-item class="full" label="分享图片"><el-input v-model="form.shareImageUrl" placeholder="不填则使用活动封面" /></el-form-item>
+              <div class="form-section-heading full">
+                <strong>时间地点</strong>
+                <span>报名截止时间必须早于活动开始时间；有经纬度时可在前台打开地图</span>
+              </div>
               <el-form-item label="地点" required><el-input v-model="form.location" placeholder="例如：城市书房 2 楼活动室" /></el-form-item>
               <el-form-item label="省/自治区"><el-input v-model="form.locationProvince" maxlength="80" placeholder="例如：浙江省" /></el-form-item>
               <el-form-item label="城市"><el-input v-model="form.locationCity" maxlength="80" placeholder="用于活动漏斗城市归因，例如：杭州市" /></el-form-item>
@@ -1507,12 +1582,17 @@ onMounted(async () => {
               <el-form-item class="full" label="报名成功入群二维码">
                 <div class="qr-field">
                   <el-input v-model="form.groupQrCodeUrl" placeholder="报名成功后在报名详情页显示；公开活动页只显示入群提示，不直接展示二维码" />
-                  <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeCoverUpload" :on-success="handleGroupQrSuccess" :on-error="handleCoverError">
-                    <el-button :icon="UploadFilled">上传入群二维码</el-button>
+                  <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeCoverUpload" :on-progress="imageUploadProgressHandler('group-qr', '群二维码')" :on-success="handleGroupQrSuccess" :on-error="imageUploadErrorHandler('group-qr', '群二维码')">
+                    <el-button :icon="UploadFilled" :loading="imageUploadState('group-qr').status === 'uploading'">上传入群二维码</el-button>
                   </el-upload>
+                  <span class="upload-status" :class="`is-${imageUploadState('group-qr').status}`" role="status">{{ imageUploadState('group-qr').message || "仅报名成功用户可看到二维码" }}</span>
                   <img v-if="form.groupQrCodeUrl" class="qr-preview" :src="form.groupQrCodeUrl" alt="活动群二维码预览" />
                 </div>
               </el-form-item>
+              <div class="form-section-heading full">
+                <strong>名额与价格</strong>
+                <span>确认报名人数、票价和发布状态，再设置报名审核策略</span>
+              </div>
               <el-form-item label="开始时间" required><el-date-picker v-model="form.startTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
               <el-form-item label="结束时间" required><el-date-picker v-model="form.endTime" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
               <el-form-item label="报名截止" required><el-date-picker v-model="form.registrationDeadline" type="datetime" value-format="YYYY-MM-DD HH:mm:ss" /></el-form-item>
@@ -1526,6 +1606,10 @@ onMounted(async () => {
                 <el-checkbox v-model="form.requireReview" :disabled="!registrationReviewEnabled">需要审核</el-checkbox>
                 <el-checkbox v-model="form.allowCancel">允许取消</el-checkbox>
               </el-form-item>
+              <div class="form-section-heading full">
+                <strong>详情与须知</strong>
+                <span>用清晰的结构说明活动亮点、流程、退款、签到和交通信息</span>
+              </div>
               <el-form-item class="full" label="活动介绍" required>
                 <MarkdownContentEditor v-model="form.description" :disabled="saving || Boolean(activityActionKey)" :templates="activityContentTemplates" placeholder="用标题、列表、加粗和图片组织活动亮点、适合人群、流程与活动信息。" />
               </el-form-item>
@@ -1583,9 +1667,10 @@ onMounted(async () => {
               <el-button type="danger" plain :icon="Delete" @click="removeSection(index)">删除模块</el-button>
               <div class="section-image-field full">
                 <el-input v-model="section.imageUrl" placeholder="模块图片 URL，可选。适合放现场照片、讲师图、流程图或活动长图" />
-                <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeCoverUpload" :on-success="sectionImageSuccessHandler(section)" :on-error="handleCoverError">
-                  <el-button :icon="UploadFilled">上传模块图片</el-button>
+                <el-upload action="/api/admin/uploads/images" name="file" :headers="uploadHeaders()" :show-file-list="false" :before-upload="beforeCoverUpload" :on-progress="imageUploadProgressHandler(`section-${index}`, '详情图片')" :on-success="sectionImageSuccessHandler(section, index)" :on-error="imageUploadErrorHandler(`section-${index}`, '详情图片')">
+                  <el-button :icon="UploadFilled" :loading="sectionUploadState(index).status === 'uploading'">上传模块图片</el-button>
                 </el-upload>
+                <span class="upload-status" :class="`is-${sectionUploadState(index).status}`" role="status">{{ sectionUploadState(index).message || "可选，建议使用清晰的流程图或现场图" }}</span>
                 <img v-if="section.imageUrl" class="section-image-preview" :src="section.imageUrl" alt="详情模块图片预览" />
               </div>
               <div class="full">
@@ -1633,6 +1718,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.page-loading { display: flex; align-items: center; justify-content: center; min-height: 120px; margin-bottom: 16px; border: 1px dashed #cbd5e1; border-radius: 8px; color: #475467; background: #f8fafc; }
 .filter-bar { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; margin: 12px 0 16px; }
 .filter-bar > :deep(.el-input), .filter-bar > :deep(.el-select) { width: 160px; max-width: 100%; }
 .filter-bar > :deep(.el-input:first-child) { width: 240px; }
@@ -1659,8 +1745,14 @@ onMounted(async () => {
 .compliance-issues strong { color: #111827; }
 .compliance-issues span { color: #7c2d12; font-weight: 600; }
 .compliance-issues em { color: #475569; font-style: normal; }
-.activity-wizard { margin-bottom: 14px; }
+.activity-wizard { margin-bottom: 10px; }
+.activity-editor-context { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 12px; margin: 0 0 16px; padding: 10px 12px; border: 1px solid var(--admin-jade-soft, #d8eee5); border-radius: 8px; background: var(--admin-paper-muted, #f6faf8); color: #50635a; font-size: 12px; line-height: 1.5; }
+.activity-editor-context strong { color: var(--admin-primary, #276b59); font-size: 13px; }
+.activity-editor-context-hint { color: #7a8982; }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 16px; }
+.form-section-heading { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 12px; margin: 12px 0 2px; padding: 10px 0 7px; border-bottom: 1px solid #e5ebe7; }
+.form-section-heading strong { color: #234f42; font-size: 13px; }
+.form-section-heading span { color: #7a8982; font-size: 12px; line-height: 1.5; }
 .field-row { display: grid; gap: 10px; margin-bottom: 12px; padding: 12px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .field-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
 .field-head strong { color: #111827; }
@@ -1676,15 +1768,27 @@ onMounted(async () => {
 .permission-alert { margin-bottom: 4px; }
 .switches { align-items: end; }
 .cover-field, .qr-field { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; }
+.upload-status { grid-column: 1 / -1; color: #7a8982; font-size: 12px; line-height: 1.4; }
+.upload-status.is-uploading { color: #276b59; }
+.upload-status.is-success { color: #166534; }
+.upload-status.is-error { color: #b42318; }
 .cover-preview { grid-column: 1 / -1; width: 220px; aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; background: #f8fafc; }
 .qr-preview { grid-column: 1 / -1; width: 180px; aspect-ratio: 1 / 1; object-fit: contain; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
 .section-image-field { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 10px; border-radius: 8px; background: #f8fafc; border: 1px dashed #d7dee8; }
 .section-image-preview { grid-column: 1 / -1; width: min(360px, 100%); aspect-ratio: 16 / 9; object-fit: cover; border-radius: 8px; border: 1px solid #e5e7eb; background: #fff; }
 .approval-header { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-bottom: 16px; border-bottom: 1px solid #e5e7eb; margin-bottom: 18px; }
 .publish-check-head { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding-bottom: 14px; border-bottom: 1px solid #e5e7eb; margin-bottom: 16px; }
+.publish-check-summary { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.publish-check-summary-item { display: inline-flex; align-items: center; gap: 5px; padding: 6px 9px; border-radius: 6px; font-size: 12px; }
+.publish-check-summary-item strong { font-size: 14px; }
+.publish-check-summary-item.is-danger { background: #fff1f2; color: #991b1b; }
+.publish-check-summary-item.is-warning { background: #fff7ed; color: #92400e; }
+.publish-check-summary-item.is-success { background: #ecfdf5; color: #166534; }
 .publish-check-list { display: grid; gap: 8px; margin-top: 16px; }
 .publish-check-item { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; background: #fff7ed; color: #92400e; line-height: 1.5; }
 .publish-check-item.blocking { background: #fff1f2; color: #991b1b; }
+.publish-check-item-copy { display: grid; gap: 2px; min-width: 0; }
+.publish-check-item-copy strong { font-size: 12px; }
 .approval-timeline { padding: 4px 4px 4px 0; }
 .approval-log { display: grid; gap: 6px; color: #334155; font-size: 13px; }
 .approval-log-title { display: flex; justify-content: space-between; gap: 12px; align-items: center; }

@@ -2,11 +2,8 @@
   <view class="form-page has-custom-nav">
     <view class="form-nav"><button class="nav-back" aria-label="返回上一页" @click="goBack">返回</button><text class="nav-title">拓展资料</text><text class="nav-placeholder" /></view>
     <view class="form-head"><text class="head-title">让别人快速理解你</text><text class="head-copy">只填写愿意公开的信息。手机号、微信号等联系方式不会在广场展示。</text></view>
-    <view v-if="loading" class="state" role="status" aria-live="polite">资料加载中…</view>
-    <view v-else-if="loadError" class="state error-state" role="alert" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <button class="button secondary retry-button" aria-label="重新加载拓展资料" @click="load">重新加载</button>
-    </view>
+    <LoadingState v-if="loading" title="正在加载拓展资料" description="请稍候，正在同步你的审核状态和公开资料。" />
+    <EmptyState v-else-if="loadError" variant="error" title="拓展资料加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <view v-else class="form-body">
       <label class="field"><text>展示名称 *</text><input v-model="form.displayName" name="displayName" aria-label="展示名称" autocomplete="off" maxlength="30" placeholder="真实姓名、昵称或职业称呼" /></label>
       <view class="field-row"><label class="field"><text>所在城市</text><input v-model="form.city" name="city" aria-label="所在城市" autocomplete="off" maxlength="80" placeholder="例如 重庆" /></label><label class="field"><text>所在行业</text><input v-model="form.industry" name="industry" aria-label="所在行业" autocomplete="off" maxlength="80" placeholder="例如 文化教育" /></label></view>
@@ -25,15 +22,36 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { ensureUser, request } from "../../api";
+import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const loading = ref(true); const submitting = ref(false); const existing = ref<any>(null); const loadError = ref("");
+const loadGuard = createTenantLoadGuard();
 const form = reactive({ displayName: "", city: "", industry: "", roleTitle: "", introduction: "", offersText: "", needsText: "", visible: true });
-async function load() { loading.value = true; loadError.value = ""; try { await loadFeatureGates(true); if (!guardCurrentPageFeature()) return; await ensureUser(); existing.value = await request("/public/me/social-profile"); if (existing.value) Object.assign(form, { displayName: existing.value.displayName || "", city: existing.value.city || "", industry: existing.value.industry || "", roleTitle: existing.value.roleTitle || "", introduction: existing.value.introduction || "", offersText: (existing.value.offers || []).join("、"), needsText: (existing.value.needs || []).join("、"), visible: existing.value.visible !== false }); } catch (error: any) { loadError.value = error?.message || "拓展资料加载失败，请稍后重试。"; } finally { loading.value = false; } }
+async function load() {
+  const loadToken = loadGuard.begin();
+  loading.value = true;
+  loadError.value = "";
+  try {
+    await loadFeatureGates(true);
+    if (!loadGuard.isCurrent(loadToken) || !guardCurrentPageFeature()) return;
+    await ensureUser();
+    const result = await request("/public/me/social-profile");
+    if (!loadGuard.isCurrent(loadToken)) return;
+    existing.value = result;
+    if (existing.value) Object.assign(form, { displayName: existing.value.displayName || "", city: existing.value.city || "", industry: existing.value.industry || "", roleTitle: existing.value.roleTitle || "", introduction: existing.value.introduction || "", offersText: (existing.value.offers || []).join("、"), needsText: (existing.value.needs || []).join("、"), visible: existing.value.visible !== false });
+  } catch (error: any) {
+    if (loadGuard.isCurrent(loadToken)) loadError.value = error?.message || "拓展资料加载失败，请稍后重试。";
+  } finally {
+    if (loadGuard.isCurrent(loadToken)) loading.value = false;
+  }
+}
 onShow(() => { void load(); });
 function tags(text: string) { return Array.from(new Set(text.split(/[，,、\n]/).map((item) => item.trim()).filter(Boolean))).slice(0, 6); }
-async function submit() { if (submitting.value) return; if (form.displayName.trim().length < 2) return uni.showToast({ title: "请填写展示名称", icon: "none" }); if (form.introduction.trim().length < 10) return uni.showToast({ title: "自我介绍至少10个字", icon: "none" }); if (!tags(form.offersText).length || !tags(form.needsText).length) return uni.showToast({ title: "请填写提供资源和拓展方向", icon: "none" }); submitting.value = true; try { const result = await request<any>("/public/me/social-profile", { method: "POST", data: { displayName: form.displayName.trim(), city: form.city.trim(), industry: form.industry.trim(), roleTitle: form.roleTitle.trim(), introduction: form.introduction.trim(), offers: tags(form.offersText), needs: tags(form.needsText), visible: form.visible } }); uni.showModal({ title: "提交成功", content: result.message || "资料已进入审核", showCancel: false, success: () => uni.navigateBack() }); } catch (e: any) { uni.showToast({ title: e?.message || "提交失败", icon: "none" }); } finally { submitting.value = false; } }
+async function submit() { if (submitting.value) return; if (form.displayName.trim().length < 2) return uni.showToast({ title: "请填写展示名称", icon: "none" }); if (form.introduction.trim().length < 10) return uni.showToast({ title: "自我介绍至少10个字", icon: "none" }); if (!tags(form.offersText).length || !tags(form.needsText).length) return uni.showToast({ title: "请填写提供资源和拓展方向", icon: "none" }); submitting.value = true; const tenantCode = getCurrentTenantCode(); try { const result = await request<any>("/public/me/social-profile", { method: "POST", data: { displayName: form.displayName.trim(), city: form.city.trim(), industry: form.industry.trim(), roleTitle: form.roleTitle.trim(), introduction: form.introduction.trim(), offers: tags(form.offersText), needs: tags(form.needsText), visible: form.visible } }); if (getCurrentTenantCode() !== tenantCode) return; uni.showModal({ title: "提交成功", content: result.message || "资料已进入审核", showCancel: false, success: () => uni.navigateBack() }); } catch (e: any) { if (getCurrentTenantCode() === tenantCode) uni.showToast({ title: e?.message || "提交失败", icon: "none" }); } finally { submitting.value = false; } }
 function goBack() { uni.navigateBack(); }
 </script>
 

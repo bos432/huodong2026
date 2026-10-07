@@ -1,30 +1,35 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
-import { FieldType } from "@activity/shared";
+import { onHide } from "@dcloudio/uni-app";
+import { FieldType, type ActivityFieldDefinition, type ActivityFieldOption, type PublicActivityDetail, type PublicCouponSummary, type PublicMemberRegistrationRecord, type PublicOperationSettings, type PublicQuoteResult, type PublicRegistrationSubmissionResult, type PublicTicketTypeSummary } from "@activity/shared";
 import { ensureUser, fetchMyProfile, getCurrentTenantCode, request, getCurrentRouteWithQuery, uploadRegistrationAttachment, withTenantCode } from "../../api";
 import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { motionStyle } from "../../motion/platform-adapter";
 import { activityPageAttribution } from '../../activity-attribution';
+import { findActiveRegistrationForActivity } from "../../registration-retry";
+import { isRegistrationBusy, transitionRegistrationFlow, type RegistrationFlowEvent, type RegistrationFlowState } from "../../registration-flow-state";
 
-const activity = ref<any>();
-const operationSetting = ref<any>();
+const activity = ref<PublicActivityDetail | null>(null);
+const operationSetting = ref<PublicOperationSettings | null>(null);
 const loading = ref(true);
 const loadError = ref("");
-const submitting = ref(false);
+const registrationState = ref<RegistrationFlowState>("editing");
 const confirming = ref(false);
 const quoting = ref(false);
 const quoteError = ref("");
 const selectedTicketTypeId = ref<number | undefined>();
 const couponCode = ref("");
-const availableCoupons = ref<any[]>([]);
+const availableCoupons = ref<PublicCouponSummary[]>([]);
 const couponLoadingId = ref<number>();
 const pointsToUse = ref(0);
-const quote = ref<any>();
+const quote = ref<PublicQuoteResult | null>(null);
 const userId = ref<number>();
 type PayMethod = "wechat" | "alipay" | "balance" | "offline";
 const paymentMethod = ref<PayMethod>("offline");
@@ -35,7 +40,9 @@ const attemptedSubmit = ref(false);
 const missingFieldId = ref<number>();
 const phoneBindVisible = ref(false);
 const pendingPhoneAction = ref<"" | "submit">("");
-const values = reactive<Record<number, any>>({});
+type RegistrationValue = string | string[] | number | boolean | null | undefined;
+type RegistrationOption = ActivityFieldOption;
+const values = reactive<Record<number, RegistrationValue>>({});
 const privacyAccepted = ref(false);
 const companions = ref<Array<{ name: string; phone: string; idCard: string }>>([]);
 const frequentRegistrants = ref<Array<{ id: number; name: string; phone?: string | null; idCard?: string | null }>>([]);
@@ -43,14 +50,24 @@ const uploadingFieldId = ref<number>();
 const pageLoadGuard = createTenantLoadGuard();
 const quoteLoadGuard = createTenantLoadGuard();
 const couponLoadGuard = createTenantLoadGuard();
+const submitGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_register", "/pages/activity/register");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
+const submitting = computed(() => isRegistrationBusy(registrationState.value));
+
+function setRegistrationState(event: RegistrationFlowEvent) {
+  registrationState.value = transitionRegistrationFlow(registrationState.value, event);
+}
+
+function resetRegistrationEditing() {
+  registrationState.value = transitionRegistrationFlow(registrationState.value, "retry");
+}
 
 const ticketOptions = computed(() => activity.value?.ticketTypes || []);
 const hasTicketTypes = computed(() => ticketOptions.value.length > 0);
-const availableTicketOptions = computed(() => ticketOptions.value.filter((ticket: any) => ticketCanSelect(ticket)));
+const availableTicketOptions = computed(() => ticketOptions.value.filter((ticket: PublicTicketTypeSummary) => ticketCanSelect(ticket)));
 const ticketSelectionUnavailable = computed(() => hasTicketTypes.value && activity.value?.remainingSeats > 0 && !availableTicketOptions.value.length);
-const selectedTicket = computed(() => ticketOptions.value.find((ticket: any) => ticket.id === selectedTicketTypeId.value));
+const selectedTicket = computed(() => ticketOptions.value.find((ticket: PublicTicketTypeSummary) => ticket.id === selectedTicketTypeId.value));
 const currentPayable = computed(() => quote.value?.payableAmount ?? Number(activity.value?.price || 0).toFixed(2));
 const payableNumber = computed(() => Number(currentPayable.value || 0));
 const memberLoginRequired = computed(() => Boolean(activity.value?.memberAccess?.loginRequired));
@@ -81,8 +98,8 @@ const availablePaymentMethods = computed(() => {
 });
 
 const showMemberAccess = computed(() => Boolean(activity.value?.minMemberLevel || activity.value?.memberAccess?.priorityMemberLevel || activity.value?.memberAccess?.requiredLevel));
-const requiredFields = computed(() => (activity.value?.fields || []).filter((field: any) => field.required));
-const completedRequiredCount = computed(() => requiredFields.value.filter((field: any) => isFilled(values[field.id])).length);
+const requiredFields = computed(() => (activity.value?.fields || []).filter((field) => field.required));
+const completedRequiredCount = computed(() => requiredFields.value.filter((field) => isFilled(values[field.id || 0])).length);
 const requiredTotal = computed(() => requiredFields.value.length);
 const formProgressText = computed(() => requiredTotal.value ? `必填 ${completedRequiredCount.value}/${requiredTotal.value}` : "无必填项");
 const selectedTicketName = computed(() => selectedTicket.value?.name || "标准报名");
@@ -90,13 +107,16 @@ const payableText = computed(() => payableNumber.value > 0 ? `￥${currentPayabl
 const refundPolicyHint = computed(() => quote.value?.refundPolicy?.enabled
   ? `按当前公益退款规则，退款时预计保留公益金￥${quote.value.refundPolicy.charityAmount}，预计可退￥${quote.value.refundPolicy.refundAmount}。具体以退款审核结果为准。`
   : "");
+const submissionConfirmationText = computed(() => `${selectedTicketName.value}，应付 ${payableText.value}。${paymentHint.value}${refundPolicyHint.value}`);
 const registrationStep = computed(() => {
   if (!selectedTicketTypeId.value && hasTicketTypes.value) return 1;
   if (requiredTotal.value && completedRequiredCount.value < requiredTotal.value) return 2;
   return 3;
 });
 const submitButtonText = computed(() => {
-  if (submitting.value) return "提交中…";
+  if (registrationState.value === "validating") return "校验中…";
+  if (registrationState.value === "submitting") return "提交中…";
+  if (registrationState.value === "payment_pending") return "等待支付…";
   if (registrationPaused.value) return "报名暂停";
   if (memberLoginRequired.value) return "登录后报名";
   if (memberBlocked.value) return "会员等级不足";
@@ -115,12 +135,12 @@ function openLegal(page: "user-agreement" | "privacy-policy") {
   uni.navigateTo({ url: withTenantCode(`/pages/legal/${page}`) });
 }
 
-function isFilled(value: any) {
+function isFilled(value: RegistrationValue) {
   if (Array.isArray(value)) return value.length > 0;
   return value !== undefined && value !== null && String(value).trim() !== "";
 }
 
-function fieldPlaceholder(field: any) {
+function fieldPlaceholder(field: ActivityFieldDefinition) {
   if (field.type === FieldType.Phone) return "用于接收报名通知";
   if (field.type === FieldType.IdCard) return "请填写证件号码";
   if (field.type === FieldType.Remark) return "如有特殊需求，可在这里说明";
@@ -130,41 +150,50 @@ function fieldPlaceholder(field: any) {
   return `请填写${field.label}`;
 }
 
-function ticketCanSelect(ticket: any) {
+function ticketCanSelect(ticket: PublicTicketTypeSummary) {
   return !ticket.saleStatus || ticket.saleStatus === "available";
 }
 
-function ticketStatusText(ticket: any) {
-  if (ticket.saleStatus === "not_started") return "未开售";
-  if (ticket.saleStatus === "ended") return "已停售";
-  if (ticket.saleStatus === "sold_out") return "已售罄";
-  if (ticket.remainingSeats !== null && ticket.remainingSeats !== undefined) return `剩余 ${ticket.remainingSeats} 张`;
-  return ticket.capacity ? `限 ${ticket.capacity} 人` : "不限容量";
+function ticketStatusText(ticket: PublicTicketTypeSummary) {
+  const limit = Number(ticket.perUserLimit || 0) > 0 ? ` · 每人限 ${Number(ticket.perUserLimit)} 张` : "";
+  if (ticket.saleStatus === "not_started") return `未开售${limit}`;
+  if (ticket.saleStatus === "ended") return `已停售${limit}`;
+  if (ticket.saleStatus === "sold_out") return `已售罄${limit}`;
+  if (ticket.remainingSeats !== null && ticket.remainingSeats !== undefined) return `剩余 ${ticket.remainingSeats} 张${limit}`;
+  return `${ticket.capacity ? `限 ${ticket.capacity} 人` : "不限容量"}${limit}`;
 }
 
-function fieldOptions(field: any) {
-  const options = Array.isArray(field?.options) ? field.options : [];
+function ticketRuleText(ticket: PublicTicketTypeSummary) {
+  const rules: string[] = [];
+  if (ticket.earlyBirdPrice !== null && ticket.earlyBirdPrice !== undefined) rules.push(`早鸟 ￥${Number(ticket.earlyBirdPrice).toFixed(2)}`);
+  if (ticket.memberPrice !== null && ticket.memberPrice !== undefined) rules.push(`会员 ￥${Number(ticket.memberPrice).toFixed(2)}`);
+  if (Array.isArray(ticket.tierPrices) && ticket.tierPrices.length) rules.push(`${ticket.tierPrices.length} 档阶梯价`);
+  return rules.join(" · ");
+}
+
+function fieldOptions(field: ActivityFieldDefinition): RegistrationOption[] {
+  const options = Array.isArray(field.options) ? field.options as Array<ActivityFieldOption | string> : [];
   return options
-    .map((option: any, index: number) => {
+    .map((option, index) => {
       const label = typeof option === "string" ? option : String(option?.label || option?.value || "").trim();
       const value = typeof option === "string" ? option : String(option?.value || label || `option_${index + 1}`).trim();
       return { label: label || value || `选项 ${index + 1}`, value: value || label || `option_${index + 1}` };
     })
-    .filter((option: any) => option.label);
+    .filter((option) => option.label);
 }
 
-function optionKey(option: any, index: number) {
+function optionKey(option: RegistrationOption, index: number) {
   return option.value || option.label || `option_${index}`;
 }
 
-function optionAnswerValue(option: any) {
+function optionAnswerValue(option: RegistrationOption) {
   return option.label || option.value || "";
 }
 
-function setMulti(fieldId: number, option: any) {
+function setMulti(fieldId: number, option: RegistrationOption) {
   const value = optionAnswerValue(option);
   if (!value) return;
-  const current = values[fieldId] || [];
+  const current = Array.isArray(values[fieldId]) ? values[fieldId] as string[] : [];
   values[fieldId] = current.includes(value) ? current.filter((item: string) => item !== value) : [...current, value];
 }
 
@@ -195,7 +224,7 @@ function addCompanion() {
 
 function removeCompanion(index: number) { companions.value.splice(index, 1); }
 
-function chooseAttachment(field: any) {
+function chooseAttachment(field: ActivityFieldDefinition) {
   if (uploadingFieldId.value || submitting.value) return;
   uploadingFieldId.value = field.id;
   uni.chooseMessageFile({
@@ -221,45 +250,54 @@ function chooseAttachment(field: any) {
 
 function submit() {
   if (submitting.value || confirming.value) return;
+  setRegistrationState("validate");
   attemptedSubmit.value = true;
   if (registrationPaused.value) {
+    setRegistrationState("failed");
     uni.showToast({ title: registrationPausedMessage.value, icon: "none" });
     return;
   }
   if (memberLoginRequired.value) {
     goLogin();
+    resetRegistrationEditing();
     return;
   }
   if (memberBlocked.value) {
+    setRegistrationState("failed");
     uni.showToast({ title: activity.value.memberAccess.message, icon: "none" });
     return;
   }
   if (ticketSelectionUnavailable.value) {
+    setRegistrationState("failed");
     uni.showToast({ title: "当前没有可报名票种", icon: "none" });
     return;
   }
   const error = validate();
   if (error) {
+    setRegistrationState("failed");
     uni.showToast({ title: error, icon: "none" });
     if (missingFieldId.value) uni.pageScrollTo({ selector: `.field-${missingFieldId.value}`, duration: 240 });
     return;
   }
   if (payableNumber.value > 0 && !availablePaymentMethods.value.length) {
+    setRegistrationState("failed");
     uni.showToast({ title: "暂无可用支付方式，请联系主办方", icon: "none" });
     return;
   }
-  const content = `${selectedTicketName.value}，应付 ${payableText.value}。${paymentHint.value}${refundPolicyHint.value}`;
   confirming.value = true;
-  uni.showModal({
-    title: activity.value.remainingSeats <= 0 ? "确认加入候补" : "确认提交报名",
-    content,
-    confirmText: activity.value.remainingSeats <= 0 ? "加入候补" : "确认提交",
-    success: (res) => {
-      confirming.value = false;
-      if (res.confirm) void doSubmit();
-    },
-    fail: () => { confirming.value = false; }
-  });
+}
+
+function cancelSubmitConfirmation() {
+  if (!confirming.value) return;
+  confirming.value = false;
+  resetRegistrationEditing();
+}
+
+function confirmSubmit() {
+  if (!confirming.value) return;
+  confirming.value = false;
+  resetRegistrationEditing();
+  void doSubmit();
 }
 
 function goLogin() {
@@ -269,13 +307,17 @@ function goLogin() {
 
 async function doSubmit() {
   if (submitting.value) return;
+  setRegistrationState("submit");
   const tenantCode = getCurrentTenantCode();
   const activityId = Number(activity.value?.id || 0);
-  submitting.value = true;
+  const submitToken = submitGuard.begin();
   try {
-    if (!(await requirePhoneBound("submit"))) return;
-    const answers = activity.value.fields.map((field: any) => ({ fieldId: field.id, label: field.label, type: field.type, value: values[field.id] ?? (field.type === FieldType.MultipleChoice ? [] : "") }));
-    const result = await request<any>(`/public/activities/${activity.value.id}/register`, {
+    if (!(await requirePhoneBound("submit"))) {
+      resetRegistrationEditing();
+      return;
+    }
+    const answers = (activity.value.fields || []).map((field) => ({ fieldId: field.id, label: field.label, type: field.type, value: values[field.id || 0] ?? (field.type === FieldType.MultipleChoice ? [] : "") }));
+    const result = await request<PublicRegistrationSubmissionResult>(`/public/activities/${activity.value.id}/register`, {
       method: "POST",
       data: {
         answers,
@@ -290,17 +332,37 @@ async function doSubmit() {
         companions: companions.value.map((item) => ({ name: item.name.trim(), phone: item.phone.trim() || undefined, idCard: item.idCard.trim() || undefined }))
       }
     });
-    if (getCurrentTenantCode() !== tenantCode || Number(activity.value?.id || 0) !== activityId) return;
+    if (!submitGuard.isCurrent(submitToken) || getCurrentTenantCode() !== tenantCode || Number(activity.value?.id || 0) !== activityId) return;
     if (result.waitlisted) {
+      setRegistrationState("waitlisted");
       uni.showModal({ title: "已进入候补", content: "当前活动名额已满，你已进入候补名单。若有名额释放，主办方可在后台为你补位。", showCancel: false, success: () => uni.navigateBack() });
       return;
     }
+    const registrationStatus = String(result.registration?.status || "");
+    if (registrationStatus === "pending_payment") setRegistrationState("payment_required");
+    else if (registrationStatus === "pending_review") setRegistrationState("review_required");
+    else setRegistrationState("completed");
     uni.showToast({ title: "报名已提交", icon: "success" });
     uni.redirectTo({ url: withTenantCode(`/pages/user/registration?id=${result.registration.id}`) });
   } catch (error: any) {
+    if (!submitGuard.isCurrent(submitToken)) return;
+    setRegistrationState("failed");
+    if (getCurrentTenantCode() === tenantCode) {
+      try {
+        const rows = await request<PublicMemberRegistrationRecord[]>("/public/me/registrations");
+        const recovered = findActiveRegistrationForActivity(Array.isArray(rows) ? rows : [], activityId);
+        if (recovered?.id) {
+          uni.showToast({ title: "已找到刚才的报名记录", icon: "success" });
+          uni.redirectTo({ url: withTenantCode(`/pages/user/registration?id=${recovered.id}`) });
+          return;
+        }
+      } catch {
+        // Preserve the original submission error when recovery is unavailable.
+      }
+    }
     uni.showModal({ title: "提交失败", content: reviewSafeText(error.message || "请稍后再试，或联系主办方协助处理。"), showCancel: false, confirmText: "知道了" });
   } finally {
-    if (getCurrentTenantCode() === tenantCode) submitting.value = false;
+    // The explicit state remains visible after the request so the page can render a deterministic result.
   }
 }
 
@@ -338,7 +400,7 @@ async function refreshQuote(showError = false) {
   quoteError.value = "";
   try {
     userId.value ||= await ensureUser();
-    const result = await request(`/public/activities/${activityId}/quote`, { method: "POST", data: { ticketTypeId: selectedTicketTypeId.value, couponCode: couponCode.value.trim() || undefined, pointsToUse: pointsToUse.value || undefined } });
+    const result = await request<PublicQuoteResult>(`/public/activities/${activityId}/quote`, { method: "POST", data: { ticketTypeId: selectedTicketTypeId.value, couponCode: couponCode.value.trim() || undefined, pointsToUse: pointsToUse.value || undefined } });
     if (!quoteLoadGuard.isCurrent(token) || Number(activity.value?.id) !== activityId) return;
     quote.value = reviewSafeData(result);
   } catch (error: any) {
@@ -352,7 +414,7 @@ async function refreshQuote(showError = false) {
 }
 
 function chooseTicket(id?: number) {
-  const ticket = ticketOptions.value.find((item: any) => item.id === id);
+  const ticket = ticketOptions.value.find((item: PublicTicketTypeSummary) => item.id === id);
   if (ticket && !ticketCanSelect(ticket)) {
     uni.showToast({ title: ticketStatusText(ticket), icon: "none" });
     return;
@@ -370,13 +432,13 @@ async function loadAvailableCoupons() {
   const token = couponLoadGuard.begin();
   const activityId = Number(activity.value.id);
   try {
-    const rows = reviewSafeData(await request(`/public/coupons/available?activityId=${activityId}`)) as any[];
+    const rows = reviewSafeData(await request<PublicCouponSummary[]>(`/public/coupons/available?activityId=${activityId}`));
     if (couponLoadGuard.isCurrent(token) && Number(activity.value?.id) === activityId) availableCoupons.value = rows;
   }
   catch { if (couponLoadGuard.isCurrent(token)) availableCoupons.value = []; }
 }
 
-async function selectOrClaimCoupon(item: any) {
+async function selectOrClaimCoupon(item: PublicCouponSummary) {
   if (couponLoadingId.value) return;
   couponLoadingId.value = item.id;
   try {
@@ -417,9 +479,9 @@ async function loadPage() {
       inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : ""
     ].filter(Boolean).join("&");
     const [detail, setting, savedRegistrants] = await Promise.all([
-      request(`/public/activities/${id}${query ? `?${query}` : ""}`),
-      request("/public/settings/operation"),
-      request<any[]>("/public/me/frequent-registrants").catch(() => [])
+      request<PublicActivityDetail>(`/public/activities/${id}${query ? `?${query}` : ""}`),
+      request<PublicOperationSettings>("/public/settings/operation"),
+      request<Array<{ id: number; name: string; phone?: string | null; idCard?: string | null }>>("/public/me/frequent-registrants").catch(() => [])
     ]);
     if (!pageLoadGuard.isCurrent(token)) return;
     activity.value = reviewSafeData(detail);
@@ -444,6 +506,15 @@ onMounted(() => {
   loadDecoration();
 });
 
+onHide(() => {
+  pageLoadGuard.invalidate();
+  quoteLoadGuard.invalidate();
+  couponLoadGuard.invalidate();
+  submitGuard.invalidate();
+  confirming.value = false;
+  resetRegistrationEditing();
+});
+
 watch(couponCode, () => {
   if (!couponCode.value.trim() && activity.value) refreshQuote();
 });
@@ -451,12 +522,10 @@ watch(couponCode, () => {
 
 <template>
   <view class="container register">
-    <view v-if="loading" class="card subtle" role="status" aria-live="polite">加载中…</view>
-      <view v-else-if="loadError" class="card" role="alert" aria-live="assertive">
-        <view class="title">报名页面加载失败</view>
-        <view class="subtle">{{ loadError }}</view>
+    <LoadingState v-if="loading" title="正在加载报名页面" description="请稍候，正在同步票种、报名字段和支付方式。" />
+      <view v-else-if="loadError" class="card register-error-state">
+        <EmptyState variant="error" :description="loadError" action-text="重新加载" @action="loadPage" />
         <view class="error-actions">
-          <view class="button secondary" role="button" tabindex="0" aria-label="重新加载报名页面" @click="loadPage" @keyup.enter="loadPage" @keyup.space.prevent="loadPage">重新加载</view>
           <view class="button secondary" role="button" tabindex="0" aria-label="去登录" @click="goLogin" @keyup.enter="goLogin" @keyup.space.prevent="goLogin">去登录</view>
         </view>
     </view>
@@ -522,6 +591,7 @@ watch(couponCode, () => {
             <view>
               <view class="ticket-name">{{ ticket.name }}</view>
               <view class="subtle">{{ ticketStatusText(ticket) }}</view>
+              <view v-if="ticketRuleText(ticket)" class="ticket-rule">{{ ticketRuleText(ticket) }}</view>
             </view>
             <view class="ticket-price">￥{{ Number(ticket.price).toFixed(2) }}</view>
           </view>
@@ -629,6 +699,17 @@ watch(couponCode, () => {
           <text>{{ payableText }}</text>
         </view>
         <view class="button" role="button" tabindex="0" :aria-disabled="submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable" :aria-busy="submitting || confirming" :aria-label="submitButtonText" :class="{ secondary: submitting || confirming || memberBlocked || registrationPaused || ticketSelectionUnavailable }" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">{{ confirming ? "等待确认…" : submitButtonText }}</view>
+      </view>
+      <view v-if="confirming" class="submit-confirm-layer" role="dialog" aria-modal="true" aria-labelledby="submit-confirm-title">
+        <view class="submit-confirm-sheet" @click.stop>
+          <view class="submit-confirm-handle" aria-hidden="true"></view>
+          <text id="submit-confirm-title" class="submit-confirm-title">{{ activity?.remainingSeats <= 0 ? "确认加入候补" : "确认提交报名" }}</text>
+          <text class="submit-confirm-copy">{{ submissionConfirmationText }}</text>
+          <view class="submit-confirm-actions">
+            <view class="submit-confirm-secondary" role="button" tabindex="0" aria-label="取消提交" @click="cancelSubmitConfirmation" @keyup.enter="cancelSubmitConfirmation" @keyup.space.prevent="cancelSubmitConfirmation">取消</view>
+            <view class="submit-confirm-primary" role="button" tabindex="0" :aria-label="activity?.remainingSeats <= 0 ? '确认加入候补' : '确认提交'" @click="confirmSubmit" @keyup.enter="confirmSubmit" @keyup.space.prevent="confirmSubmit">{{ activity?.remainingSeats <= 0 ? "加入候补" : "确认提交" }}</view>
+          </view>
+        </view>
       </view>
     </template>
     <WechatPhoneBindSheet
@@ -806,6 +887,7 @@ watch(couponCode, () => {
 .ticket.active { border-color: #0f766e; background: #eaf7f3; }
 .ticket.disabled { opacity: .58; background: #f5f5f4; }
 .ticket-name { font-size: 28rpx; font-weight: 650; margin-bottom: 6rpx; }
+.ticket-rule { margin-top: 4rpx; color: #08753f; font-size: var(--app-font-caption); line-height: 1.4; }
 .ticket-price { flex: 0 0 auto; color: #0f766e; font-weight: 800; }
 .coupon-row { display: grid; grid-template-columns: 1fr 150rpx; gap: 12rpx; align-items: center; }
 .available-coupons { display: grid; gap: 12rpx; margin-top: 16rpx; }
@@ -828,8 +910,17 @@ watch(couponCode, () => {
 .method.active { border-color: #0f766e; background: #eaf7f3; }
 .method-name { color: #172033; font-size: 27rpx; font-weight: 850; }
 .submit-bar { position: fixed; left: 0; right: 0; bottom: 0; display: grid; grid-template-columns: minmax(0, 210rpx) 1fr; gap: 18rpx; align-items: center; padding: 18rpx 24rpx calc(18rpx + env(safe-area-inset-bottom)); background: rgba(255, 255, 255, 0.98); border-top: 1rpx solid #d9ebe6; box-shadow: 0 -10rpx 30rpx rgba(20,72,64,.08); }
-.register { background:#f7f9f8; }.register .detail-hero,.register .hero-image { border-radius:8rpx; overflow:hidden; }.register .card { border-radius:8rpx; border-color:#e2eae6; box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.register .ticket-option,.register .field-control,.register .payment-option { border-radius:8rpx; }.register .submit-bar { border-color:#dce8e2; }.register .submit-button { border-radius:8rpx; background:#20d477; color:#072d19; }
-.registration-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8rpx;margin:0 0 18rpx;padding:12rpx;border:1rpx solid #e2eae6;border-radius:8rpx;background:#fff}.registration-step{min-width:0;display:flex;align-items:center;justify-content:center;gap:8rpx;min-height:54rpx;color:#819087;font-size:21rpx;font-weight:700}.registration-step text:first-child{width:30rpx;height:30rpx;display:grid;place-items:center;border-radius:50%;background:#edf1ef;color:#718078;font-size:18rpx}.registration-step.active{color:#08753f}.registration-step.active text:first-child{background:#dff8e7;color:#08753f}.registration-step.current{border-radius:6rpx;background:#effbf4;color:#163423}
+.submit-confirm-layer { position: fixed; z-index: 30; inset: 0; display: flex; align-items: flex-end; background: rgba(15, 23, 42, .42); }
+.submit-confirm-sheet { width: 100%; box-sizing: border-box; padding: 16rpx 24rpx calc(24rpx + env(safe-area-inset-bottom)); border-radius: 18rpx 18rpx 0 0; background: var(--app-surface, #fff); box-shadow: 0 -12rpx 36rpx rgba(15, 23, 42, .18); }
+.submit-confirm-handle { width: 72rpx; height: 8rpx; margin: 0 auto 20rpx; border-radius: 999rpx; background: var(--app-border, #d9ebe6); }
+.submit-confirm-title { display: block; color: var(--app-text, #172033); font-size: 34rpx; font-weight: 850; line-height: 1.4; }
+.submit-confirm-copy { display: block; margin-top: 14rpx; color: var(--app-text-muted, #667085); font-size: 26rpx; line-height: 1.65; }
+.submit-confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 16rpx; margin-top: 24rpx; }
+.submit-confirm-secondary,.submit-confirm-primary { min-height: 84rpx; display: flex; align-items: center; justify-content: center; border-radius: 8rpx; font-size: 28rpx; font-weight: 800; }
+.submit-confirm-secondary { border: 1rpx solid var(--app-border, #d9ebe6); color: var(--app-text, #172033); background: var(--app-surface-muted, #f5f7f8); }
+.submit-confirm-primary { color: #fff; background: var(--app-action, #0f766e); }
+.register { background:var(--app-page-bg); }.register .detail-hero,.register .hero-image { border-radius:8rpx; overflow:hidden; }.register .card { border-radius:8rpx; border-color:var(--app-border); box-shadow:0 8rpx 20rpx rgba(23,48,36,.035); }.register .ticket-option,.register .field-control,.register .payment-option { border-radius:8rpx; }.register .submit-bar { border-color:var(--app-border); }.register .submit-button { border-radius:8rpx; background:var(--app-action); color:#fff; }
+.registration-steps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8rpx;margin:0 0 18rpx;padding:12rpx;border:1rpx solid var(--app-border);border-radius:8rpx;background:var(--app-surface)}.registration-step{min-width:0;display:flex;align-items:center;justify-content:center;gap:8rpx;min-height:54rpx;color:var(--app-text-subtle);font-size:21rpx;font-weight:700}.registration-step text:first-child{width:30rpx;height:30rpx;display:grid;place-items:center;border-radius:50%;background:var(--app-surface-muted);color:var(--app-text-muted);font-size:18rpx}.registration-step.active{color:var(--app-success)}.registration-step.active text:first-child{background:var(--app-success-soft);color:var(--app-success)}.registration-step.current{border-radius:6rpx;background:var(--app-success-soft);color:var(--app-text)}
 .submit-summary { min-width: 0; display: grid; gap: 4rpx; }
 .submit-summary text:first-child { color: #999999; font-size: 22rpx; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .submit-summary text:last-child { color: #0f766e; font-size: 34rpx; font-weight: 900; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -844,7 +935,7 @@ watch(couponCode, () => {
 .summary{border-radius:14rpx;background:#f5f7f8}
 .summary .payable text:last-child,.ticket-price,.submit-summary text:last-child{color:var(--app-price)}
 .register .submit-bar{border-color:var(--app-border);box-shadow:0 -8rpx 24rpx rgba(22,37,45,.06)}
-.register .submit-bar .button{border-radius:6rpx;background:#a33d36;color:#fff}
+.register .submit-bar .button{border-radius:6rpx;background:var(--app-action);color:#fff}
 .register { background: #fff; }
 .register .register-hero { min-height: 0; margin-bottom: 0; border: 0; border-bottom: 1rpx solid #e1e6de; border-radius: 0; background: #fff; box-shadow: none; }
 .register .hero-image { position: relative; inset: auto; display: block; width: 100%; height: 340rpx; border-radius: 6rpx; }
@@ -861,5 +952,5 @@ watch(couponCode, () => {
 .register .hero-summary text:last-child { color: #28332d; white-space: normal; }
 .register .card { padding: 26rpx 0; margin-bottom: 0; border: 0; border-bottom: 1rpx solid #e1e6de; border-radius: 0; background: #fff; }
 .register .ticket.active,.register .method.active,.register .available-coupon.selected { border-color: #386151; background: #eaf0e9; }
-.register .submit-bar .button.secondary,.register .submit-bar .button.disabled { background: #e6ebe3; color: #65736a; border-color: #d4dfd2; }
+.register .submit-bar .button.secondary,.register .submit-bar .button.disabled { background: var(--app-surface-muted); color: var(--app-text-muted); border-color: var(--app-border); }
 </style>

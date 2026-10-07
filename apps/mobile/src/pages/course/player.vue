@@ -6,13 +6,10 @@
       <view class="nav-more" role="button" tabindex="0" aria-label="打开课程更多操作" @click="showMore" @keyup.enter="showMore" @keyup.space.prevent="showMore">⋯</view>
     </view>
 
-    <view v-if="loading" class="card subtle">加载中...</view>
+    <LoadingState v-if="loading" title="正在加载课程内容" description="请稍候，正在同步课时、学习进度和互动内容。" />
     <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
-      <view>{{ error }}</view>
-      <view class="state-actions">
-        <view class="button block state-button" role="button" tabindex="0" aria-label="重新加载课程播放器" @click="loadCourse" @keyup.enter="loadCourse" @keyup.space.prevent="loadCourse">重新加载</view>
-        <view class="button secondary block state-button" role="button" tabindex="0" aria-label="返回课程详情" @click="goDetail" @keyup.enter="goDetail" @keyup.space.prevent="goDetail">返回内容详情</view>
-      </view>
+      <EmptyState variant="error" :description="error" action-text="重新加载" @action="loadCourse" />
+      <view class="button secondary block state-button" role="button" tabindex="0" aria-label="返回课程详情" @click="goDetail" @keyup.enter="goDetail" @keyup.space.prevent="goDetail">返回内容详情</view>
     </view>
 
     <template v-else>
@@ -45,7 +42,7 @@
     </view>
 
     <view v-if="currentLesson?.contentType === 'article'" class="lesson-content-card"><text>{{ currentLesson?.content || '本课时暂无图文正文' }}</text></view>
-    <view v-if="currentLesson?.contentType === 'attachment'" class="lesson-content-card"><text>{{ currentLesson?.attachmentName || '课程附件' }}</text><view class="button block attachment-button" :class="{ disabled: !currentLesson?.attachmentUrl || attachmentOpening }" role="button" tabindex="0" :aria-label="attachmentOpening ? '附件打开中' : `打开附件 ${currentLesson?.attachmentName || '课程附件'}`" @click="openAttachment" @keyup.enter="openAttachment">{{ attachmentOpening ? "打开中..." : "打开附件" }}</view></view>
+    <view v-if="currentLesson?.contentType === 'attachment'" class="lesson-content-card"><text>{{ currentLesson?.attachmentName || '课程附件' }}</text><view class="button block attachment-button" :class="{ disabled: !currentLesson?.attachmentUrl || attachmentOpening }" role="button" tabindex="0" :aria-disabled="!currentLesson?.attachmentUrl || attachmentOpening" :aria-label="attachmentOpening ? '附件打开中' : `打开附件 ${currentLesson?.attachmentName || '课程附件'}`" @click="openAttachment" @keyup.enter="openAttachment" @keyup.space.prevent="openAttachment">{{ attachmentOpening ? "打开中..." : "打开附件" }}</view></view>
 
     <view class="lesson-card">
       <text class="chapter-title">{{ currentChapterTitle }}</text>
@@ -84,6 +81,8 @@ import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../..
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const showCatalog = ref(false);
 const loading = ref(true);

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElMessage } from "element-plus";
+import { ElMessage, ElMessageBox } from "element-plus";
 import { UploadFilled } from "@element-plus/icons-vue";
 import { api } from "../api";
 import { formatShanghaiDateTime } from '../date-time';
@@ -179,6 +179,15 @@ const selectedOperationTenant = computed(() => tenantOptions.value.find((tenant)
 const editingPlatformOperation = computed(() => canManagePlatformSettings.value && !operationTenantId.value);
 const operationScopeLabel = computed(() => selectedOperationTenant.value ? tenantOptionLabel(selectedOperationTenant.value) : "平台默认配置");
 const operationBusy = computed(() => loadingOperation.value || savingOperation.value || testingSms.value || checkingConnectivity.value);
+const paymentConfigLoading = ref(false);
+const paymentConfigSaving = ref(false);
+const paymentConfigChecking = ref(false);
+const paymentConfigEnabling = ref(false);
+const paymentConfigDisabling = ref(false);
+const paymentConfigError = ref("");
+const paymentConfigStatus = ref<any | null>(null);
+const realPaymentEnabledReadonly = computed(() => Boolean(paymentConfigStatus.value?.launchConfig?.realPaymentEnabled));
+const paymentReadinessStatus = computed(() => paymentConfigStatus.value?.readiness?.status || "unknown");
 const paymentReadiness = computed(() => [
   { key: "free", label: "免费报名", status: "已可用", type: "success", note: "适合免费活动，后端可直接完成报名。" },
   { key: "balance", label: "余额支付", status: "已可用", type: "success", note: "使用用户余额扣款，适合测试和会员账户场景。" },
@@ -234,6 +243,10 @@ const form = reactive({
     activityChanged: false,
     checkInSucceeded: false,
     activityReminder: false,
+    reviewInvitation: false,
+    certificateAvailable: false,
+    activityRecommendations: false,
+    returnVisitReminder: false,
     reminderBeforeHours: 24
   },
   automaticWechat: {
@@ -248,6 +261,10 @@ const form = reactive({
     activityChanged: false,
     checkInSucceeded: false,
     activityReminder: false,
+    reviewInvitation: false,
+    certificateAvailable: false,
+    activityRecommendations: false,
+    returnVisitReminder: false,
     reminderBeforeHours: 24
   },
   postEventAutomation: {
@@ -261,6 +278,38 @@ const form = reactive({
   }
 });
 
+function resetOperationFormToUnknown() {
+  Object.assign(form, {
+    registrationEnabled: true,
+    publicActivityArchiveEnabled: false,
+    tenantSwitcherEnabled: true,
+    registrationDisabledMessage: "",
+    offlinePaymentInstructions: "",
+    paymentMethods: { free: true, wechat: false, alipay: false, balance: true, offline: true },
+    customerServiceName: "",
+    customerServicePhone: "",
+    customerServiceWechat: "",
+    defaultGroupQrCodeUrl: "",
+    defaultTenantCode: "",
+    pageTheme: { ...defaultPageTheme },
+    refundInstructions: "",
+    invoiceInstructions: "",
+    userAgreementUrl: "",
+    privacyPolicyUrl: "",
+    merchantAgreementUrl: "",
+    smsProviderEnabled: false,
+    smsProvider: "luosimao-sms",
+    smsAccessKeyId: "",
+    smsAccessKeySecret: "",
+    smsSignName: "",
+    smsTemplateId: "",
+    smsSdkAppId: "",
+    automaticSms: { enabled: false, registrationSubmitted: false, registrationApproved: false, registrationRejected: false, paymentSucceeded: false, refundSucceeded: false, refundRejected: false, activityCancelled: false, activityChanged: false, checkInSucceeded: false, activityReminder: false, reviewInvitation: false, certificateAvailable: false, activityRecommendations: false, returnVisitReminder: false, reminderBeforeHours: 24 },
+    automaticWechat: { enabled: false, registrationSubmitted: false, registrationApproved: false, registrationRejected: false, paymentSucceeded: false, refundSucceeded: false, refundRejected: false, activityCancelled: false, activityChanged: false, checkInSucceeded: false, activityReminder: false, reviewInvitation: false, certificateAvailable: false, activityRecommendations: false, returnVisitReminder: false, reminderBeforeHours: 24 },
+    postEventAutomation: { enabled: false, reviewInvitation: false, certificateAvailable: false, activityRecommendations: false, returnVisitReminders: false, recallDays: [30, 60, 90], delayHours: 2 }
+  });
+}
+
 const automaticSmsSceneOptions = [
   { key: "registrationSubmitted", label: "报名提交（不等于成功）", template: "创建报名记录后发送，适用于提醒用户留意审核或支付。" },
   { key: "registrationApproved", label: "报名审核通过（即报名成功）", template: "审核制活动通过审核后发送，请按时参加。" },
@@ -271,8 +320,28 @@ const automaticSmsSceneOptions = [
   { key: "activityCancelled", label: "活动取消", template: "活动###已取消，原因###。" },
   { key: "activityChanged", label: "时间或地点变更", template: "活动###的时间或地点已调整，请登录查看最新安排。" },
   { key: "checkInSucceeded", label: "签到成功", template: "您已完成活动###签到，感谢参与。" },
-  { key: "activityReminder", label: "活动开始提醒", template: "您报名的活动###将于###开始，地点###。" }
+  { key: "activityReminder", label: "活动开始提醒", template: "您报名的活动###将于###开始，地点###。" },
+  { key: "reviewInvitation", label: "活动结束评价邀请", template: "活动###已结束，欢迎分享真实体验。" },
+  { key: "certificateAvailable", label: "证书领取", template: "您的###已生成，可前往慢π查看和验真。" },
+  { key: "activityRecommendations", label: "同类活动推荐", template: "根据你参加的###，为你推荐后续活动。" },
+  { key: "returnVisitReminder", label: "活动结束召回", template: "距离你参加的###已过去###，为你找到新的活动。" }
 ] as const;
+
+function parseRecallDays(value: unknown) {
+  const values = String(value || "")
+    .split(/[，,、\s]+/)
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item >= 1 && item <= 365);
+  const unique = Array.from(new Set(values)).sort((a, b) => a - b).slice(0, 6);
+  return unique.length ? unique : [30, 60, 90];
+}
+
+const recallDaysText = computed({
+  get: () => form.postEventAutomation.recallDays.join("、"),
+  set: (value: string) => {
+    form.postEventAutomation.recallDays = parseRecallDays(value);
+  }
+});
 
 const smsTestForm = reactive({ phone: "" });
 const smsSecretConfigured = ref(false);
@@ -334,6 +403,7 @@ const deployment = reactive({
   wechatMessageProvider: "wechat-subscribe-message",
   wechatAppId: "",
   wechatAppSecret: "",
+  wechatMessageTemplateId: "",
   paymentSandboxEnabled: false,
   paymentSandboxSecret: "",
   wechatPaySandboxSecret: "",
@@ -516,6 +586,7 @@ const generatedEnv = computed(() => {
     envLine("WECHAT_MESSAGE_PROVIDER", deployment.wechatMessageProvider),
     envLine("WECHAT_APP_ID", deployment.wechatAppId),
     envLine("WECHAT_APP_SECRET", deployment.wechatAppSecret),
+    envLine("WECHAT_MESSAGE_TEMPLATE_ID", deployment.wechatMessageTemplateId),
     envLine("PAYMENT_SANDBOX_ENABLED", boolValue(deployment.paymentSandboxEnabled)),
     envLine("PAYMENT_SANDBOX_SECRET", deployment.paymentSandboxSecret),
     envLine("WECHAT_PAY_SANDBOX_SECRET", deployment.wechatPaySandboxSecret),
@@ -651,7 +722,8 @@ const notificationReadiness = computed<NotificationReadiness[]>(() => [
   buildNotificationReadiness("wechat", "微信订阅消息", deployment.wechatMessageEnabled, "用于微信订阅消息触达；开启前确认小程序 AppID、密钥和模板审核状态。", [
     ["wechatMessageProvider", "WECHAT_MESSAGE_PROVIDER"],
     ["wechatAppId", "WECHAT_APP_ID"],
-    ["wechatAppSecret", "WECHAT_APP_SECRET"]
+    ["wechatAppSecret", "WECHAT_APP_SECRET"],
+    ["wechatMessageTemplateId", "WECHAT_MESSAGE_TEMPLATE_ID"]
   ])
 ]);
 
@@ -1590,7 +1662,12 @@ function operationPayload() {
 }
 
 function operationLaunchConfigPayload() {
-  if (editingPlatformOperation.value) return deploymentPayload();
+  if (editingPlatformOperation.value) {
+    const payload = deploymentPayload();
+    for (const key of paymentConfigKeys) delete payload[key];
+    delete payload.realPaymentEnabled;
+    return payload;
+  }
   return {
     deliveryMode: deployment.deliveryMode,
     reviewSafeMode: deployment.reviewSafeMode,
@@ -1707,9 +1784,136 @@ async function loadOperation(force = false) {
       applyDeploymentConfig(data.launchConfig || {});
     }
   } catch (error: any) {
+    resetOperationFormToUnknown();
+    smsSecretConfigured.value = false;
+    clearSmsSecretRequested.value = false;
     operationLoadError.value = error.message || "加载配置失败";
   } finally {
     loadingOperation.value = false;
+  }
+}
+
+const paymentConfigKeys = [
+  "wechatPayEnabled", "wechatPayAppId", "wechatPayMchId", "wechatPayApiV3Key", "wechatPayPrivateKeyPath",
+  "wechatPayCertSerialNo", "wechatPayPlatformCertPath", "wechatPayNotifyUrl", "mallWechatPayNotifyUrl",
+  "mallWechatPayRefundNotifyUrl", "mallWechatPayDirectNotifyUrlTemplate", "mallWechatPayDirectRefundNotifyUrlTemplate",
+  "alipayEnabled", "alipayAppId", "alipayPrivateKeyPath", "alipayPublicCertPath", "alipayRootCertPath", "alipayNotifyUrl",
+  "realPaymentSdkImplemented", "realPaymentCallbackVerificationImplemented", "realRefundQueryImplemented",
+  "realPaymentStatementFetchImplemented", "mallRealWechatPaymentImplemented", "mallMerchantDirectPaymentImplemented",
+  "realPaymentPreflightPassed", "realPaymentPreflightResultFile", "realPaymentPreflightMaxAgeHours",
+  "mallMultiMerchantPreflightPassed", "mallMultiMerchantSmokeResultFile", "mallMultiMerchantSmokeMaxAgeHours"
+] as const;
+
+function applyPaymentSettings(data: any) {
+  const launchConfig = data?.launchConfig || {};
+  for (const key of paymentConfigKeys) {
+    if (launchConfig[key] !== undefined) (deployment as any)[key] = launchConfig[key];
+  }
+  paymentConfigStatus.value = data;
+}
+
+function paymentConfigPayload() {
+  const payload: Record<string, unknown> = {};
+  for (const key of paymentConfigKeys) {
+    const value = (deployment as any)[key];
+    if (key === "wechatPayApiV3Key" && (!value || value === "********")) continue;
+    payload[key] = value;
+  }
+  return payload;
+}
+
+async function loadPaymentSettings() {
+  if (!canManagePlatformSettings.value) return;
+  paymentConfigLoading.value = true;
+  paymentConfigError.value = "";
+  try {
+    const data = await api.get<any, any>("/admin/settings/payment");
+    applyPaymentSettings(data);
+  } catch (error: any) {
+    paymentConfigError.value = error.message || "加载平台统一支付配置失败";
+  } finally {
+    paymentConfigLoading.value = false;
+  }
+}
+
+async function savePaymentSettings() {
+  if (!canManagePlatformSettings.value || !canEditSettings.value || paymentConfigSaving.value) return;
+  paymentConfigSaving.value = true;
+  paymentConfigError.value = "";
+  try {
+    const data = await api.put<any, any>("/admin/settings/payment", paymentConfigPayload());
+    applyPaymentSettings(data);
+    ElMessage.success("平台统一支付资料已保存；保存不会自动开启真实支付");
+  } catch (error: any) {
+    paymentConfigError.value = error.message || "保存平台统一支付配置失败";
+    ElMessage.error(paymentConfigError.value);
+  } finally {
+    paymentConfigSaving.value = false;
+  }
+}
+
+async function validatePaymentSettings() {
+  if (!canManagePlatformSettings.value || paymentConfigChecking.value) return;
+  paymentConfigChecking.value = true;
+  paymentConfigError.value = "";
+  try {
+    const data = await api.post<any, any>("/admin/settings/payment/validate");
+    applyPaymentSettings(data);
+    ElMessage[data?.readiness?.status === "ok" ? "success" : "warning"](
+      data?.readiness?.status === "ok" ? "支付配置校验通过" : "支付配置仍未通过开启门禁"
+    );
+  } catch (error: any) {
+    paymentConfigError.value = error.message || "校验平台统一支付配置失败";
+    ElMessage.error(paymentConfigError.value);
+  } finally {
+    paymentConfigChecking.value = false;
+  }
+}
+
+async function enableRealPayment() {
+  if (!canManagePlatformSettings.value || paymentConfigEnabling.value) return;
+  try {
+    await ElMessageBox.confirm(
+      "这会让平台统一支付配置进入真实支付链路，并影响所有使用平台支付的商家。请确认已完成预发联调、退款和回滚准备。",
+      "确认开启真实支付",
+      { type: "warning", confirmButtonText: "确认开启", cancelButtonText: "取消" }
+    );
+  } catch {
+    return;
+  }
+  paymentConfigEnabling.value = true;
+  paymentConfigError.value = "";
+  try {
+    const data = await api.post<any, any>("/admin/settings/payment/enable", { confirmation: "ENABLE_REAL_PAYMENT" });
+    applyPaymentSettings(data);
+    ElMessage.success("平台统一真实支付已开启");
+  } catch (error: any) {
+    paymentConfigError.value = error.message || "真实支付开启失败，请先完成门禁检查";
+    ElMessage.error(paymentConfigError.value);
+    await loadPaymentSettings();
+  } finally {
+    paymentConfigEnabling.value = false;
+  }
+}
+
+async function disableRealPayment() {
+  if (!canManagePlatformSettings.value || paymentConfigDisabling.value) return;
+  try {
+    await ElMessageBox.confirm("关闭后新的真实支付订单将不能继续创建，请确认当前没有需要继续收款的活动。", "确认关闭真实支付", { type: "warning", confirmButtonText: "确认关闭", cancelButtonText: "取消" });
+  } catch {
+    return;
+  }
+  paymentConfigDisabling.value = true;
+  paymentConfigError.value = "";
+  try {
+    const data = await api.post<any, any>("/admin/settings/payment/disable");
+    applyPaymentSettings(data);
+    ElMessage.success("平台统一真实支付已关闭");
+  } catch (error: any) {
+    paymentConfigError.value = error.message || "真实支付关闭失败";
+    ElMessage.error(paymentConfigError.value);
+  } finally {
+    paymentConfigDisabling.value = false;
   }
 }
 
@@ -1816,12 +2020,14 @@ async function runConnectivityCheck() {
 onMounted(async () => {
   await refreshTenantSettings();
   await loadOperation();
-  if (canManagePlatformSettings.value) await loadConfig();
+  if (canManagePlatformSettings.value) {
+    await Promise.all([loadConfig(), loadPaymentSettings()]);
+  }
 });
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" :aria-busy="operationBusy || loadingConfig">
     <div class="toolbar">
       <div>
         <h2>{{ brandSettingsMode ? "品牌设置" : canManagePlatformSettings ? "系统设置" : "运营设置" }}</h2>
@@ -1834,6 +2040,10 @@ onMounted(async () => {
         <el-button v-if="canEditSettings" :loading="checkingConnectivity" :disabled="operationBusy && !checkingConnectivity" @click="runConnectivityCheck">检测连通性</el-button>
         <el-button v-if="canEditSettings" type="primary" :loading="savingOperation" :disabled="operationBusy && !savingOperation" @click="saveOperation">保存设置</el-button>
       </div>
+    </div>
+
+    <div v-if="loadingOperation && !operationLoadError" class="page-loading" role="status" aria-live="polite">
+      正在加载系统设置，请稍候…
     </div>
 
     <el-alert v-if="!canEditSettings" type="info" title="当前账号为只读权限，可查看配置与体检结果，不能保存、测试通道或修改部署参数。" show-icon :closable="false" class="panel-alert" />
@@ -1978,6 +2188,45 @@ onMounted(async () => {
             </template>
             </template>
             <template v-if="operationSection === 'payment'">
+            <div v-if="canManagePlatformSettings" class="table-card unified-payment-card">
+              <div class="card-title-row">
+                <div>
+                  <div class="card-title">平台统一支付配置</div>
+                  <p class="form-tip">所有商家共用平台支付凭证。商家端只配置可用支付方式，不重复保存商户凭证。</p>
+                </div>
+                <el-tag :type="realPaymentEnabledReadonly ? 'success' : paymentReadinessStatus === 'ok' ? 'warning' : 'info'" effect="plain">
+                  {{ realPaymentEnabledReadonly ? "真实支付已开启" : paymentReadinessStatus === "ok" ? "已通过校验，待开启" : "真实支付关闭" }}
+                </el-tag>
+              </div>
+              <el-alert v-if="paymentConfigError" type="error" :title="paymentConfigError" show-icon :closable="false" class="panel-alert" />
+              <el-alert type="info" title="保存配置不会自动开启真实支付。开启真实支付必须先完成配置校验，并通过后端门禁和二次确认。" show-icon :closable="false" class="panel-alert" />
+              <div v-loading="paymentConfigLoading" class="unified-payment-form">
+                <div class="deploy-grid">
+                  <el-form-item label="微信 AppID"><el-input v-model="deployment.wechatPayAppId" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信 API v3 Key"><el-input v-model="deployment.wechatPayApiV3Key" type="password" show-password placeholder="未修改时保留已保存密钥" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信私钥路径"><el-input v-model="deployment.wechatPayPrivateKeyPath" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="证书序列号"><el-input v-model="deployment.wechatPayCertSerialNo" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="平台证书路径"><el-input v-model="deployment.wechatPayPlatformCertPath" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信支付回调 URL"><el-input v-model="deployment.wechatPayNotifyUrl" placeholder="必须使用 HTTPS" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信支付渠道"><el-switch v-model="deployment.wechatPayEnabled" active-text="纳入统一配置" inactive-text="未配置" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                </div>
+                <div class="toolbar-actions unified-payment-actions">
+                  <el-button type="primary" :loading="paymentConfigSaving" :disabled="!canEditSettings" @click="savePaymentSettings">保存支付资料</el-button>
+                  <el-button :loading="paymentConfigChecking" @click="validatePaymentSettings">校验配置</el-button>
+                  <el-button v-if="!realPaymentEnabledReadonly" type="warning" :loading="paymentConfigEnabling" :disabled="paymentReadinessStatus !== 'ok'" @click="enableRealPayment">确认开启真实支付</el-button>
+                  <el-button v-else type="danger" plain :loading="paymentConfigDisabling" @click="disableRealPayment">关闭真实支付</el-button>
+                </div>
+                <p class="form-tip">当前门禁状态：{{ paymentReadinessStatus === "ok" ? "已通过" : "未通过或尚未校验" }}。完整原因请点击“校验配置”查看。</p>
+                <div v-if="paymentConfigStatus?.readiness?.checks?.length" class="payment-check-list">
+                  <div v-for="check in paymentConfigStatus.readiness.checks" :key="check.key" class="payment-check-row">
+                    <span>{{ check.key }}</span>
+                    <el-tag :type="check.status === 'ok' ? 'success' : check.status === 'warning' ? 'warning' : 'danger'" effect="plain">{{ check.status }}</el-tag>
+                    <small>{{ check.message }}</small>
+                  </div>
+                </div>
+              </div>
+            </div>
             <el-form-item label="线下付款说明" required>
               <el-input v-model="form.offlinePaymentInstructions" type="textarea" :rows="5" maxlength="1000" show-word-limit :disabled="!canEditSettings || !paymentSettingsEditable" />
             </el-form-item>
@@ -2109,7 +2358,15 @@ onMounted(async () => {
               <el-input-number v-model="form.automaticWechat.reminderBeforeHours" :min="1" :max="168" :step="1" /><span class="field-hint">小时</span>
             </el-form-item>
             <el-alert title="用户需在小程序活动详情页主动授权。每次接受授权产生一次可用额度，发送成功后自动消费。" type="info" :closable="false" show-icon />
-            <el-divider content-position="left">活动结束自动运营</el-divider>
+             <el-divider content-position="left">活动结束自动运营</el-divider>
+            <el-alert
+              class="post-event-automation-hint"
+              title="活动结束自动运营由场景和渠道开关共同控制"
+              description="需要独立 Worker 正常运行；开启场景后会生成站内通知。若同时开启短信或微信订阅消息，还必须在对应渠道开启相同场景，并完成模板、授权和真实环境验证。"
+              type="info"
+              :closable="false"
+              show-icon
+            />
             <el-form-item label="自动运营"><el-switch v-model="form.postEventAutomation.enabled" active-text="启用" inactive-text="关闭" /></el-form-item>
             <el-form-item label="运营场景">
               <div class="automatic-sms-list">
@@ -2118,6 +2375,10 @@ onMounted(async () => {
                 <div class="automatic-sms-row"><div><strong>同类活动推荐</strong><span>推荐同商家后续同分类活动</span></div><el-switch v-model="form.postEventAutomation.activityRecommendations" :disabled="!form.postEventAutomation.enabled" /></div>
                 <div class="automatic-sms-row"><div><strong>30 / 60 / 90 天召回</strong><span>仅在有后续开放活动时发送站内提醒，避免无内容打扰</span></div><el-switch v-model="form.postEventAutomation.returnVisitReminders" :disabled="!form.postEventAutomation.enabled" /></div>
               </div>
+            </el-form-item>
+            <el-form-item label="召回天数">
+              <el-input v-model="recallDaysText" :disabled="!form.postEventAutomation.enabled || !form.postEventAutomation.returnVisitReminders" placeholder="例如：30、60、90" />
+              <span class="field-hint">填写 1-365 的天数，最多 6 个；多个值用顿号或逗号分隔。</span>
             </el-form-item>
             <el-form-item label="活动结束后延迟"><el-input-number v-model="form.postEventAutomation.delayHours" :min="0" :max="168" :step="1" /><span class="field-hint">小时</span></el-form-item>
             </template>
@@ -2539,11 +2800,12 @@ onMounted(async () => {
                 <el-form-item label="微信通知服务商"><el-input v-model="deployment.wechatMessageProvider" /></el-form-item>
                 <el-form-item label="微信 AppId"><el-input v-model="deployment.wechatAppId" /></el-form-item>
                 <el-form-item label="微信 Secret"><el-input v-model="deployment.wechatAppSecret" show-password /></el-form-item>
+                <el-form-item label="微信订阅模板 ID"><el-input v-model="deployment.wechatMessageTemplateId" placeholder="微信公众平台审核通过的模板 ID" /></el-form-item>
                 <el-form-item label="支付沙箱"><el-switch v-model="deployment.paymentSandboxEnabled" /></el-form-item>
                 <el-form-item label="沙箱密钥"><el-input v-model="deployment.paymentSandboxSecret" show-password /></el-form-item>
                 <el-form-item label="微信支付沙箱"><el-input v-model="deployment.wechatPaySandboxSecret" show-password /></el-form-item>
                 <el-form-item label="支付宝沙箱"><el-input v-model="deployment.alipayPaySandboxSecret" show-password /></el-form-item>
-                <el-form-item label="真实支付"><el-switch v-model="deployment.realPaymentEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="真实支付状态"><el-switch :model-value="realPaymentEnabledReadonly" active-text="由统一支付配置控制" inactive-text="关闭" disabled /></el-form-item>
                 <el-form-item label="下单实现"><el-switch v-model="deployment.realPaymentSdkImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="回调验签"><el-switch v-model="deployment.realPaymentCallbackVerificationImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
                 <el-form-item label="退款查询"><el-switch v-model="deployment.realRefundQueryImplemented" active-text="完成" inactive-text="未完成" /></el-form-item>
@@ -2565,7 +2827,7 @@ onMounted(async () => {
                 <el-form-item label="商城预发"><el-switch v-model="deployment.mallMultiMerchantPreflightPassed" active-text="通过" inactive-text="未通过" /></el-form-item>
                 <el-form-item label="商城验收文件"><el-input v-model="deployment.mallMultiMerchantSmokeResultFile" /></el-form-item>
                 <el-form-item label="商城有效期"><el-input-number v-model="deployment.mallMultiMerchantSmokeMaxAgeHours" :min="1" :disabled="!canEditSettings || operationBusy" /><span class="unit">小时</span></el-form-item>
-                <el-form-item label="微信支付"><el-switch v-model="deployment.wechatPayEnabled" active-text="开启" inactive-text="关闭" /></el-form-item>
+                <el-form-item label="微信支付状态"><el-switch :model-value="deployment.wechatPayEnabled" active-text="由统一支付配置控制" inactive-text="未配置" disabled /></el-form-item>
                 <el-form-item label="微信 AppId"><el-input v-model="deployment.wechatPayAppId" /></el-form-item>
                 <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" /></el-form-item>
                 <el-form-item label="微信 APIv3 Key"><el-input v-model="deployment.wechatPayApiV3Key" show-password /></el-form-item>
@@ -2695,6 +2957,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.page-loading { display: flex; align-items: center; justify-content: center; min-height: 120px; margin: 16px 0; border: 1px dashed #cbd5e1; border-radius: 8px; color: #475467; background: #f8fafc; }
 .toolbar { align-items: flex-start; }
 .toolbar-actions, .switch-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
 .payment-methods-block { display: grid; gap: 6px; }
@@ -2707,6 +2970,13 @@ onMounted(async () => {
 .payment-readiness-card div { display: grid; gap: 5px; min-width: 0; }
 .payment-readiness-card strong { color: #111827; font-size: 13px; }
 .payment-readiness-card span { color: #64748b; font-size: 12px; line-height: 1.45; }
+.unified-payment-card { margin-bottom: 16px; padding: 18px; border-color: #bae6fd; background: #f8fbff; }
+.unified-payment-form { display: grid; gap: 12px; }
+.unified-payment-actions { justify-content: flex-start; }
+.payment-check-list { display: grid; gap: 6px; padding: 10px; border: 1px solid #dbeafe; border-radius: 8px; background: #fff; }
+.payment-check-row { display: grid; grid-template-columns: minmax(180px, 240px) 90px minmax(0, 1fr); gap: 10px; align-items: center; min-height: 30px; }
+.payment-check-row span { color: #334155; font: 12px "Cascadia Mono", Consolas, monospace; overflow-wrap: anywhere; }
+.payment-check-row small { color: #64748b; line-height: 1.45; overflow-wrap: anywhere; }
 .form-tip { margin: 0; color: #64748b; font-size: 13px; line-height: 1.5; }
 .delivery-mode-panel { display: flex; align-items: center; flex-wrap: wrap; gap: 12px; }
 .feature-gate-panel { width: 100%; display: grid; gap: 12px; }
@@ -2741,6 +3011,7 @@ onMounted(async () => {
 .theme-upload { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 10px; align-items: center; }
 .sms-test-row { width: 100%; display: grid; grid-template-columns: minmax(180px, 280px) auto auto; gap: 10px; align-items: center; }
 .automatic-sms-list { width: 100%; display: grid; gap: 8px; }
+.post-event-automation-hint { margin-bottom: 14px; }
 .automatic-sms-row { min-height: 58px; padding: 10px 12px; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 16px; align-items: center; border: 1px solid #e5e7eb; border-radius: 8px; background: #f8fafc; }
 .automatic-sms-row > div { min-width: 0; display: grid; gap: 4px; }
 .automatic-sms-row strong { color: #111827; font-size: 13px; }

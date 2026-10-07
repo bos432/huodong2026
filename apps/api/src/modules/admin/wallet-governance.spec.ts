@@ -13,7 +13,7 @@ describe("admin wallet governance", () => {
 
   it("rechecks idempotency with a current read after the wallet lock", () => {
     expect(service).toContain("const repeated = await findExisting(true)");
-    expect(service).toContain('mode: "pessimistic_read"');
+    expect(service).toContain('mode: "pessimistic_write"');
     expect(service).toContain("frozenGiftBefore: fenToYuan(frozenGiftBeforeFen)");
     expect(service).toContain("frozenGiftAfter: fenToYuan(frozenGiftAfterFen)");
   });

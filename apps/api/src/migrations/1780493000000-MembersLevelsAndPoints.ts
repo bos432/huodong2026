@@ -6,7 +6,7 @@ export class MembersLevelsAndPoints1780493000000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable("member_levels"))) {
       await queryRunner.query(`
-        CREATE TABLE member_levels (
+        CREATE TABLE IF NOT EXISTS member_levels (
           id int NOT NULL AUTO_INCREMENT,
           name varchar(80) NOT NULL,
           minPoints int NOT NULL DEFAULT 0,
@@ -23,7 +23,7 @@ export class MembersLevelsAndPoints1780493000000 implements MigrationInterface {
 
     if (!(await queryRunner.hasTable("member_profiles"))) {
       await queryRunner.query(`
-        CREATE TABLE member_profiles (
+        CREATE TABLE IF NOT EXISTS member_profiles (
           id int NOT NULL AUTO_INCREMENT,
           userId int NULL,
           levelId int NULL,
@@ -45,7 +45,7 @@ export class MembersLevelsAndPoints1780493000000 implements MigrationInterface {
 
     if (!(await queryRunner.hasTable("member_point_logs"))) {
       await queryRunner.query(`
-        CREATE TABLE member_point_logs (
+        CREATE TABLE IF NOT EXISTS member_point_logs (
           id int NOT NULL AUTO_INCREMENT,
           userId int NULL,
           points int NOT NULL,

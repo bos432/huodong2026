@@ -4,6 +4,7 @@ export class EcosystemPartnerCrm1783730000000 implements MigrationInterface {
   name = "EcosystemPartnerCrm1783730000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
+    if (await queryRunner.hasTable("ambassador_applications") && await queryRunner.hasTable("ambassador_application_followups") && await queryRunner.hasTable("ambassador_profiles") && await queryRunner.hasTable("ambassador_tasks") && await queryRunner.hasTable("ambassador_contributions")) return;
     for (const column of [
       new TableColumn({ name: "businessKey", type: "varchar", length: "160", isNullable: true }),
       new TableColumn({ name: "kind", type: "varchar", length: "24", default: "'ambassador'" }),

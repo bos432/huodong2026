@@ -28,7 +28,7 @@ describe("operation setting permission contract", () => {
     const saveStart = service.indexOf("async saveOperationSetting", getStart);
     const getMethod = service.slice(getStart, saveStart);
 
-    expect(getMethod).toContain("this.operationSettings.findOne");
+    expect(getMethod).toContain("findOperationSettingForScope(scope)");
     expect(getMethod).not.toContain("ensureOperationSetting");
     expect(getMethod).not.toContain("operationSettings.save");
     expect(page).toContain('const canEditSettings = computed(() => canManagePlatformSettings.value ? hasPermission("system.manage") : hasPermission("operation_settings.manage"))');
@@ -50,6 +50,7 @@ describe("operation setting permission contract", () => {
     expect(service).toContain("private async operationSettingTarget");
     expect(service).toContain('throw new ForbiddenException("不能修改其他商家的运营设置")');
     expect(service).toContain("if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined)");
+    expect(service).toContain("真实支付必须通过平台统一支付配置接口完成门禁校验和二次确认");
     expect(service).toContain("if (!scope.tenant && dto.defaultTenantCode !== undefined)");
     expect(service).toContain("if (!scope.tenant && dto.tenantSwitcherEnabled !== undefined)");
     expect(page).toContain('v-model="operationTenantId"');
@@ -70,5 +71,14 @@ describe("operation setting permission contract", () => {
     expect(page).toContain('已同步开启“${featureGateLabel(dependency)}”');
     expect(page).toContain("for (const child of disabledChildren) deployment.featureGates[child] = false");
     expect(page).toContain("开启时会自动开启");
+  });
+
+  it("exposes bounded post-event recall day configuration in the settings workbench", () => {
+    const page = read("apps/admin/src/views/SystemSettings.vue");
+    expect(page).toContain("recallDaysText");
+    expect(page).toContain("parseRecallDays");
+    expect(page).toContain('label="召回天数"');
+    expect(page).toContain("30、60、90");
+    expect(page).toContain("postEventAutomation.recallDays = parseRecallDays");
   });
 });

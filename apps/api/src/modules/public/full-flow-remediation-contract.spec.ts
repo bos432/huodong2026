@@ -29,6 +29,13 @@ describe("full flow remediation contracts", () => {
     expect(space).toContain("posting");
   });
 
+  it("does not expose post-event publishing to activity-space visitors without registration", () => {
+    const space = fs.readFileSync(path.join(root, "../../mobile/src/pages/activity/space.vue"), "utf8");
+    const postEventCard = space.slice(space.indexOf('class="post-event-card'), space.indexOf('class="space-section', space.indexOf('class="post-event-card')));
+    expect(postEventCard).toContain('v-if="space.checkIn?.checkedIn"');
+    expect(postEventCard.match(/v-if="space\.checkIn\?\.checkedIn"/g)).toHaveLength(2);
+  });
+
   it("keeps registration identity scoped to its own route lifecycle", () => {
     const registration = fs.readFileSync(path.join(root, "../../mobile/src/pages/user/registration.vue"), "utf8");
     expect(registration).toContain("onLoad((query) => { registrationId.value = Number(query?.id || 0); })");

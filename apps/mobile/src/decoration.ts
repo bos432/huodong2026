@@ -1,4 +1,5 @@
 import { computed, ref } from "vue";
+import { sortHomepageSections } from "@activity/shared";
 import { request, setActivityListIntentFromUrl, withTenantCode } from "./api";
 import { createTenantLoadGuard } from "./tenant-load-guard";
 import { filterDecorationSectionsByFeature, filterNavigationItemsByFeature, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "./feature-gates";
@@ -73,9 +74,9 @@ function asDecorationSections(value: unknown): HomepageSectionView[] {
   // The API normally returns sorted rows, but publication snapshots and inherited
   // global sections can arrive from different sources. Keep every client on the
   // same explicit module order.
-  return value
+  const rows = value
     .filter((item): item is HomepageSectionView => Boolean(item) && typeof item === "object")
-    .sort((left, right) => Number(left.sortOrder || 0) - Number(right.sortOrder || 0) || Number(left.id || 0) - Number(right.id || 0));
+  return sortHomepageSections(rows);
 }
 
 function normalizeDecorationSections(value: unknown) {
@@ -140,9 +141,9 @@ export function usePageDecoration(pageKeyOrPath: string, currentPathOrPageKey: s
     return (pages.find((item: any) => item?.key === pageKey) as InnerPageConfig | undefined) || (defaultInnerPagesSection.config.pages as InnerPageConfig[]).find((item) => item.key === pageKey) || { key: pageKey, title: "", subtitle: "", showBottomNav: true };
   });
   const showBottomNav = computed(() => innerPageConfig.value.showBottomNav !== false && Boolean(bottomNavSection.value?.enabled));
-  const contentSections = computed(() => filterDecorationSectionsByFeature(asDecorationSections(sections.value)
+  const contentSections = computed(() => filterDecorationSectionsByFeature(sortHomepageSections(asDecorationSections(sections.value)
     .filter((item) => item.enabled && !["bottom_nav", "my_page", "inner_pages"].includes(item.type))
-    .sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id)));
+  )));
 
   async function loadDecoration() {
     const loadToken = loadGuard.begin();

@@ -67,6 +67,11 @@ checkSourceIncludes(waitApiReady, "API_READY_URL", "wait api ready script");
 checkSourceIncludes(waitApiReady, "API_READY_TIMEOUT_MS", "wait api ready script");
 checkSourceIncludes(waitApiReady, "/health/ready", "wait api ready script");
 checkSourceIncludes(waitApiReady, "ready=true", "wait api ready script");
+checkSourceIncludes(waitApiReady, "API_EXPECTED_COMMIT", "wait api ready release alignment");
+checkSourceIncludes(waitApiReady, "expected-commit", "wait api ready release alignment");
+const waitWorkerReady = read("scripts/wait-worker-ready.mjs");
+checkSourceIncludes(waitWorkerReady, "WORKER_EXPECTED_COMMIT", "wait worker ready release alignment");
+checkSourceIncludes(waitWorkerReady, "heartbeat?.commit", "wait worker ready release alignment");
 
 checkSourceIncludes(smoke, 'api("/health")', "smoke script");
 checkSourceIncludes(smoke, 'api("/health/ready")', "smoke script");

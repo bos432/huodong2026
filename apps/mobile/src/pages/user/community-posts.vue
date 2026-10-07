@@ -19,15 +19,8 @@
       </view>
     </view>
 
-    <view v-if="loading" class="empty-card">
-      <view class="empty-title">正在加载</view>
-      <view class="empty-desc">正在同步你的心得记录。</view>
-    </view>
-    <view v-else-if="loadError" class="empty-card error-card" role="alert" aria-live="assertive">
-      <view class="empty-title">心得记录加载失败</view>
-      <view class="empty-desc">{{ loadError }}</view>
-      <view class="primary-action retry-action" @click="loadPosts">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载心得" description="正在同步你的心得记录。" />
+    <EmptyState v-else-if="loadError" variant="error" title="心得记录加载失败" :description="loadError" action-text="重新加载" @action="loadPosts" />
     <view v-if="actionError" class="empty-card error-card compact-error" role="alert" aria-live="assertive">{{ actionError }}</view>
 
     <view v-for="post in filteredPosts" :key="post.id" class="post-card" @click="openPost(post)">
@@ -46,19 +39,21 @@
       </view>
       <view v-if="post.status === 'rejected' && post.reviewRemark" class="review-remark">审核意见：{{ post.reviewRemark }}</view>
       <view class="post-actions">
-        <view class="post-action">{{ actionText(post) }}</view>
+        <view class="post-action" @click.stop="post.status === 'rejected' ? editPost(post) : openPost(post)">{{ actionText(post) }}</view>
         <view class="delete-action" :class="{ disabled: deletingId === post.id }" @click.stop="deletePost(post)">{{ deletingId === post.id ? "删除中" : "删除" }}</view>
       </view>
     </view>
 
-    <view v-if="!loading && !loadError && !filteredPosts.length" class="empty-card">
-      <view class="empty-icon">心</view>
-      <view class="empty-title">{{ currentStatus === "all" ? "还没有心得" : "暂无对应状态" }}</view>
-      <view class="empty-desc">参加活动并完成签到后，就可以上传照片和心得，审核通过后展示在共修动态里。</view>
-      <view class="primary-action" @click="goPublish">发布心得</view>
-    </view>
+    <EmptyState
+      v-if="!loading && !loadError && !filteredPosts.length"
+      variant="review"
+      :title="currentStatus === 'all' ? '还没有心得' : '暂无对应状态'"
+      description="活动结束并完成签到后，就可以上传照片和心得，审核通过后展示在共修动态里。"
+      :action-text="canPublish ? '发布心得' : ''"
+      @action="goPublish"
+    />
 
-    <view v-if="posts.length" class="primary-action fixed-action" @click="goPublish">继续发布心得</view>
+    <view v-if="posts.length && canPublish" class="primary-action fixed-action" @click="goPublish">继续发布心得</view>
     <TabBar current="user" />
   </view>
 </template>
@@ -68,6 +63,8 @@ import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import TabBar from "../../components/TabBar.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDate } from "../../tenant-load-guard";
@@ -77,6 +74,7 @@ const loadError = ref("");
 const deletingId = ref(0);
 const actionError = ref("");
 const posts = ref<any[]>([]);
+const postableActivities = ref<any[]>([]);
 const loadedTenantCode = ref("");
 const loadGuard = createTenantLoadGuard();
 const currentStatus = ref("all");
@@ -91,6 +89,7 @@ const filteredPosts = computed(() => {
   if (currentStatus.value === "all") return posts.value;
   return posts.value.filter((item) => item.status === currentStatus.value);
 });
+const canPublish = computed(() => postableActivities.value.length > 0);
 
 async function loadPosts() {
   const loadToken = loadGuard.begin();
@@ -98,11 +97,16 @@ async function loadPosts() {
   loading.value = true;
   loadError.value = "";
   actionError.value = "";
+  postableActivities.value = [];
   try {
     await ensureUser();
-    const rows = await request<any[]>("/public/me/community/posts");
+    const [rows, postable] = await Promise.all([
+      request<any[]>("/public/me/community/posts"),
+      request<any[]>("/public/me/community/postable-activities").catch(() => [])
+    ]);
     if (!loadGuard.isCurrent(loadToken)) return;
     posts.value = Array.isArray(rows) ? rows : [];
+    postableActivities.value = Array.isArray(postable) ? postable : [];
     loadedTenantCode.value = loadToken.tenantCode;
   } catch (error: any) {
     if (!loadGuard.isCurrent(loadToken)) return;
@@ -138,7 +142,16 @@ function openPost(post: any) {
   uni.navigateTo({ url: withTenantCode(`/pages/community/detail?id=${post.id}`) });
 }
 
+function editPost(post: any) {
+  if (post?.status !== "rejected" || !post?.id) return;
+  uni.navigateTo({ url: withTenantCode(`/pages/community/publish?postId=${post.id}`) });
+}
+
 function goPublish() {
+  if (!canPublish.value) {
+    uni.showToast({ title: "完成活动后才可以发布心得", icon: "none" });
+    return;
+  }
   uni.navigateTo({ url: withTenantCode("/pages/community/publish") });
 }
 

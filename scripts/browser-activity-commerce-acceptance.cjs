@@ -5,8 +5,10 @@ const { spawnSync } = require("child_process");
 const root = path.resolve(__dirname, "..");
 const outputRoot = path.resolve(process.env.ACCEPTANCE_OUTPUT_DIR || path.join(root, ".local-logs"));
 const webBase = String(process.env.WEB_BASE || "http://127.0.0.1:18080").replace(/\/$/, "");
+const adminWebBase = String(process.env.ADMIN_WEB_BASE || webBase).replace(/\/$/, "");
 const apiBase = String(process.env.API_BASE_URL || process.env.API_BASE || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const tenantCode = process.env.TENANT_CODE || "qiwai-showcase";
+const adminUsername = process.env.SHOWCASE_ADMIN_USERNAME || "showcase_admin";
 const adminPassword = process.env.SHOWCASE_ADMIN_PASSWORD || "Showcase123456Aa";
 const userPassword = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -58,7 +60,16 @@ async function api(route, options = {}) {
 }
 
 async function loginUser(phone) {
-  return api("/public/auth/password-login", { method: "POST", body: { phone, password: userPassword, nickname: `浏览器活动验收${runId.slice(-4)}` } });
+  const challenge = await api("/public/auth/h5-code", { method: "POST", body: { phone } });
+  return api("/public/auth/h5-login", {
+    method: "POST",
+    body: {
+      phone,
+      nickname: `浏览器活动验收${runId.slice(-4)}`,
+      verificationToken: challenge.verificationToken,
+      verificationCode: challenge.devCode || process.env.H5_DEV_VERIFICATION_CODE || "123456"
+    }
+  });
 }
 
 async function screenshot(page, filename) {
@@ -81,8 +92,8 @@ async function waitForText(page, texts, label, timeout = 20000) {
 }
 
 async function loginAdmin(page) {
-  await page.goto(`${webBase}/admin/login`, { waitUntil: "domcontentloaded" });
-  await page.locator('input[placeholder="请输入管理员账号"]').fill("showcase_admin");
+  await page.goto(`${adminWebBase}/admin/login`, { waitUntil: "domcontentloaded" });
+  await page.locator('input[placeholder="请输入管理员账号"]').fill(adminUsername);
   await page.locator('input[placeholder="请输入密码"]').fill(adminPassword);
   await page.getByRole("button", { name: "登录" }).click();
   await page.waitForURL(/\/admin\/(?!login)/, { timeout: 20000 });
@@ -133,17 +144,17 @@ async function main() {
     const adminContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     const admin = await adminContext.newPage();
     await loginAdmin(admin);
-    await admin.goto(`${webBase}/admin/registrations?activityId=${retained.activityId}`, { waitUntil: "domcontentloaded" });
+    await admin.goto(`${adminWebBase}/admin/registrations?activityId=${retained.activityId}`, { waitUntil: "domcontentloaded" });
     await waitForText(admin, [retained.title, "批量通知", "打印名单", "按当前筛选导出 Excel", "已签到"], "PC 报名运营");
     await screenshot(admin, "admin-registration-operations.png");
     result.checks.push({ name: "PC 报名批量运营与导出入口", status: "passed" });
 
-    await admin.goto(`${webBase}/admin/reviews?activityId=${retained.activityId}`, { waitUntil: "domcontentloaded" });
+    await admin.goto(`${adminWebBase}/admin/reviews?activityId=${retained.activityId}`, { waitUntil: "domcontentloaded" });
     await waitForText(admin, [retained.title, "精选", "感谢参与，欢迎继续关注。", "待处理举报", pendingReportReason], "PC 评价治理");
     await screenshot(admin, "admin-review-governance.png");
     result.checks.push({ name: "PC 评价回复、精选和待处理举报", status: "passed", pendingReportId: pendingReport.report.id });
 
-    await admin.goto(`${webBase}/admin/recaps?activityId=${retained.activityId}`, { waitUntil: "domcontentloaded" });
+    await admin.goto(`${adminWebBase}/admin/recaps?activityId=${retained.activityId}`, { waitUntil: "domcontentloaded" });
     await waitForText(admin, [retained.title, "活动复盘", "导出 Excel", "浏览到报名转化", "评价均分"], "PC 活动复盘");
     await screenshot(admin, "admin-activity-recap.png");
     result.checks.push({ name: "PC 活动复盘与导出入口", status: "passed" });

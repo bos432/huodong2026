@@ -3,6 +3,8 @@ import { computed, onUnmounted, ref, watch } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchMyProfile, getCurrentTenantCode, requestPhoneChangeCode, updateMyPassword, updateMyPhone } from "../../api";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
 
@@ -156,8 +158,8 @@ watch(newPhone, (value) => {
 
 <template>
   <view class="security-page">
-    <view v-if="loading" class="card muted">加载中...</view>
-    <view v-else-if="loadError" class="card error-card" role="alert" aria-live="assertive"><text>{{ loadError }}</text><button class="button" aria-label="重新加载账号安全信息" @click="load">重新加载</button></view>
+    <LoadingState v-if="loading" title="正在加载账号安全" description="请稍候，正在同步手机号和登录密码设置。" />
+    <EmptyState v-else-if="loadError" variant="error" title="账号安全加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else>
       <view class="head">
         <view class="title">账号安全</view>

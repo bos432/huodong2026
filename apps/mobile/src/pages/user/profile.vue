@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchMyProfile, getCurrentTenantCode, updateMyProfile, uploadMyAvatar, withTenantCode } from "../../api";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { chooseAvatarImage } from "../../avatar-picker";
 
@@ -23,6 +25,7 @@ function displayName() {
 }
 
 async function load() {
+  if (uploadingLocalAvatar.value) return;
   const token = profileLoadGuard.begin();
   loading.value = true;
   loadError.value = "";
@@ -112,13 +115,13 @@ async function handlePhoneBound(profileData: any) {
   await load();
 }
 
-onShow(() => { if (!uploadingLocalAvatar.value) void load(); });
+onShow(() => { void load(); });
 </script>
 
 <template>
   <view class="profile-page">
-    <view v-if="loading" class="card muted">加载中...</view>
-    <view v-else-if="loadError" class="card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载会员资料" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
+    <LoadingState v-if="loading" title="正在加载会员资料" description="请稍候，正在同步头像、昵称和账号安全信息。" />
+    <EmptyState v-else-if="loadError" variant="error" title="会员资料加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else-if="profile">
       <view class="hero">
         <view role="button" tabindex="0" aria-label="更换头像" @click="chooseLocalAvatar" @keyup.enter="chooseLocalAvatar" @keyup.space.prevent="chooseLocalAvatar">

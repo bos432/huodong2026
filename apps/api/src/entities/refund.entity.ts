@@ -58,6 +58,9 @@ export class Refund {
   @Column({ type: "varchar", length: 500, nullable: true })
   providerRefundFailureReason!: string | null;
 
+  @Column({ type: "varchar", length: 500, nullable: true })
+  failureReason!: string | null;
+
   @Column({ type: "int", default: 0 })
   providerRefundRetryCount!: number;
 

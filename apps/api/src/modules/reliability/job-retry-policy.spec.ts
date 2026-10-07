@@ -1,5 +1,6 @@
+import { BadRequestException, HttpException, InternalServerErrorException } from "@nestjs/common";
 import { describe, expect, it } from "vitest";
-import { jobRetryDelayMs, nextJobFailureState } from "./job-retry-policy";
+import { isRetryableJobError, jobRetryDelayMs, nextJobFailureState } from "./job-retry-policy";
 
 describe("business job retry policy", () => {
   it("uses bounded exponential backoff", () => {
@@ -12,5 +13,17 @@ describe("business job retry policy", () => {
     const now = new Date("2026-07-13T00:00:00.000Z");
     expect(nextJobFailureState(2, 3, now)).toEqual({ status: "pending", nextAttemptAt: new Date(now.getTime() + 60_000), deadLetteredAt: null });
     expect(nextJobFailureState(3, 3, now)).toEqual({ status: "dead_letter", nextAttemptAt: now, deadLetteredAt: now });
+  });
+
+  it("dead-letters terminal provider errors without scheduling another attempt", () => {
+    const now = new Date("2026-07-13T00:00:00.000Z");
+    expect(isRetryableJobError(new BadRequestException("template disabled"))).toBe(false);
+    expect(nextJobFailureState(1, 5, now, { terminal: true })).toEqual({ status: "dead_letter", nextAttemptAt: now, deadLetteredAt: now });
+  });
+
+  it("keeps transient provider responses retryable", () => {
+    expect(isRetryableJobError(new InternalServerErrorException("provider down"))).toBe(true);
+    expect(isRetryableJobError(new HttpException("rate limited", 429))).toBe(true);
+    expect(isRetryableJobError(new Error("network reset"))).toBe(true);
   });
 });

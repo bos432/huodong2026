@@ -17,11 +17,8 @@
       <view class="history-tab app-press" :class="{ active: activeTab === 'content' }" role="tab" tabindex="0" :aria-selected="activeTab === 'content'" @click="activeTab = 'content'" @keyup.enter="activeTab = 'content'" @keyup.space.prevent="activeTab = 'content'">内容进度</view>
     </view>
 
-    <view v-if="loading" class="state-card" role="status" aria-live="polite">浏览足迹加载中…</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <button class="state-retry" :disabled="loading" aria-label="重新加载浏览足迹" @click="loadRecords">重新加载</button>
-    </view>
+    <LoadingState v-if="loading" title="正在加载浏览足迹" description="请稍候，正在同步当前城市的活动和内容记录。" />
+    <EmptyState v-else-if="loadError" variant="error" title="浏览足迹加载失败" :description="loadError" action-text="重新加载" @action="loadRecords" />
 
     <template v-else-if="activeTab === 'activities'">
       <view class="history-list">
@@ -37,12 +34,7 @@
           <text class="record-arrow">›</text>
         </view>
       </view>
-      <view v-if="!activityRecords.length" class="empty-card">
-        <view class="empty-icon">览</view>
-        <text class="empty-title">暂无活动足迹</text>
-        <text class="empty-desc">打开一个活动详情后，会自动保存在这里。</text>
-        <view class="empty-action app-press" role="button" tabindex="0" @click="goActivities" @keyup.enter="goActivities" @keyup.space.prevent="goActivities">发现活动</view>
-      </view>
+      <EmptyState v-if="!activityRecords.length" variant="activity" title="暂无活动足迹" description="打开一个活动详情后，会自动保存在这里。" action-text="发现活动" @action="goActivities" />
     </template>
 
     <template v-else>
@@ -59,11 +51,7 @@
           <text class="record-arrow">›</text>
         </view>
       </view>
-      <view v-if="!contentRecords.length" class="empty-card">
-        <view class="empty-icon">内</view>
-        <text class="empty-title">暂无内容进度</text>
-        <text class="empty-desc">查看专题内容后，进度会在这里持续更新。</text>
-      </view>
+      <EmptyState v-if="!contentRecords.length" variant="default" title="暂无内容进度" description="查看专题内容后，进度会在这里持续更新。" />
     </template>
 
     <view class="page-space" />
@@ -77,6 +65,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import { createTenantLoadGuard, formatShanghaiDateTime } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import TabBar from "../../components/TabBar.vue";
 
 type ActivityRecord = { id: number; activityId: number; title: string; coverUrl: string; categoryName: string; activityTime: string; location: string; viewedAt: string; status: string };
@@ -145,6 +135,6 @@ onShow(loadRecords);
 .history-head{padding:28rpx 0 22rpx}.history-kicker,.history-title,.history-copy{display:block}.history-kicker{color:var(--app-primary);font-size:22rpx;font-weight:850}.history-title{margin-top:8rpx;font-size:38rpx;line-height:1.3;font-weight:900}.history-copy{margin-top:10rpx;color:var(--app-muted);font-size:24rpx;line-height:1.55}
 .history-tabs{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:6rpx;padding:6rpx;border:1rpx solid var(--app-border);border-radius:16rpx;background:#fff}.history-tab{min-height:66rpx;display:flex;align-items:center;justify-content:center;border-radius:12rpx;color:var(--app-muted);font-size:25rpx;font-weight:800}.history-tab.active{background:#16252d;color:#fff}
 .history-list{display:grid;gap:14rpx;margin-top:18rpx}.history-card{display:flex;align-items:center;gap:18rpx;min-width:0;padding:18rpx;border:1rpx solid var(--app-border);border-radius:16rpx;background:#fff}.record-cover{width:142rpx;height:112rpx;flex:none;border-radius:12rpx;background:#e9f3ed}.record-fallback{display:flex;align-items:center;justify-content:center;color:#08753f;font-size:34rpx;font-weight:900}.record-fallback.content{background:#fff3e5;color:#a45d00}.record-main{min-width:0;flex:1}.record-tags{display:flex;align-items:center;gap:10rpx}.record-tags text{padding:5rpx 9rpx;border-radius:6rpx;background:#eaf7f1;color:#08753f;font-size:20rpx;font-weight:800}.record-tags text.ended{background:#f2f4f7;color:#667085}.record-title{display:-webkit-box;margin-top:8rpx;overflow:hidden;-webkit-box-orient:vertical;-webkit-line-clamp:2;color:#16252d;font-size:27rpx;line-height:1.4;font-weight:850}.record-meta,.record-viewed,.record-progress{display:block;margin-top:7rpx;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--app-muted);font-size:22rpx}.record-arrow{flex:none;color:#98a2b3;font-size:38rpx}.content-card .record-title{margin-top:0}.progress-track{height:8rpx;margin-top:12rpx;overflow:hidden;border-radius:4rpx;background:#edf1ef}.progress-fill{height:100%;border-radius:4rpx;background:var(--app-primary)}
-.state-card,.empty-card{display:grid;justify-items:center;gap:10rpx;margin-top:18rpx;padding:42rpx 26rpx;border:1rpx solid var(--app-border);border-radius:16rpx;background:#fff;color:var(--app-muted);font-size:24rpx;text-align:center}.state-card.error-state{color:#b42318}.state-retry{width:auto;min-height:60rpx;margin:0;padding:0;border:0;background:transparent;color:var(--app-primary);font-size:24rpx;font-weight:850}.state-retry::after{border:0}.empty-icon{width:72rpx;height:72rpx;display:flex;align-items:center;justify-content:center;border-radius:50%;background:#eaf7f1;color:#08753f;font-size:28rpx;font-weight:900}.empty-title{color:#16252d;font-size:29rpx;font-weight:900}.empty-desc{line-height:1.6}.empty-action{min-height:64rpx;display:flex;align-items:center;margin-top:6rpx;padding:0 24rpx;border-radius:12rpx;background:#16252d;color:#fff;font-weight:850}.page-space{height:20rpx}
+.page-space{height:20rpx}
 @media(min-width:900px){.history-page{max-width:760px;margin:0 auto}}
 </style>

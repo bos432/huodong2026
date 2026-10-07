@@ -21,7 +21,16 @@ async function request(path, options = {}) {
 }
 async function member(phonePrefix) {
   const phone = `${phonePrefix}${String(stamp).slice(-7)}`;
-  const login = await request("/public/auth/password-login", { method: "POST", body: { phone, password: "Qiwai123456" } });
+  const challenge = await request("/public/auth/h5-code", { method: "POST", body: { phone } });
+  const login = await request("/public/auth/h5-login", {
+    method: "POST",
+    body: {
+      phone,
+      nickname: `共学验收${phone.slice(-4)}`,
+      verificationToken: challenge.verificationToken,
+      verificationCode: challenge.devCode || process.env.ACCEPTANCE_H5_CODE || "123456"
+    }
+  });
   return { phone, id: Number(login.user.id), token: login.userAccessToken };
 }
 

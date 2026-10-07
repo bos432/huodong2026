@@ -11,7 +11,7 @@ const tenantCode = process.env.TENANT_CODE || "qiwai-showcase";
 const platformUsername = process.env.PLATFORM_ADMIN_USERNAME || "admin";
 const platformPassword = process.env.PLATFORM_ADMIN_PASSWORD || "Admin123456";
 const tenantUsername = process.env.SHOWCASE_ADMIN_USERNAME || "showcase_admin";
-const tenantPassword = process.env.SHOWCASE_ADMIN_PASSWORD || "Showcase123456Aa";
+const tenantPassword = process.env.SHOWCASE_ADMIN_PASSWORD || "Qiwai123456";
 const userPassword = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
 const runId = `${Date.now()}`;
 const outputDir = path.resolve(process.env.ACCEPTANCE_OUTPUT_DIR || path.join(root, ".local-logs"), `activity-commerce-acceptance-${runId}`);
@@ -81,13 +81,21 @@ async function loginAdmin(username, password) {
 }
 
 async function loginUser(phone, nickname) {
-  const data = await api("/public/auth/password-login", { method: "POST", body: { phone, password: userPassword, nickname } });
+  const code = await api("/public/auth/h5-code", { method: "POST", tenant: false, body: { phone } });
+  const data = await api("/public/auth/h5-login", { method: "POST", tenant: false, body: { phone, verificationCode: code.devCode || process.env.H5_DEV_VERIFICATION_CODE || "123456", verificationToken: code.verificationToken, nickname } });
   assert(data.userAccessToken, `${phone} login did not return userAccessToken`);
   return { ...data, phone };
 }
 
 function futureDate(days, hour) {
   const date = new Date(Date.now() + days * 86400000);
+  date.setHours(hour, 0, 0, 0);
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
+}
+
+function pastDate(days, hour) {
+  const date = new Date(Date.now() - days * 86400000);
   date.setHours(hour, 0, 0, 0);
   const pad = (value) => String(value).padStart(2, "0");
   return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:00`;
@@ -191,7 +199,7 @@ async function main() {
       { label: "所在地区", type: "region", required: true, sortOrder: 4, options: [] }
     ];
     const title = `【活动商业闭环验收保留】${runId}`;
-    const created = await api("/admin/activities", { method: "POST", token: tenantAdmin.token, tenant: false, body: activityPayload(title, initialFields, phones.blocked) });
+    const created = await api("/admin/activities", { method: "POST", token: tenantAdmin.token, tenant: false, body: { ...activityPayload(title, initialFields, phones.blocked), tenantId: tenant.id } });
     assert(created.formSchemaVersion === 1, "new activity form schema version should be 1");
 
     await expectFailure("黑名单限制", `/public/activities/${created.id}/register`, { method: "POST", token: blockedUser.userAccessToken, body: { answers: answers(created, phones.blocked), privacyAccepted: true } }, "不可报名");
@@ -207,7 +215,7 @@ async function main() {
     });
     assert(firstRegistration.registration?.status === "pending_review", "first registration should require review");
 
-    const updatedPayload = activityPayload(title, [...initialFields, { label: "补充说明", type: "remark", required: false, sortOrder: 5, options: [] }], phones.blocked);
+    const updatedPayload = { ...activityPayload(title, [...initialFields, { label: "补充说明", type: "remark", required: false, sortOrder: 5, options: [] }], phones.blocked), tenantId: tenant.id };
     const updated = await api(`/admin/activities/${created.id}`, { method: "PUT", token: tenantAdmin.token, tenant: false, body: updatedPayload });
     assert(updated.formSchemaVersion === 2 && updated.fields.length === 5, "activity form schema should increment to version 2");
 
@@ -241,6 +249,29 @@ async function main() {
       assert((checkedIn.registration?.status || checkedIn.status) === "checked_in", `registration ${id} should be checked in`);
     }
 
+    await expectFailure("活动未结束时禁止评价", `/public/registrations/${registrationIds[0]}/review`, { method: "POST", token: firstUser.userAccessToken, body: { rating: 5, content: "活动尚未结束，不应提前评价。" } }, "活动结束后才能评价");
+    const beforeEndPostable = await api("/public/me/community/postable-activities", { token: firstUser.userAccessToken });
+    assert(!beforeEndPostable.some((item) => Number(item.id) === Number(created.id)), "an ongoing checked-in activity must not be postable");
+
+    const endedPayload = {
+      ...updated,
+      status: "ended",
+      startTime: pastDate(2, 14),
+      endTime: pastDate(2, 17),
+      registrationDeadline: pastDate(3, 20),
+      tenantId: tenant.id
+    };
+    const ended = await api(`/admin/activities/${created.id}`, { method: "PUT", token: tenantAdmin.token, tenant: false, body: endedPayload });
+    assert(ended.status === "ended" && new Date(ended.endTime).getTime() <= Date.now(), "activity should transition to an ended state for post-event acceptance");
+
+    const activitySpace = await api(`/public/activities/${created.id}/space`, { token: firstUser.userAccessToken });
+    assert(activitySpace.activity?.id === created.id, "activity space should return the requested activity");
+    assert(Array.isArray(activitySpace.announcements) && Array.isArray(activitySpace.posts), "activity space should expose announcement and Q&A collections");
+    assert(activitySpace.participants?.length === 2, "activity space should show only confirmed participants");
+    assert(activitySpace.checkIn?.checkedIn === true && activitySpace.checkIn?.registrationId === registrationIds[0], "activity space should expose the current user's checked-in state");
+    const spacePost = await api(`/public/activities/${created.id}/space/posts`, { method: "POST", token: firstUser.userAccessToken, body: { content: "活动空间问答专项验收：请提前十分钟到场。" } });
+    assert(spacePost.status === "pending", "activity space Q&A should enter moderation before public display");
+
     const firstReview = await api(`/public/registrations/${registrationIds[0]}/review`, { method: "POST", token: firstUser.userAccessToken, body: { rating: 5, content: "流程完整，现场体验很好。" } });
     const secondReview = await api(`/public/registrations/${registrationIds[1]}/review`, { method: "POST", token: secondUser.userAccessToken, body: { rating: 4, content: "报名信息清晰，组织有序。" } });
     const firstReport = await api(`/public/reviews/${firstReview.id}/report`, { method: "POST", token: secondUser.userAccessToken, body: { reason: "专项验收举报，实际不成立" } });
@@ -265,6 +296,7 @@ async function main() {
     result.checks.push(
       { name: "动态表单版本和报名快照", status: "passed", versions: [firstRow.formSchemaVersion, secondRow.formSchemaVersion] },
       { name: "批量审核通知标签和名单导出", status: "passed", approved, notified, tagged, registrationExport },
+      { name: "活动空间成员、签到和问答审核", status: "passed", participantCount: activitySpace.participants.length, postId: spacePost.id, postStatus: spacePost.status },
       { name: "评价回复精选举报和复盘", status: "passed", reviewIds: [firstReview.id, secondReview.id], reportId: firstReport.report.id, recapExport }
     );
     result.retained = {
@@ -273,6 +305,7 @@ async function main() {
       title,
       userPhones: phones,
       registrationIds,
+      activitySpacePostId: spacePost.id,
       reviewIds: [firstReview.id, secondReview.id],
       reviewReportId: firstReport.report.id,
       formSchemaVersions: [1, 2],

@@ -13,7 +13,7 @@
       <text class="support-title">加入文化大使计划</text>
       <text class="support-copy">参与城市文化共建 ›</text>
     </view>
-    <view v-if="canPublish" class="publish-card" role="button" tabindex="0" aria-label="分享活动心得" @click="goPublish" @keyup.enter="goPublish" @keyup.space.prevent="goPublish">
+    <view v-if="showPublishEntry" class="publish-card" role="button" tabindex="0" aria-label="分享活动心得" @click="goPublish" @keyup.enter="goPublish" @keyup.space.prevent="goPublish">
       <view>
         <text class="publish-title">分享活动心得</text>
         <text class="publish-copy">上传照片和感悟，审核后展示给新同学</text>
@@ -34,11 +34,8 @@
 
     <!-- 近期活动 -->
     <view class="section-title"><text class="title-md">近期共修</text></view>
-    <view v-if="activitiesLoading" class="section-state" role="status" aria-live="polite">近期活动加载中…</view>
-    <view v-else-if="activitiesError" class="section-state error-state">
-      <text>{{ activitiesError }}</text>
-      <view class="state-retry" @click="loadActivities">重新加载</view>
-    </view>
+    <LoadingState v-if="activitiesLoading" compact title="正在加载近期活动" description="正在同步当前商家的活动安排。" />
+    <EmptyState v-else-if="activitiesError" compact variant="error" :description="activitiesError" action-text="重新加载" @action="loadActivities" />
     <view v-for="(act, idx) in activities" :key="idx" class="activity-card" role="button" tabindex="0" :aria-label="`查看活动：${act.title}`" @click="goActivity(act)" @keyup.enter="goActivity(act)" @keyup.space.prevent="goActivity(act)">
       <view class="activity-date-block">
         <text class="date-month">{{ act.month }}</text>
@@ -54,16 +51,13 @@
         </view>
       </view>
     </view>
-    <EmptyState v-if="!activitiesLoading && !activitiesError && !activities.length" icon="日" text="暂无近期活动" />
+    <EmptyState v-if="!activitiesLoading && !activitiesError && !activities.length" compact variant="activity" title="暂无近期活动" description="主办方发布新活动后，会第一时间显示在这里。" />
 
     <!-- 今日打卡 -->
     <view class="card checkin-card">
       <text class="title-md">今日共修</text>
-      <view v-if="checkinLoading" class="inline-state" role="status" aria-live="polite">今日打卡任务加载中…</view>
-      <view v-else-if="checkinError" class="inline-state error-state">
-        <text>{{ checkinError }}</text>
-        <view class="state-retry" @click="loadCheckinTask">重新加载</view>
-      </view>
+      <LoadingState v-if="checkinLoading" compact title="正在加载今日打卡" description="正在同步今天的共修任务。" />
+      <EmptyState v-else-if="checkinError" compact variant="error" :description="checkinError" action-text="重新加载" @action="loadCheckinTask" />
       <template v-else>
       <text class="body-text" style="margin-top:12rpx;">{{ checkinTask ? `今日任务：${checkinTask.title}` : "暂无今日打卡任务" }}</text>
       <text v-if="!checkinTask" class="subtle" style="margin-top:8rpx;">请在后台新增今天日期的打卡任务，发布后这里会自动显示。</text>
@@ -92,11 +86,8 @@
       <text class="title-md">{{ activityFilterId ? "活动口碑" : "参与者动态" }}</text>
       <text v-if="activityFilterId" class="subtle">仅展示当前活动关联心得</text>
     </view>
-    <view v-if="postsLoading" class="section-state" role="status" aria-live="polite">参与者动态加载中…</view>
-    <view v-else-if="postsError" class="section-state error-state">
-      <text>{{ postsError }}</text>
-      <view class="state-retry" @click="loadPosts">重新加载</view>
-    </view>
+    <LoadingState v-if="postsLoading" compact title="正在加载参与者动态" description="正在同步已审核的活动心得。" />
+    <EmptyState v-else-if="postsError" compact variant="error" :description="postsError" action-text="重新加载" @action="loadPosts" />
     <view v-for="(post, idx) in posts" :key="idx" class="card post-card" @click="goPost(post)">
       <view class="row" style="justify-content:flex-start; gap:12rpx;">
         <image class="avatar-sm" :src="post.avatar" mode="aspectFill" />
@@ -120,11 +111,15 @@
         </view>
       </view>
     </view>
-    <view v-if="!postsLoading && !postsError && !posts.length" class="empty-post-card">
-      <text class="empty-title">{{ activityFilterId ? "还没有活动心得" : "暂无参与者动态" }}</text>
-      <text class="empty-copy">{{ activityFilterId ? "完成签到，或活动结束且报名成功/已付款后，可以发布这场活动的心得。" : "参与活动后发布照片和感悟，审核通过后会展示在这里。" }}</text>
-      <view v-if="canPublish" class="button secondary sm" @click="goPublish">{{ activityFilterId ? "发布这场心得" : "去发布心得" }}</view>
-    </view>
+    <EmptyState
+      v-if="!postsLoading && !postsError && !posts.length"
+      compact
+      variant="social"
+      :title="activityFilterId ? '还没有活动心得' : '暂无参与者动态'"
+      :description="activityFilterId ? '活动结束且完成签到后，可以发布这场活动的心得。' : '活动结束并完成签到后发布照片和感悟，审核通过后会展示在这里。'"
+      :action-text="canPublish ? (activityFilterId ? '发布这场心得' : '去发布心得') : ''"
+      @action="goPublish"
+    />
 
     <view style="height:120rpx;"></view>
     <TabBar current="community" />
@@ -133,18 +128,19 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
+import { onHide, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
-import { ensureUser, request, withTenantCode } from "../../api";
+import LoadingState from "../../components/LoadingState.vue";
+import { ensureUser, getUserToken, request, withTenantCode } from "../../api";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryParam } from "../../query";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import { featureGatesState, guardCurrentPageFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
-import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { createTenantLoadGuard, formatShanghaiDateTime } from "../../tenant-load-guard";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 onShow(async () => {
@@ -153,6 +149,7 @@ onShow(async () => {
   if (!guardCurrentPageFeature()) return;
   loadPageTheme();
   void loadActivities();
+  void loadPublishActivities();
   void loadPosts();
   void loadCheckinTask();
   void loadDecoration();
@@ -174,6 +171,10 @@ const activityFilterId = ref(0);
 const activitiesLoadGuard = createTenantLoadGuard();
 const postsLoadGuard = createTenantLoadGuard();
 const checkinLoadGuard = createTenantLoadGuard();
+const publishActivitiesLoadGuard = createTenantLoadGuard();
+const interactionGuard = createTenantLoadGuard();
+const publishActivities = ref<any[]>([]);
+const publishActivitiesLoaded = ref(false);
 const checkinActionText = computed(() => checkinTask.value?.checkedToday ? "查看打卡记录" : "去打卡");
 const checkinCompletedCount = computed(() => Math.max(0, Number(checkinTask.value?.completedCount || 0)));
 const checkinProgress = computed(() => checkinTask.value?.checkedToday ? 100 : 0);
@@ -181,6 +182,7 @@ const checkinStatusTitle = computed(() => checkinTask.value?.checkedToday ? "你
 const checkinStatusSubtitle = computed(() => checkinTask.value?.checkedToday ? "今天已经点亮，明天继续保持。" : "进入后完成今日阅读、书写或共修记录。");
 const featureGates = featureGatesState;
 const canPublish = computed(() => featureGates.value.community !== false && featureGates.value.communityPublish !== false);
+const showPublishEntry = computed(() => canPublish.value && publishActivitiesLoaded.value && publishActivities.value.length > 0);
 const { contentSections, loadDecoration } = usePageDecoration("community_home", "/pages/community/index");
 const shareOptions = { title: "慢π共修动态", path: () => activityFilterId.value ? `/pages/community/index?activityId=${activityFilterId.value}` : "/pages/community/index" };
 onShareAppMessage(() => defaultMiniProgramShare(shareOptions));
@@ -210,13 +212,11 @@ function loadRouteOptions() {
 }
 
 function formatActivityDate(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { month: "近期", day: "•", time: value || "时间待定" };
-  const month = `${date.getMonth() + 1}月`;
-  const day = String(date.getDate());
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return { month, day, time: `${date.getFullYear()}-${month}${day} ${hour}:${minute}` };
+  const formatted = formatShanghaiDateTime(value, "");
+  if (!formatted) return { month: "近期", day: "•", time: value || "时间待定" };
+  const [date, time] = formatted.split(" ");
+  const [year, monthNumber, dayNumber] = date.split("-");
+  return { month: `${Number(monthNumber)}月`, day: String(Number(dayNumber)), time: `${year}-${Number(monthNumber)}月${Number(dayNumber)}日 ${time}` };
 }
 
 async function loadActivities() {
@@ -244,6 +244,26 @@ async function loadActivities() {
     if (activitiesLoadGuard.isCurrent(token)) activitiesError.value = error?.message || "近期活动加载失败，请稍后重试。";
   } finally {
     if (activitiesLoadGuard.isCurrent(token)) activitiesLoading.value = false;
+  }
+}
+
+async function loadPublishActivities() {
+  const token = publishActivitiesLoadGuard.begin();
+  publishActivitiesLoaded.value = false;
+  publishActivities.value = [];
+  if (!canPublish.value || !getUserToken()) {
+    publishActivitiesLoaded.value = true;
+    return;
+  }
+  try {
+    const result = await request<any[]>("/public/me/community/postable-activities");
+    if (!publishActivitiesLoadGuard.isCurrent(token)) return;
+    publishActivities.value = Array.isArray(result) ? result : [];
+  } catch {
+    if (!publishActivitiesLoadGuard.isCurrent(token)) return;
+    publishActivities.value = [];
+  } finally {
+    if (publishActivitiesLoadGuard.isCurrent(token)) publishActivitiesLoaded.value = true;
   }
 }
 
@@ -278,22 +298,29 @@ async function loadCheckinTask() {
 
 async function toggleLike(post: any) {
   if (!post?.id || likePending[post.id]) return;
-  likePending[post.id] = true;
+  const requestedPostId = post.id;
+  const interactionToken = interactionGuard.begin();
+  likePending[requestedPostId] = true;
   try {
     await ensureUser();
-    const result = await request<any>(`/public/community/posts/${post.id}/like`, { method: "POST" });
-    post.liked = Boolean(result?.liked);
-    post.likes = Number(result?.likes || 0);
-    uni.showToast({ title: post.liked ? "已点赞" : "已取消点赞", icon: "none" });
+    if (!interactionGuard.isCurrent(interactionToken)) return;
+    const result = await request<any>(`/public/community/posts/${requestedPostId}/like`, { method: "POST" });
+    const currentPost = posts.find((item) => item.id === requestedPostId);
+    if (!interactionGuard.isCurrent(interactionToken) || !currentPost) return;
+    currentPost.liked = Boolean(result?.liked);
+    currentPost.likes = Number(result?.likes || 0);
+    uni.showToast({ title: currentPost.liked ? "已点赞" : "已取消点赞", icon: "none" });
   } catch (error: any) {
-    uni.showToast({ title: error.message || "操作失败", icon: "none" });
+    if (interactionGuard.isCurrent(interactionToken)) uni.showToast({ title: error.message || "操作失败", icon: "none" });
   } finally {
-    likePending[post.id] = false;
+    if (interactionGuard.isCurrent(interactionToken)) likePending[requestedPostId] = false;
   }
 }
 function commentPost(post: CommunityPost) {
   if (!post?.id || commentPendingId.value) return;
-  commentPendingId.value = post.id;
+  const requestedPostId = post.id;
+  const interactionToken = interactionGuard.begin();
+  commentPendingId.value = requestedPostId;
   uni.showModal({
     title: "评论动态",
     editable: true,
@@ -301,32 +328,36 @@ function commentPost(post: CommunityPost) {
     confirmText: "发布",
     success: (res: any) => {
       if (!res.confirm) {
-        commentPendingId.value = 0;
+        if (interactionGuard.isCurrent(interactionToken)) commentPendingId.value = 0;
         return;
       }
       const content = String(res.content || "").trim();
       if (!content) {
-        commentPendingId.value = 0;
-        uni.showToast({ title: "请输入评论内容", icon: "none" });
+        if (interactionGuard.isCurrent(interactionToken)) {
+          commentPendingId.value = 0;
+          uni.showToast({ title: "请输入评论内容", icon: "none" });
+        }
         return;
       }
-      void submitComment(post, content);
+      if (interactionGuard.isCurrent(interactionToken)) void submitComment(requestedPostId, content, interactionToken);
     },
     fail: () => {
-      commentPendingId.value = 0;
+      if (interactionGuard.isCurrent(interactionToken)) commentPendingId.value = 0;
     }
   });
 }
-async function submitComment(post: CommunityPost, content: string) {
+async function submitComment(requestedPostId: number, content: string, interactionToken: ReturnType<typeof interactionGuard.begin>) {
   try {
     await ensureUser();
-    const result = await request<any>(`/public/community/posts/${post.id}/comments`, { method: "POST", data: { content } });
+    if (!interactionGuard.isCurrent(interactionToken)) return;
+    const result = await request<any>(`/public/community/posts/${requestedPostId}/comments`, { method: "POST", data: { content } });
+    if (!interactionGuard.isCurrent(interactionToken)) return;
     uni.showToast({ title: result?.message || "评论已提交审核", icon: "none" });
     void loadPosts();
   } catch (error: any) {
-    uni.showToast({ title: error.message || "评论失败", icon: "none" });
+    if (interactionGuard.isCurrent(interactionToken)) uni.showToast({ title: error.message || "评论失败", icon: "none" });
   } finally {
-    commentPendingId.value = 0;
+    if (interactionGuard.isCurrent(interactionToken)) commentPendingId.value = 0;
   }
 }
 function goActivity(act: any) {
@@ -353,6 +384,16 @@ function goForum() {
 }
 function goSocial() { uni.navigateTo({ url: withTenantCode("/pages/community/social") }); }
 function goPost(post: CommunityPost) { uni.navigateTo({ url: withTenantCode(`/pages/community/detail?id=${post.id}`) }); }
+
+onHide(() => {
+  activitiesLoadGuard.invalidate();
+  postsLoadGuard.invalidate();
+  checkinLoadGuard.invalidate();
+  publishActivitiesLoadGuard.invalidate();
+  interactionGuard.invalidate();
+  commentPendingId.value = 0;
+  for (const key of Object.keys(likePending)) delete likePending[Number(key)];
+});
 </script>
 
 <style scoped>
@@ -417,12 +458,4 @@ function goPost(post: CommunityPost) { uni.navigateTo({ url: withTenantCode(`/pa
 .publish-copy { display:block; margin-top:6rpx; color:#8a6b58; font-size:24rpx; }
 .post-images { display:flex; gap:10rpx; margin-top:12rpx; }
 .post-image { width:31%; height:150rpx; border-radius:14rpx; background:#f3e7d6; }
-.empty-post-card { display:grid; gap:12rpx; margin-bottom:16rpx; padding:24rpx; border-radius:20rpx; background:#fff7ec; border:1rpx solid #eadac6; }
-.empty-title { color:#5b2f24; font-size:30rpx; font-weight:900; }
-.empty-copy { color:#8a6b58; font-size:25rpx; line-height:1.6; }
-.empty-post-card .button { width:fit-content; margin-top:2rpx; }
-.section-state, .inline-state { display:grid; gap:10rpx; margin-bottom:16rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }
-.inline-state { margin-top:14rpx; margin-bottom:0; background:#f8fafc; }
-.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
-.state-retry { width:max-content; color:#C43D3D; font-weight:900; }
 </style>

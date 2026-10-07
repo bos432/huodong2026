@@ -2,6 +2,9 @@
 import { computed, onMounted, ref } from "vue";
 import { getCurrentRouteForTenant, getCurrentTenantCode, getUserToken, request, setCurrentTenantCode, setCurrentTenantCodeSource, type TenantBootstrap } from "../api";
 import type { HomepagePayload, PublicTenantView } from "@activity/shared";
+import { motionStyle } from "../motion/platform-adapter";
+import LoadingState from "./LoadingState.vue";
+import EmptyState from "./EmptyState.vue";
 
 defineOptions({ name: "TenantSwitcher" });
 
@@ -93,7 +96,7 @@ onMounted(() => void loadTenantOptions());
 </script>
 
 <template>
-  <view v-if="tenantSwitcherEnabled" class="tenant-entry" :class="{ compact }" @click="show">
+  <view v-if="tenantSwitcherEnabled" class="tenant-entry" :class="{ compact }" role="button" tabindex="0" aria-label="切换城市合伙人" @click="show" @keyup.enter="show" @keyup.space.prevent="show">
     <view>
       <template v-if="compact">
         <view class="tenant-entry-title">{{ cityLabel }}</view>
@@ -108,28 +111,33 @@ onMounted(() => void loadTenantOptions());
   </view>
 
   <view v-if="open && tenantSwitcherEnabled" class="tenant-mask" @click="hide">
-    <view class="tenant-sheet" @click.stop>
+    <view class="tenant-sheet" :style="motionStyle(0, 220)" @click.stop>
       <view class="tenant-sheet-head">
         <view>
           <view class="tenant-sheet-title">切换城市合伙人</view>
           <view class="tenant-sheet-subtitle">查看不同商家的活动、报名和页面装修</view>
         </view>
-        <view class="tenant-close" @click="hide">×</view>
+        <view class="tenant-close" role="button" tabindex="0" aria-label="关闭商家切换" @click="hide" @keyup.enter="hide" @keyup.space.prevent="hide">×</view>
       </view>
-      <view v-if="loading" class="tenant-empty">加载中...</view>
-      <view v-else-if="loadError" class="tenant-empty tenant-error"><text>{{ loadError }}</text><view class="tenant-retry" role="button" tabindex="0" @click="loadTenantOptions" @keyup.enter="loadTenantOptions" @keyup.space.prevent="loadTenantOptions">重新加载</view></view>
-      <view v-else-if="!tenantOptions.length" class="tenant-empty">暂无可切换商家</view>
+      <LoadingState v-if="loading" compact title="正在加载商家" description="正在同步可切换的城市商家。" />
+      <EmptyState v-else-if="loadError" compact variant="error" title="商家列表加载失败" :description="loadError" action-text="重新加载" @action="loadTenantOptions" />
+      <EmptyState v-else-if="!tenantOptions.length" compact variant="social" title="暂无可切换商家" description="当前没有开放的城市商家。" />
       <template v-else>
-        <input v-model="keyword" class="tenant-search" placeholder="搜索城市、商家名称或编码" />
+        <input v-model="keyword" class="tenant-search" aria-label="搜索城市、商家名称或编码" placeholder="搜索城市、商家名称或编码" />
         <view class="tenant-scope-note">{{ assetScopeMessage }}</view>
-        <view v-if="!filteredTenantOptions.length" class="tenant-empty">没有匹配的城市商家</view>
+        <EmptyState v-if="!filteredTenantOptions.length" compact variant="social" title="没有匹配的商家" description="试试更换城市或商家关键词。" />
         <view
           v-for="item in filteredTenantOptions"
-          :key="item.code"
-          class="tenant-option"
-          :class="{ active: item.code === currentTenantCode }"
-          @click="selectTenant(item)"
-        >
+           :key="item.code"
+           class="tenant-option"
+           :class="{ active: item.code === currentTenantCode }"
+           role="button"
+           tabindex="0"
+           :aria-label="`${tenantOptionLabel(item)}${item.code === currentTenantCode ? '，当前商家' : '，切换到此商家'}`"
+           @click="selectTenant(item)"
+           @keyup.enter="selectTenant(item)"
+           @keyup.space.prevent="selectTenant(item)"
+         >
           <view>
             <view class="tenant-option-name">{{ tenantOptionLabel(item) }}</view>
             <view class="tenant-option-code">{{ item.code }}<text v-if="item.code === defaultTenantCode"> · 平台默认</text></view>
@@ -142,16 +150,17 @@ onMounted(() => void loadTenantOptions());
 </template>
 
 <style scoped>
-.tenant-entry { display: flex; justify-content: space-between; align-items: center; gap: 18rpx; margin-bottom: 18rpx; padding: 18rpx 22rpx; border: 1rpx solid #d9ebe6; border-radius: 10rpx; background: #fff; box-shadow: 0 8rpx 22rpx rgba(20,72,64,.05); }
+.tenant-entry { min-width: 0; display: flex; justify-content: space-between; align-items: center; gap: 18rpx; margin-bottom: 18rpx; padding: 18rpx 22rpx; border: 1rpx solid #d9ebe6; border-radius: 10rpx; background: #fff; box-shadow: 0 8rpx 22rpx rgba(20,72,64,.05); }
+.tenant-entry > view:first-child { min-width: 0; }
 .tenant-entry-title { color: #173f3a; font-size: 30rpx; font-weight: 900; }
 .tenant-entry-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; margin-top: 4rpx; color: #66827d; font-size: 23rpx; font-weight: 700; }
 .tenant-entry-action { flex: 0 0 auto; min-width: 86rpx; height: 50rpx; display: flex; align-items: center; justify-content: center; border-radius: 8rpx; background: #eaf7f3; color: #0f766e; font-size: 23rpx; font-weight: 900; }
 .tenant-entry.compact { margin: 0; padding: 0; border: 0; border-radius: 0; background: transparent; box-shadow: none; }
 .tenant-entry.compact .tenant-entry-title { color: #101828; font-size: 30rpx; line-height: 1.15; }
-.tenant-entry.compact .tenant-entry-name { max-width: 360rpx; margin-top: 5rpx; color: #667085; font-size: 20rpx; }
+.tenant-entry.compact .tenant-entry-name { max-width: 100%; margin-top: 5rpx; color: #667085; font-size: 20rpx; }
 .tenant-entry.compact .tenant-entry-action { min-width: 72rpx; height: 48rpx; border-radius: 8rpx; background: #ecfdf3; color: #0d8a4d; font-size: 22rpx; }
 .tenant-mask { position: fixed; top: 0; right: 0; bottom: 0; left: 0; z-index: 10001; display: flex; align-items: flex-end; background: rgba(15, 23, 42, 0.46); }
-.tenant-sheet { box-sizing: border-box; width: 100%; max-height: 78vh; overflow-y: auto; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); border-radius: 16rpx 16rpx 0 0; background: #fff; box-shadow: 0 -18rpx 48rpx rgba(15, 23, 42, 0.18); animation: app-sheet-rise 220ms ease-out both; }
+.tenant-sheet { box-sizing: border-box; width: 100%; max-height: 78vh; overflow-y: auto; padding: 28rpx 24rpx calc(28rpx + env(safe-area-inset-bottom)); border-radius: 16rpx 16rpx 0 0; background: #fff; box-shadow: 0 -18rpx 48rpx rgba(15, 23, 42, 0.18); }
 .tenant-sheet-head { display: flex; justify-content: space-between; gap: 24rpx; align-items: flex-start; margin-bottom: 18rpx; }
 .tenant-sheet-title { color: #111827; font-size: 32rpx; font-weight: 900; }
 .tenant-sheet-subtitle { margin-top: 6rpx; color: #667085; font-size: 24rpx; line-height: 1.45; }

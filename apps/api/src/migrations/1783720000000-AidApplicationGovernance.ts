@@ -4,6 +4,7 @@ export class AidApplicationGovernance1783720000000 implements MigrationInterface
   name = "AidApplicationGovernance1783720000000";
 
   async up(queryRunner: QueryRunner): Promise<void> {
+    if (await queryRunner.hasTable("aid_applications") && await queryRunner.hasTable("aid_application_materials") && await queryRunner.hasTable("aid_application_events")) return;
     await queryRunner.createTable(new Table({
       name: "aid_applications",
       columns: [

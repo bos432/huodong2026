@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { activityStatusText, type ActivityStatus } from "@activity/shared";
 import { adminActivityPreviewUrl, clearMobileAdminSession, getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const loading = ref(true);
 const bootstrap = ref<any>(null);
@@ -125,8 +127,8 @@ onShow(load);
       <view class="logout" @click="logout">退出</view>
     </view>
 
-    <view v-if="pageError" class="error-panel" role="alert"><text>{{ pageError }}</text><view class="retry" @click="load">重试</view></view>
-    <view v-if="loading && !bootstrap" class="panel">加载中...</view>
+    <EmptyState v-if="pageError" variant="error" title="工作台加载失败" :description="pageError" action-text="重新加载" @action="load" />
+    <LoadingState v-if="loading && !bootstrap" title="正在加载工作台" description="正在同步经营数据，请稍候。" />
     <template v-else>
       <view v-if="canViewDashboard" class="stats">
         <view><text>{{ dashboard ? dashboard?.totals?.activityCount || 0 : "--" }}</text><text>活动总数</text></view>
@@ -134,7 +136,7 @@ onShow(load);
         <view><text>{{ dashboard ? dashboard?.totals?.registrationCount || 0 : "--" }}</text><text>报名累计</text></view>
         <view><text>{{ dashboard ? dashboard?.operations?.monthRegistrationCount || 0 : "--" }}</text><text>本月报名</text></view>
       </view>
-      <view v-if="dashboardError" class="error-panel"><text>{{ dashboardError }}</text><view class="retry" @click="load">重试</view></view>
+      <EmptyState v-if="dashboardError" compact variant="error" title="经营概览加载失败" :description="dashboardError" action-text="重新加载" @action="load" />
 
       <view class="actions">
         <view v-if="canWrite" class="action primary" @click="goCreate">发布活动</view>
@@ -152,7 +154,7 @@ onShow(load);
         <text>最近活动</text>
         <text class="section-more" @click="goList">全部活动 ›</text>
       </view>
-      <view v-if="activitiesError" class="error-panel"><text>{{ activitiesError }}</text><view class="retry" @click="load">重试</view></view>
+      <EmptyState v-if="activitiesError" compact variant="error" title="最近活动加载失败" :description="activitiesError" action-text="重新加载" @action="load" />
       <view v-for="item in activities" :key="item.id" class="activity" @click="canWrite ? goEdit(item.id) : previewActivity(item)">
         <view>
           <view class="name">{{ item.title }}</view>
@@ -161,7 +163,7 @@ onShow(load);
         </view>
         <view class="pill">{{ statusText(item.status) }}</view>
       </view>
-      <view v-if="!activities.length && !activitiesError" class="panel">暂无活动</view>
+      <EmptyState v-if="!activities.length && !activitiesError" compact variant="activity" title="暂无活动" />
       <AdminBottomNav current="home" :permissions="bootstrap?.permissions" />
     </template>
   </view>

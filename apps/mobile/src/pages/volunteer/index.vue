@@ -3,6 +3,8 @@ import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { getCurrentRouteWithQuery, getUserToken, request } from "../../api";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 
@@ -184,12 +186,8 @@ onShow(async () => {
 
 <template>
   <view class="page">
-    <view v-if="loading" class="empty">加载中...</view>
-    <view v-else-if="loadError" class="card error-card">
-      <view class="section-title">志愿服务加载失败</view>
-      <view class="empty error-copy">{{ loadError }}</view>
-      <button class="link-button" @click="load">重新加载</button>
-    </view>
+    <LoadingState v-if="loading" title="正在加载志愿服务" description="请稍候，正在同步开放任务和你的服务记录。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else>
       <view class="hero">
         <text class="eyebrow">公益志愿服务</text>
@@ -223,7 +221,7 @@ onShow(async () => {
 
       <view class="card">
         <view class="section-title">开放任务</view>
-        <view v-if="!tasks.length" class="empty">暂无开放任务。</view>
+        <EmptyState v-if="!tasks.length" title="暂无开放任务" description="运营发布新的志愿任务后，会在这里显示。" compact />
         <view v-for="task in tasks" :key="task.id" class="task">
           <view class="task-head">
             <text>{{ task.title }}</text>

@@ -1,7 +1,7 @@
 <template>
   <view class="logistics-page">
-    <view v-if="loading" class="state-card" role="status" aria-live="polite">物流信息加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载物流信息" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
+    <LoadingState v-if="loading" title="正在加载物流信息" description="正在同步订单配送进度。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else>
     <view class="hero">
       <text class="eyebrow">物流信息</text>
@@ -69,6 +69,8 @@ import { computed, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const orderId = ref(0);
 const order = ref<any>({});

@@ -1,5 +1,5 @@
 <template>
-  <view class="profile-page has-custom-nav">
+  <MobileShell active-tab="me" @tab="selectTab"><view class="profile-page has-custom-nav">
     <SplashAd />
     <view
       class="member-card"
@@ -46,11 +46,8 @@
       </view>
     </view>
 
-    <view v-if="loadingProfile && !profile" class="profile-state-card" role="status" aria-live="polite">会员资料加载中…</view>
-    <view v-else-if="profileError" class="profile-state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ profileError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载会员资料" @click="loadProfile" @keyup.enter="loadProfile" @keyup.space.prevent="loadProfile">重新加载</view>
-    </view>
+    <LoadingState v-if="loadingProfile && !profile" title="正在加载会员资料" description="请稍候，正在同步会员等级、报名和权益信息。" />
+    <EmptyState v-else-if="profileError" variant="error" title="会员资料加载失败" :description="profileError" action-text="重新加载" @action="loadProfile" />
 
     <AdSlotRenderer slot-key="user_my_banner" page-key="user_my" />
 
@@ -94,7 +91,7 @@
 
     <view v-if="isLoggedIn && repurchaseRecommendations.length" class="profile-section recommendation-panel app-enter" :style="motionStyle(136)">
       <view class="profile-section-head compact"><view><text class="profile-section-title">继续发现</text><text class="profile-section-copy">根据当前城市的开放活动推荐</text></view><view class="profile-section-link" @click="goDecoratedLink('/pages/activity/list')">全部活动</view></view>
-      <scroll-view class="recommendation-scroll" scroll-x :show-scrollbar="false"><view class="recommendation-track"><view v-for="item in repurchaseRecommendations" :key="item.id" class="recommendation-item app-press" role="button" tabindex="0" @click="openRecommendedActivity(item.id)" @keyup.enter="openRecommendedActivity(item.id)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="recommendation-cover">活动</view><text>{{ item.title }}</text><text>{{ formatMemberActivityTime(item.startTime) }} · {{ item.location || '地点待确认' }}</text></view></view></scroll-view>
+    <scroll-view class="recommendation-scroll" scroll-x :show-scrollbar="false"><view class="recommendation-track"><view v-for="item in repurchaseRecommendations" :key="item.id" class="recommendation-item app-press" role="button" tabindex="0" :aria-label="`查看推荐活动：${item.title}`" @click="openRecommendedActivity(item.id)" @keyup.enter="openRecommendedActivity(item.id)" @keyup.space.prevent="openRecommendedActivity(item.id)"><image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" /><view v-else class="recommendation-cover">活动</view><text>{{ item.title }}</text><text>{{ formatMemberActivityTime(item.startTime) }} · {{ item.location || '地点待确认' }}</text></view></view></scroll-view>
     </view>
 
     <view class="member-shortcuts app-enter" :style="motionStyle(128)">
@@ -105,6 +102,12 @@
     <view class="history-entry app-enter app-press" style="animation-delay: 140ms" role="button" tabindex="0" aria-label="查看浏览足迹" @click="goBrowsingHistory" @keyup.enter="goBrowsingHistory" @keyup.space.prevent="goBrowsingHistory">
       <view class="history-entry-icon">览</view>
       <view class="history-entry-content"><text class="history-entry-title">浏览足迹</text><text class="history-entry-copy">查看最近浏览的活动和内容学习进度</text></view>
+      <text class="entry-arrow">›</text>
+    </view>
+
+    <view v-if="isLoggedIn" class="history-entry app-enter app-press" style="animation-delay: 152ms" role="button" tabindex="0" aria-label="查看我的体验" @click="goMyExperiences" @keyup.enter="goMyExperiences" @keyup.space.prevent="goMyExperiences">
+      <view class="history-entry-icon">验</view>
+      <view class="history-entry-content"><text class="history-entry-title">我的体验</text><text class="history-entry-copy">查看体验申请、审核进度和反馈记录</text></view>
       <text class="entry-arrow">›</text>
     </view>
 
@@ -184,8 +187,7 @@
 
     <MarketingPopup />
     <view style="height:120rpx;"></view>
-    <TabBar current="user" />
-  </view>
+  </view></MobileShell>
 </template>
 
 <script setup lang="ts">
@@ -197,25 +199,29 @@ import { profileHeaderPalette } from '../../profile-header-palette';
 import { goDecoratedLink, usePageDecoration } from "../../decoration";
 import { featureGatesState, isLinkAllowedByFeature, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { chooseAvatarImage, isStoredAvatar } from "../../avatar-picker";
-import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { createTenantLoadGuard, formatShanghaiDateTime } from "../../tenant-load-guard";
 import { loadMemberOrderOverview, type MemberOrderSession } from "../../member-order-overview";
-import TabBar from "../../components/TabBar.vue";
+import MobileShell from "../../components/layout/MobileShell.vue";
+import { mobileTabRoute } from "../../mobile-tab-routes";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import MarketingPopup from "../../components/MarketingPopup.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { motionStyle } from "../../motion/platform-adapter";
+import type { PublicActivityListResponse, PublicActivitySummary, PublicAdminAccess, PublicCharitySummary, PublicCourseOrderRecord, PublicCourseSummary, PublicMallMembershipResponse, PublicMemberProfile, PublicMemberRegistrationRecord, PublicWalletSummary } from "@activity/shared";
 
-const profile = ref<any>(null);
-const wallet = ref<any>(null);
-const charity = ref<any>(null);
-const adminAccess = ref<any>(null);
-const courses = ref<any[]>([]);
-const registrations = ref<any[]>([]);
-const courseOrders = ref<any[]>([]);
-const mallOrders = ref<any[]>([]);
-const mallMemberships = ref<any[]>([]);
-const recommendedActivities = ref<any[]>([]);
+const profile = ref<PublicMemberProfile | null>(null);
+const wallet = ref<PublicWalletSummary | null>(null);
+const charity = ref<PublicCharitySummary | null>(null);
+const adminAccess = ref<PublicAdminAccess | null>(null);
+const courses = ref<PublicCourseSummary[]>([]);
+const registrations = ref<PublicMemberRegistrationRecord[]>([]);
+const courseOrders = ref<PublicCourseOrderRecord[]>([]);
+const mallOrders = ref<unknown[]>([]);
+const mallMemberships = ref<PublicMallMembershipResponse["memberships"]>([]);
+const recommendedActivities = ref<PublicActivitySummary[]>([]);
 const loadingProfile = ref(false);
 const profileError = ref("");
 const assetWarning = ref("");
@@ -223,6 +229,11 @@ const assetFailures = ref<string[]>([]);
 const wechatProfilePanelVisible = ref(false);
 const wechatProfileNickname = ref("");
 const wechatProfileAvatarPath = ref("");
+
+function selectTab(tab: "home" | "checkin" | "messages" | "me" | "publish") {
+  if (tab === "publish" || tab === "me") return;
+  uni.reLaunch({ url: withTenantCode(mobileTabRoute(tab)) });
+}
 const wechatProfilePanelMessage = ref("请选择头像和昵称后继续。");
 const syncingWechatProfile = ref(false);
 const choosingWechatAvatar = ref(false);
@@ -260,7 +271,7 @@ const memberStats = computed(() => [
   { label: "积分", value: profile.value?.id ? String(profile.value?.points || 0) : "--" },
   { label: "成长", value: profile.value?.id ? String(profile.value?.growthValue || 0) : "--" },
   { label: "余额", value: !profile.value?.id || assetFailed("wallet") ? "--" : `¥${money(wallet.value?.availableBalance)}` },
-  { label: "报名", value: !profile.value?.id || assetFailed("registrations") ? "--" : String(safeList<any>(registrations.value).length) }
+  { label: "报名", value: !profile.value?.id || assetFailed("registrations") ? "--" : String(registrations.value.length) }
 ]);
 const charityAmountText = computed(() => !profile.value?.id || assetFailed("charity") ? "--" : money(charity.value?.totalAmount));
 const walletBalanceText = computed(() => !profile.value?.id || assetFailed("wallet") ? "¥--" : `¥${money(wallet.value?.availableBalance)}`);
@@ -269,18 +280,18 @@ function isDefaultWechatNicknameValue(value?: unknown) {
   const legacyDefaultNamePattern = new RegExp(`^${["微", "信", "用户"].join("")}([A-Z0-9]+)?$`, "i");
   return !name || legacyDefaultNamePattern.test(name);
 }
-function shouldCompleteWechatProfile(row?: any) {
+function shouldCompleteWechatProfile(row?: PublicMemberProfile | null) {
   return Boolean(row?.wechatBound && (!row.avatarUrl || isDefaultWechatNicknameValue(row.nickname)));
 }
 const isDefaultWechatNickname = computed(() => isDefaultWechatNicknameValue(profile.value?.nickname));
 const canCompleteWechatProfile = computed(() => shouldCompleteWechatProfile(profile.value));
 const pendingOrderCount = computed(() => ["registrations", "courseOrders"].some(assetFailed) ? null
-  : safeList<any>(registrations.value).filter(activityOrderIsPending).length
+  : registrations.value.filter(activityOrderIsPending).length
     + safeList<any>(courseOrders.value).filter((item) => item.status === "pending_payment" || ["pending", "approved", "processing", "failed"].includes(String(item.latestRefund?.status || ""))).length);
-const upcomingOrderCount = computed(() => assetFailed("registrations") ? null : safeList<any>(registrations.value).filter(activityOrderIsUpcoming).length);
+const upcomingOrderCount = computed(() => assetFailed("registrations") ? null : registrations.value.filter(activityOrderIsUpcoming).length);
 const completedOrderCount = computed(() => {
   if (assetFailed("registrations")) return null;
-  let count = safeList<any>(registrations.value).filter(activityOrderIsCompleted).length;
+  let count = registrations.value.filter(activityOrderIsCompleted).length;
   if (!featureGatesState.value.courses) return count;
   if (["courses", "courseOrders"].some(assetFailed)) return null;
   count += safeList<any>(courseOrders.value).filter(courseOrderIsCompleted).length;
@@ -289,7 +300,7 @@ const completedOrderCount = computed(() => {
 });
 const afterSaleCount = computed(() => {
   if (["registrations", "courseOrders"].some(assetFailed)) return null;
-  const activityCount = safeList<any>(registrations.value).filter((item) => ["pending", "processing", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
+  const activityCount = registrations.value.filter((item) => ["pending", "processing", "failed", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
   const courseCount = safeList<any>(courseOrders.value).filter((item) => ["pending", "approved", "processing", "failed", "rejected"].includes(String(item.latestRefund?.status || ""))).length;
   return activityCount + courseCount;
 });
@@ -327,47 +338,50 @@ function courseOrderIsCompleted(order: any) {
   return order.latestRefund?.status === "completed" || owned && courseProgress(order) >= 100;
 }
 
-function activityOrderIsCompleted(item: any) {
+function activityOrderIsCompleted(item: PublicMemberRegistrationRecord) {
   const refundStatus = String(item.latestRefund?.status || "");
   if (refundStatus) return refundStatus === "completed";
   return ["checked_in", "completed"].includes(String(item.status || ""));
 }
 
-function activityOrderIsPending(item: any) {
+function activityOrderIsPending(item: PublicMemberRegistrationRecord) {
   const refundStatus = String(item.latestRefund?.status || "");
-  return ["pending_payment", "pending_review"].includes(String(item.status || "")) || ["pending", "processing"].includes(refundStatus);
+  return ["pending_payment", "pending_review"].includes(String(item.status || "")) || ["pending", "processing", "failed"].includes(refundStatus);
 }
 
-function activityOrderIsUpcoming(item: any) {
+function activityOrderIsUpcoming(item: PublicMemberRegistrationRecord) {
   return !item.latestRefund?.status && String(item.status || "") === "approved";
 }
 
-const nextRegistration = computed(() => safeList<any>(registrations.value)
+const nextRegistration = computed(() => registrations.value
   .filter((item) => !item.latestRefund?.status && ["pending_payment", "pending_review", "approved"].includes(String(item.status || "")) && new Date(item.activity?.endTime || 0).getTime() > Date.now())
   .sort((a, b) => new Date(a.activity?.startTime || 0).getTime() - new Date(b.activity?.startTime || 0).getTime())[0] || null);
 const memberTodos = computed(() => {
   if (!profile.value?.id) return [];
   const rows: Array<{ key: string; label: string; copy: string; action: string }> = [];
-  const pendingPayment = safeList<any>(registrations.value).find((item) => item.status === "pending_payment");
-  const pendingReview = safeList<any>(registrations.value).find((item) => item.status === "pending_review");
-  const pendingRefund = safeList<any>(registrations.value).find((item) => ["pending", "processing"].includes(String(item.latestRefund?.status || "")));
+  const pendingPayment = registrations.value.find((item) => item.status === "pending_payment");
+  const pendingReview = registrations.value.find((item) => item.status === "pending_review");
+  const pendingRefund = registrations.value.find((item) => ["pending", "processing", "failed"].includes(String(item.latestRefund?.status || "")));
   if (!profile.value.phone) rows.push({ key: "phone", label: "绑定手机号", copy: "接收报名、退款与活动变更通知", action: "phone" });
   if (pendingPayment) rows.push({ key: "payment", label: "完成活动付款", copy: pendingPayment.activity?.title || "有一笔报名待付款", action: `registration:${pendingPayment.id}` });
   if (pendingReview) rows.push({ key: "review", label: "等待报名审核", copy: pendingReview.activity?.title || "审核结果会同步到报名详情", action: `registration:${pendingReview.id}` });
-  if (pendingRefund) rows.push({ key: "refund", label: "查看退款进度", copy: pendingRefund.activity?.title || "退款申请正在处理", action: `registration:${pendingRefund.id}` });
+  if (pendingRefund) {
+    const failed = pendingRefund.latestRefund?.status === "failed";
+    rows.push({ key: "refund", label: failed ? "处理退款异常" : "查看退款进度", copy: pendingRefund.activity?.title || (failed ? "退款处理异常，请查看详情" : "退款申请正在处理"), action: `registration:${pendingRefund.id}` });
+  }
   return rows.slice(0, 4);
 });
 const repurchaseRecommendations = computed(() => {
-  const registeredIds = new Set(safeList<any>(registrations.value).map((item) => Number(item.activity?.id || 0)));
-  return safeList<any>(recommendedActivities.value).filter((item) => !registeredIds.has(Number(item.id)) && item.displayStatus !== "ended").slice(0, 3);
+  const registeredIds = new Set(registrations.value.map((item) => Number(item.activity?.id || 0)));
+  return recommendedActivities.value.filter((item) => !registeredIds.has(Number(item.id)) && item.displayStatus !== "ended").slice(0, 3);
 });
 
-function formatMemberActivityTime(value?: string) {
-  if (!value) return "时间待确认";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${date.getMonth() + 1}月${date.getDate()}日 ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+function formatMemberActivityTime(value?: string | null) {
+  const formatted = formatShanghaiDateTime(value, "时间待确认");
+  if (formatted === "时间待确认") return formatted;
+  const [date, time] = formatted.split(" ");
+  const [, month, day] = date.split("-");
+  return `${Number(month)}月${Number(day)}日 ${time}`;
 }
 
 function openRegistration(id: number) { navigateProtected(`/pages/user/registration?id=${id}`); }
@@ -408,16 +422,16 @@ async function loadProfile() {
       courseOrders.value = [];
     }
     if (!gates.mall) mallOrders.value = [];
-    const profileResult = await request<any>("/public/me/profile");
+    const profileResult = await request<PublicMemberProfile>("/public/me/profile");
     if (!profileResult || typeof profileResult !== "object" || !Number(profileResult.id)) throw new Error("会员资料格式异常，请重新加载");
     const results = await Promise.allSettled([
-      request<any>("/public/me/wallet"),
-      gates.charity ? request<any>("/public/me/charity") : Promise.resolve(null),
-      request<any>("/public/me/admin-access"),
+      request<PublicWalletSummary>("/public/me/wallet"),
+      gates.charity ? request<PublicCharitySummary>("/public/me/charity") : Promise.resolve(null),
+      request<PublicAdminAccess>("/public/me/admin-access"),
       loadMemberOrderOverview(requestedSession),
-      gates.mall ? request<any[]>("/public/me/mall/orders") : Promise.resolve([]),
-      request<any>("/public/activities?page=1&pageSize=8&status=open"),
-      gates.mall ? request<any>("/public/me/mall/membership") : Promise.resolve({ memberships: [] })
+      gates.mall ? request<unknown[]>("/public/me/mall/orders") : Promise.resolve([]),
+      request<PublicActivityListResponse | PublicActivitySummary[]>("/public/activities?page=1&pageSize=8&status=open"),
+      gates.mall ? request<PublicMallMembershipResponse>("/public/me/mall/membership") : Promise.resolve({ memberships: [] } satisfies PublicMallMembershipResponse)
     ]);
     if (!isCurrentLoad()) return;
     profile.value = profileResult;
@@ -433,9 +447,9 @@ async function loadProfile() {
       }
     };
     const isObject = (value: unknown) => Boolean(value && typeof value === "object" && !Array.isArray(value));
-    applyResult<any>(0, "wallet", "钱包", isObject, (value) => { wallet.value = value; }, () => { wallet.value = null; });
-    if (gates.charity) applyResult<any>(1, "charity", "公益贡献", isObject, (value) => { charity.value = value; }, () => { charity.value = null; });
-    applyResult<any>(2, "adminAccess", "管理权限", isObject, (value) => { adminAccess.value = value; }, () => { adminAccess.value = { canAccess: false }; });
+    applyResult<PublicWalletSummary>(0, "wallet", "钱包", isObject, (value) => { wallet.value = value; }, () => { wallet.value = null; });
+    if (gates.charity) applyResult<PublicCharitySummary>(1, "charity", "公益贡献", isObject, (value) => { charity.value = value; }, () => { charity.value = null; });
+    applyResult<PublicAdminAccess>(2, "adminAccess", "管理权限", isObject, (value) => { adminAccess.value = value; }, () => { adminAccess.value = { canAccess: false }; });
     const orderOverviewResult = results[3];
     if (orderOverviewResult.status === "fulfilled") {
       registrations.value = orderOverviewResult.value.registrations;
@@ -452,11 +466,13 @@ async function loadProfile() {
       failures.push("registrations", "courses", "courseOrders");
       failedLabels.push("报名与订单");
     }
-    if (gates.mall) applyResult<any[]>(4, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
+    if (gates.mall) applyResult<unknown[]>(4, "mallOrders", "商城订单", Array.isArray, (value) => { mallOrders.value = value; }, () => { mallOrders.value = []; });
     const activityResult = results[5];
-    recommendedActivities.value = activityResult.status === "fulfilled" ? safeList<any>(Array.isArray(activityResult.value) ? activityResult.value : activityResult.value?.items) : [];
+    recommendedActivities.value = activityResult.status === "fulfilled"
+      ? (Array.isArray(activityResult.value) ? activityResult.value : activityResult.value?.items || [])
+      : [];
     const membershipResult = results[6];
-    mallMemberships.value = membershipResult.status === "fulfilled" ? safeList<any>(membershipResult.value?.memberships).filter((item) => item.isMember) : [];
+    mallMemberships.value = membershipResult.status === "fulfilled" ? safeList<PublicMallMembershipResponse["memberships"][number]>(membershipResult.value?.memberships).filter((item) => item.isMember) : [];
     assetFailures.value = failures;
     assetWarning.value = failedLabels.length ? `部分会员资产同步失败：${failedLabels.join("、")}。对应数值暂不作为真实数据展示。` : "";
     loadedContextKey.value = sessionKey(requestedSession);
@@ -479,15 +495,15 @@ async function loadProfile() {
   }
 }
 
-onShow(() => {
+async function load() {
   loadPageTheme();
   profileLoadGuard.invalidate();
   const shownSession = memberSession();
   if (loadedContextKey.value && loadedContextKey.value !== sessionKey(shownSession)) resetUserState();
-  void (async () => {
-    await Promise.allSettled([loadFeatureGates(true), loadDecoration(), loadProfile()]);
-  })();
-});
+  await Promise.allSettled([loadFeatureGates(true), loadDecoration(), loadProfile()]);
+}
+
+onShow(() => { void load(); });
 
 const defaultGridItems = [
   { icon:"评", label:"我的评价", page:"activityReviews" },
@@ -626,6 +642,7 @@ function goAmbassador() { goDecoratedLink("/pages/ambassador/index"); }
 function goWallet() { navigateProtected("/pages/user/wallet"); }
 function goCoupons() { navigateProtected("/pages/mall/coupons"); }
 function goBrowsingHistory() { navigateProtected("/pages/user/learning"); }
+function goMyExperiences() { navigateProtected("/pages/experience/mine"); }
 function goCommunityPosts() { navigateProtected("/pages/user/community-posts"); }
 function goCommunitySocial() { navigateProtected("/pages/user/community-social"); }
 function goSocialExpansion() { navigateProtected("/pages/community/social"); }
@@ -1116,5 +1133,10 @@ function logoutUser() {
 .profile-page .order-tab-icon { color: #386151; }
 .profile-page .profile-link-list { border: 0; border-radius: 0; }
 .profile-page .profile-link-row { padding-left: 0; padding-right: 0; }
-.profile-page .logout-card { border: 0; border-radius: 0; background: #fff; color: #65736a; font-size: 25rpx; font-weight: 400; }
+.profile-page .logout-card { border: 0; border-radius: 0; background: var(--app-surface); color: var(--app-text-muted); font-size: 25rpx; font-weight: 400; }
+.profile-page .profile-section,.profile-page .more-services-toggle,.profile-page .history-entry,.profile-page .member-shortcut,.profile-page .member-shortcut:first-child { border-bottom-color: var(--app-border); }
+.profile-page .profile-section-title,.profile-page .member-shortcut-title,.profile-page .history-entry-title,.profile-page .more-services-title { color: var(--app-text); }
+.profile-page .history-entry-icon { color: var(--app-primary); }
+.profile-page .order-tab-icon { color: var(--app-primary); }
+.profile-page .profile-section-link { color: var(--app-primary); }
 </style>

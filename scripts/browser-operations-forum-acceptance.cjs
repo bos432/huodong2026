@@ -145,9 +145,18 @@ async function main() {
   const platform = await loginAdminApi("admin", PLATFORM_ADMIN_PASSWORD);
   const tenantAdmin = await loginAdminApi("showcase_admin", SHOWCASE_ADMIN_PASSWORD);
   const phone = `13993${runId.slice(-6)}`;
-  const user = await api("/public/auth/password-login", {
+  const challenge = await api("/public/auth/h5-code", {
     method: "POST",
-    body: { phone, password: SHOWCASE_PASSWORD, nickname: `浏览器论坛${runId.slice(-4)}` }
+    body: { phone }
+  });
+  const user = await api("/public/auth/h5-login", {
+    method: "POST",
+    body: {
+      phone,
+      verificationToken: challenge.verificationToken,
+      verificationCode: challenge.devCode || process.env.H5_DEV_VERIFICATION_CODE || "123456",
+      nickname: `浏览器论坛${runId.slice(-4)}`
+    }
   });
   const { topic, title } = await prepareForumData(tenantAdmin.token, user.userAccessToken);
 

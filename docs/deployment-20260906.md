@@ -11,7 +11,7 @@
 
 1. 明确文件清单后提交、推送 `feature/qiwai-ui-experiment`。本地日志、运行凭据、截图分析和商业计划书不在提交内。
 2. 设置生产 `VITE_API_BASE=/api`、`VITE_H5_ORIGIN=https://rd.chaimen666.com`、完整 `BUILD_COMMIT`，本地构建 API、后台、H5。
-3. 运行 `scripts/assemble-scoped-release.mjs`，通过面板上传生成的包至私有 `/www/backup/activity-releases/<releaseId>/`，比对 SHA-256 后解压。
+3. 从生产站点只读取得当前 API/Worker 代码提交，设置 `RELEASE_PREVIOUS_COMMIT=<生产当前提交>`，再运行 `scripts/assemble-scoped-release.mjs`；通过面板上传生成的包至私有 `/www/backup/activity-releases/<releaseId>/`，比对 SHA-256 后解压。组包器拒绝空值、占位值和与新版本相同的基线提交。
 4. 在站点根目录设置 `RELEASE_ID`，用 Node 22 执行包内 `scripts/deploy-scoped-release.mjs prepare`。备份仅本站数据库、旧构建和环境文件，等待压缩流关闭并校验 gzip。
 5. Git 快进至目标提交；运行同一脚本 `migrate`，只接受明确列出的六项迁移，发现其他待迁移项则停止。
 6. 运行 `publish`，仅更新本站两个进程。新 API ready 后才替换前端入口，保留旧哈希资源防止已有页面动态加载失败。

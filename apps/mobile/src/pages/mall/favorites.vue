@@ -5,8 +5,8 @@
       <text class="title">把想回头购买的慢π好物先收起来</text>
       <text class="sub">{{ items.length ? `${items.length} 件已收藏` : "暂无收藏商品" }}</text>
     </view>
-    <view v-if="loading" class="state-card">商城收藏加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state"><text>{{ loadError }}</text><view class="state-retry" @click="load">重新加载</view></view>
+    <LoadingState v-if="loading" title="正在加载商城收藏" description="正在同步你收藏的商品。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="load" />
     <view v-for="row in items" :key="row.id" class="product-row" @click="goDetail(row.product)">
       <image v-if="row.product?.coverUrl" class="cover" :src="row.product.coverUrl" mode="aspectFill" />
       <view v-else class="cover placeholder">好物</view>
@@ -18,7 +18,7 @@
       <text class="remove" :class="{ disabled: removingId === row.id }" @click.stop="remove(row)">{{ removingId === row.id ? "移除中" : "移除" }}</text>
       <text class="arrow">›</text>
     </view>
-    <EmptyState v-if="!items.length && !loading && !loadError" icon="♡" text="暂无商城收藏，去商品详情点收藏吧" />
+    <EmptyState v-if="!items.length && !loading && !loadError" variant="default" title="暂无商城收藏" description="在商品详情页点收藏，之后可以快速回来查看。" action-text="去商城逛逛" @action="goDiscover" />
   </view>
 </template>
 
@@ -27,6 +27,7 @@ import { ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const items = ref<any[]>([]);
@@ -40,6 +41,7 @@ function goDetail(product: any) {
   if (!product?.id) return;
   uni.navigateTo({ url: withTenantCode(`/pages/mall/detail?id=${product.id}`) });
 }
+function goDiscover() { uni.navigateTo({ url: withTenantCode("/pages/mall/index") }); }
 async function load() {
   const token = loadGuard.begin();
   loading.value = true;
@@ -88,6 +90,4 @@ onShow(load);
 .remove { color:#9a3412; font-size:23rpx; font-weight:800; }
 .disabled { opacity:.55; pointer-events:none; }
 .state-card { display:grid; gap:10rpx; margin-bottom:18rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }
-.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
-.state-retry { width:max-content; color:#c2410c; font-weight:900; }
 </style>

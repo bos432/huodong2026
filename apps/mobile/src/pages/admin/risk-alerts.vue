@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin, type MobileAdminSession } from "../../mobile-admin";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 type RiskAlert = {
   id: number;
@@ -228,14 +230,14 @@ onShow(() => { void load(true); });
 <template>
   <view class="admin-page">
     <view class="head"><view><view class="title">资金异常</view><view class="sub">支付、退款、对账与钱包风险</view></view><view class="head-actions"><view v-if="canManage" class="scan" role="button" tabindex="0" aria-label="扫描资金异常" :aria-busy="scanning" :aria-disabled="loading || scanning || actionId !== null" :class="{ disabled: loading || scanning || actionId !== null }" @click="scan" @keyup.enter="scan" @keyup.space.prevent="scan">{{ scanning ? "扫描中" : "扫描" }}</view><view class="refresh" role="button" tabindex="0" aria-label="刷新资金异常" :aria-busy="loading" :aria-disabled="loading || scanning || actionId !== null" :class="{ disabled: loading || scanning || actionId !== null }" @click="reload" @keyup.enter="reload" @keyup.space.prevent="reload">{{ loading ? "刷新中" : "刷新" }}</view></view></view>
-    <view v-if="pageError" class="error-panel" role="alert" aria-live="assertive"><text>{{ pageError }}</text><view class="retry" role="button" tabindex="0" aria-label="重新加载资金异常" @click="reload" @keyup.enter="reload" @keyup.space.prevent="reload">重试</view></view>
+    <EmptyState v-if="pageError" variant="error" title="资金异常加载失败" :description="pageError" action-text="重新加载" aria-label="重新加载资金异常" @action="reload" />
     <view v-if="actionError" class="action-error" role="alert" aria-live="assertive"><text>{{ actionError }}</text><view role="button" tabindex="0" aria-label="关闭处置错误" @click="actionError = ''" @keyup.enter="actionError = ''" @keyup.space.prevent="actionError = ''">关闭</view></view>
     <scroll-view scroll-x class="tabs" :show-scrollbar="false"><view class="track" role="tablist" aria-label="告警状态筛选"><view v-for="item in statusTabs" :key="item.value" role="tab" tabindex="0" :aria-selected="status === item.value" :aria-disabled="loading || scanning || actionId !== null" :class="{ active: status === item.value, disabled: loading || scanning || actionId !== null }" @click="setStatus(item.value)" @keyup.enter="setStatus(item.value)" @keyup.space.prevent="setStatus(item.value)">{{ item.label }}</view></view></scroll-view>
     <scroll-view scroll-x class="types" :show-scrollbar="false"><view class="track" role="tablist" aria-label="告警类型筛选"><view v-for="item in typeTabs" :key="item.value" role="tab" tabindex="0" :aria-selected="type === item.value" :aria-disabled="loading || scanning || actionId !== null" :class="{ active: type === item.value, disabled: loading || scanning || actionId !== null }" @click="setType(item.value)" @keyup.enter="setType(item.value)" @keyup.space.prevent="setType(item.value)">{{ item.label }}</view></view></scroll-view>
+    <LoadingState v-if="loading && !rows.length" title="正在加载资金异常" description="正在同步支付、退款与对账风险，请稍候。" />
     <view v-if="!pageError && !canView && !loading" class="panel" role="status">当前账号没有资金异常查看权限</view>
-    <view v-else-if="loading && !rows.length" class="panel" role="status" aria-live="polite">资金异常加载中...</view>
     <template v-else-if="!pageError && canView">
-      <view v-if="!rows.length" class="panel" role="status">当前筛选范围暂无资金异常</view>
+      <EmptyState v-if="!rows.length" compact variant="default" title="当前筛选范围暂无资金异常" />
       <view v-for="item in rows" v-else :key="item.id" class="card">
         <view class="row"><view class="severity" :class="item.severity">{{ severityText(item.severity) }}</view><view class="status">{{ statusText(item.status) }}</view></view>
         <view class="alert-title">{{ item.title }}</view><view class="message">{{ item.message }}</view>

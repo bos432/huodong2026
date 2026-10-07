@@ -18,7 +18,8 @@ function loadPlaywright() {
   throw new Error("Playwright runner is not installed");
 }
 async function login(page, account) {
-  await page.goto(`${webBase}/admin/login`, { waitUntil: "domcontentloaded" });
+  const tenantQuery = `?tenantCode=${encodeURIComponent(account.code)}`;
+  await page.goto(`${webBase}/admin/login${tenantQuery}`, { waitUntil: "domcontentloaded" });
   await page.locator('input[placeholder="请输入管理员账号"]').fill(account.username);
   await page.locator('input[placeholder="请输入密码"]').fill(account.password);
   await page.getByRole("button", { name: "登录" }).click();
@@ -33,7 +34,8 @@ async function main() {
       const context = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
       const page = await context.newPage();
       await login(page, account);
-      await page.goto(`${webBase}/admin/activities`, { waitUntil: "domcontentloaded" });
+      const tenantQuery = `?tenantCode=${encodeURIComponent(account.code)}`;
+      await page.goto(`${webBase}/admin/activities${tenantQuery}`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(1000);
       const text = await bodyText(page);
       const own = `${account.marker}-`;
@@ -44,7 +46,7 @@ async function main() {
       await page.screenshot({ path: file, fullPage: true });
       result.screenshots.push(file);
       result.checks.push({ name: `${account.code} PC 活动列表租户隔离`, status: "passed" });
-      await page.goto(`${webBase}/admin/finance/dashboard`, { waitUntil: "domcontentloaded" });
+      await page.goto(`${webBase}/admin/finance/dashboard${tenantQuery}`, { waitUntil: "domcontentloaded" });
       await page.waitForTimeout(700);
       const financeText = await bodyText(page);
       assert(!financeText.includes("财务看板") || financeText.includes("无权限"), `${account.code} operator should not access finance dashboard`);

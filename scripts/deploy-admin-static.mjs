@@ -2,10 +2,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
+import { commitMatchesArtifact, isReleaseId } from './release-metadata.mjs';
 
 const root = '/www/wwwroot/rd.chaimen666.com';
 const releaseId = process.env.ADMIN_RELEASE_ID;
-if (process.cwd() !== root || !/^20260907-[a-f0-9]{8}$/.test(releaseId || '')) throw new Error('Expected scoped production root and admin release ID.');
+if (process.cwd() !== root || !isReleaseId(releaseId)) throw new Error('Expected scoped production root and admin release ID.');
 const privateDir = `/www/backup/activity-releases/${releaseId}`;
 const bundle = path.join(privateDir, 'bundle');
 const destination = path.join(root, 'apps/admin/dist');
@@ -23,7 +24,7 @@ const health = async () => {
 if (manifest.commit !== run('git', ['rev-parse', 'HEAD']) || manifest.commit.slice(0, 8) !== releaseId.slice(9)) throw new Error('Source and artifact commit mismatch.');
 if (run('git', ['status', '--porcelain', '--untracked-files=no'])) throw new Error('Tracked production source has uncommitted changes.');
 const version = JSON.parse(await fs.readFile(path.join(bundle, 'admin/version.json'), 'utf8'));
-if (version.commit !== manifest.commit) throw new Error('Admin version mismatch.');
+if (!commitMatchesArtifact(version.commit, manifest.commit)) throw new Error('Admin version mismatch.');
 for (const [relative, expected] of Object.entries(manifest.files)) {
   const filename = path.resolve(bundle, relative);
   if (!filename.startsWith(`${bundle}/`) || hash(await fs.readFile(filename)) !== expected) throw new Error(`Invalid artifact: ${relative}`);

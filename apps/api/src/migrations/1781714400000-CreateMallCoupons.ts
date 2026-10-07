@@ -6,7 +6,7 @@ export class CreateMallCoupons1781714400000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable("mall_coupons"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_coupons (
+        CREATE TABLE IF NOT EXISTS mall_coupons (
           id INT NOT NULL AUTO_INCREMENT,
           tenantId INT NOT NULL,
           code VARCHAR(40) NOT NULL,

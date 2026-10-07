@@ -1,11 +1,8 @@
 <template>
   <view class="detail-page">
     <SplashAd />
-    <view v-if="loading" class="page-state" role="status" aria-live="polite">商品详情加载中...</view>
-    <view v-else-if="loadError" class="page-state error-state" role="alert" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载商品详情" @click="reload" @keyup.enter="reload" @keyup.space.prevent="reload">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载商品详情" description="正在同步商品、库存和可用购买方式。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="商品详情暂时无法同步，请重试。" action-text="重新加载" @action="reload" />
     <template v-else-if="product">
     <swiper v-if="gallery.length" class="hero-swiper" indicator-dots circular>
       <swiper-item v-for="image in gallery" :key="image"><image class="hero-img" :src="image" mode="aspectFill" /></swiper-item>
@@ -143,6 +140,8 @@ import { onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/un
 import { ensureUser, getCurrentTenantCode, getUserToken, request, withTenantCode } from "../../api";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 

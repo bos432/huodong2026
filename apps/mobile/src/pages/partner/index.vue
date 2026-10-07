@@ -8,6 +8,8 @@ import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const setting = ref<any>();
 const loading = ref(true);
@@ -145,8 +147,8 @@ onShow(() => {
 
     <view class="section contact">
       <view class="section-title">联系合作</view>
-      <view v-if="loading" class="contact-line">加载中...</view>
-      <view v-else-if="loadError" class="contact-error"><text>{{ loadError }}</text><view class="contact-retry" @click="load">重新加载</view></view>
+      <LoadingState v-if="loading" compact title="正在加载合作信息" description="正在同步合作联系方式。" />
+      <EmptyState v-else-if="loadError" compact variant="error" :title="loadError" description="合作联系方式暂时无法同步。" action-text="重新加载" @action="load" />
       <template v-else>
         <view class="contact-line">{{ contactText }}</view>
         <view class="contact-actions">

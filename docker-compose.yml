@@ -190,9 +190,13 @@ services:
       WECHAT_MINIAPP_IDENTITY_SERVICE_ENABLED: ${WECHAT_MINIAPP_IDENTITY_SERVICE_ENABLED:-false}
       WECHAT_MESSAGE_MOCK_ALLOWED: ${WECHAT_MESSAGE_MOCK_ALLOWED:-false}
       SMTP_SECURE: ${SMTP_SECURE:-true}
+      APP_PROCESS_ROLE: ${APP_PROCESS_ROLE:-api}
+      BUSINESS_JOB_WORKER_MODE: ${BUSINESS_JOB_WORKER_MODE:-embedded}
       BUSINESS_JOB_WORKER_ENABLED: ${BUSINESS_JOB_WORKER_ENABLED:-true}
       BUSINESS_JOB_WORKER_INTERVAL_SECONDS: ${BUSINESS_JOB_WORKER_INTERVAL_SECONDS:-30}
       BUSINESS_JOB_WORKER_ID: ${BUSINESS_JOB_WORKER_ID:-api-1}
+      WORKER_HEARTBEAT_FILE: ${WORKER_HEARTBEAT_FILE:-/app/runtime/activity-worker-heartbeat.json}
+      WORKER_HEARTBEAT_INTERVAL_MS: ${WORKER_HEARTBEAT_INTERVAL_MS:-15000}
       ACTIVITY_LIFECYCLE_WORKER_ENABLED: ${ACTIVITY_LIFECYCLE_WORKER_ENABLED:-true}
       ACTIVITY_LIFECYCLE_WORKER_INTERVAL_SECONDS: ${ACTIVITY_LIFECYCLE_WORKER_INTERVAL_SECONDS:-60}
       MALL_LOGISTICS_TRACKING_MODE: ${MALL_LOGISTICS_TRACKING_MODE:-provider}
@@ -205,11 +209,31 @@ services:
     volumes:
       - uploads-data:/app/uploads
       - private-data:/app/private-data
+      - ./apps/api/dist:/app/apps/api/dist:ro
+      - runtime-data:/app/runtime
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://127.0.0.1:3000/api/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
       timeout: 5s
       retries: 10
+
+  activity-worker:
+    profiles: ["external-worker"]
+    extends:
+      service: api
+    container_name: activity-worker
+    command: ["node", "apps/api/dist/worker.js"]
+    ports: !reset []
+    environment:
+      APP_PROCESS_ROLE: worker
+      BUSINESS_JOB_WORKER_MODE: external
+      BUSINESS_JOB_WORKER_ID: ${BUSINESS_JOB_WORKER_ID:-worker-1}
+      WORKER_HEARTBEAT_FILE: ${WORKER_HEARTBEAT_FILE:-/app/runtime/activity-worker-heartbeat.json}
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"const fs=require('fs'); const p='/app/runtime/activity-worker-heartbeat.json'; const v=JSON.parse(fs.readFileSync(p,'utf8')); const age=Date.now()-Date.parse(v.heartbeatAt); process.exit(v.status==='ready' && age>=0 && age<=90000 ? 0 : 1)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
 
   nginx:
     image: nginx:1.27-alpine
@@ -230,3 +254,4 @@ volumes:
   mysql-data:
   uploads-data:
   private-data:
+  runtime-data:

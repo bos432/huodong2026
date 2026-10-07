@@ -1,10 +1,7 @@
 <template>
   <view class="container forum-detail-page has-custom-nav">
-    <view v-if="loading && !topic" class="state-card">帖子加载中...</view>
-    <view v-else-if="loadError && !topic" class="state-card error-state">
-      <text>{{ loadError }}</text>
-        <view class="state-retry" role="button" tabindex="0" aria-label="重新加载论坛帖子" @click="loadTopic" @keyup.enter="loadTopic" @keyup.space.prevent="loadTopic">重新加载</view>
-    </view>
+    <LoadingState v-if="loading && !topic" title="正在加载论坛帖子" description="正在同步帖子、作者和回复内容。" />
+    <EmptyState v-else-if="loadError && !topic" variant="error" title="论坛帖子加载失败" :description="loadError" action-text="重新加载" @action="loadTopic" />
     <view v-if="loadError && topic" class="state-card warning-state">
       <text>{{ loadError }}，当前展示上次成功加载的内容。</text>
         <view class="state-retry" role="button" tabindex="0" aria-label="重新同步论坛帖子" @click="loadTopic" @keyup.enter="loadTopic" @keyup.space.prevent="loadTopic">重新同步</view>
@@ -68,10 +65,12 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request } from "../../api";
-import { createTenantLoadGuard } from "../../tenant-load-guard";
+import { createTenantLoadGuard, formatShanghaiDateTime } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
+import LoadingState from "../../components/LoadingState.vue";
+import EmptyState from "../../components/EmptyState.vue";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const id = ref(0);
@@ -80,6 +79,7 @@ const loading = ref(false);
 const loadError = ref("");
 const activeAction = ref("");
 const loadGuard = createTenantLoadGuard();
+const actionGuard = createTenantLoadGuard();
 const replies = computed(() => Array.isArray(topic.value?.replies) ? topic.value.replies : []);
 const shareOptions = {
   title: () => topic.value?.title || "慢π共修论坛",
@@ -95,6 +95,11 @@ onLoad((options: any) => {
 });
 
 onShow(loadTopic);
+onHide(() => {
+  loadGuard.invalidate();
+  actionGuard.invalidate();
+  activeAction.value = "";
+});
 
 async function loadTopic() {
   if (!id.value) return;
@@ -113,25 +118,32 @@ async function loadTopic() {
 
 async function toggleFavorite() {
   if (!topic.value || activeAction.value) return;
+  const requestedTopicId = topic.value.id;
+  const actionToken = actionGuard.begin();
   activeAction.value = "favorite";
   try {
     await ensureUser();
-    const result = await request<any>(`/public/forum/topics/${topic.value.id}/favorite`, { method: "POST" });
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const result = await request<any>(`/public/forum/topics/${requestedTopicId}/favorite`, { method: "POST" });
+    if (!actionGuard.isCurrent(actionToken) || topic.value?.id !== requestedTopicId) return;
     topic.value.favorited = Boolean(result?.favorited);
     topic.value.favoriteCount = Number(result?.favoriteCount || 0);
   } catch (error: any) {
-    if (error?.message) uni.showToast({ title: error.message, icon: "none" });
+    if (actionGuard.isCurrent(actionToken) && error?.message) uni.showToast({ title: error.message, icon: "none" });
   } finally {
-    activeAction.value = "";
+    if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
   }
 }
 
 function replyTopic() {
   if (!topic.value || activeAction.value) return;
   if (topic.value.locked) return uni.showToast({ title: topic.value.lockReason || "帖子已锁定", icon: "none" });
-  promptText("reply-topic", "回复帖子", "写下你的回复", async (content) => {
+  const requestedTopicId = topic.value.id;
+  promptText("reply-topic", "回复帖子", "写下你的回复", async (content, actionToken) => {
     await ensureUser();
-    const result = await request<any>(`/public/forum/topics/${topic.value.id}/replies`, { method: "POST", data: { content } });
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const result = await request<any>(`/public/forum/topics/${requestedTopicId}/replies`, { method: "POST", data: { content } });
+    if (!actionGuard.isCurrent(actionToken)) return;
     uni.showToast({ title: result?.message || "回复已提交审核", icon: "none" });
     await loadTopic();
   });
@@ -140,9 +152,12 @@ function replyTopic() {
 function replyTo(reply: any) {
   if (activeAction.value) return;
   if (topic.value?.locked) return uni.showToast({ title: topic.value.lockReason || "帖子已锁定", icon: "none" });
-  promptText(`reply-${reply.id}`, "楼中楼回复", "写下你的回复", async (content) => {
+  const requestedReplyId = reply.id;
+  promptText(`reply-${requestedReplyId}`, "楼中楼回复", "写下你的回复", async (content, actionToken) => {
     await ensureUser();
-    const result = await request<any>(`/public/forum/replies/${reply.id}/replies`, { method: "POST", data: { content } });
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const result = await request<any>(`/public/forum/replies/${requestedReplyId}/replies`, { method: "POST", data: { content } });
+    if (!actionGuard.isCurrent(actionToken)) return;
     uni.showToast({ title: result?.message || "回复已提交审核", icon: "none" });
     await loadTopic();
   });
@@ -159,15 +174,18 @@ function reportReply(reply: any) {
 }
 
 function report(actionKey: string, path: string) {
-  promptText(actionKey, "举报说明", "请简单说明原因", async (description) => {
+  promptText(actionKey, "举报说明", "请简单说明原因", async (description, actionToken) => {
     await ensureUser();
+    if (!actionGuard.isCurrent(actionToken)) return;
     const result = await request<any>(path, { method: "POST", data: { type: "other", description } });
+    if (!actionGuard.isCurrent(actionToken)) return;
     uni.showToast({ title: result?.message || "举报已提交", icon: "none" });
   });
 }
 
-function promptText(actionKey: string, title: string, placeholderText: string, handler: (content: string) => Promise<void>) {
+function promptText(actionKey: string, title: string, placeholderText: string, handler: (content: string, actionToken: ReturnType<typeof actionGuard.begin>) => Promise<void>) {
   if (activeAction.value) return;
+  const actionToken = actionGuard.begin();
   activeAction.value = `${actionKey}-prompt`;
   uni.showModal({
     title,
@@ -176,35 +194,39 @@ function promptText(actionKey: string, title: string, placeholderText: string, h
     confirmText: "提交",
     success: async (res: any) => {
       if (!res.confirm) {
-        activeAction.value = "";
+        if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
         return;
       }
       const content = String(res.content || "").trim();
       if (!content) {
-        activeAction.value = "";
-        uni.showToast({ title: "请输入内容", icon: "none" });
+        if (actionGuard.isCurrent(actionToken)) {
+          activeAction.value = "";
+          uni.showToast({ title: "请输入内容", icon: "none" });
+        }
         return;
       }
+      if (!actionGuard.isCurrent(actionToken)) return;
       activeAction.value = actionKey;
       try {
-        await handler(content);
+        await handler(content, actionToken);
       } catch (error: any) {
-        if (error?.message) uni.showToast({ title: error.message, icon: "none" });
+        if (actionGuard.isCurrent(actionToken) && error?.message) uni.showToast({ title: error.message, icon: "none" });
       } finally {
-        activeAction.value = "";
+        if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
       }
     },
     fail: () => {
-      activeAction.value = "";
+      if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
     }
   });
 }
 
 function formatTime(value?: string) {
-  if (!value) return "";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  return `${date.getMonth() + 1}-${date.getDate()} ${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+  const formatted = formatShanghaiDateTime(value, "");
+  if (!formatted) return "";
+  const [date, time] = formatted.split(" ");
+  const [, month, day] = date.split("-");
+  return `${Number(month)}-${Number(day)} ${time}`;
 }
 
 function quoteText(quote: any) {

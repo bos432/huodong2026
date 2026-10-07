@@ -62,6 +62,7 @@ const MallFinance = () => import("./views/MallFinance.vue");
 const MallOrders = () => import("./views/MallOrders.vue");
 const ConfigCheck = () => import("./views/ConfigCheck.vue");
 const MiniprogramRelease = () => import("./views/MiniprogramRelease.vue");
+const ReleaseReadiness = () => import("./views/ReleaseReadiness.vue");
 const OperationGuide = () => import("./views/OperationGuide.vue");
 const OperationFlow = () => import("./views/OperationFlow.vue");
 const OpsRoutine = () => import("./views/OpsRoutine.vue");
@@ -70,6 +71,7 @@ const TenantRegions = () => import("./views/TenantRegions.vue");
 const TenantRegionHitLogs = () => import("./views/TenantRegionHitLogs.vue");
 const TenantProfile = () => import("./views/TenantProfile.vue");
 const BusinessJobs = () => import("./views/BusinessJobs.vue");
+const Experiences = () => import("./views/Experiences.vue");
 
 export const router = createRouter({
   history: createWebHistory("/admin/"),
@@ -119,6 +121,7 @@ export const router = createRouter({
         { path: "notifications", component: Notifications, meta: { roles: ["notification.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "reviews", component: Reviews, meta: { roles: ["review.view"], scope: "tenant" } },
         { path: "activity-space", component: ActivitySpace, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
+        { path: "experiences", component: Experiences, meta: { roles: permissions.activityView, scope: "tenantOrPlatformAdmin" } },
         { path: "registrations", component: Registrations, meta: { roles: permissions.registrationView, scope: "tenantOrPlatformAdmin" } },
         { path: "waitlists", component: Waitlists, meta: { roles: ["waitlist.view"], scope: "tenant" } },
         { path: "tags", component: UserTags, meta: { roles: ["tag.view"], scope: "tenant" } },
@@ -144,6 +147,7 @@ export const router = createRouter({
         { path: "h5-code-logs", component: H5CodeLogs, meta: { roles: ["security_log.view"], scope: "platform" } },
         { path: "config-check", component: ConfigCheck, meta: { roles: ["system.view"], scope: "platform" } },
         { path: "miniprogram-release", component: MiniprogramRelease, meta: { roles: ["miniprogram_release.view"], scope: "platform" } },
+        { path: "release-readiness", component: ReleaseReadiness, meta: { roles: ["release_readiness.view"], scope: "platform" } },
         { path: "operation-guide", component: OperationGuide, meta: { roles: ["system.view"], scope: "platform" } },
         { path: "operation-flow", component: OperationFlow, meta: { roles: ["dashboard.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "ops-routine", component: OpsRoutine, meta: { roles: ["system.view", "dashboard.view"], scope: "tenantOrPlatformAdmin" } },
@@ -173,6 +177,7 @@ function fallbackPath() {
     { path: "/tenant-region-hit-logs", roles: ["tenant_region_hit_log.view"], scope: "platform" },
     { path: "/activities", roles: ["activity.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/activity-space", roles: ["activity.view"], scope: "tenantOrPlatformAdmin" },
+    { path: "/experiences", roles: ["activity.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/funnels", roles: ["analytics.view"], scope: "tenant" },
     { path: "/recaps", roles: ["analytics.view"], scope: "tenant" },
     { path: "/announcements", roles: ["announcement.view"], scope: "tenantOrPlatformAdmin" },
@@ -219,6 +224,7 @@ function fallbackPath() {
     { path: "/h5-code-logs", roles: ["security_log.view"], scope: "platform" },
     { path: "/config-check", roles: ["system.view"], scope: "platform" },
     { path: "/miniprogram-release", roles: ["miniprogram_release.view"], scope: "platform" },
+    { path: "/release-readiness", roles: ["release_readiness.view"], scope: "platform" },
     { path: "/operation-guide", roles: ["system.view"], scope: "platform" },
     { path: "/operation-flow", roles: ["dashboard.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/ops-routine", roles: ["system.view", "dashboard.view"], scope: "tenantOrPlatformAdmin" },

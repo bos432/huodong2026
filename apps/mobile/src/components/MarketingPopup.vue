@@ -130,13 +130,13 @@ watch(() => props.showKey, loadPopup, { immediate: true });
 </script>
 
 <template>
-  <view v-if="visible && popup" class="marketing-popup-mask">
-    <view :class="cardClass">
-      <view v-if="popup.dismissible !== false" class="marketing-popup-close" @click="closePopup">×</view>
+  <view v-if="visible && popup" class="marketing-popup-mask" role="presentation">
+    <view :class="cardClass" role="dialog" aria-modal="true" aria-labelledby="marketing-popup-title">
+      <view v-if="popup.dismissible !== false" class="marketing-popup-close" role="button" tabindex="0" aria-label="关闭弹窗" @click="closePopup" @keyup.enter="closePopup" @keyup.space.prevent="closePopup">×</view>
       <image v-if="popup.imageUrl" class="marketing-popup-image" :src="popup.imageUrl" mode="aspectFill" />
       <view v-else class="marketing-popup-image fallback">{{ popup.type === "wuxing_gold" ? "清冠优选" : "通知" }}</view>
       <view class="marketing-popup-body">
-        <view class="marketing-popup-title">{{ popup.title }}</view>
+        <view id="marketing-popup-title" class="marketing-popup-title">{{ popup.title }}</view>
         <view v-if="popup.subtitle" class="marketing-popup-subtitle">{{ popup.subtitle }}</view>
         <view v-if="popup.emphasis" class="marketing-popup-emphasis">{{ popup.emphasis }}</view>
         <view v-if="popup.content" class="marketing-popup-copy">{{ popup.content }}</view>
@@ -151,8 +151,8 @@ watch(() => props.showKey, loadPopup, { immediate: true });
 </template>
 
 <style scoped>
-.marketing-popup-mask { position: fixed; z-index: 9999; inset: 0; display: flex; align-items: center; justify-content: center; padding: 32rpx; background: rgba(15, 23, 42, 0.52); }
-.marketing-popup-card { position: relative; width: 100%; max-width: 690rpx; overflow: hidden; border-radius: 28rpx; background: #fff; box-shadow: 0 34rpx 90rpx rgba(15, 23, 42, 0.28); }
+.marketing-popup-mask { position: fixed; z-index: 9999; inset: 0; display: flex; align-items: flex-start; justify-content: center; overflow-y: auto; padding: 32rpx; background: rgba(15, 23, 42, 0.52); box-sizing: border-box; }
+.marketing-popup-card { position: relative; width: 100%; max-width: 690rpx; max-height: calc(100vh - 64rpx); overflow-y: auto; overflow-x: hidden; margin: auto 0; border-radius: 28rpx; background: #fff; box-shadow: 0 34rpx 90rpx rgba(15, 23, 42, 0.28); box-sizing: border-box; }
 .marketing-popup-card.wuxing { background: #fffdf5; border: 1rpx solid #f1c76a; box-shadow: 0 34rpx 90rpx rgba(154, 106, 36, 0.28); }
 .marketing-popup-close { position: absolute; z-index: 1; top: 16rpx; right: 16rpx; width: 54rpx; height: 54rpx; display: flex; align-items: center; justify-content: center; border-radius: 999rpx; background: rgba(15, 23, 42, 0.42); color: #fff; font-size: 40rpx; line-height: 1; }
 .marketing-popup-image { width: 100%; height: 280rpx; display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #ffd45a 0%, #fff2b8 100%); color: #9e1b12; font-size: 38rpx; font-weight: 900; }

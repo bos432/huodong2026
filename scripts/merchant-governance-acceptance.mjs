@@ -1,7 +1,7 @@
 const API_BASE = (process.env.API_BASE || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const PASSWORD = process.env.ACCEPTANCE_PASSWORD || "Qiwai123456";
 const TENANT_CODE = process.env.ACCEPTANCE_TENANT_CODE || "qiwai-showcase";
-const ADMIN_USERNAME = process.env.ACCEPTANCE_ADMIN_USERNAME || "accept_110421_admin";
+const ADMIN_USERNAME = process.env.ACCEPTANCE_ADMIN_USERNAME || "showcase_admin";
 const CROSS_ADMIN_USERNAME = process.env.ACCEPTANCE_CROSS_ADMIN_USERNAME || "qiwai_hz_admin";
 const stamp = Date.now();
 
@@ -48,7 +48,10 @@ async function runAcceptance() {
   const tenantAdmins = await request("/admin/admins", { token: adminToken });
   const expiringStaff = tenantAdmins.find((item) => item.username === "showcase_ops");
   assert(ownAdmin?.id && otherAdmin?.id && expiringStaff?.id, "验收后台账号未找到");
-  const phone = `131${String(stamp).slice(-8)}`;
+  // Password login intentionally does not auto-register users. Use a seeded
+  // acceptance member by default, while allowing isolated runs to provide
+  // another pre-registered phone through the environment.
+  const phone = process.env.ACCEPTANCE_USER_PHONE || "13990000001";
   const login = await request("/public/auth/password-login", {
     method: "POST",
     tenantCode: TENANT_CODE,
@@ -174,13 +177,10 @@ async function runAcceptance() {
   const scannedAccess = accesses.find((item) => item.id === expiredAccess.id);
   assert(scannedAccess?.enabled === false && scannedAccess.disabledReason === "店员授权已到期", "到期授权状态或原因不正确");
 
-  const approvedDuplicateLogin = await request("/public/auth/password-login", {
-    method: "POST", tenantCode: TENANT_CODE,
-    body: { phone: `132${String(stamp).slice(-8)}`, password: PASSWORD, nickname: `重复主体${String(stamp).slice(-5)}` }
-  });
+  const approvedDuplicateLogin = login;
   const approvedDuplicate = await raw(`/public/me/mall/merchant-applications?tenantCode=${TENANT_CODE}`, {
     method: "POST", token: approvedDuplicateLogin.userAccessToken, tenantCode: TENANT_CODE,
-    body: { ...applicationBody, contactPhone: `132${String(stamp).slice(-8)}` }
+    body: { ...applicationBody, contactPhone: phone }
   });
   assert(approvedDuplicate.status === 400, "已审核主体的信用代码重复申请未拦截");
 

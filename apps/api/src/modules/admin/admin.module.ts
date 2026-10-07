@@ -101,6 +101,7 @@ import { VolunteerTrainingRecord } from "../../entities/volunteer-training-recor
 import { VolunteerServiceProof } from "../../entities/volunteer-service-proof.entity";
 import { AdminController } from "./admin.controller";
 import { AdminService } from "./admin.service";
+import { PaymentSettingsService } from "./payment-settings.service";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 import { JwtStrategy } from "./jwt.strategy";
 import { RolesGuard } from "./roles.guard";
@@ -124,6 +125,11 @@ import { AnalyticsCalculationRun } from "../../entities/analytics-calculation-ru
 import { AidModule } from "../aid/aid.module";
 import { MemberPointsModule } from "../member-points/member-points.module";
 import { CredentialTemplateModule } from "../credential-templates/credential-template.module";
+import { ReleaseReadinessItem } from "../../entities/release-readiness-item.entity";
+import { ReleaseAcceptanceFixture } from "../../entities/release-acceptance-fixture.entity";
+import { ReleaseReadinessEvent } from "../../entities/release-readiness-event.entity";
+import { ReleaseReadinessController } from "./release-readiness.controller";
+import { ReleaseReadinessService } from "./release-readiness.service";
 
 @Module({
   imports: [
@@ -133,7 +139,7 @@ import { CredentialTemplateModule } from "../credential-templates/credential-tem
     TypeOrmModule.forFeature([CouponClaim, CouponUsage]),
     TypeOrmModule.forFeature([FundRiskAlert, BusinessJob, CourseRefund, MallPaymentCallbackLog, MallPaymentStatementRecord, MallPaymentTransaction, MallRefund, CheckInPoint, MemberSegment, MemberSegmentSnapshot, MemberSegmentSnapshotMember, MemberBehaviorTagRun, SupportWorkOrder, SupportWorkOrderLog, AnalyticsDailyMetric, AnalyticsCalculationRun]),
     TypeOrmModule.forFeature([Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminOperationLog, AdminUser, AdminInvite, TenantSubscriptionEvent, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityVersion, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivityViewLog, Announcement, Registration, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, Course, H5AuthCodeLog, HomepageSection, HomepageDecorationVersion, HomepageDecorationTemplate, MarketingPopup, AdAdvertiser, AdContract, AdCampaign, AdDailyStat, AdSettlement, AdSettlementItem, AdOfficialRevenueImport, MiniprogramReleaseSetting, MiniprogramReleaseLog, CheckIn, User, UserWallet, WalletTransaction, Waitlist, UserTag, MemberLevel, MemberLevelChange, MemberProfile, MemberPointRule, MemberPointLog, Notification, ShareVisit, CharityFundSetting, CharityFundAccount, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectEvent, CharityProjectUpdate, Certificate, VolunteerProfile, VolunteerTrainingRecord, VolunteerBadgeDefinition, VolunteerBadgeAward, VolunteerTask, VolunteerTaskApplication, VolunteerAttendanceRecord, VolunteerServiceRecord, VolunteerHourAdjustment, VolunteerServiceProof]),
-    TypeOrmModule.forFeature([AmbassadorProfile, AmbassadorTask, AmbassadorContribution, PartnerContract]),
+    TypeOrmModule.forFeature([AmbassadorProfile, AmbassadorTask, AmbassadorContribution, PartnerContract, ReleaseReadinessItem, ReleaseAcceptanceFixture, ReleaseReadinessEvent]),
     PassportModule,
     JwtModule.registerAsync({
       imports: [ConfigModule],
@@ -141,8 +147,8 @@ import { CredentialTemplateModule } from "../credential-templates/credential-tem
       useFactory: (config: ConfigService) => ({ secret: config.get("JWT_SECRET", "dev-secret-change-me"), signOptions: { expiresIn: "7d" } })
     })
   ],
-  controllers: [AdminController],
-  providers: [AdminService, AiOperationService, MiniprogramReleaseService, FundRiskMonitorService, JwtStrategy, RolesGuard, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
-  exports: [AdminService]
+  controllers: [AdminController, ReleaseReadinessController],
+  providers: [AdminService, PaymentSettingsService, AiOperationService, MiniprogramReleaseService, FundRiskMonitorService, ReleaseReadinessService, JwtStrategy, RolesGuard, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
+  exports: [AdminService, RolesGuard, JwtStrategy]
 })
 export class AdminModule {}

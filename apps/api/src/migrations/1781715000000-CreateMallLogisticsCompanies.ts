@@ -6,7 +6,7 @@ export class CreateMallLogisticsCompanies1781715000000 implements MigrationInter
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable("mall_logistics_companies")) return;
     await queryRunner.query(`
-      CREATE TABLE mall_logistics_companies (
+      CREATE TABLE IF NOT EXISTS mall_logistics_companies (
         id INT NOT NULL AUTO_INCREMENT,
         tenantId INT NOT NULL,
         name VARCHAR(80) NOT NULL,

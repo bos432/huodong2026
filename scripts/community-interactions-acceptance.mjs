@@ -16,10 +16,34 @@ async function request(path, options = {}) {
   return result.payload.data;
 }
 
+async function uploadCommunityImage(token) {
+  const form = new FormData();
+  const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=", "base64");
+  form.append("file", new Blob([png], { type: "image/png" }), `community-interactions-${stamp}.png`);
+  const response = await fetch(`${API_BASE}/public/me/community/post-images?tenantCode=${TENANT_CODE}`, { method: "POST", headers: { authorization: `Bearer ${token}`, "x-tenant-code": TENANT_CODE }, body: form });
+  const text = await response.text();
+  let payload;
+  try { payload = text ? JSON.parse(text) : null; } catch { payload = text; }
+  assert(response.ok && payload?.code === 0 && payload.data?.url, `POST community image upload failed (${response.status}): ${text}`);
+  return payload.data.url;
+}
+
 const ops = await request("/admin/auth/login", { method: "POST", body: { username: "showcase_ops", password: "Qiwai123456" } });
-const authorLogin = await request("/public/auth/password-login", { method: "POST", body: { phone: "13990000002", password: "Qiwai123456" } });
+async function loginByVerification(phone, nickname) {
+  const challenge = await request("/public/auth/h5-code", { method: "POST", body: { phone } });
+  return request("/public/auth/h5-login", {
+    method: "POST",
+    body: {
+      phone,
+      nickname,
+      verificationToken: challenge.verificationToken,
+      verificationCode: challenge.devCode || process.env.ACCEPTANCE_H5_CODE || "123456"
+    }
+  });
+}
+const authorLogin = await loginByVerification("13990000002", "社区互动验收作者");
 const commenterPhone = `1318${String(stamp).slice(-7)}`;
-const commenterLogin = await request("/public/auth/password-login", { method: "POST", body: { phone: commenterPhone, password: "Qiwai123456" } });
+const commenterLogin = await loginByVerification(commenterPhone, `社区互动验收评论者${String(stamp).slice(-5)}`);
 const author = { id: Number(authorLogin.user.id), phone: authorLogin.user.phone, token: authorLogin.userAccessToken };
 const commenter = { id: Number(commenterLogin.user.id), phone: commenterPhone, token: commenterLogin.userAccessToken };
 
@@ -27,7 +51,8 @@ const postable = await request(`/public/me/community/postable-activities?tenantC
 assert(postable.length > 0, "retained checked-in member has no postable activity");
 const activity = postable[0];
 const content = `08.02 社区互动验收保留 ${stamp}，记录活动现场学习与交流收获。`;
-const created = await request(`/public/community/posts?tenantCode=${TENANT_CODE}`, { method: "POST", token: author.token, body: { activityId: activity.id, content, images: ["https://images.unsplash.com/photo-1524995997946-a1c2e315a42f?auto=format&fit=crop&w=1200&q=80"], city: "演示城市", tags: ["08.02验收", "社区互动"] } });
+const imageUrl = await uploadCommunityImage(author.token);
+const created = await request(`/public/community/posts?tenantCode=${TENANT_CODE}`, { method: "POST", token: author.token, body: { activityId: activity.id, content, images: [imageUrl], city: "演示城市", tags: ["08.02验收", "社区互动"] } });
 const postId = Number(created.post.id);
 assert(created.post.status === "pending", "participant post was not submitted for review");
 await request(`/admin/community-posts/${postId}`, { method: "PATCH", token: ops.token, body: { status: "approved", visible: true, reviewRemark: "08.02 动态审核通过" } });

@@ -1,7 +1,7 @@
 <template>
   <view class="orders-page">
-    <view v-if="pageLoading" class="state-card" role="status" aria-live="polite">商城订单加载中...</view>
-    <view v-if="loadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载商城订单" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
+    <LoadingState v-if="pageLoading" title="正在加载商城订单" description="正在同步支付、发货和售后状态。" />
+    <EmptyState v-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="load" />
     <view v-if="actionError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ actionError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="关闭订单操作错误" @click="actionError = ''" @keyup.enter="actionError = ''" @keyup.space.prevent="actionError = ''">知道了</view></view>
     <scroll-view scroll-x class="tabs" role="tablist" aria-label="商城订单状态筛选">
       <view class="tabs-inner">
@@ -47,7 +47,7 @@
       <view v-if="order.expressNo" class="logistics">物流：{{ order.expressCompany || '' }} {{ order.expressNo }}</view>
       <view v-if="order.refund" class="logistics">售后：{{ refundText(order.refund.status) }} {{ refundSummaryText(order.refund) }}</view>
     </view>
-    <EmptyState v-if="!pageLoading && !loadError && !visibleOrders.length" icon="🛍" text="暂无商城订单" />
+    <EmptyState v-if="!pageLoading && !loadError && !visibleOrders.length" variant="order" title="暂无商城订单" description="下单后，支付、发货和售后进度会显示在这里。" />
   </view>
 </template>
 
@@ -59,6 +59,7 @@ import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const orders = ref<any[]>([]);
 const currentStatus = ref("all");

@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { OrderStatus, orderStatusText } from "@activity/shared";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { formatShanghaiDateTime } from '../../tenant-load-guard';
 
 const rows = ref<any[]>([]);
@@ -151,7 +153,7 @@ onShow(load);
       </view>
       <view class="refresh" role="button" tabindex="0" :aria-label="loading ? '刷新中' : '刷新订单'" :aria-busy="loading" :class="{ disabled: loading || actionId !== null }" @click="load" @keyup.enter="load" @keyup.space.prevent="load">{{ loading ? "刷新中" : "刷新" }}</view>
     </view>
-    <view v-if="errorMessage" class="error-panel" role="alert" aria-live="assertive"><text>{{ errorMessage }}</text><view class="retry" role="button" tabindex="0" aria-label="重新加载订单" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view></view>
+    <EmptyState v-if="errorMessage" variant="error" title="订单加载失败" :description="errorMessage" action-text="重新加载" @action="load" />
 
     <view class="search">
       <input v-model="keyword" :disabled="loading || actionId !== null" maxlength="80" cursor-spacing="24" aria-label="搜索订单、手机号或活动" placeholder="搜索订单、手机号、活动" confirm-type="search" @confirm="search" />
@@ -164,9 +166,9 @@ onShow(load);
       </view>
     </scroll-view>
 
-    <view v-if="!canViewOrders && !loading" class="panel">当前账号没有订单查看权限</view>
-    <view v-else-if="loading" class="panel">加载中...</view>
-    <view v-else-if="!rows.length" class="panel">暂无订单</view>
+    <LoadingState v-if="loading" title="正在加载订单" description="正在同步订单状态，请稍候。" />
+    <view v-else-if="!canViewOrders" class="panel">当前账号没有订单查看权限</view>
+    <EmptyState v-else-if="!rows.length" compact variant="order" title="暂无订单" />
     <view v-for="item in rows" v-else :key="item.id" class="card">
       <view class="row">
         <view>

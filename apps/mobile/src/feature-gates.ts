@@ -159,7 +159,10 @@ export function featureGateForLink(url?: string): FeatureGateKey | null {
   if (!path) return null;
   if (path === "/pages/forum/publish") return "forumPost";
   if (path.startsWith("/pages/forum/") || path === "/pages/user/forum-posts") return "userContentSharing";
-  if (path === "/pages/community/publish" || path === "/pages/community/checkin") return "communityPublish";
+  // Check-in is a user activity workflow, not user-generated content. It must
+  // remain reachable while review mode disables publishing/community content.
+  if (path === "/pages/community/publish") return "communityPublish";
+  if (path === "/pages/community/checkin") return null;
   if (path.startsWith("/pages/community/") || ["/pages/user/community-posts", "/pages/user/community-social", "/pages/user/content-appeals"].includes(path)) return "userContentSharing";
   if (path.startsWith("/pages/courses/") || path.startsWith("/pages/course/") || ["/pages/search/index", "/pages/user/courses", "/pages/user/learning", "/pages/user/favorites"].includes(path)) return "courses";
   if (path.startsWith("/pages/mall/") || path === "/pages/user/mall-orders" || path === "/pages/user/mall-order-detail") return "mall";
@@ -231,10 +234,10 @@ export function filterDecorationSectionsByFeature(sections: HomepageSectionView[
     .filter(Boolean) as HomepageSectionView[];
 }
 
-export function guardCurrentPageFeature() {
+export function guardCurrentPageFeature(pathOverride?: string) {
   const pages = getCurrentPages();
   const page = pages[pages.length - 1] as any;
-  const path = page?.route ? `/${page.route}` : "";
+  const path = pathOverride || (page?.route ? `/${page.route}` : "");
   if (!path || isLinkAllowedByFeature(path)) return true;
   showFeatureDisabledDialog(path, () => {
     if (pages.length > 1) uni.navigateBack();

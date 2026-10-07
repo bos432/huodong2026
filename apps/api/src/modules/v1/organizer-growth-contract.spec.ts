@@ -21,7 +21,7 @@ describe("organizer growth contract", () => {
     const service = read("apps/api/src/modules/v1/v1.service.ts");
     const mobile = read("apps/mobile/src/pages/activity/detail.vue");
     expect(service).toContain("organizerTrust, relatedActivities");
-    expect(service).toContain("organizerProfile: this.publicOrganizerProfile(activity.tenant)");
+    expect(service).toContain("organizerProfile: this.publicOrganizerProfile(tenant)");
     expect(mobile).toContain("activity.organizerTrust.fulfillmentRate");
     expect(mobile).toContain("activity.relatedActivities");
   });

@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common";
 import { describe, expect, it, vi } from "vitest";
 import { BusinessJob } from "../../entities/business-job.entity";
 import { BusinessJobService } from "./business-job.service";
@@ -13,7 +14,14 @@ function createHarness(rows: BusinessJob[] = []) {
       if (!row) throw new Error("not found");
       return row;
     }),
-    find: vi.fn(async () => rows.filter((row) => row.status === "pending")),
+    find: vi.fn(async ({ where }: any = {}) => {
+      const clauses = Array.isArray(where) ? where : [where];
+      return rows.filter((row) => clauses.some((clause) => {
+        if (clause.status === "pending") return row.status === "pending" && row.nextAttemptAt <= clause.nextAttemptAt.value;
+        if (clause.status === "processing") return row.status === "processing" && row.lockedUntil !== null && row.lockedUntil <= clause.lockedUntil.value;
+        return false;
+      }));
+    }),
     create: vi.fn((value: any) => ({ id: rows.length + 1, ...value })),
     save: vi.fn(async (value: BusinessJob) => {
       if (!rows.includes(value)) rows.push(value);
@@ -58,6 +66,22 @@ describe("BusinessJobService", () => {
     expect(repository.save).not.toHaveBeenCalled();
   });
 
+  it("adds a traceable task envelope before a job reaches a provider", async () => {
+    const { service } = createHarness();
+    const result = await service.publish({ tenantId: 3, type: "test.job", idempotencyKey: "traceable", payload: { value: 2 }, requestId: "req-1", runAt: new Date("2026-10-03T00:00:00.000Z") });
+    expect(result.payload).toMatchObject({
+      value: 2,
+      tenantId: 3,
+      scene: "test.job",
+      idempotencyKey: "traceable",
+      requestId: "req-1",
+      attempt: 0,
+      nextRunAt: "2026-10-03T00:00:00.000Z"
+    });
+    expect(typeof result.payload.taskId).toBe("string");
+    expect(result.payload.taskId).toBeTruthy();
+  });
+
   it("claims and completes a due job once", async () => {
     const row = pendingJob();
     const { service } = createHarness([row]);
@@ -70,6 +94,43 @@ describe("BusinessJobService", () => {
     expect(row.result).toEqual({ ok: true });
   });
 
+  it("backfills the task envelope for legacy rows before handler execution", async () => {
+    const row = pendingJob({ payload: { value: 1 }, requestId: null });
+    const { service } = createHarness([row]);
+    const handler = vi.fn(async (payload) => ({ taskId: payload.taskId }));
+    service.register("test.job", handler);
+
+    await service.runDue("worker-legacy", 20, new Date("2026-10-03T00:00:00.000Z"));
+
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({
+      value: 1,
+      taskId: expect.any(String),
+      tenantId: 3,
+      scene: "test.job",
+      idempotencyKey: "same",
+      requestId: expect.any(String),
+      attempt: 1,
+      nextRunAt: "2026-10-03T00:00:00.000Z"
+    }), expect.anything());
+    expect(row.requestId).toEqual(expect.any(String));
+  });
+
+  it("reclaims an expired processing lock after a worker restart without incrementing the attempt", async () => {
+    const row = pendingJob({ status: "processing", attemptCount: 2, lockedBy: "worker-before-restart", lockedUntil: new Date(0) });
+    const { service } = createHarness([row]);
+    const handler = vi.fn(async (_payload, job) => ({ attempt: job.attemptCount, idempotencyKey: job.idempotencyKey }));
+    service.register("test.job", handler);
+
+    const result = await service.runDue("worker-after-restart", 20, new Date());
+
+    expect(result).toEqual({ scanned: 1, completed: 1, failed: 0 });
+    expect(handler).toHaveBeenCalledTimes(1);
+    expect(handler).toHaveBeenCalledWith(expect.objectContaining({ attempt: 2, nextRunAt: expect.any(String) }), expect.objectContaining({ attemptCount: 2, idempotencyKey: "same" }));
+    expect(row.status).toBe("completed");
+    expect(row.attemptCount).toBe(2);
+    expect(row.result).toEqual({ attempt: 2, idempotencyKey: "same" });
+  });
+
   it("dead-letters a job after its final failed attempt", async () => {
     const row = pendingJob({ maxAttempts: 1 });
     const { service } = createHarness([row]);
@@ -79,6 +140,20 @@ describe("BusinessJobService", () => {
     expect(row.status).toBe("dead_letter");
     expect(row.lastError).toBe("provider unavailable");
     expect(row.deadLetteredAt).toBeInstanceOf(Date);
+  });
+
+  it("dead-letters terminal provider errors without consuming retry attempts", async () => {
+    const row = pendingJob({ maxAttempts: 5 });
+    const { service } = createHarness([row]);
+    service.register("test.job", async () => { throw new BadRequestException("template disabled"); });
+
+    const result = await service.runDue("worker-1", 20, new Date());
+
+    expect(result.failed).toBe(1);
+    expect(row.status).toBe("dead_letter");
+    expect(row.attemptCount).toBe(1);
+    expect(row.deadLetteredAt).toBeInstanceOf(Date);
+    expect(row.nextAttemptAt).toEqual(expect.any(Date));
   });
 
   it("redacts credentials from admin task details", () => {
@@ -100,7 +175,7 @@ describe("BusinessJobService", () => {
     const result = await service.replayForActor(row.id, row.tenantId, new Date("2026-07-18T00:00:00.000Z"));
 
     expect(result.status).toBe("pending");
-    expect(result.payload).toEqual({ apiKey: "********" });
+    expect(result.payload).toMatchObject({ apiKey: "********", attempt: 0, nextRunAt: "2026-07-18T00:00:00.000Z" });
     expect(result.lastError).toBeNull();
     expect(result.operationApplied).toBe(true);
     expect(row.attemptCount).toBe(0);

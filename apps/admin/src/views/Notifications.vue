@@ -7,19 +7,34 @@ import { api } from "../api";
 import { formatShanghaiDateTime } from '../date-time';
 import { currentTenantId, hasPermission, isPlatformAdmin } from "../permissions";
 import { maskPhone } from "../privacy";
+import type {
+  AdminNotificationMonitor,
+  AdminNotificationOptions,
+  AdminNotificationBatchResult,
+  AdminNotificationDeliveryResult,
+  AdminNotificationPreferencesPage,
+  AdminNotificationPreview,
+  AdminNotificationProviderStatus,
+  AdminNotificationRecord,
+  AdminNotificationSchedule,
+  AdminNotificationScheduleRunResult,
+  AdminNotificationTemplate,
+  AdminNotificationTemplateVersions,
+  AdminNotificationsPage
+} from "@activity/shared";
 
 const route = useRoute();
 const canManageTemplates = computed(() => hasPermission("notification.template.manage") || hasPermission("notification.manage"));
 const canSend = computed(() => hasPermission("notification.send") || hasPermission("notification.manage"));
 const canManagePreferences = computed(() => hasPermission("notification.preference.manage") || hasPermission("notification.manage"));
 const canViewSensitive = computed(() => hasPermission("notification.sensitive"));
-const templates = ref<any[]>([]);
-const notifications = ref<any[]>([]);
-const schedules = ref<any[]>([]);
-const providers = ref<any[]>([]);
-const preferences = ref<any[]>([]);
-const activities = ref<any[]>([]);
-const tags = ref<any[]>([]);
+const templates = ref<AdminNotificationTemplate[]>([]);
+const notifications = ref<AdminNotificationRecord[]>([]);
+const schedules = ref<AdminNotificationSchedule[]>([]);
+const providers = ref<AdminNotificationProviderStatus[]>([]);
+const preferences = ref<AdminNotificationPreferencesPage["items"]>([]);
+const activities = ref<AdminNotificationOptions["activities"]>([]);
+const tags = ref<AdminNotificationOptions["tags"]>([]);
 const loading = ref(false);
 const errorMessage = ref("");
 const actionKey = ref("");
@@ -27,11 +42,11 @@ const drawer = ref(false);
 const scheduleDrawer = ref(false);
 const previewDrawer = ref(false);
 const versionsDrawer = ref(false);
-const templateVersions = ref<any>();
-const monitor = ref<any>();
+const templateVersions = ref<AdminNotificationTemplateVersions>();
+const monitor = ref<AdminNotificationMonitor | null>(null);
 const editingId = ref<number | null>(null);
 const editingScheduleId = ref<number | null>(null);
-const preview = ref<any>();
+const preview = ref<AdminNotificationPreview>();
 const notificationPage = ref(1);
 const notificationPageSize = 20;
 const notificationTotal = ref(0);
@@ -39,6 +54,7 @@ const preferencePage = ref(1);
 const preferencePageSize = 20;
 const preferenceTotal = ref(0);
 const preferenceForm = reactive({ userId: undefined as number | undefined, channel: "sms", subscribed: false, reason: "用户申请退订" });
+let loadSerial = 0;
 const variableTips = ["{{activityTitle}}", "{{userName}}", "{{startTime}}", "{{endTime}}", "{{location}}", "{{userPhone}}", "{{checkInCode}}"];
 
 const templateForm = reactive({ name: "", channel: "site", scene: "", title: "", content: "", providerTemplateId: "", approvalStatus: "draft", dataKeysText: "", page: "pages/index/index", enabled: true });
@@ -90,6 +106,23 @@ function tenantScopeOptions(params: Record<string, unknown> = {}) {
   return { params: { ...params, ...(isPlatformAdmin() && selected ? { tenantId: selected } : {}) } };
 }
 
+function notificationScopeSnapshot() {
+  return selectedTenantId();
+}
+
+function assertNotificationScope(expected: number | undefined) {
+  if (notificationScopeSnapshot() === expected) return true;
+  loadSerial += 1;
+  actionKey.value = "";
+  drawer.value = false;
+  scheduleDrawer.value = false;
+  previewDrawer.value = false;
+  versionsDrawer.value = false;
+  ElMessage.warning("商家范围已变化，本次通知操作已取消，请重新加载后再试");
+  void load();
+  return false;
+}
+
 function routeActivityId() {
   const activityId = typeof route.query.activityId === "string" ? Number(route.query.activityId) : undefined;
   return activityId && Number.isFinite(activityId) ? activityId : undefined;
@@ -106,18 +139,21 @@ function applyRouteActivity() {
 }
 
 async function load() {
+  const serial = ++loadSerial;
+  const scopeAtStart = selectedTenantId();
   loading.value = true;
   errorMessage.value = "";
   try {
     const [tpls, records, options, rules, providerRows, preferenceRows, monitorData] = await Promise.all([
-      api.get<any, any[]>("/admin/notification-templates", tenantScopeOptions()),
-      api.get<any, { items: any[]; total: number }>("/admin/notifications", tenantScopeOptions({ page: notificationPage.value, pageSize: notificationPageSize, ...notificationFilters })),
-      api.get<any, { activities: any[]; tags: any[] }>("/admin/notifications/options", tenantScopeOptions()),
-      api.get<any, any[]>("/admin/notification-schedules", tenantScopeOptions()),
-      api.get<any, any[]>("/admin/notification-providers", tenantScopeOptions()),
-      api.get<any, { items: any[]; total: number }>("/admin/notification-preferences", tenantScopeOptions({ page: preferencePage.value, pageSize: preferencePageSize })),
-      api.get<any, any>("/admin/notifications/monitor", tenantScopeOptions())
+      api.get<unknown, AdminNotificationTemplate[]>("/admin/notification-templates", tenantScopeOptions()),
+      api.get<unknown, AdminNotificationsPage>("/admin/notifications", tenantScopeOptions({ page: notificationPage.value, pageSize: notificationPageSize, ...notificationFilters })),
+      api.get<unknown, AdminNotificationOptions>("/admin/notifications/options", tenantScopeOptions()),
+      api.get<unknown, AdminNotificationSchedule[]>("/admin/notification-schedules", tenantScopeOptions()),
+      api.get<unknown, AdminNotificationProviderStatus[]>("/admin/notification-providers", tenantScopeOptions()),
+      api.get<unknown, AdminNotificationPreferencesPage>("/admin/notification-preferences", tenantScopeOptions({ page: preferencePage.value, pageSize: preferencePageSize })),
+      api.get<unknown, AdminNotificationMonitor>("/admin/notifications/monitor", tenantScopeOptions())
     ]);
+    if (serial !== loadSerial || selectedTenantId() !== scopeAtStart) return;
     templates.value = tpls;
     notifications.value = records.items || [];
     notificationTotal.value = Number(records.total || 0);
@@ -130,10 +166,21 @@ async function load() {
     monitor.value = monitorData;
     applyRouteActivity();
   } catch (error: any) {
+    if (serial !== loadSerial || selectedTenantId() !== scopeAtStart) return;
+    templates.value = [];
+    notifications.value = [];
+    schedules.value = [];
+    providers.value = [];
+    activities.value = [];
+    tags.value = [];
+    preferences.value = [];
+    notificationTotal.value = 0;
+    preferenceTotal.value = 0;
+    monitor.value = null;
     errorMessage.value = error.message || "通知中心加载失败";
     ElMessage.error(errorMessage.value);
   } finally {
-    loading.value = false;
+    if (serial === loadSerial) loading.value = false;
   }
 }
 
@@ -179,8 +226,11 @@ async function saveSchedule() {
     ElMessage.warning("未选择模板时，请填写标题和内容");
     return;
   }
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = editingScheduleId.value ? `schedule:${editingScheduleId.value}` : "schedule:create";
   try {
+    if (!assertNotificationScope(scopeAtActionStart)) return;
     if (editingScheduleId.value) await api.patch(`/admin/notification-schedules/${editingScheduleId.value}`, scheduleForm, tenantScopeOptions());
     else await api.post("/admin/notification-schedules", scheduleForm, tenantScopeOptions());
     ElMessage.success("提醒规则已保存");
@@ -196,10 +246,14 @@ async function saveSchedule() {
 async function runDueSchedules() {
   if (!canSend.value) return ElMessage.warning("当前账号无通知发送权限");
   if (actionKey.value) return;
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = "schedule:run-due";
   try {
     await ElMessageBox.confirm("执行后会发送所有已到期且启用的提醒规则。请先确认模板内容、活动时间和通知服务商状态。", "执行到期提醒", { type: "warning", confirmButtonText: "确认执行", cancelButtonText: "再检查一下" });
-    const result = await api.post<any, { dueCount: number }>("/admin/notification-schedules/run-due", undefined, tenantScopeOptions());
+    const scopeAtConfirm = notificationScopeSnapshot();
+    if (!assertNotificationScope(scopeAtActionStart) || !assertNotificationScope(scopeAtConfirm)) return;
+    const result = await api.post<unknown, AdminNotificationScheduleRunResult>("/admin/notification-schedules/run-due", undefined, tenantScopeOptions());
     ElMessage.success(`已执行 ${result.dueCount} 条到期规则`);
     await load();
   } catch (error: any) {
@@ -245,6 +299,8 @@ async function saveTemplate() {
     ElMessage.warning("请填写模板名称、标题和内容");
     return;
   }
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = editingId.value ? `template:${editingId.value}` : "template:create";
   try {
     let dataKeys: Record<string, string> | undefined;
@@ -253,6 +309,7 @@ async function saveTemplate() {
       catch { ElMessage.warning("微信字段映射必须是有效 JSON"); return; }
     }
     const payload = { ...templateForm, scene: templateForm.scene || undefined, providerTemplateId: templateForm.providerTemplateId || undefined, page: templateForm.page || undefined, dataKeys };
+    if (!assertNotificationScope(scopeAtActionStart)) return;
     if (editingId.value) await api.patch(`/admin/notification-templates/${editingId.value}`, payload, tenantScopeOptions());
     else await api.post("/admin/notification-templates", payload, tenantScopeOptions());
     ElMessage.success("模板已保存");
@@ -278,9 +335,12 @@ async function previewNotification() {
     ElMessage.warning("请先填写通知标题和内容");
     return;
   }
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = "notification:preview";
   try {
-    preview.value = await api.post("/admin/notifications/preview", {
+    if (!assertNotificationScope(scopeAtActionStart)) return;
+    preview.value = await api.post<unknown, AdminNotificationPreview>("/admin/notifications/preview", {
       ...sendForm,
       activityId: sendForm.activityId || undefined,
       templateId: sendForm.templateId || undefined
@@ -294,9 +354,12 @@ async function previewNotification() {
 }
 
 async function showTemplateVersions(row: any) {
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = `versions:${row.id}`;
   try {
-    templateVersions.value = await api.get(`/admin/notification-templates/${row.id}/versions`, tenantScopeOptions());
+    if (!assertNotificationScope(scopeAtActionStart)) return;
+    templateVersions.value = await api.get<unknown, AdminNotificationTemplateVersions>(`/admin/notification-templates/${row.id}/versions`, tenantScopeOptions());
     versionsDrawer.value = true;
   } catch (error: any) { ElMessage.error(error.message || "模板版本加载失败"); }
   finally { actionKey.value = ""; }
@@ -304,14 +367,18 @@ async function showTemplateVersions(row: any) {
 
 async function testTemplate(row: any) {
   if (!canSend.value || actionKey.value) return;
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   const provider = providers.value.find((item) => item.channel === row.channel);
   if (row.channel === "sms" && provider && !provider.ready) {
     return ElMessage.warning(`短信通道未就绪${provider.missing?.length ? `：缺少 ${provider.missing.join("、")}` : ""}`);
   }
   try {
     const { value } = await ElMessageBox.prompt("填写接收测试消息的会员 ID。真实短信和微信消息会立即发送。", `测试模板 v${row.version || 1}`, { inputPattern: /^[1-9]\d*$/, inputErrorMessage: "请输入有效会员 ID", confirmButtonText: "发送测试", cancelButtonText: "取消" });
+    const scopeAtConfirm = notificationScopeSnapshot();
+    if (!assertNotificationScope(scopeAtActionStart) || !assertNotificationScope(scopeAtConfirm)) return;
     actionKey.value = `test:${row.id}`;
-    const result = await api.post<any, any>(`/admin/notification-templates/${row.id}/test`, { userId: Number(value) }, tenantScopeOptions());
+    const result = await api.post<unknown, AdminNotificationDeliveryResult>(`/admin/notification-templates/${row.id}/test`, { userId: Number(value) }, tenantScopeOptions());
     showDeliveryResult(result, true);
     await load();
   } catch (error: any) { if (error !== "cancel" && error !== "close") ElMessage.error(error.message || "模板测试失败"); }
@@ -328,10 +395,14 @@ async function send() {
     ElMessage.warning("请填写通知标题和内容");
     return;
   }
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = "notification:send";
   try {
     await ElMessageBox.confirm("确认发送这条通知？若未指定用户，系统会按后端规则创建发送记录。建议先预览变量渲染结果。", "发送通知", { type: "warning", confirmButtonText: "确认发送", cancelButtonText: "先不发送" });
-    const result = await api.post<any, any>("/admin/notifications/send", {
+    const scopeAtConfirm = notificationScopeSnapshot();
+    if (!assertNotificationScope(scopeAtActionStart) || !assertNotificationScope(scopeAtConfirm)) return;
+    const result = await api.post<unknown, AdminNotificationDeliveryResult>("/admin/notifications/send", {
       ...sendForm,
       activityId: sendForm.activityId || undefined,
       templateId: sendForm.templateId || undefined
@@ -353,16 +424,20 @@ async function sendActivityReminder() {
     return;
   }
   const activity = activities.value.find((item) => item.id === sendForm.activityId);
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = "notification:activity";
   try {
     await ElMessageBox.confirm(`确认向活动「${activity?.title || sendForm.activityId}」的相关用户发送提醒？发送前请确认标题、内容、渠道和服务商配置。`, "发送活动提醒", { type: "warning", confirmButtonText: "确认发送", cancelButtonText: "再预览一下" });
-    const result = await api.post<any, { sentCount: number }>(`/admin/activities/${sendForm.activityId}/reminders/send`, {
+    const scopeAtConfirm = notificationScopeSnapshot();
+    if (!assertNotificationScope(scopeAtActionStart) || !assertNotificationScope(scopeAtConfirm)) return;
+    const result = await api.post<unknown, { sentCount: number }>(`/admin/activities/${sendForm.activityId}/reminders/send`, {
       templateId: sendForm.templateId || undefined,
       channel: sendForm.channel,
       title: sendForm.title,
       content: sendForm.content,
       remark: sendForm.remark || "活动提醒"
-    });
+    }, tenantScopeOptions());
     ElMessage.success(`已发送 ${result.sentCount} 条活动提醒`);
     resetSendForm();
     await load();
@@ -380,11 +455,15 @@ async function sendTaggedNotification() {
     ElMessage.warning("请先选择会员分群标签");
     return;
   }
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   const label = selectedTag.value ? `${selectedTag.value.name}（${selectedTag.value.count}人）` : sendForm.tagName;
   actionKey.value = "notification:tag";
   try {
     await ElMessageBox.confirm(`确认向会员分群「${label}」批量发送通知？发送前请确认标题、内容、渠道和服务商配置。`, "发送分群通知", { type: "warning", confirmButtonText: "确认发送", cancelButtonText: "再预览一下" });
-    const result = await api.post<any, { matchedCount: number; sentCount: number; failedCount: number }>("/admin/notifications/send-by-tag", {
+    const scopeAtConfirm = notificationScopeSnapshot();
+    if (!assertNotificationScope(scopeAtActionStart) || !assertNotificationScope(scopeAtConfirm)) return;
+    const result = await api.post<unknown, AdminNotificationBatchResult>("/admin/notifications/send-by-tag", {
       ...sendForm,
       activityId: sendForm.activityId || undefined,
       templateId: sendForm.templateId || undefined,
@@ -403,9 +482,13 @@ async function sendTaggedNotification() {
 async function retryNotification(row: any) {
   if (!canSend.value) return ElMessage.warning("当前账号无通知发送权限");
   if (actionKey.value) return;
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = `notification:retry:${row.id}`;
   try {
     await ElMessageBox.confirm(`确认重试发送「${row.title}」？如果服务商配置仍异常，可能会再次失败并记录重试次数。`, "重试通知", { type: "info", confirmButtonText: "确认重试", cancelButtonText: "取消" });
+    const scopeAtConfirm = notificationScopeSnapshot();
+    if (!assertNotificationScope(scopeAtActionStart) || !assertNotificationScope(scopeAtConfirm)) return;
     await api.post(`/admin/notifications/${row.id}/retry`, undefined, tenantScopeOptions());
     ElMessage.success("已重新发送");
     await load();
@@ -420,8 +503,11 @@ async function savePreference() {
   if (!canManagePreferences.value) return ElMessage.warning("当前账号无通知偏好维护权限");
   if (actionKey.value) return;
   if (!preferenceForm.userId) return ElMessage.warning("请填写会员 ID");
+  const scopeAtActionStart = notificationScopeSnapshot();
+  if (!assertNotificationScope(scopeAtActionStart)) return;
   actionKey.value = `preference:${preferenceForm.userId}`;
   try {
+    if (!assertNotificationScope(scopeAtActionStart)) return;
     await api.patch(`/admin/notification-preferences/${preferenceForm.userId}`, { channel: preferenceForm.channel, subscribed: preferenceForm.subscribed, reason: preferenceForm.reason.trim() || undefined }, tenantScopeOptions());
     ElMessage.success(preferenceForm.subscribed ? "已恢复该渠道订阅" : "已记录渠道退订");
     await load();
@@ -506,6 +592,12 @@ watch(
 watch(
   () => route.query.tenantId,
   () => {
+    loadSerial += 1;
+    actionKey.value = "";
+    drawer.value = false;
+    scheduleDrawer.value = false;
+    previewDrawer.value = false;
+    versionsDrawer.value = false;
     notificationPage.value = 1;
     preferencePage.value = 1;
     void load();
@@ -514,7 +606,7 @@ watch(
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" :aria-busy="loading">
     <div class="toolbar">
       <h2>通知中心</h2>
       <div class="toolbar-actions">
@@ -523,6 +615,9 @@ watch(
         <el-button v-if="canManageTemplates" :icon="Plus" @click="createSchedule">新增提醒规则</el-button>
         <el-button v-if="canManageTemplates" type="primary" :icon="Plus" @click="createTemplate">新增模板</el-button>
       </div>
+    </div>
+    <div v-if="loading && !monitor && !templates.length && !notifications.length" class="page-loading" role="status" aria-live="polite">
+      正在加载通知配置与发送记录，请稍候…
     </div>
     <el-alert v-if="errorMessage" class="page-error" type="error" show-icon :closable="false" :title="errorMessage"><template #default><el-button size="small" @click="load">重试</el-button></template></el-alert>
     <el-alert v-if="canViewSensitive" class="permission-alert" type="warning" :closable="false" show-icon title="敏感查看权限已启用：会员手机号、服务商消息号、错误详情和完整变量可见。" />
@@ -547,7 +642,7 @@ watch(
     </div>
 
     <div class="provider-grid">
-      <div v-for="item in providers" :key="item.channel" class="provider">
+      <div v-for="item in providers" :key="item.channel" class="provider" :class="{ ready: item.ready, missing: !item.ready && item.enabled }">
         <span>{{ item.channel }}</span>
         <strong>{{ item.provider }}</strong>
         <el-tag :type="item.ready ? 'success' : item.enabled ? 'warning' : 'info'">{{ item.ready ? "已就绪" : item.enabled ? "缺配置" : "未启用" }}</el-tag>
@@ -598,7 +693,7 @@ watch(
 
       <div class="table-card">
         <h3>通知模板</h3>
-        <el-empty v-if="!templates.length" description="暂无通知模板">
+        <el-empty v-if="!loading && !templates.length" description="暂无通知模板">
           <el-button v-if="canManageTemplates" type="primary" :icon="Plus" @click="createTemplate">新增模板</el-button>
         </el-empty>
         <el-table v-else :data="templates" stripe>
@@ -630,7 +725,7 @@ watch(
 
     <div class="table-card records">
       <h3>活动提醒规则</h3>
-      <el-empty v-if="!schedules.length" description="暂无活动提醒规则">
+      <el-empty v-if="!loading && !schedules.length" description="暂无活动提醒规则">
         <el-button v-if="canManageTemplates" :icon="Plus" @click="createSchedule">新增提醒规则</el-button>
       </el-empty>
       <el-table v-else :data="schedules" stripe>
@@ -683,7 +778,7 @@ watch(
         <el-input v-model="notificationFilters.keyword" clearable placeholder="标题、用户或备注" @keyup.enter="applyNotificationFilters" />
         <el-button type="primary" @click="applyNotificationFilters">筛选</el-button>
       </div></div>
-      <el-empty v-if="!notifications.length" description="暂无发送记录" />
+      <el-empty v-if="!loading && !notifications.length" description="暂无发送记录" />
       <el-table v-else :data="notifications" stripe>
         <el-table-column prop="title" label="标题" min-width="180" show-overflow-tooltip />
         <el-table-column label="渠道" width="110"><template #default="{ row }">{{ channelText(row.channel) }}</template></el-table-column>
@@ -803,6 +898,7 @@ watch(
 </template>
 
 <style scoped>
+.page-loading { display: flex; align-items: center; justify-content: center; min-height: 120px; margin: 16px 0; border: 1px dashed #cbd5e1; border-radius: 8px; color: #475467; background: #f8fafc; }
 .toolbar-actions, .action-row, .tips { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .tips { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 12px 16px; margin-bottom: 16px; }
 .page-hint { margin-bottom: 16px; }
@@ -814,6 +910,8 @@ watch(
 .monitor-item { min-height: 86px; display: grid; gap: 8px; align-content: center; padding: 14px 16px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
 .monitor-item span { color: #667085; font-size: 13px; }.monitor-item strong { font-size: 24px; }.monitor-item.danger strong { color: #b42318; }.monitor-item.warning strong { color: #b54708; }
 .provider { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 14px; display: grid; gap: 6px; min-height: 118px; }
+.provider.ready { border-color: var(--admin-jade); background: var(--admin-jade-soft); }
+.provider.missing { border-color: #e7c98a; background: #fffaf0; }
 .provider span, .provider small { color: #667085; font-size: 12px; }
 .provider strong { font-size: 15px; overflow-wrap: anywhere; }
 .grid { display: grid; grid-template-columns: minmax(360px, 0.9fr) minmax(520px, 1.1fr); gap: 16px; align-items: start; }
@@ -824,6 +922,8 @@ watch(
 .preference-head p { margin: -8px 0 14px; color: #667085; font-size: 13px; }
 .records-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }.record-filters { display: grid; grid-template-columns: repeat(3, 130px) minmax(180px, 1fr) auto; gap: 8px; }
 h3 { margin: 0 0 16px; }
+.monitor-item.danger { border-color: var(--admin-red-soft); background: var(--admin-red-soft); }
+.monitor-item.warning { border-color: #f1e2bd; background: #fffaf0; }
 @media (max-width: 1100px) { .grid, .provider-grid, .monitor-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }.records-head { display: grid; }.record-filters { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) {
   .page, .toolbar, .toolbar-actions, .table-card, .grid, .provider-grid, .monitor-grid { min-width: 0; }

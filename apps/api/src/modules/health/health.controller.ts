@@ -13,11 +13,13 @@ export class HealthController {
   @Get()
   async check() {
     const database = await this.databaseStatus();
+    const operations = database === "up" ? await this.operationalMetrics() : null;
     return {
       api: "up",
       database,
       config: inspectRuntimeConfig(this.config).status,
       worker: this.workerStatus(),
+      operations,
       release: this.releaseInfo(),
       uptimeSeconds: this.uptimeSeconds(),
       time: new Date().toISOString()

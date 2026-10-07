@@ -8,7 +8,7 @@ vi.mock("../../entities/operation-setting.entity", () => ({ OperationSetting: cl
 vi.mock("../../entities/registration.entity", () => ({ Registration: class Registration {} }));
 vi.mock("../../entities/user.entity", () => ({ User: class User {} }));
 
-import { AutomaticSmsService, defaultAutomaticSmsSettings, normalizeAutomaticSmsSettings } from "./automatic-sms.service";
+import { AutomaticSmsService, defaultAutomaticSmsSettings, isValidAutomaticSmsPhone, normalizeAutomaticSmsSettings } from "./automatic-sms.service";
 
 function setting(automaticSms: Record<string, unknown>, overrides: Record<string, unknown> = {}) {
   return {
@@ -86,6 +86,21 @@ describe("AutomaticSmsService", () => {
     expect(provider.deliver).not.toHaveBeenCalled();
   });
 
+  it("recognizes only deliverable mainland mobile numbers", () => {
+    expect(isValidAutomaticSmsPhone("13800138000")).toBe(true);
+    expect(isValidAutomaticSmsPhone("+8613800138000")).toBe(true);
+    expect(isValidAutomaticSmsPhone("1380013800")).toBe(false);
+    expect(isValidAutomaticSmsPhone("13800138000x")).toBe(false);
+  });
+
+  it("suppresses malformed phone numbers without calling the provider", async () => {
+    const { handler, notifications, provider } = createHarness({ phone: "1380013800" });
+    const result = await handler()({ scene: "registrationSubmitted", businessId: "12", userId: 7, activityId: 9, tenantId: 3, variables: {} });
+    expect(result).toEqual(expect.objectContaining({ status: "suppressed", reason: "用户手机号格式无效" }));
+    expect(notifications[0]).toMatchObject({ status: "suppressed", suppressedReason: "用户手机号格式无效" });
+    expect(provider.deliver).not.toHaveBeenCalled();
+  });
+
   it("records a missing user as suppressed instead of dropping the worker event", async () => {
     const { handler, notifications, provider } = createHarness({ userMissing: true });
     const result = await handler()({ scene: "registrationSubmitted", businessId: "11", userId: 7, activityId: 9, tenantId: 3, variables: {} });
@@ -116,7 +131,7 @@ describe("AutomaticSmsService", () => {
     const { service, handler, registrations, jobs } = createHarness({ automaticSms: { enabled: true, activityCancelled: true } });
     const published = await service.publishForActivity({ scene: "activityCancelled", activityId: 9, businessId: 9, tenantId: 3, variables: { reason: "天气原因" } });
     expect(published).toEqual({ queuedUsers: 0, fanoutJobId: 1 });
-    expect(jobs.publish).toHaveBeenLastCalledWith(expect.objectContaining({ type: "automatic-sms.activity-fanout", idempotencyKey: "activityCancelled:9" }));
+    expect(jobs.publish).toHaveBeenLastCalledWith(expect.objectContaining({ type: "automatic-sms.activity-fanout", scene: "activityCancelled", idempotencyKey: "activityCancelled:9" }));
 
     registrations.find.mockResolvedValueOnce([
       { status: "approved", user: { id: 7 } },

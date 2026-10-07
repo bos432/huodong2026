@@ -24,6 +24,7 @@ import { AutomaticNotificationService } from "./reliability/automatic-notificati
 import { MemberPointsService } from "./member-points/member-points.service";
 import { cumulativePointClawbackTarget } from "../shared/member-point-ledger";
 import { ConversionEvent } from "../entities/conversion-event.entity";
+import { Activity } from "../entities/activity.entity";
 
 export type CompleteRefundInput = {
   refund: Refund;
@@ -55,20 +56,37 @@ export class RefundCompletionService {
   async complete(input: CompleteRefundInput) {
     const now = input.now || new Date();
     const refund = input.refund;
-    const order = await this.orders.createQueryBuilder("order")
-      .leftJoinAndSelect("order.tenant", "tenant")
-      .leftJoinAndSelect("order.registration", "registration")
-      .leftJoinAndSelect("registration.user", "user")
-      .leftJoinAndSelect("registration.tenant", "registrationTenant")
-      .leftJoinAndSelect("registration.activity", "activity")
-      .leftJoinAndSelect("activity.tenant", "activityTenant")
-      .where("order.id = :orderId", { orderId: input.order.id })
-      .getOne() || input.order;
+    // Keep this reload deliberately flat. Order/registration/activity all have
+    // eager relations, and a broad relation join exceeds MariaDB's 61-table
+    // limit as the platform grows. Refund completion only needs this compact
+    // graph; every relation below is loaded with a single-table query.
+    const orderRow = await this.orders.query("SELECT * FROM orders WHERE id = ?", [input.order.id]);
+    const order: Order = orderRow.length ? this.orders.create(orderRow[0] as Partial<Order>) : input.order;
+    if (orderRow.length && orderRow[0].registrationId) {
+      const registrationRow = await this.registrations.query("SELECT * FROM registrations WHERE id = ?", [orderRow[0].registrationId]);
+      if (registrationRow.length) {
+        const registration: Registration = this.registrations.create(registrationRow[0] as Partial<Registration>);
+        const activityRepo = this.dataSource.getRepository(Activity);
+        const userRepo = this.dataSource.getRepository(User);
+        const tenantRepo = this.dataSource.getRepository(Tenant);
+        registration.activity = await activityRepo.createQueryBuilder("activity").setFindOptions({ loadEagerRelations: false }).where("activity.id = :id", { id: registrationRow[0].activityId }).getOne() as Activity;
+        registration.user = await userRepo.createQueryBuilder("user").setFindOptions({ loadEagerRelations: false }).where("user.id = :id", { id: registrationRow[0].userId }).getOne() as User;
+        registration.tenant = registrationRow[0].tenantId ? await tenantRepo.findOneBy({ id: registrationRow[0].tenantId }) : null;
+        order.registration = registration;
+      }
+    }
+    if (orderRow.length && orderRow[0].tenantId) order.tenant = await this.dataSource.getRepository(Tenant).findOneBy({ id: orderRow[0].tenantId });
     const amount = Number(refund.amount);
     if (!Number.isFinite(amount) || amount <= 0) throw new BadRequestException("退款金额必须大于 0");
     if (refund.status === "completed") return { refund, order, idempotent: true };
 
-    const completedRefunds = await this.refunds.find({ where: { order: { id: order.id }, status: "completed" } });
+    const completedRefunds = await this.refunds
+      .createQueryBuilder("refund")
+      .setFindOptions({ loadEagerRelations: false })
+      .select(["refund.id", "refund.amount", "refund.status"])
+      .where("refund.orderId = :orderId", { orderId: order.id })
+      .andWhere("refund.status = :status", { status: "completed" })
+      .getMany();
     const refundedBefore = completedRefunds.filter((item) => item.id !== refund.id).reduce((sum, item) => sum + Number(item.amount), 0);
     if (refundedBefore + amount - Number(order.amount) > 0.001) throw new BadRequestException("退款金额不能超过订单实付金额");
 
@@ -79,19 +97,22 @@ export class RefundCompletionService {
     refund.completedAt = now;
     refund.providerRefundNextQueryAt = null;
     refund.providerRefundFailureReason = null;
-    const savedRefund = await this.refunds.save(refund);
+    refund.failureReason = null;
+    await this.refunds.save(refund, { reload: false });
+    const savedRefund = refund;
     await this.returnBalanceRefundIfNeeded(order, savedRefund, amount, input.actorName || "system");
     await this.charityFund.recordRefundReversal(order, savedRefund, input.actorName || "system");
 
     const totalRefunded = refundedBefore + amount;
     await this.clawbackOrderPoints(order, savedRefund, totalRefunded);
     order.status = totalRefunded >= Number(order.amount) ? OrderStatus.Refunded : OrderStatus.PartiallyRefunded;
-    const savedOrder = await this.orders.save(order);
+    await this.orders.save(order, { reload: false });
+    const savedOrder = order;
     const isTerminalCharityRefund = String(savedRefund.reason || "").includes("[charity_retained]");
     if ((savedOrder.status === OrderStatus.Refunded || isTerminalCharityRefund) && ![RegistrationStatus.CheckedIn, RegistrationStatus.Cancelled].includes(savedOrder.registration.status)) {
       savedOrder.registration.status = RegistrationStatus.Cancelled;
       savedOrder.registration.cancelReason = isTerminalCharityRefund ? "公益保留退款已完成，报名资格已关闭" : (savedRefund.reason || "订单已退款");
-      await this.registrations.save(savedOrder.registration);
+      await this.registrations.save(savedOrder.registration, { reload: false });
       await this.refundRedeemedPoints(savedOrder, "订单全额退款返还积分");
       await this.releaseCoupon(savedOrder, "订单全额退款返还优惠券");
     }
@@ -139,17 +160,29 @@ export class RefundCompletionService {
     const idempotencyKey = `refund_return:${refund.id}`;
     return this.dataSource.transaction(async (manager) => {
       const txRepo = manager.getRepository(WalletTransaction);
-      const existing = await txRepo.findOne({ where: { idempotencyKey } });
+      const existing = await txRepo.createQueryBuilder("tx")
+        .setFindOptions({ loadEagerRelations: false })
+        .where("tx.idempotencyKey = :idempotencyKey", { idempotencyKey })
+        .getOne();
       if (existing) return existing;
       const walletRepo = manager.getRepository(UserWallet);
       const user = order.registration.user;
       const tenant = order.tenant || null;
       const tenantScopeKey = tenant?.id ? String(tenant.id) : "platform";
       let wallet = await walletRepo.findOne({ where: { user: { id: user.id }, tenantScopeKey }, lock: { mode: "pessimistic_write" } });
-      if (!wallet) wallet = await walletRepo.save(walletRepo.create({ user, tenant, tenantScopeKey }));
-      const paymentTx = await txRepo.findOne({ where: { idempotencyKey: `balance_pay:${order.id}` } });
+      if (!wallet) wallet = await walletRepo.save(walletRepo.create({ user, tenant, tenantScopeKey }), { reload: false });
+      const paymentTx = await txRepo.createQueryBuilder("tx")
+        .setFindOptions({ loadEagerRelations: false })
+        .where("tx.idempotencyKey = :idempotencyKey", { idempotencyKey: `balance_pay:${order.id}` })
+        .getOne();
       const originalGiftUsedFen = paymentTx ? Math.max(yuanToFen(paymentTx.giftBefore || 0) - yuanToFen(paymentTx.giftAfter || 0), 0) : 0;
-      const priorReturns = await txRepo.find({ where: { order: { id: order.id }, type: "refund_return" } });
+      const priorReturns = await txRepo
+        .createQueryBuilder("tx")
+        .setFindOptions({ loadEagerRelations: false })
+        .select(["tx.id", "tx.giftBefore", "tx.giftAfter"])
+        .where("tx.orderId = :orderId", { orderId: order.id })
+        .andWhere("tx.type = :type", { type: "refund_return" })
+        .getMany();
       const restoredGiftFen = priorReturns.reduce((sum, item) => sum + Math.max(yuanToFen(item.giftAfter || 0) - yuanToFen(item.giftBefore || 0), 0), 0);
       const amountFen = yuanToFen(amount);
       const giftReturnFen = Math.min(Math.max(originalGiftUsedFen - restoredGiftFen, 0), amountFen);
@@ -160,8 +193,8 @@ export class RefundCompletionService {
       const giftAfterFen = giftBeforeFen + giftReturnFen;
       wallet.availableBalance = fenToYuan(afterFen);
       wallet.giftBalance = fenToYuan(giftAfterFen);
-      await walletRepo.save(wallet);
-      return txRepo.save(txRepo.create({ wallet, user, tenant, order, transactionNo: `BRF${Date.now()}${refund.id}`, direction: "credit", type: "refund_return", amount: amount.toFixed(2), balanceBefore: fenToYuan(beforeFen), balanceAfter: fenToYuan(afterFen), frozenBefore: wallet.frozenBalance || "0.00", frozenAfter: wallet.frozenBalance || "0.00", giftBefore: fenToYuan(giftBeforeFen), giftAfter: fenToYuan(giftAfterFen), frozenGiftBefore: wallet.frozenGiftBalance || "0.00", frozenGiftAfter: wallet.frozenGiftBalance || "0.00", operator: actorName, remark: `余额支付订单退款返还：${refund.refundNo}`, idempotencyKey }));
+      await walletRepo.save(wallet, { reload: false });
+      return txRepo.save(txRepo.create({ wallet, user, tenant, order, transactionNo: `BRF${Date.now()}${refund.id}`, direction: "credit", type: "refund_return", amount: amount.toFixed(2), balanceBefore: fenToYuan(beforeFen), balanceAfter: fenToYuan(afterFen), frozenBefore: wallet.frozenBalance || "0.00", frozenAfter: wallet.frozenBalance || "0.00", giftBefore: fenToYuan(giftBeforeFen), giftAfter: fenToYuan(giftAfterFen), frozenGiftBefore: wallet.frozenGiftBalance || "0.00", frozenGiftAfter: wallet.frozenGiftBalance || "0.00", operator: actorName, remark: `余额支付订单退款返还：${refund.refundNo}`, idempotencyKey }), { reload: false });
     });
   }
 
@@ -202,7 +235,7 @@ export class RefundCompletionService {
     if (!order.pointsUsed || order.pointsUsed <= 0 || order.pointsRefundedAt) return null;
     await this.awardPoints(order.registration.user, order.pointsUsed, "points_return", order.id, remark, order.tenant || order.registration.activity?.tenant || null);
     order.pointsRefundedAt = new Date();
-    await this.orders.save(order);
+    await this.orders.save(order, { reload: false });
     return order;
   }
 

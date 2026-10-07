@@ -1,21 +1,13 @@
 <template>
   <view class="container checkin-page">
     <view class="custom-nav">
-      <view class="nav-back" role="button" aria-label="返回" @click="goBack">返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
       <text class="nav-title">今日打卡</text>
-      <view class="nav-action" role="button" aria-label="刷新今日打卡" @click="loadCheckin">刷新</view>
+      <view class="nav-action" role="button" tabindex="0" aria-label="刷新今日打卡" @click="loadCheckin" @keyup.enter="loadCheckin" @keyup.space.prevent="loadCheckin">刷新</view>
     </view>
-    <view v-if="loading" class="checkin-card state-card" aria-live="polite">
-      <text class="subtle state-text">加载今日打卡...</text>
-    </view>
-    <view v-else-if="loadError" class="checkin-card state-card error-state" aria-live="assertive">
-      <text class="state-text">{{ loadError }}</text>
-      <view class="button secondary block" role="button" aria-label="重新加载今日打卡" @click="loadCheckin">重新加载</view>
-    </view>
-    <view v-else-if="!task" class="checkin-card state-card">
-      <text class="title-lg state-title">暂无今日任务</text>
-      <text class="subtle state-text">请等待慢π运营发布今天的打卡任务。</text>
-    </view>
+    <LoadingState v-if="loading" title="正在加载今日打卡" description="请稍候，正在同步任务和本月打卡记录。" />
+    <EmptyState v-else-if="loadError" variant="error" title="今日打卡加载失败" :description="loadError" action-text="重新加载" @action="loadCheckin" />
+    <EmptyState v-else-if="!task" variant="checkin" title="暂无今日任务" description="请等待慢π运营发布今天的打卡任务。" />
     <view v-else class="checkin-card task-card">
       <text class="subtle task-date">{{ dateTitle }}</text>
       <text class="title-lg task-title">今日任务</text>
@@ -25,7 +17,7 @@
         <text class="personal-status-title">{{ checkedIn ? "你今天已完成打卡" : "你今天还未打卡" }}</text>
         <text class="personal-status-sub">{{ checkedIn ? "今天已经点亮，明天继续保持。" : `点击后会点亮 ${currentDay} 日，并计入你的月度记录。` }}</text>
       </view>
-      <view v-if="!checkedIn" class="button block button-lg" :class="{ disabled: submitting }" role="button" :aria-label="submitting ? '正在完成今日打卡' : '完成今日打卡'" @click="doCheckin">{{ submitting ? "打卡中..." : "完成今日打卡" }}</view>
+      <view v-if="!checkedIn" class="button block button-lg" :class="{ disabled: submitting }" role="button" tabindex="0" :aria-label="submitting ? '正在完成今日打卡' : '完成今日打卡'" @click="doCheckin" @keyup.enter="doCheckin" @keyup.space.prevent="doCheckin">{{ submitting ? "打卡中..." : "完成今日打卡" }}</view>
       <view v-else class="button block button-lg disabled done-button">已完成</view>
       <view class="checkin-stats">
         <view class="checkin-stat">
@@ -58,6 +50,8 @@ import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { formatShanghaiChineseDate, formatShanghaiChineseMonth, shanghaiDateString } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 const checkedIn = ref(false);
 const loading = ref(true);
 const submitting = ref(false);

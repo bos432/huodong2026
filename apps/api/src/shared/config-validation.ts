@@ -210,13 +210,18 @@ function addStorageProviderCheck(checks: RuntimeConfigCheck[], config: ConfigSer
     return;
   }
   const supported = ["aliyun-oss", "tencent-cos", "s3"].includes(provider);
-  const required = ["STORAGE_ENDPOINT", "STORAGE_BUCKET", "STORAGE_ACCESS_KEY_ID", "STORAGE_ACCESS_KEY_SECRET", "STORAGE_PUBLIC_BASE_URL"];
+  const required = ["STORAGE_ENDPOINT", "STORAGE_BUCKET", "STORAGE_ACCESS_KEY_ID", "STORAGE_ACCESS_KEY_SECRET"];
   const missing = required.filter((key) => !config.get<string>(key, "").trim());
   const publicBase = config.get<string>("STORAGE_PUBLIC_BASE_URL", "");
   const insecure = Boolean(publicBase) && !publicBase.startsWith("https://");
   const status: RuntimeConfigCheckStatus = supported && !missing.length && (!strict || !insecure) ? "ok" : strict ? "error" : "warning";
   const issues = [...(!supported ? ["不支持的存储服务商"] : []), ...(missing.length ? [`缺少 ${missing.join("、")}`] : []), ...(insecure ? ["文件公开域名应使用 HTTPS"] : [])];
-  addCheck(checks, "STORAGE_PROVIDER", "对象存储", status, issues.length ? issues.join("；") : "对象存储基础参数已配置，可继续执行上传/读取连通测试。", provider);
+  const message = issues.length
+    ? issues.join("；")
+    : publicBase
+      ? "对象存储基础参数和文件域名已配置，可继续执行上传/读取连通测试。"
+      : "对象存储基础参数已配置；未设置独立文件域名，将通过 API /uploads 代理访问私有对象。";
+  addCheck(checks, "STORAGE_PROVIDER", "对象存储", status, message, provider);
 }
 
 function addPaymentSecretCheck(checks: RuntimeConfigCheck[], key: string, label: string, value: string, strict: boolean) {

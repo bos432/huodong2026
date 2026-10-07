@@ -25,6 +25,8 @@ const fundAlertError = ref("");
 const fundAlertScanning = ref(false);
 const handlingAlertId = ref<number | null>(null);
 const alertFilters = reactive({ status: "open", type: "" });
+let financeRequestId = 0;
+let fundAlertRequestId = 0;
 function routeTenantId() {
   const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
   return isPlatformAdmin() && tenantId && Number.isFinite(tenantId) ? tenantId : undefined;
@@ -94,17 +96,24 @@ const callbackStatusType: Record<string, string> = {
 };
 
 async function load() {
+  const requestId = ++financeRequestId;
+  const snapshot = financeScopeSnapshot();
   loading.value = true;
   errorMessage.value = "";
+  data.value = undefined;
+  fundAlerts.value = [];
   try {
-    data.value = await api.get("/admin/finance/dashboard", { params: queryParams() });
+    const nextData = await api.get("/admin/finance/dashboard", { params: queryParams() });
+    if (requestId !== financeRequestId || snapshot !== financeScopeSnapshot()) return;
+    data.value = nextData;
   } catch (error: any) {
+    if (requestId !== financeRequestId || snapshot !== financeScopeSnapshot()) return;
     errorMessage.value = error.message || "加载财务数据失败";
     ElMessage.error(errorMessage.value);
   } finally {
-    loading.value = false;
+    if (requestId === financeRequestId) loading.value = false;
   }
-  await loadFundAlerts();
+  if (requestId === financeRequestId && snapshot === financeScopeSnapshot()) await loadFundAlerts();
 }
 
 async function loadAgents() {
@@ -120,6 +129,14 @@ function queryParams() {
     agentId: filters.agentId || undefined,
     tenantId: isPlatformAdmin() ? filters.tenantId || undefined : undefined
   };
+}
+
+function financeScopeSnapshot() {
+  return JSON.stringify({ tenantId: filters.tenantId || null, agentId: filters.agentId || null });
+}
+
+function assertFinanceScope(snapshot: string) {
+  if (snapshot !== financeScopeSnapshot()) throw new Error("商家范围已变化，请重新加载后再操作");
 }
 
 function search() {
@@ -151,6 +168,7 @@ async function exportFinance() {
 
 async function approveRefund(row: any) {
   if (reviewingId.value !== null) return;
+  const snapshot = financeScopeSnapshot();
   reviewingId.value = row.id;
   try {
     const { value } = await ElMessageBox.prompt(`确认通过退款 ${row.refundNo}？真实支付订单会先发起服务商退款，查询成功后才更新订单、报名和积分状态。金额 ¥${money(row.amount)}。`, "通过退款申请", {
@@ -159,7 +177,9 @@ async function approveRefund(row: any) {
       cancelButtonText: "再核对一下",
       type: "warning"
     });
+    assertFinanceScope(snapshot);
     await api.post(`/admin/refunds/${row.id}/approve`, { remark: String(value || "").trim() || "财务审核通过" });
+    assertFinanceScope(snapshot);
     ElMessage.success("退款审核已提交");
     await load();
   } catch (error: any) {
@@ -171,6 +191,7 @@ async function approveRefund(row: any) {
 
 async function rejectRefund(row: any) {
   if (reviewingId.value !== null) return;
+  const snapshot = financeScopeSnapshot();
   reviewingId.value = row.id;
   try {
     const { value } = await ElMessageBox.prompt(`确认拒绝退款 ${row.refundNo}？请填写可对外解释的原因，便于客服沟通。`, "拒绝退款申请", {
@@ -179,7 +200,9 @@ async function rejectRefund(row: any) {
       cancelButtonText: "取消",
       inputValidator: (input) => Boolean(input?.trim()) || "请填写拒绝原因"
     });
+    assertFinanceScope(snapshot);
     await api.post(`/admin/refunds/${row.id}/reject`, { remark: String(value).trim() });
+    assertFinanceScope(snapshot);
     ElMessage.success("退款申请已拒绝");
     await load();
   } catch (error: any) {
@@ -190,10 +213,17 @@ async function rejectRefund(row: any) {
 }
 
 async function loadFundAlerts() {
+  const requestId = ++fundAlertRequestId;
+  const snapshot = financeScopeSnapshot();
   fundAlertError.value = "";
+  fundAlerts.value = [];
   try {
-    fundAlerts.value = await api.get<any, any[]>("/admin/finance/risk-alerts", { params: { ...queryParams(), status: alertFilters.status || undefined, type: alertFilters.type || undefined } });
+    const rows = await api.get<any, any[]>("/admin/finance/risk-alerts", { params: { ...queryParams(), status: alertFilters.status || undefined, type: alertFilters.type || undefined } });
+    if (requestId !== fundAlertRequestId || snapshot !== financeScopeSnapshot()) return;
+    fundAlerts.value = Array.isArray(rows) ? rows : [];
   } catch (error: any) {
+    if (requestId !== fundAlertRequestId || snapshot !== financeScopeSnapshot()) return;
+    fundAlerts.value = [];
     fundAlertError.value = error.message || "资金异常告警加载失败";
     ElMessage.error(fundAlertError.value);
   }
@@ -228,6 +258,7 @@ async function handleFundAlert(row: any, action: "acknowledged" | "resolved" | "
 
 async function retryRefund(row: any) {
   if (reviewingId.value !== null) return;
+  const snapshot = financeScopeSnapshot();
   reviewingId.value = row.id;
   try {
     const { value } = await ElMessageBox.prompt(`将使用原退款单号 ${row.refundNo} 重新提交渠道，请先确认渠道后台没有重复退款。`, "重试失败退款", {
@@ -236,7 +267,9 @@ async function retryRefund(row: any) {
       cancelButtonText: "取消",
       type: "warning"
     });
+    assertFinanceScope(snapshot);
     await api.post(`/admin/refunds/${row.id}/retry`, { remark: String(value || "").trim() || "财务确认后重试" });
+    assertFinanceScope(snapshot);
     ElMessage.success("退款重试已提交");
     await load();
   } catch (error: any) {
@@ -439,6 +472,11 @@ watch(
     if (filters.tenantId !== nextTenantId) {
       filters.tenantId = nextTenantId;
       filters.agentId = undefined;
+      financeRequestId += 1;
+      fundAlertRequestId += 1;
+      data.value = undefined;
+      fundAlerts.value = [];
+      reviewingId.value = null;
       load();
       loadAgents();
     }
@@ -447,7 +485,7 @@ watch(
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" :aria-busy="loading">
     <div class="toolbar">
       <h2>{{ pageTitle }}</h2>
       <div class="toolbar-actions">
@@ -463,6 +501,9 @@ watch(
 
     <el-alert class="page-hint" type="warning" :closable="false" show-icon :title="pageHintTitle" :description="pageHintDescription" />
     <el-alert v-if="errorMessage" class="page-error" type="error" :closable="false" show-icon :title="errorMessage"><template #default><el-button size="small" @click="load">重试</el-button></template></el-alert>
+    <div v-if="loading && !data" class="page-loading" role="status" aria-live="polite">
+      正在加载财务数据，请稍候…
+    </div>
 
     <template v-if="data">
       <div class="table-card filter-card">
@@ -705,7 +746,7 @@ watch(
       </div>
     </template>
 
-    <el-empty v-else-if="!loading" description="暂无财务数据" />
+     <el-empty v-else-if="!loading && !errorMessage" description="暂无财务数据" />
   </div>
 </template>
 
@@ -715,6 +756,7 @@ watch(
 .toolbar-actions { display: flex; flex: 1; min-width: 0; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 :deep(.toolbar-actions .el-button + .el-button) { margin-left: 0; }
 .page-hint { margin-bottom: 16px; }
+.page-loading { display: flex; align-items: center; justify-content: center; min-height: 180px; margin: 12px 0; border: 1px dashed #cbd5e1; border-radius: 8px; color: #475467; background: #f8fafc; }
 .filter-card { margin-bottom: 16px; padding-bottom: 0; }
 .operation-grid { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(360px, 0.8fr); gap: 16px; margin-bottom: 18px; }
 .daily-card, .risk-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; padding: 18px; min-width: 0; }

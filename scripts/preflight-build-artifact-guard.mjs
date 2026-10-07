@@ -38,6 +38,7 @@ check(rootPackage.scripts?.["build:shared"] === "npm --prefix packages/shared ru
 check(rootPackage.scripts?.["build:api"] === "npm --prefix apps/api run build", "package.json must expose build:api.");
 check(rootPackage.scripts?.["build:admin"] === "npm --prefix apps/admin run build", "package.json must expose build:admin.");
 check(rootPackage.scripts?.["build:mobile:h5"] === "node scripts/build-mobile-h5.mjs", "package.json must expose the Node-compatible build:mobile:h5 adapter.");
+check(rootPackage.scripts?.["verify:mp-weixin-artifact"] === "node scripts/verify-mp-weixin-artifact.mjs", "package.json must expose the mp-weixin artifact browser dependency verifier.");
 check(rootPackage.scripts?.["verify:delivery-package"] === "node scripts/verify-delivery-package.mjs", "package.json must expose verify:delivery-package.");
 check(rootPackage.scripts?.["verify:delivery-source"] === "node scripts/verify-delivery-source.mjs", "package.json must expose verify:delivery-source.");
 checkSourceIncludes(deliveryPackageVerifier, '"build/api/"', "delivery package verifier");
@@ -73,6 +74,7 @@ checkSourceIncludes(mobileH5Build, 'path.join(root, ".local-tools", "node22")', 
 checkSourceIncludes(mobileH5Build, '"build", "-p", "h5"', "mobile H5 build adapter");
 checkSourceIncludes(mobileH5Build, "clean-mobile-h5-dist.mjs", "mobile H5 build adapter");
 checkSourceIncludes(mobileH5Build, "write-static-version.mjs", "mobile H5 build adapter");
+checkSourceIncludes(read("scripts/verify-mp-weixin-artifact.mjs"), "browser-only token leaked into mp-weixin artifact", "mp-weixin artifact verifier");
 checkSourceIncludes(adminFeatureGates, 'adCenter: "ads"', "admin entitlement feature gate");
 checkSourceIncludes(adminFeatureGates, 'agentSettlement: "agentSettlement"', "admin entitlement feature gate");
 checkSourceIncludes(adminFeatureGates, "currentTenantEntitlements", "admin entitlement feature gate");

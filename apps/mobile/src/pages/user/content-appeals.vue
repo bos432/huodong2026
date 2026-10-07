@@ -1,28 +1,25 @@
 <template>
   <view class="container appeal-page">
     <view class="custom-nav">
-      <view class="nav-back" role="button" aria-label="返回" @click="goBack">返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
       <text class="nav-title">内容申诉</text>
-      <view class="nav-action" role="button" aria-label="刷新内容申诉" @click="load">刷新</view>
+      <view class="nav-action" role="button" tabindex="0" aria-label="刷新内容申诉" @click="load" @keyup.enter="load" @keyup.space.prevent="load">刷新</view>
     </view>
 
-    <view v-if="loading" class="card state-card" aria-live="polite">处罚和申诉记录加载中...</view>
-    <view v-else-if="loadError" class="card state-card error-card" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <view class="button secondary" role="button" aria-label="重新加载申诉记录" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载申诉记录" description="请稍候，正在同步你的处罚和申诉状态。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="load" />
 
     <template v-else>
-      <view v-if="actionError" class="card error-card" aria-live="assertive">{{ actionError }}</view>
+      <view v-if="actionError" class="card error-card" role="alert" aria-live="assertive">{{ actionError }}</view>
 
       <view class="section-title">处罚记录</view>
       <view v-for="item in sanctions" :key="item.id" class="card">
         <view class="row"><text class="title">{{ sanctionTitle(item) }}</text><text class="status" :class="item.status">{{ sanctionStatus(item.status) }}</text></view>
         <text class="content">{{ item.reason }}</text>
         <text class="meta">{{ scopeText(item.scope) }} · {{ item.endsAt ? `至 ${formatTime(item.endsAt)}` : "长期" }}</text>
-        <view v-if="item.status === 'active'" class="button sm secondary" role="button" :aria-label="`申诉处罚${item.id}`" @click="selectSanction(item)">申诉该处罚</view>
+        <view v-if="item.status === 'active'" class="button sm secondary" role="button" tabindex="0" :aria-label="`申诉处罚${item.id}`" @click="selectSanction(item)" @keyup.enter="selectSanction(item)" @keyup.space.prevent="selectSanction(item)">申诉该处罚</view>
       </view>
-      <view v-if="!sanctions.length" class="card empty">暂无处罚记录</view>
+      <EmptyState v-if="!sanctions.length" variant="default" title="暂无处罚记录" description="当前没有需要处理的社区或论坛处罚。" compact />
 
       <view class="section-title">提交申诉</view>
       <view class="card form-card">
@@ -30,7 +27,7 @@
         <text class="selected">{{ selectedSanction ? `#${selectedSanction.id} ${sanctionTitle(selectedSanction)}` : "未选择，可提交普通内容申诉" }}</text>
         <textarea v-model="reason" class="textarea" maxlength="2000" cursor-spacing="24" aria-label="申诉说明" placeholder="请说明情况、理由和希望的处理结果" />
         <text class="counter">{{ reason.length }}/2000</text>
-        <view class="button block" :class="{ disabled: !canSubmit }" role="button" :aria-label="submitting ? '正在提交申诉' : '提交申诉'" @click="submitAppeal">{{ submitting ? "提交中..." : "提交申诉" }}</view>
+        <view class="button block" :class="{ disabled: !canSubmit }" role="button" tabindex="0" :aria-disabled="!canSubmit" :aria-label="submitting ? '正在提交申诉' : '提交申诉'" @click="submitAppeal" @keyup.enter="submitAppeal" @keyup.space.prevent="submitAppeal">{{ submitting ? "提交中..." : "提交申诉" }}</view>
       </view>
 
       <view class="section-title">申诉进度</view>
@@ -40,7 +37,7 @@
         <text v-if="item.handleRemark" class="result">处理说明：{{ item.handleRemark }}</text>
         <text class="meta">{{ formatTime(item.createdAt) }}</text>
       </view>
-      <view v-if="!appeals.length" class="card empty">暂无申诉记录</view>
+      <EmptyState v-if="!appeals.length" variant="default" title="暂无申诉记录" description="提交申诉后，处理进度会显示在这里。" compact />
     </template>
   </view>
 </template>
@@ -53,10 +50,13 @@ import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
+import type { PublicContentAppealRecord, PublicContentAppealSubmissionResult, PublicContentSanctionRecord } from "@activity/shared";
 
-const sanctions = ref<any[]>([]);
-const appeals = ref<any[]>([]);
-const selectedSanction = ref<any>(null);
+const sanctions = ref<PublicContentSanctionRecord[]>([]);
+const appeals = ref<PublicContentAppealRecord[]>([]);
+const selectedSanction = ref<PublicContentSanctionRecord | null>(null);
 const reason = ref("");
 const loading = ref(false);
 const loadError = ref("");
@@ -81,8 +81,8 @@ async function load() {
   try {
     await ensureUser();
     const [sanctionRows, appealRows] = await Promise.all([
-      request<any[]>("/public/me/content/sanctions"),
-      request<any[]>("/public/me/content/appeals")
+      request<PublicContentSanctionRecord[]>("/public/me/content/sanctions"),
+      request<PublicContentAppealRecord[]>("/public/me/content/appeals")
     ]);
     if (!loadGuard.isCurrent(token)) return;
     sanctions.value = Array.isArray(sanctionRows) ? sanctionRows : [];
@@ -94,7 +94,7 @@ async function load() {
   }
 }
 
-function selectSanction(item: any) {
+function selectSanction(item: PublicContentSanctionRecord) {
   if (submitting.value) return;
   selectedSanction.value = item;
   appealKey.value = "";
@@ -114,7 +114,7 @@ async function submitAppeal() {
   submitting.value = true;
   actionError.value = "";
   try {
-    const result = await request<any>("/public/me/content/appeals", {
+    const result = await request<PublicContentAppealSubmissionResult>("/public/me/content/appeals", {
       method: "POST",
       header: { "x-idempotency-key": key },
       data: { sanctionId, reason: reason.value.trim() }
@@ -132,7 +132,7 @@ async function submitAppeal() {
   }
 }
 
-function sanctionTitle(item: any) { return `${item.type === "ban" ? "禁用" : "禁言"}·${scopeText(item.scope)}`; }
+function sanctionTitle(item: PublicContentSanctionRecord) { return `${item.type === "ban" ? "禁用" : "禁言"}·${scopeText(item.scope)}`; }
 function sanctionStatus(value: string) { return value === "active" ? "生效中" : value === "revoked" ? "已解除" : "已到期"; }
 function appealStatus(value: string) { return value === "approved" ? "已通过" : value === "rejected" ? "已驳回" : "待处理"; }
 function scopeText(value: string) { return value === "community" ? "社区" : value === "forum" ? "论坛" : "全部"; }

@@ -70,6 +70,7 @@ function queryTenantCode(search?: string) {
 }
 
 function locationTenantCode() {
+  // #ifdef H5
   if (typeof window === "undefined") return "";
   const direct = queryTenantCode(window.location.search);
   if (direct) return direct;
@@ -77,6 +78,8 @@ function locationTenantCode() {
   const queryStart = hash.indexOf("?");
   if (queryStart < 0) return "";
   return queryTenantCode(hash.slice(queryStart + 1));
+  // #endif
+  return "";
 }
 
 function pageTenantCode() {

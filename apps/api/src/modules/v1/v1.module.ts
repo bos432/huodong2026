@@ -40,11 +40,13 @@ import { PublicV1Controller } from "./v1-public.controller";
 import { V1Service } from "./v1.service";
 import { PublicModule } from "../public/public.module";
 import { MemberPointsModule } from "../member-points/member-points.module";
+import { NotificationService } from "../notification/notification.service";
+import { ActivityService } from "../activity/activity.service";
 
 @Module({
   imports: [PublicModule, MemberPointsModule, TypeOrmModule.forFeature([Activity, ActivityChannel, ActivityHost, ActivitySection, ActivityReview, ActivitySpaceAnnouncement, ActivitySpacePost, ActivitySpacePostReport, ActivityRecapVersion, ActivityViewLog, AdminUser, Announcement, Tenant, TenantFollower, Registration, Order, Refund, TicketType, OperationSetting, CheckIn, User, UserTag, InviteCode, ShareVisit, ConversionEvent, MemberLevel, MemberProfile, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, NotificationPreference, WechatSubscriptionGrant])],
   controllers: [AdminV1Controller, PublicV1Controller],
-  providers: [V1Service, NotificationProviderService],
+  providers: [V1Service, ActivityService, NotificationService, NotificationProviderService],
   exports: [V1Service]
 })
 export class V1Module {}

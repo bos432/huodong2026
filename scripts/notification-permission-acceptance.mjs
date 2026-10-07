@@ -162,6 +162,12 @@ const failed = await api("/admin/notifications/send", {
   body: JSON.stringify({ userId: retryUser.id, channel: "site", title: `[fail] 并发重试-${runId}`, content: "该通知用于并发失败重试验收" })
 });
 assert(failed.status === "failed", "强制失败通知未进入 failed 状态");
+const beforeRetryRead = await api("/admin/notifications?page=1&pageSize=100", { headers: auth(readAdmin.token) });
+const beforeRetrySensitive = await api("/admin/notifications?page=1&pageSize=100", { headers: auth(sensitiveAdmin.token) });
+const beforeRetryReadRow = beforeRetryRead.items.find((item) => item.id === failed.id);
+const beforeRetrySensitiveRow = beforeRetrySensitive.items.find((item) => item.id === failed.id);
+assert(beforeRetryReadRow?.errorMessage === null && beforeRetryReadRow?.providerMessageId === null, "只读失败通知在重试前泄露错误详情");
+assert(beforeRetrySensitiveRow?.errorMessage?.includes("forced failure"), "敏感账号未获得失败错误详情");
 const retryRace = await Promise.all([
   request(`/admin/notifications/${failed.id}/retry`, manageAdmin.token, "POST"),
   request(`/admin/notifications/${failed.id}/retry`, manageAdmin.token, "POST")
@@ -169,12 +175,13 @@ const retryRace = await Promise.all([
 assert(retryRace.filter((item) => item.status === 201).length === 1, `并发重试应仅受理一次：${retryRace.map((item) => item.status).join("/")}`);
 assert(retryRace.filter((item) => item.status === 400).length === 1, `并发重试应拒绝一次重复请求：${retryRace.map((item) => item.status).join("/")}`);
 
-const failedReadList = await api("/admin/notifications?status=failed&page=1&pageSize=100", { headers: auth(readAdmin.token) });
+// 重试成功后状态会从 failed 变为 sent，按 ID 在全量分页结果中校验同一条记录的脱敏边界。
+const failedReadList = await api("/admin/notifications?page=1&pageSize=100", { headers: auth(readAdmin.token) });
 const failedRead = failedReadList.items.find((item) => item.id === failed.id);
 assert(failedRead && failedRead.errorMessage === null && failedRead.providerMessageId === null, "只读失败通知泄露错误详情");
-const failedSensitiveList = await api("/admin/notifications?status=failed&page=1&pageSize=100", { headers: auth(sensitiveAdmin.token) });
+const failedSensitiveList = await api("/admin/notifications?page=1&pageSize=100", { headers: auth(sensitiveAdmin.token) });
 const failedSensitive = failedSensitiveList.items.find((item) => item.id === failed.id);
-assert(failedSensitive?.errorMessage?.includes("forced failure"), "敏感账号未获得失败错误详情");
+assert(failedSensitive && (failedSensitive.status === "sent" || failedSensitive.errorMessage === null), "重试后的通知状态不一致");
 
 const crossUser = await createTenantMember(uniquePhone(4), `跨商家通知会员-${runId}`, crossAdmin.token);
 const crossOptions = await api("/admin/notifications/options", { headers: auth(crossAdmin.token) });

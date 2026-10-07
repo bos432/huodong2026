@@ -100,6 +100,7 @@ import { cumulativePointClawbackTarget } from "../../shared/member-point-ledger"
 import { V1Service } from "../v1/v1.service";
 import { MemberPointsService } from "../member-points/member-points.service";
 import { BusinessJobService } from "../reliability/business-job.service";
+import { externalWorkerOwnsSchedules } from "../../worker-config";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -235,9 +236,11 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     private readonly memberPoints: MemberPointsService,
     private readonly businessJobs: BusinessJobService
   ) {
-    this.pendingOrderWorker = this.startPendingOrderWorker();
-    this.merchantGovernanceWorker = this.startMerchantGovernanceWorker();
-    this.inventoryGovernanceWorker = this.startInventoryGovernanceWorker();
+    if (!externalWorkerOwnsSchedules({ BUSINESS_JOB_WORKER_MODE: this.config.get("BUSINESS_JOB_WORKER_MODE", "embedded"), APP_PROCESS_ROLE: this.config.get("APP_PROCESS_ROLE", "api") })) {
+      this.pendingOrderWorker = this.startPendingOrderWorker();
+      this.merchantGovernanceWorker = this.startMerchantGovernanceWorker();
+      this.inventoryGovernanceWorker = this.startInventoryGovernanceWorker();
+    }
   }
 
   onModuleInit() {
@@ -4290,7 +4293,7 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
     this.assertPlatformMallSettlementAdmin(admin);
     const paidReference = this.optionalString(dto.paidReference);
     const paidProofUrl = this.optionalString(dto.paidProofUrl);
-    const businessKey = this.normalizeSettlementBusinessKey(dto.businessKey, `paid:${id}`);
+    const businessKey = this.normalizeSettlementBusinessKey(dto.businessKey, `paid:${id}:default`);
     const saved = await this.dataSource.transaction(async (manager) => {
       const repo = manager.getRepository(MallSettlement);
       const settlement = await repo.findOne({ where: { id }, lock: { mode: "pessimistic_write" } });
@@ -8083,7 +8086,19 @@ export class MallService implements OnModuleInit, OnModuleDestroy {
         payableAmount: fenToYuan(amounts.payableFen),
         lineCount: lines.length,
         calculationVersion: "settlement_v2",
-        snapshot: { orderIds: orders.map((order) => order.id), refundIds: refunds.map((refund) => refund.id), commissionIds: commissions.map((commission) => commission.id), commissionAdjustmentIds: clawbackAdjustments.map((adjustment) => adjustment.id), serviceFeeBps, paymentMode: merchant.paymentMode, merchantDirectCollectionOrderAmount: fenToYuan(merchantDirectOrderFen), merchantDirectCollectionRefundAmount: fenToYuan(merchantDirectRefundFen), settlementConfig: this.mallSettlementPublicConfig(merchant.settlementConfig) }
+        snapshot: {
+          orderIds: orders.map((order) => order.id),
+          refundIds: refunds.map((refund) => refund.id),
+          commissionIds: commissions.map((commission) => commission.id),
+          commissionAdjustmentIds: clawbackAdjustments.map((adjustment) => adjustment.id),
+          serviceFeeBps,
+          paymentMode: merchant.paymentMode,
+          merchantDirectCollectionOrderAmount: fenToYuan(merchantDirectOrderFen),
+          merchantDirectCollectionRefundAmount: fenToYuan(merchantDirectRefundFen),
+          platformCollectedNetAmount: fenToYuan(amounts.platformCollectedFen),
+          merchantDirectNetAmount: fenToYuan(amounts.merchantDirectFen),
+          settlementConfig: this.mallSettlementPublicConfig(merchant.settlementConfig)
+        }
       },
       lines
     };

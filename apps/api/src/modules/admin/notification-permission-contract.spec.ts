@@ -9,6 +9,7 @@ describe("notification center permission and privacy contract", () => {
   const permissions = read("apps/api/src/modules/admin/admin-permissions.ts");
   const controller = read("apps/api/src/modules/v1/v1-admin.controller.ts");
   const service = read("apps/api/src/modules/v1/v1.service.ts");
+  const mapper = read("apps/api/src/modules/notification/public-notification.mapper.ts");
   const page = read("apps/admin/src/views/Notifications.vue");
   const router = read("apps/admin/src/router.ts");
   const menu = read("apps/admin/src/navigation/admin-menu.ts");
@@ -31,7 +32,7 @@ describe("notification center permission and privacy contract", () => {
   it("uses dedicated options, pagination, and activity/member data scope", () => {
     expect(controller).toContain('@Get("notifications/options")');
     expect(controller).toContain('@Query("page") page?: string');
-    expect(page).toContain('api.get<any, { activities: any[]; tags: any[] }>("/admin/notifications/options", tenantScopeOptions())');
+    expect(page).toContain('api.get<unknown, AdminNotificationOptions>("/admin/notifications/options", tenantScopeOptions())');
     expect(page).not.toContain('"/admin/activities"');
     expect(page).not.toContain('"/admin/tags"');
     expect(service).toContain('this.notificationPagination(query.page, query.pageSize)');
@@ -56,11 +57,11 @@ describe("notification center permission and privacy contract", () => {
     expect(service).toContain('row.tenant = row.tenant || tenantRelationForActor<Tenant>(admin)');
     expect(service).toContain('if (!input.userId) throw new BadRequestException("发送单条通知必须选择目标会员")');
     expect(service).toContain('phone: includeSensitive ? user.phone : maskPhone(user.phone)');
-    expect(service).toContain('providerMessageId: includeSensitive ? row.providerMessageId : null');
-    expect(service).toContain('errorMessage: includeSensitive ? row.errorMessage : null');
+    expect(mapper).toContain('providerMessageId: includeSensitive ? row.providerMessageId : null');
+    expect(mapper).toContain('errorMessage: includeSensitive ? row.errorMessage : null');
     expect(service).toContain('result.checkInCode = `${result.checkInCode.slice(0, 2)}****${result.checkInCode.slice(-2)}`');
     expect(service).toContain('result = result.replace(/(^|\\D)(1\\d{10})(?!\\d)/g');
-    expect(service).toContain('sensitiveMasked: !includeSensitive');
+    expect(mapper).toContain('sensitiveMasked: !includeSensitive');
     expect(page).toContain('maskPhone(phone)');
   });
 
@@ -72,6 +73,11 @@ describe("notification center permission and privacy contract", () => {
     expect(service).toContain('tenantId: saved.tenant?.id || saved.activity?.tenant?.id || null');
     expect(service).toContain('notificationTenantId !== Number(job.tenantId || 0)');
     expect(service).toContain('idempotencyKey: `notification:${saved.id}`');
+    const retryStart = service.indexOf("async retryNotification");
+    const retryEnd = service.indexOf("async listNotificationSchedules", retryStart);
+    const retryBlock = service.slice(retryStart, retryEnd);
+    expect(retryBlock).not.toContain("notification.retryCount += 1;");
+    expect(service.slice(service.indexOf('this.businessJobs.register("notification.deliver"'), retryStart)).toContain("notification.retryCount += 1;");
   });
 
   it("audits all notification maintenance and delivery operations", () => {
@@ -83,5 +89,25 @@ describe("notification center permission and privacy contract", () => {
     expect(service).toContain('"notification.retry"');
     expect(service).toContain('"notification_schedule.create"');
     expect(service).toContain('"notification_schedule.run_due"');
+  });
+
+  it("does not show notification empty states before the shared load finishes", () => {
+    expect(page).toContain('v-if="!loading && !templates.length"');
+    expect(page).toContain('v-if="!loading && !schedules.length"');
+    expect(page).toContain('v-if="!loading && !notifications.length"');
+  });
+
+  it("exposes a page-level loading state before notification data exists", () => {
+    expect(page).toContain('<div class="page" :aria-busy="loading">');
+    expect(page).toContain('v-if="loading && !monitor && !templates.length && !notifications.length"');
+    expect(page).toContain('role="status" aria-live="polite"');
+  });
+
+  it("rechecks tenant scope around destructive notification actions", () => {
+    expect(page).toContain("function notificationScopeSnapshot()");
+    expect(page).toContain("function assertNotificationScope");
+    expect(page).toContain("assertNotificationScope(scopeAtActionStart)");
+    expect(page).toContain("assertNotificationScope(scopeAtConfirm)");
+    expect(page).toContain("loadSerial += 1;");
   });
 });

@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import type { HomepageSectionView } from "@activity/shared";
 import { goDecoratedLink, quickInitial } from "../decoration";
+import { formatShanghaiDateTime } from "../tenant-load-guard";
 import MarketingPopup from "./MarketingPopup.vue";
 import SplashAd from "./SplashAd.vue";
 
@@ -116,7 +117,7 @@ function quickNavStyle(section: HomepageSectionView) {
     "--primary-color": String(layout.primaryColor || "var(--primary-color, #0f766e)"),
     "--decor-accent-color": String(layout.accentColor || "var(--primary-color, #c43d3d)"),
     "--text-color": String(layout.textColor || "var(--text-color, #111827)"),
-    "--decor-item-background": String(layout.itemBackgroundColor || "linear-gradient(180deg, #fff 0%, #fffbf5 100%)"),
+    "--decor-item-background": String(layout.itemBackgroundColor || "#ffffff"),
     "--decor-card-gap": `${Number(layout.cardGap ?? 14)}rpx`
   };
 }
@@ -171,23 +172,17 @@ function priceText(price: string | number) {
 }
 
 function formatTime(value: string) {
-  if (!value) return "-";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  const month = String(date.getMonth() + 1).padStart(2, "0");
-  const day = String(date.getDate()).padStart(2, "0");
-  const hour = String(date.getHours()).padStart(2, "0");
-  const minute = String(date.getMinutes()).padStart(2, "0");
-  return `${month}-${day} ${hour}:${minute}`;
+  return formatShanghaiDateTime(value);
 }
 
 function activityDateParts(value: string) {
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return { month: "日期", day: "待定", time: "时间待定" };
+  const formatted = formatShanghaiDateTime(value, "");
+  const match = /^(\d{4})-(\d{2})-(\d{2}) (\d{2}:\d{2})$/.exec(formatted);
+  if (!match) return { month: "日期", day: "待定", time: "时间待定" };
   return {
-    month: `${date.getMonth() + 1}月`,
-    day: String(date.getDate()).padStart(2, "0"),
-    time: `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`
+    month: `${Number(match[2])}月`,
+    day: match[3],
+    time: match[4]
   };
 }
 </script>
@@ -246,13 +241,13 @@ function activityDateParts(value: string) {
     <view v-else-if="section.type === 'category_grid' && categories(section).length" class="decor-card-block" :style="sectionStyle(section)">
       <view v-if="section.title" class="decor-section-title">{{ section.title }}</view>
       <view v-if="section.subtitle" class="decor-section-copy">{{ section.subtitle }}</view>
-      <scroll-view scroll-x class="decor-category-scroll" :show-scrollbar="false">
+      <view class="decor-category-scroll">
         <view class="decor-category-track">
           <view v-for="item in categories(section)" :key="item.id" class="decor-category" @click="goDecoratedLink(`/pages/activity/list?categoryId=${item.id}`)">
             {{ item.name }}
           </view>
         </view>
-      </scroll-view>
+      </view>
     </view>
 
     <view v-else-if="section.type === 'activity_tabs' && categories(section).length" class="decor-tabs">
@@ -352,13 +347,12 @@ function activityDateParts(value: string) {
 
 <style scoped>
 .decor-hero { position: relative; overflow: hidden; padding: 42rpx 32rpx; background: #0f766e; box-shadow: 0 22rpx 54rpx rgba(91, 47, 36, 0.18); }
-.decor-hero::after { content: ""; position: absolute; right: -70rpx; bottom: -90rpx; width: 260rpx; height: 260rpx; border-radius: 999px; background: rgba(255,255,255,0.12); }
 .decor-eyebrow { color: rgba(255,255,255,0.78); font-size: 23rpx; font-weight: 800; }
 .decor-title { margin-top: 10rpx; font-size: 40rpx; line-height: 1.22; font-weight: 900; }
 .decor-copy { margin-top: 12rpx; color: rgba(255,255,255,0.84); font-size: 25rpx; line-height: 1.55; }
 .decor-button { position: relative; z-index: 1; display: inline-flex; margin-top: 22rpx; padding: 14rpx 26rpx; border-radius: var(--decor-button-radius, 999px); background: rgba(255,255,255,0.92); color: var(--decor-accent-color, #5b2f24); font-size: 24rpx; font-weight: 900; box-shadow: 0 10rpx 26rpx rgba(91, 47, 36, 0.18); }
 .decor-quick-grid { display: grid; gap: var(--decor-card-gap, 14rpx); margin-bottom: 18rpx; }
-.decor-quick-item { min-height: 122rpx; display: grid; gap: 9rpx; justify-items: center; align-content: center; border-radius: 16px; background: var(--decor-item-background, linear-gradient(180deg, #fff 0%, #fffbf5 100%)); color: var(--text-color, #3f3428); font-size: 23rpx; font-weight: 800; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); border: 1px solid rgba(139, 90, 43, 0.08); }
+.decor-quick-item { min-height: 122rpx; display: grid; gap: 9rpx; justify-items: center; align-content: center; border-radius: 16px; background: var(--decor-item-background, #ffffff); color: var(--text-color, #3f3428); font-size: 23rpx; font-weight: 800; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); border: 1px solid rgba(139, 90, 43, 0.08); }
 .decor-quick-icon { width: 54rpx; height: 54rpx; display: flex; align-items: center; justify-content: center; border-radius: 999px; font-size: 24rpx; font-weight: 900; }
 .decor-banner, .decor-rich, .decor-notice, .decor-search { padding: 24rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); }
 .decor-banner { position: relative; overflow: hidden; box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.08); }
@@ -369,7 +363,7 @@ function activityDateParts(value: string) {
 .decor-focus-kicker { position: absolute; z-index: 2; top: 20rpx; left: 20rpx; padding: 8rpx 14rpx; border-radius: 8rpx; background: rgba(15, 118, 110, 0.92); color: #fff; font-size: 22rpx; font-weight: 900; }
 .decor-focus-image { width: 100%; height: 360rpx; display: block; background: #d8ebe5; }
 .decor-focus-fallback { display: flex; align-items: center; justify-content: center; color: #0f766e; font-size: 34rpx; font-weight: 900; }
-.decor-focus-mask { position: absolute; left: 0; right: 0; top: 0; height: 360rpx; background: linear-gradient(180deg, rgba(8, 37, 34, 0.04), rgba(8, 37, 34, 0.7)); }
+.decor-focus-mask { position: absolute; left: 0; right: 0; top: 0; height: 360rpx; background: rgba(8, 37, 34, 0.28); }
 .decor-focus-date-card { position: absolute; z-index: 2; right: 20rpx; top: 20rpx; width: 92rpx; min-height: 116rpx; display: grid; align-content: center; justify-items: center; padding: 10rpx; border-radius: 10px; background: rgba(255, 255, 255, 0.94); color: #0f766e; box-shadow: 0 8rpx 18rpx rgba(8, 37, 34, 0.16); }
 .decor-date-month,.decor-date-time { font-size: 18rpx; font-weight: 800; }
 .decor-date-day { margin: 2rpx 0; color: #173f3a; font-size: 42rpx; line-height: 1; font-weight: 900; }
@@ -386,12 +380,12 @@ function activityDateParts(value: string) {
 .decor-notice, .decor-search { display: grid; grid-template-columns: auto 1fr; gap: 14rpx; align-items: center; color: #344054; font-size: 25rpx; }
 .decor-notice-label, .decor-search-city { color: var(--primary-color, #0f766e); font-weight: 900; }
 .decor-card-block { padding: 26rpx; margin-bottom: 18rpx; border-radius: var(--card-radius, 8px); background: var(--card-bg, #fff); box-shadow: 0 14rpx 34rpx rgba(91, 47, 36, 0.07); }
-.decor-category-scroll { width: 100%; height: 68rpx; white-space: nowrap; }
+.decor-category-scroll { width: 100%; height: 68rpx; white-space: nowrap; overflow-x: auto; -webkit-overflow-scrolling: touch; }
 .decor-category-track, .decor-tabs { display: inline-flex; gap: 14rpx; padding-right: 24rpx; }
 .decor-tabs { width: 100%; overflow-x: auto; margin-bottom: 18rpx; }
 .decor-category, .decor-tab { flex: 0 0 auto; padding: 14rpx 24rpx; border-radius: 999px; background: var(--decor-chip-background, #fff7ec); color: var(--primary-color, #8b5a2b); font-size: 25rpx; font-weight: 800; border: 1px solid rgba(139, 90, 43, 0.12); }
 .decor-activity-list { display: grid; gap: var(--decor-card-gap, 16rpx); }
-.decor-activity { display: grid; grid-template-columns: 84rpx 148rpx 1fr; gap: 14rpx; min-height: 148rpx; padding: 12rpx; border-radius: 14px; background: var(--decor-item-background, linear-gradient(135deg, #fff 0%, #fffaf3 100%)); border: 1px solid rgba(15, 118, 110, 0.1); }
+.decor-activity { display: grid; grid-template-columns: 84rpx 148rpx 1fr; gap: 14rpx; min-height: 148rpx; padding: 12rpx; border-radius: 14px; background: var(--decor-item-background, #ffffff); border: 1px solid rgba(15, 118, 110, 0.1); }
 .decor-activity-date-card { display: grid; align-content: center; justify-items: center; color: var(--primary-color, #0f766e); }
 .decor-activity-date-card .decor-date-day { margin: 4rpx 0; color: var(--text-color, #173f3a); font-size: 38rpx; }
 .decor-activity-image, .decor-cover-fallback { width: 148rpx; height: 148rpx; border-radius: var(--decor-image-radius, 12px); }

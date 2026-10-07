@@ -6,7 +6,7 @@ export class CreateMallFavoritesAndBrowseHistories1781715600000 implements Migra
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable("mall_favorites"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_favorites (
+        CREATE TABLE IF NOT EXISTS mall_favorites (
           id INT NOT NULL AUTO_INCREMENT,
           tenantId INT NOT NULL,
           userId INT NOT NULL,
@@ -23,7 +23,7 @@ export class CreateMallFavoritesAndBrowseHistories1781715600000 implements Migra
     }
     if (!(await queryRunner.hasTable("mall_browse_histories"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_browse_histories (
+        CREATE TABLE IF NOT EXISTS mall_browse_histories (
           id INT NOT NULL AUTO_INCREMENT,
           tenantId INT NOT NULL,
           userId INT NOT NULL,

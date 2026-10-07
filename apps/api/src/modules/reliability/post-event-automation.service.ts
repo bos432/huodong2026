@@ -9,7 +9,11 @@ import { Notification } from "../../entities/notification.entity";
 import { OperationSetting } from "../../entities/operation-setting.entity";
 import { Registration } from "../../entities/registration.entity";
 import { ActivityStatus, RegistrationStatus } from "../../shared/domain";
+import { normalizeAutomaticSmsSettings } from "./automatic-sms.service";
+import { normalizeAutomaticWechatSettings } from "./automatic-wechat.service";
 import { BusinessJobService } from "./business-job.service";
+import { AutomaticNotificationService } from "./automatic-notification.service";
+import { externalWorkerOwnsSchedules } from "../../worker-config";
 
 export type PostEventAutomationSettings = {
   enabled: boolean;
@@ -66,11 +70,13 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
     @InjectRepository(Certificate) private readonly certificates: Repository<Certificate>,
     @InjectRepository(Notification) private readonly notifications: Repository<Notification>,
     private readonly jobs: BusinessJobService,
-    private readonly config: ConfigService
+    private readonly config: ConfigService,
+    private readonly automaticNotifications: AutomaticNotificationService
   ) {}
 
   onModuleInit() {
     this.jobs.register(JOB_TYPE, (payload) => this.deliver(payload));
+    if (externalWorkerOwnsSchedules({ BUSINESS_JOB_WORKER_MODE: this.config.get("BUSINESS_JOB_WORKER_MODE", "embedded"), APP_PROCESS_ROLE: this.config.get("APP_PROCESS_ROLE", "api") })) return;
     if (this.config.get("POST_EVENT_AUTOMATION_WORKER_ENABLED", "true") !== "true") return;
     const seconds = Math.max(300, Number(this.config.get("POST_EVENT_AUTOMATION_WORKER_INTERVAL_SECONDS", 900)));
     this.timer = setInterval(() => this.scan().catch((error) => this.logger.error("Post-event automation scan failed", error)), seconds * 1000);
@@ -127,6 +133,20 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
     return { queued };
   }
 
+  private shouldPublishExternal(setting: OperationSetting, scene: PostEventScene) {
+    const sms = normalizeAutomaticSmsSettings(setting.automaticSms);
+    const wechat = normalizeAutomaticWechatSettings(setting.automaticWechat);
+    return Boolean(
+      (setting.smsProviderEnabled && sms.enabled && sms[scene]) ||
+      (wechat.enabled && wechat[scene])
+    );
+  }
+
+  private async publishExternal(setting: OperationSetting, scene: PostEventScene, userId: number, tenantId: number | null, activityId: number | null, businessId: string, variables: Record<string, unknown> = {}) {
+    if (!this.shouldPublishExternal(setting, scene)) return;
+    await this.automaticNotifications.publish({ scene, userId, tenantId, activityId, businessId, variables });
+  }
+
   private async enqueue(scene: PostEventScene, userId: number, tenantId: number | null, activityId: number | null, businessId: string, variables: Record<string, unknown> = {}, runAt?: Date) {
     const existing = await this.notifications.findOne({ where: { tenantScopeKey: tenantId ? `tenant:${tenantId}` : "platform", remark: `post_event:${scene}:${businessId}` } });
     if (existing) return null;
@@ -145,7 +165,9 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
     const existing = await this.notifications.findOne({ where: { tenantScopeKey, remark } });
     if (existing) return { notificationId: existing.id, status: existing.status };
     const [setting, registrationActivity] = await Promise.all([
-      this.settings.findOne({ where: { id: tenantId || 1 } }),
+      tenantId
+        ? this.settings.findOne({ where: { tenant: { id: tenantId } } })
+        : this.settings.findOne({ where: { tenant: IsNull() } }),
       activityId ? this.activities.findOneBy({ id: activityId }) : Promise.resolve(null)
     ]);
     const automation = normalizePostEventAutomationSettings(setting?.postEventAutomation);
@@ -160,6 +182,9 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
       providerTemplateId: null, templateVersion: null, deliveryOptions: { page: message.page }, retryCount: 0,
       sentAt: new Date(), failedAt: null, user: { id: userId } as any, activity: registrationActivity, remark
     }));
+    if (setting) {
+      await this.publishExternal(setting, scene, userId, tenantId, activityId, businessId, payload.variables as Record<string, unknown> || {});
+    }
     return { notificationId: row.id, status: row.status };
   }
 

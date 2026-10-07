@@ -1,9 +1,8 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { testActivityBookingMessage } from '../../shared/activity-test-policy';
 import { InjectRepository } from "@nestjs/typeorm";
 import ExcelJS from "exceljs";
-import { EntityManager, In, Repository } from "typeorm";
+import { EntityManager, In, IsNull, Repository } from "typeorm";
 import { ActivityHost } from "../../entities/activity-host.entity";
 import { ActivityChannel } from "../../entities/activity-channel.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
@@ -55,6 +54,10 @@ import { adminCanAccessActivity, applyAdminActivityDataScope, normalizeAdminData
 import { yuanToFen } from "../../shared/money";
 import { isDuplicateEntryError } from "../../shared/database-errors";
 import { isWechatTemplateFieldKey } from "../../shared/wechat-template-field";
+import { NotificationService } from "../notification/notification.service";
+import { externalWorkerOwnsSchedules } from "../../worker-config";
+import { ActivityService } from "../activity/activity.service";
+import { buildPublicActivityGallery, toPublicAttendee } from "./public-activity-detail";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null; permissions?: string[]; dataScope?: Record<string, unknown>; clientIp?: string | null; userAgent?: string | null; requestId?: string | null };
 type PublicTenantContext = { tenantId?: number | null; tenantCode?: string | null; host?: string | null };
@@ -191,7 +194,9 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     private readonly notificationProvider: NotificationProviderService,
     private readonly config: ConfigService,
     private readonly businessJobs: BusinessJobService,
-    private readonly memberPoints: MemberPointsService
+    private readonly memberPoints: MemberPointsService,
+    private readonly notificationService: NotificationService,
+    private readonly activityService: ActivityService
   ) {}
 
   async onModuleInit() {
@@ -324,7 +329,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     if (tracking?.inviteCode) await this.trackShare(id, { code: tracking.inviteCode, userId, source: "detail", scene: "activity_detail" }, context);
 
     activity.fields = activity.fields.sort((a, b) => a.sortOrder - b.sortOrder);
-    const [hosts, sections, reviews, memberAccess, spaceSummary, organizerTrust, relatedActivities, seriesActivities] = await Promise.all([
+    const [hosts, sections, reviews, memberAccess, spaceSummary, organizerTrust, relatedActivities, seriesActivities, attendees] = await Promise.all([
       this.hosts.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.sections.find({ where: { activity: { id } }, order: { sortOrder: "ASC", id: "ASC" } }),
       this.activityReviews(id, context),
@@ -332,7 +337,8 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       this.activitySpaceSummary(activity, user?.id || null),
       this.organizerTrustSnapshot(activity, user?.id || null),
       this.relatedActivities(activity),
-      this.relatedActivities(activity, true)
+      this.relatedActivities(activity, true),
+      this.publicActivityAttendees(id)
     ]);
 
     const reviewSummary = {
@@ -342,11 +348,27 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     const myRegistration = userId ? await this.registrations.findOne({ where: { activity: { id }, user: { id: userId }, status: In([RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn]) }, select: { id: true, status: true }, loadEagerRelations: false, order: { id: 'DESC' } }) : null;
     const myWaitlist = userId && !myRegistration ? await this.registrations.manager.getRepository(Waitlist).findOne({ where: { activity: { id }, user: { id: userId }, status: WaitlistStatus.Waiting }, select: { id: true, status: true }, loadEagerRelations: false, order: { id: 'DESC' } }) : null;
     return {
-      ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), hosts: hosts.filter(host => !isLegacySeedHost(host)), sections, reviews,
+      ...this.publicActivity(activity), ...stats, displayStatus: this.displayStatus(activity, stats.remainingSeats), gallery: buildPublicActivityGallery({ coverUrl: activity.coverUrl, sections }), attendees, hosts: hosts.filter(host => !isLegacySeedHost(host)), sections, reviews,
       myBooking: { registration: myRegistration, waitlist: myWaitlist },
       reviewSummary, organizerTrust, relatedActivities, seriesActivities, refundInstructions: operationSetting?.refundInstructions || null,
       memberAccess, hasGroupQrCode: this.hasGroupQrCode(activity, operationSetting), space: spaceSummary
     };
+  }
+
+  private async publicActivityAttendees(activityId: number) {
+    const rows = await this.registrations.createQueryBuilder("registration")
+      .leftJoinAndSelect("registration.user", "user")
+      .where("registration.activityId = :activityId", { activityId })
+      .andWhere("registration.status IN (:...statuses)", { statuses: [RegistrationStatus.Approved, RegistrationStatus.CheckedIn] })
+      .orderBy("registration.createdAt", "ASC")
+      .take(12)
+      .getMany();
+    return rows.map((row) => toPublicAttendee({
+      id: row.user?.id || row.id,
+      nickname: this.publicUserDisplayName(row.user),
+      avatarUrl: row.user?.avatarUrl || null,
+      checkedIn: row.status === RegistrationStatus.CheckedIn
+    }));
   }
 
   async toggleOrganizerFollow(tenantId: number, user: User, context?: PublicTenantContext) {
@@ -473,7 +495,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       announcements: announcements.map((row) => this.publicSpaceAnnouncement(row)),
       participants: registrations.map((row) => ({ nickname: this.publicUserDisplayName(row.user), avatarUrl: row.user?.avatarUrl || null, checkedIn: row.status === RegistrationStatus.CheckedIn })),
       posts: posts.map((row) => this.publicSpacePost(row, user.id)),
-      checkIn: access.registration?.status === RegistrationStatus.Approved ? { available: true, registrationId: access.registration.id } : { available: false, registrationId: access.registration?.id || null }
+      checkIn: { available: access.registration?.status === RegistrationStatus.Approved, checkedIn: access.registration?.status === RegistrationStatus.CheckedIn, registrationId: access.registration?.id || null }
     };
   }
 
@@ -518,47 +540,10 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   private publicActivity(activity: Activity) {
-    return {
-      id: activity.id,
-      isTest: Boolean(activity.isTest),
-      bookingDisabledReason: testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV')),
-      title: activity.title,
-      tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region, organizerProfile: this.publicOrganizerProfile(activity.tenant) } : null,
-      coverUrl: activity.coverUrl,
-      shareTitle: activity.shareTitle,
-      shareDescription: activity.shareDescription,
-      shareImageUrl: activity.shareImageUrl,
-      description: activity.description,
-      notice: activity.notice,
-      location: activity.location,
-      locationProvince: activity.locationProvince,
-      locationCity: activity.locationCity,
-      locationDistrict: activity.locationDistrict,
-      locationLatitude: activity.locationLatitude,
-      locationLongitude: activity.locationLongitude,
-      locationMapUrl: activity.locationMapUrl,
-      startTime: activity.startTime,
-      endTime: activity.endTime,
-      registrationDeadline: activity.registrationDeadline,
-      capacity: activity.capacity,
-      price: activity.price,
-      status: activity.status,
-      cancelledAt: activity.cancelledAt,
-      cancellationReason: activity.cancellationReason,
-      featured: activity.featured,
-      requireReview: activity.requireReview,
-      allowCancel: activity.allowCancel,
-      category: activity.category ? { id: activity.category.id, name: activity.category.name, iconUrl: activity.category.iconUrl, coverUrl: activity.category.coverUrl } : null,
-      agent: activity.agent ? { id: activity.agent.id, name: activity.agent.name, region: activity.agent.region } : null,
-      minMemberLevel: this.publicMemberLevel(activity.minMemberLevel),
-      priorityMemberLevel: this.publicMemberLevel(activity.priorityMemberLevel),
-      priorityRegistrationEndsAt: activity.priorityRegistrationEndsAt,
-      fields: (activity.fields || []).map((field) => ({ id: field.id, label: field.label, type: field.type, required: field.required, options: field.options || [], sortOrder: field.sortOrder })),
-      formSchemaVersion: activity.formSchemaVersion,
-      eligibilityRules: this.publicEligibilityRules(activity.eligibilityRules),
-      createdAt: activity.createdAt,
-      updatedAt: activity.updatedAt
-    };
+    return this.activityService.toPublicSummary(activity, {
+      toTenant: (tenant) => tenant ? { id: tenant.id, code: tenant.code, name: tenant.name, region: tenant.region, organizerProfile: this.publicOrganizerProfile(tenant) } : null,
+      toMemberLevel: (level) => this.publicMemberLevel(level)
+    });
   }
 
   private publicOrganizerProfile(tenant: Tenant) {
@@ -576,21 +561,10 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     return { id: level.id, name: level.name, discountRate: level.discountRate, priorityBooking: level.priorityBooking, benefits: level.benefits || [] };
   }
 
-  private publicEligibilityRules(rules?: Activity["eligibilityRules"]) {
-    if (!rules) return null;
-    return {
-      minAge: rules.minAge,
-      maxAge: rules.maxAge,
-      allowedRegions: rules.allowedRegions || [],
-      maxRegistrationsPerUser: rules.maxRegistrationsPerUser,
-      requirePrivacyConsent: Boolean(rules.requirePrivacyConsent),
-      allowCompanions: Boolean(rules.allowCompanions),
-      maxCompanions: rules.maxCompanions
-    };
-  }
-
   private findOperationSetting(tenant?: Tenant | null) {
-    return this.operationSettings.findOneBy({ id: tenant?.id || 1 });
+    return tenant
+      ? this.operationSettings.findOne({ where: { tenant: { id: tenant.id } } })
+      : this.operationSettings.findOne({ where: { tenant: IsNull() } });
   }
 
   private hasGroupQrCode(activity: Activity, setting?: OperationSetting | null) {
@@ -650,6 +624,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
     await this.assertPublicRegistrationTenantAccess(registration, context);
     if (registration.user.id !== user.id) throw new BadRequestException("只能评价自己的报名");
     if (registration.status !== RegistrationStatus.CheckedIn) throw new BadRequestException("完成现场签到后才能评价");
+    if (!registration.activity?.endTime || new Date(registration.activity.endTime).getTime() > Date.now()) throw new BadRequestException("活动结束后才能评价");
     if (await this.reviews.findOne({ where: { registration: { id: registrationId } } })) {
       throw new BadRequestException("该报名已评价");
     }
@@ -1680,7 +1655,6 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       if (this.notificationRetryCoolingDown(notification)) throw new BadRequestException("通知刚完成重试，请稍后再试");
       previousError = notification.errorMessage;
       previousFailedAt = notification.failedAt;
-      notification.retryCount += 1;
       notification.status = "pending";
       notification.errorMessage = null;
       notification.failedAt = null;
@@ -2131,18 +2105,11 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   private notificationPublicPayload(row: Notification, includeSensitive = false) {
-    const variables = this.publicNotificationVariables(row.variablesSnapshot, includeSensitive);
-    return {
-      id: row.id, channel: row.channel, scene: row.scene, tenantScopeKey: row.tenantScopeKey,
-      title: this.sanitizeNotificationText(row.title, row.variablesSnapshot, variables, includeSensitive), content: this.sanitizeNotificationText(row.content, row.variablesSnapshot, variables, includeSensitive), status: row.status, provider: row.provider,
-      providerMessageId: includeSensitive ? row.providerMessageId : null, errorMessage: includeSensitive ? row.errorMessage : null,
-      providerTemplateId: row.providerTemplateId, templateVersion: row.templateVersion,
-      suppressedReason: row.suppressedReason, variablesSnapshot: variables,
-      retryCount: row.retryCount, sentAt: row.sentAt, failedAt: row.failedAt,
-      user: this.publicNotificationUser(row.user, includeSensitive),
-      activity: row.activity ? { id: row.activity.id, title: row.activity.title, status: row.activity.status, tenant: row.activity.tenant ? { id: row.activity.tenant.id, code: row.activity.tenant.code, name: row.activity.tenant.name } : null } : null,
-      remark: row.remark, sensitiveMasked: !includeSensitive, createdAt: row.createdAt
-    };
+    return this.notificationService.toPublicRecord(row, includeSensitive, {
+      toVariables: (variables, sensitive) => this.publicNotificationVariables(variables, sensitive),
+      sanitizeText: (text, original, safe, sensitive) => this.sanitizeNotificationText(text, original, safe, sensitive),
+      toUser: (user, sensitive) => this.publicNotificationUser(user, sensitive)
+    });
   }
 
   private logNotificationOperation(admin: AdminContext | undefined, action: string, targetType: string, targetId: number, summary: string, detail: Record<string, unknown>) {
@@ -2186,6 +2153,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   private startScheduleWorker() {
+    if (externalWorkerOwnsSchedules({ BUSINESS_JOB_WORKER_MODE: this.config.get("BUSINESS_JOB_WORKER_MODE", "embedded"), APP_PROCESS_ROLE: this.config.get("APP_PROCESS_ROLE", "api") })) return;
     if (this.config.get("NOTIFICATION_SCHEDULE_WORKER_ENABLED", "false") !== "true") return;
     const intervalSeconds = Math.max(Number(this.config.get("NOTIFICATION_SCHEDULE_WORKER_INTERVAL_SECONDS", 300)), 30);
     this.scheduleTimer = setInterval(() => {

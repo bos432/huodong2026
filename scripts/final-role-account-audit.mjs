@@ -3,6 +3,7 @@ import path from "node:path";
 import { API_BASE, auth, loginAdmin, tenantHeader } from "./online-showcase-lib.mjs";
 
 const rolePassword = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
+const showcaseTenantId = Number(process.env.SHOWCASE_TENANT_ID || 8);
 const platformPassword = process.env.PLATFORM_ADMIN_PASSWORD || "Admin123456";
 const output = path.resolve(
   process.env.FINAL_ROLE_ACCOUNT_RESULT || path.join(".local-logs", `final-role-account-audit-${Date.now()}`, "result.json")
@@ -25,7 +26,7 @@ const adminCases = [
     label: "租户管理员",
     username: "showcase_admin",
     role: "operator",
-    tenantId: 23,
+    tenantId: showcaseTenantId,
     minPermissions: 90,
     require: ["activity.manage", "member.manage", "mall.product.manage", "operation_settings.manage"],
     forbid: ["tenant.view", "partner.view"],
@@ -36,7 +37,7 @@ const adminCases = [
     label: "运营",
     username: "showcase_ops",
     role: "operator",
-    tenantId: 23,
+    tenantId: showcaseTenantId,
     minPermissions: 75,
     require: ["activity.manage", "registration.manage", "notification.manage", "homepage.manage"],
     forbid: ["finance.view", "order.refund", "payment_account.view", "agent_settlement.view"],
@@ -47,7 +48,7 @@ const adminCases = [
     label: "财务",
     username: "showcase_finance",
     role: "finance",
-    tenantId: 23,
+    tenantId: showcaseTenantId,
     minPermissions: 34,
     require: ["finance.manage", "order.refund", "mall.finance.view", "agent_settlement.pay"],
     forbid: ["activity.manage", "notification.manage", "mall.product.manage", "mall.settlement.manage"],
@@ -58,7 +59,7 @@ const adminCases = [
     label: "核销员",
     username: "showcase_checkin",
     role: "checkin_staff",
-    tenantId: 23,
+    tenantId: showcaseTenantId,
     minPermissions: 4,
     require: ["dashboard.view", "activity.view", "registration.view", "checkin.manage"],
     forbid: ["registration.manage", "finance.view", "ad_center.view"],
@@ -69,7 +70,7 @@ const adminCases = [
     label: "店铺负责人",
     username: "showcase_store_owner",
     role: "operator",
-    tenantId: 23,
+    tenantId: showcaseTenantId,
     minPermissions: 13,
     require: ["mall.product.manage", "mall.order.manage", "mall.logistics.manage"],
     forbid: ["agent_settlement.view"],
@@ -80,7 +81,7 @@ const adminCases = [
     label: "店铺财务",
     username: "showcase_store_finance",
     role: "finance",
-    tenantId: 23,
+    tenantId: showcaseTenantId,
     minPermissions: 9,
     require: ["mall.order.manage", "mall.finance.view", "mall.payment.manage"],
     forbid: ["mall.product.manage", "mall.settlement.manage"],
@@ -91,23 +92,12 @@ const adminCases = [
     label: "代理负责人",
     username: "showcase_agent_owner",
     role: "finance",
-    tenantId: 23,
+    tenantId: showcaseTenantId,
     minPermissions: 16,
     require: ["agent_settlement.manage", "agent_settlement.pay", "mall.order.view"],
     forbid: ["mall.product.manage"],
     allow: ["/admin/mall/accessible-merchants", "/admin/agent-settlements", "/admin/mall/orders?pageSize=1&merchantId={merchantId}"],
     deny: ["/admin/mall/products?pageSize=1&merchantId={merchantId}"]
-  },
-  {
-    label: "讲师",
-    username: "showcase_course_teacher",
-    role: "operator",
-    tenantId: 23,
-    minPermissions: 4,
-    require: ["course.teacher_scope", "course.manage"],
-    forbid: ["activity.view", "finance.view"],
-    allow: ["/admin/courses?page=1&pageSize=1"],
-    deny: ["/admin/activities?page=1&pageSize=1"]
   },
   {
     label: "伙伴管理",
@@ -123,10 +113,10 @@ const adminCases = [
 ];
 
 const memberCases = [
-  { label: "活动会员", phone: "13990000002" },
-  { label: "课程会员", phone: "13780155100" },
-  { label: "商城会员", phone: "13990008991" },
-  { label: "志愿者", phone: "13994384798" }
+  { label: "演示用户 A", phone: "13990000001" },
+  { label: "演示用户 B", phone: "13990000002" },
+  { label: "演示用户 C", phone: "13990000003" },
+  { label: "演示用户 D", phone: "13990000004" }
 ];
 
 async function raw(route, token, options = {}) {

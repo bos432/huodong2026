@@ -1,7 +1,7 @@
 import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { In, Repository } from "typeorm";
+import { In, IsNull, Repository } from "typeorm";
 import { Activity } from "../../entities/activity.entity";
 import { NotificationPreference } from "../../entities/notification-preference.entity";
 import { Notification } from "../../entities/notification.entity";
@@ -12,6 +12,7 @@ import { RegistrationStatus } from "../../shared/domain";
 import { decryptStoredSecret } from "../../shared/secret-storage";
 import { NotificationProviderService } from "../v1/notification-provider.service";
 import { BusinessJobService } from "./business-job.service";
+import { externalWorkerOwnsSchedules } from "../../worker-config";
 
 export const automaticSmsScenes = [
   "registrationSubmitted",
@@ -23,7 +24,11 @@ export const automaticSmsScenes = [
   "activityCancelled",
   "activityChanged",
   "checkInSucceeded",
-  "activityReminder"
+  "activityReminder",
+  "reviewInvitation",
+  "certificateAvailable",
+  "activityRecommendations",
+  "returnVisitReminder"
 ] as const;
 
 export type AutomaticSmsScene = typeof automaticSmsScenes[number];
@@ -44,6 +49,10 @@ export const defaultAutomaticSmsSettings: AutomaticSmsSettings = {
   activityChanged: false,
   checkInSucceeded: false,
   activityReminder: false,
+  reviewInvitation: false,
+  certificateAvailable: false,
+  activityRecommendations: false,
+  returnVisitReminder: false,
   reminderBeforeHours: 24
 };
 
@@ -57,6 +66,12 @@ export function normalizeAutomaticSmsSettings(value: unknown): AutomaticSmsSetti
   const reminderBeforeHours = Number(input.reminderBeforeHours);
   result.reminderBeforeHours = Number.isFinite(reminderBeforeHours) ? Math.max(1, Math.min(168, Math.round(reminderBeforeHours))) : 24;
   return result;
+}
+
+/** Automatic SMS currently targets mainland mobile numbers only. */
+export function isValidAutomaticSmsPhone(value: unknown) {
+  const phone = String(value ?? "").trim().replace(/^\+86/, "");
+  return /^1[3-9]\d{9}$/.test(phone);
 }
 
 export type PublishAutomaticSmsInput = {
@@ -82,7 +97,11 @@ export function renderAutomaticNotification(scene: AutomaticSmsScene, activity: 
     activityCancelled: { title: "活动取消", content: `活动${activityTitle}已取消，原因${variables.reason || "以平台通知为准"}。` },
     activityChanged: { title: "活动安排变更", content: `活动${activityTitle}的时间或地点已调整，请登录查看最新安排。` },
     checkInSucceeded: { title: "签到成功", content: `您已完成活动${activityTitle}签到，感谢参与。` },
-    activityReminder: { title: "活动开始提醒", content: `您报名的活动${activityTitle}将于${variables.startTime || "近期"}开始，地点${variables.location || activity?.location || "以活动详情为准"}。` }
+    activityReminder: { title: "活动开始提醒", content: `您报名的活动${activityTitle}将于${variables.startTime || "近期"}开始，地点${variables.location || activity?.location || "以活动详情为准"}。` },
+    reviewInvitation: { title: "邀请评价活动", content: `活动${activityTitle}已结束，欢迎分享真实体验，帮助主办方持续改进。` },
+    certificateAvailable: { title: "证书已可领取", content: `您的${variables.certificateName || "活动证书"}已生成，可前往慢π查看和验真。` },
+    activityRecommendations: { title: "为你推荐后续活动", content: `根据你参加的${activityTitle}，为你推荐适合继续参加的活动。` },
+    returnVisitReminder: { title: "有新的活动适合你", content: `距离你参加的${activityTitle}已过去${variables.recallDay || "一段时间"}，为你找到新的活动。` }
   };
   return templates[scene];
 }
@@ -120,6 +139,7 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     this.businessJobs.register(JOB_TYPE, (payload) => this.deliver(payload));
     this.businessJobs.register(ACTIVITY_FANOUT_JOB_TYPE, (payload) => this.deliverActivityFanout(payload));
+    if (externalWorkerOwnsSchedules({ BUSINESS_JOB_WORKER_MODE: this.config.get("BUSINESS_JOB_WORKER_MODE", "embedded"), APP_PROCESS_ROLE: this.config.get("APP_PROCESS_ROLE", "api") })) return;
     if (this.config.get("AUTOMATIC_SMS_REMINDER_WORKER_ENABLED", "true") !== "true") return;
     const intervalSeconds = Math.max(60, Number(this.config.get("AUTOMATIC_SMS_REMINDER_WORKER_INTERVAL_SECONDS", 300)));
     this.reminderTimer = setInterval(() => this.scanActivityReminders().catch((error) => this.logger.error("Automatic SMS reminder scan failed", error)), intervalSeconds * 1000);
@@ -174,6 +194,7 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
       const job = await this.businessJobs.publish({
         tenantId: input.tenantId,
         type: ACTIVITY_FANOUT_JOB_TYPE,
+        scene: input.scene,
         idempotencyKey: `${input.scene}:${input.businessId}`.slice(0, 120),
         payload: { ...input, businessId: String(input.businessId), variables: this.normalizeVariables(input.variables) },
         maxAttempts: 5
@@ -254,9 +275,11 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
       ? "自动短信场景已关闭"
       : setting.smsProvider !== "luosimao-sms"
         ? "自动业务短信当前仅支持螺丝帽通道"
-      : !user.phone
-        ? "用户未绑定手机号"
-        : await this.unsubscribedReason(user.id, tenantScopeKey);
+        : !user.phone
+          ? "用户未绑定手机号"
+          : !isValidAutomaticSmsPhone(user.phone)
+            ? "用户手机号格式无效"
+          : await this.unsubscribedReason(user.id, tenantScopeKey);
     const rendered = renderAutomaticNotification(payload.scene, activity, payload.variables);
 
     if (!notification) {
@@ -318,7 +341,9 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
   }
 
   private setting(tenantId?: number | null) {
-    return this.operationSettings.findOne({ where: { id: tenantId || 1 } });
+    return tenantId
+      ? this.operationSettings.findOne({ where: { tenant: { id: tenantId } } })
+      : this.operationSettings.findOne({ where: { tenant: IsNull() } });
   }
 
   private async unsubscribedReason(userId: number, tenantScopeKey: string) {

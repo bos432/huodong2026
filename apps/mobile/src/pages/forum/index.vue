@@ -24,16 +24,10 @@
       </view>
     </scroll-view>
 
-    <view v-if="categoryError" class="state-card warning-state">
-      <text>{{ categoryError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载论坛版块" @click="loadCategories" @keyup.enter="loadCategories" @keyup.space.prevent="loadCategories">重新加载版块</view>
-    </view>
+    <EmptyState v-if="categoryError" variant="error" :description="categoryError" action-text="重新加载版块" compact @action="loadCategories" />
 
-    <view v-if="loading" class="state-card">帖子加载中...</view>
-    <view v-else-if="topicsError" class="state-card error-state">
-      <text>{{ topicsError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载论坛帖子" @click="loadTopics" @keyup.enter="loadTopics" @keyup.space.prevent="loadTopics">重新加载帖子</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载论坛帖子" description="请稍候，正在同步当前城市的共修讨论。" />
+    <EmptyState v-else-if="topicsError" variant="error" :description="topicsError" action-text="重新加载帖子" @action="loadTopics" />
 
     <view v-for="topic in topics" :key="topic.id" class="topic-card" role="button" tabindex="0" :aria-label="`打开帖子${topic.title}`" @click="goDetail(topic)" @keyup.enter="goDetail(topic)" @keyup.space.prevent="goDetail(topic)">
       <view class="topic-line">
@@ -55,11 +49,7 @@
       </view>
     </view>
 
-    <view v-if="!loading && !topicsError && !topics.length" class="empty-card">
-      <text class="empty-title">暂无帖子</text>
-      <text class="empty-copy">可以先发布一个共修话题，审核通过后会展示在这里。</text>
-      <view v-if="canPost" class="button sm" @click="goPublish">发布帖子</view>
-    </view>
+    <EmptyState v-if="!loading && !topicsError && !topics.length" title="暂无帖子" description="可以先发布一个共修话题，审核通过后会展示在这里。" :action-text="canPost ? '发布帖子' : ''" @action="goPublish" />
     <TabBar current="community" />
   </view>
 </template>
@@ -72,6 +62,8 @@ import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import { featureGatesState, loadFeatureGates, showFeatureDisabledToast } from "../../feature-gates";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 
 const categories = ref<any[]>([]);

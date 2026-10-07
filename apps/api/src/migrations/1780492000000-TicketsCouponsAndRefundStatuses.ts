@@ -6,7 +6,7 @@ export class TicketsCouponsAndRefundStatuses1780492000000 implements MigrationIn
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable("ticket_types"))) {
       await queryRunner.query(`
-        CREATE TABLE ticket_types (
+        CREATE TABLE IF NOT EXISTS ticket_types (
           id int NOT NULL AUTO_INCREMENT,
           activityId int NULL,
           name varchar(100) NOT NULL,
@@ -23,7 +23,7 @@ export class TicketsCouponsAndRefundStatuses1780492000000 implements MigrationIn
 
     if (!(await queryRunner.hasTable("coupons"))) {
       await queryRunner.query(`
-        CREATE TABLE coupons (
+        CREATE TABLE IF NOT EXISTS coupons (
           id int NOT NULL AUTO_INCREMENT,
           code varchar(64) NOT NULL,
           name varchar(120) NOT NULL,

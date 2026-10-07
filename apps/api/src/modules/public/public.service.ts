@@ -1,9 +1,9 @@
 import { BadRequestException, ConflictException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
-import { testActivityBookingMessage } from '../../shared/activity-test-policy';
-import { toPublicActivity } from "../activity/public-activity.mapper";
-import { toPublicRegistration } from "../registration/public-registration.mapper";
-import { toPublicOrderSummary } from "../commerce/public-order.mapper";
+import { isDemoActivityTitle, testActivityBookingMessage } from '../../shared/activity-test-policy';
+import { ActivityService } from "../activity/activity.service";
+import { RegistrationService } from "../registration/registration.service";
+import { CommerceService } from "../commerce/commerce.service";
 import { Logger } from "@nestjs/common";
 import { UnauthorizedException } from "@nestjs/common";
 import { InjectRepository } from "@nestjs/typeorm";
@@ -194,7 +194,10 @@ export class PublicService {
     private readonly objectStorage: ObjectStorageService,
     private readonly credentialTemplates: CredentialTemplateService,
     private readonly automaticNotifications: AutomaticNotificationService,
-    private readonly automaticWechat: AutomaticWechatService
+    private readonly automaticWechat: AutomaticWechatService,
+    private readonly activityService: ActivityService,
+    private readonly registrationService: RegistrationService,
+    private readonly commerceService: CommerceService
   ) {}
 
   async wechatSubscriptionTemplates(context?: PublicTenantContext, scenes?: string[]) {
@@ -1762,7 +1765,16 @@ export class PublicService {
     for (const section of sections) {
       if (singletonTypes.has(section.type)) latestSingleton.set(section.type, section);
     }
-    return sections.filter((section) => !singletonTypes.has(section.type) || latestSingleton.get(section.type) === section);
+    return sections
+      .filter((section) => !singletonTypes.has(section.type) || latestSingleton.get(section.type) === section)
+      .sort((left, right) => {
+        const leftSort = Number(left.sortOrder);
+        const rightSort = Number(right.sortOrder);
+        const leftValue = Number.isFinite(leftSort) ? leftSort : Number.MAX_SAFE_INTEGER;
+        const rightValue = Number.isFinite(rightSort) ? rightSort : Number.MAX_SAFE_INTEGER;
+        if (leftValue !== rightValue) return leftValue - rightValue;
+        return Number(left.id) - Number(right.id);
+      });
   }
 
   private homepageConfiguredCount(pageKey: string, tenantId: number | null) {
@@ -2000,7 +2012,7 @@ export class PublicService {
   async quote(activityId: number, dto: QuoteDto, user: User, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(activityId, { status: ActivityStatus.Open });
     if (!activity) throw new NotFoundException("活动不存在或未开放");
-    const testBlock = testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV'));
+    const testBlock = testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV'), activity.title);
     if (testBlock) throw new BadRequestException(testBlock);
     await this.assertPublicTenantAccess(activity, context);
     const quote = await this.calculateQuote(activity, { ...dto, userId: user.id });
@@ -2013,7 +2025,7 @@ export class PublicService {
   async register(activityId: number, dto: RegisterDto, user: User, context?: PublicTenantContext) {
     const activity = await this.findPublicActivity(activityId, { withFields: true });
     if (!activity || activity.status !== ActivityStatus.Open) throw new BadRequestException("活动暂不可报名");
-    const testBlock = testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV'));
+    const testBlock = testActivityBookingMessage(activity.isTest, this.config.get('NODE_ENV'), activity.title);
     if (testBlock) throw new BadRequestException(testBlock);
     const tenant = await this.assertPublicTenantAccess(activity, context);
     await this.assertRegistrationEnabled(tenant);
@@ -2022,7 +2034,18 @@ export class PublicService {
 
     const activeStatuses = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
     const existing = await this.registrations.findOne({ where: { activity: { id: activityId }, user: { id: user.id }, status: In(activeStatuses) } });
-    if (existing) throw new BadRequestException("你已报名该活动");
+    if (existing) {
+      const existingOrder = await this.findRegistrationOrder(existing.id);
+      const sameTicket = existingOrder?.ticketType?.id === (dto.ticketTypeId || null);
+      if (existing.status === RegistrationStatus.PendingPayment && existingOrder && existingOrder.status === OrderStatus.PendingPayment && existingOrder.ticketType?.id === (dto.ticketTypeId || null) && sameTicket) {
+        if (!this.isExpiredPendingOrder(existingOrder)) {
+          return { registration: this.publicRegistration(existingOrder.registration), order: this.publicOrder(existingOrder), waitlisted: false, idempotent: true };
+        }
+        await this.closeExpiredOrder(existingOrder, "订单超时未付款，已释放报名资格");
+      } else {
+        throw new BadRequestException("你已报名该活动");
+      }
+    }
     const existingWaitlist = await this.waitlists.findOne({ where: { activity: { id: activityId }, user: { id: user.id }, status: WaitlistStatus.Waiting } });
     if (existingWaitlist) throw new BadRequestException("你已在该活动候补名单中");
 
@@ -2035,7 +2058,7 @@ export class PublicService {
       if (historicalCount >= maxRegistrations) throw new BadRequestException(`每人最多报名 ${maxRegistrations} 次`);
     }
     const stats = await this.withPublicStats(activity);
-    if (stats.remainingSeats <= 0) {
+    if (stats.remainingSeats !== null && stats.remainingSeats <= 0) {
       const waitlist = await this.waitlists.save(this.waitlists.create({ activity, user, answers: dto.answers, status: WaitlistStatus.Waiting, remark: "活动满员自动候补" }));
       return { waitlist: this.publicWaitlist(waitlist), registration: null, order: null, waitlisted: true };
     }
@@ -2048,7 +2071,7 @@ export class PublicService {
     const status = price > 0 ? RegistrationStatus.PendingPayment : activity.requireReview ? RegistrationStatus.PendingReview : RegistrationStatus.Approved;
     const channel = await this.resolveActivityChannel(activity, dto.channelCode, dto.source);
     const attributionSource = this.cleanTrackingText(dto.source || channel?.source || (dto.inviteCode ? "invite" : "direct"), 80) || "direct";
-    const { registration, order } = await this.dataSource.transaction(async (manager) => {
+    const transactionResult = await this.dataSource.transaction(async (manager) => {
       const activityRepo = manager.getRepository(Activity);
       const ticketRepo = manager.getRepository(TicketType);
       const registrationRepo = manager.getRepository(Registration);
@@ -2071,7 +2094,17 @@ export class PublicService {
       }
       const activeStatuses = [RegistrationStatus.PendingPayment, RegistrationStatus.PendingReview, RegistrationStatus.Approved, RegistrationStatus.CheckedIn];
       const duplicate = await registrationRepo.findOne({ where: { activity: { id: activity.id }, user: { id: user.id }, status: In(activeStatuses) } });
-      if (duplicate) throw new BadRequestException("你已报名该活动");
+      if (duplicate) {
+        const duplicateOrder = await orderRepo.findOne({
+          where: { registration: { id: duplicate.id } },
+          relations: ["registration", "registration.activity", "registration.user", "tenant", "ticketType", "coupon", "memberLevel"]
+        });
+        const sameTicket = duplicateOrder?.ticketType?.id === (dto.ticketTypeId || null);
+        if (duplicate.status === RegistrationStatus.PendingPayment && duplicateOrder?.status === OrderStatus.PendingPayment && sameTicket && !this.isExpiredPendingOrder(duplicateOrder)) {
+          return { registration: duplicateOrder.registration, order: duplicateOrder, reused: true };
+        }
+        throw new BadRequestException("你已报名该活动");
+      }
       const used = await registrationRepo.count({ where: { activity: { id: activity.id }, status: In(activeStatuses) } });
       if (used >= lockedActivity.capacity) throw new BadRequestException("活动名额已满，请加入候补");
       let lockedTicket: TicketType | null = null;
@@ -2095,6 +2128,10 @@ export class PublicService {
       }
       return { registration: savedRegistration, order: savedOrder };
     });
+    if (transactionResult.reused) {
+      return { registration: this.publicRegistration(transactionResult.registration), order: this.publicOrder(transactionResult.order), waitlisted: false, idempotent: true };
+    }
+    const { registration, order } = transactionResult;
     let attributedInvite: InviteCode | null = null;
     const inviteText = this.cleanTrackingText(dto.inviteCode, 32);
     if (inviteText) {
@@ -2331,6 +2368,7 @@ export class PublicService {
     refund.providerRefundSyncedAt = now;
     refund.providerRefundPayload = { ...(refund.providerRefundPayload || {}), lastNotification: notification.raw || notification };
     refund.providerRefundFailureReason = notification.failureReason || null;
+    refund.failureReason = notification.failureReason || null;
 
     let action = "processing";
     if (notification.status === "success") {
@@ -2411,7 +2449,6 @@ export class PublicService {
       .leftJoinAndSelect("activity.category", "category")
       .leftJoinAndSelect("activity.tenant", "activityTenant")
       .where("viewLog.userId = :userId", { userId: user.id })
-      .andWhere("activity.status = :status", { status: ActivityStatus.Open })
       .andWhere("(activity.tenantId IS NULL OR activityTenant.enabled = :tenantEnabled)", { tenantEnabled: true })
       .orderBy("viewLog.createdAt", "DESC")
       .addOrderBy("viewLog.id", "DESC")
@@ -2480,14 +2517,15 @@ export class PublicService {
       .select("refund.id", "id")
       .addSelect("refund.orderId", "orderId")
       .addSelect("refund.refundNo", "refundNo")
-      .addSelect("refund.amount", "amount")
-      .addSelect("refund.status", "status")
-      .addSelect("refund.reviewRemark", "reviewRemark")
-      .addSelect("refund.createdAt", "createdAt")
+       .addSelect("refund.amount", "amount")
+       .addSelect("refund.status", "status")
+       .addSelect("refund.reviewRemark", "reviewRemark")
+       .addSelect("refund.failureReason", "failureReason")
+       .addSelect("refund.createdAt", "createdAt")
       .where("refund.orderId IN (:...orderIds)", { orderIds: orders.map((order) => order.id) })
       .orderBy("refund.createdAt", "DESC")
       .addOrderBy("refund.id", "DESC")
-      .getRawMany<{ id: string; orderId: string; refundNo: string; amount: string; status: string; reviewRemark: string | null; createdAt: Date }>() : [];
+       .getRawMany<{ id: string; orderId: string; refundNo: string; amount: string; status: string; reviewRemark: string | null; failureReason: string | null; createdAt: Date }>() : [];
     const latestRefundByOrder = new Map<number, any>();
     for (const refund of refundRows) {
       const orderId = Number(refund.orderId);
@@ -3312,7 +3350,13 @@ export class PublicService {
 
   private async ensureOperationSetting(tenant?: Tenant | null) {
     const id = tenant?.id || 1;
-    let setting = await this.operationSettings.findOneBy({ id });
+    let setting = tenant
+      ? await this.operationSettings.findOne({ where: { tenant: { id: tenant.id } } })
+      : await this.operationSettings.findOneBy({ id: 1 });
+    if (!setting) {
+      const legacy = await this.operationSettings.findOneBy({ id });
+      if (legacy && (!tenant || !legacy.tenant || legacy.tenant.id === tenant.id)) setting = legacy;
+    }
     if (setting) return setting;
     setting = this.operationSettings.create({
       id,
@@ -3559,14 +3603,15 @@ export class PublicService {
         .getCount(),
       this.waitlists.createQueryBuilder("waitlist").where("waitlist.activityId = :activityId", { activityId: activity.id }).andWhere("waitlist.status = :status", { status: WaitlistStatus.Waiting }).getCount()
     ]);
+    const isDemo = Boolean(activity.isTest) || isDemoActivityTitle(activity.title);
     const remainingSeats = Math.max(activity.capacity - registeredCount, 0);
     const now = Date.now();
     const displayStatus = new Date(activity.registrationDeadline).getTime() < now || new Date(activity.endTime).getTime() < now ? "ended" : remainingSeats <= 0 ? "full" : "open";
-    return { ...this.publicActivity(activity), registeredCount, waitingCount, remainingSeats, displayStatus };
+    return { ...this.publicActivity(activity), registeredCount: isDemo ? null : registeredCount, waitingCount: isDemo ? null : waitingCount, remainingSeats: isDemo ? null : remainingSeats, displayStatus };
   }
 
   private publicRegistration(registration: Registration) {
-    return toPublicRegistration(registration, (activity) => this.publicActivity(activity));
+    return this.registrationService.toPublicSummary(registration, (activity) => this.publicActivity(activity));
   }
 
   private publicOrder(order: Order) {
@@ -3574,7 +3619,7 @@ export class PublicService {
   }
 
   private publicOrderSummary(order?: Order | null) {
-    return toPublicOrderSummary(order, {
+    return this.commerceService.toPublicOrderSummary(order, {
       toTicketType: (ticketType) => this.publicTicketType(ticketType),
       toCoupon: (coupon) => this.publicCoupon(coupon),
       toMemberLevel: (level) => this.publicMemberLevel(level)
@@ -3595,6 +3640,7 @@ export class PublicService {
       completedAt: refund.completedAt,
       providerRefundStatus: refund.providerRefundStatus,
       providerRefundFailureReason: refund.providerRefundFailureReason,
+      failureReason: refund.failureReason,
       createdAt: refund.createdAt
     };
   }
@@ -3786,8 +3832,7 @@ export class PublicService {
   }
 
   private publicActivity(activity: Activity) {
-    return toPublicActivity(activity, {
-      environment: this.config.get('NODE_ENV'),
+    return this.activityService.toPublicSummary(activity, {
       toTenant: (tenant) => this.publicHomepageTenant(tenant),
       toMemberLevel: (level) => this.publicMemberLevel(level)
     });
@@ -3973,7 +4018,7 @@ export class PublicService {
   }
 
   async queryRegistrationPayment(registrationId: number, user: User, context?: PublicTenantContext) {
-    const order = await this.orders.findOne({ where: { registration: { id: registrationId } } });
+    const order = await this.findRegistrationOrder(registrationId);
     if (!order) throw new NotFoundException("订单不存在");
     await this.assertOrderTenantAccess(order, context);
     this.assertOrderUserAccess(order, user);
@@ -3981,6 +4026,19 @@ export class PublicService {
     if (![PaymentMethod.Wechat, PaymentMethod.Alipay].includes(order.paymentMethod)) return { provider: order.paymentMethod, mode: "local", orderNo: order.orderNo, transactionNo: order.transactionNo, amount: order.amount, amountFen: Number(order.amountFen || 0), status: order.status === OrderStatus.Paid ? "success" : [OrderStatus.Closed, OrderStatus.Cancelled].includes(order.status) ? "closed" : "pending", localOrder: this.publicOrder(order) };
     const provider = order.paymentMethod as SupportedPaymentProvider;
     const result = await this.paymentProvider.queryPayment(provider, order);
+    if (result.status === "success") {
+      if (!result.transactionNo) throw new BadRequestException("支付查单已成功但缺少交易流水号，请联系主办方核对");
+      if (!sameMoneyAmount(order.amount, result.amount)) {
+        await this.recordPaymentDiscrepancy(order, result.transactionNo, provider, Number(result.amount), "amount_mismatch", "支付查单金额与订单金额不一致");
+        throw new BadRequestException("支付查单金额与订单金额不一致，已记录对账差异");
+      }
+      const settled = await this.applySuccessfulPayment(order, result.transactionNo, provider, "支付查单确认", provider);
+      return { ...result, amountFen: Number(settled.order.amountFen || 0), localOrder: this.publicOrder(settled.order), settled: true };
+    }
+    if (result.status === "closed" && order.status === OrderStatus.PendingPayment) {
+      const closed = await this.closeExpiredOrder(order, "支付平台已关闭订单，名额已释放");
+      return { ...result, amountFen: Number(closed.amountFen || 0), localOrder: this.publicOrder(closed) };
+    }
     return { ...result, amountFen: Number(order.amountFen || 0), localOrder: this.publicOrder(order) };
   }
 

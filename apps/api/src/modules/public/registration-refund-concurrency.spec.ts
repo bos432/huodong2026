@@ -8,6 +8,10 @@ describe("member registration refund consistency guard", () => {
     service.indexOf("async requestRegistrationRefund("),
     service.indexOf("async cancelRegistration(")
   );
+  const registrationsMethod = service.slice(
+    service.indexOf("private async myRegistrationsForTenant("),
+    service.indexOf("async myCourseOrders(")
+  );
 
   it("serializes refund creation on the activity order and reuses an active request", () => {
     expect(method).toContain("this.dataSource.transaction");
@@ -29,7 +33,8 @@ describe("member registration refund consistency guard", () => {
 
   it("returns and displays the latest activity refund in the member order list", () => {
     expect(service).toContain('addSelect("refund.orderId", "orderId")');
-    expect(service).toContain("latestRefundByOrder");
+    expect(registrationsMethod).toContain('addSelect("refund.failureReason", "failureReason")');
+    expect(registrationsMethod).toContain("latestRefundByOrder");
     expect(service).toContain("latestRefund:");
     expect(page).toContain("退款申请处理中");
     const ordersPage = readFileSync("../mobile/src/pages/user/orders.vue", "utf8");

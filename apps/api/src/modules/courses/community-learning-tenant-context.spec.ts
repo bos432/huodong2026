@@ -37,14 +37,18 @@ describe("community learning tenant context", () => {
 
   it("serializes task counters and makes repeated program submissions idempotent", () => {
     const submit = method("submitProgramCheckin", "private applyTenantOrGlobalAliasScope");
-    expect(submit).toContain("this.dataSource.transaction");
+    expect(submit).not.toContain("this.dataSource.transaction");
     expect(submit).toContain('if (!activity) throw new NotFoundException("共学活动不存在")');
-    expect(submit).toContain('lock: { mode: "pessimistic_write" }');
+    expect(submit).toContain("unique database index");
+    expect(submit).toContain("duplicate-key recovery");
     expect(submit).toContain('row && row.status !== "rejected"');
     expect(submit).toContain("idempotent: true");
     expect(submit).toContain("Object.assign(row, values)");
     expect(submit).toContain('status: "approved"');
     expect(submit).toContain("task.completedCount = await checkinRepo.count");
+    expect(submit).toContain("The authoritative count is calculated from approved check-ins below");
+    expect(source).toContain("runCheckinTransactionWithRetry");
+    expect(source).toContain("record has changed since last read");
   });
 
   it("returns explicit public views without invite codes or tenant graphs", () => {

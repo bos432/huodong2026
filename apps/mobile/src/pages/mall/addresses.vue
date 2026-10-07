@@ -1,10 +1,7 @@
 <template>
   <view class="address-page">
-    <view v-if="loading" class="state-card">收货地址加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载收货地址" description="正在同步你的常用地址。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="收货地址暂时无法同步，请重试。" action-text="重新加载" @action="load" />
     <view class="address-card form">
       <text class="section-title">{{ editingId ? "编辑收货地址" : "新增收货地址" }}</text>
       <input v-model="form.receiverName" placeholder="收货人" />
@@ -38,6 +35,7 @@ import { reactive, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 

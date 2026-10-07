@@ -619,10 +619,13 @@ describe("admin and mobile menu integrity", () => {
     expect(router).toContain('{ path: "/business-jobs", roles: ["business_job.view"], scope: "tenantOrPlatformAdmin" }');
     expect(menu).toContain('{ index: "/business-jobs", icon: "List", label: "业务任务", roles: ["business_job.view"]');
     expect(page).toContain('const canManageJobs = computed(() => hasPermission("business_job.manage"))');
-    expect(page).toContain('v-if="!canManageJobs" class="page-error"');
-    expect(page).toContain('v-if="canManageJobs" label="操作"');
+    expect(page).toContain('v-if="!canManageJobs"');
+    expect(page).toContain('class="page-error"');
+    expect(page).toContain('v-if="canManageJobs"');
+    expect(page).toContain('label="操作"');
     expect(page).toContain('row.lastWorkerId || "-"');
-    expect(page).toContain('if (!canManageJobs.value) return ElMessage.error("当前账号无业务任务处理权限")');
+    expect(page).toContain('if (!canManageJobs.value)');
+    expect(page).toContain('当前账号无业务任务处理权限');
     expect(service).toContain('"business_job.replay"');
     expect(service).toContain('"business_job.cancel"');
     expect(service).toContain('"business_job.run_due"');

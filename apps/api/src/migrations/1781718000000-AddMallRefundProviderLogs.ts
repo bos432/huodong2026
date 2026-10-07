@@ -20,7 +20,7 @@ export class AddMallRefundProviderLogs1781718000000 implements MigrationInterfac
 
     if (!(await queryRunner.hasTable("mall_refund_logs"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_refund_logs (
+        CREATE TABLE IF NOT EXISTS mall_refund_logs (
           id INT NOT NULL AUTO_INCREMENT,
           refundId INT NOT NULL,
           orderId INT NULL,

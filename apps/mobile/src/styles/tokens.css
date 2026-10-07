@@ -1,0 +1,43 @@
+:root {
+  --mp-brand-primary: #b9533f;
+  --mp-brand-primary-dark: #974233;
+  --mp-brand-soft: #f6ded7;
+  --mp-mist-soft: #e8eff0;
+  --mp-text-primary: #1d2430;
+  --mp-text-secondary: #45505d;
+  --mp-text-muted: #78828c;
+  --mp-text-inverse: #ffffff;
+  --mp-bg-page: #f7f5f0;
+  --mp-bg-surface: #ffffff;
+  --mp-bg-soft: #f1efea;
+  --mp-price: #b9533f;
+  --mp-danger: #b04444;
+  --mp-success: #3f8062;
+  --mp-border: #e6e3dd;
+  --mp-overlay: rgb(29 36 48 / 40%);
+  --mp-font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Microsoft YaHei", sans-serif;
+  --mp-font-xs: 11px;
+  --mp-font-sm: 12px;
+  --mp-font-md: 14px;
+  --mp-font-lg: 17px;
+  --mp-font-xl: 22px;
+  --mp-space-1: 4px;
+  --mp-space-2: 8px;
+  --mp-space-3: 12px;
+  --mp-space-4: 16px;
+  --mp-space-5: 20px;
+  --mp-space-6: 24px;
+  --mp-radius-sm: 6px;
+  --mp-radius-md: 10px;
+  --mp-radius-lg: 14px;
+  --mp-radius-xl: 18px;
+  --mp-radius-pill: 999px;
+  --mp-shadow-card: 0 6px 20px rgb(29 36 48 / 8%);
+  --mp-shadow-sheet: 0 -10px 30px rgb(29 36 48 / 15%);
+  --mp-shadow-fab: 0 7px 20px rgb(185 83 63 / 28%);
+  --mp-z-tabbar: 40;
+  --mp-z-sheet: 50;
+  --mp-z-toast: 80;
+}
+
+page { background: var(--mp-bg-page); color: var(--mp-text-primary); }

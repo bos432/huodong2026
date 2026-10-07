@@ -7,11 +7,8 @@
       <view class="nav-share" role="button" tabindex="0" aria-label="分享课程" @click="share" @keyup.enter="share" @keyup.space.prevent="share">分享</view>
     </view>
 
-    <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
-      <view>{{ error }}</view>
-      <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载课程详情" @click="loadCourse" @keyup.enter="loadCourse" @keyup.space.prevent="loadCourse">重试</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载内容详情" description="请稍候，正在同步课程介绍、课时和参与权益。" />
+    <EmptyState v-else-if="error" variant="error" title="内容详情加载失败" :description="error" action-text="重新加载" @action="loadCourse" />
 
     <template v-else-if="course">
       <view class="course-cover-full" :style="{ background: course.color }">
@@ -118,6 +115,7 @@ import { ensureUser, fetchMyProfile, getCurrentTenantCode, getUserToken, request
 import { priceText } from "../../course-data";
 import { reviewSafeText } from "../../review-safe-text";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import AdSlotRenderer from "../../components/AdSlotRenderer.vue";
 import SplashAd from "../../components/SplashAd.vue";

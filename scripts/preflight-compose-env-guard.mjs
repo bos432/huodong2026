@@ -54,6 +54,13 @@ for (const key of mysqlOnlyKeys) {
 
 check(compose.includes("uploads-data:/app/uploads"), "docker-compose.yml must persist API uploads.");
 check(compose.includes("uploads-data:/usr/share/nginx/uploads"), "docker-compose.yml must expose uploads through Nginx.");
+check(compose.includes("activity-worker:"), "docker-compose.yml must define an independent activity-worker service.");
+check(compose.includes('command: [\"node\", \"apps/api/dist/worker.js\"]'), "activity-worker must run the compiled worker entrypoint.");
+check(compose.includes("APP_PROCESS_ROLE: worker"), "activity-worker must use the worker process role.");
+check(compose.includes("BUSINESS_JOB_WORKER_MODE: external"), "activity-worker must use external worker mode.");
+check(compose.includes("ports: !reset []"), "activity-worker must reset inherited API HTTP ports.");
+check(compose.includes("activity-worker-heartbeat.json"), "activity-worker must share a heartbeat file with the API health contract.");
+check(compose.includes("runtime-data:/app/runtime"), "API and activity-worker must persist their shared runtime heartbeat volume.");
 check(preflight.includes("checkDockerCompose"), "preflight must keep Docker Compose checks.");
 check(preflight.includes("envKeys(\"deploy/.env.production.example\")"), "preflight must dynamically read production env example keys.");
 check(preflight.includes("dockerComposeMysqlOnlyKeys"), "preflight must document MySQL-only Docker Compose env exclusions.");

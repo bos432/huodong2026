@@ -16,6 +16,8 @@
         tabindex="0"
         :aria-label="`按${cat.label}分类筛选`"
         @click="activeCategory = cat.key"
+        @keyup.enter="activeCategory = cat.key"
+        @keyup.space.prevent="activeCategory = cat.key"
       >{{ cat.label }}</view>
     </scroll-view>
 
@@ -31,18 +33,17 @@
           tabindex="0"
           :aria-label="`按${opt.label}排序`"
           @click="activeSort = opt.key"
+          @keyup.enter="activeSort = opt.key"
+          @keyup.space.prevent="activeSort = opt.key"
         >{{ opt.label }}</text>
       </view>
     </view>
 
-    <view v-if="loading" class="card subtle" aria-live="polite">加载中...</view>
-    <view v-else-if="error" class="card state-card error-state" role="alert" aria-live="assertive">
-      <view>{{ error }}</view>
-      <button class="button secondary retry-button" :disabled="loading" aria-label="重新加载专题内容" @click="loadCourses">重试</button>
-    </view>
+    <LoadingState v-if="loading" title="正在加载专题内容" description="请稍候，正在同步分类、价格和内容状态。" />
+    <EmptyState v-else-if="error" variant="error" :description="error" action-text="重新加载" @action="loadCourses" />
 
     <view v-else-if="filteredCourses.length" class="course-grid">
-      <view v-for="course in filteredCourses" :key="course.id" class="course-card" role="button" tabindex="0" :aria-label="`查看专题内容${course.title}`" @click="goDetail(course)">
+      <view v-for="course in filteredCourses" :key="course.id" class="course-card" role="button" tabindex="0" :aria-label="`查看专题内容${course.title}`" @click="goDetail(course)" @keyup.enter="goDetail(course)" @keyup.space.prevent="goDetail(course)">
         <view class="course-cover" :style="{ background: course.color }">
           <image v-if="course.coverUrl" class="course-cover-img" :src="course.coverUrl" mode="aspectFill" />
           <text v-else style="font-size:64rpx;">{{ course.icon }}</text>
@@ -59,7 +60,7 @@
         </view>
       </view>
     </view>
-    <EmptyState v-else icon="📚" text="暂无专题内容，请先在后台新增并发布内容" />
+    <EmptyState v-else variant="default" title="暂无专题内容" description="主办方发布内容后，会在这里展示。" />
 
     <view style="height:120rpx;"></view>
     <TabBar current="courses" />
@@ -78,6 +79,7 @@ import { usePageDecoration } from "../../decoration";
 import { loadPageTheme } from "../../theme";
 import TabBar from "../../components/TabBar.vue";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 

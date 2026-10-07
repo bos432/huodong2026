@@ -427,7 +427,9 @@ async function runProfileCommands() {
 function startAcceptanceStaticServer() {
   const h5Root = path.join(root, "apps", "mobile", "dist", "build", "h5");
   const adminRoot = path.join(root, "apps", "admin", "dist");
-  const proxyBase = new URL((process.env.ACCEPTANCE_API_PROXY || "http://127.0.0.1:18080").replace(/\/$/, ""));
+  const proxyBase = new URL(
+    (process.env.ACCEPTANCE_API_PROXY || `http://127.0.0.1:${process.env.API_HOST_PORT || 3000}`).replace(/\/$/, "")
+  );
   const server = http.createServer((req, res) => {
     const requestUrl = new URL(req.url || "/", "http://127.0.0.1");
     if (requestUrl.pathname.startsWith("/api/") || requestUrl.pathname.startsWith("/uploads/")) {
@@ -536,8 +538,8 @@ function mpWeixinBuildStep() {
   }
   return {
     name: "wechat mini program build",
-    command: npmCommand,
-    args: ["--prefix", "apps/mobile", "run", "build:mp-weixin"],
+    command: process.execPath,
+    args: ["scripts/build-mp-weixin.mjs"],
     required: true,
     timeoutMs: 420000
   };

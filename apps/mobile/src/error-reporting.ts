@@ -76,6 +76,7 @@ export function isStaleChunkError(error: unknown) {
 }
 
 function recoverStaleChunk(error: unknown) {
+  // #ifdef H5
   if (!isStaleChunkError(error) || typeof window === "undefined") return false;
   const lastReloadAt = Number(window.sessionStorage.getItem(STALE_CHUNK_RELOAD_KEY) || 0);
   if (Date.now() - lastReloadAt < STALE_CHUNK_RELOAD_WINDOW_MS) return false;
@@ -85,6 +86,8 @@ function recoverStaleChunk(error: unknown) {
   url.searchParams.set("__h5_reload", String(reloadAt));
   window.location.replace(url.toString());
   return true;
+  // #endif
+  return false;
 }
 
 export function installH5ErrorReporting(app: VueApp) {
@@ -93,6 +96,7 @@ export function installH5ErrorReporting(app: VueApp) {
     reportH5Error("vue error", error, { info });
   };
 
+  // #ifdef H5
   if (typeof window === "undefined") return;
   const target = window as Window & { __H5_ERROR_REPORTING_INSTALLED__?: boolean };
   if (target.__H5_ERROR_REPORTING_INSTALLED__) return;
@@ -117,4 +121,5 @@ export function installH5ErrorReporting(app: VueApp) {
     }
     reportH5Error("unhandled promise rejection", event.reason);
   });
+  // #endif
 }

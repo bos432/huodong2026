@@ -6,6 +6,7 @@ import { Collection, CopyDocument, Delete, MagicStick, Monitor, MoreFilled, Plus
 import { api } from "../api";
 import { currentTenantCode, hasPermission, isPlatformAdmin } from "../permissions";
 import { copyToClipboard, h5RoutePreviewUrl } from "../h5-preview";
+import { sortHomepageSections } from "@activity/shared";
 import type { HomepageSectionView, HomepageSectionType } from "@activity/shared";
 import HomepageLivePreview from "../components/HomepageLivePreview.vue";
 
@@ -17,6 +18,12 @@ type SectionForm = {
   sortOrder: number;
   config: Record<string, any>;
   layout: Record<string, any>;
+};
+
+type HomepageScopeSnapshot = {
+  pageKey: string;
+  tenantId?: number;
+  tenantCode: string;
 };
 
 type CrossCopyMode = "current_page" | "all_pages";
@@ -419,6 +426,7 @@ const route = useRoute();
 const router = useRouter();
 const loading = ref(false);
 const loadError = ref("");
+let homepageLoadSerial = 0;
 const tenantLoadError = ref("");
 const actionError = ref("");
 const toolbarAction = ref("");
@@ -457,6 +465,20 @@ const crossCopyResult = ref("");
 const versionDialogVisible = ref(false);
 const versionLoading = ref(false);
 const versionError = ref("");
+
+function homepageScopeSnapshot(): HomepageScopeSnapshot {
+  return {
+    pageKey: filters.pageKey,
+    tenantId: isPlatformAdmin() ? filters.tenantId : undefined,
+    tenantCode: currentTenantCode() || ""
+  };
+}
+
+function isHomepageScopeCurrent(snapshot: HomepageScopeSnapshot) {
+  return snapshot.pageKey === filters.pageKey
+    && snapshot.tenantId === (isPlatformAdmin() ? filters.tenantId : undefined)
+    && snapshot.tenantCode === (currentTenantCode() || "");
+}
 const versionSaving = ref(false);
 const versionRestoringId = ref<number | null>(null);
 const versionDeletingId = ref<number | null>(null);
@@ -529,7 +551,7 @@ const toolbarHelpItems = [
   { title: "刷新", text: "重新读取后台已保存的模块数据，用来确认保存后是否真正生效。" }
 ];
 
-const orderedRows = computed(() => [...rows.value].sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id));
+const orderedRows = computed(() => sortHomepageSections(rows.value));
 const canEdit = computed(() => hasPermission("homepage.manage"));
 const toolbarBusy = computed(() => Boolean(toolbarAction.value || publishing.value || versionSaving.value || uiKitApplyingKey.value));
 const currentPageOption = computed(() => pageOptions.find((item) => item.key === filters.pageKey) || pageOptions[0]);
@@ -583,7 +605,7 @@ const previewRows = computed(() => {
     if (index >= 0) list.splice(index, 1, draft);
     else list.push(draft);
   }
-  return list.filter((item) => item.enabled).sort((a, b) => a.sortOrder - b.sortOrder || a.id - b.id);
+  return sortHomepageSections(list.filter((item) => item.enabled));
 });
 const moduleCategories = [
   { key: "all", label: "全部" },
@@ -1248,10 +1270,15 @@ function syncRouteFilters() {
 
 async function load(options: { updateSnapshot?: boolean } = {}) {
   if (loading.value) return;
+  const requestSerial = ++homepageLoadSerial;
+  const requestPageKey = filters.pageKey;
+  const requestTenantId = isPlatformAdmin() ? filters.tenantId : undefined;
+  const requestScope = homepageParamsFor(requestTenantId, requestPageKey);
   loading.value = true;
   loadError.value = "";
   try {
-    const [draftRows, status] = await Promise.all([api.get<any, HomepageSectionView[]>("/admin/homepage/sections", homepageScopeParams()), api.get<any, any>("/admin/homepage/publication", homepageScopeParams())]);
+    const [draftRows, status] = await Promise.all([api.get<any, HomepageSectionView[]>("/admin/homepage/sections", requestScope), api.get<any, any>("/admin/homepage/publication", requestScope)]);
+    if (requestSerial !== homepageLoadSerial || requestPageKey !== filters.pageKey || requestTenantId !== (isPlatformAdmin() ? filters.tenantId : undefined)) return;
     rows.value = draftRows;
     publicationStatus.value = status;
     if (options.updateSnapshot !== false) {
@@ -1261,9 +1288,15 @@ async function load(options: { updateSnapshot?: boolean } = {}) {
       restoreSnapshotSavedAt.value = cached?.savedAt || "";
     }
   } catch (error: any) {
+    if (requestSerial !== homepageLoadSerial || requestPageKey !== filters.pageKey || requestTenantId !== (isPlatformAdmin() ? filters.tenantId : undefined)) return;
+    rows.value = [];
+    publicationStatus.value = null;
+    lastPublishedRows.value = [];
+    lastPublishedLoaded.value = false;
+    restoreSnapshotSavedAt.value = "";
     loadError.value = errorMessage(error, "首页装修加载失败，请重试");
   } finally {
-    loading.value = false;
+    if (requestSerial === homepageLoadSerial) loading.value = false;
   }
 }
 
@@ -1492,7 +1525,10 @@ async function saveOrder(nextRows: HomepageSectionView[]) {
   await runSectionAction("reorder", async () => {
     rememberBeforeMutation();
     const items = nextRows.map((item, index) => ({ id: item.id, sortOrder: (index + 1) * 10 }));
-    rows.value = await api.put<any, HomepageSectionView[]>("/admin/homepage/sections/reorder", { items }, homepageScopeParams());
+    const requestScope = homepageScopeSnapshot();
+    const savedRows = await api.put<any, HomepageSectionView[]>("/admin/homepage/sections/reorder", { items }, homepageScopeParams());
+    if (!isHomepageScopeCurrent(requestScope)) return;
+    rows.value = savedRows;
     ElMessage.success("排序已保存");
   });
 }
@@ -2175,7 +2211,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="builder-page">
+  <div class="builder-page" :aria-busy="loading">
     <header class="builder-heading">
       <div>
         <h2>{{ pageTitle }}</h2>
@@ -2221,6 +2257,9 @@ onMounted(async () => {
       </div>
     </div>
 
+    <div v-if="loading && !rows.length" class="builder-loading" role="status" aria-live="polite">
+      正在加载当前装修范围，请稍候…
+    </div>
     <el-alert v-if="loadError" type="error" show-icon :closable="false" :title="loadError">
       <template #default><el-button link type="primary" :loading="loading" @click="load">重新加载装修</el-button></template>
     </el-alert>
@@ -2313,7 +2352,7 @@ onMounted(async () => {
                   <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
                 </div>
                 <div v-else-if="row.type === 'image_banner'" class="preview-banner">
-                  <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
+                  <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" width="640" height="240" alt="装修 Banner 预览" />
                   <span v-else>图片 Banner</span>
                 </div>
                 <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav" :style="{ '--preview-nav-count': previewNavCount(row) }">
@@ -2634,10 +2673,15 @@ onMounted(async () => {
     <div class="builder-layout">
       <main class="section-list" v-loading="loading">
         <div class="list-head">
-          <div><h3>页面结构</h3><span>{{ orderedRows.length }} 个模块</span></div>
+          <div><h3>页面结构</h3><span>{{ orderedRows.length }} 个模块 · 从上到下即为用户端展示顺序</span></div>
           <el-button v-if="canEdit" type="primary" plain :icon="Plus" @click="openModuleLibrary">添加模块</el-button>
         </div>
-        <div v-if="!orderedRows.length" class="empty">暂无模块，点击左侧添加或恢复默认装修。</div>
+        <el-empty v-if="!orderedRows.length" description="暂无模块，点击左侧添加或恢复默认装修。">
+          <div class="empty-actions">
+            <el-button v-if="canEdit" type="primary" :icon="Plus" @click="openModuleLibrary">添加模块</el-button>
+            <el-button v-if="canEdit" plain @click="resetDefault">恢复默认装修</el-button>
+          </div>
+        </el-empty>
         <div
           v-for="(row, index) in orderedRows"
           :key="row.id"
@@ -2758,6 +2802,7 @@ onMounted(async () => {
                     <el-form-item label="展示方式">
                       <el-select v-model="form.config.display" @change="syncJsonText">
                         <el-option label="主图 + 横向副卡" value="lead_rail" />
+                        <el-option label="本周主推大图" value="focus" />
                         <el-option label="活动列表" value="list" />
                       </el-select>
                     </el-form-item>
@@ -3340,7 +3385,7 @@ onMounted(async () => {
             <span v-for="item in ((row.config as any).items || []).slice(0, 4)" :key="item.label">{{ item.label }}</span>
           </div>
           <div v-else-if="row.type === 'image_banner'" class="preview-banner">
-            <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" />
+            <img v-if="(row.config as any).imageUrl" :src="(row.config as any).imageUrl" width="640" height="240" alt="装修 Banner 预览" />
             <span v-else>图片 Banner</span>
           </div>
           <div v-else-if="row.type === 'bottom_nav'" class="preview-bottom-nav drawer-bottom-nav" :style="{ '--preview-nav-count': previewNavCount(row) }">
@@ -3367,6 +3412,7 @@ onMounted(async () => {
 </template>
 
 <style scoped>
+.builder-loading { display: flex; align-items: center; justify-content: center; min-height: 120px; margin: 16px 0; border: 1px dashed #cbd5e1; border-radius: 8px; color: #475467; background: #f8fafc; }
 .builder-page { padding: 20px; }
 .builder-heading { display: flex; justify-content: space-between; align-items: center; gap: 16px; margin-bottom: 14px; }
 .builder-heading h2 { margin: 0; color: #111827; font-size: 22px; }
@@ -3578,6 +3624,12 @@ onMounted(async () => {
 .quick-row.nav-row { grid-template-columns: 92px 72px 92px minmax(150px, 1fr) 112px minmax(170px, 1fr) 42px 58px 34px; }
 .quick-row.my-tool-row { grid-template-columns: 70px 110px 1fr 130px 42px 34px; }
 .inner-page-row { display: grid; grid-template-columns: 110px 130px 1fr 120px 34px; gap: 8px; align-items: center; }
+.section-row.active { border-color: var(--admin-jade); background: var(--admin-jade-soft); box-shadow: 0 0 0 3px rgba(56, 97, 81, .12); }
+.module-option:hover { border-color: var(--admin-jade); background: var(--admin-paper-muted); }
+.preview-row-shell.focused { border-color: var(--admin-jade); background: rgba(56, 97, 81, .08); box-shadow: 0 0 0 3px rgba(56, 97, 81, .12); }
+.preview-row-shell.focused::before { background: var(--admin-jade); }
+.preview-banner { color: var(--admin-jade); }
+.preview-bottom-nav b { color: var(--admin-jade); }
 @media (max-width: 1280px) {
   .builder-toolbar { align-items: flex-start; }
   .scope-controls { flex-wrap: wrap; }

@@ -113,6 +113,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     items: [
       { index: "/activities?status=pending_approval", icon: "Calendar", label: "活动审核", roles: ["activity.approve"], scope: "platform" },
       { index: "/activities", icon: "Calendar", label: "平台活动池", roles: permissions.activityView, scope: "platform" },
+      { index: "/experiences", icon: "Star", label: "体验选品监管", roles: permissions.activityView, scope: "platform" },
       { index: "/resource-network", icon: "Connection", label: "场地与讲师资源", roles: permissions.analytics, scope: "platform" },
       { index: "/registrations", icon: "Tickets", label: "全局报名", roles: permissions.registrationView, scope: "platform" },
       { index: "/announcements", icon: "Bell", label: "公告监管", roles: ["announcement.view"], scope: "platform" },
@@ -208,6 +209,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
       { index: "/system-settings", icon: "Tools", label: "系统设置", roles: ["system.view"], scope: "platform" },
       { index: "/config-check", icon: "Monitor", label: "上线体检", roles: ["system.view"], scope: "platform" },
       { index: "/miniprogram-release", icon: "Promotion", label: "小程序发布", roles: ["miniprogram_release.view"], scope: "platform" },
+      { index: "/release-readiness", icon: "CircleCheck", label: "上线验收中心", roles: ["release_readiness.view"], scope: "platform" },
       { index: "/operation-flow", icon: "Connection", label: "操作流程图", roles: ["dashboard.view"], scope: "platform" },
       { index: "/operation-guide", icon: "Guide", label: "运维教程", roles: ["system.view"], scope: "platform" },
       { index: "/ops-routine", icon: "List", label: "运营巡检", roles: ["system.view", "dashboard.view"], scope: "platform" },
@@ -235,6 +237,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/activities", icon: "Calendar", label: "活动管理", roles: permissions.activityView, scope: "tenant" },
+      { index: "/experiences", icon: "Star", label: "体验选品", roles: permissions.activityView, scope: "tenant" },
       { index: "/resource-network", icon: "Connection", label: "场地与讲师资源", roles: permissions.analytics, scope: "tenant" },
       { index: "/categories", icon: "CollectionTag", label: "分类管理", roles: ["category.view"], scope: "tenant" },
       { index: "/ticket-types", icon: "Sell", label: "票种管理", roles: ["ticket.view"], scope: "tenant" },

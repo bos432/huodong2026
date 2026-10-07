@@ -35,9 +35,9 @@
     <view class="section">
       <text class="section-title">{{ config.joinTitle }}</text>
       <view class="join-grid">
-        <view class="join-card" role="button" tabindex="0" aria-label="进入院长招募" @click="goDean">院长招募</view>
-        <view class="join-card" role="button" tabindex="0" aria-label="进入大使申请" @click="goAmbassador">大使申请</view>
-        <view class="join-card" role="button" tabindex="0" aria-label="进入帮扶申请" @click="goAid">帮扶申请</view>
+        <view class="join-card" role="button" tabindex="0" aria-label="进入院长招募" @click="goDean" @keyup.enter="goDean" @keyup.space.prevent="goDean">院长招募</view>
+        <view class="join-card" role="button" tabindex="0" aria-label="进入大使申请" @click="goAmbassador" @keyup.enter="goAmbassador" @keyup.space.prevent="goAmbassador">大使申请</view>
+        <view class="join-card" role="button" tabindex="0" aria-label="进入帮扶申请" @click="goAid" @keyup.enter="goAid" @keyup.space.prevent="goAid">帮扶申请</view>
       </view>
     </view>
 

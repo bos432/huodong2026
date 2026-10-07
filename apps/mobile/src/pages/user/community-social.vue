@@ -1,31 +1,28 @@
 <template>
   <view class="container social-page">
     <view class="custom-nav">
-      <view class="nav-back" role="button" tabindex="0" aria-label="返回" @click="goBack">返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
       <text class="nav-title">社区互动</text>
       <view class="nav-placeholder" />
     </view>
 
     <view class="tabs">
-      <view v-for="item in tabs" :key="item.key" :class="{ active: tab === item.key }" role="button" tabindex="0" :aria-label="`查看${item.label}记录`" @click="tab = item.key">{{ item.label }}</view>
+      <view v-for="item in tabs" :key="item.key" :class="{ active: tab === item.key }" role="button" tabindex="0" :aria-label="`查看${item.label}记录`" :aria-pressed="tab === item.key" @click="tab = item.key" @keyup.enter="tab = item.key" @keyup.space.prevent="tab = item.key">{{ item.label }}</view>
     </view>
 
-    <view v-if="loading" class="card state-card" aria-live="polite">社区互动记录加载中...</view>
-    <view v-else-if="currentFailed" class="card state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ currentError }}</text>
-      <button class="retry-text" :disabled="loading" @click="load">重新加载</button>
-    </view>
+    <LoadingState v-if="loading" title="正在加载社区互动" description="请稍候，正在同步你的收藏、消息和关注记录。" />
+    <EmptyState v-else-if="currentFailed" variant="error" :description="currentError" action-text="重新加载" @action="load" />
 
     <template v-else>
       <view v-if="tab === 'favorites'">
-        <view v-for="item in favorites" :key="item.id" class="card" role="button" tabindex="0" :aria-label="`查看收藏动态${item.id}`" @click="openPost(item)">
+        <view v-for="item in favorites" :key="item.id" class="card" role="button" tabindex="0" :aria-label="`查看收藏动态${item.id}`" @click="openPost(item)" @keyup.enter="openPost(item)" @keyup.space.prevent="openPost(item)">
           <text class="title">{{ item.content }}</text>
           <text class="meta">{{ item.likes || 0 }} 赞 · {{ item.comments || 0 }} 评论</text>
         </view>
       </view>
 
       <view v-if="tab === 'notifications'">
-        <view v-for="item in notifications" :key="item.id" class="card" :class="{ unread: !item.readAt, disabled: readingId === item.id }" role="button" tabindex="0" :aria-label="`${item.readAt ? '已读' : '未读'}消息${item.title}`" @click="openNotification(item)">
+        <view v-for="item in notifications" :key="item.id" class="card" :class="{ unread: !item.readAt, disabled: readingId === item.id }" role="button" tabindex="0" :aria-label="`${item.readAt ? '已读' : '未读'}消息${item.title}`" @click="openNotification(item)" @keyup.enter="openNotification(item)" @keyup.space.prevent="openNotification(item)">
           <text class="title">{{ item.title }}</text>
           <text class="content">{{ item.content }}</text>
           <text class="meta">{{ readingId === item.id ? "处理中..." : formatTime(item.createdAt) }}</text>
@@ -39,7 +36,7 @@
         </view>
       </view>
 
-      <view v-if="!currentRows.length" class="card empty">暂无记录</view>
+       <EmptyState v-if="!currentRows.length" variant="social" title="暂无互动记录" description="参与活动、发布内容或关注同学后，这里会留下记录。" compact />
     </template>
   </view>
 </template>
@@ -52,12 +49,15 @@ import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
+import type { PublicCommunityFollowRecord, PublicCommunityNotificationRecord, PublicCommunityPostSummary } from "@activity/shared";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const loading = ref(true);
 const tab = ref<"favorites" | "notifications" | "follows">("favorites");
-const favorites = ref<any[]>([]);
-const notifications = ref<any[]>([]);
-const follows = ref<any[]>([]);
+const favorites = ref<PublicCommunityPostSummary[]>([]);
+const notifications = ref<PublicCommunityNotificationRecord[]>([]);
+const follows = ref<PublicCommunityFollowRecord[]>([]);
 const failedTabs = ref<string[]>([]);
 const errorMessages = ref<Record<string, string>>({});
 const readingId = ref(0);
@@ -79,9 +79,9 @@ async function load() {
   try {
     await ensureUser();
     const results = await Promise.allSettled([
-      request<any[]>("/public/me/community/favorites"),
-      request<any[]>("/public/me/community/notifications"),
-      request<any[]>("/public/me/community/follows")
+      request<PublicCommunityPostSummary[]>("/public/me/community/favorites"),
+      request<PublicCommunityNotificationRecord[]>("/public/me/community/notifications"),
+      request<PublicCommunityFollowRecord[]>("/public/me/community/follows")
     ]);
     if (!loadGuard.isCurrent(token)) return;
     const targets = [favorites, notifications, follows];
@@ -105,11 +105,11 @@ async function load() {
   }
 }
 
-function openPost(item: any) {
+function openPost(item: PublicCommunityPostSummary) {
   if (item?.id) uni.navigateTo({ url: withTenantCode(`/pages/community/detail?id=${item.id}`) });
 }
 
-async function openNotification(item: any) {
+async function openNotification(item: PublicCommunityNotificationRecord) {
   if (!item?.id || readingId.value) return;
   const tenantCode = getCurrentTenantCode();
   readingId.value = item.id;

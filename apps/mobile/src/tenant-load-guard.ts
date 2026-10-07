@@ -92,6 +92,11 @@ export function formatShanghaiDateTime(value: ShanghaiDateInput, fallback = "-")
   return parts ? `${shanghaiDateText(parts)} ${padDatePart(parts.hour)}:${padDatePart(parts.minute)}` : dateFallback(value, fallback, true);
 }
 
+export function formatShanghaiTime(value: ShanghaiDateInput, fallback = "-") {
+  const parts = shanghaiDateParts(value);
+  return parts ? `${padDatePart(parts.hour)}:${padDatePart(parts.minute)}` : dateFallback(value, fallback, true);
+}
+
 export function shanghaiDateString(value: ShanghaiDateInput = new Date()) {
   return formatShanghaiDate(value, "");
 }

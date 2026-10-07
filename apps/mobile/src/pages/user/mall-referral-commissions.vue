@@ -21,9 +21,9 @@
       </view>
     </scroll-view>
 
-    <view v-if="loading" class="state-card" role="status" aria-live="polite">推广收益加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
-    <view v-else-if="!items.length" class="empty-card"><text class="empty-mark">益</text><text class="empty-title">暂无推广收益</text><text class="empty-copy">生成推广码并由其他用户完成真实支付后，收益记录会显示在这里。</text></view>
+    <LoadingState v-if="loading" title="正在加载推广收益" description="正在同步待结算、已结算和风险复核记录。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="推广收益暂时无法同步，请重试。" action-text="重新加载" @action="load" />
+    <EmptyState v-else-if="!items.length" variant="default" title="暂无推广收益" description="生成推广码并由其他用户完成真实支付后，收益记录会显示在这里。" />
 
     <view v-for="item in items" :key="item.id" class="income-card">
       <view class="income-head"><view><text class="merchant-name">{{ item.merchant?.name || "商城店铺" }}</text><text class="order-no">{{ item.orderNo || "订单处理中" }}</text></view><text class="status-pill" :class="item.status">{{ item.statusText }}</text></view>
@@ -40,6 +40,8 @@ import { ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { createTenantLoadGuard, formatShanghaiDateTime } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const merchantId = ref(0);
 const status = ref("");

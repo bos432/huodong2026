@@ -65,10 +65,12 @@ async function freeRegistrationFlow(activity, checkinToken) {
   const demo = smokeUser("free");
   const user = await loginUser(demo.phone, demo.nickname);
   const detail = await api(`/public/activities/${activity.id}?tenantCode=${TENANT_CODE}`, { headers: tenantHeader() });
+  const freeTicket = pickList(detail.ticketTypes).find((item) => Number(item.price || 0) <= 0 && item.saleStatus === "available");
+  assert(freeTicket?.id, "免费活动详情缺少可售免费票种");
   const registered = await api(`/public/activities/${activity.id}/register?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     headers: userAuth(user.userAccessToken),
-    body: JSON.stringify({ answers: answers(detail.fields || [], "A"), source: "online-showcase-free" })
+    body: JSON.stringify({ answers: answers(detail.fields || [], "A"), ticketTypeId: freeTicket.id, source: "online-showcase-free" })
   });
   assert([Status.Approved, Status.CheckedIn].includes(registered.registration?.status), "免费报名后状态应为 approved 或 checked_in");
   const registrations = pickList(await api(`/public/me/registrations?tenantCode=${TENANT_CODE}`, { headers: userAuth(user.userAccessToken) }));
@@ -332,7 +334,7 @@ async function mallFlow(financeToken, opsToken, agentSettlementEnabled) {
   await api(`/admin/members/${demo.userId}/points/adjust`, {
     method: "POST",
     headers: auth(opsToken),
-    body: JSON.stringify({ points: 300, remark: "online-showcase 商城积分抵扣验收预置" })
+    body: JSON.stringify({ points: 300, remark: "online-showcase 商城积分抵扣验收预置", idempotencyKey: `online-showcase-points-${demo.userId}` })
   });
   const address = await api(`/public/me/mall/addresses?tenantCode=${TENANT_CODE}`, {
     method: "POST",

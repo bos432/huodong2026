@@ -1,3 +1,5 @@
+import { releaseIdentifiersMatch } from './release-metadata.mjs';
+
 const args = new Map();
 for (let i = 2; i < process.argv.length; i += 1) {
   const arg = process.argv[i];
@@ -14,6 +16,7 @@ for (let i = 2; i < process.argv.length; i += 1) {
 
 const apiBase = (args.get("api-base") || process.env.API_BASE || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const readyUrl = args.get("url") || process.env.API_READY_URL || `${apiBase}/health/ready`;
+const expectedCommit = String(args.get("expected-commit") || process.env.API_EXPECTED_COMMIT || "").trim();
 const timeoutMs = positiveNumber(args.get("timeout-ms") || process.env.API_READY_TIMEOUT_MS, 60000);
 const intervalMs = positiveNumber(args.get("interval-ms") || process.env.API_READY_INTERVAL_MS, 2000);
 const startedAt = Date.now();
@@ -56,20 +59,29 @@ function readinessSummary(body) {
   ].filter(Boolean).join(" ");
 }
 
+function readinessCommit(body) {
+  const data = body?.data || body;
+  return String(data?.release?.commit || "").trim();
+}
+
 while (Date.now() - startedAt <= timeoutMs) {
   attempt += 1;
   try {
     const res = await fetch(readyUrl, { headers: { Accept: "application/json" } });
     const text = await res.text();
     const body = parseBody(text);
-    if (res.ok && readinessOk(body)) {
+    const commit = readinessCommit(body);
+    const commitMatches = !expectedCommit || releaseIdentifiersMatch(commit, expectedCommit);
+    if (res.ok && readinessOk(body) && commitMatches) {
       console.log(`OK API ready after ${attempt} attempt(s): ${readyUrl}`);
       const summary = readinessSummary(body);
       if (summary) console.log(summary);
       ready = true;
       break;
     }
-    lastError = `HTTP ${res.status} ${readinessSummary(body) || text.slice(0, 160)}`;
+    lastError = !commitMatches
+      ? `HTTP ${res.status} release.commit=${commit || "missing"}, expected=${expectedCommit}`
+      : `HTTP ${res.status} ${readinessSummary(body) || text.slice(0, 160)}`;
   } catch (error) {
     lastError = error.message || String(error);
   }

@@ -9,6 +9,8 @@ import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { API_BASE } from "../../api-base";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const detail = ref<any | null>(null);
 const myDetail = ref<any | null>(null);
@@ -202,12 +204,8 @@ onShow(() => {
 
 <template>
   <view class="charity-page">
-    <view v-if="loading" class="empty-card">加载中...</view>
-    <view v-else-if="loadError" class="empty-card error-card">
-      <view class="section-title">公益公示加载失败</view>
-      <view class="empty error-copy">{{ loadError }}</view>
-      <view class="login-link retry-link" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载公益公示" description="正在同步公益池和项目公开信息。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="公益公示暂时无法同步，请重试。" action-text="重新加载" @action="load" />
     <template v-else>
       <view class="hero">
         <view>
@@ -220,11 +218,7 @@ onShow(() => {
 
       <PageDecorationBlocks :sections="decorationSections" />
 
-      <view v-if="myLoadError" class="ambassador-card personal-error">
-        <view class="ambassador-label">个人公益信息加载失败</view>
-        <view class="ambassador-copy">{{ myLoadError }}</view>
-        <view class="login-link retry-link" @click="load">重新同步</view>
-      </view>
+      <EmptyState v-if="myLoadError" compact variant="error" title="个人公益信息加载失败" :description="myLoadError" action-text="重新同步" @action="load" />
       <view v-else-if="hasMyCharity && ambassador.eligible" class="ambassador-card active">
         <view>
           <view class="ambassador-label">电子勋章</view>
@@ -239,14 +233,7 @@ onShow(() => {
           <view class="ambassador-copy">累计公益金达到 ¥{{ money(ambassador.threshold) }} 后自动展示电子勋章和编号。</view>
         </view>
       </view>
-      <view v-else class="ambassador-card">
-        <view>
-          <view class="ambassador-label">个人公益明细</view>
-          <view class="ambassador-title">登录后查看我的公益贡献</view>
-          <view class="ambassador-copy">公开公示无需登录；登录后可查看个人订单公益金、退款保留公益金和电子勋章进度。</view>
-        </view>
-        <view class="login-link" @click="goLogin">去登录</view>
-      </view>
+      <EmptyState v-else compact variant="default" title="登录后查看我的公益贡献" description="公开公示无需登录；登录后可查看个人订单公益金、退款保留公益金和电子勋章进度。" action-text="去登录" @action="goLogin" />
 
       <view class="stats">
         <view><text>公益池累计</text><strong>¥{{ money(pool.totalAccrued) }}</strong></view>
@@ -269,9 +256,9 @@ onShow(() => {
           <view class="section-title">我的公益明细</view>
           <view class="section-sub">每一笔订单对应的公益金</view>
         </view>
-        <view v-if="myLoadError" class="empty error-copy">个人公益明细暂未同步，请点击上方“重新同步”。</view>
-        <view v-else-if="!hasMyCharity" class="empty">登录后可查看个人公益金明细。</view>
-        <view v-else-if="!transactions.length" class="empty">暂无公益金明细，完成活动报名支付后会在这里显示。</view>
+        <EmptyState v-if="myLoadError" compact variant="error" title="个人公益明细暂未同步" description="请重新同步后再查看公益流水。" action-text="重新同步" @action="load" />
+        <EmptyState v-else-if="!hasMyCharity" compact variant="default" title="登录后查看个人公益金明细" description="登录后可查看订单公益金、退款保留公益金和电子勋章进度。" action-text="去登录" @action="goLogin" />
+        <EmptyState v-else-if="!transactions.length" compact variant="default" title="暂无公益金明细" description="完成活动报名支付后，公益流水会显示在这里。" />
         <view v-for="item in transactions" :key="item.id" class="tx">
           <view class="tx-head">
             <view>
@@ -290,9 +277,9 @@ onShow(() => {
             <text>{{ item.retainedOnRefund ? "退款保留公益金" : item.refundStatus ? `退款状态：${item.refundStatus}` : formatTime(item.createdAt) }}</text>
           </view>
           <view v-if="item.certificateEligible" class="certificate-actions">
-            <view role="button" tabindex="0" @click="previewContributionCertificate(item)" @keyup.enter="previewContributionCertificate(item)">查看贡献凭证</view>
-            <view role="button" tabindex="0" @click="downloadContributionCertificate(item)" @keyup.enter="downloadContributionCertificate(item)">{{ downloadingCertificateId === item.id ? "下载中..." : "下载" }}</view>
-            <view role="button" tabindex="0" @click="verifyContributionCertificate(item)" @keyup.enter="verifyContributionCertificate(item)">验真</view>
+            <view role="button" tabindex="0" aria-label="查看贡献凭证" @click="previewContributionCertificate(item)" @keyup.enter="previewContributionCertificate(item)" @keyup.space.prevent="previewContributionCertificate(item)">查看贡献凭证</view>
+            <view role="button" tabindex="0" :aria-disabled="downloadingCertificateId === item.id" aria-label="下载贡献凭证" @click="downloadContributionCertificate(item)" @keyup.enter="downloadContributionCertificate(item)" @keyup.space.prevent="downloadContributionCertificate(item)">{{ downloadingCertificateId === item.id ? "下载中..." : "下载" }}</view>
+            <view role="button" tabindex="0" aria-label="验证贡献凭证" @click="verifyContributionCertificate(item)" @keyup.enter="verifyContributionCertificate(item)" @keyup.space.prevent="verifyContributionCertificate(item)">验真</view>
           </view>
         </view>
         <view v-if="hasMore" class="load-more" @click="loadMore">{{ loadingMore ? "加载中..." : "加载更多" }}</view>
@@ -303,7 +290,7 @@ onShow(() => {
           <view class="section-title">公益项目</view>
           <view class="section-sub">公益池使用和执行公示</view>
         </view>
-        <view v-if="!projects.length" class="empty">暂无公开公益项目，后续执行公益事项后会在这里公示。</view>
+        <EmptyState v-if="!projects.length" compact variant="default" title="暂无公开公益项目" description="后续执行公益事项后，会在这里公示项目进展。" />
         <view v-for="project in projects" :key="project.id" class="project">
           <image v-if="project.coverUrl" class="cover" :src="project.coverUrl" mode="aspectFill" />
           <view class="project-body">

@@ -1,10 +1,7 @@
 <template>
   <view class="checkout-page">
-    <view v-if="pageLoading" class="state-card" role="status" aria-live="polite">结算信息加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载结算" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载结算</view>
-    </view>
+    <LoadingState v-if="pageLoading" title="正在加载结算信息" description="正在同步商品、地址和可用支付方式。" />
+    <EmptyState v-else-if="loadError" variant="error" title="结算信息加载失败" :description="loadError" action-text="重新加载结算" @action="load" />
     <view class="card address-card" role="button" tabindex="0" aria-label="管理或选择收货地址" @click="goAddresses" @keyup.enter="goAddresses" @keyup.space.prevent="goAddresses">
       <view class="row">
         <text class="section-title">收货地址</text>
@@ -147,6 +144,8 @@ import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, fetchMyProfile, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
+import LoadingState from "../../components/LoadingState.vue";
+import EmptyState from "../../components/EmptyState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const skuId = ref(0);

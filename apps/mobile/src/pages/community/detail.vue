@@ -8,11 +8,8 @@
 
     <PageDecorationBlocks :sections="decorationSections" />
 
-    <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
-      <view>{{ error }}</view>
-      <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载共修动态" @click="loadPost" @keyup.enter="loadPost" @keyup.space.prevent="loadPost">重试</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载动态" description="请稍候，正在同步内容、作者和审核状态。" />
+    <EmptyState v-else-if="error" variant="error" title="动态加载失败" :description="error" action-text="重新加载" @action="loadPost" />
 
     <template v-else-if="post">
       <view class="card post-card">
@@ -93,11 +90,13 @@
 <script setup lang="ts">
 import QRCode from "qrcode";
 import { computed, nextTick, ref } from "vue";
-import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
+import { onHide, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request } from "../../api";
 import { normalizeCommunityPosts, type CommunityPost } from "../../community-posts";
 import { usePageDecoration } from "../../decoration";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { queryParam } from "../../query";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
@@ -122,6 +121,8 @@ const rawComments = ref<any[]>([]);
 const posterUrl = ref("");
 const postLoadGuard = createTenantLoadGuard();
 const commentsLoadGuard = createTenantLoadGuard();
+const actionGuard = createTenantLoadGuard();
+const posterGuard = createTenantLoadGuard();
 const { contentSections, loadDecoration } = usePageDecoration("community_detail", "/pages/community/detail");
 
 const post = computed<CommunityPost | null>(() => normalizeCommunityPosts(rawPost.value ? [rawPost.value] : [])[0] || null);
@@ -245,56 +246,103 @@ async function loadComments() {
 
 async function toggleLike() {
   if (!post.value || activeAction.value) return;
+  const requestedPostId = post.value.id;
+  const actionToken = actionGuard.begin();
   activeAction.value = "like";
   try {
     await ensureUser();
-    const result = await request<any>(`/public/community/posts/${post.value.id}/like`, { method: "POST" });
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const result = await request<any>(`/public/community/posts/${requestedPostId}/like`, { method: "POST" });
+    if (!actionGuard.isCurrent(actionToken) || post.value?.id !== requestedPostId) return;
     rawPost.value = { ...rawPost.value, liked: Boolean(result?.liked), likes: Number(result?.likes || 0) };
     uni.showToast({ title: result?.liked ? "已点赞" : "已取消点赞", icon: "none" });
   } catch (err: any) {
-    uni.showToast({ title: err.message || "操作失败", icon: "none" });
+    if (actionGuard.isCurrent(actionToken)) uni.showToast({ title: err.message || "操作失败", icon: "none" });
   } finally {
-    activeAction.value = "";
+    if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
   }
 }
 
-async function toggleFavorite(){if(!post.value||activeAction.value)return;activeAction.value="favorite";try{await ensureUser();const result=await request<any>(`/public/community/posts/${post.value.id}/favorite`,{method:"POST"});rawPost.value={...rawPost.value,favorited:Boolean(result.favorited),favoriteCount:Number(result.favoriteCount||0)};}catch(err:any){uni.showToast({title:err.message||"收藏失败",icon:"none"});}finally{activeAction.value="";}}
-async function toggleFollow(){if(!post.value?.userId||activeAction.value)return;activeAction.value="follow";try{await ensureUser();const result=await request<any>(`/public/community/users/${post.value.userId}/follow`,{method:"POST"});rawPost.value={...rawPost.value,following:Boolean(result.following)};}catch(err:any){uni.showToast({title:err.message||"关注失败",icon:"none"});}finally{activeAction.value="";}}
+async function toggleFavorite() {
+  if (!post.value || activeAction.value) return;
+  const requestedPostId = post.value.id;
+  const actionToken = actionGuard.begin();
+  activeAction.value = "favorite";
+  try {
+    await ensureUser();
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const result = await request<any>(`/public/community/posts/${requestedPostId}/favorite`, { method: "POST" });
+    if (!actionGuard.isCurrent(actionToken) || post.value?.id !== requestedPostId) return;
+    rawPost.value = { ...rawPost.value, favorited: Boolean(result.favorited), favoriteCount: Number(result.favoriteCount || 0) };
+  } catch (err: any) {
+    if (actionGuard.isCurrent(actionToken)) uni.showToast({ title: err.message || "收藏失败", icon: "none" });
+  } finally {
+    if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
+  }
+}
+
+async function toggleFollow() {
+  if (!post.value?.userId || activeAction.value) return;
+  const requestedPostId = post.value.id;
+  const requestedUserId = post.value.userId;
+  const actionToken = actionGuard.begin();
+  activeAction.value = "follow";
+  try {
+    await ensureUser();
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const result = await request<any>(`/public/community/users/${requestedUserId}/follow`, { method: "POST" });
+    if (!actionGuard.isCurrent(actionToken) || post.value?.id !== requestedPostId) return;
+    rawPost.value = { ...rawPost.value, following: Boolean(result.following) };
+  } catch (err: any) {
+    if (actionGuard.isCurrent(actionToken)) uni.showToast({ title: err.message || "关注失败", icon: "none" });
+  } finally {
+    if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
+  }
+}
 
 async function reportContent(path: string) {
   if (activeAction.value) return;
+  const actionToken = actionGuard.begin();
   activeAction.value = "report-prompt";
   try {
     await ensureUser();
+    if (!actionGuard.isCurrent(actionToken)) return;
     uni.showModal({
       title: "举报内容",
       editable: true,
       placeholderText: "请说明举报原因",
       success: async (result: any) => {
         if (!result.confirm) {
-          activeAction.value = "";
+          if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
           return;
         }
+        if (!actionGuard.isCurrent(actionToken)) return;
         activeAction.value = "report-submit";
         try {
           await request(path, { method: "POST", data: { type: "other", description: String(result.content || "").trim() } });
-          uni.showToast({ title: "举报已提交", icon: "success" });
+          if (actionGuard.isCurrent(actionToken)) uni.showToast({ title: "举报已提交", icon: "success" });
         } catch (error: any) {
-          uni.showToast({ title: error.message || "举报失败", icon: "none" });
+          if (actionGuard.isCurrent(actionToken)) uni.showToast({ title: error.message || "举报失败", icon: "none" });
         } finally {
-          activeAction.value = "";
+          if (actionGuard.isCurrent(actionToken)) activeAction.value = "";
         }
       },
-      fail: () => { activeAction.value = ""; }
+      fail: () => { if (actionGuard.isCurrent(actionToken)) activeAction.value = ""; }
     });
   } catch (error: any) {
-    activeAction.value = "";
-    uni.showToast({ title: error.message || "请先登录", icon: "none" });
+    if (actionGuard.isCurrent(actionToken)) {
+      activeAction.value = "";
+      uni.showToast({ title: error.message || "请先登录", icon: "none" });
+    }
   }
 }
 
 function openComment(parent?:CommunityComment) {
   if (!post.value || submitting.value) return;
+  const requestedPostId = post.value.id;
+  const parentId = parent?.id;
+  const mentionUserIds = parent?.userId ? [parent.userId] : [];
+  const actionToken = actionGuard.begin();
   submitting.value = true;
   uni.showModal({
     title: "评论动态",
@@ -303,32 +351,35 @@ function openComment(parent?:CommunityComment) {
     confirmText: "提交",
     success: (res: any) => {
       if (!res.confirm) {
-        submitting.value = false;
+        if (actionGuard.isCurrent(actionToken)) submitting.value = false;
         return;
       }
       const content = String(res.content || "").trim();
       if (!content) {
-        submitting.value = false;
-        uni.showToast({ title: "请输入评论内容", icon: "none" });
+        if (actionGuard.isCurrent(actionToken)) {
+          submitting.value = false;
+          uni.showToast({ title: "请输入评论内容", icon: "none" });
+        }
         return;
       }
-      void submitComment(content,parent);
+      if (actionGuard.isCurrent(actionToken)) void submitComment(content, requestedPostId, parentId, mentionUserIds, actionToken);
     },
-    fail: () => { submitting.value = false; }
+    fail: () => { if (actionGuard.isCurrent(actionToken)) submitting.value = false; }
   });
 }
 
-async function submitComment(content: string,parent?:CommunityComment) {
-  if (!post.value) return;
+async function submitComment(content: string, requestedPostId: number, parentId: number | undefined, mentionUserIds: number[], actionToken: ReturnType<typeof actionGuard.begin>) {
   try {
     await ensureUser();
-    const result = await request<any>(`/public/community/posts/${post.value.id}/comments`, { method: "POST", data: { content,parentId:parent?.id,mentionUserIds:parent?.userId?[parent.userId]:[] } });
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const result = await request<any>(`/public/community/posts/${requestedPostId}/comments`, { method: "POST", data: { content, parentId, mentionUserIds } });
+    if (!actionGuard.isCurrent(actionToken)) return;
     uni.showToast({ title: result?.message || "评论已提交审核", icon: "none" });
     await loadPost();
   } catch (err: any) {
-    uni.showToast({ title: err.message || "评论失败", icon: "none" });
+    if (actionGuard.isCurrent(actionToken)) uni.showToast({ title: err.message || "评论失败", icon: "none" });
   } finally {
-    submitting.value = false;
+    if (actionGuard.isCurrent(actionToken)) submitting.value = false;
   }
 }
 
@@ -340,8 +391,11 @@ function copyShareLink() {
 
 async function recordShare() {
   if (!post.value) return;
+  const requestedPostId = post.value.id;
+  const actionToken = actionGuard.begin();
   try {
-    await request(`/public/community/posts/${post.value.id}/share`, { method: "POST" });
+    await request(`/public/community/posts/${requestedPostId}/share`, { method: "POST" });
+    if (!actionGuard.isCurrent(actionToken)) return;
   } catch {
     // Sharing should not be blocked by analytics failures.
   }
@@ -561,9 +615,10 @@ function drawMiniProgramPosterPlaceholder(ctx: any, x: number, y: number, width:
   ctx.fillText("活动心得", x + 212, y + 210);
 }
 
-async function generateMiniProgramPoster() {
-  if (!post.value) return false;
+async function generateMiniProgramPoster(posterToken: ReturnType<typeof posterGuard.begin>, requestedPostId: number) {
+  if (!post.value || !posterGuard.isCurrent(posterToken) || post.value.id !== requestedPostId) return false;
   await nextTick();
+  if (!posterGuard.isCurrent(posterToken) || post.value?.id !== requestedPostId) return false;
   try {
     const ctx = uni.createCanvasContext("communityPosterCanvas");
     ctx.setFillStyle("#fff7ec");
@@ -610,8 +665,9 @@ async function generateMiniProgramPoster() {
           destWidth: 750,
           destHeight: 1120,
           success: (res) => {
-            posterUrl.value = res.tempFilePath;
-            resolve(true);
+             if (!posterGuard.isCurrent(posterToken) || post.value?.id !== requestedPostId) return resolve(false);
+             posterUrl.value = res.tempFilePath;
+             resolve(true);
           },
           fail: () => resolve(false)
         });
@@ -624,6 +680,9 @@ async function generateMiniProgramPoster() {
 
 async function generatePoster() {
   if (!post.value) return;
+  const requestedPostId = post.value.id;
+  const posterToken = posterGuard.begin();
+  if (!posterGuard.isCurrent(posterToken)) return;
   // #ifdef H5
   if (typeof document !== "undefined") {
     const canvas = document.createElement("canvas");
@@ -632,35 +691,42 @@ async function generatePoster() {
     const ctx = canvas.getContext("2d");
     if (!ctx) return;
     await drawPosterCanvas(ctx, true);
+    if (!posterGuard.isCurrent(posterToken) || post.value?.id !== requestedPostId) return;
     try {
       posterUrl.value = canvas.toDataURL("image/png");
     } catch {
+      if (!posterGuard.isCurrent(posterToken) || post.value?.id !== requestedPostId) return;
       canvas.width = 750;
       canvas.height = 1120;
       const fallbackCtx = canvas.getContext("2d");
       if (fallbackCtx) {
         await drawPosterCanvas(fallbackCtx, false);
+        if (!posterGuard.isCurrent(posterToken) || post.value?.id !== requestedPostId) return;
         try {
           posterUrl.value = canvas.toDataURL("image/png");
         } catch {
-          copyShareLink();
-          uni.showToast({ title: "海报生成失败，已复制链接", icon: "none" });
+          if (posterGuard.isCurrent(posterToken)) {
+            copyShareLink();
+            uni.showToast({ title: "海报生成失败，已复制链接", icon: "none" });
+          }
           return;
         }
       }
-      uni.showToast({ title: "图片跨域，已生成无图海报", icon: "none" });
+      if (posterGuard.isCurrent(posterToken)) uni.showToast({ title: "图片跨域，已生成无图海报", icon: "none" });
     }
     await recordShare();
     return;
   }
   // #endif
   // #ifdef MP-WEIXIN
-  if (await generateMiniProgramPoster()) {
+   if (await generateMiniProgramPoster(posterToken, requestedPostId)) {
     await recordShare();
     return;
   }
-  copyShareLink();
-  uni.showToast({ title: "海报生成失败，已复制链接", icon: "none" });
+   if (posterGuard.isCurrent(posterToken)) {
+     copyShareLink();
+     uni.showToast({ title: "海报生成失败，已复制链接", icon: "none" });
+   }
   return;
   // #endif
   copyShareLink();
@@ -680,6 +746,15 @@ onShow(async () => {
   if (!guardCurrentPageFeature()) return;
   void loadPost();
   void loadDecoration();
+});
+
+onHide(() => {
+  postLoadGuard.invalidate();
+  commentsLoadGuard.invalidate();
+  actionGuard.invalidate();
+  posterGuard.invalidate();
+  activeAction.value = "";
+  submitting.value = false;
 });
 </script>
 

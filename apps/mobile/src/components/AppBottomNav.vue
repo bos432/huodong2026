@@ -105,6 +105,8 @@ function navLabel(item: { link?: string; label?: string }) {
   <view
     v-if="items.length"
     class="custom-tabbar"
+    role="tablist"
+    aria-label="主导航"
     :style="{
       background: String(activeSection?.layout?.backgroundColor || '#ffffff'),
       '--nav-columns': items.length,
@@ -116,8 +118,14 @@ function navLabel(item: { link?: string; label?: string }) {
       :key="item.link"
       class="custom-tabbar-item app-press"
       :class="{ active: isCurrent(item.link) }"
+      role="tab"
+      tabindex="0"
+      :aria-label="navLabel(item)"
+      :aria-selected="isCurrent(item.link)"
       :style="{ color: isCurrent(item.link) ? String(item.color || activeSection?.layout?.activeColor || '#a33d36') : String(activeSection?.layout?.textColor || '#65736a') }"
       @click="goDecoratedLink(item.link, item.action)"
+      @keyup.enter="goDecoratedLink(item.link, item.action)"
+      @keyup.space.prevent="goDecoratedLink(item.link, item.action)"
     >
       <image v-if="item.iconUrl" class="custom-tabbar-image" :src="String(item.iconUrl)" mode="aspectFit" />
       <view v-else-if="navIconKind(item.link) !== 'default'" class="custom-tabbar-icon custom-tabbar-symbol" :class="`is-${navIconKind(item.link)}`" />

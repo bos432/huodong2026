@@ -6,7 +6,7 @@ export class CreateMallPaymentLogs1781717400000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable("mall_payment_transactions"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_payment_transactions (
+        CREATE TABLE IF NOT EXISTS mall_payment_transactions (
           id INT NOT NULL AUTO_INCREMENT,
           orderId INT NOT NULL,
           tenantId INT NULL,
@@ -31,7 +31,7 @@ export class CreateMallPaymentLogs1781717400000 implements MigrationInterface {
 
     if (!(await queryRunner.hasTable("mall_payment_callback_logs"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_payment_callback_logs (
+        CREATE TABLE IF NOT EXISTS mall_payment_callback_logs (
           id INT NOT NULL AUTO_INCREMENT,
           orderId INT NULL,
           tenantId INT NULL,

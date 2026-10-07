@@ -10,11 +10,8 @@
       </view>
     </view>
     <PageDecorationBlocks :sections="decorationSections" />
-    <view v-if="loading" class="state-card">商城数据加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载商城" description="正在同步商品、店铺和优惠信息。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="商城数据暂时无法同步，请重试。" action-text="重新加载" @action="load" />
     <view v-else-if="loadWarning" class="state-card warning-state">
       <text>{{ loadWarning }}</text>
       <view class="state-retry" @click="load">重新同步</view>
@@ -144,6 +141,7 @@ import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { getCurrentTenantCode, request, withTenantCode } from "../../api";
 import { usePageDecoration } from "../../decoration";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import TabBar from "../../components/TabBar.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";

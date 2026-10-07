@@ -86,6 +86,7 @@ const launchConfigEnvMap: Array<[string, string]> = [
   ["wechatMessageProvider", "WECHAT_MESSAGE_PROVIDER"],
   ["wechatAppId", "WECHAT_APP_ID"],
   ["wechatAppSecret", "WECHAT_APP_SECRET"],
+  ["wechatMessageTemplateId", "WECHAT_MESSAGE_TEMPLATE_ID"],
   ["paymentSandboxEnabled", "PAYMENT_SANDBOX_ENABLED"],
   ["paymentSandboxSecret", "PAYMENT_SANDBOX_SECRET"],
   ["wechatPaySandboxSecret", "WECHAT_PAY_SANDBOX_SECRET"],

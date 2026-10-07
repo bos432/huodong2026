@@ -30,6 +30,11 @@ const initProductionEnv = read("scripts/init-production-env.mjs");
 const launchChecklist = read("docs/launch-checklist.md");
 const runbook = read("docs/production-runbook.md");
 const progress = read("docs/project-progress.md");
+const releaseMetadata = read("scripts/release-metadata.mjs");
+const releaseAssembler = read("scripts/assemble-scoped-release.mjs");
+const scopedRelease = read("scripts/deploy-scoped-release.mjs");
+const adminStaticRelease = read("scripts/deploy-admin-static.mjs");
+const h5StaticRelease = read("scripts/deploy-h5-static.mjs");
 
 for (const key of releaseKeys) {
   checkSourceIncludes(preflight, key, "preflight");
@@ -86,6 +91,22 @@ checkSourceIncludes(runbook, "release.commit", "production runbook");
 checkSourceIncludes(runbook, "回滚版本", "production runbook");
 checkSourceIncludes(progress, "发布标识挡板闭环", "project progress");
 checkSourceIncludes(progress, "发布标识就绪度", "project progress");
+
+checkSourceIncludes(releaseMetadata, "export function isReleaseId", "release metadata");
+checkSourceIncludes(releaseMetadata, "export function isCommitIdentifier", "release metadata");
+checkSourceIncludes(releaseAssembler, "releaseIdFor(commit, sourceVersion.buildTime)", "release assembler");
+checkSourceIncludes(releaseAssembler, "RELEASE_PREVIOUS_COMMIT", "release assembler previous baseline");
+for (const [source, label] of [
+  [scopedRelease, "scoped release deployer"],
+  [adminStaticRelease, "admin static deployer"],
+  [h5StaticRelease, "H5 static deployer"]
+]) checkSourceIncludes(source, "isReleaseId(releaseId)", label);
+checkSourceIncludesAll(releaseAssembler, [
+  "deploy-scoped-release.mjs",
+  "deploy-admin-static.mjs",
+  "deploy-h5-static.mjs",
+  "release-metadata.mjs"
+], "release bundle script dependencies");
 
 if (failures.length) {
   for (const failure of failures) console.error(`ERR  ${failure}`);

@@ -13,7 +13,7 @@ export class CreateMallPromotionCommissions1781719200000 implements MigrationInt
 
     if (!(await queryRunner.hasTable("mall_promotion_codes"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_promotion_codes (
+        CREATE TABLE IF NOT EXISTS mall_promotion_codes (
           id INT NOT NULL AUTO_INCREMENT,
           tenantId INT NOT NULL,
           code VARCHAR(40) NOT NULL,
@@ -40,7 +40,7 @@ export class CreateMallPromotionCommissions1781719200000 implements MigrationInt
 
     if (!(await queryRunner.hasTable("mall_commissions"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_commissions (
+        CREATE TABLE IF NOT EXISTS mall_commissions (
           id INT NOT NULL AUTO_INCREMENT,
           tenantId INT NOT NULL,
           orderId INT NOT NULL,

@@ -159,6 +159,9 @@ import { MallPaymentStatementRecord } from "./entities/mall-payment-statement-re
 import { FundRiskAlert } from "./entities/fund-risk-alert.entity";
 import { MallProduct } from "./entities/mall-product.entity";
 import { MallProductAuditLog } from "./entities/mall-product-audit-log.entity";
+import { ReleaseReadinessItem } from "./entities/release-readiness-item.entity";
+import { ReleaseAcceptanceFixture } from "./entities/release-acceptance-fixture.entity";
+import { ReleaseReadinessEvent } from "./entities/release-readiness-event.entity";
 import { MallPromotionCode } from "./entities/mall-promotion-code.entity";
 import { MallPromotionRateLimit } from "./entities/mall-promotion-rate-limit.entity";
 import { MallPromotionRiskEvent } from "./entities/mall-promotion-risk-event.entity";
@@ -218,6 +221,9 @@ import { VolunteerTrainingRecord } from "./entities/volunteer-training-record.en
 import { VolunteerServiceProof } from "./entities/volunteer-service-proof.entity";
 import { CredentialTemplate } from "./entities/credential-template.entity";
 import { CredentialTemplateVersion } from "./entities/credential-template-version.entity";
+import { ExperienceProject } from "./entities/experience-project.entity";
+import { ExperienceApplication } from "./entities/experience-application.entity";
+import { ExperienceFeedback } from "./entities/experience-feedback.entity";
 
 config({ path: "apps/api/.env" });
 config();
@@ -379,6 +385,9 @@ export default new DataSource({
     MallPaymentTransaction,
     MallPaymentStatementRecord,
     FundRiskAlert,
+    ReleaseReadinessItem,
+    ReleaseAcceptanceFixture,
+    ReleaseReadinessEvent,
     MallRefund,
     MallRefundItem,
     MallRefundMessage,
@@ -436,6 +445,9 @@ export default new DataSource({
     Certificate,
     CredentialTemplate,
     CredentialTemplateVersion,
+    ExperienceProject,
+    ExperienceApplication,
+    ExperienceFeedback,
     VolunteerProfile,
     VolunteerTrainingRecord,
     VolunteerBadgeDefinition,
@@ -448,6 +460,7 @@ export default new DataSource({
     VolunteerServiceProof
   ],
   migrations: [__dirname.includes("dist") ? `${__dirname}/migrations/[0-9]*.js` : "apps/api/src/migrations/[0-9]*.ts"],
+  logging: process.env.DB_LOGGING === "true" ? ["query", "error"] : false,
   synchronize: false,
   timezone: "+08:00",
   dateStrings: ["DATE"]

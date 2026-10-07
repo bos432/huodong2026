@@ -35,6 +35,13 @@ const TENANT_CODE = process.env.TENANT_CODE || "qiwai-showcase";
 const SHOWCASE_PASSWORD = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
 const SHOWCASE_ADMIN_USERNAME = process.env.SHOWCASE_ADMIN_USERNAME || "showcase_admin";
 const SHOWCASE_ADMIN_PASSWORD = process.env.SHOWCASE_ADMIN_PASSWORD || SHOWCASE_PASSWORD;
+const SHOWCASE_OPS_USERNAME = process.env.SHOWCASE_OPS_USERNAME || "showcase_ops";
+const SHOWCASE_FINANCE_USERNAME = process.env.SHOWCASE_FINANCE_USERNAME || "showcase_finance";
+const SHOWCASE_CHECKIN_USERNAME = process.env.SHOWCASE_CHECKIN_USERNAME || "showcase_checkin";
+const SHOWCASE_STORE_OWNER_USERNAME = process.env.SHOWCASE_STORE_OWNER_USERNAME || "showcase_store_owner";
+const SHOWCASE_STORE_FINANCE_USERNAME = process.env.SHOWCASE_STORE_FINANCE_USERNAME || "showcase_store_finance";
+const SHOWCASE_AGENT_OWNER_USERNAME = process.env.SHOWCASE_AGENT_OWNER_USERNAME || "showcase_agent_owner";
+const SKIP_STORE_ROLES = process.env.ACCEPTANCE_SKIP_STORE_ROLES === "true";
 const RUN_AGENT_SETTLEMENT_ROLE = process.env.RUN_AGENT_SETTLEMENT_ROLE === "true";
 const PLATFORM_ADMIN_USERNAME = process.env.PLATFORM_ADMIN_USERNAME || "admin";
 const PLATFORM_ADMIN_PASSWORD = process.env.PLATFORM_ADMIN_PASSWORD || process.env.SHOWCASE_ADMIN_PASSWORD || "";
@@ -257,7 +264,11 @@ async function loginAdminUi(browser, username, password, viewport = { width: 136
   await page.locator('input[placeholder="请输入管理员账号"]').fill(username);
   await page.locator('input[placeholder="请输入密码"]').fill(password);
   await page.getByRole("button", { name: "登录" }).click();
-  await page.waitForURL(/\/admin\/(?!login)/, { timeout: 15000 });
+  try {
+    await page.waitForURL(/\/admin\/(?!login)/, { timeout: 15000 });
+  } catch (error) {
+    throw new Error(`${error.message}; admin login url=${page.url()}; body=${(await page.locator("body").innerText().catch(() => "")).slice(0, 500).replace(/\s+/g, " ")}`);
+  }
   await page.waitForTimeout(800);
   return { context, page };
 }
@@ -273,6 +284,8 @@ async function h5LoginAndRegister(browser, activity) {
   if (usePasswordLogin) await ensureH5PasswordMember(phone);
   const context = await browser.newContext({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   const page = await context.newPage();
+  page.on("console", (message) => console.log(`[H5 console:${message.type()}] ${message.text()}`));
+  page.on("pageerror", (error) => console.log(`[H5 pageerror] ${error.message}`));
   const detailRoute = `/pages/activity/detail?id=${activity.id}`;
   const loginUrl = `${WEB_BASE}/?tenantCode=${encodeURIComponent(TENANT_CODE)}#/pages/user/login?redirect=${encodeURIComponent(detailRoute)}`;
   await page.goto(loginUrl, { waitUntil: "domcontentloaded" });
@@ -282,7 +295,12 @@ async function h5LoginAndRegister(browser, activity) {
     await clickTextIfVisible(page, "密码登录");
     await fillLoginInput(page, "password", SHOWCASE_PASSWORD);
   } else {
-    await clickText(page, "验证码登录");
+    // The mobile UI labels this mode as "验证码登录 / 注册"; keep the
+    // acceptance flow compatible with the older exact "验证码登录" copy.
+    const codeLoginTab = page.getByRole("button", { name: /切换到验证码登录/ }).or(
+      page.getByText(/验证码登录/).last()
+    );
+    await codeLoginTab.click();
     await clickText(page, "获取验证码");
     if (H5_SMS_CODE) {
       await fillLoginInput(page, "code", H5_SMS_CODE);
@@ -313,9 +331,15 @@ async function h5LoginAndRegister(browser, activity) {
   await clickTextIfVisible(page, "线下收款", { exact: false });
   await screenshot(page, "h5-02-register-form.png");
   await page.locator(".submit-bar .button").last().click();
-  await page.waitForTimeout(600);
-  await clickTextIfVisible(page, "确认提交");
-  await page.waitForURL(/\/pages\/user\/registration\?id=/, { timeout: 20000 });
+  await page.locator(".submit-confirm-primary").waitFor({ state: "visible", timeout: 10000 });
+  await page.locator(".submit-confirm-primary").click();
+  try {
+    await page.waitForURL(/\/pages\/user\/registration\?id=/, { timeout: 20000 });
+  } catch (error) {
+    await screenshot(page, "h5-submit-stuck.png", { fullPage: true }).catch(() => {});
+    const currentText = await bodyText(page).catch(() => "");
+    throw new Error(`${error.message}; current=${page.url()}; body=${currentText.slice(0, 600).replace(/\s+/g, " ")}`);
+  }
   await dismissH5Overlays(page);
   await waitForBodyText(page, ["待付款", "等待后台确认收款"], "H5 registration pending payment");
   await screenshot(page, "h5-03-registration-pending.png");
@@ -327,7 +351,7 @@ async function h5LoginAndRegister(browser, activity) {
 }
 
 async function financeConfirm(browser, phone) {
-  const { context, page } = await loginAdminUi(browser, "showcase_finance", SHOWCASE_PASSWORD);
+  const { context, page } = await loginAdminUi(browser, SHOWCASE_FINANCE_USERNAME, SHOWCASE_PASSWORD);
   await gotoAdmin(page, "/orders");
   await page.locator('input[placeholder="搜索订单号、活动、手机号"]').fill(phone);
   await page.getByRole("button", { name: "筛选" }).click();
@@ -341,7 +365,7 @@ async function financeConfirm(browser, phone) {
   await page.waitForTimeout(1200);
   await waitForBodyText(page, "已付款", "finance confirmed payment");
   await screenshot(page, "admin-01-finance-confirm.png");
-  record("财务角色确认线下收款", "passed", { account: "showcase_finance", screenshot: "admin-01-finance-confirm.png" });
+  record("财务角色确认线下收款", "passed", { account: SHOWCASE_FINANCE_USERNAME, screenshot: "admin-01-finance-confirm.png" });
   await context.close();
 }
 
@@ -359,14 +383,14 @@ async function h5ShowCheckInCode(h5) {
 }
 
 async function checkInByRole(browser, code, phone) {
-  const { context, page } = await loginAdminUi(browser, "showcase_checkin", SHOWCASE_PASSWORD);
+  const { context, page } = await loginAdminUi(browser, SHOWCASE_CHECKIN_USERNAME, SHOWCASE_PASSWORD);
   await gotoAdmin(page, "/check-in");
   await page.locator('input[placeholder*="签到码"]').fill(code);
   await page.locator('input[placeholder="可填写现场备注"]').fill(`浏览器验收签到 ${runId}`);
   await page.getByRole("button", { name: "核销签到" }).click();
   await waitForBodyText(page, ["最近核销", phone], "check-in result displayed");
   await screenshot(page, "admin-02-checkin-result.png");
-  record("签到角色手工核销签到码", "passed", { account: "showcase_checkin", screenshot: "admin-02-checkin-result.png" });
+  record("签到角色手工核销签到码", "passed", { account: SHOWCASE_CHECKIN_USERNAME, screenshot: "admin-02-checkin-result.png" });
   for (const viewport of [
     { width: 375, height: 780, name: "375" },
     { width: 768, height: 900, name: "768" },
@@ -394,12 +418,14 @@ async function runRoleMatrix(browser) {
   const agentSettlementEnabled = tenantFeatureEnabled("agentSettlement");
   const roles = [
     ...(SHOWCASE_ADMIN_USERNAME === "admin" ? [] : [{ username: SHOWCASE_ADMIN_USERNAME, password: SHOWCASE_ADMIN_PASSWORD, label: "商家管理员", allowed: [{ route: "/marketing-popups", text: "营销弹窗" }, ...(adsEnabled ? [{ route: "/ad-center", text: "广告中心" }] : []), { route: "/homepage-builder", text: "首页装修" }, { route: "/members", text: "会员" }], denied: adsEnabled ? [] : ["/ad-center"] }]),
-    { username: "showcase_ops", password: SHOWCASE_PASSWORD, label: "运营", allowed: [{ route: "/activities", text: "活动" }, { route: "/registrations", text: "报名" }, { route: "/marketing-popups", text: "营销弹窗" }] },
-    { username: "showcase_finance", password: SHOWCASE_PASSWORD, label: "财务", allowed: [{ route: "/orders", text: "订单" }, { route: "/finance", text: "财务" }], denied: ["/marketing-popups"] },
-    { username: "showcase_checkin", password: SHOWCASE_PASSWORD, label: "签到", allowed: [{ route: "/check-in", text: "签到核销" }], denied: ["/ad-center"] },
-    { username: "showcase_store_owner", password: SHOWCASE_PASSWORD, label: "店铺负责人", allowed: mallEnabled ? [{ route: "/mall-products", text: "商品" }, { route: "/mall-orders", text: "商城订单" }] : [], denied: mallEnabled ? ["/agent-settlements"] : ["/mall-products", "/mall-orders", "/agent-settlements"] },
-    { username: "showcase_store_finance", password: SHOWCASE_PASSWORD, label: "店铺财务", allowed: mallEnabled ? [{ route: "/mall-orders", text: "商城订单" }, { route: "/mall-settlements", text: "结算" }] : [], denied: mallEnabled ? ["/mall-products"] : ["/mall-products", "/mall-orders", "/mall-settlements"] },
-    ...(RUN_AGENT_SETTLEMENT_ROLE ? [{ username: "showcase_agent_owner", password: SHOWCASE_PASSWORD, label: "代理负责人", allowed: [...(agentSettlementEnabled ? [{ route: "/agent-settlements", text: "代理" }] : []), { route: "/mall-orders", text: "商城订单" }], denied: ["/mall-products", ...(agentSettlementEnabled ? [] : ["/agent-settlements"])] }] : [])
+    { username: SHOWCASE_OPS_USERNAME, password: SHOWCASE_PASSWORD, label: "运营", allowed: [{ route: "/activities", text: "活动" }, { route: "/registrations", text: "报名" }, { route: "/marketing-popups", text: "营销弹窗" }] },
+    { username: SHOWCASE_FINANCE_USERNAME, password: SHOWCASE_PASSWORD, label: "财务", allowed: [{ route: "/orders", text: "订单" }, { route: "/finance", text: "财务" }], denied: ["/marketing-popups"] },
+    { username: SHOWCASE_CHECKIN_USERNAME, password: SHOWCASE_PASSWORD, label: "签到", allowed: [{ route: "/check-in", text: "签到核销" }], denied: ["/ad-center"] },
+    ...(SKIP_STORE_ROLES ? [] : [
+      { username: SHOWCASE_STORE_OWNER_USERNAME, password: SHOWCASE_PASSWORD, label: "店铺负责人", allowed: mallEnabled ? [{ route: "/mall-products", text: "商品" }, { route: "/mall-orders", text: "商城订单" }] : [], denied: mallEnabled ? ["/agent-settlements"] : ["/mall-products", "/mall-orders", "/agent-settlements"] },
+      { username: SHOWCASE_STORE_FINANCE_USERNAME, password: SHOWCASE_PASSWORD, label: "店铺财务", allowed: mallEnabled ? [{ route: "/mall-orders", text: "商城订单" }, { route: "/mall-settlements", text: "结算" }] : [], denied: mallEnabled ? ["/mall-products"] : ["/mall-products", "/mall-orders", "/mall-settlements"] }
+    ]),
+    ...(RUN_AGENT_SETTLEMENT_ROLE ? [{ username: SHOWCASE_AGENT_OWNER_USERNAME, password: SHOWCASE_PASSWORD, label: "代理负责人", allowed: [...(agentSettlementEnabled ? [{ route: "/agent-settlements", text: "代理" }] : []), { route: "/mall-orders", text: "商城订单" }], denied: ["/mall-products", ...(agentSettlementEnabled ? [] : ["/agent-settlements"])] }] : [])
   ];
   if (RUN_PLATFORM_ADMIN) {
     roles.unshift({ username: PLATFORM_ADMIN_USERNAME, password: PLATFORM_ADMIN_PASSWORD, label: "平台超管", allowed: [{ route: "/tenants", text: "商家" }, { route: "/system-settings", text: "系统设置" }, { route: "/miniprogram-release", text: "小程序" }] });
@@ -408,6 +434,7 @@ async function runRoleMatrix(browser) {
   }
   if (SHOWCASE_ADMIN_USERNAME === "admin") record("角色浏览器权限：租户管理员", "warning", { note: "本次显式使用平台超管替代租户管理员，租户专属页面不计入本轮直接验收；默认 showcase_admin 账号需在独立角色批次复验。" });
   if (!RUN_AGENT_SETTLEMENT_ROLE) record("角色浏览器权限：代理负责人", "warning", { note: "未设置 RUN_AGENT_SETTLEMENT_ROLE=true，代理负责人正向页面保留为待授权验收。" });
+  if (SKIP_STORE_ROLES) record("角色浏览器权限：店铺角色", "warning", { note: "已显式跳过店铺负责人和店铺财务角色；当前验收租户未创建这些账号。" });
 
   for (const role of roles) {
     const { context, page } = await loginAdminUi(browser, role.username, role.password);
@@ -448,9 +475,13 @@ async function runFeaturePages(browser) {
     await gotoAdmin(page, "/ad-center");
     await waitForBodyText(page, "广告中心", "ad center loaded");
     await screenshot(page, "feature-02-ad-center.png");
-    const ad = await api("/public/ad-slots?slotKey=home_top_banner&pageKey=home&platform=h5");
-    assert(ad?.resolvedImageUrl, "public ad slot did not return resolvedImageUrl");
-    record("广告位 resolvedImageUrl", "passed", { resolvedImageUrl: ad.resolvedImageUrl, screenshot: "feature-02-ad-center.png" });
+    const publicAd = await api("/public/ad-slots?slotKey=home_top_banner&pageKey=home&platform=h5");
+    if (!publicAd) {
+      record("广告位 resolvedImageUrl", "warning", { note: "当前租户未配置首页广告位，公开接口按设计返回 null。", screenshot: "feature-02-ad-center.png" });
+    } else {
+      assert(publicAd.resolvedImageUrl, "public ad slot did not return resolvedImageUrl");
+      record("广告位 resolvedImageUrl", "passed", { resolvedImageUrl: publicAd.resolvedImageUrl, screenshot: "feature-02-ad-center.png" });
+    }
   } else {
     await gotoAdmin(page, "/ad-center");
     assert(!page.url().includes("/admin/ad-center"), "disabled ad center route was accessible");
@@ -509,13 +540,8 @@ async function runFeaturePages(browser) {
 }
 
 async function runResponsiveActivityCore(browser, activity) {
-  const context = await browser.newContext({ viewport: { width: 375, height: 812 }, isMobile: true, hasTouch: true });
-  const page = await context.newPage();
-  const runtimeErrors = [];
-  page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
-  page.on("console", (message) => {
-    if (message.type() === "error") runtimeErrors.push(`console: ${message.text()}`);
-  });
+  let context = null;
+  let page = null;
 
   const routes = [
     { name: "home", url: `/?tenantCode=${encodeURIComponent(TENANT_CODE)}#/`, expected: ["首页", "活动"] },
@@ -531,7 +557,17 @@ async function runResponsiveActivityCore(browser, activity) {
 
   try {
     for (const viewport of viewports) {
-      await page.setViewportSize(viewport);
+      // uni-H5 keeps page containers alive during route changes. Use a fresh
+      // context per viewport so the test measures each real viewport without
+      // triggering a framework cache/activated-hook race from setViewportSize.
+      if (context) await context.close();
+      context = await browser.newContext({ viewport, isMobile: true, hasTouch: true });
+      page = await context.newPage();
+      const runtimeErrors = [];
+      page.on("pageerror", (error) => runtimeErrors.push(`pageerror: ${error.message}`));
+      page.on("console", (message) => {
+        if (message.type() === "error") runtimeErrors.push(`console: ${message.text()}`);
+      });
       for (const route of routes) {
         runtimeErrors.length = 0;
         await page.goto(`${WEB_BASE}${route.url}`, { waitUntil: "domcontentloaded" });
@@ -560,7 +596,7 @@ async function runResponsiveActivityCore(browser, activity) {
     }
     record("H5 活动核心链路响应式布局", "passed", { viewports: "375/390/760", routes: "home/list/detail", evidence });
   } finally {
-    await context.close();
+    if (context) await context.close();
   }
 }
 
@@ -614,7 +650,7 @@ async function main() {
   result.testData.tenantEntitlementFeatures = tenantEntitlementFeatures;
   result.testData.tenantLaunchFeatureGates = tenantLaunchFeatureGates;
   const paidActivities = await api("/public/activities?page=1&pageSize=20")
-    .then((data) => (data.items || data).filter((item) => item.displayStatus === "open"));
+    .then((data) => (data.items || data).filter((item) => item.displayStatus === "open" && !item.isTest && !String(item.title || "").startsWith("【演示】") && !item.bookingDisabledReason));
   let activity;
   for (const candidate of paidActivities) {
     const detail = await api(`/public/activities/${candidate.id}`);
@@ -637,7 +673,7 @@ async function main() {
     result.testData.phone = h5.phone;
     result.testData.registrationId = h5.registrationId;
 
-    const financeLogin = await loginAdminApi("showcase_finance", SHOWCASE_PASSWORD);
+    const financeLogin = await loginAdminApi(SHOWCASE_FINANCE_USERNAME, SHOWCASE_PASSWORD);
     const orders = await api(`/admin/orders?keyword=${encodeURIComponent(h5.phone)}&pageSize=10`, { token: financeLogin.token, tenant: false });
     const order = (orders.items || []).find((item) => item.registration?.id === h5.registrationId || item.registration?.user?.phone === h5.phone);
     if (order) result.testData.order = { id: order.id, orderNo: order.orderNo, status: order.status, amount: order.amount };

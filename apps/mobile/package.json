@@ -4,13 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "test": "vitest run",
     "dev:h5": "uni -p h5",
     "prebuild:h5": "node ../../scripts/check-mobile-node-version.mjs && node ../../scripts/check-mobile-runtime-compatibility.mjs && node ../../scripts/clean-mobile-h5-dist.mjs",
     "build:h5": "uni build -p h5 && node ../../scripts/write-static-version.mjs apps/mobile/dist/build/h5 h5",
     "prebuild:mp-weixin": "node ../../scripts/check-mobile-node-version.mjs && node ../../scripts/check-mobile-runtime-compatibility.mjs && node ../../scripts/clean-mobile-mp-weixin-dist.mjs",
     "build:mp-weixin": "uni build -p mp-weixin && node ../../scripts/patch-mobile-mp-weixin-auth.mjs"
   },
-  "dependencies": {
+  "dependencies": {},
+  "devDependencies": {
     "@dcloudio/uni-app": "3.0.0-alpha-5010220260529001",
     "@dcloudio/uni-components": "3.0.0-alpha-5010220260529001",
     "@dcloudio/uni-h5": "3.0.0-alpha-5010220260529001",
@@ -18,14 +20,14 @@
     "@types/qrcode": "^1.5.6",
     "gsap": "^3.13.0",
     "qrcode": "^1.5.4",
-    "vue": "3.5.41"
-  },
-  "devDependencies": {
+    "vue": "3.5.41",
     "@dcloudio/types": "^3.4.14",
     "@dcloudio/vite-plugin-uni": "3.0.0-alpha-5010220260529001",
     "@vitejs/plugin-vue": "^5.2.1",
+    "@vue/compiler-sfc": "^3.5.41",
     "typescript": "^5.6.3",
-    "vite": "^5.4.11"
+    "vite": "^5.4.11",
+    "vitest": "^2.1.9"
   },
   "overrides": {
     "@babel/core": "7.29.7",

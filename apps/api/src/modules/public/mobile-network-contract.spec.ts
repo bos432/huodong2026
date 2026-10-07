@@ -27,8 +27,9 @@ describe("mobile production network contract", () => {
 
     expect(activityList).not.toContain("formatToParts");
     expect(communityProgram).not.toContain("formatToParts");
-    expect(activityList).toContain("getUTCMonth");
-    expect(communityProgram).toContain("getUTCFullYear");
+    expect(activityList).toContain("formatShanghaiDateTime");
+    expect(activityList).toContain("groupHomepageActivities");
+    expect(communityProgram).toContain("formatShanghaiDateTime");
     expect(activityList).not.toContain('from "../../date-time"');
     expect(communityProgram).not.toContain('from "../../date-time"');
   });
@@ -57,15 +58,15 @@ describe("mobile production network contract", () => {
 
   it("does not block initial navigation on location and replaces stale tenant routes", () => {
     const api = read("apps/mobile/src/api.ts");
-    const home = read("apps/mobile/src/pages/index/index.vue");
+    const home = read("apps/mobile/src/pages/home/index.vue");
     const tabBar = read("apps/mobile/src/components/TabBar.vue");
     const tenantSwitcher = read("apps/mobile/src/components/TenantSwitcher.vue");
     const pageDecorationBlocks = read("apps/mobile/src/components/PageDecorationBlocks.vue");
 
-    expect(home).toContain("await Promise.allSettled([loadPageTheme(), loadDecoration(), loadOperationSetting()]);");
-    expect(home).toContain("await loadActivities();");
-    expect(home).toContain("void resolveTenantByCurrentLocation({ silent: true }).then");
-    expect(home).toContain("if (!tenantSwitcherEnabled.value) return");
+    expect(home).toContain("async function loadActivities()");
+    expect(home).toContain("request<PublicActivityListResponse | PublicActivitySummary[]>");
+    expect(home).toContain("const mapped = mapPublicActivityList(result)");
+    expect(home).toContain("loadError.value = `接口暂不可用");
     expect(api).toContain("if (bootstrap?.tenantSwitcherEnabled === false)");
     expect(tabBar).toContain('import { applyTenantBootstrapDefault } from "../api"');
     expect(tabBar).toContain("await applyTenantBootstrapDefault()");
@@ -82,12 +83,9 @@ describe("mobile production network contract", () => {
     expect(tenantSwitcher).toContain('v-else-if="loadError"');
     expect(tenantSwitcher).toContain('emit("changed", item)');
     expect(tenantSwitcher).toContain("uni.reLaunch({ url: nextRoute })");
-    expect(home).toContain('<view class="discovery-topbar">');
-    expect(home).not.toContain('<view class="discovery-topbar app-enter-soft">');
-    expect(home).toContain(":show-overlays=\"false\"");
-    expect(home).toContain("<MarketingPopup />");
-    expect(home).toContain("<SplashAd />");
-    expect(pageDecorationBlocks).toContain("showOverlays?: boolean");
-    expect(pageDecorationBlocks).toContain("<template v-if=\"showOverlays\">");
+    expect(home).toContain('<view class="topbar">');
+    expect(home).toContain('class="hero-grid"');
+    expect(home).toContain("<CategoryScroller");
+    expect(home).toContain("<BaseBottomSheet");
   });
 });

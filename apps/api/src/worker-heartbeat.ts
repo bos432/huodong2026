@@ -12,17 +12,21 @@ export type WorkerHeartbeat = {
   commit: string;
 };
 
-export function workerHeartbeatFile(env: NodeJS.ProcessEnv = process.env) {
-  const configured = String(env.WORKER_HEARTBEAT_FILE || "").trim();
-  if (configured) return configured;
-  const current = process.cwd();
-  const projectRoot = fs.existsSync(path.join(current, "apps", "api"))
+export function projectRootFrom(current: string) {
+  return fs.existsSync(path.join(current, "apps", "api"))
     ? current
     : fs.existsSync(path.join(current, "..", "apps", "api"))
       ? path.resolve(current, "..")
       : fs.existsSync(path.join(current, "..", "..", "apps", "api"))
         ? path.resolve(current, "..", "..")
         : current;
+}
+
+export function workerHeartbeatFile(env: NodeJS.ProcessEnv = process.env) {
+  const configured = String(env.WORKER_HEARTBEAT_FILE || "").trim();
+  const current = process.cwd();
+  const projectRoot = projectRootFrom(current);
+  if (configured) return path.isAbsolute(configured) ? path.resolve(configured) : path.resolve(projectRoot, configured);
   return path.resolve(projectRoot, "runtime", "activity-worker-heartbeat.json");
 }
 

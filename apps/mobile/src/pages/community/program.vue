@@ -1,16 +1,13 @@
 <template>
   <view class="container program-page">
     <view class="custom-nav">
-      <view class="nav-back" role="button" aria-label="返回" @click="goBack">返回</view>
+      <view class="nav-back" role="button" tabindex="0" aria-label="返回" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
       <text class="nav-title">共学计划</text>
-      <view class="nav-action" role="button" aria-label="刷新共学计划" @click="load">刷新</view>
+      <view class="nav-action" role="button" tabindex="0" aria-label="刷新共学计划" @click="load" @keyup.enter="load" @keyup.space.prevent="load">刷新</view>
     </view>
 
-    <view v-if="loading" class="card state-card" aria-live="polite">共学计划加载中...</view>
-    <view v-else-if="loadError" class="card state-card error-state" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <view class="button secondary block" role="button" aria-label="重新加载共学计划" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载共学计划" description="请稍候，正在同步活动安排和打卡任务。" />
+    <EmptyState v-else-if="loadError" variant="error" title="共学计划加载失败" :description="loadError" action-text="重新加载" @action="load" />
 
     <template v-else-if="program">
       <view class="hero">
@@ -52,8 +49,11 @@
           class="button block"
           :class="{ disabled: operationBusy }"
           role="button"
+          tabindex="0"
           :aria-label="activeAction === 'join' ? '正在提交共学申请' : '申请加入共学'"
           @click="joinProgram"
+          @keyup.enter="joinProgram"
+          @keyup.space.prevent="joinProgram"
         >{{ activeAction === "join" ? "提交中..." : "申请加入" }}</view>
       </view>
 
@@ -109,8 +109,11 @@
               class="button secondary block"
               :class="{ disabled: operationBusy }"
               role="button"
+              tabindex="0"
               :aria-label="`${answers[task.id].images.length ? '更换' : '选择'}${task.title}打卡图片`"
               @click="chooseImage(task.id)"
+              @keyup.enter="chooseImage(task.id)"
+              @keyup.space.prevent="chooseImage(task.id)"
             >{{ activeAction === `image:${task.id}` ? "上传中..." : answers[task.id].images.length ? "更换图片" : "选择图片" }}</view>
           </view>
 
@@ -119,8 +122,11 @@
             class="button secondary block"
             :class="{ disabled: operationBusy }"
             role="button"
+            tabindex="0"
             :aria-label="`${task.title}${answers[task.id].locationName ? '重新选择位置' : '获取位置'}`"
             @click="chooseLocation(task.id)"
+            @keyup.enter="chooseLocation(task.id)"
+            @keyup.space.prevent="chooseLocation(task.id)"
           >{{ activeAction === `location:${task.id}` ? "定位中..." : answers[task.id].locationName || "获取位置" }}</view>
 
           <view
@@ -128,8 +134,11 @@
             class="button block"
             :class="{ disabled: operationBusy || !taskCanSubmit(task) }"
             role="button"
+            tabindex="0"
             :aria-label="`${task.title}${existing(task.id)?.status === 'rejected' ? '重新提交' : task.date < today ? '补卡' : '提交打卡'}`"
             @click="submitCheckin(task)"
+            @keyup.enter="submitCheckin(task)"
+            @keyup.space.prevent="submitCheckin(task)"
           >{{ activeAction === `checkin:${task.id}` ? "提交中..." : existing(task.id)?.status === "rejected" ? "重新提交" : task.date < today ? "提交补卡" : "提交打卡" }}</view>
         </view>
       </template>
@@ -140,11 +149,13 @@
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { ensureUser, getCurrentTenantCode, request, uploadCommunityPostImage } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
-import { shanghaiDateString } from "../../tenant-load-guard";
+import { formatShanghaiDateTime, shanghaiDateString } from "../../tenant-load-guard";
 
 type TaskAnswer = { content: string; images: string[]; locationName: string; latitude: number | null; longitude: number | null };
 
@@ -365,12 +376,7 @@ function typeText(value: string) {
 }
 
 function formatTime(value: string) {
-  if (!value) return "未设置";
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return String(value).replace("T", " ").slice(0, 16);
-  const shifted = new Date(date.getTime() + 8 * 60 * 60 * 1000);
-  const pad = (part: number) => String(part).padStart(2, "0");
-  return `${shifted.getUTCFullYear()}-${pad(shifted.getUTCMonth() + 1)}-${pad(shifted.getUTCDate())} ${pad(shifted.getUTCHours())}:${pad(shifted.getUTCMinutes())}`;
+  return formatShanghaiDateTime(value, "未设置");
 }
 
 function goBack() {

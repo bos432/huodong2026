@@ -24,6 +24,7 @@ const bulkApproving = ref(false);
 const bulkRejecting = ref(false);
 const actionKey = ref("");
 const selectedRows = ref<any[]>([]);
+let registrationLoadSerial = 0;
 function routeTenantId() {
   const tenantId = typeof route.query.tenantId === "string" ? Number(route.query.tenantId) : undefined;
   return isPlatformAdmin() && tenantId && Number.isFinite(tenantId) ? tenantId : undefined;
@@ -91,18 +92,22 @@ function queryParams() {
 }
 
 async function load() {
+  const serial = ++registrationLoadSerial;
   loading.value = true;
   errorMessage.value = "";
   try {
     const result = await api.get<any, PageResult<any>>("/admin/registrations", { params: queryParams() });
+    if (serial !== registrationLoadSerial) return;
     rows.value = result.items || [];
     total.value = result.total || 0;
     selectedRows.value = [];
   } catch (error: any) {
+    if (serial !== registrationLoadSerial) return;
+    rows.value = [];
     errorMessage.value = error.message || "加载报名失败";
     ElMessage.error(errorMessage.value);
   } finally {
-    loading.value = false;
+    if (serial === registrationLoadSerial) loading.value = false;
   }
 }
 
@@ -372,7 +377,15 @@ function maskPhone(value: unknown) {
 }
 
 function answerText(row: any) {
-  return (row.answers || [])
+  const source = row?.answers;
+  const answers = Array.isArray(source)
+    ? source
+    : source && typeof source === "object"
+      ? Object.entries(source).map(([label, value]) => ({ label, value }))
+      : source == null || source === ""
+        ? []
+        : [{ label: "报名信息", value: source }];
+  return answers
     .map((answer: any, index: number) => {
       const label = String(answer.label || answer.name || "").trim() || `报名信息 ${index + 1}`;
       const rawValue = Array.isArray(answer.value) ? answer.value.join(", ") : answer.value;
@@ -448,7 +461,7 @@ watch(
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" :aria-busy="loading">
     <div class="toolbar">
       <h2>{{ pageTitle }}</h2>
       <el-button v-if="canOperateRegistrations" type="primary" plain :icon="Download" :loading="exporting" :disabled="writeLocked" @click="exportRows">按当前筛选导出 Excel</el-button>
@@ -524,10 +537,13 @@ watch(
         </div>
       </div>
 
-      <el-empty v-if="!loading && !errorMessage && !rows.length" description="暂无匹配报名记录">
+      <div v-if="loading && !rows.length" class="page-loading" role="status" aria-live="polite">
+        正在加载报名记录，请稍候…
+      </div>
+      <el-empty v-else-if="!errorMessage && !rows.length" description="暂无匹配报名记录">
         <el-button type="primary" @click="search">重新筛选</el-button>
       </el-empty>
-      <el-table v-else v-loading="loading" class="registration-table" :data="rows" stripe row-key="id" @selection-change="handleSelectionChange">
+      <el-table v-else-if="!loading || rows.length" v-loading="loading" class="registration-table" :data="rows" stripe row-key="id" @selection-change="handleSelectionChange">
         <el-table-column v-if="canOperateRegistrations" type="selection" width="48" :selectable="() => !writeLocked" />
         <el-table-column prop="id" label="ID" width="80" />
         <el-table-column label="活动" min-width="220" show-overflow-tooltip><template #default="{ row }">{{ row.activity?.title || "-" }}</template></el-table-column>
@@ -584,7 +600,7 @@ watch(
         </el-table-column>
       </el-table>
 
-      <div class="pagination">
+      <div v-if="rows.length" class="pagination">
         <el-pagination
           v-model:current-page="query.page"
           v-model:page-size="query.pageSize"
@@ -603,6 +619,7 @@ watch(
 <style scoped>
 .page-hint { margin-bottom: 14px; }
 .page-error { margin: 14px 0; }
+.page-loading { display: flex; align-items: center; justify-content: center; min-height: 160px; margin: 12px 0; border: 1px dashed #cbd5e1; border-radius: 8px; color: #475467; background: #f8fafc; }
 .activity-alert { margin-bottom: 14px; }
 .filters { margin-bottom: 12px; }
 .export-summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 12px; padding: 10px 12px; border: 1px solid #dbeafe; border-radius: 8px; background: #eff6ff; color: #475569; font-size: 13px; }

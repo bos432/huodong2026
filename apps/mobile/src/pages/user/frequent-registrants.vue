@@ -1,11 +1,11 @@
 <template>
   <view class="container registrants-page has-custom-nav">
     <view class="registrants-hero"><text class="registrants-kicker">报名资料</text><text class="registrants-title">常用报名人</text><text class="registrants-copy">仅用于你本人在当前城市的活动报名，可随时修改或删除。</text></view>
-    <view v-if="loading" class="state-card">常用报名人加载中...</view>
-    <view v-else-if="error" class="state-card error"><text>{{ error }}</text><text class="state-action" @click="load">重新加载</text></view>
+    <LoadingState v-if="loading" title="正在加载常用报名人" description="正在同步你的报名资料。" />
+    <EmptyState v-else-if="error" variant="error" title="常用报名人加载失败" :description="error" action-text="重新加载" @action="load" />
     <template v-else>
       <view v-if="rows.length" class="registrant-list"><view v-for="item in rows" :key="item.id" class="registrant-card"><view><text class="registrant-name">{{ item.name }}</text><text class="registrant-meta">{{ maskPhone(item.phone) || '未填写手机号' }} · {{ maskIdCard(item.idCard) || '未填写证件号' }}</text></view><view class="registrant-actions"><text @click="openEdit(item)">编辑</text><text class="danger" @click="remove(item)">删除</text></view></view></view>
-      <view v-else class="empty-card"><text class="empty-title">还没有常用报名人</text><text>添加同行人资料后，下次报名可直接选择带入。</text></view>
+      <EmptyState v-else variant="default" title="还没有常用报名人" description="添加同行人资料后，下次报名可直接选择带入。" />
       <view class="add-button app-press" role="button" tabindex="0" aria-label="添加常用报名人" @click="openCreate" @keyup.enter="openCreate" @keyup.space.prevent="openCreate">添加报名人</view>
     </template>
     <view v-if="formVisible" class="form-mask" @click.self="closeForm"><view class="form-sheet app-sheet-enter"><view class="form-heading"><text>{{ editingId ? '编辑报名人' : '添加报名人' }}</text><text @click="closeForm">关闭</text></view><input v-model="form.name" class="form-input" maxlength="80" placeholder="姓名（必填）" /><input v-model="form.phone" class="form-input" type="number" maxlength="11" placeholder="手机号（选填）" /><input v-model="form.idCard" class="form-input" maxlength="64" placeholder="证件号（选填）" /><text class="form-notice">资料仅归当前账号及当前城市使用，不会向其他报名成员公开。</text><view class="form-save app-press" :class="{ disabled: saving }" role="button" tabindex="0" :aria-busy="saving" @click="save" @keyup.enter="save" @keyup.space.prevent="save">{{ saving ? '保存中...' : '保存' }}</view></view></view>
@@ -16,19 +16,37 @@
 <script setup lang="ts">
 import { reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { ensureUser, request } from "../../api";
+import { ensureUser, getCurrentTenantCode, request } from "../../api";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import TabBar from "../../components/TabBar.vue";
+import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const rows = ref<any[]>([]); const loading = ref(true); const error = ref(""); const saving = ref(false); const formVisible = ref(false); const editingId = ref<number | null>(null); const form = reactive({ name: "", phone: "", idCard: "" });
+const loadGuard = createTenantLoadGuard();
 function maskPhone(value?: string) { const text = String(value || ""); return text.length === 11 ? `${text.slice(0, 3)}****${text.slice(-4)}` : text; }
 function maskIdCard(value?: string) { const text = String(value || ""); return text.length > 8 ? `${text.slice(0, 4)}********${text.slice(-4)}` : text; }
 function resetForm() { editingId.value = null; form.name = ""; form.phone = ""; form.idCard = ""; }
 function openCreate() { resetForm(); formVisible.value = true; }
 function openEdit(item: any) { editingId.value = Number(item.id); form.name = String(item.name || ""); form.phone = String(item.phone || ""); form.idCard = String(item.idCard || ""); formVisible.value = true; }
 function closeForm() { if (!saving.value) formVisible.value = false; }
-async function load() { loading.value = true; error.value = ""; try { await ensureUser(); rows.value = await request<any[]>("/public/me/frequent-registrants"); } catch (err: any) { error.value = err?.message || "常用报名人加载失败"; } finally { loading.value = false; } }
-async function save() { if (saving.value) return; if (!form.name.trim()) return uni.showToast({ title: "请填写姓名", icon: "none" }); saving.value = true; try { const path = editingId.value ? `/public/me/frequent-registrants/${editingId.value}` : "/public/me/frequent-registrants"; const row = await request<any>(path, { method: editingId.value ? "PUT" : "POST", data: { name: form.name.trim(), phone: form.phone.trim() || undefined, idCard: form.idCard.trim() || undefined } }); const index = rows.value.findIndex((item) => item.id === row.id); if (index >= 0) rows.value.splice(index, 1, row); else rows.value.unshift(row); formVisible.value = false; uni.showToast({ title: "已保存", icon: "success" }); } catch (err: any) { uni.showToast({ title: err?.message || "保存失败", icon: "none" }); } finally { saving.value = false; } }
-function remove(item: any) { uni.showModal({ title: "删除报名人", content: `确定删除“${item.name}”吗？`, success: async (result) => { if (!result.confirm) return; try { await request(`/public/me/frequent-registrants/${item.id}`, { method: "DELETE" }); rows.value = rows.value.filter((row) => row.id !== item.id); uni.showToast({ title: "已删除", icon: "success" }); } catch (err: any) { uni.showToast({ title: err?.message || "删除失败", icon: "none" }); } } }); }
+async function load() {
+  const loadToken = loadGuard.begin();
+  loading.value = true;
+  error.value = "";
+  try {
+    await ensureUser();
+    const result = await request<any[]>("/public/me/frequent-registrants");
+    if (!loadGuard.isCurrent(loadToken)) return;
+    rows.value = Array.isArray(result) ? result : [];
+  } catch (err: any) {
+    if (loadGuard.isCurrent(loadToken)) error.value = err?.message || "常用报名人加载失败";
+  } finally {
+    if (loadGuard.isCurrent(loadToken)) loading.value = false;
+  }
+}
+async function save() { if (saving.value) return; if (!form.name.trim()) return uni.showToast({ title: "请填写姓名", icon: "none" }); saving.value = true; const tenantCode = getCurrentTenantCode(); try { const path = editingId.value ? `/public/me/frequent-registrants/${editingId.value}` : "/public/me/frequent-registrants"; const row = await request<any>(path, { method: editingId.value ? "PUT" : "POST", data: { name: form.name.trim(), phone: form.phone.trim() || undefined, idCard: form.idCard.trim() || undefined } }); if (getCurrentTenantCode() !== tenantCode) return; const index = rows.value.findIndex((item) => item.id === row.id); if (index >= 0) rows.value.splice(index, 1, row); else rows.value.unshift(row); formVisible.value = false; uni.showToast({ title: "已保存", icon: "success" }); } catch (err: any) { if (getCurrentTenantCode() === tenantCode) uni.showToast({ title: err?.message || "保存失败", icon: "none" }); } finally { saving.value = false; } }
+function remove(item: any) { uni.showModal({ title: "删除报名人", content: `确定删除“${item.name}”吗？`, success: async (result) => { if (!result.confirm) return; const tenantCode = getCurrentTenantCode(); try { await request(`/public/me/frequent-registrants/${item.id}`, { method: "DELETE" }); if (getCurrentTenantCode() !== tenantCode) return; rows.value = rows.value.filter((row) => row.id !== item.id); uni.showToast({ title: "已删除", icon: "success" }); } catch (err: any) { if (getCurrentTenantCode() === tenantCode) uni.showToast({ title: err?.message || "删除失败", icon: "none" }); } } }); }
 onShow(() => { void load(); });
 </script>
 

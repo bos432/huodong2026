@@ -2,7 +2,7 @@
   <view class="container publish-page">
     <view class="custom-nav">
       <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
-      <view class="nav-title">发布心得</view>
+      <view class="nav-title">{{ editingPostId ? "修改心得" : "发布心得" }}</view>
       <view class="nav-action" role="button" tabindex="0" aria-label="刷新可发布活动" @click="loadActivities" @keyup.enter="loadActivities" @keyup.space.prevent="loadActivities">刷新</view>
     </view>
 
@@ -11,17 +11,15 @@
       <text class="subtle intro-copy">选择参加过的活动，上传现场照片和心得。提交后由后台审核，通过后会展示在共修动态中。</text>
     </view>
 
-    <view v-if="loading" class="state-card">可发布活动和心得记录加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载可发布活动" @click="loadActivities" @keyup.enter="loadActivities" @keyup.space.prevent="loadActivities">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在准备发布心得" description="请稍候，正在同步已参加活动和历史心得记录。" />
+    <EmptyState v-else-if="loadError" variant="error" title="发布资料加载失败" :description="loadError" action-text="重新加载" @action="loadActivities" />
     <view v-if="loadWarning" class="state-card warning-state">
       <text>{{ loadWarning }}</text>
       <view class="state-retry" role="button" tabindex="0" aria-label="重新同步发布数据" @click="loadActivities" @keyup.enter="loadActivities" @keyup.space.prevent="loadActivities">重新同步</view>
     </view>
 
     <view class="card form-card">
+      <view v-if="editingPostId" class="edit-notice">这是一次被退回的心得修改，提交后会重新进入审核。</view>
       <view class="field">
         <text class="label">关联活动</text>
         <picker :disabled="loading || !!loadError" :range="activityOptions" range-key="title" @change="selectActivity">
@@ -29,7 +27,7 @@
         </picker>
         <view v-if="!loading && !loadError && !activities.length" class="eligibility-empty">
           <text class="empty-title">暂时不能发布心得</text>
-          <text class="hint">已签到，或活动结束且报名成功/已付款后可发布。你可以先查看活动详情或浏览已公开的共修动态。</text>
+           <text class="hint">活动结束且完成签到后可发布。你可以先查看活动详情或浏览已公开的共修动态。</text>
           <view class="empty-actions">
             <view v-if="routeActivityId" class="button secondary sm" role="button" tabindex="0" aria-label="查看活动" @click="goActivityDetail" @keyup.enter="goActivityDetail" @keyup.space.prevent="goActivityDetail">查看活动</view>
             <view class="button secondary sm" role="button" tabindex="0" aria-label="查看动态" @click="goCommunity" @keyup.enter="goCommunity" @keyup.space.prevent="goCommunity">查看动态</view>
@@ -64,7 +62,7 @@
       </view>
 
       <view class="button block button-lg" role="button" tabindex="0" :aria-disabled="!canSubmit" :aria-busy="submitting" :class="{ disabled: !canSubmit }" @click="submit" @keyup.enter="submit" @keyup.space.prevent="submit">
-        {{ submitting ? "提交中..." : "提交审核" }}
+        {{ submitting ? "提交中..." : editingPostId ? "重新提交审核" : "提交审核" }}
       </view>
     </view>
 
@@ -86,11 +84,13 @@
 
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onShow } from "@dcloudio/uni-app";
+import { onHide, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, uploadCommunityPostImage, withTenantCode } from "../../api";
 import { queryParam } from "../../query";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const loading = ref(false);
 const uploading = ref(false);
@@ -105,7 +105,10 @@ const city = ref("");
 const tagsText = ref("");
 const myPosts = ref<any[]>([]);
 const routeActivityId = ref(0);
+const routePostId = ref(0);
+const editingPostId = ref(0);
 const loadGuard = createTenantLoadGuard();
+const actionGuard = createTenantLoadGuard();
 
 const selectedActivity = computed(() => activities.value.find((item) => item.id === selectedActivityId.value));
 const canSubmit = computed(() => !loading.value && !loadError.value && !uploading.value && !submitting.value && !!selectedActivityId.value);
@@ -140,6 +143,17 @@ async function loadActivities() {
     }
     if (postsResult.status === "fulfilled") {
       myPosts.value = Array.isArray(postsResult.value) ? postsResult.value : [];
+      const editingPost = routePostId.value
+        ? myPosts.value.find((item) => Number(item.id) === routePostId.value && item.status === "rejected")
+        : null;
+      if (editingPost) {
+        editingPostId.value = Number(editingPost.id);
+        selectedActivityId.value = Number(editingPost.activityId || editingPost.activity?.id || 0);
+        content.value = String(editingPost.content || "");
+        images.value = Array.isArray(editingPost.images) ? [...editingPost.images] : [];
+        city.value = String(editingPost.city || "");
+        tagsText.value = Array.isArray(editingPost.tags) ? editingPost.tags.join("，") : "";
+      }
     } else {
       loadWarning.value = (postsResult.reason as any)?.message || "我的心得记录同步失败，不影响继续填写。";
     }
@@ -158,15 +172,17 @@ function loadRouteOptions() {
   const pages = getCurrentPages();
   const options = (pages[pages.length - 1] as any)?.options || {};
   const pageActivityId = Number(options.activityId || 0);
+  const pagePostId = Number(options.postId || 0);
   if (pageActivityId) {
     routeActivityId.value = pageActivityId;
-    return;
   }
+  if (pagePostId) routePostId.value = pagePostId;
   // #ifdef H5
   if (typeof window !== "undefined") {
     const hash = window.location.hash || "";
     const queryText = hash.includes("?") ? hash.slice(hash.indexOf("?") + 1) : window.location.search.slice(1);
     routeActivityId.value = Number(queryParam(queryText, "activityId") || 0);
+    routePostId.value = Number(queryParam(queryText, "postId") || 0);
   }
   // #endif
 }
@@ -184,6 +200,7 @@ async function chooseImages() {
   if (uploading.value || submitting.value) return;
   const count = Math.max(9 - images.value.length, 0);
   if (!count) return;
+  const actionToken = actionGuard.begin();
   uploading.value = true;
   try {
     const chooser = new Promise<UniApp.ChooseImageSuccessCallbackResult>((resolve, reject) => uni.chooseImage({ count, sizeType: ["compressed"], sourceType: ["album", "camera"], success: resolve, fail: reject }));
@@ -192,13 +209,14 @@ async function chooseImages() {
     const files = (res.tempFilePaths || []).slice(0, count);
     for (const filePath of files) {
       const uploaded = await uploadCommunityPostImage(filePath);
+      if (!actionGuard.isCurrent(actionToken)) return;
       if (uploaded.url) images.value.push(uploaded.url);
     }
   } catch (error: any) {
     const message = String(error?.errMsg || "");
-    if (!message.includes("cancel")) uni.showToast({ title: error.message || "图片上传失败", icon: "none" });
+    if (actionGuard.isCurrent(actionToken) && !message.includes("cancel")) uni.showToast({ title: error.message || "图片上传失败", icon: "none" });
   } finally {
-    uploading.value = false;
+    if (actionGuard.isCurrent(actionToken)) uploading.value = false;
   }
 }
 
@@ -215,29 +233,40 @@ async function submit() {
   if (!selectedActivityId.value) return uni.showToast({ title: "请选择参加过的活动", icon: "none" });
   if (content.value.trim().length < 10) return uni.showToast({ title: "心得至少 10 个字", icon: "none" });
   if (!images.value.length) return uni.showToast({ title: "请至少上传 1 张活动照片", icon: "none" });
+  const actionToken = actionGuard.begin();
+  const requestedActivityId = selectedActivityId.value;
+  const requestedContent = content.value.trim();
+  const requestedImages = [...images.value];
+  const requestedCity = city.value.trim();
+  const requestedTags = tags();
   submitting.value = true;
   try {
     await ensureUser();
-    const result = await request<any>("/public/community/posts", {
-      method: "POST",
+    if (!actionGuard.isCurrent(actionToken)) return;
+    const isEditing = editingPostId.value > 0;
+    const result = await request<any>(isEditing ? `/public/me/community/posts/${editingPostId.value}` : "/public/community/posts", {
+      method: isEditing ? "PATCH" : "POST",
       data: {
-        activityId: selectedActivityId.value,
-        content: content.value.trim(),
-        images: images.value,
-        city: city.value.trim(),
-        tags: tags(),
+        activityId: requestedActivityId,
+        content: requestedContent,
+        images: requestedImages,
+        city: requestedCity,
+        tags: requestedTags,
         posterConfig: { theme: "classic" }
       }
     });
-    uni.showToast({ title: result?.message || "已提交审核", icon: "none" });
+    if (!actionGuard.isCurrent(actionToken)) return;
+    uni.showToast({ title: result?.message || (isEditing ? "已重新提交审核" : "已提交审核"), icon: "none" });
     content.value = "";
     images.value = [];
     tagsText.value = "";
+    editingPostId.value = 0;
+    routePostId.value = 0;
     await loadActivities();
   } catch (error: any) {
-    uni.showToast({ title: error.message || "提交失败", icon: "none" });
+    if (actionGuard.isCurrent(actionToken)) uni.showToast({ title: error.message || "提交失败", icon: "none" });
   } finally {
-    submitting.value = false;
+    if (actionGuard.isCurrent(actionToken)) submitting.value = false;
   }
 }
 
@@ -273,15 +302,23 @@ onShow(async () => {
   loadRouteOptions();
   await loadActivities();
 });
+
+onHide(() => {
+  loadGuard.invalidate();
+  actionGuard.invalidate();
+  uploading.value = false;
+  submitting.value = false;
+});
 </script>
 
 <style scoped>
 .publish-page { padding-bottom: 48rpx; }
 .custom-nav { display:flex; align-items:center; justify-content:space-between; padding:16rpx 0; }
-.nav-back, .nav-action { min-width:104rpx; min-height:58rpx; display:flex; align-items:center; color:#4a6b8a; font-size:27rpx; font-weight:800; }
+.nav-back, .nav-action { min-width:104rpx; min-height:58rpx; display:flex; align-items:center; color:var(--app-primary); font-size:27rpx; font-weight:800; }
 .nav-action { justify-content:flex-end; }
-.nav-title { color:#333; font-size:32rpx; font-weight:900; font-family:"STKaiti","KaiTi",serif; }
-.intro-card, .form-card, .my-posts { border-radius:24rpx; box-shadow:0 12rpx 34rpx rgba(91,47,36,0.07); margin-bottom:20rpx; }
+.nav-title { color:var(--app-text); font-size:32rpx; font-weight:850; }
+.intro-card, .form-card, .my-posts { margin-bottom:20rpx; }
+.edit-notice { margin-bottom:20rpx; padding:16rpx 18rpx; border:1rpx solid #f2d2a2; border-radius:var(--app-radius); background:var(--app-warning-soft); color:#7a5b1e; font-size:24rpx; line-height:1.5; }
 .intro-copy { display:block; margin-top:10rpx; line-height:1.6; }
 .field { margin-bottom:24rpx; }
 .field-head { justify-content:space-between; }

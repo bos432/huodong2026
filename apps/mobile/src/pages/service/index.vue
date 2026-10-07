@@ -11,6 +11,8 @@ import { loadPageTheme } from "../../theme";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const setting = ref<any>();
 const loading = ref(true);
@@ -81,18 +83,16 @@ onShow(async () => {
 
     <PageDecorationBlocks :sections="bodyDecorationSections" />
 
-    <view v-if="loading" class="card subtle" aria-live="polite">服务信息加载中...</view>
-    <view v-else-if="loadError" class="card error-card" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <view class="button secondary" role="button" aria-label="重新加载服务信息" @click="refreshTenantScopedPage">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载服务信息" description="正在同步客服、合作和售后说明。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="服务信息暂时无法同步，请重试。" action-text="重新加载" @action="refreshTenantScopedPage" />
+    <EmptyState v-else-if="!setting" variant="service" title="服务信息暂未配置" description="客服和售后说明发布后会显示在这里。" action-text="重新加载" @action="refreshTenantScopedPage" />
     <template v-else-if="setting">
       <view class="card">
         <view class="card-kicker">客服支持</view>
         <view class="card-title">联系主办方</view>
         <view v-if="setting.customerServiceName" class="line"><text>客服</text><text>{{ setting.customerServiceName }}</text></view>
-        <view v-if="setting.customerServicePhone" class="line" role="button" aria-label="复制客服电话" @click="copy(setting.customerServicePhone)"><text>电话</text><text>{{ setting.customerServicePhone }}</text></view>
-        <view v-if="setting.customerServiceWechat" class="line" role="button" aria-label="复制客服微信" @click="copy(setting.customerServiceWechat)"><text>微信</text><text>{{ setting.customerServiceWechat }}</text></view>
+        <view v-if="setting.customerServicePhone" class="line" role="button" tabindex="0" aria-label="复制客服电话" @click="copy(setting.customerServicePhone)" @keyup.enter="copy(setting.customerServicePhone)" @keyup.space.prevent="copy(setting.customerServicePhone)"><text>电话</text><text>{{ setting.customerServicePhone }}</text></view>
+        <view v-if="setting.customerServiceWechat" class="line" role="button" tabindex="0" aria-label="复制客服微信" @click="copy(setting.customerServiceWechat)" @keyup.enter="copy(setting.customerServiceWechat)" @keyup.space.prevent="copy(setting.customerServiceWechat)"><text>微信</text><text>{{ setting.customerServiceWechat }}</text></view>
         <!-- #ifdef MP-WEIXIN -->
         <button class="customer-service-button" open-type="contact" :session-from="customerServiceSession">打开微信客服</button>
         <!-- #endif -->
@@ -105,7 +105,7 @@ onShow(async () => {
         <view class="card-kicker">合作入口</view>
         <view class="card-title">城市合伙人</view>
         <view class="content">面向文化空间、书院、书法教室、读书会主理人和本地社群开放合作。你可以拥有自己的活动后台、收款方式、会员和报名数据。</view>
-        <view class="partner-entry" role="button" aria-label="查看城市合伙人方案" @click="goPartner">
+        <view class="partner-entry" role="button" tabindex="0" aria-label="查看城市合伙人方案" @click="goPartner" @keyup.enter="goPartner" @keyup.space.prevent="goPartner">
           <text>查看合作方案</text>
           <text>进入</text>
         </view>

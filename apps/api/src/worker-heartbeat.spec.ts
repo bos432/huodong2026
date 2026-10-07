@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it } from "vitest";
 import fs from "fs";
 import os from "os";
 import path from "path";
-import { isWorkerHeartbeatReady, readWorkerHeartbeat, workerHeartbeatAgeMs, workerHeartbeatFile, writeWorkerHeartbeat } from "./worker-heartbeat";
+import { isWorkerHeartbeatReady, projectRootFrom, readWorkerHeartbeat, workerHeartbeatAgeMs, workerHeartbeatFile, writeWorkerHeartbeat } from "./worker-heartbeat";
 
 const temporaryDirectories: string[] = [];
 
@@ -35,12 +35,13 @@ describe("worker heartbeat", () => {
 
   it("uses the repository runtime directory when launched from apps/api", () => {
     const previous = process.cwd();
-    const repositoryRoot = path.resolve(previous, "..", "..");
-    process.chdir(path.resolve(repositoryRoot, "apps", "api"));
-    try {
-      expect(workerHeartbeatFile()).toBe(path.resolve(repositoryRoot, "runtime", "activity-worker-heartbeat.json"));
-    } finally {
-      process.chdir(previous);
-    }
+    const repositoryRoot = projectRootFrom(previous);
+    expect(projectRootFrom(path.resolve(repositoryRoot, "apps", "api"))).toBe(repositoryRoot);
+    expect(path.resolve(repositoryRoot, "runtime", "activity-worker-heartbeat.json")).toBe(workerHeartbeatFile());
+  });
+
+  it("normalizes a configured relative path to the repository root", () => {
+    const previous = process.cwd();
+    expect(workerHeartbeatFile({ WORKER_HEARTBEAT_FILE: "runtime/local-worker.json" })).toBe(path.resolve(projectRootFrom(previous), "runtime", "local-worker.json"));
   });
 });

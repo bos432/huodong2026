@@ -1,7 +1,7 @@
 <template>
   <view class="container payment-result-page">
-    <view v-if="loadingOrder" class="result-card state-card">正在核验订单状态...</view>
-    <view v-else-if="loadError" class="result-card state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="button block" role="button" tabindex="0" aria-label="重新核验订单状态" @click="retryVerification" @keyup.enter="retryVerification" @keyup.space.prevent="retryVerification">重新核验</view></view>
+    <LoadingState v-if="loadingOrder" title="正在核验订单状态" description="请稍候，我们正在确认支付或课程权益。" />
+    <EmptyState v-else-if="loadError" variant="error" title="订单状态核验失败" :description="loadError" action-text="重新核验" @action="retryVerification" />
     <view v-else class="result-card" :class="statusClass">
       <view class="result-kicker">{{ statusKicker }}</view>
       <view class="result-icon">{{ iconText }}</view>
@@ -25,6 +25,8 @@
 import { computed, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
 const isSuccess = ref(true);
@@ -287,8 +289,5 @@ function closeOrder() {
 .secondary-action {
   border-color: rgba(74, 107, 138, 0.28);
 }
-.state-card { color:#667085; line-height:1.6; }
-.state-card .button { margin-top:20rpx; }
-.error-state { border-color:#fecaca; background:#fff7f7; color:#b91c1c; }
 .disabled { opacity:.6; pointer-events:none; }
 </style>

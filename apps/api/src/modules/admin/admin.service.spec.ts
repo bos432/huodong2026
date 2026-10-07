@@ -478,8 +478,9 @@ describe("mobile financial write concurrency guard", () => {
     const lockedRefund = source.slice(source.indexOf("private lockedRefund("), source.indexOf("private callbackLogsQuery("));
 
     expect(rejectRefund).toContain("this.lockedRefund(repo, refundId)");
-    expect(lockedRefund).toContain('setLock("pessimistic_write")');
-    expect(lockedRefund).toContain("loadEagerRelations: false");
+    expect(lockedRefund).toContain("SELECT * FROM refunds WHERE id = ? FOR UPDATE");
+    expect(lockedRefund).toContain("repo.create(rows[0] as Partial<Refund>)");
+    expect(lockedRefund).not.toContain("leftJoinAndSelect");
     expect(rejectRefund).toContain('refund.status === "rejected"');
     expect(rejectRefund).toContain("if (!result.claimed) return result.saved");
   });

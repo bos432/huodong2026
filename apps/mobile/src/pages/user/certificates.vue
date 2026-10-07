@@ -11,8 +11,8 @@
       <view class="hero-desc">内容或活动达成后，证书会集中展示在这里。</view>
     <view class="verify-entry" role="button" tabindex="0" aria-label="公开凭证验真" @click="openVerification()" @keyup.enter="openVerification()" @keyup.space.prevent="openVerification()">公开凭证验真</view>
     </view>
-    <view v-if="loading" class="state-card">证书与凭证加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载证书" @click="loadCertificates" @keyup.enter="loadCertificates" @keyup.space.prevent="loadCertificates">重新加载证书</view></view>
+    <LoadingState v-if="loading" title="正在加载证书" description="请稍候，正在同步你的活动和志愿服务凭证。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="loadCertificates" />
     <view v-if="volunteerWarning" class="state-card warning-state" role="status" aria-live="polite"><text>{{ volunteerWarning }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新同步志愿凭证" @click="loadCertificates" @keyup.enter="loadCertificates" @keyup.space.prevent="loadCertificates">重新同步志愿凭证</view></view>
     <view v-if="downloadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ downloadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="关闭证书下载错误" @click="downloadError = ''" @keyup.enter="downloadError = ''" @keyup.space.prevent="downloadError = ''">关闭</view></view>
     <view v-for="c in certificates" :key="c.id" class="certificate-card">
@@ -30,11 +30,7 @@
         <button class="verify-btn" aria-label="验证证书" @click="openVerification(c.certificateNo, 'certificate')">验真</button>
       </view>
     </view>
-    <view v-if="!loading && !loadError && !certificates.length" class="empty-card">
-      <view class="empty-icon">证</view>
-      <view class="empty-title">暂无证书</view>
-      <view class="empty-desc">完成可发证的内容或活动后，证书会自动出现在这里。</view>
-    </view>
+    <EmptyState v-if="!loading && !loadError && !certificates.length" variant="default" title="暂无证书" description="完成可发证的内容或活动后，证书会自动出现在这里。" />
     <view v-if="volunteer.badges?.length" class="credential-card">
       <view class="credential-title">志愿勋章</view>
       <view v-for="badge in volunteer.badges" :key="badge.id" class="credential-row"><text>{{ badge.name }}</text><text>{{ formatTime(badge.awardedAt) }}</text></view>
@@ -55,6 +51,8 @@ import { createTenantLoadGuard } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDate } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const loading = ref(true);
 const loadError = ref("");

@@ -9,11 +9,8 @@
       <view v-for="item in tabs" :key="item.key" class="tab-pill" :class="{ active: activeTab === item.key }" role="tab" tabindex="0" :aria-selected="activeTab === item.key" :aria-label="`查看我的${item.label}`" @click="activeTab = item.key" @keyup.enter="activeTab = item.key" @keyup.space.prevent="activeTab = item.key">{{ item.label }}</view>
     </view>
 
-    <view v-if="loading" class="state-card">论坛记录加载中...</view>
-    <view v-else-if="activeTabFailed" class="state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ loadWarning }}</text>
-      <view class="state-retry" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载论坛记录" description="正在同步你的帖子、回复和收藏。" />
+    <EmptyState v-else-if="activeTabFailed" variant="error" title="论坛记录加载失败" :description="loadWarning" action-text="重新加载" @action="load" />
 
     <view v-if="activeTab === 'topics'">
       <view v-for="item in topics" :key="item.id" class="forum-card" @click="goTopic(item)">
@@ -28,7 +25,7 @@
           <text>收藏 {{ item.favoriteCount || 0 }}</text>
         </view>
       </view>
-      <view v-if="!loading && !activeTabFailed && !topics.length" class="empty-card">暂无我的帖子</view>
+      <EmptyState v-if="!loading && !activeTabFailed && !topics.length" variant="default" title="暂无我的帖子" description="发布或参与讨论后，内容会显示在这里。" />
     </view>
 
     <view v-if="activeTab === 'replies'">
@@ -40,7 +37,7 @@
           <text>{{ formatTime(item.createdAt) }}</text>
         </view>
       </view>
-      <view v-if="!loading && !activeTabFailed && !replies.length" class="empty-card">暂无我的回复</view>
+      <EmptyState v-if="!loading && !activeTabFailed && !replies.length" variant="default" title="暂无我的回复" description="参与帖子讨论后，你的回复会显示在这里。" />
     </view>
 
     <view v-if="activeTab === 'favorites'">
@@ -53,7 +50,7 @@
           <text>{{ formatTime(item.createdAt) }}</text>
         </view>
       </view>
-      <view v-if="!loading && !activeTabFailed && !favorites.length" class="empty-card">暂无我的收藏</view>
+      <EmptyState v-if="!loading && !activeTabFailed && !favorites.length" variant="default" title="暂无我的收藏" description="收藏感兴趣的帖子，之后可以在这里快速找到。" />
     </view>
     <TabBar current="user" />
   </view>
@@ -68,6 +65,8 @@ import { reviewSafeText } from "../../review-safe-text";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import TabBar from "../../components/TabBar.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const tabs = [
   { key: "topics", label: "帖子" },

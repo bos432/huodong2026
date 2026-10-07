@@ -1,5 +1,5 @@
 import { Activity } from "../../entities/activity.entity";
-import { testActivityBookingMessage } from "../../shared/activity-test-policy";
+import { isDemoActivityTitle, testActivityBookingMessage } from "../../shared/activity-test-policy";
 
 export type PublicActivityMapperDependencies = {
   environment?: string;
@@ -15,11 +15,12 @@ export type PublicActivityProjection = Record<string, unknown>;
  * this boundary can be tested without a database.
  */
 export function toPublicActivity(activity: Activity, dependencies: PublicActivityMapperDependencies): PublicActivityProjection {
-  const rules = activity.eligibilityRules || null;
+    const rules = activity.eligibilityRules || null;
+  const isDemo = Boolean(activity.isTest) || isDemoActivityTitle(activity.title);
   return {
     id: activity.id,
-    isTest: Boolean(activity.isTest),
-    bookingDisabledReason: testActivityBookingMessage(activity.isTest, dependencies.environment),
+    isTest: isDemo,
+    bookingDisabledReason: testActivityBookingMessage(activity.isTest, dependencies.environment, activity.title),
     title: activity.title,
     tenant: dependencies.toTenant(activity.tenant),
     coverUrl: activity.coverUrl,
@@ -74,9 +75,11 @@ export function toPublicActivity(activity: Activity, dependencies: PublicActivit
       maxAge: rules.maxAge,
       allowedRegions: rules.allowedRegions || [],
       maxRegistrationsPerUser: rules.maxRegistrationsPerUser,
-      requirePrivacyConsent: rules.requirePrivacyConsent,
-      allowCompanions: rules.allowCompanions,
+      requirePrivacyConsent: Boolean(rules.requirePrivacyConsent),
+      allowCompanions: Boolean(rules.allowCompanions),
       maxCompanions: rules.maxCompanions
-    } : null
+    } : null,
+    createdAt: activity.createdAt,
+    updatedAt: activity.updatedAt
   };
 }

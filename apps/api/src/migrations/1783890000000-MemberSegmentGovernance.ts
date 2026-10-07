@@ -5,6 +5,11 @@ async function dropIndexIfPresent(queryRunner: QueryRunner, tableName: string, i
   if (table?.indices.some((index) => index.name === indexName)) await queryRunner.dropIndex(tableName, indexName);
 }
 
+async function addIndexIfMissing(queryRunner: QueryRunner, tableName: string, index: TableIndex) {
+  const table = await queryRunner.getTable(tableName);
+  if (!table?.indices.some((existing) => existing.name === index.name)) await queryRunner.createIndex(tableName, index);
+}
+
 async function addScopeColumn(queryRunner: QueryRunner, tableName: string) {
   if (!(await queryRunner.hasColumn(tableName, "tenantScopeKey"))) {
     await queryRunner.addColumn(tableName, new TableColumn({ name: "tenantScopeKey", type: "varchar", length: "64", isNullable: false, default: "'platform'" }));
@@ -25,10 +30,10 @@ export class MemberSegmentGovernance1783890000000 implements MigrationInterface 
 
     await dropIndexIfPresent(queryRunner, "user_tags", "IDX_user_tags_tenant_user_name");
     await dropIndexIfPresent(queryRunner, "member_segments", "UQ_member_segment_tenant_name");
-    await queryRunner.createIndex("user_tags", new TableIndex({ name: "UQ_user_tags_scope_user_name", columnNames: ["tenantScopeKey", "userId", "name"], isUnique: true }));
-    await queryRunner.createIndex("user_tags", new TableIndex({ name: "IDX_user_tags_scope_name", columnNames: ["tenantScopeKey", "name", "userId"] }));
-    await queryRunner.createIndex("member_segments", new TableIndex({ name: "UQ_member_segments_scope_name", columnNames: ["tenantScopeKey", "name"], isUnique: true }));
-    await queryRunner.createIndex("member_segments", new TableIndex({ name: "IDX_member_segments_scope_enabled", columnNames: ["tenantScopeKey", "enabled", "updatedAt"] }));
+    await addIndexIfMissing(queryRunner, "user_tags", new TableIndex({ name: "UQ_user_tags_scope_user_name", columnNames: ["tenantScopeKey", "userId", "name"], isUnique: true }));
+    await addIndexIfMissing(queryRunner, "user_tags", new TableIndex({ name: "IDX_user_tags_scope_name", columnNames: ["tenantScopeKey", "name", "userId"] }));
+    await addIndexIfMissing(queryRunner, "member_segments", new TableIndex({ name: "UQ_member_segments_scope_name", columnNames: ["tenantScopeKey", "name"], isUnique: true }));
+    await addIndexIfMissing(queryRunner, "member_segments", new TableIndex({ name: "IDX_member_segments_scope_enabled", columnNames: ["tenantScopeKey", "enabled", "updatedAt"] }));
 
     const tagTable = await queryRunner.getTable("user_tags");
     for (const foreignKey of tagTable?.foreignKeys.filter((item) => item.columnNames.includes("tenantId")) || []) await queryRunner.dropForeignKey("user_tags", foreignKey);
@@ -39,10 +44,10 @@ export class MemberSegmentGovernance1783890000000 implements MigrationInterface 
       await queryRunner.query("UPDATE member_segment_snapshots SET businessKey = CONCAT('legacy:', id) WHERE businessKey IS NULL OR businessKey = ''");
       await queryRunner.changeColumn("member_segment_snapshots", "businessKey", new TableColumn({ name: "businessKey", type: "varchar", length: "100", isNullable: false }));
     }
-    await queryRunner.createIndex("member_segment_snapshots", new TableIndex({ name: "UQ_member_segment_snapshot_business", columnNames: ["tenantScopeKey", "segmentId", "businessKey"], isUnique: true }));
-    await queryRunner.createIndex("member_segment_snapshots", new TableIndex({ name: "IDX_member_segment_snapshot_scope_created", columnNames: ["tenantScopeKey", "createdAt"] }));
+    await addIndexIfMissing(queryRunner, "member_segment_snapshots", new TableIndex({ name: "UQ_member_segment_snapshot_business", columnNames: ["tenantScopeKey", "segmentId", "businessKey"], isUnique: true }));
+    await addIndexIfMissing(queryRunner, "member_segment_snapshots", new TableIndex({ name: "IDX_member_segment_snapshot_scope_created", columnNames: ["tenantScopeKey", "createdAt"] }));
 
-    await queryRunner.query(`CREATE TABLE member_behavior_tag_runs (
+    await queryRunner.query(`CREATE TABLE IF NOT EXISTS member_behavior_tag_runs (
       id INT NOT NULL AUTO_INCREMENT,
       tenantId INT NULL,
       tenantScopeKey VARCHAR(64) NOT NULL,

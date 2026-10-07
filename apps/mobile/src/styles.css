@@ -6,7 +6,7 @@
 
 html, body {
   overflow-x: hidden;
-  background: var(--page-bg, #F4F8F7);
+  background: var(--page-bg, #F7F5F0);
   font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans SC", sans-serif;
 }
 
@@ -30,21 +30,28 @@ textarea:focus-visible {
   outline-offset: 3rpx;
 }
 
-/* ===== 慢π 国风五行设计系统 ===== */
-/* 宣纸白为底，墨色为字，青绿与朱砂承担主操作和价格信息。 */
+/* ===== 慢π 设计系统 ===== */
+/* 纸白为底，墨色为字，陶土色承担主操作，雾蓝承担辅助信息。 */
 :root, page {
-  --app-page-bg: #FFFFFF;
+  --app-page-bg: #F7F5F0;
   --app-surface: #FFFFFF;
-  --app-surface-muted: #F0F3EE;
-  --app-text: #28332D;
-  --app-text-muted: #65736A;
-  --app-text-subtle: #879188;
-  --app-primary: #386151;
-  --app-primary-soft: #EAF0E9;
-  --app-action: #A33D36;
-  --app-price: #A33D36;
-  --app-border: #E1E6DE;
-  --app-radius: 8rpx;
+  --app-surface-muted: #F1EFEA;
+  --app-text: #1D2430;
+  --app-text-muted: #45505D;
+  --app-text-subtle: #78828C;
+  --app-primary: #B9533F;
+  --app-primary-soft: #F6DED7;
+  --app-action: #B9533F;
+  --app-price: #B9533F;
+  --app-border: #E6E3DD;
+  --app-success: #3F8062;
+  --app-success-soft: #E7F0EB;
+  --app-danger: #B04444;
+  --app-danger-soft: #F8E7E5;
+  --app-warning: #B98226;
+  --app-warning-soft: #F7EEDB;
+  --app-focus: #557083;
+  --app-radius: 12rpx;
   --app-space-1: 16rpx;
   --app-space-2: 24rpx;
   --app-space-3: 32rpx;
@@ -62,7 +69,7 @@ textarea:focus-visible {
 .container {
   min-height: 100vh;
   padding: 24rpx 32rpx;
-  background: var(--page-bg-layer, #F5F7F8);
+  background: var(--page-bg-layer, #F7F5F0);
   background-size: var(--page-bg-size, cover);
   background-position: var(--page-bg-position, center top);
   background-attachment: scroll;
@@ -102,9 +109,9 @@ textarea:focus-visible {
 .title-xl { font-size: var(--app-font-page-title); font-weight: 500; color: var(--app-text); font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; }
 .title-lg { font-size: var(--app-font-card-title); font-weight: 500; color: var(--app-text); font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; }
 .title-md { font-size: 32rpx; font-weight: 750; color: var(--app-text); }
-.body-text { font-size: var(--app-font-body); color: #54716C; line-height: 1.6; }
-.subtle { color: #718A85; font-size: var(--app-font-helper); }
-.price { font-size: 36rpx; font-weight: 700; color: #C35240; }
+.body-text { font-size: var(--app-font-body); color: var(--app-text-muted); line-height: 1.6; }
+.subtle { color: var(--app-text-subtle); font-size: var(--app-font-helper); }
+.price { font-size: 36rpx; font-weight: 700; color: var(--app-price); }
 .price-original { font-size: 24rpx; color: #999999; text-decoration: line-through; }
 
 /* ===== 按钮 ===== */
@@ -124,12 +131,12 @@ textarea:focus-visible {
 .button:active { opacity: 0.86; transform: translateY(1rpx) scale(.99); }
 .button.secondary {
   background: transparent;
-  color: #0F766E;
-  border: 2rpx solid #0F766E;
+  color: var(--app-focus);
+  border: 2rpx solid var(--app-focus);
 }
 .button.ghost {
   background: transparent;
-  color: #0F766E;
+  color: var(--app-focus);
   border: none;
 }
 .button.sm { height: 64rpx; font-size: 26rpx; border-radius: 8rpx; }
@@ -393,8 +400,8 @@ textarea:focus-visible {
 }
 
 @keyframes app-media-breathe {
-  from { transform: scale(1.015); }
-  to { transform: scale(1.065); }
+  from { opacity: 0; transform: scale(1.025); }
+  to { opacity: 1; transform: scale(1); }
 }
 
 @keyframes app-sheet-rise {
@@ -419,7 +426,7 @@ textarea:focus-visible {
 
 .app-media-motion {
   transform-origin: center center;
-  animation: app-media-breathe 11s ease-in-out infinite alternate;
+  animation: app-media-breathe 520ms var(--app-motion-ease) both;
 }
 
 .app-press {

@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { ActivityStatus, activityStatusText } from "@activity/shared";
 import { adminActivityPreviewUrl, mobileAdminRequest, requireMobileAdmin } from "../../../mobile-admin";
 import AdminBottomNav from "../../../components/AdminBottomNav.vue";
+import EmptyState from "../../../components/EmptyState.vue";
+import LoadingState from "../../../components/LoadingState.vue";
 
 const rows = ref<any[]>([]);
 const counts = ref<Record<string, number>>({});
@@ -153,7 +155,7 @@ onShow(load);
       </view>
       <view v-if="canWrite" class="create" @click="createActivity">新增</view>
     </view>
-    <view v-if="errorMessage" class="error-panel"><text>{{ errorMessage }}</text><view class="retry" @click="load">重试</view></view>
+    <EmptyState v-if="errorMessage" variant="error" title="活动列表加载失败" :description="errorMessage" action-text="重新加载" @action="load" />
 
     <view class="search">
       <input v-model="keyword" :disabled="loading" placeholder="搜索活动或地点" confirm-type="search" @confirm="search" />
@@ -169,8 +171,8 @@ onShow(load);
       </view>
     </scroll-view>
 
-    <view v-if="loading" class="panel">加载中...</view>
-    <view v-else-if="!rows.length" class="panel">暂无活动</view>
+    <LoadingState v-if="loading" title="正在加载活动" description="正在同步活动列表，请稍候。" />
+    <EmptyState v-else-if="!rows.length" compact variant="activity" title="暂无活动" />
     <view v-for="item in rows" v-else :key="item.id" class="card">
       <view class="main" @click="canWrite ? editActivity(item.id) : previewActivity(item)">
         <image v-if="item.coverUrl" :src="item.coverUrl" mode="aspectFill" />

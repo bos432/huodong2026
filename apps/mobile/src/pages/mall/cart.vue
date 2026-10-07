@@ -4,11 +4,8 @@
       <text class="eyebrow">慢π严选购物车</text>
       <text class="title">把想要的好物先放进来，确认地址后一起结算</text>
     </view>
-    <view v-if="loading" class="state-card">购物车加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载购物车" description="正在同步商品和可结算库存。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="购物车暂时无法同步，请重试。" action-text="重新加载" @action="load" />
     <view v-if="cartGroups.length > 1" class="cross-store-tip">
       跨店购物车将按 {{ cartGroups.length }} 个店铺拆成子订单，支付、发货、售后都会分别处理。
     </view>
@@ -54,6 +51,7 @@ import { computed, reactive, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 
 const cartItems = ref<any[]>([]);

@@ -1,4 +1,5 @@
 import { request } from "./api";
+import type { PublicCourseOrderRecord, PublicCourseSummary, PublicMemberRegistrationRecord } from "@activity/shared";
 
 export type MemberOrderSession = {
   tenantCode: string;
@@ -12,9 +13,9 @@ export type MemberOrderOverview = {
     tenantId: number | null;
     tenantCode: string | null;
   };
-  registrations: any[];
-  courses: any[];
-  courseOrders: any[];
+  registrations: PublicMemberRegistrationRecord[];
+  courses: PublicCourseSummary[];
+  courseOrders: PublicCourseOrderRecord[];
   failedSources: Array<"registrations" | "courses" | "courseOrders">;
   warning: string;
 };

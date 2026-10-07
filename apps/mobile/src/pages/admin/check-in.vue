@@ -3,6 +3,8 @@ import { onBeforeUnmount, ref } from "vue";
 import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { formatShanghaiDateTime } from '../../tenant-load-guard';
 
 const code = ref("");
@@ -240,6 +242,22 @@ async function changeActivity(event: any) {
 
 function changePoint(event: any) { selectedPointId.value = points.value[Number(event?.detail?.value)]?.id || null; }
 
+function openActivityPicker() {
+  if (!activities.value.length) return uni.showToast({ title: "暂无可选活动", icon: "none" });
+  uni.showActionSheet({
+    itemList: activities.value.map((item) => item.title || `活动 ${item.id}`),
+    success: (result) => { void changeActivity({ detail: { value: result.tapIndex } }); }
+  });
+}
+
+function openPointPicker() {
+  if (!points.value.length) return uni.showToast({ title: "当前活动暂无核销点", icon: "none" });
+  uni.showActionSheet({
+    itemList: points.value.map((item) => item.name || `核销点 ${item.id}`),
+    success: (result) => { changePoint({ detail: { value: result.tapIndex } }); }
+  });
+}
+
 function stopOverviewTimer() {
   // #ifdef H5
   if (overviewTimer !== null) window.clearInterval(overviewTimer);
@@ -306,11 +324,11 @@ onBeforeUnmount(stopPageWork);
     <view class="card">
       <view class="label">当前活动</view>
       <picker :range="activities" range-key="title" @change="changeActivity">
-        <view class="picker-value" role="button" tabindex="0" aria-label="选择当前活动">{{ activities.find((item) => item.id === selectedActivityId)?.title || "全部活动（扫码后自动识别）" }}</view>
+        <view class="picker-value" role="button" tabindex="0" aria-label="选择当前活动" @keyup.enter="openActivityPicker" @keyup.space.prevent="openActivityPicker">{{ activities.find((item) => item.id === selectedActivityId)?.title || "全部活动（扫码后自动识别）" }}</view>
       </picker>
       <view class="label">核销点</view>
       <picker :range="points" range-key="name" @change="changePoint">
-        <view class="picker-value" role="button" tabindex="0" aria-label="选择核销点">{{ points.find((item) => item.id === selectedPointId)?.name || "未指定核销点" }}</view>
+        <view class="picker-value" role="button" tabindex="0" aria-label="选择核销点" @keyup.enter="openPointPicker" @keyup.space.prevent="openPointPicker">{{ points.find((item) => item.id === selectedPointId)?.name || "未指定核销点" }}</view>
       </picker>
       <view v-if="pointsError" class="field-error">{{ pointsError }}，可重新选择活动后重试。</view>
       <view class="offline-actions">
@@ -330,9 +348,9 @@ onBeforeUnmount(stopPageWork);
       <textarea v-model="remark" class="textarea" maxlength="500" cursor-spacing="24" aria-label="现场异常或补签说明" placeholder="可填写现场异常或补签说明" />
       <view class="submit" role="button" tabindex="0" :aria-disabled="submitting" :aria-busy="submitting" :aria-label="submitting ? '核销中' : '确认核销'" :class="{ disabled: submitting }" @click="!submitting && submit()" @keyup.enter="!submitting && submit()" @keyup.space.prevent="!submitting && submit()">{{ submitting ? "核销中..." : "确认核销" }}</view>
     </view>
-    <view v-if="pageLoading && !bootstrap" class="card">核销工作台加载中...</view>
-    <view v-if="operationError" class="error-panel" role="alert" aria-live="assertive"><text>{{ operationError }}</text><view class="retry" @click="loadPage">重试</view></view>
-    <view v-if="overviewError" class="error-panel" role="alert" aria-live="assertive"><text>{{ overviewError }}</text><view class="retry" role="button" tabindex="0" aria-label="重新加载现场概览" @click="loadOverview" @keyup.enter="loadOverview" @keyup.space.prevent="loadOverview">重试</view></view>
+    <LoadingState v-if="pageLoading && !bootstrap" title="正在加载核销工作台" description="正在同步活动和核销点，请稍候。" />
+    <EmptyState v-if="operationError" variant="error" title="核销工作台加载失败" :description="operationError" action-text="重新加载" @action="loadPage" />
+    <EmptyState v-if="overviewError" compact variant="error" title="现场概览加载失败" :description="overviewError" action-text="重新加载" @action="loadOverview" />
 
     <view v-if="result" class="card success">
       <view class="success-head">

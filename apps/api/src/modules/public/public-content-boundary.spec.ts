@@ -218,10 +218,9 @@ describe("public announcement and community asset boundaries", () => {
 
   it("allowlists enhanced activities and removes private eligibility rules", () => {
     const view = v1Service.slice(v1Service.indexOf("private publicActivity(activity"), v1Service.indexOf("private findOperationSetting"));
-    expect(view).toContain("tenant: activity.tenant ? { id: activity.tenant.id, code: activity.tenant.code, name: activity.tenant.name, region: activity.tenant.region, organizerProfile: this.publicOrganizerProfile(activity.tenant) } : null");
-    expect(view).toContain("logoUrl: typeof raw.logoUrl === \"string\" ? raw.logoUrl : null");
-    expect(view).toContain("eligibilityRules: this.publicEligibilityRules(activity.eligibilityRules)");
-    expect(view).not.toContain("...publicActivity");
+    expect(view).toContain("this.activityService.toPublicSummary(activity");
+    expect(view).toContain("organizerProfile: this.publicOrganizerProfile(tenant)");
+    expect(v1Service).toContain("private publicOrganizerProfile(tenant: Tenant)");
     expect(view).not.toContain("settings:");
     expect(view).not.toContain("contactPhone:");
     expect(view).not.toContain("blacklistPhones:");

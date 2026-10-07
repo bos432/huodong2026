@@ -1,9 +1,10 @@
 import { BadRequestException, Injectable, Logger, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
+import { randomUUID } from "node:crypto";
 import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
 import { DataSource, LessThanOrEqual, Repository } from "typeorm";
 import { BusinessJob, BusinessJobStatus } from "../../entities/business-job.entity";
-import { nextJobFailureState } from "./job-retry-policy";
+import { isRetryableJobError, nextJobFailureState } from "./job-retry-policy";
 import { sanitizeAuditValue } from "../admin/audit-sanitizer";
 
 export type BusinessJobHandler = (payload: Record<string, unknown>, job: BusinessJob) => Promise<Record<string, unknown> | void>;
@@ -36,12 +37,25 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
     this.handlers.set(type, handler);
   }
 
-  async publish(input: { tenantId?: number | null; type: string; idempotencyKey: string; payload: Record<string, unknown>; maxAttempts?: number; runAt?: Date; requestId?: string | null }) {
+  async publish(input: { tenantId?: number | null; type: string; scene?: string; idempotencyKey: string; payload: Record<string, unknown>; maxAttempts?: number; runAt?: Date; requestId?: string | null }) {
     const tenantId = input.tenantId ?? 0;
     const existing = await this.jobs.findOne({ where: { tenantId, type: input.type, idempotencyKey: input.idempotencyKey } });
     if (existing) return existing;
+    const requestId = input.requestId || randomUUID();
+    const nextRunAt = input.runAt || new Date();
+    const taskId = randomUUID();
+    const payload = {
+      ...input.payload,
+      taskId,
+      tenantId,
+      scene: input.scene || input.type,
+      idempotencyKey: input.idempotencyKey,
+      requestId,
+      attempt: 0,
+      nextRunAt: nextRunAt.toISOString()
+    };
     try {
-      return await this.jobs.save(this.jobs.create({ tenantId, type: input.type, idempotencyKey: input.idempotencyKey, payload: input.payload, status: "pending", attemptCount: 0, maxAttempts: Math.max(1, input.maxAttempts || 5), nextAttemptAt: input.runAt || new Date(), lockedUntil: null, lockedBy: null, lastError: null, result: null, requestId: input.requestId || null, completedAt: null, deadLetteredAt: null }));
+      return await this.jobs.save(this.jobs.create({ tenantId, type: input.type, idempotencyKey: input.idempotencyKey, payload, status: "pending", attemptCount: 0, maxAttempts: Math.max(1, input.maxAttempts || 5), nextAttemptAt: nextRunAt, lockedUntil: null, lockedBy: null, lastError: null, result: null, requestId, completedAt: null, deadLetteredAt: null }));
     } catch (error) {
       const concurrent = await this.jobs.findOne({ where: { tenantId, type: input.type, idempotencyKey: input.idempotencyKey } });
       if (concurrent) return concurrent;
@@ -50,7 +64,14 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
   }
 
   async runDue(workerId: string, limit = 20, now = new Date()) {
-    const candidates = await this.jobs.find({ where: { status: "pending", nextAttemptAt: LessThanOrEqual(now) }, order: { nextAttemptAt: "ASC", id: "ASC" }, take: Math.max(1, Math.min(limit, 100)) });
+    const candidates = await this.jobs.find({
+      where: [
+        { status: "pending", nextAttemptAt: LessThanOrEqual(now) },
+        { status: "processing", lockedUntil: LessThanOrEqual(now) }
+      ],
+      order: { nextAttemptAt: "ASC", id: "ASC" },
+      take: Math.max(1, Math.min(limit, 100))
+    });
     let completed = 0;
     let failed = 0;
     for (const candidate of candidates) {
@@ -91,6 +112,7 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
       job.status = "pending";
       job.attemptCount = wasDeadLetter ? 0 : job.attemptCount;
       job.nextAttemptAt = runAt;
+      job.payload = this.ensureTaskEnvelope(job, runAt, job.attemptCount);
       job.lockedUntil = null;
       job.lockedBy = null;
       job.lastError = null;
@@ -153,6 +175,7 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
         job.status = "pending";
         job.attemptCount = 0;
         job.nextAttemptAt = runAt;
+        job.payload = this.ensureTaskEnvelope(job, runAt, 0);
         job.lockedUntil = null;
         job.lockedBy = null;
         job.lastError = null;
@@ -186,6 +209,21 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
     if (actorTenantId && job.tenantId !== actorTenantId) throw new NotFoundException("Business job not found in current tenant");
   }
 
+  private ensureTaskEnvelope(job: BusinessJob, nextRunAt: Date, attempt: number) {
+    const requestId = job.requestId || randomUUID();
+    job.requestId = requestId;
+    return {
+      ...job.payload,
+      taskId: typeof job.payload?.taskId === "string" && job.payload.taskId ? job.payload.taskId : randomUUID(),
+      tenantId: job.tenantId,
+      scene: typeof job.payload?.scene === "string" && job.payload.scene ? job.payload.scene : job.type,
+      idempotencyKey: job.idempotencyKey,
+      requestId,
+      attempt,
+      nextRunAt: nextRunAt.toISOString()
+    };
+  }
+
   private serializeForAdmin(job: BusinessJob) {
     return {
       ...job,
@@ -200,9 +238,12 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
     return this.dataSource.transaction(async (manager) => {
       const repository = manager.getRepository(BusinessJob);
       const job = await repository.createQueryBuilder("job").setLock("pessimistic_write").where("job.id = :id", { id }).getOne();
-      if (!job || job.status !== "pending" || job.nextAttemptAt > now || (job.lockedUntil && job.lockedUntil > now)) return null;
+      const pendingDue = job?.status === "pending" && job.nextAttemptAt <= now;
+      const expiredProcessing = job?.status === "processing" && Boolean(job.lockedUntil && job.lockedUntil <= now);
+      if (!job || (!pendingDue && !expiredProcessing)) return null;
       job.status = "processing";
-      job.attemptCount += 1;
+      if (!expiredProcessing) job.attemptCount += 1;
+      job.payload = this.ensureTaskEnvelope(job, now, job.attemptCount);
       job.lockedBy = workerId.slice(0, 80);
       job.lockedUntil = lockedUntil;
       job.lastWorkerId = workerId.slice(0, 80);
@@ -224,9 +265,9 @@ export class BusinessJobService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async fail(job: BusinessJob, error: unknown, now: Date) {
-    const failure = nextJobFailureState(job.attemptCount, job.maxAttempts, now);
+    const failure = nextJobFailureState(job.attemptCount, job.maxAttempts, now, { terminal: !isRetryableJobError(error) });
     const message = error instanceof Error ? error.message : String(error);
-    await this.jobs.update(job.id, { ...failure, lockedBy: null, lockedUntil: null, lastWorkerId: job.lastWorkerId, lastFinishedAt: now, lastError: message.slice(0, 1000) });
+    await this.jobs.update(job.id, { ...failure, payload: this.ensureTaskEnvelope(job, failure.nextAttemptAt, job.attemptCount), requestId: job.requestId, lockedBy: null, lockedUntil: null, lastWorkerId: job.lastWorkerId, lastFinishedAt: now, lastError: message.slice(0, 1000) });
     this.logger.warn(`Business job ${job.id} (${job.type}) failed on attempt ${job.attemptCount}: ${message}`);
   }
 }

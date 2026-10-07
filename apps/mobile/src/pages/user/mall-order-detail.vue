@@ -1,10 +1,7 @@
 <template>
   <view class="detail-page">
-    <view v-if="pageLoading" class="page-state" role="status" aria-live="polite">订单详情加载中...</view>
-    <view v-else-if="loadError" class="page-state error-state" role="alert" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载商城订单详情" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view>
-    </view>
+    <LoadingState v-if="pageLoading" title="正在加载订单详情" description="正在同步订单、支付和售后状态。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else-if="order">
     <view v-if="groupLoadWarning" class="page-state warning-state" role="status" aria-live="polite">
       <text>{{ groupLoadWarning }}</text>
@@ -265,6 +262,8 @@ import { ensureUser, getCurrentTenantCode, request, uploadMallRefundImage, uploa
 import { handleMallWechatPayResult, preferredMallWechatPaymentScene } from "../../mall-payment";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const orderId = ref(0);
 const order = ref<any | null>(null);

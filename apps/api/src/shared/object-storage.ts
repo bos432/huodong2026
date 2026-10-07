@@ -1,5 +1,4 @@
-import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
-import { randomBytes } from "crypto";
+import { GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 
 export type ObjectStorageConfig = {
   provider: string;
@@ -36,19 +35,30 @@ export function normalizePublicAssetBase(value: unknown) {
   }
 }
 
+export function objectStorageAssetUrl(key: string, storagePublicBase: unknown, publicApiOrigin: unknown) {
+  const encodedKey = String(key || "").split("/").map((part) => encodeURIComponent(part)).join("/");
+  const storageBase = normalizePublicAssetBase(storagePublicBase);
+  if (storageBase) return `${storageBase}/${encodedKey}`;
+  const apiBase = normalizePublicAssetBase(publicApiOrigin);
+  return apiBase ? `${apiBase}/uploads/${encodedKey}` : `/uploads/${encodedKey}`;
+}
+
 export async function testObjectStorageConnection(input: Partial<ObjectStorageConfig>) {
   const config = normalizeObjectStorageConfig(input);
   const missing = objectStorageMissingFields(config);
   if (missing.length) throw new Error(`对象存储缺少配置：${missing.join("、")}`);
   if (config.provider === "local") return { provider: "local", operation: "local", latencyMs: 0 };
   const client = new S3Client({ endpoint: config.endpoint, region: config.region, credentials: { accessKeyId: config.accessKeyId, secretAccessKey: config.accessKeySecret }, forcePathStyle: config.provider === "s3" });
-  const key = `connectivity/.probe-${Date.now()}-${randomBytes(5).toString("hex")}.txt`;
+  const key = "connectivity/.manpi-connectivity-probe.txt";
   const started = Date.now();
   try {
-    await client.send(new PutObjectCommand({ Bucket: config.bucket, Key: key, Body: "activity-storage-connectivity", ContentType: "text/plain" }));
+    const expected = "activity-storage-connectivity";
+    await client.send(new PutObjectCommand({ Bucket: config.bucket, Key: key, Body: expected, ContentType: "text/plain" }));
     await client.send(new HeadObjectCommand({ Bucket: config.bucket, Key: key }));
-    await client.send(new DeleteObjectCommand({ Bucket: config.bucket, Key: key }));
-    return { provider: config.provider, operation: "put-head-delete", latencyMs: Date.now() - started };
+    const output = await client.send(new GetObjectCommand({ Bucket: config.bucket, Key: key }));
+    const body = output.Body && typeof output.Body.transformToString === "function" ? await output.Body.transformToString() : "";
+    if (body !== expected) throw new Error("对象存储读取内容校验失败");
+    return { provider: config.provider, operation: "put-head-get", latencyMs: Date.now() - started };
   } finally {
     client.destroy();
   }

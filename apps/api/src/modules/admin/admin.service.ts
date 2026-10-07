@@ -174,6 +174,7 @@ import { automaticSmsScenes, normalizeAutomaticSmsSettings } from "../reliabilit
 import { AutomaticNotificationService } from "../reliability/automatic-notification.service";
 import { normalizeAutomaticWechatSettings } from "../reliability/automatic-wechat.service";
 import { normalizePostEventAutomationSettings } from "../reliability/post-event-automation.service";
+import { externalWorkerOwnsSchedules } from "../../worker-config";
 import { VolunteerProfile } from "../../entities/volunteer-profile.entity";
 import { VolunteerAttendanceRecord } from "../../entities/volunteer-attendance-record.entity";
 import { VolunteerBadgeAward } from "../../entities/volunteer-badge-award.entity";
@@ -382,11 +383,13 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     mkdirSync(this.uploadRoot(), { recursive: true });
     await this.ensureDefaultAdmin();
     await this.ensureDevSeed();
-    this.startOrderCloseWorker();
-    this.startActivityLifecycleWorker();
-    this.startMemberLifecycleWorker();
-    this.startAnalyticsRecomputeWorker();
-    this.startBehaviorTagRefreshWorker();
+    if (!externalWorkerOwnsSchedules({ BUSINESS_JOB_WORKER_MODE: this.config.get("BUSINESS_JOB_WORKER_MODE", "embedded"), APP_PROCESS_ROLE: this.config.get("APP_PROCESS_ROLE", "api") })) {
+      this.startOrderCloseWorker();
+      this.startActivityLifecycleWorker();
+      this.startMemberLifecycleWorker();
+      this.startAnalyticsRecomputeWorker();
+      this.startBehaviorTagRefreshWorker();
+    }
   }
 
   onModuleDestroy() {
@@ -8404,7 +8407,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
 
   async getOperationSetting(admin?: AdminContext, requestedTenantId?: number | string | null) {
     const scope = await this.operationSettingTarget(admin, requestedTenantId);
-    const setting = await this.operationSettings.findOne({ where: { id: scope.id } });
+    const setting = await this.findOperationSettingForScope(scope);
     const row = setting || this.createOperationSetting(admin, scope.tenant, scope.id);
     return this.publicOperationSettingForAdmin(row, scope.tenant);
   }
@@ -8450,6 +8453,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       setting.paymentMethods = this.normalizePaymentMethods(setting.paymentMethods);
     }
     if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined) {
+      const requestedLaunchConfig = dto.launchConfig as Record<string, unknown>;
+      if (requestedLaunchConfig.realPaymentEnabled === true || requestedLaunchConfig.wechatPayEnabled === true) {
+        throw new BadRequestException("真实支付必须通过平台统一支付配置接口完成门禁校验和二次确认");
+      }
       setting.launchConfig = secureLaunchConfigForStorage(setting.launchConfig, dto.launchConfig, dto.clearLaunchConfigSecrets);
     }
     if (!scope.tenant && dto.defaultTenantCode !== undefined) {
@@ -8596,14 +8603,21 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       locked.reviewedBy = this.actorName(admin);
       locked.reviewRemark = dto.remark || null;
       locked.reviewedAt = new Date();
-      return { refund: await repo.save(locked), claimed: true };
+      await repo.save(locked, { reload: false });
+      return { refund: locked, claimed: true };
     });
     if (!claimed.claimed) return { refund: claimed.refund, order: claimed.refund.order, idempotent: true, providerPending: claimed.refund.status === "processing" };
     const refund = claimed.refund;
     this.assertTenantAccess(refund, admin);
     const order = refund.order;
     if (![OrderStatus.Paid, OrderStatus.PartiallyRefunded].includes(order.status)) throw new BadRequestException("当前订单不能退");
-    const reservedRefunds = await this.refunds.find({ where: { order: { id: order.id }, status: In(["processing", "completed"]) } });
+    const reservedRefunds = await this.refunds
+      .createQueryBuilder("refund")
+      .setFindOptions({ loadEagerRelations: false })
+      .select(["refund.id", "refund.amount", "refund.status"])
+      .where("refund.orderId = :orderId", { orderId: order.id })
+      .andWhere("refund.status IN (:...statuses)", { statuses: ["processing", "completed"] })
+      .getMany();
     const refunded = reservedRefunds.filter((item) => item.status === "completed").reduce((sum, item) => sum + Number(item.amount), 0);
     const reserved = reservedRefunds.filter((item) => item.id !== refund.id).reduce((sum, item) => sum + Number(item.amount), 0);
     const amount = Number(refund.amount);
@@ -8616,7 +8630,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
       refund.providerRefundFailureReason = error instanceof Error ? error.message : "服务商退款提交失败";
       refund.providerRefundRetryCount = Number(refund.providerRefundRetryCount || 0) + 1;
       refund.providerRefundSyncedAt = new Date();
-      await this.refunds.save(refund);
+      await this.refunds.save(refund, { reload: false });
       throw error;
     }
     const now = new Date();
@@ -8634,7 +8648,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         refund.reviewRemark = dto.remark || null;
         refund.reviewedAt = now;
         refund.providerRefundFailureReason = "服务商退款失败";
-        const savedRefund = await this.refunds.save(refund);
+        await this.refunds.save(refund, { reload: false });
+        const savedRefund = refund;
         await this.logOperation(admin, "refund.provider_failed", "refund", savedRefund.id, `服务商退款失败：${savedRefund.refundNo}`, { orderNo: order.orderNo, amount: savedRefund.amount, providerRefundNo: savedRefund.providerRefundNo });
         return { refund: savedRefund, order, providerPending: false };
       }
@@ -8643,7 +8658,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
         refund.reviewedBy = this.actorName(admin);
         refund.reviewRemark = dto.remark || null;
         refund.reviewedAt = now;
-        const savedRefund = await this.refunds.save(refund);
+        await this.refunds.save(refund, { reload: false });
+        const savedRefund = refund;
         await this.logOperation(admin, "refund.provider_processing", "refund", savedRefund.id, `服务商退款处理中：${savedRefund.refundNo}`, { orderNo: order.orderNo, amount: savedRefund.amount, providerRefundNo: savedRefund.providerRefundNo, providerRefundStatus: savedRefund.providerRefundStatus });
         await this.businessJobs.publish({
           tenantId: order.registration?.activity?.tenant?.id || null,
@@ -10464,7 +10480,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const result = await this.dataSource.transaction(async (manager) => {
       const walletRepo = manager.getRepository(UserWallet);
       const txRepo = manager.getRepository(WalletTransaction);
-      const findExisting = (currentRead = false) => txRepo.findOne({ where: { idempotencyKey: dto.idempotencyKey }, relations: { user: true, wallet: true }, loadEagerRelations: false, ...(currentRead ? { lock: { mode: "pessimistic_read" as const } } : {}) });
+      // MariaDB does not accept TypeORM's `FOR SHARE` generated for pessimistic_read.
+      // The retry lookup is inside the same transaction, so a write lock preserves
+      // the idempotency race guarantee and remains portable across MySQL/MariaDB.
+      const findExisting = (currentRead = false) => txRepo.findOne({ where: { idempotencyKey: dto.idempotencyKey }, relations: { user: true, wallet: true }, loadEagerRelations: false, ...(currentRead ? { lock: { mode: "pessimistic_write" as const } } : {}) });
       const assertIdempotentMatch = (existing: WalletTransaction) => {
         if (existing.user?.id !== userId || existing.wallet?.tenantScopeKey !== tenantScopeKey || existing.type !== transactionType || existing.direction !== direction || yuanToFen(existing.amount) !== amountFen) throw new ConflictException("幂等键已被其他钱包操作使用");
       };
@@ -12297,10 +12316,24 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async ensureOperationSettingForTarget(admin: AdminContext | undefined, scope: { id: number; tenant: Tenant | null }) {
-    let setting = await this.operationSettings.findOne({ where: { id: scope.id } });
+    let setting = await this.findOperationSettingForScope(scope);
     if (setting) return setting;
     setting = this.createOperationSetting(admin, scope.tenant, scope.id);
     return this.operationSettings.save(setting);
+  }
+
+  private async findOperationSettingForScope(scope: { id: number; tenant: Tenant | null }) {
+    const scoped = scope.tenant
+      ? await this.operationSettings.findOne({ where: { tenant: { id: scope.tenant.id } } })
+      : await this.operationSettings.findOne({ where: { tenant: IsNull() } });
+    if (scoped) return scoped;
+
+    // Keep the original platform row and legacy tenant-id rows readable while new writes use the relation.
+    const legacy = await this.operationSettings.findOne({ where: { id: scope.id } });
+    if (!legacy) return null;
+    if (scope.tenant && legacy.tenant && legacy.tenant.id !== scope.tenant.id) return null;
+    if (!scope.tenant && legacy.id !== 1) return null;
+    return legacy;
   }
 
   private createOperationSetting(admin?: AdminContext, tenant?: Tenant | null, targetId?: number) {
@@ -13499,14 +13532,22 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
   }
 
   private lockedRefund(repo: Repository<Refund>, id: number, includeOrder = false) {
-    const builder = repo
-      .createQueryBuilder("refund")
-      .setFindOptions({ loadEagerRelations: false })
-      .leftJoinAndSelect("refund.tenant", "tenant")
-      .where("refund.id = :id", { id })
-      .setLock("pessimistic_write");
-    if (includeOrder) builder.leftJoinAndSelect("refund.order", "order");
-    return builder.getOne();
+    // Lock the single refund row with raw SQL. Refund -> Order -> Registration
+    // has a deep eager graph; letting TypeORM expand it here can exceed
+    // MariaDB's 61-table join limit during review. Later code loads only the
+    // relationships it actually needs.
+    return repo.query("SELECT * FROM refunds WHERE id = ? FOR UPDATE", [id]).then(async (rows: any[]) => {
+      if (!rows.length) return null;
+      const refund = repo.create(rows[0] as Partial<Refund>);
+      if (rows[0].tenantId) refund.tenant = await repo.manager.getRepository(Tenant).findOneBy({ id: rows[0].tenantId });
+      if (includeOrder && rows[0].orderId) {
+        refund.order = await repo.manager.getRepository(Order)
+          .createQueryBuilder("order")
+          .where("order.id = :orderId", { orderId: rows[0].orderId })
+          .getOne() as Order;
+      }
+      return refund;
+    });
   }
 
   private callbackLogsQuery() {

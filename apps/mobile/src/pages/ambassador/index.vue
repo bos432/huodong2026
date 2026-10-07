@@ -5,6 +5,8 @@ import { request } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 type Faq = { question: string; answer: string };
 type CaseItem = { id: number; name: string; field?: string; avatarUrl?: string; metrics?: string; quote?: string };
@@ -127,11 +129,8 @@ onLoad((options: any) => {
 
 <template>
   <view class="ambassador-page">
-    <view v-if="loading" class="state-card" aria-live="polite">页面加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ loadError }}</text>
-      <button class="state-retry" :disabled="loading" @click="refreshPage">重新加载</button>
-    </view>
+    <LoadingState v-if="loading" title="正在加载合作招募" description="正在同步合作说明和申请配置。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="合作招募暂时无法同步，请重试。" action-text="重新加载" @action="refreshPage" />
     <template v-else>
       <view class="hero" :style="heroStyle">
       <view class="hero-inner">

@@ -9,7 +9,7 @@ export class CreateMallCouponUsages1781721000000 implements MigrationInterface {
     }
     if (!(await queryRunner.hasTable("mall_coupon_usages"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_coupon_usages (
+        CREATE TABLE IF NOT EXISTS mall_coupon_usages (
           id INT NOT NULL AUTO_INCREMENT,
           tenantId INT NOT NULL,
           couponId INT NOT NULL,

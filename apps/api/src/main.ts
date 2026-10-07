@@ -10,6 +10,7 @@ import { AppModule } from "./modules/app.module";
 import { ApiExceptionFilter } from "./shared/api-exception.filter";
 import { ApiResponseInterceptor } from "./shared/api-response.interceptor";
 import { validateRuntimeConfig } from "./shared/config-validation";
+import { ObjectStorageService } from "./shared/object-storage.service";
 
 function installerBootstrapMode(config: ConfigService) {
   return config.get<string>("INSTALLER_ENABLED", "false") === "true" && !fs.existsSync(join(process.cwd(), "runtime", "install.lock"));
@@ -39,6 +40,22 @@ async function bootstrap() {
       { path: "install", method: RequestMethod.GET },
       { path: "install.php", method: RequestMethod.GET }
     ]
+  });
+  const objectStorage = app.get(ObjectStorageService, { strict: false });
+  express.use("/uploads", async (req: any, res: any, next: () => void) => {
+    if (req.method !== "GET" && req.method !== "HEAD") return next();
+    let key: string;
+    try {
+      key = decodeURIComponent(String(req.path || "").replace(/^\/+/, ""));
+    } catch {
+      return res.status(404).end();
+    }
+    try {
+      if (!(await objectStorage.proxyRead(key, req.method, typeof req.headers.range === "string" ? req.headers.range : undefined, res))) next();
+    } catch {
+      if (!res.headersSent) res.status(502).end();
+      else res.destroy?.();
+    }
   });
   app.useStaticAssets(join(process.cwd(), config.get<string>("UPLOAD_DIR", "uploads")), { prefix: "/uploads" });
   app.use((req: any, res: any, next: () => void) => {

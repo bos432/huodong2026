@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin, type MobileAdminSession } from "../../mobile-admin";
 import { addShanghaiDays, shanghaiDateString } from "../../tenant-load-guard";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const bootstrap = ref<any>(null);
 const overview = ref<any>(null);
@@ -136,9 +138,9 @@ onShow(() => { void load(true); });
   <view class="admin-page">
     <view class="head"><view><view class="title">经营统计</view><view class="sub">统一口径 · 最近 {{ rangeDays }} 天</view></view><view class="refresh" role="button" tabindex="0" aria-label="刷新经营统计" :aria-busy="loading" :class="{ disabled: loading }" @click="load" @keyup.enter="load" @keyup.space.prevent="load">{{ loading ? "刷新中" : "刷新" }}</view></view>
     <view class="ranges" role="tablist" aria-label="统计时间范围"><view v-for="item in ranges" :key="item.value" role="tab" tabindex="0" :aria-selected="rangeDays === item.value" :aria-disabled="loading" :class="{ active: rangeDays === item.value, disabled: loading }" @click="setRange(item.value)" @keyup.enter="setRange(item.value)" @keyup.space.prevent="setRange(item.value)">{{ item.label }}</view></view>
-    <view v-if="pageError" class="error-panel" role="alert" aria-live="assertive"><text>{{ pageError }}</text><view class="retry" role="button" tabindex="0" aria-label="重新加载经营统计" @click="load(true)" @keyup.enter="load(true)" @keyup.space.prevent="load(true)">重试</view></view>
+    <EmptyState v-if="pageError" variant="error" title="经营统计加载失败" :description="pageError" action-text="重新加载" aria-label="重新加载经营统计" @action="load(true)" />
+    <LoadingState v-if="loading && !overview" title="正在加载统计数据" description="正在同步经营指标，请稍候。" />
     <view v-if="!pageError && !canViewAnalytics && !loading" class="panel" role="status">当前账号没有经营统计查看权限</view>
-    <view v-else-if="loading && !overview" class="panel" role="status" aria-live="polite">统计数据加载中...</view>
     <template v-else-if="overview">
       <view class="metric-grid">
         <view><text>{{ totals.viewCount || 0 }}</text><text>浏览</text><small>报名率 {{ percent(rates.signupRate) }}</small></view>

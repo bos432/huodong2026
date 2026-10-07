@@ -1,7 +1,7 @@
 const API_BASE = (process.env.API_BASE || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const PASSWORD = process.env.ACCEPTANCE_PASSWORD || "Qiwai123456";
 const TENANT_CODE = "qiwai-showcase";
-const POST_ID = Number(process.env.CONTENT_GOVERNANCE_POST_ID || 42);
+const CONFIGURED_POST_ID = Number(process.env.CONTENT_GOVERNANCE_POST_ID || 0);
 const stamp = Date.now();
 
 function assert(value, message) { if (!value) throw new Error(message); }
@@ -39,15 +39,28 @@ async function adminLogin(username) {
 async function main() {
   const adminToken = await adminLogin("showcase_ops");
   const crossTenantToken = await adminLogin("qiwai_hz_ops");
-  const phone = `130${String(stamp).slice(-8)}`;
-  const login = await request("/public/auth/password-login", {
+  const phone = process.env.CONTENT_GOVERNANCE_PHONE || "13990000001";
+  const codeChallenge = await request("/public/auth/h5-code", {
+    method: "POST",
+    body: { phone }
+  });
+  const verificationCode = codeChallenge.devCode || process.env.ACCEPTANCE_H5_CODE || "123456";
+  const login = await request("/public/auth/h5-login", {
     method: "POST",
     tenantCode: TENANT_CODE,
-    body: { phone, password: PASSWORD, nickname: `内容治理验收${String(stamp).slice(-6)}` }
+    body: {
+      phone,
+      nickname: `内容治理验收${String(stamp).slice(-6)}`,
+      verificationToken: codeChallenge.verificationToken,
+      verificationCode
+    }
   });
   const userToken = login.userAccessToken;
   const userId = login.user.id;
-  assert((await request(`/public/community/posts/${POST_ID}?tenantCode=${TENANT_CODE}`, { token: userToken, tenantCode: TENANT_CODE }))?.id === POST_ID, "验收动态不可见");
+  const visiblePosts = await request(`/public/community/posts?tenantCode=${TENANT_CODE}`, { token: userToken, tenantCode: TENANT_CODE });
+  const selectedPost = visiblePosts.find((item) => Number(item.id) === CONFIGURED_POST_ID) || visiblePosts[0];
+  assert(selectedPost?.id, "当前用户没有可用于内容治理验收的公开动态");
+  const postId = Number(selectedPost.id);
 
   const maskKeyword = `治理敏感词${String(stamp).slice(-5)}`;
   const maskRule = await request("/admin/content-keyword-rules", {
@@ -55,7 +68,7 @@ async function main() {
     token: adminToken,
     body: { keyword: maskKeyword, scope: "community", matchMode: "contains", action: "mask", replacement: "[已过滤]", enabled: true }
   });
-  const masked = await request(`/public/community/posts/${POST_ID}/comments?tenantCode=${TENANT_CODE}`, {
+  const masked = await request(`/public/community/posts/${postId}/comments?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     token: userToken,
     tenantCode: TENANT_CODE,
@@ -70,7 +83,7 @@ async function main() {
     token: adminToken,
     body: { keyword: rejectKeyword, scope: "community", matchMode: "exact", action: "reject", enabled: true }
   });
-  const rejected = await raw(`/public/community/posts/${POST_ID}/comments?tenantCode=${TENANT_CODE}`, {
+  const rejected = await raw(`/public/community/posts/${postId}/comments?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     token: userToken,
     tenantCode: TENANT_CODE,
@@ -86,7 +99,7 @@ async function main() {
     token: adminToken,
     body: { userId, type: "mute", scope: "community", startsAt: new Date(Date.now() - 86400000).toISOString(), reason: "08.04 发布阻止验收" }
   });
-  const blockedBeforeExpiry = await raw(`/public/community/posts/${POST_ID}/comments?tenantCode=${TENANT_CODE}`, {
+  const blockedBeforeExpiry = await raw(`/public/community/posts/${postId}/comments?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     token: userToken,
     tenantCode: TENANT_CODE,
@@ -110,7 +123,7 @@ async function main() {
       reason: "08.04 已过截止时间归档验收"
     }
   });
-  const allowedAfterExpiry = await request(`/public/community/posts/${POST_ID}/comments?tenantCode=${TENANT_CODE}`, {
+  const allowedAfterExpiry = await request(`/public/community/posts/${postId}/comments?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     token: userToken,
     tenantCode: TENANT_CODE,
@@ -154,13 +167,13 @@ async function main() {
   const appealsAfterReview = await request(`/public/me/content/appeals?tenantCode=${TENANT_CODE}`, { token: userToken, tenantCode: TENANT_CODE });
   assert(appealsAfterReview.find((item) => item.id === appealId)?.status === "approved", "申诉结果未回显");
 
-  const report = await request(`/public/community/posts/${POST_ID}/report?tenantCode=${TENANT_CODE}`, {
+  const report = await request(`/public/community/posts/${postId}/report?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     token: userToken,
     tenantCode: TENANT_CODE,
     body: { type: "other", description: "08.04 重复举报与租户隔离验收，不隐藏原内容。" }
   });
-  const duplicateReport = await raw(`/public/community/posts/${POST_ID}/report?tenantCode=${TENANT_CODE}`, {
+  const duplicateReport = await raw(`/public/community/posts/${postId}/report?tenantCode=${TENANT_CODE}`, {
     method: "POST",
     token: userToken,
     tenantCode: TENANT_CODE,
@@ -174,8 +187,10 @@ async function main() {
     token: adminToken,
     body: { status: "rejected", action: "none", handleRemark: "验收复核未发现违规，举报不予采纳。" }
   });
-  const notifications = await request("/admin/notifications", { token: adminToken });
-  const userNotifications = notifications.filter((item) => Number(item.user?.id) === userId);
+  const notifications = await request("/admin/notifications?page=1&pageSize=100", { token: adminToken });
+  const notificationRows = Array.isArray(notifications) ? notifications : notifications?.items || notifications?.rows || [];
+  assert(Array.isArray(notificationRows), "通知列表响应格式异常");
+  const userNotifications = notificationRows.filter((item) => Number(item.user?.id) === userId);
   for (const title of ["社区账号处罚通知", "社区处罚已解除", "内容申诉已通过", "社区举报处理结果"]) {
     assert(userNotifications.some((item) => item.title === title && ["sent", "suppressed"].includes(item.status)), `缺少已发送或按频控抑制的治理通知：${title}`);
     assert(!userNotifications.some((item) => item.title === title && item.status === "failed"), `治理通知发送失败：${title}`);
@@ -184,7 +199,7 @@ async function main() {
   console.log(JSON.stringify({
     ok: true,
     user: { id: userId, phone },
-    postId: POST_ID,
+    postId,
     maskedCommentId: masked.comment.id,
     allowedAfterExpiryCommentId: allowedAfterExpiry.comment.id,
     blockingSanctionId: blockingSanction.id,

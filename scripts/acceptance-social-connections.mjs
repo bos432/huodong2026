@@ -5,26 +5,36 @@ import { createRequire } from 'node:module';
 import { randomInt } from 'node:crypto';
 const require = createRequire(path.resolve('apps/api/package.json'));
 const statePath = '.local-logs/operations-20260905/runtime.json';
-const state = JSON.parse(fs.readFileSync(statePath, 'utf8'));
-Object.assign(process.env, { DB_HOST: '127.0.0.1', DB_PORT: '13316', DB_USERNAME: 'root', DB_PASSWORD: state.dbPassword, DB_DATABASE: 'activity_operations' });
+const state = fs.existsSync(statePath) ? JSON.parse(fs.readFileSync(statePath, 'utf8')) : {};
+const dbPassword = process.env.DB_PASSWORD || state.dbPassword || 'activitypass';
+const userPassword = process.env.SOCIAL_ACCEPTANCE_PASSWORD || state.adminPassword || 'Qiwai123456';
+const apiBase = (process.env.SOCIAL_API_BASE || `http://127.0.0.1:${process.env.API_PORT || 3000}/api`).replace(/\/$/, '');
+const otherTenantCode = process.env.SOCIAL_OTHER_TENANT_CODE || 'qiwai-hangzhou';
+Object.assign(process.env, {
+  DB_HOST: process.env.DB_HOST || '127.0.0.1',
+  DB_PORT: process.env.DB_PORT || '13306',
+  DB_USERNAME: process.env.DB_USERNAME || 'activity',
+  DB_PASSWORD: dbPassword,
+  DB_DATABASE: process.env.DB_DATABASE || 'activity_registration'
+});
 const ds = require(path.resolve('apps/api/dist/data-source.js')).default;
 await ds.initialize();
 async function raw(route, token, method = 'GET', data, tenantCode = 'qiwai-showcase') {
-  const r = await fetch(`http://127.0.0.1:3010/api${route}${route.includes('?') ? '&' : '?'}tenantCode=${tenantCode}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: data === undefined ? undefined : JSON.stringify(data) });
+  const r = await fetch(`${apiBase}${route}${route.includes('?') ? '&' : '?'}tenantCode=${tenantCode}`, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) }, body: data === undefined ? undefined : JSON.stringify(data) });
   const json = await r.json(); return { status: r.status, data: json.data, message: json.message };
 }
 const tokens = []; const users = [];
 try {
   const tenant = await ds.getRepository('Tenant').findOneByOrFail({ code: 'qiwai-showcase' });
-  const otherTenant = await ds.getRepository('Tenant').findOneByOrFail({ code: 'operations-other-local' });
+  const otherTenant = await ds.getRepository('Tenant').findOneByOrFail({ code: otherTenantCode });
   const profiles = ds.getRepository('SocialProfile'); const userRepo = ds.getRepository('User');
   const prefix = `199${randomInt(100000, 999999)}`;
-  const passwordHash = await require('bcryptjs').hash(state.adminPassword, 10);
+  const passwordHash = await require('bcryptjs').hash(userPassword, 10);
   for (let i = 0; i < 15; i++) {
     const user = await userRepo.save(userRepo.create({ phone: prefix + String(i).padStart(2, '0'), nickname: `本地同行${i}（测试${prefix.slice(-4)}）`, sourceChannel: 'test', passwordHash }));
     users.push(user);
     await profiles.save(profiles.create({ userId: user.id, user, tenant, tenantScopeKey: `tenant:${tenant.id}`, displayName: user.nickname, city: '本地测试', introduction: '仅用于隔离本地环境的同行连接测试，不代表真实个人。', offers: ['活动策划'], needs: ['阅读交流'], status: i === 14 ? 'pending' : 'approved', visible: true }));
-    const login = await raw('/public/auth/password-login', null, 'POST', { phone: user.phone, password: state.adminPassword });
+    const login = await raw('/public/auth/password-login', null, 'POST', { phone: user.phone, password: userPassword });
     assert.equal(login.status, 201, login.message); tokens.push(login.data.userAccessToken);
   }
   state.socialTestAccounts = users.map(user => ({ id: user.id, phone: user.phone, label: user.nickname }));

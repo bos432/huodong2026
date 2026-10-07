@@ -6,11 +6,8 @@
       <view class="nav-placeholder"></view>
     </view>
 
-    <view v-if="loading" class="card subtle">加载中...</view>
-    <view v-else-if="error" class="card state-card" role="alert" aria-live="assertive">
-      <view>{{ error }}</view>
-      <view class="button secondary retry-button" role="button" tabindex="0" aria-label="重新加载订单" @click="loadCourse" @keyup.enter="loadCourse" @keyup.space.prevent="loadCourse">重试</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载内容订单" description="请稍候，正在同步内容权益和可用支付方式。" />
+    <EmptyState v-else-if="error" variant="error" title="订单信息加载失败" :description="error" action-text="重新加载" @action="loadCourse" />
 
     <template v-else-if="course">
       <view class="confirm-hero">
@@ -81,6 +78,8 @@ import { handleWechatPayResult } from "../../mall-payment";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const selectedPayment = ref("");
 const loading = ref(true);

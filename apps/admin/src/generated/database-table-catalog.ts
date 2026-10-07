@@ -1194,6 +1194,27 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
   },
   {
     "group": "平台治理与基础设施",
+    "name": "experience_applications",
+    "meaning": "体验申请相关业务数据。",
+    "business": "平台治理与基础设施模块中的体验申请查询、状态流转和关联记录。",
+    "caution": "可能包含个人或敏感信息，查询、导出和清理必须遵循最小权限与隐私要求。"
+  },
+  {
+    "group": "平台治理与基础设施",
+    "name": "experience_feedback",
+    "meaning": "体验反馈相关业务数据。",
+    "business": "平台治理与基础设施模块中的体验反馈查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "平台治理与基础设施",
+    "name": "experience_projects",
+    "meaning": "体验项目相关业务数据。",
+    "business": "平台治理与基础设施模块中的体验项目查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "平台治理与基础设施",
     "name": "h5_auth_code_logs",
     "meaning": "H5认证码日志相关业务数据。",
     "business": "平台治理与基础设施模块中的H5认证码日志查询、状态流转和关联记录。",
@@ -1225,6 +1246,27 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
     "name": "redemption_codes",
     "meaning": "兑换码相关业务数据。",
     "business": "平台治理与基础设施模块中的兑换码查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "平台治理与基础设施",
+    "name": "release_acceptance_fixtures",
+    "meaning": "上线验收测试夹具相关业务数据。",
+    "business": "平台治理与基础设施模块中的上线验收测试夹具查询、状态流转和关联记录。",
+    "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
+  },
+  {
+    "group": "平台治理与基础设施",
+    "name": "release_readiness_events",
+    "meaning": "上线验收记录相关业务数据。",
+    "business": "平台治理与基础设施模块中的上线验收记录查询、状态流转和关联记录。",
+    "caution": "属于追踪或审计依据，优先归档，不要直接清空近期数据。"
+  },
+  {
+    "group": "平台治理与基础设施",
+    "name": "release_readiness_items",
+    "meaning": "上线验收项相关业务数据。",
+    "business": "平台治理与基础设施模块中的上线验收项查询、状态流转和关联记录。",
     "caution": "优先通过后台和业务接口维护；批量修复前先备份并校验关联数据。"
   },
   {

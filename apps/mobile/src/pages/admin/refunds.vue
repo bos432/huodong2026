@@ -5,6 +5,8 @@ import { getMobileAdminSession, mobileAdminRequest, requireMobileAdmin } from ".
 import { stringifyQuery } from "../../query";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const rows = ref<any[]>([]);
 const bootstrap = ref<any>(null);
@@ -207,13 +209,13 @@ onShow(() => { void load(true); });
       <view><view class="title">退款审核</view><view class="sub">查看并处理活动订单退款申请</view></view>
       <view class="head-actions"><view v-if="canManageRefunds" class="scan" role="button" tabindex="0" :aria-label="scanning ? '扫描退款回执中' : '扫描退款回执'" :aria-busy="scanning" :class="{ disabled: loading || actionId !== null || scanning }" @click="scanProviderRefunds" @keyup.enter="scanProviderRefunds" @keyup.space.prevent="scanProviderRefunds">{{ scanning ? "扫描中" : "查回执" }}</view><view class="refresh" role="button" tabindex="0" :aria-label="loading ? '刷新中' : '刷新退款列表'" :aria-busy="loading" :class="{ disabled: loading || actionId !== null || scanning }" @click="load" @keyup.enter="load" @keyup.space.prevent="load">{{ loading ? "刷新中" : "刷新" }}</view></view>
     </view>
-    <view v-if="errorMessage" class="error-panel" role="alert" aria-live="assertive"><text>{{ errorMessage }}</text><view class="retry" role="button" tabindex="0" aria-label="重新加载退款列表" @click="load(true)" @keyup.enter="load(true)" @keyup.space.prevent="load(true)">重试</view></view>
+    <EmptyState v-if="errorMessage" variant="error" title="退款列表加载失败" :description="errorMessage" action-text="重新加载" @action="load(true)" />
     <view v-if="actionError" class="error-panel" role="alert" aria-live="assertive"><text>{{ actionError }}</text><view class="retry" role="button" tabindex="0" aria-label="关闭退款操作错误" @click="actionError = ''" @keyup.enter="actionError = ''" @keyup.space.prevent="actionError = ''">关闭</view></view>
     <view class="search"><input v-model="keyword" :disabled="loading || actionId !== null || scanning" maxlength="80" cursor-spacing="24" aria-label="搜索退款号、订单号或手机号" placeholder="退款号、订单号、手机号" confirm-type="search" @confirm="search" /><view class="search-btn" role="button" tabindex="0" aria-label="搜索退款" :class="{ disabled: loading || actionId !== null || scanning }" @click="search" @keyup.enter="search" @keyup.space.prevent="search">搜索</view></view>
     <scroll-view scroll-x class="tabs" :show-scrollbar="false"><view class="track" role="tablist" aria-label="退款状态筛选"><view v-for="tab in tabs" :key="tab.value" class="tab" role="tab" tabindex="0" :aria-selected="status === tab.value" :aria-label="`查看${tab.label}退款`" :class="{ active: status === tab.value }" @click="setStatus(tab.value)" @keyup.enter="setStatus(tab.value)" @keyup.space.prevent="setStatus(tab.value)">{{ tab.label }}</view></view></scroll-view>
-    <view v-if="!canViewRefunds && !loading" class="panel">当前账号没有财务退款查看权限</view>
-    <view v-else-if="loading" class="panel">加载中...</view>
-    <view v-else-if="!rows.length" class="panel">暂无退款记录</view>
+    <LoadingState v-if="loading" title="正在加载退款记录" description="正在同步退款状态，请稍候。" />
+    <view v-else-if="!canViewRefunds" class="panel">当前账号没有财务退款查看权限</view>
+    <EmptyState v-else-if="!rows.length" compact variant="order" title="暂无退款记录" />
     <view v-for="item in rows" v-else :key="item.id" class="card">
       <view class="row"><view><view class="refund-no">{{ item.refundNo || `退款 ${item.id}` }}</view><view class="name">{{ item.order?.registration?.activity?.title || item.order?.orderNo || "活动订单" }}</view></view><view class="amount">￥{{ amount(item) }}</view></view>
       <view class="meta">订单：{{ item.order?.orderNo || "-" }} · {{ item.order?.paymentMethod || "-" }}</view>

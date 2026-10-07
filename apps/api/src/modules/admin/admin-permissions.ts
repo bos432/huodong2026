@@ -34,6 +34,8 @@ export const ADMIN_PERMISSION_DEFINITIONS = [
   { key: "system.manage", label: "维护系统设置/执行检测", group: "系统安全", platformOnly: true },
   { key: "miniprogram_release.view", label: "查看小程序发布配置/记录", group: "系统安全", platformOnly: true },
   { key: "miniprogram_release.manage", label: "维护小程序配置/执行发布", group: "系统安全", platformOnly: true },
+  { key: "release_readiness.view", label: "查看上线验收中心", group: "系统安全", platformOnly: true },
+  { key: "release_readiness.manage", label: "维护上线验收与确认", group: "系统安全", platformOnly: true },
   { key: "activity.view", label: "查看活动", group: "活动" },
   { key: "activity.manage", label: "创建/编辑/下架活动", group: "活动" },
   { key: "activity.approve", label: "平台审核活动", group: "活动", platformOnly: true },
@@ -160,6 +162,8 @@ const OPERATOR_PERMISSIONS: AdminPermissionKey[] = [
   "analytics.manage",
   "business_job.view",
   "business_job.manage",
+  "release_readiness.view",
+  "release_readiness.manage",
   "support.view",
   "support.manage",
   "support.sensitive",
@@ -261,6 +265,7 @@ const PERMISSION_DEPENDENCIES: Partial<Record<AdminPermissionKey, AdminPermissio
   "course_order.manage": ["course_order.view"],
   "system.manage": ["system.view"],
   "miniprogram_release.manage": ["miniprogram_release.view"],
+  "release_readiness.manage": ["release_readiness.view"],
   "operation_settings.manage": ["operation_settings.view"],
   "analytics.export": ["analytics.view"],
   "analytics.manage": ["analytics.view"],
@@ -433,6 +438,9 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
   if (path === "auth/login-logs/export" || path === "auth/h5-code-logs/export") return "security_log.export";
   if (path === "auth/log-options" || path.startsWith("auth/login-logs") || path.startsWith("auth/h5-code-logs")) return "security_log.view";
   if (path.startsWith("miniprogram-release")) return write ? "miniprogram_release.manage" : "miniprogram_release.view";
+  if (path.startsWith("release-readiness/items/") && path.endsWith("/verify")) return "release_readiness.manage";
+  if (path.startsWith("release-readiness") && write) return "release_readiness.manage";
+  if (path.startsWith("release-readiness")) return "release_readiness.view";
   if (path === "mall/accessible-merchants") return "mall.merchant.view";
   if (path === "mall/payment-merchants") return "mall.payment.manage";
   if (path.startsWith("mall/merchants") || path.startsWith("mall/merchant-access") || path.startsWith("mall/merchant-applications") || path.startsWith("mall/merchant-qualifications") || path.startsWith("mall/merchant-contracts") || path.startsWith("mall/merchant-governance")) return "mall.merchant.manage";
@@ -474,6 +482,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
     if (scope?.tenantId) return write ? "operation_settings.manage" : "operation_settings.view";
     return write ? "system.manage" : "system.view";
   }
+  if (path === "settings/payment" || path.startsWith("settings/payment/")) return "system.manage";
   if (path === "settings/sms/test" || path === "settings/connectivity-check") return scope?.tenantId ? "operation_settings.manage" : "system.manage";
   if (path === "settings/charity") return write ? "charity.manage" : "charity.view";
   if (path.startsWith("credential-templates")) return write ? "certificate_template.manage" : "certificate_template.view";

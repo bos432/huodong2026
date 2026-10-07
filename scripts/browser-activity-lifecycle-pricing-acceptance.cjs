@@ -5,8 +5,10 @@ const { spawnSync } = require("child_process");
 const root = path.resolve(__dirname, "..");
 const outputRoot = path.resolve(process.env.ACCEPTANCE_OUTPUT_DIR || path.join(root, ".local-logs"));
 const webBase = String(process.env.WEB_BASE || "http://127.0.0.1:18080").replace(/\/$/, "");
+const adminWebBase = String(process.env.ADMIN_WEB_BASE || "http://127.0.0.1:18081").replace(/\/$/, "");
 const apiBase = String(process.env.API_BASE_URL || process.env.API_BASE || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const tenantCode = process.env.TENANT_CODE || "qiwai-showcase";
+const adminUsername = process.env.SHOWCASE_ADMIN_USERNAME || "showcase_admin";
 const adminPassword = process.env.SHOWCASE_ADMIN_PASSWORD || "Showcase123456Aa";
 const userPassword = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
 const runId = new Date().toISOString().replace(/[-:.TZ]/g, "").slice(0, 14);
@@ -77,8 +79,8 @@ async function waitForText(page, texts, label, timeout = 20000) {
 }
 
 async function loginAdmin(page) {
-  await page.goto(`${webBase}/admin/login`, { waitUntil: "domcontentloaded" });
-  await page.locator('input[placeholder="请输入管理员账号"]').fill("showcase_admin");
+  await page.goto(`${adminWebBase}/admin/login`, { waitUntil: "domcontentloaded" });
+  await page.locator('input[placeholder="请输入管理员账号"]').fill(adminUsername);
   await page.locator('input[placeholder="请输入密码"]').fill(adminPassword);
   await page.getByRole("button", { name: "登录" }).click();
   await page.waitForURL(/\/admin\/(?!login)/, { timeout: 20000 });
@@ -97,7 +99,18 @@ async function closeOverlay(page) {
 async function main() {
   assert(retained?.lifecycleActivityId && retained?.ticketActivityId && retained?.ticketTypeId, "source result is missing retained records");
   const browserPhone = `130${runId.slice(-8)}`;
-  const browserUser = await api("/public/auth/password-login", { method: "POST", body: { phone: browserPhone, password: userPassword, nickname: `票种浏览器验收${runId.slice(-4)}` } });
+  // New acceptance phones must follow the product's first-login contract:
+  // obtain a verification challenge before the account can be used.
+  const challenge = await api("/public/auth/h5-code", { method: "POST", body: { phone: browserPhone } });
+  const browserUser = await api("/public/auth/h5-login", {
+    method: "POST",
+    body: {
+      phone: browserPhone,
+      nickname: `票种浏览器验收${runId.slice(-4)}`,
+      verificationToken: challenge.verificationToken,
+      verificationCode: challenge.devCode || process.env.H5_DEV_VERIFICATION_CODE || "123456"
+    }
+  });
   assert(browserUser.userAccessToken, "browser user token missing");
 
   const { chromium } = loadPlaywright();
@@ -118,7 +131,7 @@ async function main() {
     result.checks.push({ name: "H5 活动地图、导航和主办方", status: "passed" });
 
     await mobile.goto(`${webBase}/?tenantCode=${tenantCode}#/pages/activity/register?id=${retained.ticketActivityId}&tenantCode=${tenantCode}`, { waitUntil: "domcontentloaded" });
-    await waitForText(mobile, [retained.ticketActivityTitle, "限量早鸟会员阶梯票", "限 1 人", "早鸟"], "H5 票种规则");
+    await waitForText(mobile, [retained.ticketActivityTitle, "限量早鸟会员阶梯票", "每人限 1 张", "早鸟"], "H5 票种规则");
     await screenshot(mobile, "h5-ticket-pricing-sold-out.png");
     result.checks.push({ name: "H5 限量早鸟票种与售罄状态", status: "passed" });
     await mobileContext.close();
@@ -126,7 +139,7 @@ async function main() {
     const adminContext = await browser.newContext({ viewport: { width: 1440, height: 1000 } });
     const admin = await adminContext.newPage();
     await loginAdmin(admin);
-    await admin.goto(`${webBase}/admin/activities?activityId=${retained.lifecycleActivityId}`, { waitUntil: "domcontentloaded" });
+    await admin.goto(`${adminWebBase}/admin/activities?activityId=${retained.lifecycleActivityId}`, { waitUntil: "domcontentloaded" });
     await waitForText(admin, [retained.lifecycleActivityTitle, "已结束", "生命周期验收分类"], "PC 活动列表");
     const activityRow = admin.locator("tbody tr").filter({
       has: admin.getByText(retained.lifecycleActivityTitle, { exact: true })
@@ -151,7 +164,7 @@ async function main() {
     result.checks.push({ name: "PC 活动渠道链接与转化报告", status: "passed" });
     await closeOverlay(admin);
 
-    await admin.goto(`${webBase}/admin/ticket-types`, { waitUntil: "domcontentloaded" });
+    await admin.goto(`${adminWebBase}/admin/ticket-types`, { waitUntil: "domcontentloaded" });
     await waitForText(admin, ["票种管理", "新建票种"], "PC 票种管理");
     const activitySelect = admin.locator(".table-card .el-select").first();
     await activitySelect.click();

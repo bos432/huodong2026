@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { ensureUser, getUserId, getUserToken, request } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import WechatPhoneBindSheet from "../../components/WechatPhoneBindSheet.vue";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
@@ -116,12 +118,8 @@ onShow(() => { void load(); });
 
 <template>
   <view class="wallet-page">
-    <view v-if="loading" class="card loading-card" role="status" aria-live="polite">余额信息加载中...</view>
-    <view v-else-if="loadError" class="card error-card" role="alert" aria-live="assertive">
-      <view class="section-title">余额加载失败</view>
-      <view class="empty error-copy">{{ loadError }}</view>
-      <view class="retry-button" role="button" tabindex="0" aria-label="重新加载余额信息" @click="load" @keyup.enter="load" @keyup.space="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载余额" description="请稍候，正在同步余额和流水记录。" />
+    <EmptyState v-else-if="loadError" variant="error" title="余额加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else>
     <view class="hero">
       <view>

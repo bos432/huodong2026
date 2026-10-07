@@ -13,8 +13,8 @@
     <view class="my-tabs">
       <view v-for="t in tabs" :key="t.key" class="my-tab" :class="{active:activeTab===t.key}" role="tab" tabindex="0" :aria-selected="activeTab===t.key" :aria-label="`查看${t.label}内容`" @click="activeTab=t.key" @keyup.enter="activeTab=t.key" @keyup.space.prevent="activeTab=t.key">{{ t.label }}</view>
     </view>
-    <view v-if="loading" class="state-card">我的课程加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="state-retry" role="button" tabindex="0" aria-label="重新加载我的课程" @click="loadCourses" @keyup.enter="loadCourses" @keyup.space.prevent="loadCourses">重新加载</view></view>
+    <LoadingState v-if="loading" title="正在加载我的内容" description="请稍候，正在同步学习进度和最近课时。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="loadCourses" />
     <view v-for="c in visibleCourses" :key="c.id" class="my-course-item" role="button" tabindex="0" :aria-label="`打开${c.title}`" @click="goCourse(c)" @keyup.enter="goCourse(c)" @keyup.space.prevent="goCourse(c)">
       <view class="course-row">
         <view class="course-cover" :style="{ background: c.color }">
@@ -29,7 +29,7 @@
         </view>
       </view>
     </view>
-    <empty-state v-if="!loading && !loadError && !visibleCourses.length" icon="📖" text="暂无进行中的内容" />
+    <EmptyState v-if="!loading && !loadError && !visibleCourses.length" variant="default" title="暂无进行中的内容" description="加入专题内容后，学习进度会显示在这里。" action-text="去发现内容" @action="goDiscover" />
     <TabBar current="courses" />
   </view>
 </template>
@@ -41,6 +41,8 @@ import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
 import { normalizeCourse, type CourseCard } from "../../course-data";
 import TabBar from "../../components/TabBar.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const activeTab = ref("all");
 const tabs = [{key:"all",label:"全部"},{key:"ongoing",label:"进行中"},{key:"done",label:"已完成"}];
@@ -79,6 +81,7 @@ async function loadCourses() {
 
 function goBack() { uni.navigateBack(); }
 function goCourse(c:any) { uni.navigateTo({ url: withTenantCode(`/pages/course/player?id=${c.id}${c.recentLesson?.id ? `&lessonId=${c.recentLesson.id}` : ""}`) }); }
+function goDiscover() { uni.navigateTo({ url: withTenantCode("/pages/courses/index") }); }
 
 onShow(loadCourses);
 </script>
@@ -241,7 +244,5 @@ onShow(loadCourses);
 }
 .recent-lesson { display:block; margin-top:6rpx; color:#4a6b8a; font-size:23rpx; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .state-card { display:grid; gap:10rpx; margin-bottom:18rpx; padding:20rpx 22rpx; border-radius:8px; background:#fff; color:#667085; font-size:24rpx; line-height:1.55; }
-.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
-.state-retry { width:max-content; color:#C43D3D; font-weight:900; }
-@media (min-width: 900px) { .user-subpage { max-width:760px; margin:0 auto; } }
+ @media (min-width: 900px) { .user-subpage { max-width:760px; margin:0 auto; } }
 </style>

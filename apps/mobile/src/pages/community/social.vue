@@ -21,9 +21,9 @@
     <view class="directory-head app-enter"><view><text class="section-title">发现同城伙伴</text><text class="section-copy">按行业、城市或合作方向查找</text></view></view>
     <view class="search-row app-enter"><input v-model="keyword" name="socialSearch" aria-label="搜索行业、城市或合作方向" autocomplete="off" confirm-type="search" placeholder="搜索行业、城市或合作方向" @confirm="loadProfiles" /><button class="search-action" aria-label="搜索拓展伙伴" @click="loadProfiles">搜索</button></view>
 
-    <view v-if="loading" class="state" role="status" aria-live="polite">正在加载拓展伙伴…</view>
-    <view v-else-if="error" class="state error" role="alert" aria-live="assertive"><text>{{ error }}</text><button class="retry" aria-label="重新加载拓展伙伴" @click="loadProfiles">重新加载</button></view>
-    <view v-else-if="!profiles.length" class="state empty"><text class="empty-title">暂时没有匹配的伙伴</text><text>完善并提交你的资料，审核后即可被同城伙伴发现。</text></view>
+    <LoadingState v-if="loading" title="正在加载拓展伙伴" description="请稍候，正在同步当前商家的连接资料。" />
+    <EmptyState v-else-if="error" compact variant="error" :title="error" description="请检查网络后重试。" action-text="重新加载" @action="loadProfiles" />
+    <EmptyState v-else-if="!profiles.length" compact variant="social" title="暂时没有匹配的伙伴" description="完善并提交你的资料，审核后即可被同城伙伴发现。" />
 
     <view v-else class="profile-list">
       <view v-for="(item, index) in profiles" :key="item.id" class="profile-card app-stagger" :style="{ '--motion-delay': `${index * 42}ms` }">
@@ -49,6 +49,8 @@ import { onShow, onHide } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode, getCurrentTenantCode, getUserToken } from "../../api";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { createTenantLoadGuard } from '../../tenant-load-guard';
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 
 const mine = ref<any>(null);
 const profiles = ref<any[]>([]);
@@ -71,7 +73,7 @@ onHide(() => { showGeneration++; profileGuard.invalidate(); mineGuard.invalidate
 
 async function loadMine() { const token = mineGuard.begin(); const result = await request('/public/me/social-profile'); if (mineGuard.isCurrent(token)) mine.value = result; }
 async function loadProfiles() { const token = profileGuard.begin(); loading.value = true; error.value = ""; try { const query = keyword.value.trim() ? `?keyword=${encodeURIComponent(keyword.value.trim())}` : ""; const rows = await request<any[]>(`/public/social/profiles${query}`); if (profileGuard.isCurrent(token)) profiles.value = Array.isArray(rows) ? rows : []; } catch (e: any) { if (profileGuard.isCurrent(token)) error.value = e?.message || "拓展伙伴加载失败"; } finally { if (profileGuard.isCurrent(token)) loading.value = false; } }
-async function toggleFollow(item: any) { if (!item?.userId || followingId.value) return; followingId.value = item.userId; try { const result = await request<any>(`/public/community/users/${item.userId}/follow`, { method: "POST" }); item.following = Boolean(result.following); uni.showToast({ title: item.following ? "已关注" : "已取消关注", icon: "none" }); } catch (e: any) { uni.showToast({ title: e?.message || "操作失败", icon: "none" }); } finally { followingId.value = 0; } }
+async function toggleFollow(item: any) { if (!item?.userId || followingId.value) return; followingId.value = item.userId; const tenantCode = getCurrentTenantCode(); try { const result = await request<any>(`/public/community/users/${item.userId}/follow`, { method: "POST" }); if (tenantCode !== getCurrentTenantCode()) return; item.following = Boolean(result.following); uni.showToast({ title: item.following ? "已关注" : "已取消关注", icon: "none" }); } catch (e: any) { if (tenantCode === getCurrentTenantCode()) uni.showToast({ title: e?.message || "操作失败", icon: "none" }); } finally { followingId.value = 0; } }
 function editProfile() { uni.navigateTo({ url: withTenantCode("/pages/community/social-profile") }); }
 function openCard() { uni.navigateTo({ url: withTenantCode("/pages/community/card") }); }
 function openConnections() { uni.navigateTo({ url: withTenantCode('/pages/community/connections') }); }
@@ -103,6 +105,6 @@ function goBack() { uni.navigateBack(); }
 .hero-title{font-size:38rpx;line-height:1.32;font-weight:900}
 .hero-button{border-radius:12rpx;background:#fff;color:#16252d}
 .profile-status{margin:16rpx 28rpx 0;padding:24rpx;border:1rpx solid var(--app-border);border-radius:16rpx}
-.search-row,.profile-card,.state{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
+.search-row,.profile-card{border-color:var(--app-border);border-radius:16rpx;box-shadow:none}
 .follow{border-radius:12rpx;background:#16252d}
 </style>

@@ -6,6 +6,7 @@ describe("refund business job contracts", () => {
   const courses = readFileSync("src/modules/courses/courses.service.ts", "utf8");
   const courseEntity = readFileSync("src/entities/course-refund.entity.ts", "utf8");
   const migration = readFileSync("src/migrations/1783970000000-CourseRefundProviderRecovery.ts", "utf8");
+  const acceptance = readFileSync("../../scripts/refund-business-job-acceptance.mjs", "utf8");
 
   it("registers tenant-bound handlers for mall and course provider queries", () => {
     expect(mall).toContain('register("mall-refund.provider-query"');
@@ -41,5 +42,12 @@ describe("refund business job contracts", () => {
     }
     expect(migration).toContain("async down(queryRunner: QueryRunner)");
     expect(migration).toContain("dropColumn");
+  });
+
+  it("keeps acceptance fixture seeding explicit and local-only", () => {
+    expect(acceptance).toContain("REFUND_JOB_SEED_FIXTURES");
+    expect(acceptance).toContain("assertFixtureSeedingIsLocal");
+    expect(acceptance).toContain('"refund-business-job-source"');
+    expect(acceptance).toContain("refund job acceptance fixtures are unavailable; run with REFUND_JOB_SEED_FIXTURES=true on local DB");
   });
 });

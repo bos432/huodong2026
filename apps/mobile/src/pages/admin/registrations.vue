@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { RegistrationStatus, registrationStatusText } from "@activity/shared";
 import { mobileAdminRequest, requireMobileAdmin } from "../../mobile-admin";
 import AdminBottomNav from "../../components/AdminBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { formatShanghaiDateTime } from '../../tenant-load-guard';
 
 const rows = ref<any[]>([]);
@@ -164,7 +166,7 @@ onShow(load);
       </view>
       <view class="refresh" role="button" tabindex="0" :aria-label="loading ? '刷新中' : '刷新报名'" :aria-busy="loading" :class="{ disabled: loading || actionId !== null }" @click="load" @keyup.enter="load" @keyup.space.prevent="load">{{ loading ? "刷新中" : "刷新" }}</view>
     </view>
-    <view v-if="errorMessage" class="error-panel" role="alert" aria-live="assertive"><text>{{ errorMessage }}</text><view class="retry" role="button" tabindex="0" aria-label="重新加载报名" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view></view>
+    <EmptyState v-if="errorMessage" variant="error" title="报名加载失败" :description="errorMessage" action-text="重新加载" @action="load" />
 
     <view class="search">
       <input v-model="keyword" :disabled="loading || actionId !== null" maxlength="80" cursor-spacing="24" aria-label="搜索手机号、昵称或活动" placeholder="搜索手机号、昵称、活动" confirm-type="search" @confirm="search" />
@@ -177,9 +179,9 @@ onShow(load);
       </view>
     </scroll-view>
 
-    <view v-if="!canViewRegistrations && !loading" class="panel">当前账号没有报名查看权限</view>
-    <view v-else-if="loading" class="panel">加载中...</view>
-    <view v-else-if="!rows.length" class="panel">暂无报名</view>
+    <LoadingState v-if="loading" title="正在加载报名" description="正在同步报名和审核状态，请稍候。" />
+    <view v-else-if="!canViewRegistrations" class="panel">当前账号没有报名查看权限</view>
+    <EmptyState v-else-if="!rows.length" compact variant="default" title="暂无报名" />
     <view v-for="item in rows" v-else :key="item.id" class="card">
       <view class="row">
         <view class="name">{{ item.activity?.title || "-" }}</view>

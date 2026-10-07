@@ -56,7 +56,13 @@ const tableLabelOverrides = {
   miniprogram_release_logs: "小程序发布日志",
   miniprogram_release_settings: "小程序发布设置",
   support_work_orders: "客服工单",
-  support_work_order_logs: "客服工单日志"
+  support_work_order_logs: "客服工单日志",
+  experience_projects: "体验项目",
+  experience_applications: "体验申请",
+  experience_feedback: "体验反馈",
+  release_readiness_items: "上线验收项",
+  release_acceptance_fixtures: "上线验收测试夹具",
+  release_readiness_events: "上线验收记录"
 };
 
 function groupFor(name) {

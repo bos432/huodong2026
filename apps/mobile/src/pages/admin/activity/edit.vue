@@ -4,6 +4,8 @@ import { onShow } from "@dcloudio/uni-app";
 import { ActivityStatus, FieldType, activityStatusText, checkActivityContentCompliance } from "@activity/shared";
 import { adminActivityPreviewUrl, mobileAdminRequest, requireMobileAdmin, uploadAdminImage } from "../../../mobile-admin";
 import { formatShanghaiDateTime } from '../../../tenant-load-guard';
+import EmptyState from "../../../components/EmptyState.vue";
+import LoadingState from "../../../components/LoadingState.vue";
 
 type FieldDraft = { label: string; type: FieldType; required: boolean; optionsText: string; sortOrder: number };
 type HostDraft = { name: string; title: string; avatarUrl: string; bio: string; sortOrder: number };
@@ -526,8 +528,8 @@ onShow(() => {
       <view v-for="(item, index) in steps" :key="item" class="step" role="tab" tabindex="0" :aria-selected="step === index" :aria-label="`编辑${item}步骤`" :class="{ active: step === index }" @click="step = index" @keyup.enter="step = index" @keyup.space.prevent="step = index">{{ item }}</view>
     </view>
 
-    <view v-if="loading" class="panel">加载中...</view>
-    <view v-else-if="loadError" class="panel error-panel" role="alert" aria-live="assertive"><view>{{ loadError }}</view><view class="retry" role="button" tabindex="0" aria-label="重新加载活动编辑页" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重试</view></view>
+    <LoadingState v-if="loading" title="正在加载活动编辑" description="正在同步活动配置，请稍候。" />
+    <EmptyState v-else-if="loadError" variant="error" title="活动编辑加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else>
       <view v-show="step === 0" class="panel">
         <view v-if="canSelectTenant" class="field">

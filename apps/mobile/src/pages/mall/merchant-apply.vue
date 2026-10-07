@@ -5,11 +5,8 @@
       <text class="intro-copy">提交经营主体、联系人和资质材料。审核通过后，平台将为你创建待开通店铺。</text>
     </view>
 
-    <view v-if="pageLoading" class="page-state">申请记录加载中...</view>
-    <view v-else-if="loadError" class="page-state error-state">
-      <text>{{ loadError }}</text>
-      <button class="retry-button" @click="loadPage">重新加载</button>
-    </view>
+    <LoadingState v-if="pageLoading" title="正在加载入驻申请" description="正在同步申请记录和审核状态。" />
+    <EmptyState v-else-if="loadError" variant="error" title="入驻申请加载失败" :description="loadError" action-text="重新加载" @action="loadPage" />
 
     <template v-else>
     <view v-if="profileWarning" class="inline-warning">{{ profileWarning }}</view>
@@ -75,6 +72,8 @@ import { fetchMyProfile, getUserToken, request, uploadMallMerchantApplicationFil
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
+import LoadingState from "../../components/LoadingState.vue";
+import EmptyState from "../../components/EmptyState.vue";
 
 type QualificationFile = { type: string; name: string; url: string; number?: string; validUntil?: string };
 

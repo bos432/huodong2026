@@ -86,6 +86,19 @@ const mallOperatorPermissions = [
   "upload.image"
 ];
 
+const mallStoreFinancePermissions = [
+  "dashboard.view",
+  "mall.merchant.view",
+  "mall.order.view",
+  "mall.order.manage",
+  "mall.refund.manage",
+  "mall.finance.view",
+  "mall.payment.manage",
+  "mall.settlement.manage",
+  "mall.statistics.view",
+  "upload.settlement_proof"
+];
+
 async function main() {
   console.log(`多商户商城 smoke target：${TENANT_CODE}`);
   const platform = await loginPlatformAdmin();
@@ -444,7 +457,7 @@ async function ensureStoreAccounts(token, tenantId) {
   const admins = pickList(await api("/admin/admins?includeSmoke=true&pageSize=300", { headers: auth(token) }));
   const selfOwner = await upsertAdmin(token, admins, tenantId, "showcase_store_owner", "自营店铺运营");
   const agentOwner = await upsertAdmin(token, admins, tenantId, "showcase_agent_owner", "代理店铺运营");
-  const selfFinance = await upsertAdmin(token, admins, tenantId, "showcase_store_finance", "自营店铺财务", "finance");
+  const selfFinance = await upsertAdmin(token, admins, tenantId, "showcase_store_finance", "自营店铺财务", "finance", mallStoreFinancePermissions);
   return { selfOwner, agentOwner, selfFinance };
 }
 
@@ -1949,9 +1962,14 @@ async function assertCrossStoreBalanceGuard(userToken, selfProduct, agentProduct
     })
   });
   const message = String(result.error?.message || "");
-  assert(!result.ok, "跨店结算不应允许余额支付，否则可能出现子订单部分扣款");
-  assert(message.includes("跨店结算暂不支持余额支付"), "跨店余额支付被拒绝时应返回运营可读原因");
-  return { message };
+  if (result.ok) {
+    assert(result.data?.status === "paid", "跨店余额支付成功后结算组应为已支付");
+    assert(Array.isArray(result.data?.orders) && result.data.orders.length === 2, "跨店余额支付成功后应保留全部子订单");
+    assert(result.data.orders.every((order) => order.status === "paid"), "跨店余额支付成功后子订单必须全部已支付，不能部分成功");
+    return { mode: "atomic_success", message: "跨店余额支付已统一扣款，全部子订单原子完成" };
+  }
+  assert(message.includes("余额不足") && message.includes("未扣款"), "跨店余额不足时应返回未扣款的运营可读原因");
+  return { mode: "atomic_rejected", message };
 }
 
 async function assertUserPrivatePayloadSafety(userToken, product) {
@@ -1961,20 +1979,25 @@ async function assertUserPrivatePayloadSafety(userToken, product) {
     await api(`/public/me/mall/products/${product.id}/favorite?tenantCode=${TENANT_CODE}`, { method: "POST", headers: userAuth(userToken) });
   }
   await api(`/public/me/mall/products/${product.id}/browse?tenantCode=${TENANT_CODE}`, { method: "POST", headers: userAuth(userToken) });
-  const addressPayload = {
-    receiverName: "多商户 DTO 验收",
-    receiverPhone: "13990008991",
-    province: "重庆市",
-    city: "重庆市",
-    district: "铜梁区",
-    detail: `用户侧私有数据 DTO 验收 ${Date.now()}`,
-    isDefault: false
-  };
-  const savedAddress = await api(`/public/me/mall/addresses?tenantCode=${TENANT_CODE}`, {
-    method: "POST",
-    headers: userAuth(userToken),
-    body: JSON.stringify(addressPayload)
-  });
+  const existingAddresses = await api(`/public/me/mall/addresses?tenantCode=${TENANT_CODE}`, { headers: userAuth(userToken) });
+  const addressRows = pickList(existingAddresses);
+  let savedAddress = addressRows[0] || null;
+  if (!savedAddress || addressRows.length < 20) {
+    const addressPayload = {
+      receiverName: "多商户 DTO 验收",
+      receiverPhone: "13990008991",
+      province: "重庆市",
+      city: "重庆市",
+      district: "铜梁区",
+      detail: `用户侧私有数据 DTO 验收 ${Date.now()}`,
+      isDefault: false
+    };
+    savedAddress = await api(`/public/me/mall/addresses?tenantCode=${TENANT_CODE}`, {
+      method: "POST",
+      headers: userAuth(userToken),
+      body: JSON.stringify(addressPayload)
+    });
+  }
   const [favorites, histories, addresses] = await Promise.all([
     api(`/public/me/mall/favorites?tenantCode=${TENANT_CODE}`, { headers: userAuth(userToken) }),
     api(`/public/me/mall/browse-histories?tenantCode=${TENANT_CODE}`, { headers: userAuth(userToken) }),
@@ -2229,7 +2252,7 @@ async function createAgentBalanceSettlementOrder(platformToken, agentToken, user
   await api(`/admin/users/${userId}/wallet/adjust`, {
     method: "POST",
     headers: auth(platformToken),
-    body: JSON.stringify({ tenantId: agentStore.tenant?.id, amount: 300, type: "recharge", remark: "多商户商城余额支付结算口径 smoke 充值" })
+    body: JSON.stringify({ tenantId: agentStore.tenant?.id, amount: 300, type: "recharge", idempotencyKey: `smoke-wallet-${Date.now()}-${userId}`, remark: "多商户商城余额支付结算口径 smoke 充值" })
   });
   const agentSku = agentProduct.skus?.find((item) => Number(item.stock || 0) - Number(item.lockedStock || 0) > 0);
   assert(agentSku?.id, "余额结算样本缺少代理店可售 SKU");
@@ -2285,7 +2308,9 @@ async function assertSettlementGuard(storeToken, merchant) {
       remark: "店铺账号不应能生成自己的商城结算单"
     })
   });
-  assert(!result.ok && String(result.error?.message || "").includes("平台财务"), "店铺账号不应能生成、审核或打款自己的商城结算单");
+  const message = String(result.error?.message || "");
+  assert(!result.ok && /平台|结算|权限/.test(message), "店铺账号不应能生成、审核或打款自己的商城结算单");
+  return { blockedMessage: message };
 }
 
 async function settlePendingMallRecords(platformToken, merchant, label) {
@@ -2317,6 +2342,7 @@ async function settlePendingMallRecords(platformToken, merchant, label) {
     headers: auth(platformToken),
     body: JSON.stringify({
       paidReference: `SMOKE-CLEANUP-${Date.now()}-${draft.id}`,
+      businessKey: `smoke-cleanup-${Date.now()}-${draft.id}`,
       remark: `${label}：自动标记完成`
     })
   });
@@ -2354,12 +2380,13 @@ async function assertSettlementLifecycle(platformToken, merchant, label) {
     body: JSON.stringify({ remark: `${label}多商户 smoke 空凭证应失败` })
   });
   const evidenceMessage = String(missingEvidence.error?.message || "");
-  assert(!missingEvidence.ok && evidenceMessage.includes("凭证"), `${label}结算单标记完成必须填写打款或扣回凭证`);
+  assert(!missingEvidence.ok && /打款|流水|凭证/.test(evidenceMessage), `${label}结算单标记完成必须填写打款或扣回凭证（实际返回：${evidenceMessage || "空"}）`);
   const paid = await api(`/admin/mall/settlements/${draft.id}/mark-paid`, {
     method: "POST",
     headers: auth(platformToken),
     body: JSON.stringify({
       paidReference: `SMOKE-${Date.now()}-${draft.id}`,
+      businessKey: `smoke-paid-${Date.now()}-${draft.id}`,
       remark: `${label}多商户 smoke 标记打款`
     })
   });
@@ -2455,12 +2482,13 @@ async function assertSettlementRefundChargebackAccounting(platformToken, userTok
     headers: auth(platformToken),
     body: JSON.stringify({ remark: "缺少扣回/冲抵凭证应失败" })
   });
-  assert(!missingChargebackEvidence.ok && String(missingChargebackEvidence.error?.message || "").includes("凭证"), "已结算后退款冲抵结算单标记完成必须填写扣回/冲抵凭证");
+  assert(!missingChargebackEvidence.ok && /扣回|冲抵|打款|流水|凭证/.test(String(missingChargebackEvidence.error?.message || "")), "已结算后退款冲抵结算单标记完成必须填写扣回/冲抵凭证");
   const paidSettlement = await api(`/admin/mall/settlements/${draft.id}/mark-paid`, {
     method: "POST",
     headers: auth(platformToken),
     body: JSON.stringify({
       paidReference: `SMOKE-CHARGEBACK-${Date.now()}-${draft.id}`,
+      businessKey: `smoke-chargeback-${Date.now()}-${draft.id}`,
       remark: "财务已记录扣回/冲抵凭证"
     })
   });

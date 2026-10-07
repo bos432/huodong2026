@@ -2,6 +2,8 @@
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
 import { adminActivityPreviewUrl, mobileAdminRequest, requireMobileAdmin } from "../../../mobile-admin";
+import EmptyState from "../../../components/EmptyState.vue";
+import LoadingState from "../../../components/LoadingState.vue";
 
 const id = ref(0);
 const tenantCode = ref("");
@@ -49,8 +51,8 @@ onShow(load);
 
 <template>
   <view class="preview-page">
-    <view v-if="loading" class="panel state">活动预览加载中...</view>
-    <view v-else-if="loadError" class="panel state error-state" role="alert" aria-live="assertive"><text>{{ loadError }}</text><view class="retry" role="button" tabindex="0" aria-label="重新加载活动预览" @click="load" @keyup.enter="load" @keyup.space.prevent="load">重新加载</view></view>
+    <LoadingState v-if="loading" title="正在加载活动预览" description="正在同步公开活动信息，请稍候。" />
+    <EmptyState v-else-if="loadError" variant="error" title="活动预览加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <view v-else class="panel">
       <view class="title">{{ activity?.title || "活动预览" }}</view>
       <view class="sub">公开 H5 链接</view>

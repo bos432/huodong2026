@@ -13,12 +13,8 @@
       <view v-for="tab in tabs" :key="tab.key" class="order-tab" :class="{ active: activeTab === tab.key }" role="tab" tabindex="0" :aria-selected="activeTab === tab.key" @click="selectTab(tab.key)" @keyup.enter="selectTab(tab.key)" @keyup.space.prevent="selectTab(tab.key)">{{ tab.label }}</view>
     </view>
 
-    <view v-if="loading" class="card subtle" role="status" aria-live="polite">订单加载中…</view>
-    <view v-else-if="loadError" class="card error-card" role="alert" aria-live="assertive">
-      <view class="title small">订单加载失败</view>
-      <view class="subtle">{{ loadError }}</view>
-      <view class="button secondary retry" role="button" tabindex="0" aria-label="重新加载我的订单" @click="retryOrders" @keyup.enter="retryOrders" @keyup.space.prevent="retryOrders">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载订单" description="正在同步你的报名、支付和售后记录。" />
+    <EmptyState v-else-if="loadError" variant="error" title="订单加载失败" :description="loadError" action-text="重新加载" @action="retryOrders" />
 
     <template v-else>
       <view v-if="loadWarning" class="card warning-card" role="status" aria-live="polite">{{ loadWarning }}</view>
@@ -57,9 +53,11 @@ import { ensureUser, getCurrentTenantCode, getUserId, getUserToken, request, wit
 import { loadMemberOrderOverview, readMemberOrderSnapshot, type MemberOrderSession } from "../../member-order-overview";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import TabBar from "../../components/TabBar.vue";
 import { reviewSafeText } from "../../review-safe-text";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
+import type { PublicCourseOrderRecord, PublicCourseSummary, PublicMemberOrderRecord, PublicMemberRegistrationRecord, PublicRefundSummary } from "@activity/shared";
 
 type OrderTab = "all" | "pending" | "upcoming" | "after_sale" | "learning" | "completed";
 type UiOrder = {
@@ -67,19 +65,19 @@ type UiOrder = {
   type: "activity" | "course";
   typeLabel: string;
   title: string;
-  orderNo?: string;
-  amount?: string | number;
-  paymentMethod?: string;
+  orderNo?: string | null;
+  amount?: string | number | null;
+  paymentMethod?: string | null;
   status: string;
   statusText: string;
   statusClass: string;
-  createdAt?: string;
+  createdAt?: string | null;
   targetId?: number;
   courseId?: number;
   orderId?: number;
   owned?: boolean;
   progress?: number;
-  latestRefund?: any;
+  latestRefund?: PublicRefundSummary | null;
   refundableAmountFen?: number;
   canRefund?: boolean;
   tip?: string;
@@ -100,9 +98,9 @@ const busy = computed(() => loading.value || syncing.value);
 const loadError = ref("");
 const loadWarning = ref("");
 const actionError = ref("");
-const registrations = ref<any[]>([]);
-const courses = ref<any[]>([]);
-const courseOrders = ref<any[]>([]);
+const registrations = ref<PublicMemberRegistrationRecord[]>([]);
+const courses = ref<PublicCourseSummary[]>([]);
+const courseOrders = ref<PublicCourseOrderRecord[]>([]);
 const refundingOrderId = ref(0);
 const loadedContextKey = ref("");
 const loadGuard = createTenantLoadGuard();
@@ -217,9 +215,9 @@ function retryOrders() {
   void loadOrders();
 }
 
-function toActivityOrder(row: any): UiOrder {
-  const order = row.order || {};
-  const status = row.status || order.status || "";
+function toActivityOrder(row: PublicMemberRegistrationRecord): UiOrder {
+  const order = row.order || null;
+  const status = row.status || order?.status || "";
   const refund = row.latestRefund || null;
   return {
     key: `activity-${row.id}`,
@@ -239,7 +237,7 @@ function toActivityOrder(row: any): UiOrder {
   };
 }
 
-function toCourseOrder(order: any): UiOrder {
+function toCourseOrder(order: PublicCourseOrderRecord): UiOrder {
   const owned = order.owned === undefined ? order.status === "paid" : Boolean(order.owned);
   const refund = order.latestRefund || null;
   const refundableAmountFen = Math.max(Number(order.refundableAmountFen || 0), 0);
@@ -272,7 +270,7 @@ function toCourseOrder(order: any): UiOrder {
   };
 }
 
-function toLearningOrder(course: any): UiOrder {
+function toLearningOrder(course: PublicCourseSummary): UiOrder {
   const progress = Number(course.learning?.progress || 0);
   return {
     key: `course-learning-${course.id}`,
@@ -314,15 +312,17 @@ function registrationStatusText(status: string) {
   return map[status] || "报名记录";
 }
 
-function activityStatusText(status: string, order: any, refund: any) {
+function activityStatusText(status: string, order: PublicMemberOrderRecord | null, refund: PublicRefundSummary | null) {
   if (["pending", "processing"].includes(String(refund?.status || ""))) return "退款处理中";
+  if (refund?.status === "failed") return "退款处理异常";
   if (refund?.status === "completed") return order?.status === "partially_refunded" ? "部分退款" : "已退款";
   if (refund?.status === "rejected") return "退款未通过";
   return registrationStatusText(status);
 }
 
-function activityStatusClass(status: string, order: any, refund: any) {
+function activityStatusClass(status: string, order: PublicMemberOrderRecord | null, refund: PublicRefundSummary | null) {
   if (["pending", "processing"].includes(String(refund?.status || ""))) return "pending";
+  if (refund?.status === "failed") return "pending";
   if (refund?.status === "completed") return order?.status === "partially_refunded" ? statusClass(status) : "muted";
   if (refund?.status === "rejected") return "muted";
   return statusClass(status);
@@ -359,8 +359,9 @@ function courseOrderTip(status: string, owned: boolean, progress: number, refund
   return owned ? `观看进度 ${progress}%` : "";
 }
 
-function activityTip(status: string, order: any, refund: any) {
+function activityTip(status: string, order: PublicMemberOrderRecord | null, refund: PublicRefundSummary | null) {
   if (["pending", "processing"].includes(String(refund?.status || ""))) return `退款申请处理中，申请金额 ${moneyText(refund.amount)}。`;
+  if (refund?.status === "failed") return `退款处理异常：${reviewSafeText(refund.failureReason || "请联系主办方处理")}`;
   if (refund?.status === "completed") return order?.status === "partially_refunded"
     ? `最近一笔退款已完成，金额 ${moneyText(refund.amount)}，订单为部分退款。`
     : `退款已完成，退款金额 ${moneyText(refund.amount)}。`;

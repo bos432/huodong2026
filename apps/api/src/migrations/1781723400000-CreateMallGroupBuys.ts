@@ -6,7 +6,7 @@ export class CreateMallGroupBuys1781723400000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (await queryRunner.hasTable("mall_group_buys")) return;
     await queryRunner.query(`
-      CREATE TABLE mall_group_buys (
+      CREATE TABLE IF NOT EXISTS mall_group_buys (
         id INT NOT NULL AUTO_INCREMENT,
         tenantId INT NOT NULL,
         productId INT NOT NULL,

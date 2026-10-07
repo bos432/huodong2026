@@ -18,6 +18,7 @@ import {
   renderAutomaticNotification
 } from "./automatic-sms.service";
 import { BusinessJobService } from "./business-job.service";
+import { externalWorkerOwnsSchedules } from "../../worker-config";
 
 export type AutomaticWechatSettings = Record<AutomaticSmsScene, boolean> & {
   enabled: boolean;
@@ -36,6 +37,10 @@ export const defaultAutomaticWechatSettings: AutomaticWechatSettings = Object.fr
   activityChanged: false,
   checkInSucceeded: false,
   activityReminder: false,
+  reviewInvitation: false,
+  certificateAvailable: false,
+  activityRecommendations: false,
+  returnVisitReminder: false,
   reminderBeforeHours: 24
 }) as AutomaticWechatSettings;
 
@@ -82,6 +87,7 @@ export class AutomaticWechatService implements OnModuleInit, OnModuleDestroy {
   onModuleInit() {
     this.jobs.register(JOB_TYPE, (payload) => this.deliver(payload));
     this.jobs.register(FANOUT_JOB_TYPE, (payload) => this.deliverFanout(payload));
+    if (externalWorkerOwnsSchedules({ BUSINESS_JOB_WORKER_MODE: this.config.get("BUSINESS_JOB_WORKER_MODE", "embedded"), APP_PROCESS_ROLE: this.config.get("APP_PROCESS_ROLE", "api") })) return;
     if (this.config.get("AUTOMATIC_WECHAT_REMINDER_WORKER_ENABLED", "true") !== "true") return;
     const seconds = Math.max(60, Number(this.config.get("AUTOMATIC_WECHAT_REMINDER_WORKER_INTERVAL_SECONDS", 300)));
     this.reminderTimer = setInterval(() => this.scanReminders().catch((error) => this.logger.error("Automatic WeChat reminder scan failed", error)), seconds * 1000);
@@ -112,6 +118,7 @@ export class AutomaticWechatService implements OnModuleInit, OnModuleDestroy {
       return this.jobs.publish({
         tenantId: input.tenantId,
         type: FANOUT_JOB_TYPE,
+        scene: input.scene,
         idempotencyKey: `${input.scene}:${input.businessId}`.slice(0, 120),
         payload: { ...input, businessId: String(input.businessId), variables: this.variables(input.variables) },
         maxAttempts: 5
@@ -266,7 +273,9 @@ export class AutomaticWechatService implements OnModuleInit, OnModuleDestroy {
     ]);
     const automatic = normalizeAutomaticWechatSettings(setting?.automaticWechat);
     if (!automatic.enabled || !automatic[scene]) return this.suppress({ scene, businessId, userId, activityId, tenantId, variables }, businessId, variables, "微信自动通知场景已关闭");
-    if (!template || !template.enabled || template.approvalStatus !== "approved" || !template.providerTemplateId) throw new Error("微信场景模板不可用");
+    if (!template || !template.enabled || template.approvalStatus !== "approved" || !template.providerTemplateId) {
+      return this.suppress({ scene, businessId, userId, activityId, tenantId, variables }, businessId, variables, "微信场景模板不可用或已撤回");
+    }
     if (!user?.openid) return this.suppress({ scene, businessId, userId, activityId, tenantId, variables }, businessId, variables, "用户未绑定微信 openid");
 
     const renderedDefault = renderAutomaticNotification(scene, activity, variables);
@@ -346,7 +355,9 @@ export class AutomaticWechatService implements OnModuleInit, OnModuleDestroy {
   }
 
   private setting(tenantId?: number | null) {
-    return this.operationSettings.findOne({ where: { id: tenantId || 1 } });
+    return tenantId
+      ? this.operationSettings.findOne({ where: { tenant: { id: tenantId } } })
+      : this.operationSettings.findOne({ where: { tenant: IsNull() } });
   }
 
   private reserveAvailableGrant(userId: number, tenantScopeKey: string, scene: string, templateId: string, key: string) {

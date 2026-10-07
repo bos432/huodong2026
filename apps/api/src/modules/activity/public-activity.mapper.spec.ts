@@ -67,4 +67,15 @@ describe("toPublicActivity", () => {
 
     expect(result.bookingDisabledReason).toContain("测试活动");
   });
+
+  it("treats explicitly labelled demo activities as non-bookable and test-scoped", () => {
+    const result = toPublicActivity({ id: 2, isTest: false, title: "【演示】城市漫步", fields: [] } as any, {
+      environment: "production",
+      toTenant: () => null,
+      toMemberLevel: () => null
+    });
+
+    expect(result.isTest).toBe(true);
+    expect(result.bookingDisabledReason).toContain("演示活动");
+  });
 });

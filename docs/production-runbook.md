@@ -45,11 +45,12 @@ BUILD_TIME=<iso-build-time>
 7. 执行 `npm run preflight`。
 8. 生产数据库备份：`npm run db:backup`。
 9. 如有 migration，执行 `npm --prefix apps/api run migration:show`，确认后执行 `npm --prefix apps/api run migration:run`。
-10. 发布：`docker compose --env-file deploy/.env.production up -d --build`。
-11. 检查 `/api/health/ready` 返回 `ready: true`。
-12. 检查 `/api/health` 中的 `release.version` 和 `release.commit` 与发布记录一致。
-13. 顺序执行 `npm run smoke` 和 `npm run smoke:flow`。两条烟测都会改写共享测试数据，其中 `npm run smoke` 会临时切换全站报名开关，不要并发运行。
-14. 如本次开放或变更多商户商城，执行 `npm run smoke:mall-multi-merchant`，确认 `deploy/mall-multi-merchant-smoke-result.json` 为 `passed=true`；设置 `MALL_MULTI_MERCHANT_PREFLIGHT_PASSED=true` 后重新执行 `npm run preflight`，再执行 `npm run prelaunch:online-showcase` 做真实支付和多商户商城上线门禁。
+10. 发布：`docker compose --env-file deploy/.env.production up -d --build api activity-worker nginx`。Compose 会用同一 API 构建产物启动 API 和独立 Worker；不要只启动 `api`。
+11. 检查 `docker compose ps` 中 `activity-api`、`activity-worker`、`activity-nginx` 均为 healthy/running；Worker 不应发布 3000 端口。
+12. 检查 `/api/health/ready` 返回 `ready: true`，并检查 `/api/health/worker` 返回 `ready: true`。
+13. 检查 `/api/health` 中的 `release.version` 和 `release.commit` 与发布记录一致；`runtime/activity-worker-heartbeat.json` 的 commit 必须与 API 相同。
+14. 顺序执行 `npm run smoke` 和 `npm run smoke:flow`。两条烟测都会改写共享测试数据，其中 `npm run smoke` 会临时切换全站报名开关，不要并发运行。
+15. 如本次开放或变更多商户商城，执行 `npm run smoke:mall-multi-merchant`，确认 `deploy/mall-multi-merchant-smoke-result.json` 为 `passed=true`；设置 `MALL_MULTI_MERCHANT_PREFLIGHT_PASSED=true` 后重新执行 `npm run preflight`，再执行 `npm run prelaunch:online-showcase` 做真实支付和多商户商城上线门禁。
 
 ## 3. 健康检查
 
@@ -74,20 +75,22 @@ npm run monitor:health
 
 使用独立 Worker 时，API 和 Worker 必须分别启动。API 进程不消费业务任务，Worker 通过共享的 `runtime/activity-worker-heartbeat.json` 报告心跳：
 
-```bash
-export APP_PROCESS_ROLE=api
-export BUSINESS_JOB_WORKER_MODE=external
-export BUSINESS_JOB_WORKER_ENABLED=false
-pm2 restart activity-api --update-env
+Docker Compose 已将这一关系固化为 `api` + `activity-worker` 两个服务。Worker 继承 API 的镜像、数据库依赖、生产环境变量和持久化卷，只覆盖进程角色、启动命令和心跳健康检查；API 和 Worker 共享 `runtime-data`，因此 API 的 readiness 能识别 Worker 停止。若只启动 API，外置 Worker 模式下 readiness 会保持未就绪。
 
-export APP_PROCESS_ROLE=worker
-export BUSINESS_JOB_WORKER_MODE=external
-export BUSINESS_JOB_WORKER_ENABLED=true
-pm2 start apps/api/dist/worker.js --name activity-worker --update-env
+推荐使用仓库内的双进程模板，避免只重启 API 或把 API 错误地配置成任务消费者：
+
+```bash
+export ACTIVITY_APP_ROOT=/www/wwwroot/your-domain.example
+export APP_VERSION=0.1.0
+export BUILD_COMMIT=your-release-commit
+export BUILD_TIME="$(date -Iseconds)"
+pm2 startOrRestart deploy/ecosystem.activity.cjs --only activity-api,activity-worker --update-env
 pm2 save
 npm run wait:worker-ready
 curl -fsS https://your-domain.example/api/health/worker
 ```
+
+模板中的 API 进程使用 `APP_PROCESS_ROLE=api`、`BUSINESS_JOB_WORKER_ENABLED=false`；Worker 使用 `APP_PROCESS_ROLE=worker`、`BUSINESS_JOB_WORKER_ENABLED=true`，两者共享 `runtime/activity-worker-heartbeat.json`。若服务器上的 PM2 版本不支持 `startOrRestart`，分别执行 `pm2 restart activity-api --update-env` 和 `pm2 start deploy/ecosystem.activity.cjs --only activity-worker --update-env`，不要重启其他站点。
 
 发布后若 `/api/health/worker` 不是 `ready=true`，先不要接收新的付费报名或依赖异步通知的运营流量，检查 `pm2 logs activity-worker`、`runtime/activity-worker-heartbeat.json` 和数据库连接。不要通过重启 API 代替启动 Worker。
 

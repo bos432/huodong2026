@@ -80,11 +80,14 @@ import { ObjectStorageService } from "../../shared/object-storage.service";
 import { AidModule } from "../aid/aid.module";
 import { MemberPointsModule } from "../member-points/member-points.module";
 import { CredentialTemplateModule } from "../credential-templates/credential-template.module";
+import { ActivityService } from "../activity/activity.service";
+import { RegistrationService } from "../registration/registration.service";
+import { CommerceService } from "../commerce/commerce.service";
 
 @Module({
   imports: [AidModule, MemberPointsModule, CredentialTemplateModule, TypeOrmModule.forFeature([User, AdminUser, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, Agent, AgentPaymentAccount, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, Activity, Announcement, HomepageSection, MarketingPopup, AdCampaign, AdDailyStat, Registration, FrequentRegistrant, Order, OperationSetting, PaymentCallbackLog, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, H5AuthCodeLog, MiniprogramReleaseSetting, ActivityReview, ActivityViewLog, Waitlist, MemberLevel, MemberProfile, MemberPointLog, CheckIn, CharityFundSetting, CharityFundAccount, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectEvent, CharityProjectUpdate, VolunteerProfile, VolunteerTrainingRecord, VolunteerBadgeDefinition, VolunteerBadgeAward, VolunteerTask, VolunteerTaskApplication, VolunteerAttendanceRecord, VolunteerServiceRecord, VolunteerHourAdjustment, VolunteerServiceProof, Course, CourseChapter, CourseLesson, CourseOrder, CourseRefund, UserLearning, UserFavorite, Certificate, CommunityPost, NotificationTemplate, WechatSubscriptionGrant])],
   controllers: [PublicController, PaymentController],
-  providers: [PublicService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
+  providers: [PublicService, ActivityService, RegistrationService, CommerceService, PaymentProviderService, NotificationProviderService, RefundCompletionService, CharityFundService, ObjectStorageService],
   exports: [PublicService, PaymentProviderService, ObjectStorageService]
 })
 export class PublicModule {}

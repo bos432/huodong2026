@@ -10,6 +10,8 @@ const router = useRouter();
 const data = ref<any>();
 const loading = ref(false);
 const errorMessage = ref("");
+const platformHealth = ref<any | null>(null);
+const notificationMonitor = ref<any | null>(null);
 const mallMerchants = ref<MallMerchant[]>([]);
 const mallAnalytics = ref<any>({});
 const selectedMallMerchantId = ref<number>();
@@ -157,6 +159,24 @@ const todoCards = computed(() => {
       ];
 });
 const alertCards = computed(() => (data.value?.alerts || []).filter((item: any) => item.count > 0));
+const deliveryHealthCards = computed(() => {
+  const worker = platformHealth.value?.worker || {};
+  const operations = platformHealth.value?.operations || {};
+  const failedNotifications = Number(notificationMonitor.value?.status?.failed || 0);
+  const deadLetters = Number(operations.businessJobsDeadLetter || notificationMonitor.value?.jobs?.dead_letter || 0);
+  const dueJobs = Number(operations.businessJobsDue || 0);
+  const staleJobs = Number(operations.businessJobsStaleProcessing || 0);
+  const workerReady = worker.required === false || worker.ready === true;
+  const cards: Array<{ label: string; value: number | string; desc: string; tone: "danger" | "success" | "warning"; path: string }> = [
+    { label: "通知失败", value: failedNotifications, desc: failedNotifications > 0 ? "请进入通知中心检查回执并按需重试" : "暂无发送失败记录", tone: failedNotifications > 0 ? "danger" : "success", path: "/notifications" },
+  ];
+  if (isPlatformAdmin()) cards.push(
+    { label: "任务积压", value: dueJobs, desc: dueJobs > 0 ? "有到期业务任务等待 Worker 处理" : "暂无到期积压任务", tone: dueJobs > 0 ? "warning" : "success", path: "/notifications" },
+    { label: "死信 / 过期锁", value: deadLetters + staleJobs, desc: deadLetters + staleJobs > 0 ? `死信 ${deadLetters}，过期锁 ${staleJobs}` : "暂无死信或过期锁任务", tone: deadLetters + staleJobs > 0 ? "danger" : "success", path: "/notifications" },
+    { label: "Worker 心跳", value: workerReady ? "正常" : "异常", desc: worker.required === false ? "当前部署使用内置任务模式" : workerReady ? "外置 Worker 最近心跳正常" : "外置 Worker 未就绪，请停止扩大灰度", tone: workerReady ? "success" : "danger", path: "/system-settings" }
+  );
+  return cards;
+});
 const mallTodoCards = computed(() => [
   { label: "待确认收款", value: mallStatusCount(["pending_confirm"]), tone: "warning", path: "/mall-orders", query: { status: "pending_confirm" } },
   { label: "待发货订单", value: mallStatusCount(["paid"]), tone: "warning", path: "/mall-orders", query: { status: "paid" } },
@@ -217,7 +237,18 @@ async function load() {
   errorMessage.value = "";
   try {
     if (mallWorkbenchMode.value) await loadMallWorkbench();
-    else data.value = await api.get("/admin/dashboard");
+    else {
+      const [dashboard, health, monitor] = await Promise.all([
+        api.get("/admin/dashboard"),
+        isPlatformAdmin() ? api.get("/health").catch(() => null) : Promise.resolve(null),
+        canAccess(["notification.view", "notification.manage"])
+          ? api.get("/admin/notifications/monitor").catch(() => null)
+          : Promise.resolve(null)
+      ]);
+      data.value = dashboard;
+      platformHealth.value = health;
+      notificationMonitor.value = monitor;
+    }
   } catch (error: any) {
     errorMessage.value = error.message || "数据看板加载失败";
   } finally {
@@ -242,8 +273,11 @@ async function loadMallAnalytics() {
 
 async function handleMallMerchantChange() {
   loading.value = true;
+  errorMessage.value = "";
   try {
     await loadMallAnalytics();
+  } catch (error: any) {
+    errorMessage.value = error.message || "商城经营数据加载失败";
   } finally {
     loading.value = false;
   }
@@ -342,7 +376,7 @@ onMounted(load);
 </script>
 
 <template>
-  <div class="page">
+  <div class="page" :aria-busy="loading">
     <div class="toolbar">
       <h2>{{ pageTitle }}</h2>
       <div class="toolbar-actions">
@@ -355,6 +389,15 @@ onMounted(load);
     <el-alert v-if="errorMessage" type="error" show-icon :closable="false" :title="errorMessage">
       <template #default><el-button size="small" @click="load">重试</el-button></template>
     </el-alert>
+    <div v-if="loading && !data && !mallMerchants.length" class="page-loading" role="status" aria-live="polite">
+      正在加载运营数据，请稍候…
+    </div>
+    <el-empty
+      v-if="!loading && !errorMessage && !data && !mallMerchants.length && !mallWorkbenchMode"
+      description="暂时没有可展示的运营数据"
+    >
+      <el-button @click="load">重新加载</el-button>
+    </el-empty>
 
     <OperatingWorkbench v-if="!mallWorkbenchMode && !isPlatformAdmin()" />
     <template v-if="mallWorkbenchMode">
@@ -492,6 +535,22 @@ onMounted(load);
       </div>
     </div>
 
+    <div v-if="!mallWorkbenchMode && data" class="table-card delivery-health-card">
+      <div class="section-heading">
+        <div>
+          <h3>通知与任务健康</h3>
+          <p>用于判断是否可以继续扩大灰度；数据来自当前租户可见范围和运行时健康检查。</p>
+        </div>
+        <el-button link type="primary" @click="router.push('/notifications')">打开通知中心</el-button>
+      </div>
+      <div class="delivery-health-grid">
+        <div v-for="item in deliveryHealthCards" :key="item.label" class="delivery-health-item" :class="item.tone" role="button" tabindex="0" @click="router.push(item.path)" @keydown.enter.prevent="router.push(item.path)" @keydown.space.prevent="router.push(item.path)">
+          <div><span>{{ item.label }}</span><p>{{ item.desc }}</p></div>
+          <strong>{{ item.value }}</strong>
+        </div>
+      </div>
+    </div>
+
     <div v-if="!mallWorkbenchMode && permissionCards.length" class="permission-grid">
       <div v-for="item in permissionCards" :key="item.label" class="permission" :class="item.tone">
         <span>{{ item.label }}</span>
@@ -558,6 +617,7 @@ onMounted(load);
 </template>
 
 <style scoped>
+.page-loading { display: flex; align-items: center; justify-content: center; min-height: 180px; margin: 18px 0; border: 1px dashed #cbd5e1; border-radius: 8px; color: #475467; background: #f8fafc; }
 .operation-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
 .toolbar-actions { display: flex; align-items: center; justify-content: flex-end; gap: 10px; flex-wrap: wrap; }
 .mall-merchant-card { background: #fff; border: 1px solid #fed7aa; border-radius: 8px; padding: 16px; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-bottom: 18px; }
@@ -607,6 +667,19 @@ onMounted(load);
 .health-item.warning { border-left-color: #d97706; }
 .health-item.danger { border-left-color: #dc2626; }
 .health-item.muted { border-left-color: #94a3b8; }
+.section-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; margin-bottom:14px; }
+.section-heading h3 { margin:0; }
+.section-heading p { margin:6px 0 0; color:#667085; font-size:13px; line-height:1.45; }
+.delivery-health-grid { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:12px; }
+.delivery-health-item { display:flex; align-items:center; justify-content:space-between; gap:12px; min-height:82px; padding:12px 14px; border:1px solid #e5e7eb; border-left-width:4px; border-radius:8px; cursor:pointer; }
+.delivery-health-item:hover, .delivery-health-item:focus-visible { outline:none; border-color:#0f766e; background:#f0fdfa; }
+.delivery-health-item span { color:#111827; font-weight:600; }
+.delivery-health-item p { margin:6px 0 0; color:#667085; font-size:12px; line-height:1.4; }
+.delivery-health-item strong { font-size:20px; white-space:nowrap; }
+.delivery-health-item.success { border-left-color:#16a34a; }
+.delivery-health-item.warning { border-left-color:#d97706; }
+.delivery-health-item.danger { border-left-color:#dc2626; }
+.delivery-health-item.muted { border-left-color:#94a3b8; }
 .action-list button { width: 100%; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; padding: 12px 14px; text-align: left; cursor: pointer; display: grid; gap: 6px; }
 .action-list button:hover { border-color: #0f766e; background: #f0fdfa; }
 .action-list span { color: #111827; font-weight: 600; }
@@ -614,6 +687,6 @@ onMounted(load);
 .advice-text { display: block; margin-top: 6px; color: #667085; line-height: 1.45; }
 .mini-table { margin-top: 12px; }
 h3 { margin: 0 0 16px; }
-@media (max-width: 900px) { .operation-grid, .metric-grid, .todo-grid, .alert-grid, .permission-grid, .dashboard-columns { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
-@media (max-width: 640px) { .operation-grid, .metric-grid, .todo-grid, .alert-grid, .permission-grid, .dashboard-columns, .mall-merchant-card { grid-template-columns: 1fr; } }
+@media (max-width: 900px) { .operation-grid, .metric-grid, .todo-grid, .alert-grid, .permission-grid, .dashboard-columns, .delivery-health-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 640px) { .operation-grid, .metric-grid, .todo-grid, .alert-grid, .permission-grid, .dashboard-columns, .mall-merchant-card, .delivery-health-grid { grid-template-columns: 1fr; } .section-heading { align-items: stretch; flex-direction: column; } }
 </style>

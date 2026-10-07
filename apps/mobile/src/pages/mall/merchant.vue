@@ -1,10 +1,7 @@
 <template>
   <view class="merchant-page has-custom-nav">
-    <view v-if="loading" class="page-state">店铺加载中...</view>
-    <view v-else-if="loadError" class="page-state error-state">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载店铺" description="正在同步店铺资料和商品。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="店铺信息暂时无法同步，请重试。" action-text="重新加载" @action="load" />
     <template v-else-if="merchant">
     <view class="merchant-hero">
       <image v-if="merchant.logoUrl" class="merchant-logo" :src="merchant.logoUrl" mode="aspectFill" />
@@ -133,6 +130,7 @@ import { ref } from "vue";
 import { onLoad, onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
 import { request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { defaultMiniProgramShare, defaultMiniProgramTimelineShare, showMiniProgramShareMenu } from "../../share";
 

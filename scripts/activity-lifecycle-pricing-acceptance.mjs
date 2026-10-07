@@ -8,7 +8,7 @@ const tenantCode = process.env.TENANT_CODE || "qiwai-showcase";
 const platformUsername = process.env.PLATFORM_ADMIN_USERNAME || "admin";
 const platformPassword = process.env.PLATFORM_ADMIN_PASSWORD || "Admin123456";
 const tenantUsername = process.env.SHOWCASE_ADMIN_USERNAME || "showcase_admin";
-const tenantPassword = process.env.SHOWCASE_ADMIN_PASSWORD || "Showcase123456Aa";
+const tenantPassword = process.env.SHOWCASE_ADMIN_PASSWORD || "Qiwai123456";
 const userPassword = process.env.SHOWCASE_PASSWORD || "Qiwai123456";
 const runId = `${Date.now()}`;
 const outputDir = path.resolve(process.env.ACCEPTANCE_OUTPUT_DIR || path.join(root, ".local-logs"), `activity-lifecycle-pricing-${runId}`);
@@ -72,7 +72,8 @@ async function loginAdmin(username, password) {
 }
 
 async function loginUser(phone, nickname) {
-  const value = await api("/public/auth/password-login", { method: "POST", body: { phone, password: userPassword, nickname } });
+  const code = await api("/public/auth/h5-code", { method: "POST", tenant: false, body: { phone } });
+  const value = await api("/public/auth/h5-login", { method: "POST", tenant: false, body: { phone, verificationCode: code.devCode || process.env.H5_DEV_VERIFICATION_CODE || "123456", verificationToken: code.verificationToken, nickname } });
   assert(value.userAccessToken, `${phone} user token missing`);
   return { ...value, phone };
 }

@@ -229,6 +229,13 @@ import { MallModule } from "./mall/mall.module";
 import { PublicModule } from "./public/public.module";
 import { V1Module } from "./v1/v1.module";
 import { ReliabilityModule } from "./reliability/reliability.module";
+import { ExperienceModule } from "./experience/experience.module";
+import { ExperienceProject } from "../entities/experience-project.entity";
+import { ExperienceApplication } from "../entities/experience-application.entity";
+import { ExperienceFeedback } from "../entities/experience-feedback.entity";
+import { ReleaseReadinessItem } from "../entities/release-readiness-item.entity";
+import { ReleaseAcceptanceFixture } from "../entities/release-acceptance-fixture.entity";
+import { ReleaseReadinessEvent } from "../entities/release-readiness-event.entity";
 
 const entities = [User, UserWallet, WalletTransaction, Tenant, TenantRegion, TenantRegionHitLog, AdminLoginLog, AdminMallMerchantAccess, AdminOperationLog, AdminUser, Agent, AgentPaymentAccount, AgentSettlement, AgentSettlementTransfer, AmbassadorLandingSetting, AmbassadorCase, AmbassadorApplication, AmbassadorApplicationFollowup, ActivityCategory, ActivityChannel, ActivityApprovalLog, Activity, ActivityField, ActivityHost, ActivitySection, ActivityReview, ActivitySpaceAnnouncement, ActivitySpacePost, ActivitySpacePostReport, ActivityViewLog, Announcement, Registration, FrequentRegistrant, Order, OperationSetting, PaymentCallbackLog, PaymentStatementRecord, PaymentTransaction, Refund, TicketType, Coupon, ConversionEvent, CheckIn, CharityFundSetting, CharityFundAccount, CharityFundTransaction, CharityProject, CharityProjectDisbursement, CharityProjectEvent, CharityProjectUpdate, H5AuthCodeLog, HomepageSection, HomepageDecorationVersion, HomepageDecorationTemplate, MarketingPopup, ForumCategory, ForumCategoryModerator, ForumTopic, ForumReply, ForumReport, ForumFavorite, ForumViewLog, ForumNotification, AdAdvertiser, AdContract, AdCampaign, AdDailyStat, AdSettlement, AdSettlementItem, AdOfficialRevenueImport, MiniprogramReleaseSetting, MiniprogramReleaseLog, InviteCode, ShareVisit, Waitlist, UserTag, MemberLevel, MemberLevelChange, MemberProfile, MemberPointRule, MallMerchant, MallMerchantApplication, MallMerchantQualification, MallMerchantContract, MallMerchantPaymentAccount, MallMembershipPurchase, MallCheckoutGroup, MallCategory, MallBrand, MallCoupon, MallCouponClaim, MallCouponUsage, MallCommission, MallCommissionRule, MallCommissionAdjustment, MallPromotionCode, MallFavorite, MallBrowseHistory, MallFlashSale, MallGroupBuy, MallGroupBuyRecord, MallLogisticsCompany, MallProduct, MallProductAuditLog, MallSku, MallInventoryLog, MallInventoryAnomaly, MallAddress, MallCartItem, MallOrder, MallOrderItem, MallOrderEvent, MallShipment, MallShipmentItem, MallShipmentTrackingEvent, MallPaymentCallbackLog, MallPaymentTransaction, MallPaymentStatementRecord, MallRefund, MallRefundItem, MallRefundMessage, MallRefundLog, MallReview, MallReviewReport, MallSettlement, MallSettlementLine, MallSettlementEvent, MemberPointLog, NotificationTemplate, Notification, NotificationSchedule, Course, CourseChapter, CourseLesson, CourseOrder, CommunityActivity, CheckInTask, CommunityPost, CommunityPostLike, CommunityPostComment, CommunityCheckIn, UserLearning, UserFavorite, Certificate, VolunteerProfile, VolunteerTrainingRecord, VolunteerBadgeDefinition, VolunteerBadgeAward, VolunteerTask, VolunteerTaskApplication, VolunteerAttendanceRecord, VolunteerServiceRecord, VolunteerHourAdjustment, VolunteerServiceProof];
 
@@ -251,6 +258,8 @@ entities.push(FundRiskAlert as any);
 entities.push(CheckInPoint as any);
 entities.push(CourseResourceAccessLog as any, CourseTeacher as any);
 entities.push(MallPromotionRateLimit as any, MallPromotionRiskAlert as any, MallPromotionRiskEvent as any);
+entities.push(ExperienceProject as any, ExperienceApplication as any, ExperienceFeedback as any);
+entities.push(ReleaseReadinessItem as any, ReleaseAcceptanceFixture as any, ReleaseReadinessEvent as any);
 
 loadEnv({ path: "apps/api/.env" });
 loadEnv();
@@ -276,6 +285,7 @@ const businessModules = [
       password: config.get("DB_PASSWORD", "activitypass"),
       database: config.get("DB_DATABASE", "activity_registration"),
       entities,
+      logging: config.get("DB_LOGGING", "false") === "true" ? ["query", "error"] : false,
       synchronize: dbSynchronizeEnabled(config),
       timezone: "+08:00",
       dateStrings: ["DATE"]
@@ -295,6 +305,6 @@ entities.push(CommunityActivityMember as any, CommunityPostFavorite as any, Comm
 entities.push(AidApplication as any, AidApplicationMaterial as any, AidApplicationEvent as any);
 
 @Module({
-  imports: [configModule, InstallModule, ...(installerBootstrapMode() ? [] : businessModules)]
+  imports: [configModule, InstallModule, ...(installerBootstrapMode() ? [] : [...businessModules, ExperienceModule])]
 })
 export class AppModule {}

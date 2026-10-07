@@ -135,7 +135,7 @@ export class MemberPointLedgerGovernance1783880000000 implements MigrationInterf
   async up(queryRunner: QueryRunner) {
     if (!(await queryRunner.hasTable("member_point_rules"))) {
       await queryRunner.query(`
-        CREATE TABLE member_point_rules (
+        CREATE TABLE IF NOT EXISTS member_point_rules (
           id int NOT NULL AUTO_INCREMENT,
           tenantId int NULL,
           tenantScopeKey varchar(32) NOT NULL DEFAULT 'platform',

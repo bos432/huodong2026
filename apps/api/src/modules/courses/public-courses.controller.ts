@@ -1,4 +1,4 @@
-import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, ParseIntPipe, Post, Query, Req, Res, UnauthorizedException, UploadedFile, UseInterceptors } from "@nestjs/common";
+import { BadRequestException, Body, Controller, Delete, ForbiddenException, Get, NotFoundException, Param, ParseIntPipe, Patch, Post, Query, Req, Res, UnauthorizedException, UploadedFile, UseInterceptors } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
 import { SocialConnectionService } from './social-connection.service';
 import { FileInterceptor } from "@nestjs/platform-express";
@@ -45,12 +45,11 @@ import { ForumReply } from "../../entities/forum-reply.entity";
 import { ForumReport } from "../../entities/forum-report.entity";
 import { ForumTopic } from "../../entities/forum-topic.entity";
 import { ForumViewLog } from "../../entities/forum-view-log.entity";
-import { Order } from "../../entities/order.entity";
 import { Registration } from "../../entities/registration.entity";
 import { UserLearning } from "../../entities/user-learning.entity";
 import { User } from "../../entities/user.entity";
 import { Tenant } from "../../entities/tenant.entity";
-import { OrderStatus, RegistrationStatus } from "../../shared/domain";
+import { RegistrationStatus } from "../../shared/domain";
 import { normalizeTenantCode, normalizeTenantHost } from "../../shared/tenant-scope";
 import { PublicService } from "../public/public.service";
 import { ObjectStorageService } from "../../shared/object-storage.service";
@@ -396,10 +395,55 @@ export class PublicCoursesController {
     return res.end(buffer);
   }
 
-  @Delete("me/community/posts/:id")
-  async deleteMyCommunityPost(@Param("id", ParseIntPipe) id: number, @Req() req: any) {
+  @Patch("me/community/posts/:id")
+  async resubmitMyCommunityPost(
+    @Param("id", ParseIntPipe) id: number,
+    @Body() dto: { content?: string; images?: string[]; city?: string; tags?: string[]; posterConfig?: Record<string, unknown> },
+    @Req() req: any,
+    @Query("tenantCode") tenantCode?: string,
+  ) {
+    await this.assertCommunityPublishEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
-    const post = await this.communityPosts.findOneBy({ id, userId, deletedAt: IsNull() });
+    const tenant = await this.resolveTenant(req, tenantCode);
+    await this.assertContentWriteAllowed(userId, tenant, "community");
+    const post = await this.communityPosts.findOne({
+      where: this.exactTenantWhere({ id, userId, deletedAt: IsNull() }, tenant),
+    });
+    if (!post || post.source !== "participant") throw new NotFoundException("心得不存在或已删除");
+    if (post.status !== "rejected") throw new BadRequestException("只有未通过审核的心得可以修改后重新提交");
+    if (!post.activityId) throw new BadRequestException("该心得缺少关联活动，无法重新提交");
+
+    const postableActivities = await this.postableActivities(userId, tenant);
+    if (!postableActivities.some((item: any) => Number(item.id) === Number(post.activityId))) {
+      throw new BadRequestException("关联活动已不满足发布条件，请重新参加活动后再发布");
+    }
+    const screened = await this.screenContent(String(dto.content || "").trim(), tenant, "community");
+    const content = screened.text;
+    if (content.length < 10) throw new BadRequestException("心得内容至少 10 个字");
+    if (content.length > 2000) throw new BadRequestException("心得内容不能超过 2000 个字");
+    const images = await this.normalizeImageUrls(dto.images);
+    if (!images.length) throw new BadRequestException("请至少上传 1 张活动照片");
+
+    Object.assign(post, {
+      content,
+      images,
+      city: this.optionalText(dto.city, 120),
+      tags: this.normalizeTags(dto.tags),
+      posterConfig: this.safePosterConfig(dto.posterConfig),
+      status: "pending",
+      visible: true,
+      reviewRemark: null,
+      approvedAt: null,
+    });
+    return { post: this.postView(await this.communityPosts.save(post), { liked: false }), message: "已重新提交审核" };
+  }
+
+  @Delete("me/community/posts/:id")
+  async deleteMyCommunityPost(@Param("id", ParseIntPipe) id: number, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    await this.assertCommunityEnabled(req, tenantCode);
+    const userId = this.requireUserId(req.headers?.authorization);
+    const tenant = await this.resolveTenant(req, tenantCode);
+    const post = await this.communityPosts.findOne({ where: this.exactTenantWhere({ id, userId, deletedAt: IsNull() }, tenant) });
     if (!post) throw new NotFoundException("动态不存在或已删除");
     post.deletedAt = new Date();
     post.visible = false;
@@ -556,6 +600,28 @@ export class PublicCoursesController {
     });
   }
 
+  /** Retry only transient MariaDB transaction conflicts from concurrent check-ins. */
+  private async runCheckinTransactionWithRetry<T>(work: () => Promise<T>, attempts = 6): Promise<T> {
+    for (let attempt = 1; attempt <= attempts; attempt += 1) {
+      try {
+        return await work();
+      } catch (error: any) {
+        const code = String(error?.code || error?.driverError?.code || "");
+        const message = String(error?.message || error?.driverError?.message || "").toLowerCase();
+        const retryable = ["ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(code)
+          || message.includes("record has changed since last read")
+          || message.includes("deadlock found")
+          || message.includes("lock wait timeout");
+        if (!retryable || attempt === attempts) throw error;
+        // Concurrent submissions can hold the task lock for the duration of
+        // the transaction. Give MariaDB a short, bounded exponential backoff
+        // instead of turning a transient conflict into an HTTP 500.
+        await new Promise((resolve) => setTimeout(resolve, Math.min(250, 25 * 2 ** (attempt - 1))));
+      }
+    }
+    throw new Error("check-in transaction retry exhausted");
+  }
+
   @Post("community/posts")
   async createParticipantPost(@Body() dto: { activityId?: number; content?: string; images?: string[]; city?: string; tags?: string[]; posterConfig?: Record<string, unknown> }, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     await this.assertCommunityPublishEnabled(req, tenantCode);
@@ -571,7 +637,7 @@ export class PublicCoursesController {
     const content = screened.text;
     if (content.length < 10) throw new BadRequestException("心得内容至少 10 个字");
     if (content.length > 2000) throw new BadRequestException("心得内容不能超过 2000 个字");
-    const images = this.normalizeImageUrls(dto.images);
+    const images = await this.normalizeImageUrls(dto.images);
     if (!images.length) throw new BadRequestException("请至少上传 1 张活动照片");
     const post = await this.communityPosts.save(this.communityPosts.create({
       userId,
@@ -748,7 +814,7 @@ export class PublicCoursesController {
       targetType,
       targetId,
       reason,
-      evidenceUrls: this.normalizeForumImages(dto.evidenceUrls),
+      evidenceUrls: await this.normalizeUserImageUrls(dto.evidenceUrls),
       status: "pending",
       handleRemark: null,
       handledByAdminId: null,
@@ -874,7 +940,7 @@ export class PublicCoursesController {
       userId,
       title,
       content,
-      images: this.normalizeForumImages(dto.images),
+      images: await this.normalizeUserImageUrls(dto.images),
       tags: this.normalizeForumTags(dto.tags),
       activityId: Number(dto.activityId || 0) || null,
       courseId: Number(dto.courseId || 0) || null,
@@ -1055,8 +1121,10 @@ export class PublicCoursesController {
       }
       const completedCount = await this.countTaskCheckins(lockedTask.id, tenant, checkinRepo);
       if (Number(lockedTask.completedCount || 0) !== completedCount) {
+        // This endpoint is hit concurrently by many users. Updating the single
+        // counter column avoids saving a stale eager-loaded entity snapshot.
+        await taskRepo.update(lockedTask.id, { completedCount });
         lockedTask.completedCount = completedCount;
-        await taskRepo.save(lockedTask);
       }
       return {
         checkedToday: true,
@@ -1142,26 +1210,34 @@ export class PublicCoursesController {
     await this.assertCommunityEnabled(req, tenantCode);
     const userId = this.requireUserId(req.headers?.authorization);
     const tenant = await this.resolveTenant(req, tenantCode);
-    return this.dataSource.transaction(async (manager) => {
-      const activity = await manager.getRepository(CommunityActivity).findOne({
+    // The unique check-in index is the idempotency boundary. Keep this
+    // submission path outside a long transaction so concurrent first writes
+    // do not contend on a repeatable-read snapshot; duplicate-key recovery
+    // below returns the winning row.
+    return this.runCheckinTransactionWithRetry(async () => {
+      const activity = await this.communityActivities.findOne({
         where: this.exactTenantWhere({ id, status: "published" }, tenant)
       });
       if (!activity) throw new NotFoundException("共学活动不存在");
-      const memberRepo = manager.getRepository(CommunityActivityMember);
-      const taskRepo = manager.getRepository(CheckInTask);
-      const checkinRepo = manager.getRepository(CommunityCheckIn);
+      const memberRepo = this.communityActivityMembers;
+      const taskRepo = this.checkinTasks;
+      const checkinRepo = this.communityCheckins;
       const membership = await memberRepo.findOne({ where: this.exactTenantWhere({ activityId: id, userId, status: "joined" }, tenant) });
       if (!membership) throw new ForbiddenException("请先加入共学活动");
       const task = await taskRepo.findOne({
-        where: this.exactTenantWhere({ id: Number(dto.taskId || 0), activityId: id, enabled: true }, tenant),
-        lock: { mode: "pessimistic_write" }
+        // The task is read-only in this request. Locking it pessimistically
+        // makes concurrent submissions contend on a row whose denormalized
+        // counter is not written by this path.
+        where: this.exactTenantWhere({ id: Number(dto.taskId || 0), activityId: id, enabled: true }, tenant)
       });
       if (!task) throw new NotFoundException("打卡任务不存在");
       const today = this.today();
       const date = this.dateOnly(dto.date || task.date);
       let row = await checkinRepo.findOne({
-        where: this.exactTenantWhere({ userId, taskId: task.id, activityId: id, date }, tenant),
-        lock: { mode: "pessimistic_write" }
+        // Idempotency is enforced by the unique database index. A row lock
+        // here makes concurrent first submissions contend before the insert;
+        // ordinary reads plus duplicate-key recovery are safer under load.
+        where: this.exactTenantWhere({ userId, taskId: task.id, activityId: id, date }, tenant)
       });
       let makeup = false;
       if (!row || row.status !== "rejected") {
@@ -1174,7 +1250,7 @@ export class PublicCoursesController {
         makeup = row.makeup;
       }
       const content = String(dto.content || "").trim().slice(0, 5000);
-      const images = Array.isArray(dto.images) ? dto.images.map(String).filter(Boolean).slice(0, 9) : [];
+      const images = await this.normalizeUserImageUrls(dto.images);
       if (["text", "question"].includes(task.checkinType) && content.length < 2) throw new BadRequestException("请填写打卡内容");
       if (task.checkinType === "image" && !images.length) throw new BadRequestException("请上传打卡图片");
       if (task.checkinType === "location" && (!Number.isFinite(Number(dto.latitude)) || !Number.isFinite(Number(dto.longitude)))) {
@@ -1199,6 +1275,7 @@ export class PublicCoursesController {
       };
       if (row) Object.assign(row, values);
       else row = checkinRepo.create({ userId, taskId: task.id, activityId: id, date, tenant: membership.tenant, ...values });
+      let idempotent = false;
       try {
         row = await checkinRepo.save(row);
       } catch (error: any) {
@@ -1206,11 +1283,15 @@ export class PublicCoursesController {
         const existing = await checkinRepo.findOne({ where: this.exactTenantWhere({ userId, taskId: task.id, activityId: id, date }, tenant) });
         if (!existing) throw error;
         row = existing;
+        idempotent = true;
       }
+      // completedCount is a denormalized display field. Do not write the task
+      // row from this concurrent path: MariaDB can reject that row update after
+      // parallel check-in inserts with "record has changed since last read".
+      // The authoritative count is calculated from approved check-ins below.
       task.completedCount = await checkinRepo.count({ where: this.exactTenantWhere({ taskId: task.id, status: "approved" }, tenant) });
-      await taskRepo.save(task);
       const rows = await checkinRepo.find({ where: this.exactTenantWhere({ activityId: id, userId, status: "approved" }, tenant), order: { date: "ASC" } });
-      return { checkin: this.publicCommunityCheckin(row), streak: this.checkinStreak(rows.map((item) => this.dateOnly(item.date))) };
+      return { checkin: this.publicCommunityCheckin(row), streak: this.checkinStreak(rows.map((item) => this.dateOnly(item.date))), ...(idempotent ? { idempotent: true } : {}) };
     });
   }
 
@@ -1322,7 +1403,7 @@ export class PublicCoursesController {
         quoteContent: quote?.content || null,
         userId,
         content,
-        images: this.normalizeForumImages(dto.images),
+        images: await this.normalizeUserImageUrls(dto.images),
         authorRole: lockedTopic.userId === userId ? "author" : "user",
         status: approved ? "approved" : "pending",
         approvedAt: approved ? new Date() : null
@@ -1421,11 +1502,14 @@ export class PublicCoursesController {
     return text.slice(0, maxLength);
   }
 
-  private normalizeForumImages(value: unknown) {
+  private async normalizeUserImageUrls(value: unknown) {
     const rows = Array.isArray(value) ? value : [];
     const normalized = rows.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 9);
     for (const url of normalized) {
-      if (!/^\/uploads\/community-posts\/|^https?:\/\//i.test(url)) throw new BadRequestException("图片地址不合法");
+      const localPath = /^\/uploads\/(?:community-posts(?:-t[a-z0-9-]+-u[a-z0-9-]+)?|course-reviews-t[a-z0-9-]+-u[a-z0-9-]+)\/[^?#]+$/i.test(url);
+      const ownedRemote = await this.objectStorage.isPublicAssetUrlAllowed(url, "community-posts-t")
+        || await this.objectStorage.isPublicAssetUrlAllowed(url, "course-reviews-t");
+      if (!localPath && !ownedRemote) throw new BadRequestException("图片地址不合法");
     }
     return normalized;
   }
@@ -1495,16 +1579,12 @@ export class PublicCoursesController {
   }
 
   private async postableActivities(userId: number, tenant?: Tenant | null) {
-    const now = new Date();
     const builder = this.registrations
       .createQueryBuilder("registration")
       .innerJoinAndSelect("registration.activity", "activity")
-      .leftJoin(Order, "linkedOrder", "linkedOrder.registrationId = registration.id")
       .where("registration.userId = :userId", { userId })
-      .andWhere(
-        "(registration.status = :checkedIn OR (activity.endTime <= :now AND (registration.status = :approved OR linkedOrder.status = :paid)))",
-        { checkedIn: RegistrationStatus.CheckedIn, approved: RegistrationStatus.Approved, paid: OrderStatus.Paid, now }
-      )
+      .andWhere("registration.status = :checkedIn", { checkedIn: RegistrationStatus.CheckedIn })
+      .andWhere("activity.endTime <= :now", { now: new Date() })
       .orderBy("activity.endTime", "DESC");
     if (tenant) builder.andWhere("(registration.tenantId = :tenantId OR activity.tenantId = :tenantId)", { tenantId: tenant.id });
     const rows = await builder.getMany();
@@ -1526,13 +1606,8 @@ export class PublicCoursesController {
       }));
   }
 
-  private normalizeImageUrls(value: unknown) {
-    const rows = Array.isArray(value) ? value : [];
-    const normalized = rows.map((item) => String(item || "").trim()).filter(Boolean).slice(0, 9);
-    for (const url of normalized) {
-      if (!/^\/uploads\/community-posts\/|^https?:\/\//i.test(url)) throw new BadRequestException("心得图片地址不合法");
-    }
-    return normalized;
+  private async normalizeImageUrls(value: unknown) {
+    return this.normalizeUserImageUrls(value);
   }
 
   private publicLessonView(lesson: CourseLesson, canAccess: boolean, userId: number | null) {

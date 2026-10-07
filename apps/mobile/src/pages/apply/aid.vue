@@ -23,8 +23,8 @@
       <button class="submit" :loading="submitting" :disabled="submitting || choosingFiles || (!!applicationsError && !pendingApplication)" @click="submit">{{ pendingApplication ? "继续上传剩余材料" : config.submitText }}</button>
     </view>
 
-    <view v-if="applicationsLoading" class="section state-section">申请记录加载中...</view>
-    <view v-else-if="applicationsError" class="section state-section error-state"><text>{{ applicationsError }}</text><button class="small-button" @click="loadApplications">重新加载</button></view>
+    <LoadingState v-if="applicationsLoading" compact title="正在加载申请记录" description="正在同步你的公益申请和审核状态。" />
+    <EmptyState v-else-if="applicationsError" compact variant="error" title="申请记录加载失败" :description="applicationsError" action-text="重新加载" @action="loadApplications" />
     <view v-else-if="applications.length" class="section">
       <text class="section-title">我的申请</text>
       <view v-for="item in applications" :key="item.id" class="application-row">
@@ -47,6 +47,8 @@ import { getCurrentRouteWithQuery, getUserToken, request, uploadAidApplicationMa
 import { useEntryPageConfig } from "../../entry-pages";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
+import LoadingState from "../../components/LoadingState.vue";
+import EmptyState from "../../components/EmptyState.vue";
 
 const active = ref<"personal" | "project">("personal");
 const submitting = ref(false);

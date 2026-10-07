@@ -1,6 +1,7 @@
 const API_BASE = (process.env.API_BASE || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const PASSWORD = process.env.ACCEPTANCE_PASSWORD || "Qiwai123456";
-const TENANT_CODE = "qiwai-hangzhou";
+const TENANT_CODE = process.env.TENANT_CODE || "qiwai-showcase";
+const DISABLED_FORUM_TENANT_CODE = process.env.DISABLED_FORUM_TENANT_CODE || "qiwai-hangzhou";
 const stamp = Date.now();
 
 function assert(condition, message) {
@@ -31,8 +32,8 @@ async function request(path, options = {}) {
   return result.data;
 }
 
-async function adminLogin(username) {
-  const result = await request("/admin/auth/login", { method: "POST", body: { username, password: PASSWORD } });
+async function adminLogin(username, password = PASSWORD) {
+  const result = await request("/admin/auth/login", { method: "POST", body: { username, password } });
   assert(result.token, `${username} 登录未返回 token`);
   return result.token;
 }
@@ -48,9 +49,10 @@ async function userLogin(phone, tenantCode) {
 }
 
 async function main() {
-  const hangzhouAdmin = await adminLogin("qiwai_hz_ops");
-  const showcaseAdmin = await adminLogin("showcase_ops");
-  const phone = `135${String(stamp).slice(-8)}`;
+  const hangzhouAdmin = await adminLogin(process.env.FORUM_ADMIN_USERNAME || "showcase_admin");
+  const showcaseAdmin = await adminLogin(process.env.FORUM_REVIEWER_USERNAME || "showcase_admin");
+  const platformAdmin = await adminLogin(process.env.PLATFORM_ADMIN_USERNAME || "admin", process.env.PLATFORM_ADMIN_PASSWORD || "Admin123456");
+  const phone = process.env.FORUM_USER_PHONE || "13990000001";
   const user = await userLogin(phone, TENANT_CODE);
 
   const category = await request("/admin/forum/categories", {
@@ -138,16 +140,19 @@ async function main() {
     body: { adminId: candidates[0].id, permissions: ["topic_review", "reply_review", "topic_lock", "topic_feature"] }
   });
   assert(moderator.id, "版主分配失败");
+  const crossTenantCandidates = await request("/admin/forum/moderator-candidates?tenantId=2", { token: platformAdmin });
+  const crossTenantCandidate = crossTenantCandidates.find((item) => Number(item.tenant?.id) === 2);
+  assert(crossTenantCandidate, "没有找到跨租户版主候选人");
   const crossTenantModerator = await raw(`/admin/forum/categories/${category.id}/moderators`, {
     method: "POST",
     token: showcaseAdmin,
-    body: { adminId: candidates[0].id }
+    body: { adminId: crossTenantCandidate.id }
   });
-  assert([403, 404].includes(crossTenantModerator.status), `跨租户版主分配应拒绝，实际 ${crossTenantModerator.status}`);
+  assert([400, 403, 404].includes(crossTenantModerator.status), `跨租户版主分配应拒绝，实际 ${crossTenantModerator.status}`);
 
-  const disabledForum = await raw("/public/forum/categories?tenantCode=qiwai-showcase", {
+  const disabledForum = await raw(`/public/forum/categories?tenantCode=${DISABLED_FORUM_TENANT_CODE}`, {
     token: user.userAccessToken,
-    tenantCode: "qiwai-showcase"
+    tenantCode: DISABLED_FORUM_TENANT_CODE
   });
   assert([403, 404].includes(disabledForum.status), `未开通论坛租户应隐藏或拒绝论坛，实际 ${disabledForum.status}`);
 

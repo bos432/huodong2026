@@ -12,7 +12,8 @@ export class ConversionEventGovernance1783900000000 implements MigrationInterfac
        AND retained_event.id < duplicate_event.id
       WHERE duplicate_event.idempotencyKey IS NOT NULL
     `);
-    await queryRunner.query("ALTER TABLE conversion_events ADD UNIQUE INDEX UQ_conversion_events_idempotency_key (idempotencyKey)");
+    const conversionEvents = await queryRunner.getTable("conversion_events");
+    if (conversionEvents && !conversionEvents.indices.some((index) => index.name === "UQ_conversion_events_idempotency_key")) await queryRunner.query("ALTER TABLE conversion_events ADD UNIQUE INDEX UQ_conversion_events_idempotency_key (idempotencyKey)");
     await queryRunner.query(`
       DELETE conversion_event
       FROM conversion_events conversion_event
@@ -132,6 +133,7 @@ export class ConversionEventGovernance1783900000000 implements MigrationInterfac
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query("ALTER TABLE conversion_events DROP INDEX UQ_conversion_events_idempotency_key");
+    const conversionEvents = await queryRunner.getTable("conversion_events");
+    if (conversionEvents?.indices.some((index) => index.name === "UQ_conversion_events_idempotency_key")) await queryRunner.query("ALTER TABLE conversion_events DROP INDEX UQ_conversion_events_idempotency_key");
   }
 }

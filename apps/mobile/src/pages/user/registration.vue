@@ -1,13 +1,15 @@
 <script setup lang="ts">
 import { computed, ref } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
-import { OrderStatus, RegistrationStatus } from "@activity/shared";
+import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
+import { OrderStatus, RegistrationStatus, type PublicCheckInCodeResult, type PublicMemberOrderRecord, type PublicOperationSettings, type PublicPaymentMutationResult, type PublicPaymentRequestResult, type PublicPaymentStatusResult, type PublicRegistrationDetailResponse } from "@activity/shared";
 import QRCode from "qrcode";
 import { ensureUser, getCurrentTenantCode, request, requestCheckInQrImage, requestRegistrationRefund, withTenantCode } from "../../api";
 import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { clientError } from "../../error-reporting";
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import { queryEntries } from "../../query";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
@@ -34,7 +36,7 @@ const orderStatusText: Record<OrderStatus, string> = {
   [OrderStatus.Closed]: "已关闭"
 };
 
-const detail = ref<any>();
+const detail = ref<PublicRegistrationDetailResponse | null>(null);
 const registrationId = ref(0);
 const code = ref("");
 const codeQrUrl = ref("");
@@ -50,7 +52,10 @@ const refunding = ref(false);
 const cancelling = ref(false);
 const loadedContextKey = ref("");
 const loadGuard = createTenantLoadGuard();
+const paymentActionGuard = createTenantLoadGuard();
+const refundActionGuard = createTenantLoadGuard();
 let codeRequestSerial = 0;
+const currentTime = ref(Date.now());
 const groupDialogVisible = ref(false);
 const groupQrImageError = ref(false);
 const paymentInstructionsField = "offlinePaymentInstructions";
@@ -63,10 +68,18 @@ const registrationStatus = computed(() => detail.value?.registration?.status as 
 const orderStatus = computed(() => detail.value?.order?.status as OrderStatus | undefined);
 const primaryAction = computed(() => actionForStatus(registrationStatus.value));
 const charityRefund = computed(() => detail.value?.charityRefund || null);
-const canShareActivityPost = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
+const latestRefund = computed(() => detail.value?.refunds?.[0] || null);
+const canShareActivityPost = computed(() => {
+  const endTime = detail.value?.activity?.endTime ? new Date(detail.value.activity.endTime).getTime() : 0;
+  return registrationStatus.value === RegistrationStatus.CheckedIn && endTime > 0 && endTime <= Date.now();
+});
 const communityPublishAvailable = computed(() => isLinkAllowedByFeature("/pages/community/publish"));
 const canShowCheckInCode = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
 const canEnterActivitySpace = computed(() => registrationStatus.value === RegistrationStatus.Approved || registrationStatus.value === RegistrationStatus.CheckedIn);
+const canReviewActivity = computed(() => {
+  const endTime = detail.value?.registration?.activity?.endTime ? new Date(detail.value.registration.activity.endTime).getTime() : 0;
+  return registrationStatus.value === RegistrationStatus.CheckedIn && endTime > 0 && endTime <= currentTime.value;
+});
 const paymentBusy = computed(() => Boolean(paying.value) || paymentChecking.value || paymentClosing.value);
 
 type RegistrationActionContext = { tenantCode: string; registrationId: number; orderId: number };
@@ -110,12 +123,18 @@ function formatTime(value?: string) {
   return formatShanghaiDateTime(value);
 }
 
-function operationSetting() {
+function operationSetting(): PublicOperationSettings & { refundInstructions?: string | null } {
   return detail.value?.operationSetting || {};
 }
 
 function paymentInstructions() {
   return operationSetting()[paymentInstructionsField] || "线下付款后请联系主办方确认收款，后台确认后报名状态会自动更新。";
+}
+
+function refundStatusCopy() {
+  const refund = latestRefund.value;
+  if (!refund || refund.status !== "failed") return "";
+  return `退款处理异常：${reviewSafeText(refund.failureReason || "请联系主办方处理")}`;
 }
 
 function statusTitle(status?: RegistrationStatus) {
@@ -132,7 +151,7 @@ function statusCopy(status?: RegistrationStatus) {
   if (status === RegistrationStatus.PendingPayment) return detail.value?.order?.expiresAt ? `请在 ${formatTime(detail.value.order.expiresAt)} 前完成付款。` : "请完成付款，付款成功或后台确认后状态会更新。";
   if (status === RegistrationStatus.PendingReview) return "主办方正在确认报名信息，结果会同步到这里。";
   if (status === RegistrationStatus.Approved) return "活动当天可在这里查看签到码，也可以提前加入活动群获取通知。";
-  if (status === RegistrationStatus.CheckedIn) return "活动已到场签到，欢迎留下评价帮助主办方改进。";
+  if (status === RegistrationStatus.CheckedIn) return canReviewActivity.value ? "活动已到场签到，欢迎留下评价帮助主办方改进。" : "已完成现场签到，活动结束后即可评价。";
   if (status === RegistrationStatus.Rejected) return detail.value?.registration?.reviewRemark || "如需了解原因，可以联系主办方。";
   if (status === RegistrationStatus.Cancelled) return detail.value?.registration?.cancelReason || "这条报名不会再占用名额。";
   return "查看报名、订单和联系信息。";
@@ -141,7 +160,7 @@ function statusCopy(status?: RegistrationStatus) {
 function actionForStatus(status?: RegistrationStatus) {
   if (status === RegistrationStatus.PendingPayment) return { label: "去支付", type: "order" };
   if (status === RegistrationStatus.Approved) return { label: "查看签到码", type: "code" };
-  if (status === RegistrationStatus.CheckedIn) return { label: "评价活动", type: "review" };
+  if (status === RegistrationStatus.CheckedIn) return canReviewActivity.value ? { label: "评价活动", type: "review" } : { label: "查看活动空间", type: "space" };
   return { label: "联系主办方", type: "service" };
 }
 
@@ -156,6 +175,7 @@ function statusClass(status?: RegistrationStatus) {
 function runPrimaryAction() {
   if (primaryAction.value.type === "code") showCode();
   else if (primaryAction.value.type === "review") goReview();
+  else if (primaryAction.value.type === "space") goActivitySpace();
   else if (primaryAction.value.type === "order") uni.pageScrollTo({ selector: ".order-card", duration: 240 });
   else uni.pageScrollTo({ selector: ".service-card", duration: 240 });
 }
@@ -224,7 +244,7 @@ async function load() {
   loadError.value = "";
   try {
     userId.value = await ensureUser();
-    const nextDetail = reviewSafeData(await request(`/public/me/registrations/${id}`));
+    const nextDetail = reviewSafeData(await request<PublicRegistrationDetailResponse>(`/public/me/registrations/${id}`));
     if (!loadGuard.isCurrent(loadToken) || routeRegistrationId() !== id) return;
     detail.value = nextDetail;
     loadedContextKey.value = contextKey;
@@ -338,6 +358,7 @@ async function requestRefund() {
   if (!detail.value?.registration?.id || !preview?.canRequest || refunding.value) return;
   const context = actionContext();
   if (!context) return;
+  const refundActionToken = refundActionGuard.begin();
   refunding.value = true;
   actionError.value = "";
   uni.showModal({
@@ -346,22 +367,23 @@ async function requestRefund() {
     confirmText: "提交申请",
     success: async (res) => {
       if (!res.confirm) {
-        refunding.value = false;
+        if (refundActionGuard.isCurrent(refundActionToken)) refunding.value = false;
         return;
       }
       try {
         assertActionContext(context);
         await requestRegistrationRefund(context.registrationId);
+        if (!refundActionGuard.isCurrent(refundActionToken)) return;
         assertActionContext(context);
         uni.showToast({ title: "已提交退款申请" });
         await load();
       } catch (error: any) {
-        showActionError(error, "退款申请失败");
+        if (refundActionGuard.isCurrent(refundActionToken)) showActionError(error, "退款申请失败");
       } finally {
-        refunding.value = false;
+        if (refundActionGuard.isCurrent(refundActionToken)) refunding.value = false;
       }
     },
-    fail: () => { refunding.value = false; }
+    fail: () => { if (refundActionGuard.isCurrent(refundActionToken)) refunding.value = false; }
   });
 }
 
@@ -371,7 +393,7 @@ async function showCode(scroll = true) {
   const serial = ++codeRequestSerial;
   actionError.value = "";
   try {
-    const data = await request<any>(`/public/me/registrations/${context.registrationId}/check-in-code`);
+    const data = await request<PublicCheckInCodeResult>(`/public/me/registrations/${context.registrationId}/check-in-code`);
     if (serial !== codeRequestSerial) return;
     assertActionContext(context);
     code.value = data.code;
@@ -393,24 +415,28 @@ async function payOrder(provider: "wechat" | "alipay" | "balance") {
   if (!detail.value?.order || paymentBusy.value) return;
   const context = actionContext();
   if (!context?.orderId) return;
+  const paymentActionToken = paymentActionGuard.begin();
   paying.value = provider;
   actionError.value = "";
   try {
     assertActionContext(context);
     if (provider === "balance") {
-      await request<any>(`/public/orders/${context.orderId}/pay/balance`, { method: "POST" });
+      await request<PublicPaymentMutationResult>(`/public/orders/${context.orderId}/pay/balance`, { method: "POST" });
+      if (!paymentActionGuard.isCurrent(paymentActionToken)) return;
       assertActionContext(context);
       uni.showToast({ title: "余额支付成功" });
       await load();
       return;
     }
-    const pay = await request<any>(`/public/orders/${context.orderId}/pay/${provider}`, { method: "POST", data: { paymentScene: preferredPaymentScene(provider) } });
+    const pay = await request<PublicPaymentRequestResult>(`/public/orders/${context.orderId}/pay/${provider}`, { method: "POST", data: { paymentScene: preferredPaymentScene(provider) } });
+    if (!paymentActionGuard.isCurrent(paymentActionToken)) return;
     assertActionContext(context);
     if (pay.mode === "sandbox") {
       await request(`/payment/${provider}/callback`, {
         method: "POST",
         data: { ...pay.payParams, amount: Number(pay.amount) }
       });
+      if (!paymentActionGuard.isCurrent(paymentActionToken)) return;
       uni.showToast({ title: provider === "alipay" ? "支付宝支付成功" : "微信支付成功" });
     } else if (pay.payParams?.h5Url) {
       // #ifdef H5
@@ -437,17 +463,19 @@ async function payOrder(provider: "wechat" | "alipay" | "balance") {
       uni.showModal({ title: "支付宝", content: "请在浏览器中打开后完成支付宝付款。", showCancel: false });
     } else if (pay.payParams?.tradeType === "JSAPI" && pay.payParams?.package) {
       await requestWechatPayment(pay.payParams);
+      if (!paymentActionGuard.isCurrent(paymentActionToken)) return;
       uni.showToast({ title: "微信支付完成" });
     } else if (pay.payParams?.codeUrl) {
       uni.showModal({ title: "微信支付", content: "请使用微信扫码完成支付。", showCancel: false });
     } else {
       uni.showToast({ title: "已发起微信支付", icon: "none" });
     }
+    if (!paymentActionGuard.isCurrent(paymentActionToken)) return;
     await load();
   } catch (error: any) {
-    showActionError(error, "支付失败");
+    if (paymentActionGuard.isCurrent(paymentActionToken)) showActionError(error, "支付失败");
   } finally {
-    paying.value = "";
+    if (paymentActionGuard.isCurrent(paymentActionToken)) paying.value = "";
   }
 }
 
@@ -455,22 +483,28 @@ async function refreshPaymentStatus() {
   if (!detail.value?.registration?.id || paymentBusy.value) return;
   const context = actionContext();
   if (!context) return;
+  const paymentActionToken = paymentActionGuard.begin();
   paymentChecking.value = true;
   actionError.value = "";
   try {
     assertActionContext(context);
-    const result = await request<any>(`/public/me/registrations/${context.registrationId}/payment-status`);
+    const result = await request<PublicPaymentStatusResult>(`/public/me/registrations/${context.registrationId}/payment-status`);
+    if (!paymentActionGuard.isCurrent(paymentActionToken)) return;
     assertActionContext(context);
     uni.showToast({ title: result.status === "success" ? "支付已确认" : result.status === "closed" ? "订单已关闭" : "仍在等待支付", icon: "none" });
     await load();
-  } catch (error: any) { showActionError(error, "查单失败"); }
-  finally { paymentChecking.value = false; }
+  } catch (error: any) {
+    if (paymentActionGuard.isCurrent(paymentActionToken)) showActionError(error, "查单失败");
+  } finally {
+    if (paymentActionGuard.isCurrent(paymentActionToken)) paymentChecking.value = false;
+  }
 }
 
 function closePendingPayment() {
   if (!detail.value?.registration?.id || paymentBusy.value) return;
   const context = actionContext();
   if (!context) return;
+  const paymentActionToken = paymentActionGuard.begin();
   paymentClosing.value = true;
   actionError.value = "";
   uni.showModal({ title: "关闭待支付订单", content: "关闭后本次报名会取消并释放名额，已使用的积分将返还。确认继续？", confirmText: "确认关闭", confirmColor: "#b42318", success: async (result) => {
@@ -481,12 +515,18 @@ function closePendingPayment() {
     try {
       assertActionContext(context);
       await request(`/public/me/registrations/${context.registrationId}/payment-close`, { method: "POST" });
+      if (!paymentActionGuard.isCurrent(paymentActionToken)) return;
       assertActionContext(context);
       uni.showToast({ title: "订单已关闭", icon: "success" });
       await load();
-    } catch (error: any) { showActionError(error, "关闭失败"); }
-    finally { paymentClosing.value = false; }
-  }, fail: () => { paymentClosing.value = false; }});
+    } catch (error: any) {
+      if (paymentActionGuard.isCurrent(paymentActionToken)) showActionError(error, "关闭失败");
+    } finally {
+      if (paymentActionGuard.isCurrent(paymentActionToken)) paymentClosing.value = false;
+    }
+  }, fail: () => {
+    if (paymentActionGuard.isCurrent(paymentActionToken)) paymentClosing.value = false;
+  }});
 }
 
 function preferredPaymentScene(provider: "wechat" | "alipay" | "balance") {
@@ -538,19 +578,28 @@ async function goPublish() {
 }
 
 onLoad((query) => { registrationId.value = Number(query?.id || 0); });
-onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFeatureGates(true)]); });
+onShow(async () => { currentTime.value = Date.now(); await Promise.allSettled([load(), loadDecoration(), loadFeatureGates(true)]); });
+onHide(() => {
+  loadGuard.invalidate();
+  paymentActionGuard.invalidate();
+  refundActionGuard.invalidate();
+  codeRequestSerial += 1;
+  code.value = "";
+  codeQrUrl.value = "";
+  codeQrMatrix.value = [];
+  paying.value = "";
+  paymentChecking.value = false;
+  paymentClosing.value = false;
+  refunding.value = false;
+});
 </script>
 
 <template>
   <view class="container registration" :class="{ 'has-custom-nav': showBottomNav }">
-    <view v-if="loading" class="card subtle" role="status" aria-live="polite">加载中…</view>
-    <view v-else-if="loadError" class="card error-card">
-      <view class="title small">报名详情加载失败</view>
-      <view class="subtle">{{ loadError }}</view>
-      <view class="button secondary retry" @click="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载报名详情" description="正在同步报名、订单和活动服务信息。" />
+    <EmptyState v-else-if="loadError" variant="error" title="报名详情加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else-if="detail">
-      <view v-if="actionError" class="card action-error" role="alert" aria-live="assertive"><text>{{ actionError }}</text><view class="action-error-close" role="button" tabindex="0" @click="actionError = ''">关闭</view></view>
+<view v-if="actionError" class="card action-error" role="alert" aria-live="assertive"><text>{{ actionError }}</text><view class="action-error-close" role="button" tabindex="0" aria-label="关闭报名操作错误" @click="actionError = ''" @keyup.enter="actionError = ''" @keyup.space.prevent="actionError = ''">关闭</view></view>
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
 
       <view class="registration-hero" :class="statusClass(detail.registration.status as RegistrationStatus)">
@@ -638,6 +687,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
           <view class="button secondary" :class="{ disabled: paymentBusy }" role="button" tabindex="0" :aria-disabled="paymentBusy" :aria-busy="paymentChecking" @click="refreshPaymentStatus" @keyup.enter="refreshPaymentStatus" @keyup.space.prevent="refreshPaymentStatus">{{ paymentChecking ? "查询中…" : "刷新支付状态" }}</view>
           <view class="button secondary danger-button" :class="{ disabled: paymentBusy }" role="button" tabindex="0" :aria-disabled="paymentBusy" :aria-busy="paymentClosing" @click="closePendingPayment" @keyup.enter="closePendingPayment" @keyup.space.prevent="closePendingPayment">{{ paymentClosing ? "关闭中…" : "关闭订单" }}</view>
         </view>
+        <view v-if="latestRefund?.status === 'failed'" class="notice danger">{{ refundStatusCopy() }}。当前订单仍可按退款规则重新申请，或联系主办方处理。</view>
         <view v-if="charityRefund?.enabled" class="charity-refund-box">
           <view class="charity-refund-title">公益退款规则</view>
           <view v-if="charityRefund.terminal" class="charity-refund-copy">公益退款已完成，公益金 ¥{{ money(charityRefund.charityAmount) }} 已保留，报名资格已关闭。</view>
@@ -682,7 +732,7 @@ onShow(async () => { await Promise.allSettled([load(), loadDecoration(), loadFea
 
       <view v-if="canShowCheckInCode" class="button" @click="showCode(true)">{{ code ? "刷新签到二维码" : "查看签到二维码" }}</view>
       <view v-if="canShowCheckInCode" class="button secondary" @click="addCalendarReminder">添加到日历</view>
-      <view v-if="canShowCheckInCode" class="button secondary" @click="goReview">评价活动</view>
+      <view v-if="canReviewActivity" class="button secondary" @click="goReview">评价活动</view>
       <view v-if="canShareActivityPost && communityPublishAvailable" class="button secondary share-button" @click="goPublish">分享活动心得</view>
       <view v-if="canCancel()" class="button secondary danger-button" :class="{ disabled: cancelling }" role="button" tabindex="0" :aria-disabled="cancelling" :aria-busy="cancelling" @click="cancel" @keyup.enter="cancel" @keyup.space.prevent="cancel">{{ cancelling ? "取消中…" : "取消报名" }}</view>
 

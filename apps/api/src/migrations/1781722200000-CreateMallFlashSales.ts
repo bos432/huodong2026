@@ -6,7 +6,7 @@ export class CreateMallFlashSales1781722200000 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     if (!(await queryRunner.hasTable("mall_flash_sales"))) {
       await queryRunner.query(`
-        CREATE TABLE mall_flash_sales (
+        CREATE TABLE IF NOT EXISTS mall_flash_sales (
           id INT NOT NULL AUTO_INCREMENT,
           tenantId INT NOT NULL,
           productId INT NOT NULL,

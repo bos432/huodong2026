@@ -1,114 +1,61 @@
-# 慢π API 与路由兼容清单
+# 慢π接口与兼容面清单
 
-**采集时间：** 2026-10-02（Asia/Shanghai）  
-**规则：** 下列入口属于兼容边界。后续内部重构可以更换 Service，但不得删除、改名或改变主要响应语义。
+**日期：** 2026-10-02
+**规则：** 下列入口是兼容边界。内部可以通过 bounded service 和 Worker 渐进重构，但不得随意改名、删除或改变主要响应 envelope。
 
-## 1. 用户端路由边界
+## 用户端公开入口
 
-### 活动主链路
+控制器：`apps/api/src/modules/public/public.controller.ts`
 
-- `pages/index/index`
-- `pages/activity/list`
-- `pages/activity/detail`
-- `pages/activity/register`
-- `pages/activity/space`
-- `pages/user/registration`
-- `pages/user/orders`
-- `pages/user/review`
-- `pages/user/activity-reviews`
+- 身份：`/public/auth/*`、微信登录
+- 租户与首页：`/public/tenants*`、`/public/homepage`、`/public/page-decoration`、`/public/settings/operation`
+- 活动：`/public/categories`、`/public/activities`、活动详情、报价、报名
+- 订单与支付：活动订单支付、课程订单支付、支付状态、关闭订单、支付/退款回调
+- 我的：钱包、资料、常用报名人、订单概览、活动历史、报名详情、退款申请、签到码
+- 通知：微信订阅模板查询与订阅记录
+- 内容与验证：评价、社区/课程/收藏、证书、凭证、公益和志愿者公开入口
 
-### 登录、我的和内容
+## 管理端兼容面
 
-- `pages/user/login`
-- `pages/user/my`
-- `pages/user/profile`
-- `pages/user/security`
-- `pages/user/settings`
-- `pages/community/index`
-- `pages/community/detail`
-- `pages/community/publish`
-- `pages/community/social`
-- `pages/community/social-profile`
-- `pages/community/card`
-- `pages/community/connections`
+控制器与路由仍位于 `apps/api/src/modules/*` 和 `apps/admin/src/router.ts`。主要兼容模块包括：
 
-### 其他既有模块
+- 活动、报名、订单、退款、签到
+- 首页装修、通知、公告、运营设置、内容审核和申诉
+- 租户、城市区域、会员、权限、操作日志
+- 小程序发布、系统设置、配置检查、Worker/业务任务
+- 商城、课程、公益、志愿者、城市合伙人等既有业务
 
-专题、商城、公益、志愿服务、公告、客服、城市合伙人、体验项目和法律页面继续保留现有 `pages.json` 路径。活动升级不得通过删除或改名这些路径来解决 UI 问题。
+后台旧菜单路径继续保留，具体菜单权限以 `apps/admin/src/navigation/admin-menu.ts` 为准。
 
-## 2. 管理端路由边界
+## 移动端路由兼容面
 
-现有 `apps/admin/src/router.ts` 和 `apps/admin/src/navigation/admin-menu.ts` 是后台兼容来源。活动、报名、订单、退款、通知、首页装修、系统设置、会员、社区、内容审核、小程序发布、租户和运营日志路径必须继续可访问。任何路径迁移必须同时保留兼容重定向和权限校验。
-
-## 3. 公开 API 边界
-
-### 登录、租户和首页
+用户端入口由 `apps/mobile/src/pages.json` 定义，核心活动闭环路由为：
 
 ```text
-POST /public/auth/h5-login
-POST /public/auth/password-login
-POST /public/auth/h5-code
-POST /public/auth/wechat-login
-GET  /public/categories
-GET  /public/tenants
-GET  /public/tenants/bootstrap
-GET  /public/tenants/resolve
-GET  /public/homepage
-GET  /public/page-decoration
-GET  /public/settings/operation
+pages/index/index
+pages/activity/list
+pages/activity/detail
+pages/activity/register
+pages/activity/space
+pages/user/my
+pages/user/orders
+pages/user/registration
+pages/user/review
+pages/user/activity-reviews
+pages/community/social
+pages/community/social-profile
+pages/community/connections
 ```
 
-### 活动、报名和支付
+专题、社区、商城、公益、志愿者、公告、服务中心、城市合伙人和设置等既有页面继续保留，不因本次 UI 升级整体重写。
 
-```text
-GET  /public/activities
-GET  /public/activities/:id
-POST /public/activities/:id/quote
-POST /public/activities/:id/register
-GET  /public/me/registrations
-GET  /public/me/registrations/:id
-POST /public/me/registrations/:id/cancel
-POST /public/me/registrations/:id/refund-request
-GET  /public/me/registrations/:id/check-in-code
-GET  /public/me/registrations/:id/payment-status
-POST /public/me/registrations/:id/payment-close
-POST /public/orders/:id/pay/mock
-POST /public/orders/:id/pay/wechat
-POST /public/orders/:id/pay/balance
-POST /public/orders/:id/pay/alipay
-POST /payment/mock/callback
-POST /payment/wechat/callback
-POST /payment/alipay/callback
-POST /payment/wechat/refund-callback
-POST /payment/alipay/refund-callback
-```
+## 共享契约边界
 
-### 活动空间、评价和内容
+`packages/shared/src/index.ts` 只承载公开字段和跨端状态契约，不允许放入 TypeORM 实体、访问令牌、原始手机号、支付凭据、Provider 密钥或私有文件路径。当前已接入活动、报名、订单、退款、签到、活动空间和通知的首批公开契约。
 
-```text
-GET  /public/activities/:id/enhanced
-GET  /public/activities/:id/reviews
-POST /public/registrations/:id/review
-GET  /public/activities/:id/space
-POST /public/activities/:id/space/posts
-POST /public/activities/:id/space/posts/:postId/report
-POST /public/reviews/:id/report
-```
+## 多租户与权限不变量
 
-### 通知和订阅
-
-```text
-GET  /public/wechat-subscriptions/templates
-POST /public/me/wechat-subscriptions
-GET  /public/me/wechat-subscriptions
-```
-
-后台通知模板、通知记录、Provider、偏好、计划、发送、预览和重试入口由 `apps/api/src/modules/v1/v1-admin.controller.ts` 继续提供兼容入口。
-
-## 4. 必须持续验证的契约
-
-- 所有公开请求必须解析明确的租户上下文，不能因缺少租户参数而读取另一个租户的数据。
-- 活动公开摘要不得返回原始手机号、支付凭据、访问令牌或未审核内容。
-- 报名、支付、退款和通知的重复请求返回已有业务结果，不创建重复记录。
-- API 错误仍遵循现有错误封装和登录失效处理。
-- 新增字段只能向后兼容；旧客户端忽略新增字段时仍能完成原流程。
+- 每个公开请求必须保留租户上下文，切换租户后不得复用旧租户的活动、分类、装修或报名状态。
+- 管理端继续按角色、权限、租户范围和资源归属校验。
+- 活动空间、签到码、成员摘要、群二维码和履约内容继续受报名/审核/活动状态限制。
+- API、Worker、通知和回调不得绕过租户边界；详细验证以既有 acceptance/preflight 套件为准。

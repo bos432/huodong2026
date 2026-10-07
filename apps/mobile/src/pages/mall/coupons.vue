@@ -10,11 +10,8 @@
       <view v-for="item in tabs" :key="item.value" class="tab" :class="{ active: status === item.value }" role="tab" tabindex="0" :aria-selected="status === item.value" :aria-label="`查看${item.label}优惠券`" @click="selectStatus(item.value)" @keyup.enter="selectStatus(item.value)" @keyup.space="selectStatus(item.value)">{{ item.label }}</view>
     </view>
 
-    <view v-if="loading" class="state-card" aria-live="polite">优惠券加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state" role="alert">
-      <text>{{ loadError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载优惠券" @click="load" @keyup.enter="load" @keyup.space="load">重新加载</view>
-    </view>
+    <LoadingState v-if="loading" title="正在加载优惠券" description="正在同步可领取和已领取优惠券。" />
+    <EmptyState v-else-if="loadError" variant="error" :title="loadError" description="优惠券暂时无法同步，请重试。" action-text="重新加载" aria-label="重新加载优惠券" @action="load" />
 
     <view v-if="status === 'claimable'" class="coupon-list">
       <view v-for="item in claimableCoupons" :key="item.id" class="coupon-card" :class="{ claimed: item.claimed }">
@@ -55,6 +52,7 @@ import { computed, ref } from "vue";
 import { onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, getCurrentTenantCode, request, withTenantCode } from "../../api";
 import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { guardCurrentPageFeature, loadFeatureGates } from "../../feature-gates";
 

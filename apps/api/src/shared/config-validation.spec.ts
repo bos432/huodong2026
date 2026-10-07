@@ -79,6 +79,19 @@ describe("runtime config validation", () => {
     expect(report.checks.find((check) => check.key === "PUBLIC_H5_ORIGIN")?.status).toBe("ok");
   });
 
+  it("accepts private object storage without a public bucket domain", () => {
+    const report = inspectRuntimeConfig(config({
+      NODE_ENV: "production",
+      STORAGE_PROVIDER: "aliyun-oss",
+      STORAGE_ENDPOINT: "https://oss-cn-hangzhou.aliyuncs.com",
+      STORAGE_BUCKET: "manpi-assets-qiwai-20261006",
+      STORAGE_ACCESS_KEY_ID: "runtime-key-id",
+      STORAGE_ACCESS_KEY_SECRET: "runtime-key-secret",
+      PUBLIC_API_ORIGIN: "https://rd.chaimen666.com"
+    }));
+    expect(report.checks.find((check) => check.key === "STORAGE_PROVIDER")?.status).toBe("ok");
+  });
+
   it("marks SMS provider as an error when template id is missing", () => {
     const report = inspectRuntimeConfig(
       config({

@@ -6,6 +6,8 @@ import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../.
 import TenantContextBadge from "../../components/TenantContextBadge.vue";
 import AppBottomNav from "../../components/AppBottomNav.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
+import EmptyState from "../../components/EmptyState.vue";
+import LoadingState from "../../components/LoadingState.vue";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
 import { reviewSafeText } from "../../review-safe-text";
 
@@ -18,9 +20,17 @@ const submitted = ref(false);
 const loading = ref(true);
 const loadError = ref("");
 const detail = ref<any>(null);
+const currentTime = ref(Date.now());
 const loadGuard = createTenantLoadGuard();
 const activityTitle = computed(() => detail.value?.registration?.activity?.title || "活动评价");
-const eligibilityError = computed(() => detail.value?.registration?.status === "checked_in" ? "" : "完成现场签到后才能评价这场活动。" );
+const activityEnded = computed(() => {
+  const endTime = detail.value?.registration?.activity?.endTime ? new Date(detail.value.registration.activity.endTime).getTime() : 0;
+  return endTime > 0 && endTime <= currentTime.value;
+});
+const eligibilityError = computed(() => {
+  if (detail.value?.registration?.status !== "checked_in") return "完成现场签到后才能评价这场活动。";
+  return activityEnded.value ? "" : "活动结束后才能评价这场活动。";
+});
 const { tenant, bottomNavSection, contentSections, innerPageConfig, showBottomNav, loadDecoration } = usePageDecoration("review_page", "/pages/user/review");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 function handleRatingChange(event: any) {
@@ -59,6 +69,7 @@ async function load() {
 
 onLoad((options: any) => { registrationId.value = Number(options?.id || 0); });
 onShow(() => {
+  currentTime.value = Date.now();
   void load();
   void loadDecoration();
 });
@@ -68,8 +79,8 @@ onShow(() => {
   <view class="container review-page" :class="{ 'has-custom-nav': showBottomNav }">
     <TenantContextBadge :tenant="tenant" label="当前城市" hint="评价归属" />
 
-    <view v-if="loading" class="state-card">评价信息加载中...</view>
-    <view v-else-if="loadError" class="state-card error-state"><text>{{ loadError }}</text><view class="state-retry" @click="load">重新加载</view></view>
+    <LoadingState v-if="loading" title="正在加载评价信息" description="正在同步报名资格和活动内容。" />
+    <EmptyState v-else-if="loadError" variant="error" :description="loadError" action-text="重新加载" @action="load" />
 
     <template v-else-if="detail">
 
@@ -103,9 +114,6 @@ onShow(() => {
 
 <style scoped>
 .review-page.has-custom-nav { padding-bottom: 160rpx; }
-.state-card { display:grid; gap:14rpx; margin-bottom:20rpx; padding:24rpx; border-radius:8px; background:#fff; color:#667085; font-size:25rpx; line-height:1.6; }
-.state-card.error-state { border:1rpx solid #fecaca; background:#fff7f7; color:#b91c1c; }
-.state-retry { width:max-content; color:#c43d3d; font-weight:900; }
 .review-hero {
   position: relative;
   overflow: hidden;

@@ -1,10 +1,7 @@
 <template>
   <view class="container publish-page">
-    <view v-if="categoriesLoading" class="state-card">版块加载中...</view>
-    <view v-else-if="categoriesError" class="state-card error-state" role="alert" aria-live="assertive">
-      <text>{{ categoriesError }}</text>
-      <view class="state-retry" role="button" tabindex="0" aria-label="重新加载论坛版块" @click="loadCategories" @keyup.enter="loadCategories" @keyup.space.prevent="loadCategories">重新加载</view>
-    </view>
+    <LoadingState v-if="categoriesLoading" title="正在加载论坛版块" description="正在同步可发布的讨论分类。" />
+    <EmptyState v-else-if="categoriesError" variant="error" title="论坛版块加载失败" :description="categoriesError" action-text="重新加载" @action="loadCategories" />
     <view class="form-card">
       <view class="field">
         <text class="label">版块</text>
@@ -35,9 +32,11 @@
 
 <script setup lang="ts">
 import { computed, reactive, ref } from "vue";
-import { onLoad, onShow } from "@dcloudio/uni-app";
+import { onHide, onLoad, onShow } from "@dcloudio/uni-app";
 import { ensureUser, request, withTenantCode } from "../../api";
 import { createTenantLoadGuard } from "../../tenant-load-guard";
+import LoadingState from "../../components/LoadingState.vue";
+import EmptyState from "../../components/EmptyState.vue";
 
 const categories = ref<any[]>([]);
 const categoryIndex = ref(0);
@@ -47,6 +46,7 @@ const categoriesError = ref("");
 const routeCategoryId = ref(0);
 const routeActivityId = ref(0);
 const categoriesLoadGuard = createTenantLoadGuard();
+const submitGuard = createTenantLoadGuard();
 const form = reactive({ title: "", content: "", tagsText: "", imagesText: "" });
 const selectedCategory = computed(() => categories.value[categoryIndex.value] || null);
 const canSubmit = computed(() => !submitting.value && !categoriesLoading.value && !categoriesError.value && !!selectedCategory.value?.id);
@@ -57,6 +57,11 @@ onLoad((options: any) => {
 });
 
 onShow(loadCategories);
+onHide(() => {
+  categoriesLoadGuard.invalidate();
+  submitGuard.invalidate();
+  submitting.value = false;
+});
 
 async function loadCategories() {
   const token = categoriesLoadGuard.begin();
@@ -92,9 +97,11 @@ async function submit() {
   if (!selectedCategory.value?.id) return uni.showToast({ title: "请选择版块", icon: "none" });
   if (!form.title.trim()) return uni.showToast({ title: "请输入标题", icon: "none" });
   if (!form.content.trim()) return uni.showToast({ title: "请输入内容", icon: "none" });
+  const submitToken = submitGuard.begin();
   submitting.value = true;
   try {
     await ensureUser();
+    if (!submitGuard.isCurrent(submitToken)) return;
     const result = await request<any>("/public/forum/topics", {
       method: "POST",
       data: {
@@ -106,15 +113,17 @@ async function submit() {
         activityId: routeActivityId.value || undefined
       }
     });
+    if (!submitGuard.isCurrent(submitToken)) return;
     uni.showToast({ title: result?.message || "已提交", icon: "none" });
     const topicId = result?.topic?.id;
     setTimeout(() => {
+      if (!submitGuard.isCurrent(submitToken)) return;
       uni.redirectTo({ url: withTenantCode(topicId && result?.topic?.status === "approved" ? `/pages/forum/detail?id=${topicId}` : "/pages/forum/index") });
     }, 600);
   } catch (error: any) {
-    if (error?.message) uni.showToast({ title: error.message, icon: "none" });
+    if (submitGuard.isCurrent(submitToken) && error?.message) uni.showToast({ title: error.message, icon: "none" });
   } finally {
-    submitting.value = false;
+    if (submitGuard.isCurrent(submitToken)) submitting.value = false;
   }
 }
 </script>

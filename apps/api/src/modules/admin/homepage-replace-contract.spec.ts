@@ -32,6 +32,15 @@ describe("homepage transactional replacement contract", () => {
     expect(builder).toContain("confirmAction");
   });
 
+  it("does not apply a stale reorder response after the edit scope changes", () => {
+    const builder = read("apps/admin/src/views/HomepageBuilder.vue");
+
+    expect(builder).toContain("function homepageScopeSnapshot()");
+    expect(builder).toContain("function isHomepageScopeCurrent(snapshot: HomepageScopeSnapshot)");
+    expect(builder).toContain("const requestScope = homepageScopeSnapshot();");
+    expect(builder).toContain("if (!isHomepageScopeCurrent(requestScope)) return;");
+  });
+
   it("makes the draft and published H5 boundary explicit", () => {
     const builder = read("apps/admin/src/views/HomepageBuilder.vue");
 
@@ -46,7 +55,7 @@ describe("homepage transactional replacement contract", () => {
   it("keeps the simplified builder and live draft preview contract", () => {
     const builder = read("apps/admin/src/views/HomepageBuilder.vue");
     const preview = read("apps/admin/src/components/HomepageLivePreview.vue");
-    const mobileHome = read("apps/mobile/src/pages/index/index.vue");
+    const mobileHome = read("apps/mobile/src/pages/home/index.vue");
 
     expect(builder).toContain("<HomepageLivePreview");
     expect(builder).toContain('v-model="previewDevice"');
@@ -78,9 +87,29 @@ describe("homepage transactional replacement contract", () => {
     expect(preview).toContain('emit("select", section)');
     expect(preview).toContain("section.config?.display === 'lead_rail'");
     expect(preview).toContain('class="activity-focus-rail"');
-    expect(mobileHome).toContain("featuredDisplay === 'lead_rail' && sideActivities.length");
+    expect(mobileHome).toContain("const heroCards = computed(() =>");
+    expect(mobileHome).toContain("<CategoryScroller :items=\"categories\"");
     expect(preview).toContain("width:357px");
     expect(preview).toContain("width:412px");
+  });
+
+  it("keeps an actionable empty state for an empty homepage module list", () => {
+    const builder = read("apps/admin/src/views/HomepageBuilder.vue");
+
+    expect(builder).toContain('<el-empty v-if="!orderedRows.length" description="暂无模块，点击左侧添加或恢复默认装修。">');
+    expect(builder).toContain('@click="openModuleLibrary"');
+    expect(builder).not.toContain('<div v-if="!orderedRows.length" class="empty">暂无模块，点击左侧添加或恢复默认装修。</div>');
+  });
+
+  it("keeps featured activity display variants consistent across builder forms", () => {
+    const builder = read("apps/admin/src/views/HomepageBuilder.vue");
+
+    expect(builder).toContain('<el-option label="主图 + 横向副卡" value="lead_rail" />');
+    expect(builder).toContain('<el-option label="本周主推大图" value="focus" />');
+    expect(builder).toContain('<el-option label="活动列表" value="list" />');
+    expect(builder).toContain('<el-radio-button value="lead_rail">主推 + 横滑副卡</el-radio-button>');
+    expect(builder).toContain('<el-radio-button value="focus">本周主推大图</el-radio-button>');
+    expect(builder).toContain('<el-radio-button value="list">活动列表</el-radio-button>');
   });
 
   it("makes inner-page bottom navigation conflicts recoverable", () => {

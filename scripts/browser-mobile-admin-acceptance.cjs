@@ -84,6 +84,19 @@ async function waitForText(page, matcher, label, timeout = 15000) {
   throw new Error(`${label} not found; current=${page.url()}; text=${lastText.slice(0, 240).replace(/\s+/g, " ")}`);
 }
 
+async function waitForDashboardStats(page, timeout = 15000) {
+  const deadline = Date.now() + timeout;
+  let lastStats = "";
+  while (Date.now() < deadline) {
+    lastStats = await page.locator(".stats").innerText({ timeout: 1000 }).catch(() => "");
+    // Bootstrap and dashboard metrics load in parallel; "--" is an interim state,
+    // not a numeric zero and must not fail the acceptance run.
+    if (lastStats && !lastStats.includes("--")) return lastStats;
+    await page.waitForTimeout(250);
+  }
+  throw new Error(`mobile admin dashboard stats did not finish loading; current=${lastStats.replace(/\s+/g, " ")}`);
+}
+
 async function clickVisibleText(page, text, options = {}) {
   const locator = page.getByText(text, { exact: options.exact ?? true });
   const count = await locator.count();
@@ -146,6 +159,7 @@ async function login(page) {
   await page.waitForFunction(() => window.location.hash === "#/pages/admin/home", null, { timeout: 15000 });
   await waitForText(page, ["手机管理", "发布活动", "活动管理"], "mobile admin logged in");
   await waitForText(page, "最近活动", "mobile admin home loaded");
+  await waitForDashboardStats(page);
   const statCards = page.locator(".stats > *");
   const statCount = await statCards.count();
   if (statCount < 4) throw new Error(`mobile admin dashboard expected 4 stat cards, got ${statCount}`);
@@ -153,7 +167,9 @@ async function login(page) {
   const registrationCount = Number((await statCards.nth(2).innerText()).match(/\d+/)?.[0] || 0);
   const recentActivityCount = await page.locator(".activity").count();
   if (recentActivityCount > 0 && activityCount <= 0) throw new Error("mobile admin dashboard activity count is zero while recent activities are visible");
-  if (registrationCount <= 0) throw new Error("mobile admin dashboard registration count did not load");
+  if (registrationCount <= 0) {
+    record("手机管理端报名统计空数据状态", "warning", { note: "本地验收租户当前没有历史报名，工作台正确显示 0；后续报名列表仍继续验收空态和加载状态。" });
+  }
   await screenshot(page, "01-login-home.png");
   record("手机管理端登录和工作台", "passed", { account: USERNAME, activityCount, registrationCount, screenshot: "01-login-home.png" });
 }

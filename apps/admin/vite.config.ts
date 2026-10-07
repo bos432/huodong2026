@@ -1,12 +1,13 @@
 import { fileURLToPath, URL } from "node:url";
 import vue from "@vitejs/plugin-vue";
 import { defineConfig } from "vite";
+import { devVersionPlugin } from "../../scripts/vite-dev-version-plugin.mjs";
 
-const apiProxyTarget = process.env.VITE_DEV_API_PROXY || "http://localhost:18080";
+const apiProxyTarget = process.env.VITE_DEV_API_PROXY || "http://127.0.0.1:3000";
 
 export default defineConfig({
   base: "./",
-  plugins: [vue()],
+  plugins: [vue(), devVersionPlugin("admin", fileURLToPath(new URL("..", import.meta.url)))],
   resolve: {
     alias: {
       "@": fileURLToPath(new URL("./src", import.meta.url)),

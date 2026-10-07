@@ -27,14 +27,14 @@
     "@nestjs/typeorm": "^11.0.3",
     "@types/qrcode": "^1.5.6",
     "bcryptjs": "^2.4.3",
-    "brace-expansion": "5.0.9",
+    "brace-expansion": "5.0.12",
     "class-transformer": "^0.5.1",
     "class-validator": "^0.14.1",
     "dotenv": "16.4.5",
     "exceljs": "^4.4.0",
     "glob": "13.0.6",
-    "mysql2": "^3.11.5",
-    "nodemailer": "^9.0.3",
+    "mysql2": "^3.24.5",
+    "nodemailer": "^10.0.13",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "qrcode": "^1.5.4",
@@ -59,6 +59,7 @@
     "vitest": "^2.1.8"
   },
   "overrides": {
+    "proxy-addr": "2.0.8",
     "exceljs": {
       "uuid": "11.1.1",
       "archiver": "8.0.0",
@@ -72,6 +73,7 @@
     },
     "tencentcloud-sdk-nodejs": {
       "uuid": "11.1.1"
-    }
+    },
+    "multer": "2.4.0"
   }
 }

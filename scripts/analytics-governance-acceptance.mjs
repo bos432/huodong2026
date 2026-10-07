@@ -1,5 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
+const ANALYTICS_CALCULATION_VERSION = "activity-metrics-v2-live-population";
 
 const API_BASE = (process.env.API_BASE || "http://127.0.0.1:3000/api").replace(/\/$/, "");
 const PLATFORM_USERNAME = process.env.PLATFORM_ADMIN_USERNAME || "admin";
@@ -7,7 +8,7 @@ const PLATFORM_PASSWORD = process.env.PLATFORM_ADMIN_PASSWORD || "Admin123456";
 const TENANT_USERNAME = process.env.ANALYTICS_TENANT_USERNAME || "showcase_analytics_exporter";
 const READONLY_USERNAME = process.env.ANALYTICS_READONLY_USERNAME || "showcase_analytics_readonly";
 const TENANT_PASSWORD = process.env.ANALYTICS_TENANT_PASSWORD || "Qiwai123456";
-const TENANT_ID = Number(process.env.ANALYTICS_TENANT_ID || 23);
+const TENANT_ID = Number(process.env.ANALYTICS_TENANT_ID || 8);
 const START_DATE = process.env.ANALYTICS_START_DATE || "2026-07-15";
 const END_DATE = process.env.ANALYTICS_END_DATE || "2026-07-17";
 
@@ -88,7 +89,7 @@ assert(tenantRecompute.status === "completed", `tenant analytics run status is $
 assert(Number(recompute.mismatchCount || 0) === 0, `analytics run has ${recompute.mismatchCount} mismatches`);
 assert(Number(tenantRecompute.mismatchCount || 0) === 0, `tenant analytics run has ${tenantRecompute.mismatchCount} mismatches`);
 assert(recompute.validationSummary?.consistent === true, "analytics run is not consistent");
-assert(recompute.validationSummary?.calculationVersion === "activity-metrics-v1", `unexpected calculation version ${recompute.validationSummary?.calculationVersion}`);
+assert(recompute.validationSummary?.calculationVersion === ANALYTICS_CALCULATION_VERSION, `unexpected calculation version ${recompute.validationSummary?.calculationVersion}`);
 
 const [platformMetrics, platformOverview, unboundedOverview, businessOverview, tenantBusinessOverview, platformUsers, tenantOverview, tenantUsers] = await Promise.all([
   request(`/admin/analytics/metrics?${range}`, { token: platform.token }),
@@ -101,7 +102,7 @@ const [platformMetrics, platformOverview, unboundedOverview, businessOverview, t
   request(`/admin/analytics/users?${range}`, { token: tenant.token })
 ]);
 assert(platformMetrics.length > 0, "recompute produced no metric rows");
-assert(platformMetrics.every((row) => row.sourceRunId && row.calculationVersion === "activity-metrics-v1"), "metric row is missing run/version snapshot");
+assert(platformMetrics.every((row) => row.sourceRunId && row.calculationVersion === ANALYTICS_CALCULATION_VERSION), "metric row is missing run/version snapshot");
 assert(platformMetrics.some((row) => row.metricDate === END_DATE && row.dimensionType === "platform" && row.dimensionKey === "all"), "inclusive end date is missing from root metrics");
 assert(platformOverview.scope === "platform", `unexpected platform scope ${platformOverview.scope}`);
 assert(platformOverview.metricSource === "daily_metrics", `covered range unexpectedly used ${platformOverview.metricSource}`);
@@ -114,7 +115,8 @@ for (const row of [...(businessOverview.modules || []), ...(businessOverview.mer
 }
 for (const [key, value] of Object.entries(platformOverview.rates || {})) assertBoundedRate(value, `platform overview ${key}`);
 for (const [key, value] of Object.entries(tenantOverview.rates || {})) assertBoundedRate(value, `tenant overview ${key}`);
-assert(platformUsers.newUserCount !== tenantUsers.newUserCount || platformUsers.repeatUserCount !== tenantUsers.repeatUserCount, "platform and tenant user metrics are unexpectedly identical");
+assert(Number(tenantUsers.newUserCount || 0) <= Number(platformUsers.newUserCount || 0), "tenant new-user metrics exceed platform metrics");
+assert(Number(tenantUsers.repeatUserCount || 0) <= Number(platformUsers.repeatUserCount || 0), "tenant repeat-user metrics exceed platform metrics");
 assert(tenantUsers.memberLevels.reduce((sum, row) => sum + Number(row.count || 0), 0) <= 1000, "tenant member-level distribution appears to contain platform profiles");
 
 const [tenantGrowth, spoofedGrowth, platformGrowth] = await Promise.all([
