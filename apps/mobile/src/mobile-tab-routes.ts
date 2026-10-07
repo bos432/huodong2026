@@ -8,7 +8,7 @@ export function mobileTabRoute(tab: MobileUserTab): string {
     case "checkin":
       return "/pages/checkin/index";
     case "messages":
-      return "/pages/user/notifications";
+      return "/pages/prototype/message";
     case "me":
       return "/pages/prototype/me";
   }
