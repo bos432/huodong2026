@@ -25,7 +25,9 @@ function refreshChallengeCards() {
     return { ...challenge, progress: progress.completed, status: progress.status, checkpointCount: progress.total };
   });
 }
-function openChallenge(id: number) { uni.navigateTo({ url: `/pages/checkin/detail?id=${id}` }); }
+function openChallenge(id: number) {
+  uni.navigateTo({ url: withTenantCode(`/pages/checkin/detail?id=${encodeURIComponent(String(id))}`) });
+}
 function selectTab(tab: "home" | "checkin" | "messages" | "me" | "publish") {
   if (tab === "home") uni.reLaunch({ url: withTenantCode(mobileTabRoute("home")) });
   if (tab === "messages") uni.reLaunch({ url: withTenantCode(mobileTabRoute("messages")) });
