@@ -4,5 +4,6 @@ export function getContainerDatabaseRuntime(options = {}) {
   return {
     container,
     image: String(options.DB_RUNTIME_IMAGE || 'rdchaimen666com-api').trim() || 'rdchaimen666com-api',
+    typeormPath: '/app/apps/api/node_modules/typeorm',
   };
 }

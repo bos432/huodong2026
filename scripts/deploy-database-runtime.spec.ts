@@ -10,7 +10,7 @@ describe('scoped release database runtime', () => {
     expect(getContainerDatabaseRuntime({
       DB_NETWORK_CONTAINER: 'activity-api',
       DB_RUNTIME_IMAGE: 'rdchaimen666com-api',
-    })).toEqual({ container: 'activity-api', image: 'rdchaimen666com-api' });
+    })).toEqual({ container: 'activity-api', image: 'rdchaimen666com-api', typeormPath: '/app/apps/api/node_modules/typeorm' });
   });
 
   it('rejects blank container configuration', () => {
