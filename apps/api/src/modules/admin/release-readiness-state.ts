@@ -10,6 +10,27 @@ export const RELEASE_READINESS_ITEMS = [
   { key: "test_fixtures", category: "测试账号与测试订单", label: "测试账号与测试订单" }
 ] as const;
 
+export type ReadinessDecisionItem = { itemKey: string; label: string; status: string };
+
+const STATUS_LABELS: Record<string, string> = {
+  unconfigured: "未登记验收状态",
+  configured: "已配置，等待外部验收",
+  external_pending: "外部验收中",
+  blocked: "已阻塞",
+  expired: "已过期"
+};
+
+export function readinessDecision(items: ReadinessDecisionItem[]) {
+  const byKey = new Map(items.map((item) => [item.itemKey, item]));
+  const blockers = RELEASE_READINESS_ITEMS.flatMap(({ key, label }) => {
+    const item = byKey.get(key);
+    if (!item) return [`${label}：未登记验收状态`];
+    if (item.status === "accepted") return [];
+    return [`${item.label || label}：${STATUS_LABELS[item.status] || "状态未完成"}`];
+  });
+  return { ready: blockers.length === 0, blockers };
+}
+
 export function nextReleaseReadinessStatus(status: ReleaseReadinessStatus, action: ReleaseReadinessAction): ReleaseReadinessStatus {
   if (action === "save") return "configured";
   if (action === "check") return "external_pending";

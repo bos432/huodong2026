@@ -8,7 +8,7 @@ type ReadinessItem = {
   id: number; key: string; category: string; label: string; status: string; owner?: string | null; reviewer?: string | null;
   blockingReason?: string | null; evidence?: Record<string, unknown> | null; lastCheckedAt?: string | null; updatedAt?: string | null;
 };
-type Summary = { total: number; unconfigured: number; configured: number; externalPending: number; accepted: number; blocked: number; expired: number; ready?: boolean };
+type Summary = { total: number; unconfigured: number; configured: number; externalPending: number; accepted: number; blocked: number; expired: number; ready?: boolean; blockers?: string[] };
 
 const loading = ref(false);
 const savingKey = ref("");
@@ -120,6 +120,9 @@ onMounted(load);
       <div class="summary-card"><span>外部验收中</span><strong>{{ summary.externalPending }}</strong><small>需要证据</small></div>
       <div class="summary-card danger"><span>阻塞</span><strong>{{ summary.blocked + summary.expired }}</strong><small>请先处理原因</small></div>
     </div>
+    <el-alert v-if="!summary.ready" type="warning" :closable="false" show-icon class="launch-gate-alert" title="正式运营闸门未打开">
+      <ul class="blocker-list"><li v-for="blocker in (summary.blockers || [])" :key="blocker">{{ blocker }}</li></ul>
+    </el-alert>
     <div class="policy-note"><strong>安全边界</strong><span>验收中心不保存支付密钥、短信密钥、验证码或私钥；只引用现有加密配置，并保存脱敏证据摘要。</span></div>
     <div v-if="loading && !items.length" class="empty-state">正在加载验收项…</div>
     <div v-else-if="!items.length" class="empty-state">暂无验收项 <el-button link @click="load">重试</el-button></div>
@@ -159,6 +162,7 @@ onMounted(load);
 .eyebrow, .category { margin: 0; color: #6b7280; font-size: 11px; letter-spacing: .08em; font-weight: 700; }
 h1 { margin: 5px 0 6px; font-size: 28px; line-height: 1.2; } h2 { margin: 5px 0 0; font-size: 16px; } .subtle, .muted, small { color: #6b7280; font-size: 12px; line-height: 1.5; }
 .summary-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin: 18px 0; }.summary-card, .item-card, .sub-panel { background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }.summary-card { padding: 16px; display: grid; gap: 6px; }.summary-card strong { font-size: 25px; }.summary-card.primary strong { color: #0f766e; }.summary-card.danger strong { color: #b42318; }.summary-card small { margin: 0; }.policy-note { padding: 12px 14px; background: #f0fdfa; border: 1px solid #99f6e4; border-radius: 8px; display: flex; gap: 10px; margin-bottom: 16px; font-size: 13px; }.state-alert { margin-top: 12px; }.item-list { display: grid; gap: 12px; }.item-card { padding: 16px; }.form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 14px 0 10px; }.blocking { color: #b42318; font-size: 12px; margin: 8px 0; }.evidence { color: #166534; font-size: 12px; margin: 8px 0; }.item-actions { justify-content: flex-start; flex-wrap: wrap; }.lower-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }.sub-panel { padding: 16px; }.panel-title { margin-bottom: 10px; }.panel-title h2 { margin: 0; }.fixture-row, .event-row { display: flex; justify-content: space-between; gap: 12px; align-items: center; padding: 10px 0; border-top: 1px solid #f0f2f5; }.fixture-row div, .event-row div { display: grid; gap: 3px; }.fixture-row small, .event-row small { color: #6b7280; }.event-row time { white-space: nowrap; font-size: 11px; color: #6b7280; }.empty-state { padding: 42px; text-align: center; color: #6b7280; background: #fff; border: 1px dashed #d1d5db; border-radius: 8px; margin-top: 16px; }
+.launch-gate-alert { margin-bottom: 16px; }.blocker-list { margin: 0; padding-left: 18px; line-height: 1.7; }
  .fixture-form { display: grid; gap: 12px; margin-top: 16px; }.fixture-form :deep(.el-textarea) { grid-column: 1 / -1; }
 @media (max-width: 900px) { .summary-grid { grid-template-columns: repeat(2, 1fr); }.lower-grid { grid-template-columns: 1fr; } }
 @media (max-width: 600px) { .readiness-page { padding: 16px; }.page-header { align-items: flex-start; }.page-header, .item-head { flex-direction: column; align-items: flex-start; }.form-grid { grid-template-columns: 1fr; }.summary-grid { grid-template-columns: 1fr 1fr; }.item-actions .el-button { margin-left: 0; } }

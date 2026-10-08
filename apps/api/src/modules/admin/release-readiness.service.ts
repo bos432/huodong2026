@@ -4,7 +4,7 @@ import { Repository } from "typeorm";
 import { ReleaseAcceptanceFixture } from "../../entities/release-acceptance-fixture.entity";
 import { ReleaseReadinessEvent } from "../../entities/release-readiness-event.entity";
 import { ReleaseReadinessItem } from "../../entities/release-readiness-item.entity";
-import { RELEASE_READINESS_ITEMS, nextReleaseReadinessStatus, sanitizeReleaseEvidence } from "./release-readiness-state";
+import { RELEASE_READINESS_ITEMS, nextReleaseReadinessStatus, readinessDecision, sanitizeReleaseEvidence } from "./release-readiness-state";
 import { normalizeFixtureInput } from "./release-readiness-fixture-input";
 
 type ReadinessAdmin = { id?: number; username?: string; tenantId?: number | null };
@@ -33,7 +33,7 @@ export class ReleaseReadinessService {
     const scope = this.scope(admin);
     await this.ensureItems(scope);
     const items = await this.items.find({ where: { scopeKey: scope.scopeKey } });
-    return { scope: scope.scopeKey, ...this.summaryCounts(items), ready: items.length > 0 && items.every((item) => item.status === "accepted") };
+    return { scope: scope.scopeKey, ...this.summaryCounts(items) };
   }
 
   async updateItem(admin: ReadinessAdmin | undefined, key: string, body: Record<string, unknown>) {
@@ -136,7 +136,8 @@ export class ReleaseReadinessService {
   }
 
   private summaryCounts(items: ReleaseReadinessItem[]) {
-    return { total: items.length, unconfigured: items.filter((item) => item.status === "unconfigured").length, configured: items.filter((item) => item.status === "configured").length, externalPending: items.filter((item) => item.status === "external_pending").length, accepted: items.filter((item) => item.status === "accepted").length, blocked: items.filter((item) => item.status === "blocked").length, expired: items.filter((item) => item.status === "expired").length };
+    const counts = { total: items.length, unconfigured: items.filter((item) => item.status === "unconfigured").length, configured: items.filter((item) => item.status === "configured").length, externalPending: items.filter((item) => item.status === "external_pending").length, accepted: items.filter((item) => item.status === "accepted").length, blocked: items.filter((item) => item.status === "blocked").length, expired: items.filter((item) => item.status === "expired").length };
+    return { ...counts, ...readinessDecision(items.map((item) => ({ itemKey: item.itemKey, label: item.label, status: item.status }))) };
   }
 
   private policy() {
