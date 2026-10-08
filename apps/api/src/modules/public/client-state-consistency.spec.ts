@@ -716,7 +716,7 @@ describe("mobile client state consistency", () => {
   });
 
   it("refreshes community learning pages without accepting stale tenant responses", () => {
-    for (const page of [communityProgram, communityCheckin]) {
+    for (const page of [communityProgram]) {
       expect(page).toContain("createTenantLoadGuard");
       expect(page).toContain("loadGuard.isCurrent(token)");
       expect(page).toContain("onShow(async () =>");
@@ -724,13 +724,11 @@ describe("mobile client state consistency", () => {
       expect(page).toContain("guardCurrentPageFeature");
     }
     expect(communityProgram).toContain('aria-live="assertive"');
-    expect(communityCheckin).toContain('import EmptyState from "../../components/EmptyState.vue";');
-    expect(communityCheckin).toContain('import LoadingState from "../../components/LoadingState.vue";');
-    expect(communityCheckin).toContain('<LoadingState v-if="loading"');
-    expect(communityCheckin).toContain('action-text="重新加载"');
+    expect(communityCheckin).toContain('import { onLoad } from "@dcloudio/uni-app";');
+    expect(communityCheckin).toContain('uni.redirectTo({ url: withTenantCode("/pages/checkin/index") });');
     expect(communityProgram).toContain("loadedContextKey.value !== nextContextKey");
     expect(communityProgram).toContain('from "../../tenant-load-guard"');
-    expect(communityCheckin).toContain('loadError.value = reviewSafeText(error?.message || "今日打卡加载失败")');
+    expect(communityCheckin).toContain("Keep old deep links usable");
   });
 
   it("locks program media, location and writes before opening asynchronous controls", () => {
@@ -742,7 +740,7 @@ describe("mobile client state consistency", () => {
     const locationPicker = communityProgram.slice(communityProgram.indexOf("async function chooseLocation"), communityProgram.indexOf("function previewTaskImage"));
     expect(locationPicker.indexOf("activeAction.value = `location:${taskId}`")).toBeLessThan(locationPicker.indexOf("uni.chooseLocation"));
     expect(communityProgram).toContain("getCurrentTenantCode()")
-    expect(communityCheckin).toContain("getCurrentTenantCode() !== tenantCode");
+    expect(communityCheckin).toContain("withTenantCode");
   });
 
   it("keeps activity search state tenant-scoped and exposes loading failures", () => {
