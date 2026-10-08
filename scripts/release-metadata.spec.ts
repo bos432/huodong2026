@@ -54,7 +54,7 @@ describe("release artifact commit matching", () => {
 
   it("ships every release script dependency inside the scoped bundle", () => {
     const source = readFileSync(resolve(process.cwd(), "scripts/assemble-scoped-release.mjs"), "utf8");
-    for (const script of ["deploy-scoped-release.mjs", "deploy-admin-static.mjs", "deploy-h5-static.mjs", "release-metadata.mjs"]) {
+    for (const script of ["deploy-scoped-release.mjs", "deploy-runtime.mjs", "deploy-admin-static.mjs", "deploy-h5-static.mjs", "release-metadata.mjs"]) {
       expect(source, script).toContain(script);
     }
   });
