@@ -6,9 +6,18 @@ describe('scoped release database identity', () => {
     expect(isAllowedDatabaseIdentity({ database: 'reader', host: '172.28.0.1', port: 3306 })).toBe(true);
   });
 
+  it('allows the current production Docker database identity', () => {
+    expect(isAllowedDatabaseIdentity({
+      database: 'activity_registration',
+      host: '127.0.0.1',
+      port: 13306,
+    })).toBe(true);
+  });
+
   it('rejects other databases, hosts, and ports', () => {
     expect(isAllowedDatabaseIdentity({ database: 'reader', host: '10.0.0.8', port: 3306 })).toBe(false);
     expect(isAllowedDatabaseIdentity({ database: 'activity_registration', host: '127.0.0.1', port: 3306 })).toBe(false);
+    expect(isAllowedDatabaseIdentity({ database: 'activity_registration', host: '10.0.0.8', port: 13306 })).toBe(false);
     expect(isAllowedDatabaseIdentity({ database: 'reader', host: '127.0.0.1', port: 3307 })).toBe(false);
   });
 });
