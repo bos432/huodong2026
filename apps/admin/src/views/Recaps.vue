@@ -233,6 +233,26 @@ watch(
         <div class="metric"><span>通知触达</span><strong>{{ data.notifications }}</strong></div>
       </div>
 
+      <div v-if="data.commercialSummary" class="commercial-card">
+        <div class="commercial-heading">
+          <div>
+            <h3>活动经营摘要</h3>
+            <p>依据已记录的支付和退款事件计算，仅作为经营核对口径，不等同于正式结算或已打款。</p>
+          </div>
+          <el-tag :type="data.commercialSummary.reportingScope === 'test' ? 'warning' : 'info'">
+            {{ data.commercialSummary.reportingScope === 'test' ? '测试数据，排除正式业绩' : '正式活动口径' }}
+          </el-tag>
+        </div>
+        <el-alert :title="data.commercialSummary.settlementMessage" :type="data.commercialSummary.settlementStatus === 'preview_ready' ? 'info' : 'warning'" :closable="false" show-icon />
+        <div class="commercial-metrics">
+          <div><span>支付毛额</span><strong>¥{{ (Number(data.commercialSummary.grossCollectedFen || 0) / 100).toFixed(2) }}</strong></div>
+          <div><span>退款额</span><strong>¥{{ (Number(data.commercialSummary.refundFen || 0) / 100).toFixed(2) }}</strong></div>
+          <div><span>净收款</span><strong>¥{{ (Number(data.commercialSummary.netCollectedFen || 0) / 100).toFixed(2) }}</strong></div>
+          <div><span>平台服务费</span><strong>¥{{ (Number(data.commercialSummary.platformFeeFen || 0) / 100).toFixed(2) }}</strong><small>{{ (Number(data.commercialSummary.platformFeeBps || 0) / 100).toFixed(2) }}%</small></div>
+          <div><span>主理人结算口径</span><strong>¥{{ (Number(data.commercialSummary.organizerPayableFen || 0) / 100).toFixed(2) }}</strong><small>未生成正式结算单</small></div>
+        </div>
+      </div>
+
       <div class="two-col">
         <div class="table-card">
           <h3>核心漏斗</h3>
@@ -331,6 +351,14 @@ watch(
 .hero-card small, .insight small { color: #667085; }
 .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
 .records { margin-top: 16px; }
+.commercial-card { margin-bottom: 16px; padding: 18px; border: 1px solid #dbe4ef; border-radius: 8px; background: #fbfdff; }
+.commercial-heading { display: flex; justify-content: space-between; align-items: flex-start; gap: 16px; margin-bottom: 12px; }
+.commercial-heading h3 { margin-bottom: 6px; }
+.commercial-heading p { margin: 0; color: #667085; font-size: 13px; line-height: 1.5; }
+.commercial-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }
+.commercial-metrics > div { display: grid; gap: 5px; padding: 12px; background: #fff; border: 1px solid #e5e7eb; border-radius: 8px; }
+.commercial-metrics span, .commercial-metrics small { color: #667085; font-size: 12px; }
+.commercial-metrics strong { color: #0f766e; font-size: 20px; }
 .history-alert { margin-bottom: 16px; }
 .version-content, .version-grid { margin-top: 16px; }
 .version-grid { display: grid; grid-template-columns: minmax(320px, .8fr) minmax(0, 1.2fr); gap: 16px; }
@@ -364,6 +392,7 @@ h3 { margin: 0 0 16px; }
   .hero-card { grid-column: 1 / -1; }
   .two-col { grid-template-columns: 1fr; }
   .version-grid, .version-columns { grid-template-columns: 1fr; }
+  .commercial-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
 @media (max-width: 640px) {
   .toolbar { align-items: stretch; }

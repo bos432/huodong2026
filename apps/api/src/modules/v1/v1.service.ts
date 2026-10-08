@@ -52,6 +52,7 @@ import { contentAudienceMatches } from "../../shared/content-audience";
 import { boundedPercentage } from "../admin/dashboard-metrics";
 import { adminCanAccessActivity, applyAdminActivityDataScope, normalizeAdminDataScope } from "../admin/admin-data-scope";
 import { yuanToFen } from "../../shared/money";
+import { calculateActivityCommercialAmounts, normalizeCommercialRateToBps } from "../../shared/activity-commercial-policy";
 import { isDuplicateEntryError } from "../../shared/database-errors";
 import { isWechatTemplateFieldKey } from "../../shared/wechat-template-field";
 import { NotificationService } from "../notification/notification.service";
@@ -1026,6 +1027,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   async activityFunnel(activityId: number, admin?: AdminContext) {
     const activity = await this.activities.findOneBy({ id: activityId });
     this.assertAnalyticsActivityAccess(activity, admin);
+    if (!activity) throw new NotFoundException("活动不存在");
     return this.buildActivityFunnel(activity!, this.conversionEvents.manager);
   }
 
@@ -1147,20 +1149,54 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
   }
 
   async activityRecap(activityId: number, admin?: AdminContext, versionNo?: number) {
+    const activity = await this.activities.findOneBy({ id: activityId });
+    this.assertAnalyticsActivityAccess(activity, admin);
+    if (!activity) throw new NotFoundException("活动不存在");
     if (versionNo !== undefined) {
       if (!Number.isInteger(versionNo) || versionNo < 1) throw new BadRequestException("复盘版本号不正确");
-      const activity = await this.activities.findOneBy({ id: activityId });
-      this.assertAnalyticsActivityAccess(activity, admin);
       const version = await this.recapVersions.findOne({ where: { activity: { id: activityId }, versionNo } });
       if (!version) throw new NotFoundException("复盘版本不存在");
-      return { ...(version.metricSnapshot as any), version: this.publicRecapVersion(version, true), isHistorical: true, legacyDefinition: version.metricSnapshot.calculationVersion !== ANALYTICS_CALCULATION_VERSION };
+      const snapshot = version.metricSnapshot as any;
+      return { ...snapshot, commercialSummary: snapshot.commercialSummary || this.activityCommercialSummary(activity, snapshot.funnel), version: this.publicRecapVersion(version, true), isHistorical: true, legacyDefinition: snapshot.calculationVersion !== ANALYTICS_CALCULATION_VERSION };
     }
     const funnel = await this.activityFunnel(activityId, admin);
     const reviews = await this.reviews.find({ where: { activity: { id: activityId }, status: "visible" }, order: { createdAt: "DESC" }, take: 20 });
     const averageRating = reviews.length ? (reviews.reduce((sum, item) => sum + item.rating, 0) / reviews.length).toFixed(1) : "0.0";
     const notifications = await this.notifications.count({ where: { activity: { id: activityId } } });
     const latestVersion = await this.recapVersions.findOne({ where: { activity: { id: activityId } }, order: { versionNo: "DESC" } });
-    return { ...funnel, reviewSummary: { averageRating, latestReviews: reviews.map((row) => ({ id: row.id, user: row.user ? { id: row.user.id, nickname: row.user.nickname, phone: maskPhone(row.user.phone) } : null, rating: row.rating, content: row.content, createdAt: row.createdAt })) }, notifications, latestVersion: latestVersion ? this.publicRecapVersion(latestVersion, false) : null, generatedAt: new Date(), isHistorical: false };
+    return { ...funnel, commercialSummary: this.activityCommercialSummary(activity, funnel.funnel), reviewSummary: { averageRating, latestReviews: reviews.map((row) => ({ id: row.id, user: row.user ? { id: row.user.id, nickname: row.user.nickname, phone: maskPhone(row.user.phone) } : null, rating: row.rating, content: row.content, createdAt: row.createdAt })) }, notifications, latestVersion: latestVersion ? this.publicRecapVersion(latestVersion, false) : null, generatedAt: new Date(), isHistorical: false };
+  }
+
+  private activityCommercialSummary(activity: Activity, funnel: { grossAmountFen?: number; refundAmountFen?: number }) {
+    const grossCollectedFen = Number(funnel?.grossAmountFen || 0);
+    const refundFen = Number(funnel?.refundAmountFen || 0);
+    const settings = activity.tenant?.settings && typeof activity.tenant.settings === "object" && !Array.isArray(activity.tenant.settings) ? activity.tenant.settings as Record<string, unknown> : {};
+    const agentConfig = activity.agent?.settlementConfig && typeof activity.agent.settlementConfig === "object" && !Array.isArray(activity.agent.settlementConfig) ? activity.agent.settlementConfig as Record<string, unknown> : {};
+    const platformRate = settings.activityPlatformServiceFeeBps ?? settings.activityPlatformServiceFeeRate ?? settings.platformServiceFeeBps ?? settings.platformServiceFeeRate ?? settings.serviceFeeRate;
+    const organizerRate = agentConfig.activityCommissionBps ?? agentConfig.activityCommissionRate ?? agentConfig.commissionBps ?? agentConfig.commissionRate;
+    const platformFeeBps = platformRate === undefined ? 0 : normalizeCommercialRateToBps(platformRate, "活动平台服务费");
+    const organizerCommissionBps = organizerRate === undefined ? 0 : normalizeCommercialRateToBps(organizerRate, "主理人结算费率");
+    const amounts = calculateActivityCommercialAmounts({ grossCollectedFen, refundFen, platformFeeBps, organizerCommissionBps });
+    const hasData = grossCollectedFen !== 0 || refundFen !== 0;
+    let settlementStatus = "preview_ready";
+    let settlementMessage = "当前为经营口径预览，尚未生成正式结算单";
+    if (activity.isTest) {
+      settlementStatus = "excluded_test";
+      settlementMessage = "测试活动不计入正式经营业绩和结算";
+    } else if (!hasData) {
+      settlementStatus = "no_activity_data";
+      settlementMessage = "暂无已确认的支付或退款数据";
+    } else if (!activity.agent) {
+      settlementStatus = "organizer_not_configured";
+      settlementMessage = "活动尚未配置主理人，暂不能形成主理人结算口径";
+    } else if (organizerRate === undefined) {
+      settlementStatus = "rate_not_configured";
+      settlementMessage = "主理人已配置，但尚未配置结算费率";
+    } else if (platformRate === undefined) {
+      settlementStatus = "platform_fee_not_configured";
+      settlementMessage = "平台服务费未配置，当前按 0 计算，仅供核对";
+    }
+    return { ...amounts, platformFeeBps, organizerCommissionBps, reportingScope: activity.isTest ? "test" : "live", settlementStatus, settlementMessage };
   }
 
   async listActivityRecapVersions(activityId: number, admin?: AdminContext) {
@@ -1236,6 +1272,9 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       { name: "支付毛额（分）", value: recap.funnel.grossAmountFen },
       { name: "退款额（分）", value: recap.funnel.refundAmountFen },
       { name: "净额（分）", value: recap.funnel.netAmountFen },
+      { name: "平台服务费（分）", value: recap.commercialSummary?.platformFeeFen ?? 0 },
+      { name: "主理人结算口径（分）", value: recap.commercialSummary?.organizerPayableFen ?? 0 },
+      { name: "商业化口径状态", value: recap.commercialSummary?.settlementStatus || "unknown" },
       { name: "通知触达", value: recap.notifications },
       { name: "报名转化率", value: `${recap.rates.signupRate}%` },
       { name: "付款转化率", value: `${recap.rates.paymentRate}%` },
