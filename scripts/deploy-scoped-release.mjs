@@ -8,6 +8,7 @@ import { createGzip } from 'node:zlib';
 import { createHash } from 'node:crypto';
 import { isReleaseId, releaseIdentifiersMatch } from './release-metadata.mjs';
 import { isAllowedDatabaseIdentity } from './deploy-database-identity.mjs';
+import { getContainerDatabaseRuntime } from './deploy-database-runtime.mjs';
 
 const root = '/www/wwwroot/rd.chaimen666.com';
 const releaseId = process.env.RELEASE_ID;
@@ -27,6 +28,7 @@ const expectedMigrations = [
 ];
 const pm2 = '/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2';
 const node = '/www/server/nodejs/v22.22.3/bin/node';
+const databaseRuntime = getContainerDatabaseRuntime(process.env);
 function run(command, args, options = {}) {
   return execFileSync(command, args, { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, ...options }).trim();
 }
@@ -45,6 +47,36 @@ async function databaseAt(directory) {
   if (!isAllowedDatabaseIdentity(database.options)) throw new Error('Database identity mismatch.');
   await database.initialize();
   return database;
+}
+function databaseOptionsFromEnvironment() {
+  return {
+    host: process.env.DB_HOST,
+    port: Number(process.env.DB_PORT),
+    username: process.env.DB_USERNAME,
+    password: process.env.DB_PASSWORD,
+    database: process.env.DB_DATABASE,
+  };
+}
+function runContainerDatabase(directory, mode) {
+  if (!databaseRuntime) throw new Error('Container database runtime is not configured.');
+  const expected = JSON.stringify(expectedMigrations);
+  const script = `const d=require('./apps/api/dist/data-source.js').default; const {MigrationExecutor}=require('typeorm'); (async()=>{await d.initialize(); const e=new MigrationExecutor(d); const p=await e.getPendingMigrations(); const expected=${expected}; if(${JSON.stringify(mode)}==='prepare'){console.log(JSON.stringify({pending:p.map(x=>x.name)}));}else{const expectedPending=expected.slice(Math.max(0,expected.length-p.length)); if(JSON.stringify(p.map(x=>x.name))!==JSON.stringify(expectedPending)) throw new Error('Unexpected pending migrations: '+JSON.stringify(p.map(x=>x.name))); const applied=await d.runMigrations({transaction:'each'}); console.log(JSON.stringify({applied:applied.map(x=>x.name)}));} await d.destroy();})().catch(e=>{console.error(e.message);process.exit(1)})`;
+  return JSON.parse(run('docker', [
+    'run', '--rm', '--network', `container:${databaseRuntime.container}`, '-i', '-w', '/app',
+    '-v', `${directory}:/app/apps/api/dist:ro`,
+    '-e', 'DB_HOST', '-e', 'DB_PORT', '-e', 'DB_USERNAME', '-e', 'DB_DATABASE', '-e', 'DB_PASSWORD',
+    databaseRuntime.image, 'node', '-e', script,
+  ], { env: process.env }));
+}
+function startDatabaseDump(options) {
+  if (!databaseRuntime) {
+    return spawn('/usr/bin/mysqldump', ['--single-transaction', '--quick', '--routines', '--triggers', '--events', '--default-character-set=utf8mb4', '-h', options.host, '-P', String(options.port), '-u', options.username, options.database], { env: { ...process.env, MYSQL_PWD: options.password }, stdio: ['ignore', 'pipe', 'pipe'] });
+  }
+  return spawn('docker', [
+    'run', '--rm', '--network', `container:${databaseRuntime.container}`, '-e', 'MYSQL_PWD', 'mysql:8.4', 'mysqldump',
+    '--single-transaction', '--quick', '--routines', '--triggers', '--events', '--default-character-set=utf8mb4',
+    '-h', options.host, '-P', String(options.port), '-u', options.username, options.database,
+  ], { env: { ...process.env, MYSQL_PWD: options.password }, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 async function writeRecord(name, value) { await fs.writeFile(path.join(privateDir, name), JSON.stringify(value, null, 2), { mode: 0o600, flag: 'wx' }); }
 async function verifyBundle() {
@@ -75,12 +107,15 @@ if (mode === 'prepare') {
   await fs.mkdir(privateDir, { recursive: true, mode: 0o700 });
   await fs.chmod(privateDir, 0o700);
   await writeRecord('baseline.json', { commit: manifest.previousCommit, processes: publicProcesses(processes()), services: run('ps', ['-eo', 'pid,ppid,lstart,comm']) });
-  const database = await databaseAt(path.join(root, 'apps/api/dist'));
+  const database = databaseRuntime ? null : await databaseAt(path.join(root, 'apps/api/dist'));
   try {
-    const { MigrationExecutor } = require('typeorm');
-    if ((await new MigrationExecutor(database).getPendingMigrations()).length) throw new Error('Unexpected historical pending migrations.');
-    const options = database.options;
-    const dump = spawn('/usr/bin/mysqldump', ['--single-transaction', '--quick', '--routines', '--triggers', '--events', '--default-character-set=utf8mb4', '-h', options.host, '-P', String(options.port), '-u', options.username, options.database], { env: { ...process.env, MYSQL_PWD: options.password }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const options = databaseRuntime ? databaseOptionsFromEnvironment() : database.options;
+    if (!isAllowedDatabaseIdentity(options)) throw new Error('Database identity mismatch.');
+    const pending = databaseRuntime
+      ? runContainerDatabase(path.join(root, 'apps/api/dist'), 'prepare').pending
+      : (await new (require('typeorm').MigrationExecutor)(database).getPendingMigrations()).map(migration => migration.name);
+    if (pending.length) throw new Error(`Unexpected historical pending migrations: ${JSON.stringify(pending)}`);
+    const dump = startDatabaseDump(options);
     let stderr = '';
     dump.stderr.on('data', chunk => { stderr += chunk; });
     const complete = new Promise((resolve, reject) => { dump.on('error', reject); dump.on('close', code => code === 0 ? resolve() : reject(new Error(`Backup failed: ${stderr}`))); });
@@ -95,20 +130,26 @@ if (mode === 'prepare') {
     await fs.cp(path.join(bundle, 'api'), nextApi, { recursive: true, force: false, errorOnExist: true });
     await writeRecord('backup-complete.json', { time: new Date().toISOString(), database: options.database, previousCommit: manifest.previousCommit });
     console.log('BACKUP_OK; staged API ready; production processes unchanged.');
-  } finally { await database.destroy(); }
+  } finally { await database?.destroy(); }
 } else if (mode === 'migrate') {
   await fs.access(path.join(privateDir, 'backup-complete.json'));
   if (run('git', ['rev-parse', 'HEAD']) !== manifest.commit) throw new Error('Git version mismatch.');
-  const database = await databaseAt(nextApi);
-  try {
-    const { MigrationExecutor } = require('typeorm');
-    const pending = (await new MigrationExecutor(database).getPendingMigrations()).map(migration => migration.name);
-    const expectedPending = expectedMigrations.slice(Math.max(0, expectedMigrations.length - pending.length));
-    if (JSON.stringify(pending) !== JSON.stringify(expectedPending)) throw new Error(`Unexpected pending migrations: ${JSON.stringify(pending)}`);
-    const applied = await database.runMigrations({ transaction: 'each' });
-    await writeRecord('migrations-complete.json', { names: applied.map(migration => migration.name), time: new Date().toISOString() });
-    console.log('MIGRATIONS_OK', JSON.stringify(applied.map(migration => migration.name)));
-  } finally { await database.destroy(); }
+  if (databaseRuntime) {
+    const applied = runContainerDatabase(nextApi, 'migrate').applied;
+    await writeRecord('migrations-complete.json', { names: applied, time: new Date().toISOString() });
+    console.log('MIGRATIONS_OK', JSON.stringify(applied));
+  } else {
+    const database = await databaseAt(nextApi);
+    try {
+      const { MigrationExecutor } = require('typeorm');
+      const pending = (await new MigrationExecutor(database).getPendingMigrations()).map(migration => migration.name);
+      const expectedPending = expectedMigrations.slice(Math.max(0, expectedMigrations.length - pending.length));
+      if (JSON.stringify(pending) !== JSON.stringify(expectedPending)) throw new Error(`Unexpected pending migrations: ${JSON.stringify(pending)}`);
+      const applied = await database.runMigrations({ transaction: 'each' });
+      await writeRecord('migrations-complete.json', { names: applied.map(migration => migration.name), time: new Date().toISOString() });
+      console.log('MIGRATIONS_OK', JSON.stringify(applied.map(migration => migration.name)));
+    } finally { await database.destroy(); }
+  }
 } else if (mode === 'publish') {
   await fs.access(path.join(privateDir, 'migrations-complete.json'));
   if (run('git', ['rev-parse', 'HEAD']) !== manifest.commit) throw new Error('Git version mismatch.');
