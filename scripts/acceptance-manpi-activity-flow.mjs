@@ -40,6 +40,9 @@ export async function acceptManpiActivityFlow({ ds, http, tenant, other, user, t
   assert.equal(waitlisted.waitlisted, true, 'Full activity must clearly return a waitlist result');
   assert.equal(waitlisted.registration, null);
   assert.equal(waitlisted.order, null, 'Waitlist must not create a paid or pending order');
+  const queuedDetail = check(await http(`/public/activities/${activity.id}/enhanced`, tokenB), 200);
+  assert.equal(queuedDetail.waitingCount, 1, 'Enhanced detail must reflect the persisted waiting entry');
+  assert.equal(queuedDetail.myBooking.waitlist.id, waitlisted.waitlist.id);
   assert.equal(await ds.getRepository('Registration').count({ where: { activity: { id: activity.id } } }), 1, 'Reserved capacity must prevent another booking');
   assert.equal((await http(`/public/me/registrations/${registrationId}`, tokenB)).status, 404);
   assert.equal((await http(`/admin/registrations/${registrationId}/check-in`, hostToken, 'POST', {})).status, 400, 'Unapproved registration cannot be checked in');

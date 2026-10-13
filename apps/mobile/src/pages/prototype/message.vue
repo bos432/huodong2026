@@ -98,7 +98,7 @@ function selectTab(tab: "home" | "checkin" | "messages" | "me" | "publish") {
 <template>
   <MobileShell active-tab="messages" @tab="selectTab">
     <view class="message-page">
-      <view class="header"><text class="title">消息</text><button v-if="unreadCount" class="read-all" :disabled="reading" @click="markRead">{{ reading ? "保存中…" : "当前列表已读" }}<view class="unread-badge">{{ unreadCount }}</view></button></view>
+      <view class="header"><text class="title">消息</text><button v-if="unreadCount" class="read-all" :disabled="reading" @click="markRead">{{ reading ? "保存中…" : "全部标为已读" }}<view class="unread-badge">{{ unreadCount }}</view></button></view>
       <view v-if="isGuest" class="login-note"><IconGlyph name="message" :size="15" label="个人通知" /><view><text>登录后查看自己的活动提醒</text><small>平台公告可直接浏览</small></view><button @click="login">登录 / 注册</button></view>
       <view class="message-filters" role="tablist" aria-label="消息分类"><view v-for="tab in [{key:'all',label:'全部'},{key:'activity',label:'活动提醒'},{key:'system',label:'平台通知'}]" :key="tab.key" role="tab" tabindex="0" :aria-selected="filter === tab.key" :class="{active: filter === tab.key}" @click="filter = tab.key as MessageFilter" @keyup.enter="filter = tab.key as MessageFilter" @keyup.space.prevent="filter = tab.key as MessageFilter">{{ tab.label }}</view></view>
       <view v-if="loading" class="message-state" role="status">正在同步消息…</view>

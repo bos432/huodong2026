@@ -1902,14 +1902,15 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       RegistrationStatus.Approved,
       RegistrationStatus.CheckedIn
     ];
-    const [registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount] = await Promise.all([
+    const [registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount, waitingCount] = await Promise.all([
       this.registrations.count({ where: { activity: { id: activityId }, status: In(active) } }),
       this.registrations.count({ where: { activity: { id: activityId }, status: RegistrationStatus.CheckedIn } }),
       this.reviews.count({ where: { activity: { id: activityId }, status: "visible" } }),
       this.viewLogs.count({ where: { activity: { id: activityId } } }),
-      this.shareVisits.count({ where: { activity: { id: activityId } } })
+      this.shareVisits.count({ where: { activity: { id: activityId } } }),
+      this.registrations.manager.getRepository(Waitlist).count({ where: { activity: { id: activityId }, status: WaitlistStatus.Waiting } })
     ]);
-    return { registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount, remainingSeats: Math.max(capacity - registeredCount, 0) };
+    return { registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount, waitingCount, remainingSeats: Math.max(capacity - registeredCount, 0) };
   }
 
   private displayStatus(activity: Activity, remainingSeats: number) {
