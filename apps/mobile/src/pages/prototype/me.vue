@@ -49,7 +49,9 @@ const todos = computed(() => [
 ]);
 
 function loadLocalExperiences() {
-  experienceRecords.value = readExperienceRecords(uni);
+  experienceRecords.value = readExperienceRecords({
+    getStorageSync: (key) => uni.getStorageSync(key)
+  });
 }
 async function loadProfile() {
   const sequence = ++profileLoadSequence;
