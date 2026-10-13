@@ -37,6 +37,15 @@ describe("personal activity record summary", () => {
     expect(result.reviewEligibilityKnown).toBe(false);
   });
 
+  it("counts and links reviewable registrations without redirecting to the upcoming journey tab", () => {
+    const result = summarizeProfileRegistrations([
+      row(1, "checked_in", "2026-10-12T09:00:00+08:00", { canReview: true }),
+      row(2, "checked_in", "2026-10-12T09:00:00+08:00", { canReview: false })
+    ], now);
+    expect(result.reviewable.map((item) => item.id)).toEqual([1]);
+    expect(result.reviewEligibilityKnown).toBe(true);
+  });
+
   it("chooses the nearest upcoming activity and does not mutate the API rows", () => {
     const rows = [
       { ...row(2, "approved", "2026-10-15T12:00:00+08:00"), activity: { id: 2, title: "Later", startTime: "2026-10-15T08:00:00+08:00", endTime: "2026-10-15T12:00:00+08:00" } },

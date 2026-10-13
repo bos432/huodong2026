@@ -938,4 +938,5 @@ onHide(() => {
 .line.strong text:last-child{color:var(--app-price)}
 .pay-actions .button{border-radius:14rpx}.pay-actions .button:not(.secondary){background:#16252d;color:#fff}
 .group-action,.mini-button,.dialog-action{border-radius:12rpx}
+.registration.has-custom-nav { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
 </style>

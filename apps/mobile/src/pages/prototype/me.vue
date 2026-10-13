@@ -43,7 +43,7 @@ const activityCounts = computed(() => [
 ]);
 const todos = computed(() => [
   { icon: "calendar", title: "待参加", description: "已确认报名的活动安排", count: countText(summary.value.upcoming.length), path: "/pages/user/orders?status=upcoming" },
-  { icon: "star", title: "待评价", description: "签到后留下真实感受", count: summary.value.reviewEligibilityKnown ? countText(summary.value.reviewable.length) : "—", path: "/pages/checkin/index" },
+  { icon: "star", title: "待评价", description: "签到后留下真实感受", count: summary.value.reviewEligibilityKnown ? countText(summary.value.reviewable.length) : "—", path: "/pages/user/pending-reviews" },
   { icon: "ticket", title: "票夹", description: "查看报名凭证和活动安排", count: countText(summary.value.ticketCount), path: "/pages/user/orders?status=all" },
   { icon: "book", title: "活动记录", description: "只记录真实参与过的活动", count: countText(summary.value.records.length), path: "/pages/user/orders?status=completed" }
 ]);
@@ -123,10 +123,6 @@ function navigateMember(path: string) {
 function login() { navigateMember("/pages/prototype/me"); }
 function openRegistration(id: number) { navigateMember(`/pages/user/registration?id=${id}`); }
 function openTodo(item: { title: string; path: string }) {
-  if (item.title === "待评价" && getUserToken() && summary.value.reviewable[0]) {
-    openRegistration(summary.value.reviewable[0].id);
-    return;
-  }
   navigateMember(item.path);
 }
 async function openSetting(item: { label: string; path?: string }) {

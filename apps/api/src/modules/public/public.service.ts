@@ -63,6 +63,7 @@ import { TenantRegionHitLog } from "../../entities/tenant-region-hit-log.entity"
 import { TenantRegion, TenantRegionBoundaryPoint } from "../../entities/tenant-region.entity";
 import { decryptStoredSecret, encryptStoredSecret } from "../../shared/secret-storage";
 import { maskPhone } from "../../shared/data-masking";
+import { loadMemberReviewEligibility } from "./member-review-eligibility";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
@@ -2562,6 +2563,13 @@ export class PublicService {
     }
     const rows = await builder.getMany();
     if (!rows.length) return [];
+    const reviewableIds = await loadMemberReviewEligibility(rows, async (ids) => {
+      const reviews = await this.activityReviews.createQueryBuilder("review")
+        .select("review.registrationId", "registrationId")
+        .where("review.registrationId IN (:...ids)", { ids })
+        .getRawMany<{ registrationId: number | string }>();
+      return reviews.map((review) => Number(review.registrationId));
+    });
     const orders = await this.orders.find({ where: rows.map((registration) => ({ registration: { id: registration.id } })) });
     const refundRows = orders.length ? await this.refunds.createQueryBuilder("refund")
       .select("refund.id", "id")
@@ -2583,6 +2591,7 @@ export class PublicService {
     }
     return rows.map((registration) => ({
       ...this.publicRegistration(registration),
+      canReview: reviewableIds.has(registration.id),
       order: this.publicOrderSummary(orders.find((order) => order.registration.id === registration.id) || null),
       latestRefund: latestRefundByOrder.get(orders.find((order) => order.registration.id === registration.id)?.id || 0) || null
     }));

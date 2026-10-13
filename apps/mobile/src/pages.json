@@ -117,6 +117,7 @@
         { "path": "wallet", "style": { "navigationBarTitleText": "余额明细" } },
         { "path": "login", "style": { "navigationBarTitleText": "登录" } },
         { "path": "orders", "style": { "navigationBarTitleText": "我的订单" } },
+        { "path": "pending-reviews", "style": { "navigationBarTitleText": "待评价" } },
         { "path": "mall-orders", "style": { "navigationBarTitleText": "商城订单" } },
         { "path": "mall-referral-commissions", "style": { "navigationBarTitleText": "推广收益" } },
         { "path": "mall-order-detail", "style": { "navigationBarTitleText": "商城订单详情" } },
