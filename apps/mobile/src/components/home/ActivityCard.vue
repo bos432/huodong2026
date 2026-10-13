@@ -13,11 +13,11 @@ watch(() => props.activity.cover, () => { imageFailed.value = false; });
     <view v-else class="activity-cover activity-cover-empty"><IconGlyph name="star" :size="24" label="慢π活动" /><text class="activity-cover-label">{{ activity.category || "慢π活动" }}</text></view>
     <view class="activity-content">
       <view class="date-line"><b>{{ activity.date }}</b><small>{{ activity.weekday }} {{ activity.startTime }} - {{ activity.endTime }}</small></view>
-      <view class="status-row"><text class="status" :class="activity.status">{{ activity.status === 'full' ? '已满座' : '可报名' }}</text><text v-if="activity.isDemo" class="demo-tag">演示活动</text><text v-for="tag in activity.tags.slice(0, 2)" :key="tag" class="tag">{{ tag }}</text></view>
+      <view class="status-row"><text v-if="!activity.isDemo" class="status" :class="activity.status">{{ activity.status === 'full' ? '已满座' : '可报名' }}</text><text v-if="activity.isDemo" class="demo-tag">演示活动</text><text v-for="tag in activity.tags.slice(0, 2)" :key="tag" class="tag">{{ tag }}</text></view>
       <b class="title">{{ activity.title }}</b>
-      <view class="muted"><IconGlyph name="pin" :size="13" /><text class="meta-text">{{ activity.distanceText }} · {{ activity.venue }}</text></view>
-      <view class="muted"><IconGlyph name="host" :size="13" /><text class="meta-text">{{ activity.hostName }}</text></view>
-      <view class="foot"><view><b>{{ activity.highlight }}</b><small v-if="activity.isDemo">报名数据未接入 · 名额信息以正式发布为准</small><small v-else>{{ activity.registrationCount }} 人已报名 · 剩余 {{ activity.remainingSlots }} 席</small></view><text class="price">{{ activity.priceText }}</text></view>
+      <view class="muted"><IconGlyph name="pin" :size="13" /><text class="meta-text">{{ activity.isDemo ? '地点信息以正式发布为准' : `${activity.distanceText} · ${activity.venue}` }}</text></view>
+      <view class="muted"><IconGlyph name="host" :size="13" /><text class="meta-text">{{ activity.isDemo ? '主理人资料待审核' : activity.hostName }}</text></view>
+      <view class="foot"><view><b>{{ activity.isDemo ? '当前仅用于页面展示' : activity.highlight }}</b><small v-if="activity.isDemo">报名数据未接入 · 名额信息以正式发布为准</small><small v-else>{{ activity.registrationCount }} 人已报名 · 剩余 {{ activity.remainingSlots }} 席</small></view><text class="price">{{ activity.isDemo ? '示例价 ' : '' }}{{ activity.priceText }}</text></view>
     </view>
   </view>
 </template>

@@ -1,0 +1,46 @@
+import { readFileSync } from "node:fs";
+import { describe, expect, it } from "vitest";
+
+const source = readFileSync(new URL("./index.vue", import.meta.url), "utf8");
+
+describe("home featured activity carousel", () => {
+  it("uses native horizontal paging and binds each slide to its own activity data", () => {
+    expect(source).toContain("<swiper");
+    expect(source).toContain("<swiper-item");
+    expect(source).toContain("@change=\"onHeroChange\"");
+    expect(source).toContain("v-for=\"(item, index) in heroCards\"");
+    expect(source).toContain("item.cover");
+    expect(source).not.toContain("class=\"hero-grid\"");
+    expect(source).not.toContain("mockActivities[index % mockActivities.length].cover");
+  });
+
+  it("opens the activity represented by the active slide and exposes slide selection accessibly", () => {
+    expect(source).toContain("openActivity(item.id)");
+    expect(source).toContain(':aria-label="`第${index + 1}项推荐活动`"');
+    expect(source).toContain(":aria-current=\"carouselIndex === index ? 'true' : 'false'\"");
+  });
+
+  it("shows eligible demo activities in the carousel without implying real booking data", () => {
+    expect(source).not.toContain("if (demoMode.value) return [];");
+    expect(source).toContain(".filter((item) => item.status === \"open\")");
+    expect(source).toContain('class="hero-demo"');
+    expect(source).toContain("报名数据未接入");
+    expect(source).toContain("不代表真实举办安排");
+  });
+
+  it("places the discovery heading and categories before the featured activities", () => {
+    const template = source.slice(source.indexOf("<template>"));
+    const heading = template.indexOf("今天，去参加一场活动");
+    const categories = template.indexOf("<CategoryScroller");
+    const carousel = template.indexOf('class="hero-carousel"');
+    expect(heading).toBeGreaterThan(-1);
+    expect(heading).toBeLessThan(categories);
+    expect(categories).toBeLessThan(carousel);
+  });
+
+  it("shows a Manpi-styled recovery surface when a featured cover cannot load", () => {
+    expect(source).toContain("heroImageFailed");
+    expect(source).toContain("class=\"hero-image-fallback\"");
+    expect(source).toContain("活动封面暂不可用");
+  });
+});

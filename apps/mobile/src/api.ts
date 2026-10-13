@@ -128,7 +128,7 @@ export function setCurrentTenantCode(value: string) {
       const hashQuery = hashParams.toString();
       nextUrl.hash = `${hashPath}${hashQuery ? `?${hashQuery}` : ""}`;
     }
-    window.history.replaceState(null, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
+    window.history.replaceState(window.history.state, "", `${nextUrl.pathname}${nextUrl.search}${nextUrl.hash}`);
   }
   // #endif
   return code;

@@ -122,6 +122,10 @@ export class PublicController {
   @Post("ambassador/applications")
   async submitAmbassadorApplication(@Body() dto: AmbassadorApplicationDto, @Req() req: any, @Query("tenantCode") tenantCode?: string) {
     const context = this.tenantContext(req, tenantCode);
+    if (dto.source === "host_apply") {
+      const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+      return this.service.submitAmbassadorApplication(dto, user, context);
+    }
     const partnerSource = ["dean_recruit", "partner_apply", "brand_story_contact"].includes(String(dto.source || ""));
     await this.service.assertFeatureGateEnabled(context, dto.kind === "partner" || partnerSource ? "partner" : "ambassador");
     return this.service.submitAmbassadorApplication(dto);
@@ -568,6 +572,13 @@ export class PublicController {
   async myAdminAccess(@Req() req: any) {
     const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
     return this.service.myAdminAccess(user);
+  }
+
+  @Get("me/host-application")
+  async myHostApplication(@Req() req: any, @Query("tenantCode") tenantCode?: string, @Res({ passthrough: true }) res?: Response) {
+    res?.setHeader("Cache-Control", "private, no-store");
+    const user = await this.service.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.myHostApplication(user, this.tenantContext(req, tenantCode));
   }
 
   @Get("me/charity")

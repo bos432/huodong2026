@@ -588,6 +588,7 @@ export function resolveAdminRoutePermission(method: string, routePath?: string, 
   if (path.startsWith("course-")) return "course.manage";
   if (path.startsWith("courses")) return "course.manage";
   if (path.startsWith("checkin-tasks")) return "community.manage";
+  if (path.startsWith("slow-experiences")) return "community.manage";
   if (path.startsWith("social-profiles")) return "community.manage";
   if (path.startsWith("content-keyword-rules") || path.startsWith("content-sanctions") || path.startsWith("content-appeals")) return "forum.moderate";
   if (path.startsWith("community")) return "community.manage";

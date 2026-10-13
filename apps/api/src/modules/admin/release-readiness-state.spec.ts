@@ -28,6 +28,31 @@ describe("release readiness state", () => {
     });
   });
 
+  it("recursively removes sensitive evidence fields and bounds free-text values", () => {
+    expect(sanitizeReleaseEvidence({ summary: "x".repeat(1200), details: [{ privateKey: "key", phone: "13983747433", result: "ok" }] })).toEqual({
+      summary: "x".repeat(1000),
+      details: [{ phone: "***7433", result: "ok" }]
+    });
+  });
+
+  it("redacts credentials pasted into free-text evidence summaries", () => {
+    const fakeKey = [
+      ["-----BEGIN", "PRIVATE KEY-----"].join(" "),
+      "secret-material",
+      ["-----END", "PRIVATE KEY-----"].join(" ")
+    ].join("\n");
+    const evidence = sanitizeReleaseEvidence({
+      summary: "回调已验证，APIv3 Key=12345678901234567890123456789012; Bearer eyJhbGciOiJub25lIn0.abc.def",
+      details: `private key: ${fakeKey}`
+    });
+
+    expect(JSON.stringify(evidence)).not.toContain("12345678901234567890123456789012");
+    expect(JSON.stringify(evidence)).not.toContain("eyJhbGciOiJub25lIn0.abc.def");
+    expect(JSON.stringify(evidence)).not.toContain("secret-material");
+    expect(evidence.summary).toContain("[已脱敏]");
+    expect(evidence.details).toContain("[已脱敏]");
+  });
+
   it("returns explicit launch blockers until every external capability is accepted", () => {
     const decision = readinessDecision([
       { itemKey: "payment_config", label: "支付配置", status: "accepted" },

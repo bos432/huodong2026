@@ -84,7 +84,8 @@ describe("mobile production network contract", () => {
     expect(tenantSwitcher).toContain('emit("changed", item)');
     expect(tenantSwitcher).toContain("uni.reLaunch({ url: nextRoute })");
     expect(home).toContain('<view class="topbar">');
-    expect(home).toContain('class="hero-grid"');
+    expect(home).toContain('class="hero-carousel"');
+    expect(home).toContain("<swiper class=\"hero-swiper\"");
     expect(home).toContain("<CategoryScroller");
     expect(home).toContain("<BaseBottomSheet");
   });

@@ -1102,6 +1102,20 @@ export const generatedDatabaseTables: GeneratedDatabaseTable[] = [
     "caution": "可能包含个人或敏感信息，查询、导出和清理必须遵循最小权限与隐私要求。"
   },
   {
+    "group": "慢体验与内容治理",
+    "name": "slow_experience_events",
+    "meaning": "慢体验审核操作记录相关业务数据。",
+    "business": "慢体验与内容治理模块中的慢体验审核操作记录查询、状态流转和关联记录。",
+    "caution": "属于追踪或审计依据，优先归档，不要直接清空近期数据。"
+  },
+  {
+    "group": "慢体验与内容治理",
+    "name": "slow_experience_records",
+    "meaning": "慢体验个人记录相关业务数据。",
+    "business": "慢体验与内容治理模块中的慢体验个人记录查询、状态流转和关联记录。",
+    "caution": "包含个人文字和私密照片引用，必须按账号和商家授权访问；禁止直接公开文件或跳过内容审核。"
+  },
+  {
     "group": "平台治理与基础设施",
     "name": "admin_invites",
     "meaning": "管理员邀请相关业务数据。",

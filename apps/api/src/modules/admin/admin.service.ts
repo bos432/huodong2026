@@ -1815,8 +1815,8 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     row.reviewedBy = admin?.id || null;
     row.reviewedAt = new Date();
     const saved = await this.ambassadorApplications.save(row);
-    if (saved.status === "activated" && saved.kind === "ambassador") await this.ensureAmbassadorProfileFromApplication(saved, admin);
-    if (["approved", "activated"].includes(saved.status) || saved.source === "volunteer_apply") await this.ensureVolunteerProfileFromApplication(saved);
+    if (saved.source !== "host_apply" && saved.status === "activated" && saved.kind === "ambassador") await this.ensureAmbassadorProfileFromApplication(saved, admin);
+    if (saved.source !== "host_apply" && (["approved", "activated"].includes(saved.status) || saved.source === "volunteer_apply")) await this.ensureVolunteerProfileFromApplication(saved);
     const applicationType = saved.kind === "partner" ? "partner" : "ambassador";
     await this.logOperation(admin, `${applicationType}.application.update`, "ambassador_application", saved.id, `${saved.kind === "partner" ? "跟进合作伙伴线索" : "跟进文化大使申请"}：${saved.name}`, { status: saved.status });
     return this.publicAmbassadorApplication(saved);
@@ -1864,7 +1864,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     application.reviewedBy = admin?.id || null;
     application.reviewedAt = new Date();
     await this.ambassadorApplications.save(application);
-    if (application.status === "activated" && application.kind === "ambassador") await this.ensureAmbassadorProfileFromApplication(application, admin);
+    if (application.source !== "host_apply" && application.status === "activated" && application.kind === "ambassador") await this.ensureAmbassadorProfileFromApplication(application, admin);
     const applicationType = application.kind === "partner" ? "partner" : "ambassador";
     await this.logOperation(admin, `${applicationType}.application.followup`, "ambassador_application", application.id, `新增${application.kind === "partner" ? "伙伴" : "大使"}线索跟进：${application.name}`, { result: followup.result });
     return this.publicAmbassadorFollowup(followup, content);
@@ -2097,6 +2097,7 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     const row = await this.dataSource.transaction(async (manager) => {
       const application = await manager.getRepository(AmbassadorApplication).findOne({ where: { id: dto.applicationId }, lock: { mode: "pessimistic_write" } });
       if (!application || application.kind !== "partner") throw new BadRequestException("合同必须关联合作伙伴线索");
+      if (application.source === "host_apply") throw new BadRequestException("主理人申请不属于城市合伙人合同流程");
       if (!["approved", "activated"].includes(application.status)) throw new BadRequestException("合作伙伴线索审核通过后才能建立合同");
       const contractRepo = manager.getRepository(PartnerContract);
       const lockedReplay = await contractRepo.findOne({ where: { businessKey } });
@@ -8454,10 +8455,10 @@ export class AdminService implements OnModuleInit, OnModuleDestroy {
     }
     if (!this.isTenantScoped(admin) && dto.launchConfig !== undefined) {
       const requestedLaunchConfig = dto.launchConfig as Record<string, unknown>;
-      if (requestedLaunchConfig.realPaymentEnabled === true || requestedLaunchConfig.wechatPayEnabled === true) {
+      if (["realPaymentEnabled", "wechatPayEnabled"].some((key) => requestedLaunchConfig[key] !== undefined && requestedLaunchConfig[key] !== false && requestedLaunchConfig[key] !== "false")) {
         throw new BadRequestException("真实支付必须通过平台统一支付配置接口完成门禁校验和二次确认");
       }
-      setting.launchConfig = secureLaunchConfigForStorage(setting.launchConfig, dto.launchConfig, dto.clearLaunchConfigSecrets);
+      setting.launchConfig = secureLaunchConfigForStorage(setting.launchConfig, { ...setting.launchConfig, ...requestedLaunchConfig }, dto.clearLaunchConfigSecrets);
     }
     if (!scope.tenant && dto.defaultTenantCode !== undefined) {
       setting.defaultTenantCode = await this.normalizeDefaultTenantCode(dto.defaultTenantCode);

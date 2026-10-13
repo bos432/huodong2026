@@ -6,6 +6,20 @@ import { PublicService } from "../public/public.service";
 export class PublicV1Controller {
   constructor(private readonly service: V1Service, private readonly publicAuth: PublicService) {}
 
+  @Get("me/notifications")
+  @Header("Cache-Control", "private, no-store")
+  async memberNotifications(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.memberNotifications(user.id, this.tenantContext(req, tenantCode));
+  }
+
+  @Post("me/notifications/:id/read")
+  @Header("Cache-Control", "private, no-store")
+  async readMemberNotification(@Req() req: any, @Param("id", ParseIntPipe) id: number, @Query("tenantCode") tenantCode?: string) {
+    const user = await this.publicAuth.requireUserFromAuthorization(req.headers?.authorization);
+    return this.service.readMemberNotification(id, user.id, this.tenantContext(req, tenantCode));
+  }
+
   @Get("announcements")
   announcements(@Req() req: any, @Query("tenantCode") tenantCode?: string) {
     return this.service.publicAnnouncements(this.tenantContext(req, tenantCode), this.publicAuth.optionalUserIdFromAuthorization(req.headers?.authorization));

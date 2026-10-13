@@ -69,6 +69,7 @@ const priorityText: Record<string, string> = {
   high: "高"
 };
 const sourceOptions = [
+  { value: "host_apply", label: "主理人申请", type: "info" },
   { value: "dean_recruit", label: "院长招募", type: "warning" },
   { value: "ambassador_apply", label: "大使申请", type: "danger" },
   { value: "aid_personal", label: "个人帮扶", type: "success" },
@@ -736,6 +737,7 @@ function sourceMeta(value?: string | null) {
 
 function sourceTip(value?: string | null) {
   const source = String(value || "");
+  if (source === "host_apply") return "慢π活动主理人申请；审核通过后需另行开通工作台权限";
   if (source === "dean_recruit") return "本地慢π院长/负责人申请";
   if (source === "ambassador_apply") return "文化大使、讲师、主理人申请";
   if (source === "aid_personal") return "个人学习帮扶、公益名额申请";

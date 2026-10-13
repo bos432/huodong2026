@@ -224,6 +224,8 @@ import { CredentialTemplateVersion } from "./entities/credential-template-versio
 import { ExperienceProject } from "./entities/experience-project.entity";
 import { ExperienceApplication } from "./entities/experience-application.entity";
 import { ExperienceFeedback } from "./entities/experience-feedback.entity";
+import { SlowExperienceRecord } from "./entities/slow-experience-record.entity";
+import { SlowExperienceEvent } from "./entities/slow-experience-event.entity";
 
 config({ path: "apps/api/.env" });
 config();
@@ -448,6 +450,8 @@ export default new DataSource({
     ExperienceProject,
     ExperienceApplication,
     ExperienceFeedback,
+    SlowExperienceRecord,
+    SlowExperienceEvent,
     VolunteerProfile,
     VolunteerTrainingRecord,
     VolunteerBadgeDefinition,

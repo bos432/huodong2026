@@ -230,6 +230,9 @@ import { PublicModule } from "./public/public.module";
 import { V1Module } from "./v1/v1.module";
 import { ReliabilityModule } from "./reliability/reliability.module";
 import { ExperienceModule } from "./experience/experience.module";
+import { SlowExperienceModule } from "./slow-experience/slow-experience.module";
+import { SlowExperienceRecord } from "../entities/slow-experience-record.entity";
+import { SlowExperienceEvent } from "../entities/slow-experience-event.entity";
 import { ExperienceProject } from "../entities/experience-project.entity";
 import { ExperienceApplication } from "../entities/experience-application.entity";
 import { ExperienceFeedback } from "../entities/experience-feedback.entity";
@@ -259,6 +262,7 @@ entities.push(CheckInPoint as any);
 entities.push(CourseResourceAccessLog as any, CourseTeacher as any);
 entities.push(MallPromotionRateLimit as any, MallPromotionRiskAlert as any, MallPromotionRiskEvent as any);
 entities.push(ExperienceProject as any, ExperienceApplication as any, ExperienceFeedback as any);
+entities.push(SlowExperienceRecord as any, SlowExperienceEvent as any);
 entities.push(ReleaseReadinessItem as any, ReleaseAcceptanceFixture as any, ReleaseReadinessEvent as any);
 
 loadEnv({ path: "apps/api/.env" });
@@ -305,6 +309,6 @@ entities.push(CommunityActivityMember as any, CommunityPostFavorite as any, Comm
 entities.push(AidApplication as any, AidApplicationMaterial as any, AidApplicationEvent as any);
 
 @Module({
-  imports: [configModule, InstallModule, ...(installerBootstrapMode() ? [] : [...businessModules, ExperienceModule])]
+  imports: [configModule, InstallModule, ...(installerBootstrapMode() ? [] : [...businessModules, ExperienceModule, SlowExperienceModule])]
 })
 export class AppModule {}

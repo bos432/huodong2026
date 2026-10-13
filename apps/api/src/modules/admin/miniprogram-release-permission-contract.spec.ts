@@ -30,7 +30,9 @@ describe("mini program release permission contract", () => {
     expect(page).toContain('const settingLoadError = ref("")');
     expect(page).toContain('const logsLoadError = ref("")');
     expect(page).toContain('const pageBusy = computed(() => loading.value || mutationBusy.value)');
-    expect(page).toContain('.then(() => true).catch(() => false)');
+    expect(page).toContain('const manualGuideVisible = ref(false)');
+    expect(page).toContain('function openManualGuide()');
+    expect(page).toContain('@click="openManualGuide"');
   });
 
   it("bounds persisted text fields and sanitizes release log details", () => {
@@ -55,5 +57,17 @@ describe("mini program release permission contract", () => {
     expect(page).toContain('href="https://mp.weixin.qq.com/"');
     expect(page).not.toContain("runAction('submit-audit')");
     expect(page).not.toContain("runAction('release')");
+  });
+
+  it("keeps upload private keys out of Admin and directs operators to local Developer Tools", () => {
+    const page = read("apps/admin/src/views/MiniprogramRelease.vue");
+
+    expect(page).not.toContain("form.appSecret");
+    expect(page).not.toContain("form.privateKey");
+    expect(page).not.toContain("/admin/miniprogram-release/upload");
+    expect(page).not.toContain("latestQrCode");
+    expect(page).toContain("apps/mobile/dist/build/mp-weixin");
+    expect(page).toContain("微信开发者工具");
+    expect(page).toContain("历史上传成功状态不代表当前微信开发版本或体验码");
   });
 });

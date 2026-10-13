@@ -14,8 +14,13 @@ describe("queryActivities", () => {
     expect(queryActivities(items, { keyword: "", category: "自然体验", sort: "recommended" }).map(item => item.id)).toEqual([1]);
   });
 
+  it("filters by the selected activity city when city data is available", () => {
+    const mixedCities = [...items, { ...items[0], id: 4, city: "成都市" }];
+    expect(queryActivities(mixedCities, { keyword: "", category: "推荐", sort: "recommended", city: "成都" }).map(item => item.id)).toEqual([4]);
+  });
+
   it("sorts by date and distance", () => {
-    expect(queryActivities(items, { keyword: "", category: "推荐", sort: "nearest_time" }).map(item => item.id)).toEqual([2, 3, 1]);
+    expect(queryActivities(items, { keyword: "", category: "推荐", sort: "nearest_time" }, new Date(2026, 9, 1)).map(item => item.id)).toEqual([2, 3, 1]);
     expect(queryActivities(items, { keyword: "", category: "推荐", sort: "nearest_distance" }).map(item => item.id)).toEqual([2, 1, 3]);
   });
 

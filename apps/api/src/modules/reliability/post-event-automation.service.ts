@@ -150,7 +150,7 @@ export class PostEventAutomationService implements OnModuleInit, OnModuleDestroy
   private async enqueue(scene: PostEventScene, userId: number, tenantId: number | null, activityId: number | null, businessId: string, variables: Record<string, unknown> = {}, runAt?: Date) {
     const existing = await this.notifications.findOne({ where: { tenantScopeKey: tenantId ? `tenant:${tenantId}` : "platform", remark: `post_event:${scene}:${businessId}` } });
     if (existing) return null;
-    return this.jobs.publish({ tenantId, type: JOB_TYPE, idempotencyKey: `${scene}:${businessId}`.slice(0, 120), payload: { scene, userId, tenantId, activityId, businessId, variables }, maxAttempts: 5, runAt });
+    return this.jobs.publish({ tenantId, type: JOB_TYPE, scene, idempotencyKey: `${scene}:${businessId}`.slice(0, 120), payload: { scene, userId, tenantId, activityId, businessId, variables }, maxAttempts: 5, runAt });
   }
 
   private async deliver(payload: Record<string, unknown>) {

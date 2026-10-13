@@ -36,4 +36,14 @@ describe("release metadata delivery contract", () => {
       expect(source, script).toContain(script);
     }
   });
+
+  it("keeps the vulnerable mini-program uploader out of API dependencies", () => {
+    const packageJson = JSON.parse(readFileSync(repoFile("apps/api/package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+
+    expect(packageJson.dependencies?.["miniprogram-ci"]).toBeUndefined();
+    expect(packageJson.devDependencies?.["miniprogram-ci"]).toBeUndefined();
+  });
 });

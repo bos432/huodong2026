@@ -15,6 +15,12 @@ export class AmbassadorApplication {
   @Column({ type: "varchar", length: 160, nullable: true })
   businessKey!: string | null;
 
+  @Column({ type: "int", nullable: true })
+  applicantUserId!: number | null;
+
+  @Column({ type: "varchar", length: 80, nullable: true })
+  applicantTenantScopeKey!: string | null;
+
   @Index()
   @Column({ type: "varchar", length: 24, default: "ambassador" })
   kind!: EcosystemApplicationKind;

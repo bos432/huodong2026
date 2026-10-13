@@ -226,6 +226,15 @@ describe("public announcement and community asset boundaries", () => {
     expect(view).not.toContain("blacklistPhones:");
   });
 
+  it("does not expose tenant contact details in anonymous tenant discovery", () => {
+    const tenantMethods = publicService.slice(publicService.indexOf("async publicTenants()"), publicService.indexOf("async resolveTenantByLocation("));
+    expect(tenantMethods).toContain("this.publicTenantDirectoryItem(tenant)");
+    expect(tenantMethods).not.toContain("this.publicHomepageTenant(tenant)");
+    const directoryItem = publicService.slice(publicService.indexOf("private publicTenantDirectoryItem("), publicService.indexOf("private publicTenantRegion("));
+    for (const field of ["contactName:", "contactPhone:", "settings:", "remark:"]) expect(directoryItem).not.toContain(field);
+    expect(directoryItem).toContain("organizerProfile: this.publicTenantOrganizerProfile(tenant)");
+  });
+
   it("returns safe activity review, report and share attribution views", () => {
     const reviews = v1Service.slice(v1Service.indexOf("async activityReviews"), v1Service.indexOf("async adminReviews"));
     expect(reviews).toContain("rows.map((row) => this.publicActivityReview(row))");

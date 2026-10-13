@@ -23,16 +23,16 @@ const defaultTheme: Required<PageTheme> = {
   brandLogoUrl: "",
   brandSlogan: "和慢π一起，让热爱发光",
   adminTitle: "",
-  backgroundColor: "#FFFFFF",
+  backgroundColor: "#F7F5F0",
   backgroundImage: "",
   backgroundOverlayColor: "#FFFFFF",
   backgroundOverlayOpacity: 0,
   cardBackgroundColor: "#FFFFFF",
   cardOpacity: 100,
   cardRadius: 8,
-  textColor: "#28332D",
-  mutedColor: "#65736A",
-  primaryColor: "#386151"
+  textColor: "#1D2430",
+  mutedColor: "#78828C",
+  primaryColor: "#B9533F"
 };
 
 export const pageBrand = ref({

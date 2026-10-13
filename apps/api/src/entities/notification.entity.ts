@@ -62,4 +62,7 @@ export class Notification {
 
   @CreateDateColumn()
   createdAt!: Date;
+
+  @Column({ type: "datetime", nullable: true })
+  readAt!: Date | null;
 }

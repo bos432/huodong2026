@@ -1,11 +1,20 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
+import { ConfigService } from "@nestjs/config";
 import { InjectRepository } from "@nestjs/typeorm";
-import { Repository } from "typeorm";
+import { existsSync } from "node:fs";
+import { isAbsolute, join, resolve } from "node:path";
+import { IsNull, Repository } from "typeorm";
+import { OperationSetting } from "../../entities/operation-setting.entity";
+import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
+import { MiniprogramReleaseLog } from "../../entities/miniprogram-release-log.entity";
+import { NotificationTemplate } from "../../entities/notification-template.entity";
+import { configWithLaunchOverrides } from "../../shared/launch-config";
 import { ReleaseAcceptanceFixture } from "../../entities/release-acceptance-fixture.entity";
 import { ReleaseReadinessEvent } from "../../entities/release-readiness-event.entity";
 import { ReleaseReadinessItem } from "../../entities/release-readiness-item.entity";
 import { RELEASE_READINESS_ITEMS, nextReleaseReadinessStatus, readinessDecision, sanitizeReleaseEvidence } from "./release-readiness-state";
 import { normalizeFixtureInput } from "./release-readiness-fixture-input";
+import { assessReadinessConfiguration, REQUIRED_WECHAT_ACCEPTANCE_SCENES } from "./release-readiness-checks";
 
 type ReadinessAdmin = { id?: number; username?: string; tenantId?: number | null };
 
@@ -14,7 +23,12 @@ export class ReleaseReadinessService {
   constructor(
     @InjectRepository(ReleaseReadinessItem) private readonly items: Repository<ReleaseReadinessItem>,
     @InjectRepository(ReleaseAcceptanceFixture) private readonly fixtures: Repository<ReleaseAcceptanceFixture>,
-    @InjectRepository(ReleaseReadinessEvent) private readonly events: Repository<ReleaseReadinessEvent>
+    @InjectRepository(ReleaseReadinessEvent) private readonly events: Repository<ReleaseReadinessEvent>,
+    @InjectRepository(OperationSetting) private readonly operationSettings: Repository<OperationSetting>,
+    @InjectRepository(MiniprogramReleaseSetting) private readonly miniSettings: Repository<MiniprogramReleaseSetting>,
+    @InjectRepository(MiniprogramReleaseLog) private readonly miniLogs: Repository<MiniprogramReleaseLog>,
+    @InjectRepository(NotificationTemplate) private readonly templates: Repository<NotificationTemplate>,
+    private readonly config: ConfigService
   ) {}
 
   private scope(admin?: ReadinessAdmin) {
@@ -52,23 +66,115 @@ export class ReleaseReadinessService {
   async check(admin: ReadinessAdmin | undefined, key: string) {
     const item = await this.findItem(admin, key);
     const from = item.status;
-    item.status = nextReleaseReadinessStatus(item.status as any, "check");
+    const assessment = await this.assessConfiguration(item.itemKey, admin);
+    item.status = assessment.configured ? nextReleaseReadinessStatus(item.status as any, "check") : "unconfigured";
     item.lastCheckedAt = new Date();
-    item.blockingReason = "仅完成本地/后台只读检查，等待外部证据：真实渠道、真机或体验版动作仍需人工完成。";
+    item.blockingReason = assessment.configured
+      ? "配置已核对；仍需完成并提交外部验收证据，配置检查或体验版上传不会自动通过验收。"
+      : assessment.blockers.join("；");
     await this.items.save(item);
     await this.record(admin, item, "check", from, item.status, item.blockingReason, null);
-    return this.publicItem(item);
+    return { ...this.publicItem(item), check: { configured: assessment.configured, requiresExternalEvidence: assessment.requiresExternalEvidence, blockers: assessment.blockers } };
+  }
+
+  private async assessConfiguration(key: string, admin?: ReadinessAdmin) {
+    const scope = this.scope(admin);
+    if (key === "test_fixtures") {
+      const fixtures = await this.fixtures.find({ where: { scopeKey: scope.scopeKey } });
+      return assessReadinessConfiguration(key, fixtures);
+    }
+    if (key === "miniprogram_acceptance") {
+      const setting = await this.miniSettings.findOne({ where: {}, order: { id: "ASC" } });
+      const upload = setting?.appId && setting.version
+        ? await this.miniLogs.findOne({ where: { action: "upload", status: "success", appId: setting.appId, version: setting.version }, order: { createdAt: "DESC" } })
+        : null;
+      return assessReadinessConfiguration(key, { appId: setting?.appId, version: setting?.version, uploadedVersion: upload?.version, successfulUpload: Boolean(upload) });
+    }
+
+    const platformSetting = await this.operationSettings.findOne({ where: { tenant: IsNull() } })
+      || await this.operationSettings.findOne({ where: { id: 1 } });
+    const scopedSetting = scope.tenantId == null
+      ? platformSetting
+      : await this.operationSettings.findOne({ where: { tenant: { id: scope.tenantId } as any } });
+    const runtime = configWithLaunchOverrides(this.config, platformSetting?.launchConfig || null);
+
+    if (key === "payment_config" || key === "payment_callbacks") {
+      const read = (field: string, env: string) => runtime.get(env, (platformSetting?.launchConfig as any)?.[field] || "");
+      const snapshot = {
+        paymentAppId: read("wechatPayAppId", "WECHAT_PAY_APP_ID"),
+        merchantId: read("wechatPayMchId", "WECHAT_PAY_MCH_ID"),
+        apiV3Key: read("wechatPayApiV3Key", "WECHAT_PAY_API_V3_KEY"),
+        privateKeyConfigured: this.credentialExists(read("wechatPayPrivateKeyPath", "WECHAT_PAY_PRIVATE_KEY_PATH")),
+        certificateSerial: read("wechatPayCertSerialNo", "WECHAT_PAY_CERT_SERIAL_NO"),
+        platformCertificateConfigured: this.credentialExists(read("wechatPayPlatformCertPath", "WECHAT_PAY_PLATFORM_CERT_PATH")),
+        paymentNotifyUrl: read("wechatPayNotifyUrl", "WECHAT_PAY_NOTIFY_URL"),
+        refundNotifyUrl: read("mallWechatPayRefundNotifyUrl", "MALL_WECHAT_PAY_REFUND_NOTIFY_URL") || read("mallWechatPayNotifyUrl", "MALL_WECHAT_PAY_NOTIFY_URL")
+      };
+      return assessReadinessConfiguration(key, snapshot);
+    }
+
+    if (key === "sms") {
+      const setting = scopedSetting || platformSetting;
+      const enabled = Boolean(setting?.smsProviderEnabled) || runtime.get("SMS_PROVIDER_ENABLED", "false") === "true";
+      return assessReadinessConfiguration(key, {
+        smsEnabled: enabled,
+        smsProvider: setting?.smsProvider || runtime.get("SMS_PROVIDER", ""),
+        smsSecret: setting?.smsAccessKeySecret || runtime.get("SMS_ACCESS_KEY_SECRET", ""),
+        smsAccessKeyId: setting?.smsAccessKeyId || runtime.get("SMS_ACCESS_KEY_ID", ""),
+        smsSign: setting?.smsSignName || runtime.get("SMS_SIGN_NAME", ""),
+        smsTemplateId: setting?.smsTemplateId || runtime.get("SMS_TEMPLATE_ID", ""),
+        smsSdkAppId: setting?.smsSdkAppId || runtime.get("SMS_SDK_APP_ID", "")
+      });
+    }
+
+    if (key === "wechat_subscription") {
+      const templateWhere = { channel: "wechat", enabled: true, approvalStatus: "approved" } as const;
+      const templateRows = await this.templates.find({
+        where: scope.tenantId == null
+          ? { ...templateWhere, tenant: IsNull() }
+          : [{ ...templateWhere, tenant: { id: scope.tenantId } as any }, { ...templateWhere, tenant: IsNull() }]
+      });
+      const automaticWechat = ((scopedSetting || platformSetting)?.automaticWechat || {}) as Record<string, unknown>;
+      const enabledScenes = REQUIRED_WECHAT_ACCEPTANCE_SCENES.filter((scene) => [true, 1, "1", "true"].includes(automaticWechat[scene] as any));
+      return assessReadinessConfiguration(key, {
+        providerEnabled: runtime.get("WECHAT_MESSAGE_PROVIDER_ENABLED", "false") === "true",
+        automaticEnabled: [true, 1, "1", "true"].includes(automaticWechat.enabled as any),
+        provider: runtime.get("WECHAT_MESSAGE_PROVIDER", ""),
+        wechatAppId: runtime.get("WECHAT_APP_ID", ""),
+        wechatAppSecret: runtime.get("WECHAT_APP_SECRET", ""),
+        activeTemplateScenes: templateRows.filter((template) => Boolean(template.providerTemplateId?.trim()) && Boolean(template.scene)).map((template) => template.scene),
+        enabledScenes
+      });
+    }
+
+    return assessReadinessConfiguration(key, {});
+  }
+
+  private credentialExists(value: unknown) {
+    const path = typeof value === "string" ? value.trim() : "";
+    if (!path) return false;
+    if (path.startsWith("secure-credential://")) {
+      const id = path.slice("secure-credential://".length);
+      if (!/^[a-zA-Z0-9._-]+$/.test(id)) return false;
+      const root = resolve(this.config.get<string>("PRIVATE_CREDENTIAL_DIR", join("private-data", "payment-credentials")));
+      return existsSync(join(root, id));
+    }
+    return existsSync(isAbsolute(path) ? path : resolve(path));
   }
 
   async verify(admin: ReadinessAdmin | undefined, key: string, body: Record<string, unknown>) {
     const item = await this.findItem(admin, key);
     if (body.confirmation !== "EXTERNAL_ACCEPTANCE_CONFIRMED") throw new BadRequestException("请输入 EXTERNAL_ACCEPTANCE_CONFIRMED 才能确认外部验收");
     if (!body.evidence || typeof body.evidence !== "object" || Array.isArray(body.evidence)) throw new BadRequestException("必须提供外部验收证据摘要");
+    const assessment = await this.assessConfiguration(item.itemKey, admin);
+    if (!assessment.configured) throw new BadRequestException(`当前配置未通过检查：${assessment.blockers.join("；")}`);
+    const evidence = sanitizeReleaseEvidence(body.evidence as Record<string, unknown>);
+    if (typeof evidence.summary !== "string" || !evidence.summary.trim()) throw new BadRequestException("脱敏证据摘要不能为空");
     const from = item.status;
     item.status = nextReleaseReadinessStatus(item.status as any, "verify");
     item.reviewer = this.text(body.reviewer, 120) || item.reviewer || admin?.username || null;
     item.blockingReason = null;
-    item.evidence = sanitizeReleaseEvidence(body.evidence as Record<string, unknown>);
+    item.evidence = evidence;
     item.lastCheckedAt = new Date();
     await this.items.save(item);
     await this.record(admin, item, "verify", from, item.status, null, item.evidence);

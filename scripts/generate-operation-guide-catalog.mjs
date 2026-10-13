@@ -60,12 +60,15 @@ const tableLabelOverrides = {
   experience_projects: "体验项目",
   experience_applications: "体验申请",
   experience_feedback: "体验反馈",
+  slow_experience_records: "慢体验个人记录",
+  slow_experience_events: "慢体验审核操作记录",
   release_readiness_items: "上线验收项",
   release_acceptance_fixtures: "上线验收测试夹具",
   release_readiness_events: "上线验收记录"
 };
 
 function groupFor(name) {
+  if (name.startsWith("slow_experience_")) return "慢体验与内容治理";
   if (name.startsWith("mall_")) return "多商户商城";
   if (/^(charity_|aid_|ambassador_|partner_|volunteer_)/.test(name)) return "公益与合作生态";
   if (/^(course_|courses$|community_|forum_|content_|social_)/.test(name) || name === "checkin_tasks") return "课程共修与内容治理";
@@ -93,6 +96,7 @@ function labelFor(name) {
 }
 
 function cautionFor(name) {
+  if (name === "slow_experience_records") return "包含个人文字和私密照片引用，必须按账号和商家授权访问；禁止直接公开文件或跳过内容审核。";
   if (/(wallet|payment|refund|settlement|commission|fund|disbursement|order)/.test(name)) return "涉及金额、权益或对账，禁止直接改删，必须通过业务接口或可回滚迁移并保留审计。";
   if (/(admin|permission|tenant|region|contract|qualification)/.test(name)) return "涉及权限、租户或主体归属，修改前确认数据范围并保留操作记录。";
   if (/(material|profile|application|user|member|volunteer|aid)/.test(name)) return "可能包含个人或敏感信息，查询、导出和清理必须遵循最小权限与隐私要求。";

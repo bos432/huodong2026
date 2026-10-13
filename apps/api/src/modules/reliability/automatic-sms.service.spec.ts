@@ -73,7 +73,7 @@ describe("AutomaticSmsService", () => {
   it("uses a stable business job idempotency key without putting credentials in the payload", async () => {
     const { service, jobs } = createHarness();
     await service.publish({ scene: "registrationSubmitted", businessId: 10, userId: 7, activityId: 9, tenantId: 3 });
-    expect(jobs.publish).toHaveBeenCalledWith(expect.objectContaining({ type: "automatic-sms.deliver", idempotencyKey: "registrationSubmitted:10", tenantId: 3 }));
+    expect(jobs.publish).toHaveBeenCalledWith(expect.objectContaining({ type: "automatic-sms.deliver", scene: "registrationSubmitted", idempotencyKey: "registrationSubmitted:10", tenantId: 3 }));
     expect(jobs.publish.mock.calls[0][0].payload).toEqual(expect.objectContaining({ userId: 7, activityId: 9, tenantId: 3 }));
     expect(JSON.stringify(jobs.publish.mock.calls[0][0].payload)).not.toContain("key-test");
   });
