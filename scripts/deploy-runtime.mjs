@@ -30,7 +30,10 @@ export function assertDockerApiIdentity(container, runtime) {
 }
 
 export function assertUnrelatedDockerUnchanged(baseline, current) {
-  for (const previous of baseline.filter(row => row.name !== '/activity-api')) {
+  const previousUnrelated = baseline.filter(row => row.name !== '/activity-api');
+  const currentUnrelated = current.filter(row => row.name !== '/activity-api');
+  if (previousUnrelated.length !== currentUnrelated.length) throw new Error('Unrelated Docker container inventory changed.');
+  for (const previous of previousUnrelated) {
     const present = current.find(row => row.name === previous.name);
     if (!present || ['id', 'startedAt', 'status', 'restarts'].some(key => present[key] !== previous[key])) {
       throw new Error(`Unrelated Docker container changed: ${previous.name}`);

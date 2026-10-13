@@ -20,7 +20,8 @@ test('Docker scope verification preserves stopped and running unrelated containe
   for (const patch of [{ id: 'recreated' }, { startedAt: 'restarted' }, { restarts: 3 }, { status: 'running' }]) {
     assert.throws(() => runtime.assertUnrelatedDockerUnchanged(baseline, [current[0], current[1], { ...current[2], ...patch }]), /other-service/);
   }
-  assert.throws(() => runtime.assertUnrelatedDockerUnchanged(baseline, current.slice(0, 2)), /other-service/);
+  assert.throws(() => runtime.assertUnrelatedDockerUnchanged(baseline, current.slice(0, 2)), /inventory/);
+  assert.throws(() => runtime.assertUnrelatedDockerUnchanged(baseline, [...current, { id: 'new', name: '/new-service', startedAt: 'd', restarts: 0, status: 'running' }]), /inventory/);
 });
 
 test('Docker process ownership checks the compose project and API service', () => {
