@@ -23,7 +23,7 @@ for (const [source, target] of [
   ['apps/api/dist', 'api'], ['apps/admin/dist', 'admin'], ['apps/mobile/dist/build/h5', 'h5'], ['uploads/demo-activities', 'covers']
 ]) await fs.cp(path.join(root, source), path.join(bundle, target), { recursive: true, force: false, errorOnExist: true });
 await fs.mkdir(path.join(bundle, 'scripts'));
-for (const script of ['deploy-scoped-release.mjs', 'deploy-runtime.mjs', 'deploy-admin-static.mjs', 'deploy-h5-static.mjs', 'release-metadata.mjs', 'deploy-database-identity.mjs', 'deploy-database-runtime.mjs']) {
+for (const script of ['deploy-scoped-release.mjs', 'deploy-runtime.mjs', 'deploy-migrations.mjs', 'deploy-admin-static.mjs', 'deploy-h5-static.mjs', 'release-metadata.mjs', 'deploy-database-identity.mjs', 'deploy-database-runtime.mjs']) {
   await fs.copyFile(path.join(root, `scripts/${script}`), path.join(bundle, 'scripts', script));
 }
 const files = {};
