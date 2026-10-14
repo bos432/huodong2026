@@ -8,6 +8,23 @@ export interface ActivityQuery {
   city?: string;
 }
 
+function hasExpired(item: Activity, now: Date) {
+  const deadline = item.registrationDeadline;
+  if (deadline) {
+    const timestamp = new Date(deadline).getTime();
+    return Number.isFinite(timestamp) && timestamp <= now.getTime();
+  }
+  if (item.startDateTime) {
+    const timestamp = new Date(item.startDateTime).getTime();
+    return Number.isFinite(timestamp) && timestamp <= now.getTime();
+  }
+  if (item.dataSource === "api") return false;
+  const [month, day] = item.date.split("/").map(Number);
+  const start = new Date(now.getFullYear(), (month || 1) - 1, day || 1, Number(item.startTime.slice(0, 2)), Number(item.startTime.slice(3, 5)));
+  if (item.dataSource !== "api" && start.getTime() < now.getTime()) start.setFullYear(start.getFullYear() + 1);
+  return start.getTime() <= now.getTime();
+}
+
 function dateValue(item: Activity, now: Date) {
   const [month, day] = item.date.split("/").map(Number);
   const date = new Date(now.getFullYear(), (month || 1) - 1, day || 1, Number(item.startTime.slice(0, 2)), Number(item.startTime.slice(3, 5)));
@@ -29,7 +46,10 @@ export function queryActivities(items: Activity[], query: ActivityQuery, now = n
   const filtered = items.filter(item => {
     const matchesKeyword = !keyword || `${item.title}${item.venue}${item.hostName}${item.category}${item.tags.join("")}`.toLowerCase().includes(keyword);
     const matchesCategory = query.category === "推荐" || item.category === query.category || item.tags.includes(query.category);
-    const matchesStatus = !query.status || query.status === "all" || item.status === query.status;
+    const matchesStatus = (!query.status || query.status === "all" || item.status === query.status)
+      && item.status !== "ended"
+      && item.status !== "cancelled"
+      && (item.status !== "open" || !hasExpired(item, now));
     const selectedCity = query.city?.trim();
     const activityCity = [item.city, item.province, item.district].filter(Boolean).join(" ");
     const matchesCity = !selectedCity || !activityCity || activityCity.includes(selectedCity);

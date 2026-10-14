@@ -40,6 +40,8 @@ export function mapPublicActivitySummary(item: PublicActivitySummary): Activity 
     weekday: start?.weekday || "",
     startTime: start?.time || "时间待定",
     endTime: end?.time || "时间待定",
+    startDateTime: item.startTime || null,
+    registrationDeadline: item.registrationDeadline || null,
     city: item.locationCity || "",
     province: item.locationProvince || "",
     district: item.locationDistrict || "",

@@ -29,6 +29,20 @@ describe("queryActivities", () => {
     expect(queryActivities(items, { keyword: "", category: "推荐", sort: "price_low" }).map(item => item.id)).toEqual([2, 1, 3]);
   });
 
+  it("hides expired and terminal activities from discovery while retaining currently bookable real events", () => {
+    const now = new Date("2026-10-14T10:00:00.000Z");
+    const candidates: Activity[] = [
+      { ...items[0], id: 10, dataSource: "api", date: "10/15", startTime: "12:00", registrationDeadline: "2026-10-14T09:59:59.000Z" },
+      { ...items[0], id: 11, dataSource: "api", date: "10/15", startTime: "12:00", registrationDeadline: "2026-10-14T10:00:01.000Z" },
+      { ...items[0], id: 12, status: "ended" },
+      { ...items[0], id: 13, status: "cancelled" },
+      { ...items[0], id: 14, dataSource: "api", date: "10/13", startTime: "12:00", startDateTime: "2026-10-13T12:00:00.000Z" },
+      { ...items[0], id: 15, dataSource: "api", date: "10/15", startTime: "12:00", startDateTime: null }
+    ];
+
+    expect(queryActivities(candidates, { keyword: "", category: "推荐", sort: "recommended" }, now).map(item => item.id)).toEqual([11, 15]);
+  });
+
   it("keeps demo popularity in stable order instead of inventing hotness", () => {
     const demoItems = items.map(item => ({ ...item, isDemo: true }));
     expect(queryActivities(demoItems, { keyword: "", category: "推荐", sort: "popularity" }).map(item => item.id)).toEqual([1, 2, 3]);

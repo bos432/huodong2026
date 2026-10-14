@@ -23,6 +23,8 @@ export interface Activity {
   refundPolicy: string;
   insuranceIncluded: boolean;
   endTime?: string;
+  startDateTime?: string | null;
+  registrationDeadline?: string | null;
   hostAvatar?: string;
   description?: string;
   dataSource?: "api" | "mock";

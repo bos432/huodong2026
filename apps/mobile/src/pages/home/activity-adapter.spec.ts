@@ -30,6 +30,8 @@ describe("activity adapter", () => {
       date: "10/12",
       weekday: "周一",
       startTime: "14:00",
+      startDateTime: "2026-10-12T14:00:00+08:00",
+      registrationDeadline: null,
       endTime: "16:30",
       venue: "江岸公园",
       city: "重庆市",

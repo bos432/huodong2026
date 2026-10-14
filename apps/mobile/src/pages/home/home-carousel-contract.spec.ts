@@ -21,11 +21,22 @@ describe("home featured activity carousel", () => {
   });
 
   it("shows eligible demo activities in the carousel without implying real booking data", () => {
-    expect(source).not.toContain("if (demoMode.value) return [];");
     expect(source).toContain(".filter((item) => item.status === \"open\")");
     expect(source).toContain('class="hero-demo"');
     expect(source).toContain("报名数据未接入");
     expect(source).toContain("不代表真实举办安排");
+  });
+
+  it("communicates the no-real-activities state and hides filters when only demo records exist", () => {
+    expect(source).toContain('const hasRealActivities = computed(() => activities.value.some((item) => !item.isDemo))');
+    expect(source).toContain('v-if="hasRealActivities" class="actions"');
+    expect(source).toContain("真实活动即将上线");
+    expect(source).toContain("主理人发布并通过审核后，活动会显示在这里。");
+  });
+
+  it("does not bypass demo booking safeguards", () => {
+    expect(source).not.toContain("if (demoMode.value) return [];");
+    expect(source).toContain('class="hero-demo"');
   });
 
   it("places the discovery heading and categories before the featured activities", () => {
