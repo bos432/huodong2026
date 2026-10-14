@@ -5,6 +5,10 @@ import { execFileSync } from 'node:child_process';
 import { commitMatchesArtifact, isCommitIdentifier, releaseIdFor, releaseIdentifiersMatch } from './release-metadata.mjs';
 
 const root = process.cwd();
+const sourceStatus = execFileSync('git', ['status', '--porcelain', '--untracked-files=normal'], { encoding: 'utf8' }).trim();
+if (sourceStatus) {
+  throw new Error('Refusing to label a dirty worktree as a Git release. Prepare a reviewed, committed source snapshot before assembling production artifacts.');
+}
 const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
 const sourceVersion = JSON.parse(await fs.readFile(path.join(root, 'apps/admin/dist/version.json'), 'utf8'));
 const releaseId = releaseIdFor(commit, sourceVersion.buildTime);
@@ -19,7 +23,7 @@ for (const [source, target] of [
   ['apps/api/dist', 'api'], ['apps/admin/dist', 'admin'], ['apps/mobile/dist/build/h5', 'h5'], ['uploads/demo-activities', 'covers']
 ]) await fs.cp(path.join(root, source), path.join(bundle, target), { recursive: true, force: false, errorOnExist: true });
 await fs.mkdir(path.join(bundle, 'scripts'));
-for (const script of ['deploy-scoped-release.mjs', 'deploy-runtime.mjs', 'deploy-admin-static.mjs', 'deploy-h5-static.mjs', 'release-metadata.mjs', 'deploy-database-identity.mjs', 'deploy-database-runtime.mjs']) {
+for (const script of ['deploy-scoped-release.mjs', 'deploy-runtime.mjs', 'deploy-migrations.mjs', 'deploy-admin-static.mjs', 'deploy-h5-static.mjs', 'release-metadata.mjs', 'deploy-database-identity.mjs', 'deploy-database-runtime.mjs']) {
   await fs.copyFile(path.join(root, `scripts/${script}`), path.join(bundle, 'scripts', script));
 }
 const files = {};

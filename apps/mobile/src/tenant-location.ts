@@ -7,6 +7,8 @@ type ResolveResult = {
   matched: boolean;
   fallback: boolean;
   tenant: PublicTenantView | null;
+  tenants?: PublicTenantView[];
+  candidates?: Array<{ tenant: PublicTenantView }>;
   message?: string;
 };
 

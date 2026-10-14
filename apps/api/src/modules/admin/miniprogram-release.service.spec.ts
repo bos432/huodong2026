@@ -1,20 +1,34 @@
 import { describe, expect, it, vi } from "vitest";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { GoneException } from "@nestjs/common";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
 describe("MiniprogramReleaseService", () => {
-  it("builds and versions the current mini program source before every upload", () => {
-    const serviceSource = readFileSync("src/modules/admin/miniprogram-release.service.ts", "utf8");
-    const buildScript = readFileSync("../../scripts/build-mp-weixin.mjs", "utf8");
-    const uploadSection = serviceSource.slice(serviceSource.indexOf("async uploadTrial"), serviceSource.indexOf("async submitAudit"));
+  it("rejects server-side upload without touching settings or logs", async () => {
+    const settings = { findOne: vi.fn(() => { throw new Error("settings must not be queried"); }) };
+    const logs = { save: vi.fn(() => { throw new Error("logs must not be written"); }) };
+    const service = new MiniprogramReleaseService(settings as any, logs as any);
 
-    expect(uploadSection.indexOf("await this.buildProject()")).toBeLessThan(uploadSection.indexOf("this.projectPath(setting)"));
-    expect(uploadSection).toContain("const artifactVersion = this.artifactVersion(projectPath)");
-    expect(uploadSection).toContain("detail: { build, artifactVersion,");
-    expect(serviceSource).toContain("spawn(process.execPath, [script]");
-    expect(buildScript).toContain('"apps/mobile/dist/build/mp-weixin", "mp-weixin"');
+    const error = await service.uploadTrial({ version: "1.2.3" } as any).catch((value) => value);
+
+    expect(error).toBeInstanceOf(GoneException);
+    expect(error.getStatus()).toBe(410);
+    expect(error.message).toContain("微信开发者工具");
+    expect(settings.findOne).not.toHaveBeenCalled();
+    expect(logs.save).not.toHaveBeenCalled();
+  });
+
+  it("preserves the runtime login secret while clearing the obsolete upload key", async () => {
+    const row = { id: 1, appId: "wx-old", appSecret: "old-secret", privateKey: "old-private-key", version: null, description: null, projectPath: null, auditItem: null };
+    const settings = { findOne: vi.fn().mockResolvedValue(row), save: vi.fn(async (value) => value) };
+    const logs = { create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
+    const service = new MiniprogramReleaseService(settings as any, logs as any);
+
+    const saved = await service.saveSetting({ appId: "wx-demo", appSecret: "new-secret", privateKey: "new-private-key" } as any, { id: 4, username: "operator", role: "super_admin", tenantId: null });
+
+    expect(row.appSecret).toBe("old-secret");
+    expect(row.privateKey).toBeNull();
+    expect(saved).not.toHaveProperty("hasAppSecret");
+    expect(saved).not.toHaveProperty("hasPrivateKey");
   });
 
   it("bounds log limits and removes sensitive diagnostic fields", async () => {
@@ -37,7 +51,7 @@ describe("MiniprogramReleaseService", () => {
         }
       ])
     };
-    const service = new MiniprogramReleaseService({} as any, logs as any, { get: vi.fn() } as any);
+    const service = new MiniprogramReleaseService({} as any, logs as any);
 
     const rows = await service.logsList(Number.NaN) as any[];
 
@@ -45,40 +59,4 @@ describe("MiniprogramReleaseService", () => {
     expect(rows[0].detail).toEqual({ accessToken: "********", nested: { privateKey: "********", result: "visible" } });
   });
 
-  it("removes multi-identity config in standard wx.login mode", () => {
-    const dir = mkdtempSync(join(tmpdir(), "mp-release-standard-"));
-    try {
-      writeFileSync(join(dir, "app.json"), JSON.stringify({ permission: {}, miniApp: { useAuthorizePage: true } }));
-      writeFileSync(join(dir, "app.miniapp.json"), JSON.stringify({ identityServiceConfig: { authorizeMiniprogramType: 1 } }));
-      const service = new MiniprogramReleaseService({} as any, {} as any, { get: vi.fn().mockReturnValue(false) } as any);
-
-      const appResult = (service as any).ensureSafeAppJson(dir, (service as any).identityServiceEnabled());
-      const authResult = (service as any).ensureMiniappAuthConfig(dir, (service as any).identityServiceEnabled());
-
-      expect(JSON.parse(readFileSync(join(dir, "app.json"), "utf8")).miniApp).toBeUndefined();
-      expect(existsSync(join(dir, "app.miniapp.json"))).toBe(false);
-      expect(appResult.useAuthorizePage).toBe(false);
-      expect(authResult.enabled).toBe(false);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
-
-  it("keeps multi-identity config behind the explicit service switch", () => {
-    const dir = mkdtempSync(join(tmpdir(), "mp-release-identity-"));
-    try {
-      writeFileSync(join(dir, "app.json"), JSON.stringify({ permission: {} }));
-      const service = new MiniprogramReleaseService({} as any, {} as any, { get: vi.fn().mockReturnValue("true") } as any);
-
-      const appResult = (service as any).ensureSafeAppJson(dir, (service as any).identityServiceEnabled());
-      const authResult = (service as any).ensureMiniappAuthConfig(dir, (service as any).identityServiceEnabled());
-
-      expect(JSON.parse(readFileSync(join(dir, "app.json"), "utf8")).miniApp.useAuthorizePage).toBe(true);
-      expect(JSON.parse(readFileSync(join(dir, "app.miniapp.json"), "utf8")).identityServiceConfig.adaptWxLogin).toBe(false);
-      expect(appResult.useAuthorizePage).toBe(true);
-      expect(authResult.enabled).toBe(true);
-    } finally {
-      rmSync(dir, { recursive: true, force: true });
-    }
-  });
 });

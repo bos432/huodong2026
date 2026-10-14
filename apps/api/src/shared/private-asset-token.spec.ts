@@ -4,6 +4,10 @@ import { createPrivateAssetToken, verifyPrivateAssetToken } from "./private-asse
 const payload = { v: 1 as const, purpose: "registration_attachment" as const, reference: "secure-private-document://registration-attachments/file.pdf.enc", tenantId: 42, ownerUserId: 7, originalName: "证明.pdf", mimetype: "application/pdf", size: 123 };
 
 describe("private asset token", () => {
+  it("keeps the dedicated slow-experience photo context without reusing other asset grants", () => {
+    const photo = { ...payload, purpose: "slow_experience_photo" as any, reference: "secure-private-document://slow-experience/photo.png.enc", contextId: 19, expiresAt: Date.now() + 60_000 };
+    expect(verifyPrivateAssetToken(createPrivateAssetToken(photo, "secret"), "secret")).toEqual(photo);
+  });
   it("round trips an authenticated private reference", () => expect(verifyPrivateAssetToken(createPrivateAssetToken(payload, "secret"), "secret")).toEqual(payload));
   it("rejects tampering and another signing secret", () => {
     const token = createPrivateAssetToken(payload, "secret");

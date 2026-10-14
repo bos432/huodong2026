@@ -110,7 +110,7 @@ export function tenantEntitlementFeatureForAdminPath(path: string): TenantEntitl
   const mappings: Array<[RegExp, TenantEntitlementFeature]> = [
     [/^(mall\/|admin\/mall\/)/, "mall"],
     [/^(courses\/|admin\/courses\/|course-)/, "courses"],
-    [/^(community\/|admin\/community\/|checkin-tasks\/)/, "community"],
+    [/^(community\/|admin\/community\/|checkin-tasks\/|(?:admin\/)?slow-experiences(?:\/|$))/, "community"],
     [/^(forum\/|admin\/forum\/)/, "forum"],
     [/^(charity\/|admin\/charity\/)/, "charity"],
     [/^(volunteer\/|admin\/volunteer\/)/, "volunteers"],

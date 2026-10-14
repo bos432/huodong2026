@@ -7,6 +7,8 @@ export interface Activity {
   weekday: string;
   startTime: string;
   city: string;
+  province?: string;
+  district?: string;
   distanceText: string;
   venue: string;
   cover: string;

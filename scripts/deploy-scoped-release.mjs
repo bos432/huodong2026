@@ -9,28 +9,24 @@ import { createHash } from 'node:crypto';
 import { isReleaseId, releaseIdentifiersMatch } from './release-metadata.mjs';
 import { isAllowedDatabaseIdentity } from './deploy-database-identity.mjs';
 import { getContainerDatabaseRuntime } from './deploy-database-runtime.mjs';
-import { assertDockerPublishScope, dockerHealthMatches, resolveDeployRuntime } from './deploy-runtime.mjs';
+import { assertDockerPublishScope, assertDockerApiIdentity, assertUnrelatedDockerUnchanged, dockerHealthMatches, resolveDeployRuntime } from './deploy-runtime.mjs';
+import { assertReviewedMigrations, reviewedReleaseMigrations } from './deploy-migrations.mjs';
 
 const root = '/www/wwwroot/rd.chaimen666.com';
 const releaseId = process.env.RELEASE_ID;
 const mode = process.argv[2];
-if (process.cwd() !== root || !isReleaseId(releaseId) || !['prepare', 'migrate', 'publish', 'verify'].includes(mode)) throw new Error('Expected scoped project, release ID and explicit mode.');
+if (process.cwd() !== root || !isReleaseId(releaseId) || !['prepare', 'migrate', 'publish', 'verify', 'rollback'].includes(mode)) throw new Error('Expected scoped project, release ID and explicit mode.');
 const privateDir = `/www/backup/activity-releases/${releaseId}`;
 const bundle = path.join(privateDir, 'bundle');
 const nextApi = path.join(root, 'apps/api', `.release-${releaseId}`, 'dist');
 const require = createRequire(path.join(root, 'apps/api/package.json'));
 const manifest = JSON.parse(await fs.readFile(path.join(bundle, 'release.json'), 'utf8'));
-const expectedMigrations = [
-  'ActivityOperationVersions1788566400000', 'ActivitySeries1788652800000',
-  'ActivityFollowups1788652900000', 'ActivityTestFlag1788653000000',
-  'SocialConnections1788653100000', 'AiOperationDrafts1788653200000',
-  'CreateReleaseReadinessCenter1788653500000',
-  'AddRefundFailureReason1788653600000'
-];
+const expectedMigrations = reviewedReleaseMigrations;
+const readinessUrl = process.env.API_READINESS_URL || 'http://127.0.0.1:3000/api/health/ready';
 const pm2 = '/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2';
 const node = '/www/server/nodejs/v22.22.3/bin/node';
 const databaseRuntime = getContainerDatabaseRuntime(process.env);
-const deployRuntime = mode === 'publish' ? resolveDeployRuntime(process.env) : null;
+const deployRuntime = resolveDeployRuntime(process.env);
 function run(command, args, options = {}) {
   return execFileSync(command, args, { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, ...options }).trim();
 }
@@ -62,7 +58,7 @@ function databaseOptionsFromEnvironment() {
 function runContainerDatabase(directory, mode) {
   if (!databaseRuntime) throw new Error('Container database runtime is not configured.');
   const expected = JSON.stringify(expectedMigrations);
-  const script = `const d=require('./apps/api/dist/data-source.js').default; const {MigrationExecutor}=require('${databaseRuntime.typeormPath}'); (async()=>{await d.initialize(); const e=new MigrationExecutor(d); const p=await e.getPendingMigrations(); const expected=${expected}; if(${JSON.stringify(mode)}==='prepare'){console.log(JSON.stringify({pending:p.map(x=>x.name)}));}else{const expectedPending=expected.slice(Math.max(0,expected.length-p.length)); if(JSON.stringify(p.map(x=>x.name))!==JSON.stringify(expectedPending)) throw new Error('Unexpected pending migrations: '+JSON.stringify(p.map(x=>x.name))); const applied=await d.runMigrations({transaction:'each'}); console.log(JSON.stringify({applied:applied.map(x=>x.name)}));} await d.destroy();})().catch(e=>{console.error(e.message);process.exit(1)})`;
+  const script = `const d=require('./apps/api/dist/data-source.js').default; const {MigrationExecutor}=require('${databaseRuntime.typeormPath}'); const check=${assertReviewedMigrations.toString()}; (async()=>{await d.initialize(); const e=new MigrationExecutor(d); const p=await e.getPendingMigrations(); const expected=${expected}; if(${JSON.stringify(mode)}==='prepare'){console.log(JSON.stringify({pending:p.map(x=>x.name)}));}else{check(p.map(x=>x.name),expected); const applied=await d.runMigrations({transaction:'each'}); console.log(JSON.stringify({applied:applied.map(x=>x.name)}));} await d.destroy();})().catch(e=>{console.error(e.message);process.exit(1)})`;
   return JSON.parse(run('docker', [
     'run', '--rm', '--network', `container:${databaseRuntime.container}`, '-i', '-w', '/app',
     '-v', `${directory}:/app/apps/api/dist:ro`,
@@ -81,6 +77,31 @@ function startDatabaseDump(options) {
   ], { env: { ...process.env, MYSQL_PWD: options.password }, stdio: ['ignore', 'pipe', 'pipe'] });
 }
 async function writeRecord(name, value) { await fs.writeFile(path.join(privateDir, name), JSON.stringify(value, null, 2), { mode: 0o600, flag: 'wx' }); }
+async function readRecord(name) { return JSON.parse(await fs.readFile(path.join(privateDir, name), 'utf8')); }
+async function assertSavedProductionPatch() {
+  const baseline = await readRecord('baseline.json');
+  const digest = createHash('sha256').update(run('git', ['diff', '--binary', 'HEAD'])).digest('hex');
+  if (baseline.patchDigest !== digest) throw new Error('Reviewed production patch changed after backup.');
+}
+async function backupDockerPrivateData() {
+  const api = dockerInspect(deployRuntime.apiContainer);
+  const mount = api.Mounts?.find(row => row.Destination === '/app/private-data');
+  if (!mount || !['volume', 'bind'].includes(mount.Type) || !mount.RW) throw new Error('API private-data persistent mount is missing or read-only.');
+  const archive = path.join(privateDir, 'private-data.tar.gz');
+  const child = spawn('docker', ['exec', deployRuntime.apiContainer, 'tar', '-czf', '-', '-C', '/app', 'private-data'], { stdio: ['ignore', 'pipe', 'pipe'] });
+  let stderr = '';
+  child.stderr.on('data', chunk => { stderr += chunk; });
+  const complete = new Promise((resolve, reject) => {
+    child.on('error', reject);
+    child.on('close', code => code === 0 ? resolve() : reject(new Error(`Private backup failed: ${stderr}`)));
+  });
+  await Promise.all([complete, pipeline(child.stdout, createWriteStream(archive, { flags: 'wx', mode: 0o600 }))]);
+  if (!(await fs.stat(archive)).size) throw new Error('Private backup archive is empty.');
+  run('gzip', ['-t', archive]);
+  const entries = run('tar', ['-tzf', archive]).split('\n').filter(Boolean);
+  if (!entries.length || entries.some(entry => !entry.startsWith('private-data/') || entry.split('/').includes('..'))) throw new Error('Unexpected private backup archive paths.');
+  await writeRecord('private-backup-complete.json', { time: new Date().toISOString(), bytes: (await fs.stat(archive)).size, entries: entries.length, restoreVerified: false });
+}
 async function verifyBundle() {
   if (!releaseIdentifiersMatch(manifest.commit, releaseId.slice(9)) || !/^[a-f0-9]{40}$/.test(manifest.commit)) throw new Error('Release metadata mismatch.');
   for (const [relative, expected] of Object.entries(manifest.files)) {
@@ -102,6 +123,15 @@ async function publishStatic(source, target) {
   }
 }
 function dockerInspect(name) { return JSON.parse(run('docker', ['inspect', name]))[0]; }
+function dockerProcesses() {
+  const ids = run('docker', ['ps', '-aq']).split(/\s+/).filter(Boolean);
+  if (!ids.length) throw new Error('Docker inventory is empty.');
+  const format = '{"id":{{json .Id}},"name":{{json .Name}},"startedAt":{{json .State.StartedAt}},"status":{{json .State.Status}},"restarts":{{json .RestartCount}}}';
+  return run('docker', ['inspect', '--format', format, ...ids]).split('\n').map(line => JSON.parse(line));
+}
+function runtimeProcesses() {
+  return deployRuntime.kind === 'docker' ? dockerProcesses() : publicProcesses(processes());
+}
 function dockerStaticTargets(runtime) {
   const mounts = dockerInspect(runtime.nginxContainer).Mounts || [];
   const target = destination => mounts.find(mount => mount.Type === 'bind' && mount.Destination === destination)?.Source;
@@ -118,7 +148,7 @@ function restartDockerApi(runtime) {
 async function waitForDockerApi(commit) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
-      const response = await fetch('http://127.0.0.1:18080/api/health/ready', { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(readinessUrl, { signal: AbortSignal.timeout(5000) });
       const body = await response.json();
       const health = body.data || body;
       if (response.ok && dockerHealthMatches(health, commit) && health.worker?.mode === 'embedded' && health.worker?.ready === true) return true;
@@ -130,7 +160,7 @@ async function waitForDockerApi(commit) {
 async function waitForApi(commit) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
     try {
-      const response = await fetch('http://127.0.0.1:18080/api/health/ready', { signal: AbortSignal.timeout(5000) });
+      const response = await fetch(readinessUrl, { signal: AbortSignal.timeout(5000) });
       const body = await response.json();
       const health = body.data || body;
       if (response.ok && dockerHealthMatches(health, commit)) return true;
@@ -141,12 +171,20 @@ async function waitForApi(commit) {
 }
 
 await verifyBundle();
-if (mode !== 'publish' || deployRuntime.kind === 'pm2') ownedProcesses(processes());
+if (deployRuntime.kind === 'pm2') ownedProcesses(processes());
+else {
+  assertDockerApiIdentity(dockerInspect(deployRuntime.apiContainer), deployRuntime);
+  dockerStaticTargets(deployRuntime);
+  if (!databaseRuntime || databaseRuntime.container !== deployRuntime.apiContainer) throw new Error('Docker database runtime must use the activity-api network.');
+}
 if (mode === 'prepare') {
-  if (run('git', ['rev-parse', 'HEAD']) !== manifest.previousCommit || run('git', ['status', '--porcelain', '--untracked-files=no'])) throw new Error('Production checkout differs from reviewed baseline.');
+  const productionPatch = run('git', ['diff', '--binary', 'HEAD']);
+  const patchDigest = createHash('sha256').update(productionPatch).digest('hex');
+  if (run('git', ['rev-parse', 'HEAD']) !== manifest.previousCommit || (productionPatch && process.env.REVIEWED_PRODUCTION_PATCH_SHA256 !== patchDigest)) throw new Error('Production checkout differs from reviewed baseline.');
   await fs.mkdir(privateDir, { recursive: true, mode: 0o700 });
   await fs.chmod(privateDir, 0o700);
-  await writeRecord('baseline.json', { commit: manifest.previousCommit, processes: publicProcesses(processes()), services: run('ps', ['-eo', 'pid,ppid,lstart,comm']) });
+  await fs.writeFile(path.join(privateDir, 'production-tracked.patch'), productionPatch, { mode: 0o600, flag: 'wx' });
+  await writeRecord('baseline.json', { commit: manifest.previousCommit, patchDigest, runtime: deployRuntime.kind, processes: runtimeProcesses(), services: run('ps', ['-eo', 'pid,ppid,lstart,comm']) });
   const database = databaseRuntime ? null : await databaseAt(path.join(root, 'apps/api/dist'));
   try {
     const options = databaseRuntime ? databaseOptionsFromEnvironment() : database.options;
@@ -166,14 +204,17 @@ if (mode === 'prepare') {
       try { await fs.access(path.join(root, candidate)); paths.push(candidate); } catch (error) { if (error.code !== 'ENOENT') throw error; }
     }
     run('tar', ['-czf', path.join(privateDir, 'previous-artifacts.tar.gz'), ...paths]);
+    await fs.chmod(path.join(privateDir, 'previous-artifacts.tar.gz'), 0o600);
     run('gzip', ['-t', path.join(privateDir, 'previous-artifacts.tar.gz')]);
+    if (deployRuntime.kind === 'docker') await backupDockerPrivateData();
     await fs.cp(path.join(bundle, 'api'), nextApi, { recursive: true, force: false, errorOnExist: true });
     await writeRecord('backup-complete.json', { time: new Date().toISOString(), database: options.database, previousCommit: manifest.previousCommit });
     console.log('BACKUP_OK; staged API ready; production processes unchanged.');
   } finally { await database?.destroy(); }
 } else if (mode === 'migrate') {
   await fs.access(path.join(privateDir, 'backup-complete.json'));
-  if (run('git', ['rev-parse', 'HEAD']) !== manifest.commit) throw new Error('Git version mismatch.');
+  await assertSavedProductionPatch();
+  if (![manifest.previousCommit, manifest.commit].includes(run('git', ['rev-parse', 'HEAD']))) throw new Error('Git baseline changed.');
   if (databaseRuntime) {
     const applied = runContainerDatabase(nextApi, 'migrate').applied;
     await writeRecord('migrations-complete.json', { names: applied, time: new Date().toISOString() });
@@ -183,8 +224,7 @@ if (mode === 'prepare') {
     try {
       const { MigrationExecutor } = require('typeorm');
       const pending = (await new MigrationExecutor(database).getPendingMigrations()).map(migration => migration.name);
-      const expectedPending = expectedMigrations.slice(Math.max(0, expectedMigrations.length - pending.length));
-      if (JSON.stringify(pending) !== JSON.stringify(expectedPending)) throw new Error(`Unexpected pending migrations: ${JSON.stringify(pending)}`);
+      assertReviewedMigrations(pending, expectedMigrations);
       const applied = await database.runMigrations({ transaction: 'each' });
       await writeRecord('migrations-complete.json', { names: applied.map(migration => migration.name), time: new Date().toISOString() });
       console.log('MIGRATIONS_OK', JSON.stringify(applied.map(migration => migration.name)));
@@ -192,7 +232,8 @@ if (mode === 'prepare') {
   }
 } else if (mode === 'publish') {
   await fs.access(path.join(privateDir, 'migrations-complete.json'));
-  if (run('git', ['rev-parse', 'HEAD']) !== manifest.commit) throw new Error('Git version mismatch.');
+  await assertSavedProductionPatch();
+  if (![manifest.previousCommit, manifest.commit].includes(run('git', ['rev-parse', 'HEAD']))) throw new Error('Git baseline changed.');
   const rows = deployRuntime.kind === 'pm2' ? ownedProcesses(processes()) : [];
   const staticTargets = deployRuntime.kind === 'docker' ? dockerStaticTargets(deployRuntime) : null;
   const staticBackupRoot = staticTargets ? path.join(privateDir, 'static-backup') : null;
@@ -202,6 +243,14 @@ if (mode === 'prepare') {
     let source;
     try { source = await fs.readFile(target, 'utf8'); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
     previousEnvFiles.push({ target, source });
+  }
+  await writeRecord('environment-before.json', previousEnvFiles);
+  const previousApi = path.join(root, 'apps/api', `.previous-${releaseId}`);
+  let previousApiMoved = false;
+  let candidateApiMoved = false;
+  try {
+  for (const { target, source: previousSource } of previousEnvFiles) {
+    let source = previousSource;
     for (const [key, value] of Object.entries({ BUILD_COMMIT: manifest.commit, BUILD_TIME: manifest.buildTime })) {
       const pattern = new RegExp(`^${key}=.*$`, 'gm');
       source = pattern.test(source) ? source.replace(pattern, `${key}=${value}`) : `${source.trimEnd()}\n${key}=${value}\n`;
@@ -209,10 +258,10 @@ if (mode === 'prepare') {
     await fs.writeFile(`${target}.${releaseId}`, source, { mode: 0o600, flag: 'wx' });
     await fs.rename(`${target}.${releaseId}`, target);
   }
-  const previousApi = path.join(root, 'apps/api', `.previous-${releaseId}`);
   await fs.rename(path.join(root, 'apps/api/dist'), previousApi);
+  previousApiMoved = true;
   await fs.rename(nextApi, path.join(root, 'apps/api/dist'));
-  try {
+  candidateApiMoved = true;
     if (deployRuntime.kind === 'pm2') {
       for (const row of rows.slice().reverse()) {
         run(node, [pm2, 'restart', row.name, '--update-env'], { env: { ...process.env, ...row.pm2_env.env, BUILD_COMMIT: manifest.commit, BUILD_TIME: manifest.buildTime } });
@@ -244,36 +293,65 @@ if (mode === 'prepare') {
     } catch (error) { if (error.code !== 'ENOENT') throw error; await fs.writeFile(path.join(covers, filename), source, { flag: 'wx', mode: 0o644 }); }
   }
     if (deployRuntime.kind === 'pm2') run(node, [pm2, 'save']);
-    await writeRecord('publish-complete.json', { commit: manifest.commit, time: new Date().toISOString(), runtime: deployRuntime.kind, processes: publicProcesses(processes()) });
+    await writeRecord('publish-complete.json', { commit: manifest.commit, time: new Date().toISOString(), runtime: deployRuntime.kind, processes: runtimeProcesses() });
     console.log(deployRuntime.kind === 'docker'
       ? 'PUBLISH_OK; only activity-api recreated; embedded worker ready; nginx/mysql/redis untouched.'
       : 'PUBLISH_OK; only activity-api and activity-worker restarted; old hashed assets retained.');
   } catch (error) {
     const failedApi = path.join(root, 'apps/api', `.failed-${releaseId}`);
-    try { await fs.rename(path.join(root, 'apps/api/dist'), failedApi); } catch (restoreError) { if (restoreError.code !== 'ENOENT') console.error(`Failed to preserve failed API: ${restoreError.message}`); }
-    await fs.rename(previousApi, path.join(root, 'apps/api/dist'));
+    if (candidateApiMoved) await fs.rename(path.join(root, 'apps/api/dist'), failedApi);
+    if (previousApiMoved) await fs.rename(previousApi, path.join(root, 'apps/api/dist'));
     for (const { target, source } of previousEnvFiles) await fs.writeFile(target, source, { mode: 0o600 });
     if (staticBackupRoot) {
       for (const [name, target] of [['admin', staticTargets.admin], ['h5', staticTargets.h5]]) {
         const backup = path.join(staticBackupRoot, name);
         try {
           await fs.access(backup);
-          await fs.rm(target, { recursive: true, force: true });
-          await fs.cp(backup, target, { recursive: true });
+          await publishStatic(backup, target);
         } catch (restoreError) {
           console.error(`Failed to restore ${name} static assets: ${restoreError.message}`);
         }
       }
     }
-    if (deployRuntime.kind === 'docker') {
+    if (deployRuntime.kind === 'docker' && previousApiMoved) {
       try { restartDockerApi(deployRuntime); } catch (restoreError) { console.error(`Failed to restart restored API: ${restoreError.message}`); }
     }
     throw error;
   }
+} else if (mode === 'rollback') {
+  if (deployRuntime.kind !== 'docker') throw new Error('Explicit rollback currently supports the reviewed Docker deployment only.');
+  await fs.access(path.join(privateDir, 'publish-complete.json'));
+  const baseline = await readRecord('baseline.json');
+  if (baseline.runtime !== 'docker') throw new Error('Rollback runtime mismatch.');
+  assertUnrelatedDockerUnchanged(baseline.processes, runtimeProcesses());
+  const response = await fetch(readinessUrl, { signal: AbortSignal.timeout(5000) });
+  const body = await response.json();
+  if (!response.ok || !dockerHealthMatches(body.data || body, manifest.commit)) throw new Error('Rollback refuses to replace an unexpected running API release.');
+  const savedEnvironment = await readRecord('environment-before.json');
+  const allowedTargets = ['.env', 'apps/api/.env', 'deploy/.env.production'].map(filename => path.join(root, filename));
+  if (!Array.isArray(savedEnvironment) || savedEnvironment.some(row => !allowedTargets.includes(row.target) || typeof row.source !== 'string')) throw new Error('Unexpected saved environment paths.');
+  const previousApi = path.join(root, 'apps/api', `.previous-${releaseId}`);
+  const preservedCandidate = path.join(root, 'apps/api', `.rolled-back-${releaseId}`);
+  const targets = dockerStaticTargets(deployRuntime);
+  const backups = path.join(privateDir, 'static-backup');
+  await fs.access(previousApi);
+  for (const name of ['admin', 'h5']) await fs.access(path.join(backups, name, 'index.html'));
+  await fs.rename(path.join(root, 'apps/api/dist'), preservedCandidate);
+  await fs.rename(previousApi, path.join(root, 'apps/api/dist'));
+  for (const { target, source } of savedEnvironment) await fs.writeFile(target, source, { mode: 0o600 });
+  restartDockerApi(deployRuntime);
+  if (!await waitForDockerApi(manifest.previousCommit)) throw new Error('Restored API not ready; retained candidate and backups require operator inspection.');
+  await publishStatic(path.join(backups, 'admin'), targets.admin);
+  await publishStatic(path.join(backups, 'h5'), targets.h5);
+  assertUnrelatedDockerUnchanged(baseline.processes, runtimeProcesses());
+  await writeRecord('rollback-complete.json', { time: new Date().toISOString(), restoredCommit: manifest.previousCommit, candidatePreserved: preservedCandidate, databaseMigrationsRetained: true });
+  console.log('ROLLBACK_OK; previous API and static entries restored; additive migrations retained; unrelated containers unchanged.');
 } else {
   const baseline = JSON.parse(await fs.readFile(path.join(privateDir, 'baseline.json'), 'utf8'));
-  const current = publicProcesses(processes());
-  for (const previous of baseline.processes.filter(row => !['activity-api', 'activity-worker'].includes(row.name))) {
+  if (baseline.runtime !== deployRuntime.kind) throw new Error('Deployment runtime differs from backup baseline.');
+  const current = runtimeProcesses();
+  if (deployRuntime.kind === 'docker') assertUnrelatedDockerUnchanged(baseline.processes, current);
+  else for (const previous of baseline.processes.filter(row => !['activity-api', 'activity-worker'].includes(row.name))) {
     const present = current.find(row => row.id === previous.id);
     if (!present || present.pid !== previous.pid || present.restarts !== previous.restarts) throw new Error(`Unrelated PM2 process changed: ${previous.name}`);
   }

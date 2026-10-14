@@ -5,11 +5,14 @@ export interface ActivityQuery {
   category: string;
   sort: ActivitySort;
   status?: "all" | "open" | "full";
+  city?: string;
 }
 
-function dateValue(item: Activity) {
+function dateValue(item: Activity, now: Date) {
   const [month, day] = item.date.split("/").map(Number);
-  return new Date(2026, (month || 1) - 1, day || 1, Number(item.startTime.slice(0, 2)), Number(item.startTime.slice(3, 5))).getTime();
+  const date = new Date(now.getFullYear(), (month || 1) - 1, day || 1, Number(item.startTime.slice(0, 2)), Number(item.startTime.slice(3, 5)));
+  if (date.getTime() < now.getTime()) date.setFullYear(date.getFullYear() + 1);
+  return date.getTime();
 }
 
 function distanceValue(item: Activity) {
@@ -21,16 +24,19 @@ function priceValue(item: Activity) {
   return Number.isFinite(value) ? value : Number.MAX_SAFE_INTEGER;
 }
 
-export function queryActivities(items: Activity[], query: ActivityQuery) {
+export function queryActivities(items: Activity[], query: ActivityQuery, now = new Date()) {
   const keyword = query.keyword.trim().toLowerCase();
   const filtered = items.filter(item => {
     const matchesKeyword = !keyword || `${item.title}${item.venue}${item.hostName}${item.category}${item.tags.join("")}`.toLowerCase().includes(keyword);
     const matchesCategory = query.category === "推荐" || item.category === query.category || item.tags.includes(query.category);
     const matchesStatus = !query.status || query.status === "all" || item.status === query.status;
-    return matchesKeyword && matchesCategory && matchesStatus;
+    const selectedCity = query.city?.trim();
+    const activityCity = [item.city, item.province, item.district].filter(Boolean).join(" ");
+    const matchesCity = !selectedCity || !activityCity || activityCity.includes(selectedCity);
+    return matchesKeyword && matchesCategory && matchesStatus && matchesCity;
   });
   return [...filtered].sort((a, b) => {
-    if (query.sort === "nearest_time") return dateValue(a) - dateValue(b);
+    if (query.sort === "nearest_time") return dateValue(a, now) - dateValue(b, now);
     if (query.sort === "nearest_distance") {
       const aDistance = distanceValue(a);
       const bDistance = distanceValue(b);

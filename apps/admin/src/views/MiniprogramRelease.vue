@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from "vue";
-import { ElMessage, ElMessageBox } from "element-plus";
+import { ElMessage } from "element-plus";
 import { api } from "../api";
 import { formatShanghaiDateTime } from '../date-time';
 import { canAccess } from "../permissions";
@@ -8,8 +8,6 @@ import { canAccess } from "../permissions";
 type ReleaseSetting = {
   id?: number;
   appId?: string;
-  hasAppSecret?: boolean;
-  hasPrivateKey?: boolean;
   version?: string;
   description?: string;
   projectPath?: string;
@@ -35,17 +33,14 @@ type ReleaseLog = {
 const settingLoading = ref(false);
 const logsLoading = ref(false);
 const saving = ref(false);
-const actionLoading = ref("");
 const settingLoadError = ref("");
 const logsLoadError = ref("");
 const saveError = ref("");
-const actionError = ref("");
+const manualGuideVisible = ref(false);
 const setting = ref<ReleaseSetting | null>(null);
 const logs = ref<ReleaseLog[]>([]);
 const form = reactive({
   appId: "",
-  appSecret: "",
-  privateKey: "",
   version: "",
   description: "",
   projectPath: "apps/mobile/dist/build/mp-weixin",
@@ -54,15 +49,14 @@ const form = reactive({
 
 const canManage = computed(() => canAccess(["miniprogram_release.manage"]));
 const loading = computed(() => settingLoading.value || logsLoading.value);
-const mutationBusy = computed(() => saving.value || Boolean(actionLoading.value));
+const mutationBusy = computed(() => saving.value);
 const pageBusy = computed(() => loading.value || mutationBusy.value);
 
 const readiness = computed(() => [
   { label: "AppID", ok: Boolean(form.appId || setting.value?.appId), hint: "微信小程序后台的 AppID。" },
-  { label: "AppSecret", ok: Boolean(form.appSecret || setting.value?.hasAppSecret), hint: "保留配置；普通小程序提审不通过此处调用。" },
-  { label: "CI 私钥", ok: Boolean(form.privateKey || setting.value?.hasPrivateKey), hint: "微信公众平台下载代码上传密钥，并配置服务器 IP 白名单。" },
-  { label: "版本号", ok: Boolean(form.version), hint: "上传体验版必须填写，例如 1.0.1。" },
-  { label: "构建目录", ok: Boolean(form.projectPath), hint: "上传体验版时会先自动构建，再读取该目录。" }
+  { label: "版本号", ok: Boolean(form.version), hint: "体验版上传时填写的版本号，例如 1.0.1。" },
+  { label: "构建目录", ok: Boolean(form.projectPath), hint: "本地构建后由微信开发者工具导入。" },
+  { label: "上传方式", ok: false, hint: "由已授权的微信开发者工具账号人工上传，不在服务器保存上传密钥。" }
 ]);
 
 const acceptanceChecklist = [
@@ -74,15 +68,13 @@ const acceptanceChecklist = [
   "签到员可扫码或输入签到码完成核销"
 ];
 
-const latestQrCode = computed(() => logs.value.find((item) => item.qrCodeUrl)?.qrCodeUrl || "");
-const latestUploadLog = computed(() => latestLog("upload"));
 const releaseStages = computed(() => [
   {
     key: "upload",
     label: "1. 上传体验版",
-    status: latestUploadLog.value?.status || "pending",
-    time: latestUploadLog.value?.createdAt,
-    detail: latestUploadLog.value?.version ? `版本 ${latestUploadLog.value.version}` : "上传时自动构建并校验 mp-weixin"
+    status: "manual",
+    time: undefined,
+    detail: "本地构建后，在微信开发者工具导入并上传"
   },
   {
     key: "submit_audit",
@@ -109,7 +101,7 @@ const releaseStages = computed(() => [
 
 const actionLabels: Record<string, string> = {
   setting: "保存配置",
-  upload: "上传体验版",
+  upload: "上传体验版（历史记录）",
   submit_audit: "提交审核",
   audit_status: "查询审核",
   release: "发布线上版"
@@ -123,15 +115,9 @@ const statusTypes: Record<string, "success" | "danger" | "warning" | "info"> = {
   manual: "warning"
 };
 
-function latestLog(action: string) {
-  return logs.value.find((item) => item.action === action);
-}
-
 function fillForm(row: ReleaseSetting | null) {
   setting.value = row;
   form.appId = row?.appId || "";
-  form.appSecret = "";
-  form.privateKey = "";
   form.version = row?.version || "";
   form.description = row?.description || "";
   form.projectPath = row?.projectPath || "apps/mobile/dist/build/mp-weixin";
@@ -190,16 +176,12 @@ async function save() {
   try {
     const saved = await api.post<any, ReleaseSetting>("/admin/miniprogram-release/setting", {
       appId,
-      appSecret: form.appSecret || undefined,
-      privateKey: form.privateKey || undefined,
       version,
       description,
       projectPath,
       auditItem
     });
     fillForm(saved);
-    form.appSecret = "";
-    form.privateKey = "";
     ElMessage.success("小程序发布配置已保存");
     await loadLogs();
   } catch (error: any) {
@@ -225,28 +207,8 @@ async function loadLogs(notify = true) {
   }
 }
 
-async function runAction(action: "upload") {
-  if (!canManage.value || pageBusy.value) return;
-  if (!form.version.trim()) return ElMessage.error("请先填写版本号并保存配置");
-  const confirmed = await ElMessageBox.confirm(
-    "确认上传体验版？系统会先构建最新小程序代码，成功后再上传。",
-    "小程序发布管理",
-    { type: "info" }
-  ).then(() => true).catch(() => false);
-  if (!confirmed) return;
-  actionLoading.value = action;
-  actionError.value = "";
-  try {
-    await api.post("/admin/miniprogram-release/upload", { version: form.version, description: form.description });
-    ElMessage.success("操作已完成，已写入发布记录");
-    await loadLogs();
-  } catch (error: any) {
-    actionError.value = error.message || "操作失败";
-    ElMessage.error(actionError.value);
-    await loadLogs(false);
-  } finally {
-    actionLoading.value = "";
-  }
+function openManualGuide() {
+  manualGuideVisible.value = true;
 }
 
 function formatTime(value?: string) {
@@ -265,7 +227,7 @@ onMounted(load);
     <div class="toolbar">
       <div>
         <h2>小程序发布管理</h2>
-        <p class="subtitle">后台上传体验版，微信公众平台完成提交审核、状态查询和正式发布。</p>
+        <p class="subtitle">配置版本信息；构建、体验版上传和线上发布由负责人在本地微信工具中完成。</p>
       </div>
       <div class="actions">
         <el-button :loading="loading" :disabled="pageBusy" @click="load">刷新</el-button>
@@ -282,16 +244,15 @@ onMounted(load);
       <el-button :loading="logsLoading" :disabled="pageBusy" @click="loadLogs()">重试记录</el-button>
     </div>
     <el-alert v-if="saveError" class="operation-error" type="error" :title="saveError" show-icon :closable="false" />
-    <el-alert v-if="actionError" class="operation-error" type="error" :title="actionError" show-icon :closable="false" />
-    <el-alert v-if="!canManage" class="notice" type="info" :closable="false" show-icon title="当前账号为只读模式，可查看发布配置、阶段和记录，不能保存配置或执行上传、提审和发布。" />
+    <el-alert v-if="!canManage" class="notice" type="info" :closable="false" show-icon title="当前账号为只读模式，可查看发布配置、阶段和记录，不能保存配置。" />
 
     <el-alert
       class="notice"
       type="warning"
       :closable="false"
       show-icon
-      title="上线前准备"
-      description="需要在微信公众平台下载代码上传密钥，并把服务器出口 IP 加入小程序代码上传 IP 白名单。上传体验版时系统会自动构建最新代码；普通小程序需到微信公众平台手动提审和发布。"
+      title="发布方式：本地人工上传"
+      description="服务器不再保存微信代码上传密钥，也不代替开发者工具上传。请先在本机完成构建，再由已授权账号通过微信开发者工具上传体验版；提审和正式发布仍由负责人在微信公众平台操作。"
     />
 
     <div class="stage-grid">
@@ -301,7 +262,7 @@ onMounted(load);
           <span>{{ item.detail }}</span>
           <small>{{ formatTime(item.time) }}</small>
         </div>
-        <el-tag :type="statusTypes[item.status] || 'info'" effect="plain">{{ item.status === "pending" ? "待处理" : item.status === "manual" ? "微信平台" : item.status }}</el-tag>
+        <el-tag :type="statusTypes[item.status] || 'info'" effect="plain">{{ item.status === "pending" ? "待处理" : item.status === "manual" ? "人工操作" : item.status }}</el-tag>
       </div>
     </div>
 
@@ -318,14 +279,6 @@ onMounted(load);
         <h3>发布配置</h3>
         <el-form label-width="120px" :disabled="!canManage || pageBusy">
           <el-form-item label="小程序 AppID"><el-input v-model="form.appId" placeholder="wx..." /></el-form-item>
-          <el-form-item label="AppSecret（保留）">
-            <el-input v-model="form.appSecret" show-password placeholder="留空表示不修改已保存 Secret" />
-            <div class="field-hint">当前：{{ setting?.hasAppSecret ? "已保存" : "未保存" }}；普通小程序手动提审不依赖此项。</div>
-          </el-form-item>
-          <el-form-item label="CI 私钥">
-            <el-input v-model="form.privateKey" type="textarea" :rows="6" placeholder="粘贴微信代码上传密钥，留空表示不修改已保存私钥" />
-            <div class="field-hint">当前：{{ setting?.hasPrivateKey ? "已保存" : "未保存" }}</div>
-          </el-form-item>
           <el-form-item label="版本号"><el-input v-model="form.version" placeholder="例如 1.0.1" /></el-form-item>
           <el-form-item label="版本描述"><el-input v-model="form.description" type="textarea" :rows="3" placeholder="本次更新说明" /></el-form-item>
           <el-form-item label="构建目录"><el-input v-model="form.projectPath" /></el-form-item>
@@ -338,18 +291,14 @@ onMounted(load);
 
       <div class="card action-card">
         <h3>发布操作</h3>
-        <el-alert class="action-hint" type="info" :closable="false" show-icon title="推荐顺序：保存配置 -> 上传体验版 -> 体验码验收 -> 打开微信公众平台 -> 提交审核 -> 审核通过后发布。" />
+        <el-alert class="action-hint" type="info" :closable="false" show-icon title="推荐顺序：保存版本信息 -> 本地构建 -> 开发者工具上传体验版 -> 真机验收 -> 微信公众平台提审。" />
         <el-alert class="action-hint" type="warning" :closable="false" show-icon title="普通小程序不能调用第三方平台专用的自动提审接口，审核与发布必须在微信公众平台完成。" />
         <div v-if="canManage" class="action-grid">
-          <el-button type="primary" :loading="actionLoading === 'upload'" :disabled="pageBusy" @click="runAction('upload')">上传体验版</el-button>
+          <el-button type="primary" :disabled="pageBusy" @click="openManualGuide">查看本地上传步骤</el-button>
           <a class="wechat-console-link" href="https://mp.weixin.qq.com/" target="_blank" rel="noopener noreferrer">打开微信公众平台</a>
         </div>
         <div class="qr-box">
-          <template v-if="latestQrCode">
-            <img :src="latestQrCode" alt="体验版二维码" />
-            <span>最新体验版二维码</span>
-          </template>
-          <el-empty v-else description="上传体验版后显示二维码" />
+          <el-empty description="体验版二维码由微信开发者工具生成；历史二维码不会显示为当前版本" />
         </div>
       </div>
 
@@ -359,7 +308,7 @@ onMounted(load);
           type="info"
           :closable="false"
           show-icon
-          title="上传体验版后，先按清单验收，再提交微信审核。"
+          title="人工上传并取得当前版本体验码后，先按清单验收，再决定是否提交审核。"
         />
         <div class="checklist">
           <div v-for="(item, index) in acceptanceChecklist" :key="item" class="check-item">
@@ -372,6 +321,7 @@ onMounted(load);
 
     <div class="card">
       <h3>发布记录</h3>
+      <p class="field-hint">保留历史操作记录；历史上传成功状态不代表当前微信开发版本或体验码。</p>
       <el-table :data="logs" stripe empty-text="暂无发布记录" v-loading="logsLoading">
         <el-table-column label="时间" width="170"><template #default="{ row }">{{ formatTime(row.createdAt) }}</template></el-table-column>
         <el-table-column label="动作" width="120"><template #default="{ row }">{{ actionLabels[row.action] || row.action }}</template></el-table-column>
@@ -387,6 +337,19 @@ onMounted(load);
         </el-table-column>
       </el-table>
     </div>
+
+    <el-dialog v-model="manualGuideVisible" title="本地上传体验版" width="min(620px, calc(100vw - 32px))">
+      <ol class="manual-steps">
+        <li>在项目根目录运行 <code>npm run build:mobile:mp-weixin</code>，等待构建及产物校验通过。</li>
+        <li>在微信开发者工具导入 <code>apps/mobile/dist/build/mp-weixin</code> 目录。</li>
+        <li>确认 AppID 与当前小程序一致，点击工具右上角“上传”，填写版本号 <code>{{ form.version || "（先填写版本号）" }}</code>。</li>
+        <li>上传成功后，从微信公众平台或开发者工具获取当前体验码，完成真机验收；本后台不会伪造二维码或上传结果。</li>
+      </ol>
+      <template #footer>
+        <el-button @click="manualGuideVisible = false">关闭</el-button>
+        <a class="wechat-console-link" href="https://mp.weixin.qq.com/" target="_blank" rel="noopener noreferrer">打开微信公众平台</a>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -407,7 +370,7 @@ onMounted(load);
 .stage-card strong { color: #111827; font-size: 15px; }
 .stage-card span { color: #475569; font-size: 13px; line-height: 1.45; }
 .stage-card small { color: #94a3b8; font-size: 12px; }
-.readiness { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
+.readiness { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .ready-card { display: grid; gap: 8px; align-content: start; padding: 14px; border: 1px solid #fed7aa; border-radius: 8px; background: #fff7ed; }
 .ready-card.ok { border-color: #bbf7d0; background: #f0fdf4; }
 .ready-card span { color: #64748b; font-size: 13px; line-height: 1.45; }
@@ -419,6 +382,9 @@ onMounted(load);
 .action-grid { display: grid; grid-template-columns: 1fr; gap: 10px; }
 .wechat-console-link { display: grid; min-height: 40px; place-items: center; border: 1px solid #d97706; border-radius: 4px; background: #d97706; color: #fff; font-size: 14px; text-decoration: none; }
 .wechat-console-link:hover { border-color: #b45309; background: #b45309; color: #fff; }
+.manual-steps { display: grid; gap: 12px; padding-left: 22px; color: #334155; line-height: 1.7; }
+.manual-steps code { overflow-wrap: anywhere; padding: 2px 4px; border-radius: 4px; background: #f1f5f9; }
+.el-dialog__footer .wechat-console-link { display: inline-grid; padding: 0 14px; }
 .qr-box { min-height: 260px; display: grid; place-items: center; margin-top: 16px; padding: 16px; border: 1px dashed #cbd5e1; border-radius: 8px; background: #f8fafc; }
 .qr-box img { width: 220px; height: 220px; object-fit: contain; background: #fff; border-radius: 8px; }
 .qr-box span { color: #64748b; font-size: 13px; }

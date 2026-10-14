@@ -5,6 +5,14 @@ import type { HomepageSectionView } from "@activity/shared";
 import { defaultBottomNavSection, goDecoratedLink, usePageDecoration } from "../decoration";
 import { filterNavigationItemsByFeature } from "../feature-gates";
 import { motionStyle } from "../motion/platform-adapter";
+import { withTenantCode } from "../api";
+import { mobileTabRoute, type MobileUserTab } from "../mobile-tab-routes";
+import { usesMemberNavigation } from "../member-navigation";
+import MobileShell from "./layout/MobileShell.vue";
+
+function selectMemberTab(tab: MobileUserTab | "publish") {
+  if (tab !== "publish") uni.reLaunch({ url: withTenantCode(mobileTabRoute(tab)) });
+}
 
 const props = defineProps<{
   section?: HomepageSectionView | null;
@@ -102,8 +110,9 @@ function navLabel(item: { link?: string; label?: string }) {
 </script>
 
 <template>
+  <MobileShell v-if="usesMemberNavigation(currentPath)" navigation-only active-tab="me" @tab="selectMemberTab" />
   <view
-    v-if="items.length"
+    v-else-if="items.length"
     class="custom-tabbar"
     role="tablist"
     aria-label="主导航"

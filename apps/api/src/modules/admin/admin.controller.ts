@@ -2250,6 +2250,13 @@ export class AdminController {
   }
 
   @AdminRoles(...SUPER_ADMIN)
+  @Post("settings/payment/credentials")
+  @UseInterceptors(FileInterceptor("file", { limits: { fileSize: 2 * 1024 * 1024 } }))
+  paymentCredentialUpload(@Body("field") field: string, @UploadedFile() file: Express.Multer.File, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
+    return this.paymentSettings.uploadCredential(admin, field, file);
+  }
+
+  @AdminRoles(...SUPER_ADMIN)
   @Post("settings/payment/enable")
   paymentSettingsEnable(@Body() body: { confirmation?: string }, @CurrentAdmin() admin: { id: number; username: string; role?: string; tenantId?: number | null }) {
     return this.paymentSettings.enable(admin, body);

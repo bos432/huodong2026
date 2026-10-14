@@ -129,6 +129,7 @@ describe("notification automation suite", () => {
     await service.scan(new Date("2026-10-03T10:00:00.000Z"));
 
     expect(jobs.publish).toHaveBeenCalled();
+    expect(jobs.publish).toHaveBeenCalledWith(expect.objectContaining({ type: "post-event.notification", scene: "reviewInvitation" }));
     expect(external.publish).not.toHaveBeenCalled();
   });
 });

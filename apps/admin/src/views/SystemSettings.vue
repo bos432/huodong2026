@@ -1804,6 +1804,31 @@ const paymentConfigKeys = [
   "mallMultiMerchantPreflightPassed", "mallMultiMerchantSmokeResultFile", "mallMultiMerchantSmokeMaxAgeHours"
 ] as const;
 
+const paymentCredentialUploading = ref("");
+function beforePlatformCredentialUpload(field: string, file: File) {
+  if (!canManagePlatformSettings.value || !canEditSettings.value || paymentCredentialUploading.value) return false;
+  if (!/\.(pem|key|crt|cer)$/i.test(file.name) || file.size > 2 * 1024 * 1024) {
+    ElMessage.error("请选择不超过 2MB 的 PEM 私钥或证书文件");
+    return false;
+  }
+  paymentCredentialUploading.value = field;
+  return true;
+}
+function platformCredentialUploaded(field: string, response: any) {
+  paymentCredentialUploading.value = "";
+  const result = response?.data || response;
+  if (result?.field !== field || !String(result?.path || "").startsWith("secure-credential://")) {
+    ElMessage.error(response?.message || "上传失败，请重试");
+    return;
+  }
+  (deployment as any)[field] = result.path;
+  ElMessage.success("凭证已加密上传，请点击保存支付资料完成配置");
+}
+function platformCredentialUploadFailed() {
+  paymentCredentialUploading.value = "";
+  ElMessage.error("凭证上传失败，请检查文件格式、权限和网络");
+}
+
 function applyPaymentSettings(data: any) {
   const launchConfig = data?.launchConfig || {};
   for (const key of paymentConfigKeys) {
@@ -1837,7 +1862,7 @@ async function loadPaymentSettings() {
 }
 
 async function savePaymentSettings() {
-  if (!canManagePlatformSettings.value || !canEditSettings.value || paymentConfigSaving.value) return;
+  if (!canManagePlatformSettings.value || !canEditSettings.value || paymentConfigSaving.value || paymentCredentialUploading.value) return;
   paymentConfigSaving.value = true;
   paymentConfigError.value = "";
   try {
@@ -2203,16 +2228,28 @@ onMounted(async () => {
               <div v-loading="paymentConfigLoading" class="unified-payment-form">
                 <div class="deploy-grid">
                   <el-form-item label="微信 AppID"><el-input v-model="deployment.wechatPayAppId" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
-                  <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
-                  <el-form-item label="微信 API v3 Key"><el-input v-model="deployment.wechatPayApiV3Key" type="password" show-password placeholder="未修改时保留已保存密钥" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
-                  <el-form-item label="微信私钥路径"><el-input v-model="deployment.wechatPayPrivateKeyPath" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信商户号"><el-input v-model="deployment.wechatPayMchId" name="wechat-pay-merchant-id" autocomplete="off" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信 API v3 Key"><el-input v-model="deployment.wechatPayApiV3Key" name="wechat-pay-api-v3-key" autocomplete="new-password" type="password" show-password placeholder="未修改时保留已保存密钥" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="商户私钥" class="payment-credential-field">
+                    <el-input v-model="deployment.wechatPayPrivateKeyPath" placeholder="上传 apiclient_key.pem" :disabled="!canEditSettings || paymentConfigSaving || !!paymentCredentialUploading" />
+                    <el-upload action="/api/admin/settings/payment/credentials" name="file" :headers="uploadHeaders()" :data="{ field: 'wechatPayPrivateKeyPath' }" :show-file-list="false" accept=".pem,.key" :disabled="!canEditSettings || paymentConfigSaving || !!paymentCredentialUploading" :before-upload="(file: File) => beforePlatformCredentialUpload('wechatPayPrivateKeyPath', file)" :on-success="(response: any) => platformCredentialUploaded('wechatPayPrivateKeyPath', response)" :on-error="platformCredentialUploadFailed">
+                      <el-button :icon="UploadFilled" :loading="paymentCredentialUploading === 'wechatPayPrivateKeyPath'">上传私钥</el-button>
+                    </el-upload>
+                  </el-form-item>
                   <el-form-item label="证书序列号"><el-input v-model="deployment.wechatPayCertSerialNo" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
-                  <el-form-item label="平台证书路径"><el-input v-model="deployment.wechatPayPlatformCertPath" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
-                  <el-form-item label="微信支付回调 URL"><el-input v-model="deployment.wechatPayNotifyUrl" placeholder="必须使用 HTTPS" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="微信支付平台证书" class="payment-credential-field">
+                    <el-input v-model="deployment.wechatPayPlatformCertPath" placeholder="上传微信支付平台证书 PEM" :disabled="!canEditSettings || paymentConfigSaving || !!paymentCredentialUploading" />
+                    <el-upload action="/api/admin/settings/payment/credentials" name="file" :headers="uploadHeaders()" :data="{ field: 'wechatPayPlatformCertPath' }" :show-file-list="false" accept=".pem,.crt,.cer" :disabled="!canEditSettings || paymentConfigSaving || !!paymentCredentialUploading" :before-upload="(file: File) => beforePlatformCredentialUpload('wechatPayPlatformCertPath', file)" :on-success="(response: any) => platformCredentialUploaded('wechatPayPlatformCertPath', response)" :on-error="platformCredentialUploadFailed">
+                      <el-button :icon="UploadFilled" :loading="paymentCredentialUploading === 'wechatPayPlatformCertPath'">上传平台证书</el-button>
+                    </el-upload>
+                  </el-form-item>
+                  <el-form-item label="微信支付回调"><el-input v-model="deployment.wechatPayNotifyUrl" placeholder="必须使用 HTTPS" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="商城支付回调"><el-input v-model="deployment.mallWechatPayNotifyUrl" placeholder="必须使用 HTTPS" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
+                  <el-form-item label="商城退款回调"><el-input v-model="deployment.mallWechatPayRefundNotifyUrl" placeholder="必须使用 HTTPS" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
                   <el-form-item label="微信支付渠道"><el-switch v-model="deployment.wechatPayEnabled" active-text="纳入统一配置" inactive-text="未配置" :disabled="!canEditSettings || paymentConfigSaving" /></el-form-item>
                 </div>
                 <div class="toolbar-actions unified-payment-actions">
-                  <el-button type="primary" :loading="paymentConfigSaving" :disabled="!canEditSettings" @click="savePaymentSettings">保存支付资料</el-button>
+                  <el-button type="primary" :loading="paymentConfigSaving" :disabled="!canEditSettings || !!paymentCredentialUploading" @click="savePaymentSettings">保存支付资料</el-button>
                   <el-button :loading="paymentConfigChecking" @click="validatePaymentSettings">校验配置</el-button>
                   <el-button v-if="!realPaymentEnabledReadonly" type="warning" :loading="paymentConfigEnabling" :disabled="paymentReadinessStatus !== 'ok'" @click="enableRealPayment">确认开启真实支付</el-button>
                   <el-button v-else type="danger" plain :loading="paymentConfigDisabling" @click="disableRealPayment">关闭真实支付</el-button>
@@ -3089,6 +3126,9 @@ onMounted(async () => {
 .deploy-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0 16px; }
 .deploy-grid :deep(.el-form-item) { margin-bottom: 14px; }
 .deploy-grid :deep(.el-form-item__label) { color: #475569; font-weight: 600; }
+.payment-credential-field :deep(.el-form-item__content) { display: block; }
+.payment-credential-field :deep(.el-input) { width: 100%; min-width: 0; }
+.payment-credential-field :deep(.el-upload) { margin-top: 8px; }
 .notification-readiness, .rollout-readiness { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .connectivity-report { margin-bottom: 16px; }
 .connectivity-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 12px; }

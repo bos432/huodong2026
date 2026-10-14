@@ -45,6 +45,7 @@ const AdminLoginLogs = () => import("./views/AdminLoginLogs.vue");
 const H5CodeLogs = () => import("./views/H5CodeLogs.vue");
 const Courses = () => import("./views/Courses.vue");
 const Community = () => import("./views/Community.vue");
+const SlowExperiences = () => import("./views/SlowExperiences.vue");
 const MallMerchants = () => import("./views/MallMerchants.vue");
 const MallPayments = () => import("./views/MallPayments.vue");
 const MallProducts = () => import("./views/MallProducts.vue");
@@ -89,6 +90,7 @@ export const router = createRouter({
         { path: "support", component: SupportSearch, meta: { roles: ["support.view"], scope: "tenantOrPlatformAdmin" } },
         { path: "courses", component: Courses, meta: { roles: ["course.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "community", component: Community, meta: { roles: ["community.manage"], scope: "tenantOrPlatformAdmin" } },
+        { path: "slow-experiences", component: SlowExperiences, meta: { roles: ["community.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "mall-merchants", component: MallMerchants, meta: { roles: ["mall.merchant.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "mall-payments", component: MallPayments, meta: { roles: ["mall.payment.manage"], scope: "tenantOrPlatformAdmin" } },
         { path: "mall-products", component: MallProducts, meta: { roles: ["mall.product.manage"], scope: "tenantOrPlatformAdmin" } },
@@ -169,6 +171,7 @@ function fallbackPath() {
     { path: "/support", roles: ["support.view"], scope: "tenantOrPlatformAdmin" },
     { path: "/courses", roles: ["course.manage"], scope: "tenantOrPlatformAdmin" },
     { path: "/community", roles: ["community.manage"], scope: "tenantOrPlatformAdmin" },
+    { path: "/slow-experiences", roles: ["community.manage"], scope: "tenantOrPlatformAdmin" },
     { path: "/ambassador", roles: ["ambassador.view", "partner.view"], scope: "platform" },
     { path: "/aid-applications", roles: ["aid.view"], scope: "platform" },
     { path: "/volunteers", roles: ["ambassador.manage"], scope: "platform" },

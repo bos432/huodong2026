@@ -42,8 +42,24 @@ export function nextReleaseReadinessStatus(status: ReleaseReadinessStatus, actio
 }
 
 export function sanitizeReleaseEvidence(value: Record<string, unknown>) {
-  return Object.fromEntries(Object.entries(value || {}).filter(([key]) => !/(secret|password|token|private.?key|api.?key|apiv\d*key|credential)/i.test(key)).map(([key, item]) => {
-    if (key.toLowerCase().includes("phone") && typeof item === "string") return [key, `***${item.slice(-4)}`];
-    return [key, item];
-  }));
+  const sensitiveKey = /(secret|password|token|private.?key|api.?key|apiv\d*key|credential)/i;
+  const redactFreeText = (value: string) => value
+    .replace(/-----BEGIN [A-Z ]*(?:PRIVATE KEY|SECRET KEY)-----[\s\S]*?-----END [A-Z ]*(?:PRIVATE KEY|SECRET KEY)-----/gi, "[已脱敏]")
+    .replace(/\bBearer\s+[A-Za-z0-9._~+/-]+=*/gi, "Bearer [已脱敏]")
+    .replace(/\b((?:api\s*v?\s*3\s*key|api[_-]?key|access[_-]?key(?:[_-]?secret)?|secret|password|token|private[_-]?key)\s*[:=：]\s*)[^\s,;，；]+/gi, "$1[已脱敏]");
+  const clean = (item: unknown, key: string, depth: number): unknown => {
+    if (sensitiveKey.test(key) || depth > 5) return undefined;
+    if (Array.isArray(item)) return item.slice(0, 50).map((entry) => clean(entry, key, depth + 1)).filter((entry) => entry !== undefined);
+    if (item && typeof item === "object") {
+      return Object.fromEntries(Object.entries(item as Record<string, unknown>).slice(0, 100)
+        .map(([childKey, child]) => [childKey, clean(child, childKey, depth + 1)] as const)
+        .filter(([, child]) => child !== undefined));
+    }
+    if (typeof item === "string") {
+      if (key.toLowerCase().includes("phone")) return `***${item.slice(-4)}`;
+      return redactFreeText(item).slice(0, 1000);
+    }
+    return item;
+  };
+  return clean(value || {}, "", 0) as Record<string, unknown>;
 }

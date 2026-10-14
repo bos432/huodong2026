@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "crypto";
 
 export type PrivateAssetTokenPayload = {
   v: 1;
-  purpose: "registration_attachment" | "settlement_proof" | "course_resource";
+  purpose: "registration_attachment" | "settlement_proof" | "course_resource" | "slow_experience_photo";
   reference: string;
   tenantId: number | null;
   ownerUserId?: number | null;
@@ -28,7 +28,7 @@ export function verifyPrivateAssetToken(token: string, secret: string): PrivateA
   if (a.length !== b.length || !timingSafeEqual(a, b)) return null;
   try {
     const value = JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"));
-    if (value?.v !== 1 || !["registration_attachment", "settlement_proof", "course_resource"].includes(value.purpose)) return null;
+    if (value?.v !== 1 || !["registration_attachment", "settlement_proof", "course_resource", "slow_experience_photo"].includes(value.purpose)) return null;
     if (!String(value.reference || "").startsWith("secure-private-document://")) return null;
     if (!Number.isInteger(value.size) || value.size < 1 || value.size > 500 * 1024 * 1024) return null;
     if (typeof value.originalName !== "string" || typeof value.mimetype !== "string") return null;

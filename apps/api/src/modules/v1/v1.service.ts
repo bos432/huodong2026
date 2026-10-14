@@ -1,5 +1,6 @@
 import { BadRequestException, Injectable, NotFoundException, OnModuleDestroy, OnModuleInit } from "@nestjs/common";
 import { ConfigService } from "@nestjs/config";
+import { isNotificationScheduleDue } from "../../shared/notification-schedule-due";
 import { InjectRepository } from "@nestjs/typeorm";
 import ExcelJS from "exceljs";
 import { EntityManager, In, IsNull, Repository } from "typeorm";
@@ -56,6 +57,7 @@ import { calculateActivityCommercialAmounts, normalizeCommercialRateToBps } from
 import { isDuplicateEntryError } from "../../shared/database-errors";
 import { isWechatTemplateFieldKey } from "../../shared/wechat-template-field";
 import { NotificationService } from "../notification/notification.service";
+import { MemberNotificationInbox } from "../notification/member-notification-inbox";
 import { externalWorkerOwnsSchedules } from "../../worker-config";
 import { ActivityService } from "../activity/activity.service";
 import { buildPublicActivityGallery, toPublicAttendee } from "./public-activity-detail";
@@ -235,6 +237,16 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   onModuleDestroy() {
     if (this.scheduleTimer) clearInterval(this.scheduleTimer);
+  }
+
+  async memberNotifications(userId: number, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    return new MemberNotificationInbox(this.notifications).list(userId, tenant?.id || null);
+  }
+
+  async readMemberNotification(id: number, userId: number, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    return new MemberNotificationInbox(this.notifications).read(id, userId, tenant?.id || null);
   }
 
   async publicAnnouncements(context?: PublicTenantContext, userId?: number | null) {
@@ -1770,11 +1782,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
 
   async runDueNotificationSchedules(now = new Date(), admin?: AdminContext) {
     const schedules = await this.listDueNotificationSchedules(admin);
-    const due = schedules.filter((schedule) => {
-      if (schedule.lastRunAt) return false;
-      const triggerAt = new Date(schedule.activity.startTime).getTime() - schedule.beforeHours * 60 * 60 * 1000;
-      return triggerAt <= now.getTime();
-    });
+    const due = schedules.filter((schedule) => isNotificationScheduleDue(schedule, now));
 
     const results = [];
     for (const candidate of due) {
@@ -1785,7 +1793,7 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
           .leftJoinAndSelect("activity.tenant", "tenant")
           .leftJoinAndSelect("schedule.template", "template")
           .where("schedule.id = :id", { id: candidate.id }).getOne();
-        if (!locked || !locked.enabled || locked.lastRunAt) return null;
+        if (!locked || !isNotificationScheduleDue(locked, now)) return null;
         this.assertNotificationActivityAccess(locked.activity, admin);
         locked.lastRunAt = now;
         return manager.getRepository(NotificationSchedule).save(locked);
@@ -1894,14 +1902,15 @@ export class V1Service implements OnModuleInit, OnModuleDestroy {
       RegistrationStatus.Approved,
       RegistrationStatus.CheckedIn
     ];
-    const [registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount] = await Promise.all([
+    const [registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount, waitingCount] = await Promise.all([
       this.registrations.count({ where: { activity: { id: activityId }, status: In(active) } }),
       this.registrations.count({ where: { activity: { id: activityId }, status: RegistrationStatus.CheckedIn } }),
       this.reviews.count({ where: { activity: { id: activityId }, status: "visible" } }),
       this.viewLogs.count({ where: { activity: { id: activityId } } }),
-      this.shareVisits.count({ where: { activity: { id: activityId } } })
+      this.shareVisits.count({ where: { activity: { id: activityId } } }),
+      this.registrations.manager.getRepository(Waitlist).count({ where: { activity: { id: activityId }, status: WaitlistStatus.Waiting } })
     ]);
-    return { registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount, remainingSeats: Math.max(capacity - registeredCount, 0) };
+    return { registeredCount, checkInCount, reviewCount, viewCount, shareVisitCount, waitingCount, remainingSeats: Math.max(capacity - registeredCount, 0) };
   }
 
   private displayStatus(activity: Activity, remainingSeats: number) {

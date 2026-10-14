@@ -42,7 +42,7 @@
       </view>
       <empty-state v-if="!visibleOrders.length" icon="单" text="暂无对应订单" />
     </template>
-    <TabBar current="user" />
+    <TabBar current="user" current-path="/pages/user/orders" />
   </view>
 </template>
 
@@ -512,4 +512,5 @@ onShow(() => {
 .order-meta text:last-child{color:#33454e}
 .status-pill,.notice{border-radius:10rpx}
 .order-action{color:#0f766e}
+.orders-page { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
 </style>

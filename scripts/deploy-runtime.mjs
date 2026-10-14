@@ -13,10 +13,32 @@ export function resolveDeployRuntime(env = process.env) {
   throw new Error('DEPLOY_RUNTIME must be explicitly set to docker or pm2 before publishing.');
 }
 
-export function assertDockerPublishScope({ apiContainer, nginxContainer, restartContainers = [] }) {
+export function assertDockerPublishScope({ apiContainer, nginxContainer, composeProject = 'rdchaimen666com', restartContainers = [] }) {
+  if (composeProject !== 'rdchaimen666com') throw new Error('Docker publish must target the rdchaimen666com project.');
   if (apiContainer !== 'activity-api') throw new Error('Docker publish must target activity-api.');
   if (nginxContainer !== 'activity-nginx') throw new Error('Docker publish must inspect activity-nginx.');
   if (restartContainers.length) throw new Error('Docker publish must not restart unrelated or static containers.');
+}
+
+export function assertDockerApiIdentity(container, runtime) {
+  assertDockerPublishScope(runtime);
+  const labels = container?.Config?.Labels || {};
+  if (container?.Name !== '/activity-api' || labels['com.docker.compose.project'] !== runtime.composeProject || labels['com.docker.compose.service'] !== 'api') {
+    throw new Error('Docker API ownership mismatch.');
+  }
+  if (!container?.State?.Running) throw new Error('Docker API must be running before deployment.');
+}
+
+export function assertUnrelatedDockerUnchanged(baseline, current) {
+  const previousUnrelated = baseline.filter(row => row.name !== '/activity-api');
+  const currentUnrelated = current.filter(row => row.name !== '/activity-api');
+  if (previousUnrelated.length !== currentUnrelated.length) throw new Error('Unrelated Docker container inventory changed.');
+  for (const previous of previousUnrelated) {
+    const present = current.find(row => row.name === previous.name);
+    if (!present || ['id', 'startedAt', 'status', 'restarts'].some(key => present[key] !== previous[key])) {
+      throw new Error(`Unrelated Docker container changed: ${previous.name}`);
+    }
+  }
 }
 
 export function dockerHealthMatches(body, commit) {

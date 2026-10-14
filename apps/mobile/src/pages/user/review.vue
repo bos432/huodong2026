@@ -84,7 +84,7 @@ onShow(() => {
 
     <template v-else-if="detail">
 
-    <view class="review-hero" style="background:#0f766e">
+    <view class="review-hero">
       <view class="hero-mark">评</view>
       <view class="hero-copy">
         <view class="title">{{ innerPageConfig.title || "评价活动" }}</view>
@@ -113,6 +113,7 @@ onShow(() => {
 </template>
 
 <style scoped>
+@import "../../styles/tokens.css";
 .review-page.has-custom-nav { padding-bottom: 160rpx; }
 .review-hero {
   position: relative;
@@ -168,4 +169,6 @@ onShow(() => {
 .textarea { min-height: 220rpx; }
 .submit-button { margin-top: 20rpx; }
 .submit-button.disabled { opacity:.6; pointer-events:none; }
+.review-page.has-custom-nav { padding-bottom: calc(100px + env(safe-area-inset-bottom)); }
+.review-hero { background:var(--mp-brand-primary); }
 </style>

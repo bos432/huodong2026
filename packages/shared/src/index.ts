@@ -26,6 +26,20 @@ export enum OrderStatus {
   Closed = "closed"
 }
 
+export interface PublicSlowExperienceRecord {
+  id: number;
+  discovery: string;
+  lightNote: string;
+  feeling: string;
+  photoUrl: string | null;
+  visibility: "private" | "public_review";
+  moderationStatus: "not_submitted" | "pending" | "approved" | "rejected";
+  revision: number;
+  reviewRemark?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export enum PaymentMethod {
   Free = "free",
   Offline = "offline",
@@ -265,6 +279,9 @@ export interface PublicActivitySummary {
   startTime?: string | null;
   endTime?: string | null;
   location?: string | null;
+  locationProvince?: string | null;
+  locationCity?: string | null;
+  locationDistrict?: string | null;
   price?: number | string | null;
   capacity?: number | null;
   registeredCount?: number | null;
@@ -629,6 +646,33 @@ export interface PublicCommunityNotificationRecord {
   content: string;
   readAt?: string | null;
   createdAt?: string | null;
+}
+
+/** Delivered, user-owned site message; excludes provider diagnostics and credentials. */
+export interface PublicMemberNotificationRecord {
+  id: number;
+  scene?: string | null;
+  title: string;
+  content: string;
+  activityId?: number | null;
+  readAt?: string | null;
+  createdAt?: string | null;
+}
+
+export interface PublicMemberHostApplication {
+  id: number;
+  status: "pending" | "contacted" | "screened" | "interview" | "approved" | "activated" | "rejected";
+  name: string;
+  city: string;
+  expertise: string;
+  experience: string;
+  submittedAt: string;
+  updatedAt: string;
+}
+
+export interface PublicMemberHostApplicationResponse {
+  application: PublicMemberHostApplication | null;
+  canAccessWorkspace: boolean;
 }
 
 export interface PublicCommunityFollowRecord {

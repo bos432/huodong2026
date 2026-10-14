@@ -5,9 +5,10 @@ import AppBottomNav from "./AppBottomNav.vue";
 import { applyTenantBootstrapDefault } from "../api";
 import { usePageDecoration } from "../decoration";
 
-const props = defineProps<{ current: string }>();
+const props = defineProps<{ current: string; currentPath?: string }>();
 
 const currentPath = computed(() => {
+  if (props.currentPath) return props.currentPath;
   if (props.current === "courses") return "/pages/courses/index";
   if (props.current === "community") return "/pages/community/index";
   if (props.current === "activity") return "/pages/activity/list";

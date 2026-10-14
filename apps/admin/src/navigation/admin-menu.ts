@@ -127,6 +127,7 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "platform",
     items: [
       { index: "/homepage-builder", icon: "Grid", label: "前台全局装修", roles: ["homepage.manage"], scope: "platform" },
+      { index: "/slow-experiences", icon: "DocumentChecked", label: "慢体验公开审核", roles: ["community.manage"], scope: "platform" },
       { index: "/marketing-popups", icon: "Promotion", label: "营销弹窗", roles: ["marketing_popup.view"], scope: "platform" },
       { index: "/ad-center", icon: "Money", label: "广告中心", roles: ["ad_center.view"], scope: "platform" }
     ]
@@ -324,7 +325,8 @@ const rawMenuGroups: AdminMenuGroup[] = [
     scope: "tenant",
     items: [
       { index: "/courses", icon: "Reading", label: "课程管理", roles: ["course.manage"], scope: "tenant" },
-      { index: "/community", icon: "ChatLineSquare", label: "共修动态", roles: ["community.manage"], scope: "tenant" }
+      { index: "/community", icon: "ChatLineSquare", label: "共修动态", roles: ["community.manage"], scope: "tenant" },
+      { index: "/slow-experiences", icon: "DocumentChecked", label: "慢体验公开审核", roles: ["community.manage"], scope: "tenant" }
     ]
   },
   {

@@ -17,6 +17,7 @@ import { Activity } from "../../entities/activity.entity";
 import { ActivityReview } from "../../entities/activity-review.entity";
 import { ActivityViewLog } from "../../entities/activity-view-log.entity";
 import { AmbassadorApplication } from "../../entities/ambassador-application.entity";
+import { MemberHostApplications } from "./member-host-applications";
 import { AmbassadorCase } from "../../entities/ambassador-case.entity";
 import { AmbassadorLandingSetting } from "../../entities/ambassador-landing-setting.entity";
 import { Announcement } from "../../entities/announcement.entity";
@@ -62,6 +63,7 @@ import { TenantRegionHitLog } from "../../entities/tenant-region-hit-log.entity"
 import { TenantRegion, TenantRegionBoundaryPoint } from "../../entities/tenant-region.entity";
 import { decryptStoredSecret, encryptStoredSecret } from "../../shared/secret-storage";
 import { maskPhone } from "../../shared/data-masking";
+import { loadMemberReviewEligibility } from "./member-review-eligibility";
 import { TicketType } from "../../entities/ticket-type.entity";
 import { User } from "../../entities/user.entity";
 import { Certificate } from "../../entities/certificate.entity";
@@ -237,6 +239,10 @@ export class PublicService {
       await this.recordH5CodeLog({ phone, clientIp, mode, status: "failed", message: error.message || "验证码发送失败", expiresAt: null });
       throw error;
     }
+  }
+
+  async memberTenantContext(context?: PublicTenantContext | null) {
+    return this.resolveTenantContext(context);
   }
 
   private async resolveTenantContext(context?: PublicTenantContext | null) {
@@ -968,7 +974,7 @@ export class PublicService {
       .orderBy("tenant.region", "ASC")
       .addOrderBy("tenant.id", "ASC")
       .getMany();
-    return tenants.map((tenant) => this.publicHomepageTenant(tenant));
+    return tenants.map((tenant) => this.publicTenantDirectoryItem(tenant));
   }
 
   async publicTenantBootstrap() {
@@ -1024,9 +1030,9 @@ export class PublicService {
     return {
       matched: Boolean(match),
       fallback: !match,
-      tenant: match ? this.publicHomepageTenant(match.region.tenant) : null,
+      tenant: match ? this.publicTenantDirectoryItem(match.region.tenant) : null,
       region: match ? this.publicTenantRegion(match.region, match.distanceMeters) : null,
-      candidates: matches.slice(0, 5).map((item) => ({ tenant: this.publicHomepageTenant(item.region.tenant), region: this.publicTenantRegion(item.region, item.distanceMeters) })),
+      candidates: matches.slice(0, 5).map((item) => ({ tenant: this.publicTenantDirectoryItem(item.region.tenant), region: this.publicTenantRegion(item.region, item.distanceMeters) })),
       tenants: match ? [] : await this.publicTenants(),
       message: match ? `已根据当前位置匹配：${match.region.tenant.name}` : "当前位置暂无匹配商家，请手动选择城市/商家"
     };
@@ -1240,11 +1246,40 @@ export class PublicService {
     };
   }
 
-  async submitAmbassadorApplication(dto: AmbassadorApplicationDto) {
+  async myHostApplication(user: User, context?: PublicTenantContext) {
+    const tenant = await this.resolveTenantContext(context);
+    const [application, access] = await Promise.all([
+      new MemberHostApplications(this.ambassadorApplications).latest(user.id, tenant?.id ?? null),
+      this.myAdminAccess(user)
+    ]);
+    const canAccessWorkspace = access.canAccess && (access.tenantId == null || access.tenantId === (tenant?.id ?? null));
+    return { application, canAccessWorkspace: Boolean(canAccessWorkspace) };
+  }
+
+  async submitAmbassadorApplication(dto: AmbassadorApplicationDto, user?: User, context?: PublicTenantContext, manager?: EntityManager): Promise<any> {
+    const hostApply = dto.source === "host_apply";
+    if (hostApply && !user) throw new UnauthorizedException("请先登录再提交主理人申请");
+    if (hostApply && !manager) {
+      return this.dataSource.transaction(async (transaction) => {
+        // Serialize check-and-create across concurrent requests from this account.
+        const owner = await transaction.getRepository(User).findOne({ where: { id: user!.id }, lock: { mode: "pessimistic_write" } });
+        if (!owner) throw new UnauthorizedException("登录已失效，请重新登录");
+        return this.submitAmbassadorApplication(dto, owner, context, transaction);
+      });
+    }
+    const applications = manager ? manager.getRepository(AmbassadorApplication) : this.ambassadorApplications;
+    const tenant = hostApply ? await this.resolveTenantContext(context) : null;
     let businessKey: string;
     try { businessKey = ecosystemBusinessKey(dto.businessKey, "申请业务键"); } catch (error: any) { throw new BadRequestException(error.message); }
-    const replay = await this.ambassadorApplications.findOne({ where: { businessKey } });
+    const replay = hostApply
+      ? await new MemberHostApplications(applications).replay(businessKey, user!.id, tenant?.id ?? null)
+      : await applications.findOne({ where: { businessKey } });
+    if (!hostApply && replay?.source === "host_apply") throw new BadRequestException("申请编号不可用，请重新提交");
     if (replay) return { id: replay.id, status: replay.status, kind: replay.kind, submittedAt: replay.createdAt, replayed: true };
+    if (hostApply) {
+      const current = await new MemberHostApplications(applications).latest(user!.id, tenant?.id ?? null);
+      if (current && current.status !== "rejected") throw new BadRequestException("已有主理人申请，请查看审核进度");
+    }
     const phone = this.normalizePhone(dto.phone);
     const name = String(dto.name || "").trim();
     const city = String(dto.city || "").trim();
@@ -1253,16 +1288,18 @@ export class PublicService {
     const wechat = String(dto.wechat || "").trim();
     const source = this.cleanTrackingText(dto.source, 80) || null;
     const channelCode = this.cleanTrackingText(dto.channelCode, 80) || null;
-    const kind = dto.kind || (["dean_recruit", "partner_apply", "brand_story_contact"].includes(String(source || "")) ? "partner" : "ambassador");
+    const kind = hostApply ? "partner" : dto.kind || (["dean_recruit", "partner_apply", "brand_story_contact"].includes(String(source || "")) ? "partner" : "ambassador");
     if (!name) throw new BadRequestException("请填写姓名");
     if (!city) throw new BadRequestException("请填写城市");
     if (!expertise) throw new BadRequestException("请填写擅长领域");
     if (!experience) throw new BadRequestException("请填写经验介绍");
     if (!wechat) throw new BadRequestException("请填写微信号");
-    const recentCount = await this.ambassadorApplications.count({ where: { phone, kind, createdAt: MoreThan(new Date(Date.now() - 24 * 60 * 60 * 1000)) } });
+    const recentCount = await applications.count({ where: { phone, kind, createdAt: MoreThan(new Date(Date.now() - 24 * 60 * 60 * 1000)) } });
     if (recentCount >= 3) throw new BadRequestException("同一手机号 24 小时内最多提交 3 次同类招募申请");
-    const row = this.ambassadorApplications.create({
+    const row = applications.create({
       businessKey, kind, name, phone, city,
+      applicantUserId: hostApply ? user!.id : null,
+      applicantTenantScopeKey: hostApply ? (tenant ? `tenant:${tenant.id}` : "platform") : null,
       province: this.cleanTrackingText(dto.province, 80) || null,
       district: this.cleanTrackingText(dto.district, 80) || null,
       organizationName: this.cleanTrackingText(dto.organizationName, 160) || null,
@@ -1273,12 +1310,15 @@ export class PublicService {
       convertedTenant: null, convertedMerchant: null, conversionBusinessKey: null, convertedAt: null
     });
     try {
-      const saved = await this.ambassadorApplications.save(row);
+      const saved = await applications.save(row);
       return { id: saved.id, status: saved.status, kind: saved.kind, submittedAt: saved.createdAt };
     } catch (error: any) {
       const duplicate = error?.code === "ER_DUP_ENTRY" || error?.errno === 1062 || error?.driverError?.code === "ER_DUP_ENTRY" || error?.driverError?.errno === 1062;
       if (!duplicate) throw error;
-      const existing = await this.ambassadorApplications.findOne({ where: { businessKey } });
+      const existing = hostApply
+        ? await new MemberHostApplications(applications).replay(businessKey, user!.id, tenant?.id ?? null)
+        : await applications.findOne({ where: { businessKey } });
+      if (!hostApply && existing?.source === "host_apply") throw new BadRequestException("申请编号不可用，请重新提交");
       if (!existing) throw new BadRequestException("申请编号冲突，请重新提交");
       return { id: existing.id, status: existing.status, kind: existing.kind, submittedAt: existing.createdAt, replayed: true };
     }
@@ -1876,6 +1916,17 @@ export class PublicService {
       region: tenant.region || null,
       contactName: tenant.contactName || null,
       contactPhone: tenant.contactPhone || null,
+      organizerProfile: this.publicTenantOrganizerProfile(tenant)
+    };
+  }
+
+  private publicTenantDirectoryItem(tenant?: Tenant | null) {
+    if (!tenant) return null;
+    return {
+      id: tenant.id,
+      code: tenant.code,
+      name: tenant.name,
+      region: tenant.region || null,
       organizerProfile: this.publicTenantOrganizerProfile(tenant)
     };
   }
@@ -2512,6 +2563,13 @@ export class PublicService {
     }
     const rows = await builder.getMany();
     if (!rows.length) return [];
+    const reviewableIds = await loadMemberReviewEligibility(rows, async (ids) => {
+      const reviews = await this.activityReviews.createQueryBuilder("review")
+        .select("review.registrationId", "registrationId")
+        .where("review.registrationId IN (:...ids)", { ids })
+        .getRawMany<{ registrationId: number | string }>();
+      return reviews.map((review) => Number(review.registrationId));
+    });
     const orders = await this.orders.find({ where: rows.map((registration) => ({ registration: { id: registration.id } })) });
     const refundRows = orders.length ? await this.refunds.createQueryBuilder("refund")
       .select("refund.id", "id")
@@ -2533,6 +2591,7 @@ export class PublicService {
     }
     return rows.map((registration) => ({
       ...this.publicRegistration(registration),
+      canReview: reviewableIds.has(registration.id),
       order: this.publicOrderSummary(orders.find((order) => order.registration.id === registration.id) || null),
       latestRefund: latestRefundByOrder.get(orders.find((order) => order.registration.id === registration.id)?.id || 0) || null
     }));

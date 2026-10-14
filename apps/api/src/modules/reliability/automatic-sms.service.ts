@@ -180,6 +180,7 @@ export class AutomaticSmsService implements OnModuleInit, OnModuleDestroy {
     return this.businessJobs.publish({
       tenantId: payload.tenantId,
       type: JOB_TYPE,
+      scene: payload.scene,
       idempotencyKey: `${payload.scene}:${payload.businessId}`.slice(0, 120),
       payload,
       maxAttempts: 5
