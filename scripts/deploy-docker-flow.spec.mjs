@@ -14,6 +14,7 @@ async function verifyDockerFixture(change, options = {}) {
   const root = '/www/wwwroot/rd.chaimen666.com';
   const commit = '12345678'.padEnd(40, '0');
   const previousCommit = '87654321'.padEnd(40, '0');
+  const previousApiCommit = options.previousApiCommit || previousCommit;
   let runningCommit = options.runningCommit || commit;
   const baseline = [
     { id: 'old-api', name: '/activity-api', startedAt: 'first', status: 'running', restarts: 0 },
@@ -33,9 +34,9 @@ async function verifyDockerFixture(change, options = {}) {
   });
   const sources = {
     'node:fs/promises': { default: { readFile: async filename => {
-      if (filename.endsWith('/release.json')) return JSON.stringify({ commit, previousCommit, files: {} });
+      if (filename.endsWith('/release.json')) return JSON.stringify({ commit, previousCommit, previousApiCommit, files: {} });
       if (filename.endsWith('/baseline.json')) return JSON.stringify({ runtime: 'docker', processes: baseline });
-      if (filename.endsWith('/environment-before.json')) return JSON.stringify([{ target: `${root}/.env`, source: `BUILD_COMMIT=${previousCommit}\n` }]);
+      if (filename.endsWith('/environment-before.json')) return JSON.stringify([{ target: `${root}/.env`, source: `BUILD_COMMIT=${previousApiCommit}\n` }]);
       throw new Error(`Unexpected read: ${filename}`);
     }, access: async filename => { if (options.missingBackup && filename.endsWith('/h5/index.html')) throw new Error('Missing static backup'); },
     rename: async (...args) => { writes.push({ operation: 'rename', args }); },
@@ -55,7 +56,7 @@ async function verifyDockerFixture(change, options = {}) {
       if (command === 'docker' && args[0] === 'inspect' && args[1] === '--format') return current.map(row => JSON.stringify(row)).join('\n');
       if (command === 'docker' && args[0] === 'compose' && options.mode === 'rollback') {
         assert.equal(args.join(' '), 'compose -p rdchaimen666com up -d --no-deps --no-build --force-recreate api');
-        runningCommit = previousCommit;
+        runningCommit = previousApiCommit;
         return 'restored API';
       }
       if (command === 'git' && args.join(' ') === 'rev-parse HEAD') return commit;
@@ -106,6 +107,13 @@ test('Docker rollback refuses an unexpected release or missing backup before mut
       return /unexpected|Missing static backup/.test(error.message);
     });
   }
+});
+
+test('Docker rollback checks the previous running API even when checkout HEAD differs', async () => {
+  const previousApiCommit = 'abcdef12'.padEnd(40, '0');
+  const { writes } = await verifyDockerFixture({}, { mode: 'rollback', previousApiCommit });
+  const record = writes.find(row => row.operation === 'writeFile' && row.args[0].endsWith('/rollback-complete.json'));
+  assert.equal(JSON.parse(record.args[1]).restoredCommit, previousApiCommit);
 });
 
 test('Docker verify rejects unrelated container recreation and restart', async () => {

@@ -12,6 +12,17 @@
 
 ## Global Constraints
 
+### Verified state on 2026-10-14
+
+- Candidate merge snapshot `b08d92c49a2af1d7cc6b9fbdb1f4c41f58cc7218` includes parents `c36ff388` and the running API source `2d917114`; its worktree was clean after commit.
+- API: 281 test files / 1460 tests passed; mobile: 60 test files / 187 tests passed. API, Admin and H5 production builds succeeded. Static guards passed using their documented template-only mode because production secrets are intentionally absent locally.
+- Local browser verified the launch dialog renders and entering home removes the dialog without console errors. Local relative API requests use demo fallback; this is not production flow acceptance.
+- Production checkout HEAD is `a94528f4d6e09a33ab62709f1f793cde61bd2171`, while running API reports `2d91711468b47a08a238e304f8102feb97ce0963`. They must be recorded separately as `previousCommit` and `previousApiCommit`.
+- Production tracked patch SHA-256 from `git diff --binary HEAD | sha256sum`: `42fdabaac6739a6a883cfa5f8131969ff2b40b413b25c43e8596bf35e3987787`. This digest is an observation, not proof that every patch has been reviewed. Review the tracked changes before authorizing the prepare gate.
+- Production Nginx H5 bind source is `/www/wwwroot/rd.chaimen666.com/deploy-staging/manpi-a94528f4/h5`; Admin bind source is `apps/admin/dist`, API dist is bind-mounted. Preserve these targets and the existing Docker image/Compose configuration.
+- Bundle `20261014-b08d92c4` was built and hash-checked locally but is superseded by the separate-baseline publishing fix. Do not upload or publish that archive.
+- Separate-baseline rollback regression reproduced a failure, then passed with the fix; 9 deployment tests passed. No production deployment or restart has been performed during this verification.
+
 - Production Compose project must be `rdchaimen666com`; the only recreated container is `/activity-api` (Compose service `api`).
 - The live API host port is 3000; port 18080 belongs to Nginx. API readiness response wraps health data under `data`.
 - Do not run a database migration unless the live pending list is an exact reviewed subset and the migration is required by this release. Expected release migrations are `deploy-migrations.mjs`; current production read-only inspection showed all required H5 migrations already applied.

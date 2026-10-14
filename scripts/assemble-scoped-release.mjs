@@ -13,9 +13,11 @@ const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).
 const sourceVersion = JSON.parse(await fs.readFile(path.join(root, 'apps/admin/dist/version.json'), 'utf8'));
 const releaseId = releaseIdFor(commit, sourceVersion.buildTime);
 const previousCommit = String(process.env.RELEASE_PREVIOUS_COMMIT || '').trim().toLowerCase();
+const previousApiCommit = String(process.env.RELEASE_PREVIOUS_API_COMMIT || previousCommit).trim().toLowerCase();
 if (!isCommitIdentifier(previousCommit) || releaseIdentifiersMatch(previousCommit, commit)) {
   throw new Error('RELEASE_PREVIOUS_COMMIT must be a valid previous Git commit and differ from the release commit.');
 }
+if (!isCommitIdentifier(previousApiCommit) || releaseIdentifiersMatch(previousApiCommit, commit)) throw new Error('RELEASE_PREVIOUS_API_COMMIT must identify the previous running API release.');
 const output = path.join(root, '.local-logs', 'production-release', releaseId);
 const bundle = path.join(output, 'bundle');
 await fs.mkdir(bundle, { recursive: true });
@@ -38,7 +40,7 @@ await hashTree(bundle);
 const adminVersion = JSON.parse(await fs.readFile(path.join(bundle, 'admin/version.json'), 'utf8'));
 const h5Version = JSON.parse(await fs.readFile(path.join(bundle, 'h5/version.json'), 'utf8'));
 if (!commitMatchesArtifact(adminVersion.commit, commit) || !commitMatchesArtifact(h5Version.commit, commit)) throw new Error('Static artifacts do not match release commit.');
-const manifest = { releaseId, commit, previousCommit, buildTime: adminVersion.buildTime, files };
+const manifest = { releaseId, commit, previousCommit, previousApiCommit, buildTime: adminVersion.buildTime, files };
 await fs.writeFile(path.join(bundle, 'release.json'), JSON.stringify(manifest, null, 2));
 const archive = path.join(output, `${releaseId}.tar.gz`);
 execFileSync('tar', ['-czf', archive, '-C', output, 'bundle']);

@@ -6,7 +6,7 @@ import { execFileSync, spawn } from 'node:child_process';
 import { pipeline } from 'node:stream/promises';
 import { createGzip } from 'node:zlib';
 import { createHash } from 'node:crypto';
-import { isReleaseId, releaseIdentifiersMatch } from './release-metadata.mjs';
+import { isCommitIdentifier, isReleaseId, releaseIdentifiersMatch } from './release-metadata.mjs';
 import { isAllowedDatabaseIdentity } from './deploy-database-identity.mjs';
 import { getContainerDatabaseRuntime } from './deploy-database-runtime.mjs';
 import { assertDockerPublishScope, assertDockerApiIdentity, assertUnrelatedDockerUnchanged, dockerHealthMatches, resolveDeployRuntime } from './deploy-runtime.mjs';
@@ -21,6 +21,8 @@ const bundle = path.join(privateDir, 'bundle');
 const nextApi = path.join(root, 'apps/api', `.release-${releaseId}`, 'dist');
 const require = createRequire(path.join(root, 'apps/api/package.json'));
 const manifest = JSON.parse(await fs.readFile(path.join(bundle, 'release.json'), 'utf8'));
+const previousApiCommit = manifest.previousApiCommit || manifest.previousCommit;
+if (!isCommitIdentifier(manifest.previousCommit) || !isCommitIdentifier(previousApiCommit)) throw new Error('Invalid production baseline identifiers.');
 const expectedMigrations = reviewedReleaseMigrations;
 const readinessUrl = process.env.API_READINESS_URL || 'http://127.0.0.1:3000/api/health/ready';
 const pm2 = '/www/server/nodejs/v22.22.3/lib/node_modules/pm2/bin/pm2';
@@ -178,6 +180,9 @@ else {
   if (!databaseRuntime || databaseRuntime.container !== deployRuntime.apiContainer) throw new Error('Docker database runtime must use the activity-api network.');
 }
 if (mode === 'prepare') {
+  const response = await fetch(readinessUrl, { signal: AbortSignal.timeout(5000) });
+  const body = await response.json();
+  if (!response.ok || !dockerHealthMatches(body.data || body, previousApiCommit)) throw new Error('Running API differs from reviewed baseline.');
   const productionPatch = run('git', ['diff', '--binary', 'HEAD']);
   const patchDigest = createHash('sha256').update(productionPatch).digest('hex');
   if (run('git', ['rev-parse', 'HEAD']) !== manifest.previousCommit || (productionPatch && process.env.REVIEWED_PRODUCTION_PATCH_SHA256 !== patchDigest)) throw new Error('Production checkout differs from reviewed baseline.');
@@ -340,11 +345,11 @@ if (mode === 'prepare') {
   await fs.rename(previousApi, path.join(root, 'apps/api/dist'));
   for (const { target, source } of savedEnvironment) await fs.writeFile(target, source, { mode: 0o600 });
   restartDockerApi(deployRuntime);
-  if (!await waitForDockerApi(manifest.previousCommit)) throw new Error('Restored API not ready; retained candidate and backups require operator inspection.');
+  if (!await waitForDockerApi(previousApiCommit)) throw new Error('Restored API not ready; retained candidate and backups require operator inspection.');
   await publishStatic(path.join(backups, 'admin'), targets.admin);
   await publishStatic(path.join(backups, 'h5'), targets.h5);
   assertUnrelatedDockerUnchanged(baseline.processes, runtimeProcesses());
-  await writeRecord('rollback-complete.json', { time: new Date().toISOString(), restoredCommit: manifest.previousCommit, candidatePreserved: preservedCandidate, databaseMigrationsRetained: true });
+  await writeRecord('rollback-complete.json', { time: new Date().toISOString(), restoredCommit: previousApiCommit, candidatePreserved: preservedCandidate, databaseMigrationsRetained: true });
   console.log('ROLLBACK_OK; previous API and static entries restored; additive migrations retained; unrelated containers unchanged.');
 } else {
   const baseline = JSON.parse(await fs.readFile(path.join(privateDir, 'baseline.json'), 'utf8'));
