@@ -133,7 +133,7 @@
         { "path": "content-appeals", "style": { "navigationBarTitleText": "内容申诉" } },
         { "path": "forum-posts", "style": { "navigationBarTitleText": "我的论坛" } },
         { "path": "certificates", "style": { "navigationBarTitleText": "我的证书" } },
-        { "path": "settings", "style": { "navigationBarTitleText": "设置" } }
+        { "path": "settings", "style": { "navigationBarTitleText": "隐私与安全", "navigationStyle": "custom" } }
       ]
     },
     {

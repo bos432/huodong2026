@@ -119,7 +119,7 @@ onShow(() => { void load(); });
 </script>
 
 <template>
-  <view class="profile-page">
+  <view class="account-profile-page member-secondary">
     <LoadingState v-if="loading" title="正在加载会员资料" description="请稍候，正在同步头像、昵称和账号安全信息。" />
     <EmptyState v-else-if="loadError" variant="error" title="会员资料加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else-if="profile">
@@ -134,7 +134,7 @@ onShow(() => { void load(); });
         </view>
       </view>
 
-      <view class="card">
+      <view class="account-card">
         <view class="field">
           <view class="label">头像</view>
           <view class="avatar-row">
@@ -183,12 +183,12 @@ onShow(() => { void load(); });
       @bound="handlePhoneBound"
     />
 
-    <AppBottomNav current-path="/pages/user/my" />
+    <AppBottomNav current-path="/pages/user/profile" />
   </view>
 </template>
 
 <style scoped>
-.profile-page {
+.account-profile-page {
   min-height: 100vh;
   padding: 24rpx 24rpx 160rpx;
   background:
@@ -197,7 +197,7 @@ onShow(() => { void load(); });
 }
 
 .hero,
-.card {
+.account-card {
   border: 1rpx solid rgba(199, 181, 157, 0.58);
   border-radius: 24rpx;
   background: rgba(255, 252, 246, 0.96);
@@ -256,7 +256,7 @@ onShow(() => { void load(); });
   color: rgba(255, 250, 242, 0.76);
 }
 
-.card {
+.account-card {
   padding: 26rpx;
   margin-bottom: 20rpx;
 }
@@ -359,4 +359,8 @@ onShow(() => { void load(); });
   font-size: 25rpx;
   font-weight: 900;
 }
+</style>
+
+<style scoped>
+@import "../../styles/member-secondary.css";
 </style>

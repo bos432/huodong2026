@@ -7,7 +7,7 @@ import { filterNavigationItemsByFeature } from "../feature-gates";
 import { motionStyle } from "../motion/platform-adapter";
 import { withTenantCode } from "../api";
 import { mobileTabRoute, type MobileUserTab } from "../mobile-tab-routes";
-import { usesMemberNavigation } from "../member-navigation";
+import { usesMemberNavigation, memberNavigationTab } from "../member-navigation";
 import MobileShell from "./layout/MobileShell.vue";
 
 function selectMemberTab(tab: MobileUserTab | "publish") {
@@ -110,7 +110,7 @@ function navLabel(item: { link?: string; label?: string }) {
 </script>
 
 <template>
-  <MobileShell v-if="usesMemberNavigation(currentPath)" navigation-only active-tab="me" @tab="selectMemberTab" />
+  <MobileShell v-if="usesMemberNavigation(currentPath)" navigation-only :active-tab="memberNavigationTab(currentPath)" @tab="selectMemberTab" />
   <view
     v-else-if="items.length"
     class="custom-tabbar"

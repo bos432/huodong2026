@@ -157,7 +157,7 @@ watch(newPhone, (value) => {
 </script>
 
 <template>
-  <view class="security-page">
+  <view class="account-security-page member-secondary">
     <LoadingState v-if="loading" title="正在加载账号安全" description="请稍候，正在同步手机号和登录密码设置。" />
     <EmptyState v-else-if="loadError" variant="error" title="账号安全加载失败" :description="loadError" action-text="重新加载" @action="load" />
     <template v-else>
@@ -166,7 +166,7 @@ watch(newPhone, (value) => {
         <view class="sub">当前账号：{{ profile?.phone || "未绑定手机号" }}</view>
       </view>
 
-      <view class="card">
+      <view class="account-card">
         <view class="card-title">绑定手机号</view>
         <view class="sub">更换手机号需要校验新手机号验证码。</view>
         <view class="field">
@@ -185,7 +185,7 @@ watch(newPhone, (value) => {
         <view class="button" role="button" tabindex="0" :aria-disabled="!canSavePhone" :aria-busy="savingPhone" :aria-label="savingPhone ? '保存中' : '保存手机号'" :class="{ disabled: !canSavePhone }" @click="savePhone" @keyup.enter="savePhone" @keyup.space.prevent="savePhone">{{ savingPhone ? "保存中..." : "保存手机号" }}</view>
       </view>
 
-      <view class="card">
+      <view class="account-card">
         <view class="card-title">{{ profile?.hasPassword ? "修改登录密码" : "设置登录密码" }}</view>
         <view class="sub">设置后可在 H5 使用手机号和密码登录，短信登录仍然保留。</view>
         <view class="field">
@@ -200,12 +200,12 @@ watch(newPhone, (value) => {
       </view>
     </template>
 
-    <AppBottomNav current-path="/pages/user/my" />
+    <AppBottomNav current-path="/pages/user/security" />
   </view>
 </template>
 
 <style scoped>
-.security-page {
+.account-security-page {
   min-height: 100vh;
   box-sizing: border-box;
   padding: 24rpx 24rpx calc(160rpx + env(safe-area-inset-bottom));
@@ -242,7 +242,7 @@ watch(newPhone, (value) => {
   color: rgba(255, 250, 242, 0.76);
 }
 
-.card {
+.account-card {
   margin-bottom: 20rpx;
   padding: 26rpx;
   border: 1rpx solid rgba(199, 181, 157, 0.58);
@@ -330,5 +330,9 @@ watch(newPhone, (value) => {
 .error-card { border-color:#fecaca; background:#fff7f7; color:#b91c1c; line-height:1.6; }
 .error-card .button { margin-top:18rpx; }
 .mini-button.disabled, .button.disabled { pointer-events:none; }
-@media (min-width: 900px) { .security-page { max-width:760px; margin:0 auto; } }
+@media (min-width: 900px) { .account-security-page { max-width:760px; margin:0 auto; } }
+</style>
+
+<style scoped>
+@import "../../styles/member-secondary.css";
 </style>

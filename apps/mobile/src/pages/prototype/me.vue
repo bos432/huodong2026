@@ -127,7 +127,7 @@ function openTodo(item: { title: string; path: string }) {
 }
 async function openSetting(item: { label: string; path?: string }) {
   if (item.path) {
-    if (item.label === "隐私与安全") uni.navigateTo({ url: withTenantCode(isGuest.value ? "/pages/legal/privacy-policy" : item.path) });
+    if (item.label === "隐私与安全") uni.navigateTo({ url: withTenantCode(item.path) });
     else navigateMember(item.path);
     return;
   }

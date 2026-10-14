@@ -105,6 +105,10 @@ export function filterIntrinsicHeaderDecorationSections(sections: unknown) {
 
 export function goDecoratedLink(url?: string, action?: string) {
   if (!url) return;
+  if (normalizeLink(url) === "/pages/user/my") {
+    uni.reLaunch({ url: withTenantCode("/pages/prototype/me") });
+    return;
+  }
   if (!isLinkAllowedByFeature(url)) {
     showFeatureDisabledToast(url);
     return;

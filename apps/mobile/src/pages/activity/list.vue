@@ -254,7 +254,7 @@ onReachBottom(loadMore);
 </script>
 
 <template>
-  <view class="container activity-page has-custom-nav">
+  <view class="activity-browser-page has-custom-nav member-secondary">
     <view class="activity-list-topbar app-enter">
       <TenantSwitcher compact :tenant="tenant" @changed="handleTenantChanged" />
       <view class="activity-list-actions"><view class="activity-list-count">{{ resultCountText }}</view></view>
@@ -321,7 +321,7 @@ onReachBottom(loadMore);
 </template>
 
 <style scoped>
-.activity-page { padding: 24rpx 28rpx; background: var(--app-page-bg); max-width: 760px; margin: 0 auto; overflow-wrap: anywhere; }
+.activity-browser-page { padding: 24rpx 28rpx; background: var(--app-page-bg); max-width: 760px; margin: 0 auto; overflow-wrap: anywhere; }
 .activity-list-topbar { display: flex; align-items: center; justify-content: space-between; gap: 16rpx; }
 .activity-list-actions { flex-shrink: 0; }
 .activity-list-count { color: var(--app-text-muted); font-size: 24rpx; }
@@ -354,4 +354,8 @@ onReachBottom(loadMore);
 .load-more { margin-top: 24rpx; background: var(--app-action); border-radius: 6rpx; }
 .no-more { padding: 26rpx 0; color: var(--app-text-subtle); font-size: 23rpx; text-align: center; }
 .category-chip:focus-visible,.status-tab:focus-visible { outline: 3rpx solid var(--app-focus); outline-offset: 3rpx; }
+</style>
+
+<style scoped>
+@import "../../styles/member-secondary.css";
 </style>

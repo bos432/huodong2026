@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { onMounted } from "vue";
+import { withTenantCode } from "../../api";
 
 onMounted(() => {
-  uni.reLaunch({ url: "/pages/home/index" });
+  uni.reLaunch({ url: withTenantCode("/pages/home/index") });
 });
 </script>
 

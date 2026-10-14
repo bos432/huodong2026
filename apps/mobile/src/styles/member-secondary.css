@@ -1,0 +1,39 @@
+@import "./tokens.css";
+
+/* Secondary screens use the same width, surfaces and navigation clearance as MobileShell. */
+.member-secondary.member-secondary {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 480px;
+  min-height: 100vh;
+  margin: 0 auto;
+  padding: 16px 16px calc(96px + env(safe-area-inset-bottom));
+  background: var(--mp-bg-page);
+  color: var(--mp-text-primary);
+  font-family: var(--mp-font-family);
+}
+.member-secondary .page-hero,
+.member-secondary .head,
+.member-secondary .hero {
+  padding: 18px 16px;
+  border: 1px solid var(--mp-border);
+  border-radius: 14px;
+  background: var(--mp-bg-surface);
+  color: var(--mp-text-primary);
+  box-shadow: none;
+}
+.member-secondary .hero-kicker { padding: 0; background: transparent; color: var(--mp-brand-primary-dark); font-size: 10px; letter-spacing: 1px; }
+.member-secondary .hero-title { margin-top: 8px; color: var(--mp-text-primary); font-size: 23px; }
+.member-secondary .hero-desc,
+.member-secondary .hero .sub,
+.member-secondary .head .sub { color: var(--mp-text-secondary); font-size: 12px; }
+.member-secondary .settings-card,
+.member-secondary .account-card { border: 1px solid var(--mp-border); border-radius: 14px; background: var(--mp-bg-surface); box-shadow: none; }
+.member-secondary .settings-item { min-height: 52px; padding: 14px 0; border-color: var(--mp-border); color: var(--mp-text-primary); font-size: 14px; }
+.member-secondary .nav-title { color: var(--mp-text-primary); font-size: 16px; }
+.member-secondary .nav-back { color: var(--mp-brand-primary-dark); font-size: 13px; }
+.member-secondary .logout-button { height: 44px; margin-top: 20px; background: var(--mp-bg-surface); color: var(--mp-danger); font-size: 14px; }
+.member-secondary .hero .fallback { color: var(--mp-brand-primary-dark); background: var(--mp-brand-soft); }
+.member-secondary .activity-list-title { font-family: var(--mp-font-family); font-size: 23px; font-weight: 750; }
+.member-secondary .filter-card { padding: 12px; border: 1px solid var(--mp-border); border-radius: 14px; }
+.member-secondary .search-box { border-radius: 9px; }

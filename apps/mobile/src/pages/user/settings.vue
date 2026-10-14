@@ -1,32 +1,33 @@
 <template>
-  <view class="container user-subpage has-custom-nav">
+  <view class="privacy-settings-page has-custom-nav member-secondary">
     <view class="custom-nav">
       <view class="nav-back" role="button" tabindex="0" aria-label="返回上一页" @click="goBack" @keyup.enter="goBack" @keyup.space.prevent="goBack">返回</view>
-      <text class="nav-title">设置</text>
+      <text class="nav-title">隐私与安全</text>
       <view class="nav-placeholder"></view>
     </view>
     <view class="page-hero">
-      <view class="hero-kicker">偏好设置</view>
-      <view class="hero-title">管理账号与通知</view>
-      <view class="hero-desc">账号安全、会员权益和应用信息集中在这里。</view>
+      <view class="hero-kicker">SLOWPI / PRIVACY</view>
+      <view class="hero-title">隐私与安全</view>
+      <view class="hero-desc">管理账号安全，了解个人信息如何被使用。</view>
     </view>
     <view class="settings-card">
       <view class="settings-item" role="button" tabindex="0" aria-label="账号与安全" @click="goSecurity" @keyup.enter="goSecurity" @keyup.space.prevent="goSecurity"><text>账号与安全</text><text class="item-arrow">›</text></view>
       <view v-if="featureGates.userContentSharing && featureGates.community" class="settings-item" role="button" tabindex="0" aria-label="我的活动心得" @click="goCommunityPosts" @keyup.enter="goCommunityPosts" @keyup.space.prevent="goCommunityPosts"><text>我的活动心得</text><text class="item-arrow">›</text></view>
-      <view class="settings-item" role="button" tabindex="0" aria-label="会员中心" @click="goMemberCenter" @keyup.enter="goMemberCenter" @keyup.space.prevent="goMemberCenter"><text>会员中心</text><text class="item-arrow">›</text></view>
+      <view class="settings-item" role="button" tabindex="0" aria-label="个人资料" @click="goMemberCenter" @keyup.enter="goMemberCenter" @keyup.space.prevent="goMemberCenter"><text>个人资料</text><text class="item-arrow">›</text></view>
       <view v-if="featureGates.userContentSharing && featureGates.community" class="settings-item" role="button" tabindex="0" aria-label="消息通知" @click="goNotifications" @keyup.enter="goNotifications" @keyup.space.prevent="goNotifications"><text>消息通知</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="用户协议" @click="goLegal('user-agreement')" @keyup.enter="goLegal('user-agreement')" @keyup.space.prevent="goLegal('user-agreement')"><text>用户协议</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="隐私政策" @click="goLegal('privacy-policy')" @keyup.enter="goLegal('privacy-policy')" @keyup.space.prevent="goLegal('privacy-policy')"><text>隐私政策</text><text class="item-arrow">›</text></view>
       <view class="settings-item" role="button" tabindex="0" aria-label="关于慢π" @click="showAbout" @keyup.enter="showAbout" @keyup.space.prevent="showAbout"><text>关于慢π</text><text class="item-arrow">{{ clientVersion }} ›</text></view>
     </view>
-    <view class="logout-button" :class="{ disabled: activeAction }" role="button" tabindex="0" :aria-busy="activeAction === 'logout'" :aria-label="activeAction === 'logout' ? '正在确认退出登录' : '退出登录'" @click="logout" @keyup.enter="logout" @keyup.space.prevent="logout">{{ activeAction === "logout" ? "确认中..." : "退出登录" }}</view>
-    <TabBar current="user" />
+    <view v-if="getUserToken()" class="logout-button" :class="{ disabled: activeAction }" role="button" tabindex="0" :aria-busy="activeAction === 'logout'" :aria-label="activeAction === 'logout' ? '正在确认退出登录' : '退出登录'" @click="logout" @keyup.enter="logout" @keyup.space.prevent="logout">{{ activeAction === "logout" ? "确认中..." : "退出登录" }}</view>
+    <TabBar current="user" current-path="/pages/user/settings" />
   </view>
 </template>
 <script setup lang="ts">
 import { computed, ref } from "vue";
 import { onShow } from "@dcloudio/uni-app";
-import { clearUser, ensureUser, request, withTenantCode } from "../../api";
+import { clearUser, getUserToken, request, withTenantCode } from "../../api";
+import { mobileTabRoute } from "../../mobile-tab-routes";
 import TabBar from "../../components/TabBar.vue";
 import { featureGatesState, loadFeatureGates } from "../../feature-gates";
 
@@ -38,16 +39,16 @@ const clientVersion = computed(() => {
   return version ? `v${version}` : "未配置";
 });
 
-function goBack() { uni.navigateBack(); }
+function goBack() { uni.navigateBack({ fail: () => uni.reLaunch({ url: withTenantCode(mobileTabRoute("me")) }) }); }
 function goSecurity() { uni.navigateTo({ url:withTenantCode("/pages/user/security") }); }
 function goCommunityPosts() { uni.navigateTo({ url:withTenantCode("/pages/user/community-posts") }); }
 function goMemberCenter() { uni.navigateTo({ url:withTenantCode("/pages/user/profile") }); }
-function goNotifications() { uni.navigateTo({ url:withTenantCode("/pages/user/community-social?tab=notifications") }); }
+function goNotifications() { uni.navigateTo({ url:withTenantCode("/pages/prototype/message") }); }
 function goLegal(page: "user-agreement" | "privacy-policy") { uni.navigateTo({ url:withTenantCode(`/pages/legal/${page}`) }); }
 function showAbout() {
   if (activeAction.value) return;
   activeAction.value = "about";
-  uni.showModal({ title:"关于慢π", content:`慢π活动、课程、社区与公益服务平台。当前小程序版本 ${clientVersion.value}。`, showCancel:false, complete:() => { activeAction.value = ""; } });
+  uni.showModal({ title:"关于慢π", content:`慢π，让真实活动成为生活的一部分。小程序版本 ${clientVersion.value}。`, showCancel:false, complete:() => { activeAction.value = ""; } });
 }
 
 async function loadMiniprogramVersion() {
@@ -67,16 +68,16 @@ function logout() {
     success(r) {
       if (!r.confirm) { activeAction.value = ""; return; }
       clearUser();
-      uni.reLaunch({ url:withTenantCode("/pages/user/my") });
+      uni.reLaunch({ url:withTenantCode(mobileTabRoute("me")) });
     },
     fail() { activeAction.value = ""; }
   });
 }
 
-onShow(() => { void ensureUser(); void loadMiniprogramVersion(); void loadFeatureGates(true); });
+onShow(() => { void loadMiniprogramVersion(); void loadFeatureGates(true); });
 </script>
 <style scoped>
-.user-subpage {
+.privacy-settings-page {
   min-height: 100vh;
   box-sizing:border-box;
   padding-bottom: calc(160rpx + env(safe-area-inset-bottom));
@@ -185,6 +186,10 @@ onShow(() => { void ensureUser(); void loadMiniprogramVersion(); void loadFeatur
 }
 .logout-button.disabled { opacity:.6; pointer-events:none; }
 @media (min-width: 900px) {
-  .user-subpage { max-width:760px; margin:0 auto; }
+  .privacy-settings-page { max-width:760px; margin:0 auto; }
 }
+</style>
+
+<style scoped>
+@import "../../styles/member-secondary.css";
 </style>

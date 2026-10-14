@@ -268,7 +268,7 @@ function copyText(text?: string) {
 function goMy() {
   const existing = existingActivityBooking(activity.value);
   if (existing?.registrationId) { uni.navigateTo({ url: withTenantCode(`/pages/user/registration?id=${existing.registrationId}`) }); return; }
-  uni.reLaunch({ url: withTenantCode("/pages/user/my") });
+  uni.reLaunch({ url: withTenantCode("/pages/prototype/me") });
 }
 
 function goService() {
