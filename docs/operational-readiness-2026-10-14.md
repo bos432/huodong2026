@@ -3,8 +3,8 @@
 ## 当前线上状态
 
 - H5/API 正式入口：`https://rd.chaimen666.com/?tenantCode=qiwai-showcase`。
-- API、数据库、嵌入式 Worker：在线；`/api/health/ready` 返回 `ready=true`。
-- H5/API/Admin 当前版本：`152da076521843e14187160d53f3ce8ea86e6ca4`；三端公开版本文件一致。
+- API、数据库、嵌入式 Worker：在线；`/api/health/ready` 返回 `ready=true`。2026-10-14 H5 首页修正发布后再次检查仍为 `ready=true`。
+- API/Admin 当前版本：`152da076521843e14187160d53f3ce8ea86e6ca4`。H5 已单独发布首页修正版本 `09bf050433d1631c62576280529aa4dce6261cf9`；两者版本不同是本次仅更新 H5 的预期结果。
 - Admin 版本文件 `https://rd.chaimen666.com/admin/version.json` 同样返回该提交；独立 `admin.chaimen666.com` 当前探测失败。优先使用 H5 域名下配置的 `/admin/` 后台入口。
 - 公开活动：`qiwai-showcase` 只有演示活动且报名截止已过；`cq_tongliang`、`manpi-demo` 无公开活动。演示内容不可报名，不能当作实际开业活动。
 - 支付：余额与线下人工确认可用；真实微信支付关闭。不可向访客宣传已经接通线上收款。
