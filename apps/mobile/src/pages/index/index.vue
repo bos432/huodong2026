@@ -68,6 +68,7 @@
     </view>
 
     <SplashAd />
+    <LaunchScreen />
     <MarketingPopup />
     <view style="height:120rpx;"></view>
     <TabBar current="index" />
@@ -86,6 +87,7 @@ import TabBar from "../../components/TabBar.vue";
 import PageDecorationBlocks from "../../components/PageDecorationBlocks.vue";
 import MarketingPopup from "../../components/MarketingPopup.vue";
 import SplashAd from "../../components/SplashAd.vue";
+import LaunchScreen from "../../components/LaunchScreen.vue";
 import TenantSwitcher from "../../components/TenantSwitcher.vue";
 import ActivityPreviewRow from "../../components/ActivityPreviewRow.vue";
 import { wuxingActivityFilter, wuxingThemes } from '../../wuxing-navigation';
@@ -380,3 +382,5 @@ function formatActivityHour(value: string) { return formatActivityDate(value, "t
 .discovery-page .heading-title { font-family: "STSong", "SimSun", "Noto Serif CJK SC", serif; font-weight: 600; }
 
 </style>
+
+
