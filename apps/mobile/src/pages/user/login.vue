@@ -488,4 +488,24 @@ onUnmounted(() => { if (cooldownTimer) clearInterval(cooldownTimer); });
 .login-page [role="button"]:focus-visible { outline:2px solid #0f766e; outline-offset:3px; }
 .login-page input:focus-visible { outline:2px solid #0f766e; outline-offset:2px; }
 @media (min-width:900px) { .login-page { max-width:760px; margin:0 auto; } }
+/* Login page visual refinement */
+.login-page { gap: 14rpx; background: #f4f6f4; color: #203329; }
+.login-card { gap: 22rpx; padding: 30rpx 26rpx 18rpx; border: 1rpx solid #dfe8e1; border-radius: 18rpx; background: #fff; box-shadow: 0 10rpx 26rpx rgba(28, 57, 40, 0.06); }
+.card-kicker { color: #183d2a; font-size: 30rpx; font-weight: 850; letter-spacing: .02em; }
+.phone-login-section { gap: 20rpx; }
+.field { gap: 10rpx; }
+.label { color: #3e5146; font-size: 25rpx; font-weight: 750; }
+.login-tabs { gap: 6rpx; padding: 5rpx; border: 1rpx solid #e0e9e2; border-radius: 12rpx; background: #f3f6f3; }
+.login-tab { min-height: 68rpx; border-radius: 9rpx; color: #718078; font-size: 24rpx; font-weight: 750; }
+.login-tab.active { background: #fff; color: #1c5638; box-shadow: 0 3rpx 8rpx rgba(28, 57, 40, 0.08); border-bottom: 0; }
+.code-row { grid-template-columns: 1fr 168rpx; gap: 10rpx; }
+.mini-button { border-radius: 10rpx; background: #1e5a3a; font-size: 24rpx; font-weight: 750; }
+.mini-button.disabled { background: #a5b0aa; }
+.notice { padding: 14rpx 16rpx; border: 1rpx solid #d9e8df; border-radius: 10rpx; background: #f0f7f2; color: #4c6e5a; font-size: 23rpx; line-height: 1.5; }
+.admin-login-entry { min-height: 56rpx; margin-top: 2rpx; padding: 8rpx 18rpx 0; border-top: 1rpx solid #edf1ed; color: #527060; font-size: 23rpx; font-weight: 650; }
+.home-entry { min-height: 48rpx; color: #9b4b3d; font-size: 23rpx; font-weight: 750; }
+.login-page .input { height: 78rpx; padding: 0 18rpx; border: 1rpx solid #d7e3db; border-radius: 10rpx; background: #fbfdfb; color: #203329; font-size: 25rpx; }
+.login-page .input:focus { border-color: #4b9270; background: #fff; }
+.login-page .button { min-height: 76rpx; border-radius: 10rpx; background: #1e5a3a; color: #fff; font-size: 27rpx; font-weight: 800; line-height: 76rpx; text-align: center; }
+.login-page .button.secondary { border: 1rpx solid #b9cabe; background: #eef4ef; color: #537060; }
 </style>
