@@ -32,6 +32,7 @@
 .member-secondary .settings-item { min-height: 52px; padding: 14px 0; border-color: var(--mp-border); color: var(--mp-text-primary); font-size: 14px; }
 .member-secondary .nav-title { color: var(--mp-text-primary); font-size: 16px; }
 .member-secondary .nav-back { color: var(--mp-brand-primary-dark); font-size: 13px; }
+.member-secondary .item-arrow { color: var(--mp-text-muted); font-size: 12px; }
 .member-secondary .logout-button { height: 44px; margin-top: 20px; background: var(--mp-bg-surface); color: var(--mp-danger); font-size: 14px; }
 .member-secondary .hero .fallback { color: var(--mp-brand-primary-dark); background: var(--mp-brand-soft); }
 .member-secondary .activity-list-title { font-family: var(--mp-font-family); font-size: 23px; font-weight: 750; }
