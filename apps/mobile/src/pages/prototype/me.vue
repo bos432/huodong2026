@@ -8,7 +8,7 @@ import type { PublicMemberProfile, PublicMemberRegistrationRecord } from "@activ
 import { mobileTabRoute } from "../../mobile-tab-routes";
 import { withTenantCode, getUserToken, getUserId, getCurrentTenantCode, clearUser, request } from "../../api";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
-import { EXPERIENCE_RECORDS_STORAGE_KEY, normalizeExperienceRecords, readExperienceRecords, type ExperienceRecord } from "../checkin/experience-records";
+import { EXPERIENCE_RECORDS_STORAGE_KEY, normalizeExperienceRecords, readExperienceRecords, type ExperienceRecord } from "../../experience-records";
 import { summarizeProfileRegistrations } from "./profile-state";
 
 const settings = [

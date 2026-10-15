@@ -1,5 +1,5 @@
 import type { PublicMemberRegistrationRecord } from "@activity/shared";
-import { getJourneyGroup, sortJourneyRegistrations } from "../checkin/journey-state";
+import { getJourneyGroup, sortJourneyRegistrations } from "../../journey-state";
 
 export function summarizeProfileRegistrations(rows: PublicMemberRegistrationRecord[], now = Date.now()) {
   const active = rows.filter((row) => ["upcoming", "completed"].includes(getJourneyGroup(row, now)));

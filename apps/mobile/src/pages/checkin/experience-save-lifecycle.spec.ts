@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import ts from "typescript";
 import { describe, expect, it, vi } from "vitest";
-import { experienceDraftError } from "./experience-records";
+import { experienceDraftError } from "../../experience-records";
 
 function composer() {
   const script = readFileSync(new URL("./detail.vue", import.meta.url), "utf8").split('<script setup lang="ts">')[1].split("</script>")[0];
@@ -16,7 +16,7 @@ function composer() {
     "../../api": { withTenantCode: (path: string) => path },
     "../../mock/challenge": { mockChallenges: [] },
     "../../mock/challenge-flow": { getChallengeProgress: () => ({}) },
-    "./experience-records": { experienceDraftError },
+    "../../experience-records": { experienceDraftError },
     "../../slow-experience-client": {
       captureExperienceAccount: () => state.token ? { userToken: state.token, tenantCode: state.tenant } : null,
       experienceAccountIsCurrent: (account: any) => account.userToken === state.token && account.tenantCode === state.tenant,

@@ -49,6 +49,23 @@ function checkComponentWxssSelectors() {
 
 if (!fs.existsSync(output)) throw new Error(`mp-weixin output does not exist: ${output}`);
 
+const appConfig = JSON.parse(fs.readFileSync(path.join(output, "app.json"), "utf8"));
+const subpackageRoots = (appConfig.subPackages || appConfig.subpackages || [])
+  .map((pack) => `${pack.root.replace(/\/$/, "")}/`);
+function mainPackageBytes(directory) {
+  return fs.readdirSync(directory, { withFileTypes: true }).reduce((total, entry) => {
+    const filename = path.join(directory, entry.name);
+    const relative = path.relative(output, filename).split(path.sep).join("/");
+    if (subpackageRoots.some((root) => `${relative}/`.startsWith(root))) return total;
+    return total + (entry.isDirectory() ? mainPackageBytes(filename) : fs.statSync(filename).size);
+  }, 0);
+}
+const mainBytes = mainPackageBytes(output);
+if (mainBytes > 2 * 1024 * 1024) {
+  throw new Error(`mp-weixin main package exceeds 2 MiB: ${mainBytes} bytes`);
+}
+console.log(`mp-weixin main package: ${mainBytes} bytes / 2097152`);
+
 // Inspect the effective export, not the fallback string also present in the bundle.
 const apiModule = { exports: {} };
 vm.runInNewContext(fs.readFileSync(path.join(output, "api-base.js"), "utf8"),
@@ -68,13 +85,27 @@ if (stale.length) {
 }
 
 const missing = [];
+const crossPackage = [];
+function packageOwner(filename) {
+  const relative = path.relative(output, filename).split(path.sep).join("/");
+  return subpackageRoots.find((root) => relative.startsWith(root)) || "";
+}
 for (const file of filesAt(output)) {
   const content = fs.readFileSync(file, "utf8");
   for (const match of content.matchAll(/require\(["'](\.[^"']+)["']\)/g)) {
     const request = match[1];
     const target = path.resolve(path.dirname(file), request.endsWith(".js") ? request : `${request}.js`);
     if (!fs.existsSync(target)) missing.push(`${path.relative(output, file)} -> ${request}`);
+    const targetPackage = packageOwner(target);
+    if (targetPackage && targetPackage !== packageOwner(file)) {
+      crossPackage.push(`${path.relative(output, file)} -> ${request}`);
+    }
   }
+}
+
+if (crossPackage.length) {
+  console.error("mp-weixin synchronous dependency crosses subpackage boundary:\n" + crossPackage.join("\n"));
+  process.exit(1);
 }
 
 if (missing.length) {

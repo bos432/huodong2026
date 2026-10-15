@@ -1,21 +1,46 @@
 {
   "pages": [
     { "path": "pages/index/index", "style": { "navigationBarTitleText": "慢π", "navigationStyle": "custom" } },
-    { "path": "pages/home/index", "style": { "navigationBarTitleText": "慢π首页", "navigationStyle": "custom" } },
-    { "path": "pages/checkin/index", "style": { "navigationBarTitleText": "我的行程", "navigationStyle": "custom" } },
-    { "path": "pages/checkin/detail", "style": { "navigationBarTitleText": "城市手记", "navigationStyle": "custom" } },
-    { "path": "pages/prototype/message", "style": { "navigationBarTitleText": "消息", "navigationStyle": "custom" } },
-    { "path": "pages/prototype/me", "style": { "navigationBarTitleText": "我的", "navigationStyle": "custom" } },
-    { "path": "pages/prototype/detail", "style": { "navigationBarTitleText": "活动详情", "navigationStyle": "custom" } },
-    { "path": "pages/prototype/index", "style": { "navigationBarTitleText": "慢π UI 原型", "navigationStyle": "custom" } },
-    { "path": "pages/scan/index", "style": { "navigationBarTitleText": "扫一扫" } },
-    { "path": "pages/courses/index", "style": { "navigationBarTitleText": "专题内容" } },
-    { "path": "pages/activity/list", "style": { "navigationBarTitleText": "活动列表" } },
-    { "path": "pages/activity/detail", "style": { "navigationBarTitleText": "活动详情" } },
-    { "path": "pages/activity/register", "style": { "navigationBarTitleText": "报名" } },
-    { "path": "pages/activity/space", "style": { "navigationBarTitleText": "活动空间" } }
+    { "path": "pages/home/index", "style": { "navigationBarTitleText": "慢π首页", "navigationStyle": "custom" } }
   ],
   "subPackages": [
+    {
+      "root": "pages/checkin",
+      "pages": [
+        { "path": "index", "style": {"navigationBarTitleText":"我的行程","navigationStyle":"custom"} },
+        { "path": "detail", "style": {"navigationBarTitleText":"城市手记","navigationStyle":"custom"} }
+      ]
+    },
+    {
+      "root": "pages/prototype",
+      "pages": [
+        { "path": "message", "style": {"navigationBarTitleText":"消息","navigationStyle":"custom"} },
+        { "path": "me", "style": {"navigationBarTitleText":"我的","navigationStyle":"custom"} },
+        { "path": "detail", "style": {"navigationBarTitleText":"活动详情","navigationStyle":"custom"} },
+        { "path": "index", "style": {"navigationBarTitleText":"慢π UI 原型","navigationStyle":"custom"} }
+      ]
+    },
+    {
+      "root": "pages/scan",
+      "pages": [
+        { "path": "index", "style": {"navigationBarTitleText":"扫一扫"} }
+      ]
+    },
+    {
+      "root": "pages/courses",
+      "pages": [
+        { "path": "index", "style": {"navigationBarTitleText":"专题内容"} }
+      ]
+    },
+    {
+      "root": "pages/activity",
+      "pages": [
+        { "path": "list", "style": {"navigationBarTitleText":"活动列表"} },
+        { "path": "detail", "style": {"navigationBarTitleText":"活动详情"} },
+        { "path": "register", "style": {"navigationBarTitleText":"报名"} },
+        { "path": "space", "style": {"navigationBarTitleText":"活动空间"} }
+      ]
+    },
     {
       "root": "pages/journal",
       "pages": [

@@ -8,7 +8,7 @@ import { getChallengeProgress } from "../../mock/challenge-flow";
 import { mobileTabRoute } from "../../mobile-tab-routes";
 import { withTenantCode } from "../../api";
 import type { Challenge } from "../../types/challenge";
-import { experienceDraftError, type ExperienceVisibility } from "./experience-records";
+import { experienceDraftError, type ExperienceVisibility } from "../../experience-records";
 import { captureExperienceAccount, createCloudExperience, updateCloudExperience, loadOwnedExperience, experienceAccountIsCurrent } from "../../slow-experience-client";
 import "../../styles/tokens.css";
 

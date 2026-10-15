@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createExperienceRecord, normalizeExperienceRecords, readExperienceRecords, saveExperienceRecord, type ExperienceRecordDraft } from "./experience-records";
+import { createExperienceRecord, normalizeExperienceRecords, readExperienceRecords, saveExperienceRecord, type ExperienceRecordDraft } from "../../experience-records";
 
 const draft: ExperienceRecordDraft = {
   discovery: "老墙缝里长出了一片很小的绿叶",

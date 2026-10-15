@@ -8,8 +8,8 @@ import { getCurrentTenantCode, getUserToken, request, withTenantCode } from "../
 import { mobileTabRoute } from "../../mobile-tab-routes";
 import { formatShanghaiDateTime } from "../../tenant-load-guard";
 import { mockChallenges } from "../../mock/challenge";
-import { getJourneyGroup, getJourneyStatus, sortJourneyRegistrations } from "./journey-state";
-import type { JourneyGroup } from "./journey-state";
+import { getJourneyGroup, getJourneyStatus, sortJourneyRegistrations } from "../../journey-state";
+import type { JourneyGroup } from "../../journey-state";
 import "../../styles/tokens.css";
 
 type JourneyFilter = "upcoming" | "completed" | "all";

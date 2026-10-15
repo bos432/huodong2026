@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PublicMemberRegistrationRecord } from "@activity/shared";
-import { getJourneyGroup, getJourneyStatus } from "./journey-state";
+import { getJourneyGroup, getJourneyStatus } from "../../journey-state";
 
 const now = new Date("2026-10-12T10:00:00+08:00").getTime();
 
