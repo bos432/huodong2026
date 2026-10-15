@@ -2,7 +2,7 @@
 import QRCode from "qrcode";
 import { computed, nextTick, ref } from "vue";
 import { onShareAppMessage, onShareTimeline, onShow } from "@dcloudio/uni-app";
-import { ensureUser, fetchWechatSubscriptionTemplates, getUserToken, request, requestWechatSubscriptions, withTenantCode } from "../../api";
+import { ensureUser, fetchWechatSubscriptionTemplates, getCurrentTenantCode, getUserToken, request, requestWechatSubscriptions, withTenantCode } from "../../api";
 import { filterIntrinsicHeaderDecorationSections, usePageDecoration } from "../../decoration";
 import { reviewSafeData, reviewSafeText } from "../../review-safe-text";
 import { markdownToRichTextHtml } from "@activity/shared";
