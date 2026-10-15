@@ -104,7 +104,7 @@ describe("activity detail shared state contract", () => {
   it("never shows attendee identities or counts on demo activity details", () => {
     const template = source.slice(source.indexOf("<template>"), source.lastIndexOf("</template>"));
     expect(template).toContain('v-if="activity.attendees?.length && !activity.isTest"');
-    expect(source).toContain('if (activity.value?.isTest) return "演示活动，暂不可报名";');
+    expect(source).toContain('if (activity.value?.isTest) return "演示活动";');
   });
 
   it("keeps activity actions independent from detail loading state", () => {

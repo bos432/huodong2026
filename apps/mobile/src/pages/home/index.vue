@@ -6,12 +6,12 @@ import BaseBottomSheet from "../../components/sheets/BaseBottomSheet.vue";
 import CategoryScroller from "../../components/home/CategoryScroller.vue";
 import ActivityCard from "../../components/home/ActivityCard.vue";
 import WeekendInspiration from "../../components/home/WeekendInspiration.vue";
-import { queryInspirations } from "./weekend-inspiration";
+import { queryInspirations, queryRealActivityReviews } from "./weekend-inspiration";
+import { demoActivitiesForTenant } from "./demo-activity-feed";
 import IconGlyph from "../../components/ui/IconGlyph.vue";
 import { getCurrentTenantCode, request, setCurrentTenantCode, setCurrentTenantCodeSource, withTenantCode, type TenantBootstrap } from "../../api";
 import type { PublicActivityListResponse, PublicActivitySummary } from "@activity/shared";
 import type { PublicTenantView } from "@activity/shared";
-import { mockActivities } from "../../mock/activity";
 import { resolveTenantByCurrentLocation } from "../../tenant-location";
 import type { Activity, ActivitySort } from "../../types/activity";
 import { queryActivities } from "./activity-query";
@@ -38,11 +38,16 @@ const page = ref(1);
 const loading = ref(true);
 const loadError = ref("");
 const activities = ref<Activity[]>([]);
+const publicActivities = ref<Activity[]>([]);
+const tenantCode = ref(getCurrentTenantCode());
+const isShowcase = ref(false);
 const dataSource = ref<"api" | "mock">("mock");
 const inspirationTenant = ref(getCurrentTenantCode());
 const inspirations = computed(() => statusFilter.value === "all" ? queryInspirations(inspirationTenant.value, filterCategory.value === "推荐" ? activeCategory.value : filterCategory.value, search.value) : []);
+const activityReviews = computed(() => queryRealActivityReviews(inspirationTenant.value));
 const carouselIndex = ref(0);
 const heroImageFailed = ref<Record<number, boolean>>({});
+const activeHeroIsDemo = computed(() => Boolean(heroCards.value[carouselIndex.value]?.isDemo));
 const canUseDistanceSort = false;
 const canUsePopularitySort = false;
 const filteredActivities = computed(() => {
@@ -57,7 +62,11 @@ const heroCards = computed(() => {
 const demoMode = computed(() => dataSource.value === "mock" || (activities.value.length > 0 && activities.value.every((item) => item.isDemo)));
 const hasRealActivities = computed(() => activities.value.some((item) => !item.isDemo));
 
-function openActivity(id: number) { uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${encodeURIComponent(String(id))}`) }); }
+function visibleActivitiesForTenant(code: string, items: Activity[]) {
+  return items.length ? items : demoActivitiesForTenant(code, items);
+}
+
+function openActivity(id: number) { const isDemo = heroCards.value.find((item) => item.id === id)?.isDemo || filteredActivities.value.find((item) => item.id === id)?.isDemo; uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${encodeURIComponent(String(id))}${isDemo ? "&demo=1" : ""}`) }); }
 function onHeroChange(event: { detail?: { current?: number } }) {
   carouselIndex.value = Number(event?.detail?.current || 0);
 }
@@ -147,18 +156,24 @@ function filterSummary() {
 }
 async function loadActivities() {
   inspirationTenant.value = getCurrentTenantCode();
+  tenantCode.value = inspirationTenant.value;
+  isShowcase.value = tenantCode.value === "qiwai-showcase";
   loading.value = true;
   loadError.value = "";
   try {
     const result = await request<PublicActivityListResponse | PublicActivitySummary[]>("/public/activities?page=1&pageSize=20");
     const mapped = mapPublicActivityList(result);
-    activities.value = mapped.items;
+    publicActivities.value = mapped.items;
+    activities.value = visibleActivitiesForTenant(tenantCode.value, publicActivities.value);
     dataSource.value = "api";
     page.value = 1;
   } catch (error: any) {
-    activities.value = mockActivities.map(item => ({ ...item, dataSource: "mock" as const }));
+    publicActivities.value = [];
+    activities.value = tenantCode.value === "qiwai-showcase"
+      ? visibleActivitiesForTenant(tenantCode.value, publicActivities.value)
+      : [];
     dataSource.value = "mock";
-    loadError.value = `接口暂不可用，当前展示本地演示数据：${error?.message || "请求失败"}`;
+    loadError.value = `接口暂不可用${tenantCode.value === "qiwai-showcase" ? "，当前展示本地演示数据" : ""}：${error?.message || "请求失败"}`;
   } finally {
     loading.value = false;
   }
@@ -194,10 +209,11 @@ onShow(() => {
         </view>
       </view>
       <view v-else-if="!inspirations.length" class="hero-empty"><b>暂时没有推荐活动</b><small>已发布并开放报名的活动会出现在这里。</small></view>
+      <view v-if="activityReviews.length" class="activity-reviews"><view class="activity-reviews-heading"><b>真实活动回顾</b><small>来源：铜梁区融媒体中心 · 已结束，不可报名</small></view><view v-for="item in activityReviews" :key="item.title" class="activity-review-card"><b>{{ item.title }}</b><text>{{ item.date }} · {{ item.place }}</text><small>{{ item.summary }}</small><a :href="item.sourceUrl" target="_blank" rel="noopener noreferrer">{{ item.sourceName }} ↗</a></view></view>
       <WeekendInspiration :items="inspirations" />
-      <view class="intro"><view class="intro-copy"><b>近期活动</b><small>{{ demoMode ? '当前仅用于页面展示' : '来自活动服务的公开信息' }}</small></view><view v-if="hasRealActivities" class="actions"><view @click="sheet = 'sort'"><IconGlyph name="sort" :size="14" /><text>{{ sortLabel(activeSort) }}</text></view><view @click="openFilter"><IconGlyph name="filter" :size="14" /><text>筛选</text></view></view></view>
+      <view class="intro"><view class="intro-copy"><b>近期活动</b><small>{{ isShowcase && demoMode ? '演示商家 · 样例不可报名' : '来自活动服务的公开信息' }}</small></view><view v-if="hasRealActivities" class="actions"><view @click="sheet = 'sort'"><IconGlyph name="sort" :size="14" /><text>{{ sortLabel(activeSort) }}</text></view><view @click="openFilter"><IconGlyph name="filter" :size="14" /><text>筛选</text></view></view></view>
       <view v-if="statusFilter !== 'all' || filterCategory !== '推荐'" class="active-filters"><IconGlyph name="filter" :size="13" label="当前筛选" /><text>当前条件：{{ filterSummary() }}</text><view role="button" tabindex="0" aria-label="清除筛选" @click="clearFilters">清除</view></view>
-      <view class="feed"><view v-if="loadError" class="state notice"><b>当前为本地演示模式</b><small>{{ loadError }}</small><button @click="retryLoad">重试接口</button></view><view v-if="loading" class="state loading">正在同步公开活动…</view><template v-else><ActivityCard v-for="activity in filteredActivities" :key="activity.id" :activity="activity" @open="openActivity" /><view v-if="!filteredActivities.length" class="state empty"><b>{{ hasRealActivities ? (cityActivities.length ? "还没有匹配的活动" : `${currentCity}暂没有可展示的活动`) : "真实活动即将上线" }}</b><small>{{ hasRealActivities ? (cityActivities.length ? "换个关键词或放宽筛选条件，再看看附近的安排。" : "该城市暂无已发布活动，试试切换城市。") : "目前展示的演示内容不代表真实举办安排。主理人发布并通过审核后，活动会显示在这里。" }}</small><button v-if="hasRealActivities && cityActivities.length" @click="clearFilters">清除筛选</button></view><button v-else-if="filteredActivities.length < activities.length" class="load" @click="loadMore">加载更多活动</button><view v-else-if="filteredActivities.length" class="load done">已加载全部活动</view></template></view>
+      <view class="feed"><view v-if="loadError" class="state notice"><b>当前为本地演示模式</b><small>{{ loadError }}</small><button @click="retryLoad">重试接口</button></view><view v-if="loading" class="state loading">正在同步公开活动…</view><template v-else><ActivityCard v-for="activity in filteredActivities" :key="activity.id" :activity="activity" @open="openActivity(activity.id)" /><view v-if="!filteredActivities.length" class="state empty"><b>{{ hasRealActivities ? (cityActivities.length ? "还没有匹配的活动" : `${currentCity}暂没有可展示的活动`) : "真实活动即将上线" }}</b><small>{{ hasRealActivities ? (cityActivities.length ? "换个关键词或放宽筛选条件，再看看附近的安排。" : "该城市暂无已发布活动，试试切换城市。") : "主理人发布并通过审核后，活动会显示在这里。" }}</small><button v-if="hasRealActivities && cityActivities.length" @click="clearFilters">清除筛选</button></view><button v-else-if="filteredActivities.length < activities.length" class="load" @click="loadMore">加载更多活动</button><view v-else-if="filteredActivities.length" class="load done">已加载全部活动</view></template></view>
     </view>
     <BaseBottomSheet :open="sheet === 'sort'" title="排序" @close="sheet = null"><view class="option" v-for="option in (['recommended','nearest_time','nearest_distance','popularity','price_low'] as ActivitySort[])" :key="option" :class="{ disabled: (option === 'nearest_distance' && !canUseDistanceSort) || (option === 'popularity' && !canUsePopularitySort) }" @click="(option !== 'nearest_distance' || canUseDistanceSort) && (option !== 'popularity' || canUsePopularitySort) ? (activeSort = option, sheet = null) : undefined"><view><text>{{ sortLabel(option) }}</text><small v-if="option === 'nearest_distance' && !canUseDistanceSort">需要定位权限，当前不可用</small><small v-else-if="option === 'popularity' && !canUsePopularitySort">演示数据不提供可信热度</small></view><b v-if="activeSort === option">✓</b></view></BaseBottomSheet>
     <BaseBottomSheet :open="sheet === 'filter'" title="筛选" @close="sheet = null"><view class="filter-content"><b>活动状态</b><view class="filter-grid"><text :class="{ selected: draftStatusFilter === 'all' }" @click="draftStatusFilter = 'all'">全部</text><text :class="{ selected: draftStatusFilter === 'open' }" @click="draftStatusFilter = 'open'">可报名</text><text :class="{ selected: draftStatusFilter === 'full' }" @click="draftStatusFilter = 'full'">已满座</text></view><b>活动类型</b><view class="filter-grid types"><text v-for="type in categories.slice(1)" :key="type" :class="{ selected: draftFilterCategory === type }" @click="draftFilterCategory = type">{{ type }}</text></view><button class="reset" @click="draftStatusFilter = 'all'; draftFilterCategory = '推荐'">重置</button><button class="confirm" @click="applyFilter">确定</button></view></BaseBottomSheet>

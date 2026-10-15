@@ -6,7 +6,7 @@ const source = readFileSync(resolve(__dirname, "register.vue"), "utf8");
 
 describe("activity registration shared state contract", () => {
   it("uses shared states for registration loading and failure", () => {
-    expect(source).toContain('<LoadingState v-if="loading"');
+    expect(source).toContain('<LoadingState v-else-if="loading"');
     expect(source).toContain('variant="error" :description="loadError"');
     expect(source).toContain('action-text="重新加载"');
   });
@@ -26,5 +26,14 @@ describe("activity registration shared state contract", () => {
 
   it("leaves validation before invoking the submit state machine", () => {
     expect(source).toContain('confirming.value = false;\n  resetRegistrationEditing();\n  void doSubmit();');
+  });
+
+  it("keeps showcase registration local and blocks sensitive collection or writes", () => {
+    expect(source).toContain('if (requestedDemo && getCurrentTenantCode() !== "qiwai-showcase")');
+    expect(source).toContain('if (demoRegistration.value && demoDetailForDisplay.value && activity.value)');
+    expect(source).toContain('if (demoDetailForDisplay.value) return;');
+    expect(source).toContain('!demoDetailForDisplay || (![');
+    expect(source).toContain('FieldType.Attachment].includes(item.type)');
+    expect(source).toContain('!demoDetailForDisplay && activity.eligibilityRules?.allowCompanions');
   });
 });

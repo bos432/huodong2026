@@ -18,6 +18,28 @@ export interface WeekendInspiration {
   sourceUrl: string;
 }
 
+export interface RealActivityReview {
+  title: string;
+  date: string;
+  place: string;
+  summary: string;
+  sourceName: string;
+  sourceUrl: string;
+}
+
+export const tongliangActivityReviews: RealActivityReview[] = [{
+  title: "铜梁平滩 2026 年龙柚文化季",
+  date: "2026-10-12",
+  place: "平滩镇九龙街小广场",
+  summary: "铜梁区融媒体中心报道：现场包含文艺汇演、亲子创意手作和村级特色展台。活动已经结束，不开放报名。",
+  sourceName: "华龙网 / 铜梁区融媒体中心（2026-10-12）",
+  sourceUrl: "https://www.cqnews.net/web/content_1559307961814040576.html"
+}];
+
+export function queryRealActivityReviews(tenantCode: string) {
+  return tenantCode === "cq_tongliang" ? tongliangActivityReviews : [];
+}
+
 export const weekendInspirations: WeekendInspiration[] = [
   {
     id: "old-town", category: "城市漫步", title: "安居古城，沿老街慢慢走", place: "铜梁 · 安居古城",

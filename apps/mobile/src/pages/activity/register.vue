@@ -15,6 +15,8 @@ import { motionStyle } from "../../motion/platform-adapter";
 import { activityPageAttribution } from '../../activity-attribution';
 import { findActiveRegistrationForActivity } from "../../registration-retry";
 import { isRegistrationBusy, transitionRegistrationFlow, type RegistrationFlowEvent, type RegistrationFlowState } from "../../registration-flow-state";
+import { demoRegistrationResult, isDemoRegistration } from "./demo-registration";
+import { demoDetailForTenant } from "./activity-demo-view";
 
 const activity = ref<PublicActivityDetail | null>(null);
 const operationSetting = ref<PublicOperationSettings | null>(null);
@@ -54,6 +56,9 @@ const submitGuard = createTenantLoadGuard();
 const { tenant, contentSections, innerPageConfig, innerPageLayout, loadDecoration } = usePageDecoration("activity_register", "/pages/activity/register");
 const bodyDecorationSections = computed(() => filterIntrinsicHeaderDecorationSections(contentSections.value));
 const submitting = computed(() => isRegistrationBusy(registrationState.value));
+const demoRegistration = computed(() => demoDetailForDisplay.value && isDemoRegistration(getCurrentTenantCode(), activity.value));
+const demoSubmitted = ref(false);
+const demoDetailForDisplay = ref(false);
 
 function setRegistrationState(event: RegistrationFlowEvent) {
   registrationState.value = transitionRegistrationFlow(registrationState.value, event);
@@ -79,6 +84,7 @@ const registrationPaused = computed(() => {
 const registrationPausedMessage = computed(() => operationSetting.value?.registrationDisabledMessage || "报名通道暂时关闭，请稍后再试或联系主办方。");
 const paymentHint = computed(() => {
   if (!activity.value) return "";
+  if (demoRegistration.value) return "仅用于体验报名表单；提交只做页面内模拟，不会创建真实报名、订单或收款。";
   if (registrationPaused.value) return registrationPausedMessage.value;
   if (memberBlocked.value) return activity.value.memberAccess.message;
   if (activity.value.remainingSeats <= 0) return "当前名额已满，提交后将进入候补名单";
@@ -88,6 +94,7 @@ const paymentHint = computed(() => {
 const defaultPaymentMethods = { free: true, wechat: false, alipay: false, balance: true, offline: true };
 const paymentMethods = computed<Record<string, boolean>>(() => ({ ...defaultPaymentMethods, ...(operationSetting.value?.paymentMethods || {}) }));
 const availablePaymentMethods = computed(() => {
+  if (demoRegistration.value) return [];
   const rows = [
     { value: "wechat" as PayMethod, name: "微信支付", desc: "H5 / 小程序" },
     { value: "alipay" as PayMethod, name: "支付宝", desc: "支付宝付款" },
@@ -114,6 +121,7 @@ const registrationStep = computed(() => {
   return 3;
 });
 const submitButtonText = computed(() => {
+  if (demoRegistration.value) return demoSubmitted.value ? "模拟报名已完成" : "体验模拟报名";
   if (registrationState.value === "validating") return "校验中…";
   if (registrationState.value === "submitting") return "提交中…";
   if (registrationState.value === "payment_pending") return "等待支付…";
@@ -125,6 +133,7 @@ const submitButtonText = computed(() => {
   return "确认提交";
 });
 const seatsText = computed(() => {
+  if (demoRegistration.value) return "演示体验 · 无真实名额";
   if (!activity.value) return "";
   if (activity.value.remainingSeats <= 0) return "名额已满，可先加入候补";
   return `剩余 ${activity.value.remainingSeats} 个名额`;
@@ -212,6 +221,7 @@ function validate() {
 }
 
 function addCompanion() {
+  if (demoDetailForDisplay.value) return;
   const max = Number(activity.value?.eligibilityRules?.maxCompanions || 0);
   if (companions.value.length >= max) return uni.showToast({ title: `最多添加 ${max} 位同行人`, icon: "none" });
   const choices = frequentRegistrants.value.slice(0, 5);
@@ -225,6 +235,7 @@ function addCompanion() {
 function removeCompanion(index: number) { companions.value.splice(index, 1); }
 
 function chooseAttachment(field: ActivityFieldDefinition) {
+  if (demoDetailForDisplay.value) return;
   if (uploadingFieldId.value || submitting.value) return;
   uploadingFieldId.value = field.id;
   uni.chooseMessageFile({
@@ -252,6 +263,10 @@ function submit() {
   if (submitting.value || confirming.value) return;
   setRegistrationState("validate");
   attemptedSubmit.value = true;
+  if (demoDetailForDisplay.value) {
+    confirming.value = true;
+    return;
+  }
   if (registrationPaused.value) {
     setRegistrationState("failed");
     uni.showToast({ title: registrationPausedMessage.value, icon: "none" });
@@ -308,6 +323,13 @@ function goLogin() {
 async function doSubmit() {
   if (submitting.value) return;
   setRegistrationState("submit");
+  if (demoRegistration.value && demoDetailForDisplay.value && activity.value) {
+    demoSubmitted.value = true;
+    setRegistrationState("completed");
+    const result = demoRegistrationResult(activity.value.title);
+    uni.showModal({ title: result.title, content: result.message, showCancel: false });
+    return;
+  }
   const tenantCode = getCurrentTenantCode();
   const activityId = Number(activity.value?.id || 0);
   const submitToken = submitGuard.begin();
@@ -388,6 +410,7 @@ function handlePhoneBound() {
 }
 
 async function refreshQuote(showError = false) {
+  if (demoDetailForDisplay.value) return;
   if (!activity.value) return;
   if (hasTicketTypes.value && !selectedTicketTypeId.value) {
     quote.value = undefined;
@@ -428,6 +451,7 @@ function applyCoupon() {
 }
 
 async function loadAvailableCoupons() {
+  if (demoDetailForDisplay.value) return;
   if (!activity.value?.id) return;
   const token = couponLoadGuard.begin();
   const activityId = Number(activity.value.id);
@@ -439,6 +463,7 @@ async function loadAvailableCoupons() {
 }
 
 async function selectOrClaimCoupon(item: PublicCouponSummary) {
+  if (demoDetailForDisplay.value) return;
   if (couponLoadingId.value) return;
   couponLoadingId.value = item.id;
   try {
@@ -468,29 +493,41 @@ async function loadPage() {
     const pages = getCurrentPages();
     const options = (pages[pages.length - 1] as any).options || {};
     const id = Number(options.id);
+    const requestedDemo = String(options.demo || "") === "1";
+    if (requestedDemo && getCurrentTenantCode() !== "qiwai-showcase") {
+      throw new Error("演示活动仅在演示商家中可用，请从对应商家重新打开。");
+    }
     const attribution = activityPageAttribution(options);
     channelCode.value = attribution.channelCode;
     source.value = attribution.source;
     inviteCode.value = attribution.inviteCode;
-    userId.value = await ensureUser();
+    if (!requestedDemo) userId.value = await ensureUser();
     const query = [
       channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
       source.value ? `source=${encodeURIComponent(source.value)}` : "",
       inviteCode.value ? `inviteCode=${encodeURIComponent(inviteCode.value)}` : ""
     ].filter(Boolean).join("&");
-    const [detail, setting, savedRegistrants] = await Promise.all([
-      request<PublicActivityDetail>(`/public/activities/${id}${query ? `?${query}` : ""}`),
-      request<PublicOperationSettings>("/public/settings/operation"),
-      request<Array<{ id: number; name: string; phone?: string | null; idCard?: string | null }>>("/public/me/frequent-registrants").catch(() => [])
-    ]);
+    const [detail, setting, savedRegistrants] = requestedDemo && getCurrentTenantCode() === "qiwai-showcase"
+      ? [demoDetailForTenant(getCurrentTenantCode(), id), { registrationEnabled: true }, []] as const
+      : await Promise.all([
+          request<PublicActivityDetail>(`/public/activities/${id}${query ? `?${query}` : ""}`),
+          request<PublicOperationSettings>("/public/settings/operation"),
+          request<Array<{ id: number; name: string; phone?: string | null; idCard?: string | null }>>("/public/me/frequent-registrants").catch(() => [])
+        ]);
     if (!pageLoadGuard.isCurrent(token)) return;
+    if (!detail) throw new Error("演示活动不存在或当前商家不支持此样例");
     activity.value = reviewSafeData(detail);
+    demoDetailForDisplay.value = requestedDemo && getCurrentTenantCode() === "qiwai-showcase";
     operationSetting.value = reviewSafeData(setting);
     frequentRegistrants.value = Array.isArray(savedRegistrants) ? savedRegistrants : [];
     if (payableNumber.value > 0 && !paymentMethods.value[paymentMethod.value]) {
       paymentMethod.value = availablePaymentMethods.value[0]?.value || "offline";
     }
     selectedTicketTypeId.value = availableTicketOptions.value[0]?.id;
+    if (demoDetailForDisplay.value) {
+      quote.value = { originalAmount: "0.00", payableAmount: "0.00", discountAmount: "0.00", couponDiscountAmount: "0.00", pointsDiscountAmount: "0.00", pointsUsed: 0, availablePoints: 0 } as PublicQuoteResult;
+      return;
+    }
     await Promise.all([refreshQuote(), loadAvailableCoupons()]);
   } catch (error: any) {
     if (!pageLoadGuard.isCurrent(token)) return;
@@ -522,7 +559,8 @@ watch(couponCode, () => {
 
 <template>
   <view class="container register">
-    <LoadingState v-if="loading" title="正在加载报名页面" description="请稍候，正在同步票种、报名字段和支付方式。" />
+    <view v-if="demoSubmitted" class="demo-registration-result" role="status"><b>模拟报名完成</b><text>{{ demoRegistrationResult(activity?.title || '').message }}</text><view class="button" role="button" tabindex="0" @click="demoSubmitted = false; resetRegistrationEditing()">再体验一次</view></view>
+    <LoadingState v-else-if="loading" title="正在加载报名页面" description="请稍候，正在同步票种、报名字段和支付方式。" />
       <view v-else-if="loadError" class="card register-error-state">
         <EmptyState variant="error" :description="loadError" action-text="重新加载" @action="loadPage" />
         <view class="error-actions">
@@ -531,6 +569,7 @@ watch(couponCode, () => {
     </view>
     <template v-else-if="activity">
       <TenantContextBadge :tenant="tenant" label="当前城市" hint="报名归属" />
+      <view v-if="demoDetailForDisplay" class="demo-registration-notice" role="status">演示商家 · 仅体验报名表单；不会真实报名、下单、收集联系方式或收款。</view>
 
       <view class="register-hero">
         <image v-if="activity.coverUrl" class="hero-image" :src="activity.coverUrl" mode="aspectFill" />
@@ -579,7 +618,7 @@ watch(couponCode, () => {
         </view>
       </view>
 
-      <view class="card price-card">
+      <view v-if="!demoDetailForDisplay" class="card price-card">
         <view class="section-heading">
           <view>
             <view class="label">1. 选择票种</view>
@@ -640,11 +679,11 @@ watch(couponCode, () => {
         <view class="section-heading form-heading">
           <view>
             <view class="label">2. 填写报名信息</view>
-            <view class="subtle">请核对信息准确，主办方会按这些内容联系你。</view>
+            <view class="subtle">{{ demoDetailForDisplay ? "仅在当前页面体验，请勿填写个人联系方式。" : "请核对信息准确，主办方会按这些内容联系你。" }}</view>
           </view>
           <view class="progress-pill">{{ formProgressText }}</view>
         </view>
-        <view v-for="field in activity.fields" :key="field.id" class="field" :class="[`field-${field.id}`, { missing: attemptedSubmit && missingFieldId === field.id }]">
+        <view v-for="field in activity.fields.filter((item) => !demoDetailForDisplay || (!['手机号','联系电话','电话','证件号','身份证号','邮箱','电子邮箱','联系地址'].includes(item.label) && ![FieldType.Phone, FieldType.IdCard, FieldType.Email, FieldType.Address, FieldType.Attachment].includes(item.type)))" :key="field.id" class="field" :class="[`field-${field.id}`, { missing: attemptedSubmit && missingFieldId === field.id }]">
           <view class="label field-label">{{ field.label }}<text v-if="field.required"> *</text><text v-else class="optional">选填</text></view>
           <input v-if="[FieldType.Text, FieldType.Phone, FieldType.IdCard, FieldType.Email, FieldType.Number, FieldType.Address].includes(field.type)" v-model="values[field.id]" class="input" maxlength="200" cursor-spacing="24" :aria-label="field.label" :placeholder="fieldPlaceholder(field)" :type="[FieldType.Phone, FieldType.Number].includes(field.type) ? 'number' : 'text'" />
           <textarea v-else-if="field.type === FieldType.Remark" v-model="values[field.id]" class="textarea" maxlength="2000" cursor-spacing="24" :aria-label="field.label" :placeholder="fieldPlaceholder(field)" />
@@ -674,7 +713,7 @@ watch(couponCode, () => {
             <view class="coupon-action">{{ couponLoadingId === item.id ? "处理中" : Number(item.remainingUses || 0) > 0 ? `可用 ${item.remainingUses} 次` : "领取" }}</view>
           </view>
         </view>
-        <view v-if="activity.eligibilityRules?.allowCompanions" class="companions-block">
+        <view v-if="!demoDetailForDisplay && activity.eligibilityRules?.allowCompanions" class="companions-block">
           <view class="section-heading"><view><view class="label">同行人</view><view class="subtle">最多 {{ activity.eligibilityRules.maxCompanions || 0 }} 人</view></view><view class="mini-button" @click="addCompanion">添加</view></view>
           <view v-for="(companion, index) in companions" :key="index" class="companion-row">
             <input v-model="companion.name" class="input" placeholder="姓名（必填）" />
@@ -683,7 +722,7 @@ watch(couponCode, () => {
             <view class="remove-link" @click="removeCompanion(index)">删除</view>
           </view>
         </view>
-        <view v-if="activity.eligibilityRules?.requirePrivacyConsent" class="privacy-row">
+        <view v-if="!demoDetailForDisplay && activity.eligibilityRules?.requirePrivacyConsent" class="privacy-row">
           <!-- #ifdef H5 -->
           <component :is="'input'" class="privacy-checkbox" type="checkbox" :checked="privacyAccepted" aria-label="同意用户协议和隐私政策" @change="privacyAccepted = $event.target.checked" />
           <!-- #endif -->

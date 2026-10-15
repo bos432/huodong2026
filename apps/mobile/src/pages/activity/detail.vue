@@ -18,6 +18,7 @@ import { activityPageAttribution } from '../../activity-attribution';
 import LoadingState from "../../components/LoadingState.vue";
 import EmptyState from "../../components/EmptyState.vue";
 import { mockActivities } from "../../mock/activity";
+import { demoDetailForTenant } from "./activity-demo-view";
 import { demoActivityDate } from "../../mock/demo-activity-dates";
 
 const activity = ref<any>();
@@ -128,7 +129,7 @@ function memberLoginRequired() {
 }
 
 function canRegister() {
-  if (activity.value?.isTest) return false;
+  if (activity.value?.isTest) return getCurrentTenantCode() === "qiwai-showcase";
   const existing = existingActivityBooking(activity.value);
   if (existing) return Boolean(existing.registrationId);
   if (activity.value?.bookingDisabledReason) return false;
@@ -138,7 +139,7 @@ function canRegister() {
 }
 
 function registerButtonText() {
-  if (activity.value?.isTest) return "演示活动，暂不可报名";
+  if (activity.value?.isTest) return getCurrentTenantCode() === "qiwai-showcase" ? "体验模拟报名" : "测试活动，暂不可报名";
   const existing = existingActivityBooking(activity.value);
   if (existing) return existing.label;
   if (activity.value?.bookingDisabledReason) return '测试活动';
@@ -152,7 +153,7 @@ function registerButtonText() {
 }
 
 function actionHint() {
-  if (activity.value?.isTest) return "当前仅用于页面展示，暂不接入真实报名或支付。";
+  if (activity.value?.isTest) return getCurrentTenantCode() === "qiwai-showcase" ? "演示表单仅作本地模拟，不会创建真实报名、订单或收款。" : "测试活动，暂不开放报名。";
   const existing = existingActivityBooking(activity.value);
   if (existing) return existing.hint;
   if (activity.value?.bookingDisabledReason) return activity.value.bookingDisabledReason;
@@ -165,8 +166,12 @@ function actionHint() {
 }
 
 function register() {
-  if (activity.value?.isTest) {
-    uni.showToast({ title: "演示活动，暂不可报名", icon: "none" });
+  if (activity.value?.isTest && getCurrentTenantCode() !== "qiwai-showcase") {
+    uni.showToast({ title: "测试活动，暂不开放报名", icon: "none" });
+    return;
+  }
+  if (activity.value?.isTest && getCurrentTenantCode() === "qiwai-showcase") {
+    uni.navigateTo({ url: withTenantCode(`/pages/activity/register?id=${activity.value.id}&demo=1`) });
     return;
   }
   const existing = existingActivityBooking(activity.value);
@@ -311,7 +316,7 @@ function organizerMetric(value: unknown, suffix = "") {
 
 function goRelatedActivity(item: any) {
   if (!item?.id) return;
-  uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${item.id}`) });
+  uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${item.id}${item.isTest ? "&demo=1" : ""}`) });
 }
 
 function isAcceptanceActivity(value: any) {
@@ -595,6 +600,44 @@ async function load() {
     const pages = getCurrentPages();
     const options = (pages[pages.length - 1] as any).options || {};
     activityId = Number(options.id);
+    if (String(options.demo || "") === "1") {
+      const demoDetail = demoDetailForTenant(getCurrentTenantCode(), activityId);
+      if (!demoDetail) throw new Error("演示活动不存在或当前商家不支持此样例");
+      if (!loadGuard.isCurrent(token)) return;
+      const sanitized = sanitizeDemoDetail(reviewSafeData(demoDetail));
+      activity.value = filterRelatedActivities(sanitized.value);
+      detailSource.value = "mock";
+      galleryIndex.value = 0;
+      failedGalleryImages.value = [];
+      operationSetting.value = { registrationEnabled: true };
+      return;
+    }
+    const demoDetail = getCurrentTenantCode() === "qiwai-showcase" ? demoDetailForTenant(getCurrentTenantCode(), activityId) : null;
+    if (demoDetail) {
+      let demoCandidate: any;
+      try {
+        demoCandidate = await request(`/public/activities/${activityId}/enhanced?source=demo`);
+      } catch (candidateError: any) {
+        if (Number(candidateError?.statusCode) !== 404) throw candidateError;
+        const sanitized = sanitizeDemoDetail(reviewSafeData(demoDetail));
+        activity.value = filterRelatedActivities(sanitized.value);
+        detailSource.value = "mock";
+        galleryIndex.value = 0;
+        failedGalleryImages.value = [];
+        operationSetting.value = { registrationEnabled: true };
+        return;
+      }
+      const detailTitle = String(demoCandidate?.title || "");
+      if (detailTitle.startsWith("【演示】") || demoCandidate?.isTest) {
+        const sanitized = sanitizeDemoDetail(reviewSafeData(demoCandidate));
+        activity.value = filterRelatedActivities(sanitized.value);
+        detailSource.value = sanitized.isDemo ? "mock" : "api";
+        galleryIndex.value = 0;
+        failedGalleryImages.value = [];
+        operationSetting.value = { registrationEnabled: true };
+        return;
+      }
+    }
     const attribution = activityPageAttribution(options);
     inviteCode.value = attribution.inviteCode;
     channelCode.value = attribution.channelCode;
@@ -604,7 +647,7 @@ async function load() {
       channelCode.value ? `channelCode=${encodeURIComponent(channelCode.value)}` : "",
       `source=${encodeURIComponent(source.value)}`
     ].filter(Boolean).join("&");
-    const detail = await request(`/public/activities/${activityId}/enhanced?${query}`);
+    const detail: any = await request(`/public/activities/${activityId}/enhanced?${query}`);
     if (!loadGuard.isCurrent(token)) return;
     const sanitized = sanitizeDemoDetail(reviewSafeData(detail));
     activity.value = filterRelatedActivities(sanitized.value);
@@ -675,7 +718,8 @@ onShow(() => {
     </view>
 
     <template v-else-if="activity">
-      <view v-if="detailSource === 'mock'" class="test-activity-banner" role="status">本地演示数据 · 不代表真实举办安排</view>
+      <view v-if="activity.isTest && getCurrentTenantCode() === 'qiwai-showcase'" class="test-activity-banner" role="status">演示商家 · 可体验模拟报名，不代表真实举办安排，不会创建真实报名、订单或收款。</view>
+      <view v-else-if="detailSource === 'mock'" class="test-activity-banner" role="status">本地演示数据 · 不代表真实举办安排</view>
       <view v-else-if="activity.isTest" class="test-activity-banner" role="status">测试活动 · 不代表正式举办安排</view>
       <view class="detail-hero app-enter" :class="{ 'demo-cover': activity.isTest && !galleryImages.length }">
         <swiper v-if="galleryImages.length" class="hero-swiper" :current="galleryIndex" :circular="galleryImages.length > 1" :indicator-dots="galleryImages.length > 1" @change="onGalleryChange">

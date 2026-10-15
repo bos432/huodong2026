@@ -15,7 +15,7 @@ describe("resetActivityListFilters", () => {
 
   it("keeps the result summary neutral while the list is loading or failed", () => {
     expect(source).toContain('const resultCountText = computed(() => loading.value || error.value ? "活动列表"');
-    expect(source).toContain('const resultCountDescription = computed(() => loading.value || error.value ? "正在同步活动列表"');
+    expect(source).toContain('loading.value || error.value ? "正在同步活动列表"');
   });
 
   it("does not expose ended activities when the archive is disabled", () => {

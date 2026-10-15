@@ -7,7 +7,7 @@ const discoverySource = readFileSync(resolve(__dirname, "../home/index.vue"), "u
 
 describe("mobile homepage tenant state contract", () => {
   it("uses the approved slow-pi discovery homepage as the public root entry", () => {
-    expect(source).toContain('uni.reLaunch({ url: "/pages/home/index" });');
+    expect(source).toContain('uni.reLaunch({ url: withTenantCode("/pages/home/index") });');
   });
 
   it("renders the slow-pi discovery state from the current prototype", () => {

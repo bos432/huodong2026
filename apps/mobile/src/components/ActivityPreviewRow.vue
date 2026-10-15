@@ -27,9 +27,9 @@ const seatLabel = computed(() => {
     <view v-else class="row-cover row-cover-empty"><text>{{ activity.category?.name || '活动' }}</text></view>
     <view class="row-copy">
       <text class="row-title">{{ activity.title }}</text>
-      <text class="row-meta">{{ dateLabel }} · {{ activity.location || '地点待确认' }}</text>
-      <view class="row-footer"><text class="row-category">{{ activity.category?.name || '活动' }} · {{ activity.isTest ? '测试活动' : statusLabel }}</text><text class="row-price">{{ priceLabel }}</text></view>
-      <text class="row-organizer">主办：{{ organizerLabel || '主办方待确认' }}</text>
+      <text class="row-meta">{{ activity.isTest ? '示例时间 · ' : '' }}{{ dateLabel }} · {{ activity.isTest ? '地点信息以正式发布为准' : activity.location || '地点待确认' }}</text>
+      <view class="row-footer"><text class="row-category">{{ activity.category?.name || '活动' }} · {{ activity.isTest ? '演示活动' : statusLabel }}</text><text class="row-price">{{ activity.isTest ? '示例费用 ' : '' }}{{ priceLabel }}</text></view>
+      <text class="row-organizer">{{ activity.isTest ? '演示主理资料' : `主办：${organizerLabel || '主办方待确认'}` }}</text>
       <text v-if="!activity.isTest" class="row-count">{{ activity.registeredCount || 0 }} 人已报名 · {{ seatLabel }}</text>
     </view>
   </view>

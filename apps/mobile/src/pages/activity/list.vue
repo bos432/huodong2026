@@ -15,12 +15,16 @@ import LoadingState from "../../components/LoadingState.vue";
 import { motionStyle } from "../../motion/platform-adapter";
 import { normalizeActivityListStatus, resetActivityListFilters, type ActivityListStatus } from "./list-state";
 import { groupHomepageActivities } from "../../homepage-order";
+import { activitiesForList, demoActivitiesAsPublicSummaries, DEMO_SHOWCASE_TENANT } from "./activity-demo-view";
+import { mapPublicActivityList } from "../home/activity-adapter";
 import type { PublicActivityListResponse, PublicActivitySummary, PublicCategorySummary, PublicOperationSettings } from "@activity/shared";
 
 type ActivityStatusFilter = ActivityListStatus;
 
 const categories = ref<PublicCategorySummary[]>([]);
 const rows = ref<PublicActivitySummary[]>([]);
+const demoRows = ref<ReturnType<typeof activitiesForList>>([]);
+const localDemoRows = ref(false);
 const activeCategoryId = ref<number | "all">("all");
 const activeStatus = ref<ActivityStatusFilter>("all");
 const publicActivityArchiveEnabled = ref(false);
@@ -56,9 +60,12 @@ function safeList<T>(value: unknown): T[] {
 }
 
 const visibleCategories = computed(() => safeList<PublicCategorySummary>(categories.value));
+const demoFilterActive = computed(() => activeCategoryId.value !== "all" || activeStatus.value !== "all" || Boolean(keyword.value.trim()));
+const visibleDemoRows = computed(() => demoFilterActive.value ? [] : demoRows.value);
+const demoOnly = computed(() => getCurrentTenantCode() === DEMO_SHOWCASE_TENANT && visibleDemoRows.value.length > 0);
 
 function goDetail(id: number) {
-  uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${id}`) });
+  uni.navigateTo({ url: withTenantCode(`/pages/activity/detail?id=${id}${demoOnly.value && localDemoRows.value ? "&demo=1" : ""}`) });
 }
 
 function statusText(status: string) {
@@ -96,9 +103,11 @@ const resultHint = computed(() => {
   const statusName = statusTabs.value.find((item) => item.value === activeStatus.value)?.label || "全部";
   return `${categoryName} · ${statusName}`;
 });
-const resultCountText = computed(() => loading.value || error.value ? "活动列表" : `${rows.value.length} 场活动`);
-const resultCountDescription = computed(() => loading.value || error.value ? "正在同步活动列表" : `已展示 ${rows.value.length} 场活动`);
+const resultCountText = computed(() => loading.value || error.value ? "活动列表" : `${demoOnly.value ? visibleDemoRows.value.length : rows.value.length} 场活动`);
+const resultCountDescription = computed(() => demoOnly.value ? "演示商家样例 · 不代表真实活动安排" : loading.value || error.value ? "正在同步活动列表" : `已展示 ${rows.value.length} 场活动`);
 const dateGroups = computed(() => groupHomepageActivities(safeList<PublicActivitySummary>(rows.value)));
+const demoDateGroups = computed(() => groupHomepageActivities(demoActivitiesAsPublicSummaries(visibleDemoRows.value)));
+const visibleDateGroups = computed(() => demoOnly.value ? demoDateGroups.value : dateGroups.value);
 
 function buildQuery(nextPage: number) {
   const params = [
@@ -121,13 +130,18 @@ async function loadPage(nextPage: number, append = false) {
     const result = await request<PublicActivityListResponse | PublicActivitySummary[]>(buildQuery(nextPage));
     if (!pageLoadGuard.isCurrent(loadToken)) return;
     const items = Array.isArray(result) ? result : safeList<PublicActivitySummary>(result.items);
+    if (!append) { demoRows.value = []; localDemoRows.value = false; }
     rows.value = append ? safeList<PublicActivitySummary>(rows.value).concat(items) : items;
+    if (!append && items.length === 0) { demoRows.value = activitiesForList(getCurrentTenantCode(), []); localDemoRows.value = demoRows.value.length > 0; }
+    if (!append && items.length > 0 && getCurrentTenantCode() === DEMO_SHOWCASE_TENANT && items.every((item) => item.isTest || item.title?.startsWith("【演示】"))) {
+      demoRows.value = mapPublicActivityList(items).items;
+    }
     total.value = Array.isArray(result) ? items.length : result.total || 0;
     page.value = Array.isArray(result) ? nextPage : result.page || nextPage;
     hasMore.value = Array.isArray(result) ? false : Boolean(result.hasMore);
   } catch (err: any) {
     if (!pageLoadGuard.isCurrent(loadToken)) return;
-    if (!append) rows.value = [];
+    if (!append) { rows.value = []; demoRows.value = activitiesForList(getCurrentTenantCode(), []); localDemoRows.value = demoRows.value.length > 0; }
     error.value = err.message || "加载失败";
   } finally {
     if (pageLoadGuard.isCurrent(loadToken)) {
@@ -301,11 +315,14 @@ onReachBottom(loadMore);
     </view>
 
     <LoadingState v-if="loading" title="正在加载活动" description="正在同步日期、地点和报名状态。" />
-    <EmptyState v-else-if="error" variant="error" title="活动列表加载失败" :description="error" action-text="重新加载" @action="loadFirstPage" />
-    <EmptyState v-else-if="!rows.length" variant="activity" title="没有找到匹配活动" description="试试切换分类、状态，或者减少搜索关键词。" action-text="查看全部活动" @action="resetFilters" />
+    <EmptyState v-else-if="error && !demoOnly" variant="error" title="活动列表加载失败" :description="error" action-text="重新加载" @action="loadFirstPage" />
+    <EmptyState v-else-if="!rows.length && !demoOnly" variant="activity" :title="getCurrentTenantCode() === DEMO_SHOWCASE_TENANT ? '演示活动暂不可用' : '没有找到匹配活动'" :description="getCurrentTenantCode() === DEMO_SHOWCASE_TENANT ? '样例目前只在“全部分类、全部状态、无关键词”时展示；调整筛选后没有匹配结果。' : '试试切换分类、状态，或者减少搜索关键词。'" action-text="查看全部活动" @action="resetFilters" />
 
     <view v-else class="activity-feed">
-      <view v-for="group in dateGroups" :key="group.key" class="activity-date-group">
+      <view v-if="demoOnly" class="demo-activity-notice" role="status">演示商家 · 以下样例仅供浏览，不代表真实举办安排，不接受报名或支付。</view>
+      <view v-if="error" class="demo-activity-notice" role="status">{{ error }} · 当前展示的是本地页面样例。</view>
+
+      <view v-for="group in visibleDateGroups" :key="group.key" class="activity-date-group">
         <view class="date-group-head"><text>{{ group.label }}</text><text>{{ group.items.length }} 场</text></view>
         <ActivityPreviewRow v-for="item in group.items" :key="item.id" :activity="item" :date-label="formatShanghaiDateTime(item.startTime, '时间待定')" :price-label="priceText(item.price)" :status-label="statusText(item.displayStatus || item.status)" :organizer-label="tenant?.name || '主办方待确认'" @open="goDetail(item.id)" />
       </view>
@@ -316,7 +333,7 @@ onReachBottom(loadMore);
       <view v-else class="no-more">没有更多活动了</view>
     </view>
 
-    <TabBar current="activity" />
+    <TabBar current="activity" current-path="/pages/activity/list" />
   </view>
 </template>
 
