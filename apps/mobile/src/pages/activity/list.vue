@@ -319,7 +319,7 @@ onReachBottom(loadMore);
     <EmptyState v-else-if="!rows.length && !demoOnly" variant="activity" :title="getCurrentTenantCode() === DEMO_SHOWCASE_TENANT ? '演示活动暂不可用' : '没有找到匹配活动'" :description="getCurrentTenantCode() === DEMO_SHOWCASE_TENANT ? '样例目前只在“全部分类、全部状态、无关键词”时展示；调整筛选后没有匹配结果。' : '试试切换分类、状态，或者减少搜索关键词。'" action-text="查看全部活动" @action="resetFilters" />
 
     <view v-else class="activity-feed">
-      <view v-if="demoOnly" class="demo-activity-notice" role="status">演示商家 · 以下样例仅供浏览，不代表真实举办安排，不接受报名或支付。</view>
+      <view v-if="demoOnly" class="demo-activity-notice" role="status">演示商家 · 可体验模拟报名，不代表真实举办安排，不会创建真实报名、订单或收款。</view>
       <view v-if="error" class="demo-activity-notice" role="status">{{ error }} · 当前展示的是本地页面样例。</view>
 
       <view v-for="group in visibleDateGroups" :key="group.key" class="activity-date-group">

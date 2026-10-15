@@ -742,11 +742,11 @@ watch(couponCode, () => {
       <view v-if="confirming" class="submit-confirm-layer" role="dialog" aria-modal="true" aria-labelledby="submit-confirm-title">
         <view class="submit-confirm-sheet" @click.stop>
           <view class="submit-confirm-handle" aria-hidden="true"></view>
-          <text id="submit-confirm-title" class="submit-confirm-title">{{ activity?.remainingSeats <= 0 ? "确认加入候补" : "确认提交报名" }}</text>
+          <text id="submit-confirm-title" class="submit-confirm-title">{{ demoDetailForDisplay ? "确认模拟报名" : activity?.remainingSeats <= 0 ? "确认加入候补" : "确认提交报名" }}</text>
           <text class="submit-confirm-copy">{{ submissionConfirmationText }}</text>
           <view class="submit-confirm-actions">
             <view class="submit-confirm-secondary" role="button" tabindex="0" aria-label="取消提交" @click="cancelSubmitConfirmation" @keyup.enter="cancelSubmitConfirmation" @keyup.space.prevent="cancelSubmitConfirmation">取消</view>
-            <view class="submit-confirm-primary" role="button" tabindex="0" :aria-label="activity?.remainingSeats <= 0 ? '确认加入候补' : '确认提交'" @click="confirmSubmit" @keyup.enter="confirmSubmit" @keyup.space.prevent="confirmSubmit">{{ activity?.remainingSeats <= 0 ? "加入候补" : "确认提交" }}</view>
+            <view class="submit-confirm-primary" role="button" tabindex="0" :aria-label="demoDetailForDisplay ? '确认模拟报名' : activity?.remainingSeats <= 0 ? '确认加入候补' : '确认提交'" @click="confirmSubmit" @keyup.enter="confirmSubmit" @keyup.space.prevent="confirmSubmit">{{ demoDetailForDisplay ? "确认模拟报名" : activity?.remainingSeats <= 0 ? "加入候补" : "确认提交" }}</view>
           </view>
         </view>
       </view>

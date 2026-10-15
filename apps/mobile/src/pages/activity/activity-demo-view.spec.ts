@@ -13,7 +13,7 @@ describe("showcase activities remain isolated and non-bookable", () => {
   it("provides a non-bookable sample detail only for the showcase tenant", () => {
     const activity = demoDetailForTenant("qiwai-showcase", 1, new Date("2026-10-15T00:00:00+08:00"));
     expect(activity).toMatchObject({ isTest: true, bookingDisabledReason: "演示活动，仅供浏览，不接受报名", registeredCount: null, remainingSeats: null });
-    expect(activity?.notice).toContain("不接受报名或支付");
+    expect(activity?.notice).toContain("不接受真实报名或支付");
     expect(demoDetailForTenant("cq_tongliang", 1)).toBeNull();
     expect(demoDetailForTenant("qiwai-showcase", 999)).toBeNull();
   });

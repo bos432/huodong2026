@@ -5,6 +5,9 @@ import { describe, expect, it } from "vitest";
 const source = readFileSync(resolve(__dirname, "detail.vue"), "utf8");
 
 describe("activity detail shared state contract", () => {
+  it("imports the tenant resolver used by demo activity actions", () => {
+    expect(source).toMatch(/import \{[^}]*getCurrentTenantCode[^}]*\} from "\.\.\/\.\.\/api"/);
+  });
   it("uses shared states for detail loading and failure", () => {
     expect(source).toContain('<LoadingState v-if="loading"');
     expect(source).toContain('<view v-else-if="error" class="card detail-error-state">');
