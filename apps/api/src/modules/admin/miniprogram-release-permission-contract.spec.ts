@@ -23,6 +23,7 @@ describe("mini program release permission contract", () => {
 
   it("keeps the PC page read-only, recoverable and mutually exclusive", () => {
     const page = read("apps/admin/src/views/MiniprogramRelease.vue");
+    const controller = read("apps/api/src/modules/admin/admin.controller.ts");
 
     expect(page).toContain('const canManage = computed(() => canAccess(["miniprogram_release.manage"]))');
     expect(page).toContain('v-if="!canManage"');
@@ -33,6 +34,11 @@ describe("mini program release permission contract", () => {
     expect(page).toContain('const manualGuideVisible = ref(false)');
     expect(page).toContain('function openManualGuide()');
     expect(page).toContain('@click="openManualGuide"');
+    expect(page).toContain('function openManualUploadRecord()');
+    expect(page).toContain('manual-upload-record');
+    expect(page).toContain('我确认微信开发者工具已显示该版本上传成功');
+    expect(page).toContain('此操作不会标记真机验收、审核通过或正式发布');
+    expect(controller).toMatch(/@AdminRoles\(\.\.\.SUPER_ADMIN\)\s+@Post\("miniprogram-release\/manual-upload-record"\)/);
   });
 
   it("bounds persisted text fields and sanitizes release log details", () => {

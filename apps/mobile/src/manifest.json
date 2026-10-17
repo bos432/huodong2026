@@ -12,7 +12,8 @@
       }
     },
     "setting": {
-      "urlCheck": true
+      "urlCheck": true,
+      "minified": true
     },
     "networkTimeout": {
       "request": 15000,

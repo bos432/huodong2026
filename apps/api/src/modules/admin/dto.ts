@@ -2884,6 +2884,16 @@ export class MiniprogramReleaseVersionDto {
   description?: string;
 }
 
+export class MiniprogramManualUploadRecordDto {
+  @IsString()
+  @IsNotEmpty()
+  @MaxLength(40)
+  version!: string;
+
+  @IsBoolean()
+  confirmed!: boolean;
+}
+
 export class CouponDto {
   @IsString()
   @IsNotEmpty()

@@ -30,6 +30,15 @@
 - Do not run write-oriented production smoke tests, reset/delete production records, change security groups, or restart unrelated containers.
 - Keep rollback artifacts and database backup until post-release verification is complete.
 
+### Current production evidence — 2026-10-18
+
+- Read-only public checks report API `ready=true`, database up, embedded worker ready, and zero blocking configuration errors. Optional warnings remain for SMS, email and WeChat subscription messaging.
+- API, Admin and H5 report commit `b4d4ccbb`; the current production source checkout remains at `a94528f4`. The production tracked-patch digest still matches the reviewed value `42fdabaac6739a6a883cfa5f8131969ff2b40b413b25c43e8596bf35e3987787`.
+- Admin is mounted from `/www/wwwroot/rd.chaimen666.com/apps/admin/dist`; H5 is mounted from `/www/wwwroot/rd.chaimen666.com/deploy-staging/manpi-a94528f4/h5`. Only the `activity-api` container belongs to this application release. Current Nginx, MySQL, Redis and other application containers are healthy; their IDs and start times must be rechecked after publish.
+- The previous static recovery archive is retained at `/www/backup/activity-releases/20261017-b4d4ccbb/static-recovery-20261018.tar.gz`. The previous manual static recovery did not create `publish-complete.json`; do not interpret the existing archive as a completed scoped release.
+- Mini Program version `2.2.45` was uploaded successfully from local WeChat Developer Tools; local evidence is `.local-logs/production-release/20261017-b4d4ccbb/wechat-upload-2.2.45-retry2.json`. This proves neither device acceptance nor WeChat audit/release. The release-readiness center remains `1/6` accepted; real payment is off.
+- Remaining business launch gates require real merchant/account credentials, tested payment/refund callbacks, approved subscription templates and delivery tests, device/experience-version acceptance, and an actual approved production release. Never manufacture these as completed evidence.
+
 ---
 
 ### Task 1: Establish and review the candidate source snapshot

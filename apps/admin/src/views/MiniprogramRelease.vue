@@ -33,12 +33,15 @@ type ReleaseLog = {
 const settingLoading = ref(false);
 const logsLoading = ref(false);
 const saving = ref(false);
+const recordingUpload = ref(false);
 const settingLoadError = ref("");
 const logsLoadError = ref("");
 const saveError = ref("");
 const manualGuideVisible = ref(false);
+const manualUploadRecordVisible = ref(false);
 const setting = ref<ReleaseSetting | null>(null);
 const logs = ref<ReleaseLog[]>([]);
+const manualUploadForm = reactive({ confirmed: false });
 const form = reactive({
   appId: "",
   version: "",
@@ -49,8 +52,9 @@ const form = reactive({
 
 const canManage = computed(() => canAccess(["miniprogram_release.manage"]));
 const loading = computed(() => settingLoading.value || logsLoading.value);
-const mutationBusy = computed(() => saving.value);
+const mutationBusy = computed(() => saving.value || recordingUpload.value);
 const pageBusy = computed(() => loading.value || mutationBusy.value);
+const currentUploadRecord = computed(() => logs.value.find((row) => row.action === "upload" && row.status === "success" && row.appId === setting.value?.appId && row.version === setting.value?.version));
 
 const readiness = computed(() => [
   { label: "AppID", ok: Boolean(form.appId || setting.value?.appId), hint: "微信小程序后台的 AppID。" },
@@ -72,9 +76,9 @@ const releaseStages = computed(() => [
   {
     key: "upload",
     label: "1. 上传体验版",
-    status: "manual",
-    time: undefined,
-    detail: "本地构建后，在微信开发者工具导入并上传"
+    status: currentUploadRecord.value ? "success" : "manual",
+    time: currentUploadRecord.value?.createdAt,
+    detail: currentUploadRecord.value ? "当前保存版本已有人工上传成功记录" : "本地构建后，在微信开发者工具导入并上传"
   },
   {
     key: "submit_audit",
@@ -101,7 +105,7 @@ const releaseStages = computed(() => [
 
 const actionLabels: Record<string, string> = {
   setting: "保存配置",
-  upload: "上传体验版（历史记录）",
+  upload: "上传体验版",
   submit_audit: "提交审核",
   audit_status: "查询审核",
   release: "发布线上版"
@@ -211,6 +215,31 @@ function openManualGuide() {
   manualGuideVisible.value = true;
 }
 
+function openManualUploadRecord() {
+  manualUploadForm.confirmed = false;
+  manualUploadRecordVisible.value = true;
+}
+
+async function recordManualUpload() {
+  if (!canManage.value || pageBusy.value) return;
+  if (!setting.value?.appId || !form.version.trim()) return ElMessage.error("请先保存小程序 AppID 和版本号");
+  if (!manualUploadForm.confirmed) return ElMessage.error("请先确认微信开发者工具显示上传成功");
+  recordingUpload.value = true;
+  try {
+    await api.post<any, ReleaseLog>("/admin/miniprogram-release/manual-upload-record", {
+      version: setting.value.version,
+      confirmed: manualUploadForm.confirmed
+    });
+    manualUploadRecordVisible.value = false;
+    ElMessage.success("已登记当前版本上传成功；真机验收和微信审核仍需单独完成");
+    await loadLogs();
+  } catch (error: any) {
+    ElMessage.error(error.message || "登记上传结果失败");
+  } finally {
+    recordingUpload.value = false;
+  }
+}
+
 function formatTime(value?: string) {
   return formatShanghaiDateTime(value, '-', true);
 }
@@ -295,6 +324,7 @@ onMounted(load);
         <el-alert class="action-hint" type="warning" :closable="false" show-icon title="普通小程序不能调用第三方平台专用的自动提审接口，审核与发布必须在微信公众平台完成。" />
         <div v-if="canManage" class="action-grid">
           <el-button type="primary" :disabled="pageBusy" @click="openManualGuide">查看本地上传步骤</el-button>
+          <el-button :disabled="pageBusy || !setting?.version" @click="openManualUploadRecord">登记上传成功</el-button>
           <a class="wechat-console-link" href="https://mp.weixin.qq.com/" target="_blank" rel="noopener noreferrer">打开微信公众平台</a>
         </div>
         <div class="qr-box">
@@ -350,6 +380,21 @@ onMounted(load);
         <a class="wechat-console-link" href="https://mp.weixin.qq.com/" target="_blank" rel="noopener noreferrer">打开微信公众平台</a>
       </template>
     </el-dialog>
+
+    <el-dialog v-model="manualUploadRecordVisible" title="登记体验版上传结果" width="min(520px, calc(100vw - 32px))">
+      <el-alert type="warning" :closable="false" show-icon title="仅在微信开发者工具明确显示上传成功后登记。此操作不会标记真机验收、审核通过或正式发布。" />
+      <el-form label-width="110px" class="upload-record-form">
+        <el-form-item label="小程序 AppID"><el-input :model-value="setting?.appId || ''" disabled /></el-form-item>
+        <el-form-item label="登记版本"><el-input :model-value="setting?.version || ''" disabled /></el-form-item>
+        <el-form-item>
+          <el-checkbox v-model="manualUploadForm.confirmed">我确认微信开发者工具已显示该版本上传成功</el-checkbox>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="manualUploadRecordVisible = false">取消</el-button>
+        <el-button type="primary" :loading="recordingUpload" :disabled="!manualUploadForm.confirmed" @click="recordManualUpload">保存登记</el-button>
+      </template>
+    </el-dialog>
   </div>
 </template>
 
@@ -361,6 +406,7 @@ onMounted(load);
 .error-recovery { display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
 .error-recovery .el-alert { flex: 1; min-width: 0; }
 .operation-error { margin-bottom: 16px; }
+.upload-record-form { margin-top: 18px; }
 .stage-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-bottom: 16px; }
 .stage-card { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; min-height: 118px; padding: 14px; border: 1px solid #e5e7eb; border-radius: 8px; background: #fff; }
 .stage-card.success { border-color: #bbf7d0; background: #f0fdf4; }

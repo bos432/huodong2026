@@ -4,7 +4,7 @@ import { IsNull, Repository } from "typeorm";
 import { AdminOperationLog } from "../../entities/admin-operation-log.entity";
 import { MiniprogramReleaseLog } from "../../entities/miniprogram-release-log.entity";
 import { MiniprogramReleaseSetting } from "../../entities/miniprogram-release-setting.entity";
-import { MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto } from "./dto";
+import { MiniprogramManualUploadRecordDto, MiniprogramReleaseSettingDto, MiniprogramReleaseVersionDto } from "./dto";
 
 type AdminContext = { id?: number; username?: string; role?: string; tenantId?: number | null };
 type ReleaseStatus = "success" | "failed" | "processing";
@@ -50,6 +50,24 @@ export class MiniprogramReleaseService {
     throw new GoneException(MANUAL_UPLOAD_MESSAGE);
   }
 
+  async recordManualUpload(dto: MiniprogramManualUploadRecordDto, admin?: AdminContext) {
+    const setting = await this.currentSetting();
+    if (!setting?.appId || !setting.version) throw new BadRequestException("请先保存当前小程序 AppID 和版本号");
+    const version = this.nullableText(dto.version);
+    if (version !== setting.version) throw new BadRequestException("登记版本必须与当前已保存版本一致");
+    if (dto.confirmed !== true) throw new BadRequestException("请确认微信开发者工具已显示上传成功");
+    const row = await this.record("upload", "success", setting, admin, {
+      version,
+      description: setting.description,
+      detail: {
+        source: "manual_wechat_developer_tools",
+        confirmedByOperator: true,
+        disclaimer: "由后台操作人登记，不代表微信接口校验、真机验收、审核通过或正式发布。"
+      }
+    });
+    return this.publicLog(row);
+  }
+
   async submitAudit(admin?: AdminContext) {
     void admin;
     throw new BadRequestException(DIRECT_ACCOUNT_RELEASE_MESSAGE);
@@ -65,7 +83,7 @@ export class MiniprogramReleaseService {
     throw new BadRequestException(DIRECT_ACCOUNT_RELEASE_MESSAGE);
   }
 
-  private async record(action: "setting", status: ReleaseStatus, setting: MiniprogramReleaseSetting, admin?: AdminContext, payload: Record<string, any> = {}) {
+  private async record(action: "setting" | "upload", status: ReleaseStatus, setting: MiniprogramReleaseSetting, admin?: AdminContext, payload: Record<string, any> = {}) {
     return this.logs.save(this.logs.create({
       action,
       status,

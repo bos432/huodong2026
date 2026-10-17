@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { GoneException } from "@nestjs/common";
+import { BadRequestException, GoneException } from "@nestjs/common";
 import { MiniprogramReleaseService } from "./miniprogram-release.service";
 
 describe("MiniprogramReleaseService", () => {
@@ -29,6 +29,35 @@ describe("MiniprogramReleaseService", () => {
     expect(row.privateKey).toBeNull();
     expect(saved).not.toHaveProperty("hasAppSecret");
     expect(saved).not.toHaveProperty("hasPrivateKey");
+  });
+
+  it("records an operator-confirmed upload only for the saved AppID and version", async () => {
+    const setting = { id: 1, appId: "wx-demo", version: "2.2.45", description: "线上活动优化" };
+    const row = { id: 8, createdAt: new Date("2026-10-18T00:00:00Z") };
+    const settings = { findOne: vi.fn().mockResolvedValue(setting) };
+    const logs = {
+      create: vi.fn((value) => ({ ...value, ...row })),
+      save: vi.fn(async (value) => value)
+    };
+    const service = new MiniprogramReleaseService(settings as any, logs as any);
+
+    const result = await service.recordManualUpload({ version: "2.2.45", confirmed: true }, { id: 4, username: "root" });
+
+    expect(logs.save).toHaveBeenCalledWith(expect.objectContaining({
+      action: "upload", status: "success", appId: "wx-demo", version: "2.2.45", adminId: 4, adminUsername: "root",
+      detail: expect.objectContaining({ source: "manual_wechat_developer_tools", confirmedByOperator: true })
+    }));
+    expect(result.detail).toMatchObject({ disclaimer: expect.stringContaining("不代表微信接口校验") });
+  });
+
+  it("rejects mismatched versions and unconfirmed manual upload records without writing logs", async () => {
+    const settings = { findOne: vi.fn().mockResolvedValue({ appId: "wx-demo", version: "2.2.45" }) };
+    const logs = { create: vi.fn((value) => value), save: vi.fn(async (value) => value) };
+    const service = new MiniprogramReleaseService(settings as any, logs as any);
+
+    await expect(service.recordManualUpload({ version: "2.2.44", confirmed: true }, { id: 4 })).rejects.toBeInstanceOf(BadRequestException);
+    await expect(service.recordManualUpload({ version: "2.2.45", confirmed: false }, { id: 4 })).rejects.toBeInstanceOf(BadRequestException);
+    expect(logs.save).not.toHaveBeenCalled();
   });
 
   it("bounds log limits and removes sensitive diagnostic fields", async () => {
