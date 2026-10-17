@@ -9,6 +9,7 @@ import * as migrations from './deploy-migrations.mjs';
 import * as releases from './release-metadata.mjs';
 import * as databaseIdentity from './deploy-database-identity.mjs';
 import * as databaseRuntime from './deploy-database-runtime.mjs';
+import * as deploymentPatch from './deploy-patch.mjs';
 
 async function verifyDockerFixture(change, options = {}) {
   const root = '/www/wwwroot/rd.chaimen666.com';
@@ -70,7 +71,8 @@ async function verifyDockerFixture(change, options = {}) {
     './deploy-migrations.mjs': migrations,
     './release-metadata.mjs': releases,
     './deploy-database-identity.mjs': databaseIdentity,
-    './deploy-database-runtime.mjs': databaseRuntime
+    './deploy-database-runtime.mjs': databaseRuntime,
+    './deploy-patch.mjs': deploymentPatch
   };
   const module = new SourceTextModule(await readFile(new URL('./deploy-scoped-release.mjs', import.meta.url), 'utf8'), { context });
   await module.link(specifier => {

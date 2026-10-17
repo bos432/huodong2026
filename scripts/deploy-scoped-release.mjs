@@ -11,6 +11,7 @@ import { isAllowedDatabaseIdentity } from './deploy-database-identity.mjs';
 import { getContainerDatabaseRuntime } from './deploy-database-runtime.mjs';
 import { assertDockerPublishScope, assertDockerApiIdentity, assertUnrelatedDockerUnchanged, dockerHealthMatches, resolveDeployRuntime } from './deploy-runtime.mjs';
 import { assertReviewedMigrations, reviewedReleaseMigrations } from './deploy-migrations.mjs';
+import { productionPatchDigest } from './deploy-patch.mjs';
 
 const root = '/www/wwwroot/rd.chaimen666.com';
 const releaseId = process.env.RELEASE_ID;
@@ -31,6 +32,9 @@ const databaseRuntime = getContainerDatabaseRuntime(process.env);
 const deployRuntime = resolveDeployRuntime(process.env);
 function run(command, args, options = {}) {
   return execFileSync(command, args, { cwd: root, encoding: 'utf8', maxBuffer: 16 * 1024 * 1024, ...options }).trim();
+}
+function runBuffer(command, args, options = {}) {
+  return execFileSync(command, args, { cwd: root, maxBuffer: 16 * 1024 * 1024, ...options });
 }
 function processes() { return JSON.parse(run(node, [pm2, 'jlist'])); }
 function publicProcesses(rows) { return rows.map(row => ({ id: row.pm_id, name: row.name, pid: row.pid, status: row.pm2_env.status, restarts: row.pm2_env.restart_time, script: row.pm2_env.pm_exec_path })); }
@@ -82,7 +86,7 @@ async function writeRecord(name, value) { await fs.writeFile(path.join(privateDi
 async function readRecord(name) { return JSON.parse(await fs.readFile(path.join(privateDir, name), 'utf8')); }
 async function assertSavedProductionPatch() {
   const baseline = await readRecord('baseline.json');
-  const digest = createHash('sha256').update(run('git', ['diff', '--binary', 'HEAD'])).digest('hex');
+  const digest = productionPatchDigest(runBuffer('git', ['diff', '--binary', 'HEAD']));
   if (baseline.patchDigest !== digest) throw new Error('Reviewed production patch changed after backup.');
 }
 async function backupDockerPrivateData() {
@@ -183,9 +187,9 @@ if (mode === 'prepare') {
   const response = await fetch(readinessUrl, { signal: AbortSignal.timeout(5000) });
   const body = await response.json();
   if (!response.ok || !dockerHealthMatches(body.data || body, previousApiCommit)) throw new Error('Running API differs from reviewed baseline.');
-  const productionPatch = run('git', ['diff', '--binary', 'HEAD']);
-  const patchDigest = createHash('sha256').update(productionPatch).digest('hex');
-  if (run('git', ['rev-parse', 'HEAD']) !== manifest.previousCommit || (productionPatch && process.env.REVIEWED_PRODUCTION_PATCH_SHA256 !== patchDigest)) throw new Error('Production checkout differs from reviewed baseline.');
+  const productionPatch = runBuffer('git', ['diff', '--binary', 'HEAD']);
+  const patchDigest = productionPatchDigest(productionPatch);
+  if (run('git', ['rev-parse', 'HEAD']) !== manifest.previousCommit || (productionPatch.length && process.env.REVIEWED_PRODUCTION_PATCH_SHA256 !== patchDigest)) throw new Error('Production checkout differs from reviewed baseline.');
   await fs.mkdir(privateDir, { recursive: true, mode: 0o700 });
   await fs.chmod(privateDir, 0o700);
   await fs.writeFile(path.join(privateDir, 'production-tracked.patch'), productionPatch, { mode: 0o600, flag: 'wx' });
