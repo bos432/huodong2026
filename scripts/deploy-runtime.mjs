@@ -44,3 +44,7 @@ export function assertUnrelatedDockerUnchanged(baseline, current) {
 export function dockerHealthMatches(body, commit) {
   return body?.ready === true && releaseIdentifiersMatch(body?.release?.commit || '', commit);
 }
+
+export function dockerReleaseEnvironment(env, commit, buildTime) {
+  return { ...env, BUILD_COMMIT: commit, BUILD_TIME: buildTime };
+}

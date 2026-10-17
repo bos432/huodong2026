@@ -92,6 +92,12 @@ test('Docker verify runs with no PM2 installed and does not issue any mutation c
   assert(!commands.some(row => /pm2|node/.test(row.command) || row.args.includes('up')));
 });
 
+test('Docker release environment overrides inherited build metadata for the candidate', () => {
+  assert.deepEqual(runtime.dockerReleaseEnvironment({ BUILD_COMMIT: 'old', BUILD_TIME: 'old-time', KEEP: 'value' }, 'new', 'new-time'), {
+    BUILD_COMMIT: 'new', BUILD_TIME: 'new-time', KEEP: 'value'
+  });
+});
+
 test('Docker rollback restores only owned API/static/config and never reverts migrations', async () => {
   const { commands, writes } = await verifyDockerFixture({}, { mode: 'rollback' });
   assert.equal(commands.filter(row => row.command === 'docker' && row.args[0] === 'compose').length, 1);

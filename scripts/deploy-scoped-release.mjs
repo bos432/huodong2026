@@ -9,7 +9,7 @@ import { createHash } from 'node:crypto';
 import { isCommitIdentifier, isReleaseId, releaseIdentifiersMatch } from './release-metadata.mjs';
 import { isAllowedDatabaseIdentity } from './deploy-database-identity.mjs';
 import { getContainerDatabaseRuntime } from './deploy-database-runtime.mjs';
-import { assertDockerPublishScope, assertDockerApiIdentity, assertUnrelatedDockerUnchanged, dockerHealthMatches, resolveDeployRuntime } from './deploy-runtime.mjs';
+import { assertDockerPublishScope, assertDockerApiIdentity, assertUnrelatedDockerUnchanged, dockerHealthMatches, dockerReleaseEnvironment, resolveDeployRuntime } from './deploy-runtime.mjs';
 import { assertReviewedMigrations, reviewedReleaseMigrations } from './deploy-migrations.mjs';
 import { productionPatchDigest } from './deploy-patch.mjs';
 
@@ -129,6 +129,9 @@ async function publishStatic(source, target) {
   }
 }
 function dockerInspect(name) { return JSON.parse(run('docker', ['inspect', name]))[0]; }
+function environmentValue(source, key) {
+  return source.match(new RegExp(`^${key}=(.*)$`, 'm'))?.[1] || '';
+}
 function dockerProcesses() {
   const ids = run('docker', ['ps', '-aq']).split(/\s+/).filter(Boolean);
   if (!ids.length) throw new Error('Docker inventory is empty.');
@@ -147,9 +150,11 @@ function dockerStaticTargets(runtime) {
   if (!admin?.startsWith(prefix) || !h5?.startsWith(prefix)) throw new Error('Nginx static mount is outside the production project.');
   return { admin, h5 };
 }
-function restartDockerApi(runtime) {
+function restartDockerApi(runtime, commit, buildTime) {
   assertDockerPublishScope(runtime);
-  run('docker', ['compose', '-p', runtime.composeProject, 'up', '-d', '--no-deps', '--no-build', '--force-recreate', 'api']);
+  run('docker', ['compose', '-p', runtime.composeProject, 'up', '-d', '--no-deps', '--no-build', '--force-recreate', 'api'], {
+    env: dockerReleaseEnvironment(process.env, commit, buildTime),
+  });
 }
 async function waitForDockerApi(commit) {
   for (let attempt = 0; attempt < 30; attempt += 1) {
@@ -279,7 +284,7 @@ if (mode === 'prepare') {
       await fs.mkdir(staticBackupRoot, { recursive: true, mode: 0o700 });
       await fs.cp(staticTargets.admin, path.join(staticBackupRoot, 'admin'), { recursive: true, errorOnExist: true });
       await fs.cp(staticTargets.h5, path.join(staticBackupRoot, 'h5'), { recursive: true, errorOnExist: true });
-      restartDockerApi(deployRuntime);
+      restartDockerApi(deployRuntime, manifest.commit, manifest.buildTime);
     }
     const ready = deployRuntime.kind === 'docker'
       ? await waitForDockerApi(manifest.commit)
@@ -323,7 +328,10 @@ if (mode === 'prepare') {
       }
     }
     if (deployRuntime.kind === 'docker' && previousApiMoved) {
-      try { restartDockerApi(deployRuntime); } catch (restoreError) { console.error(`Failed to restart restored API: ${restoreError.message}`); }
+      try {
+        const previousRootEnvironment = previousEnvFiles.find(row => row.target === path.join(root, '.env'))?.source || '';
+        restartDockerApi(deployRuntime, previousApiCommit, environmentValue(previousRootEnvironment, 'BUILD_TIME'));
+      } catch (restoreError) { console.error(`Failed to restart restored API: ${restoreError.message}`); }
     }
     throw error;
   }
@@ -348,7 +356,8 @@ if (mode === 'prepare') {
   await fs.rename(path.join(root, 'apps/api/dist'), preservedCandidate);
   await fs.rename(previousApi, path.join(root, 'apps/api/dist'));
   for (const { target, source } of savedEnvironment) await fs.writeFile(target, source, { mode: 0o600 });
-  restartDockerApi(deployRuntime);
+  const previousRootEnvironment = savedEnvironment.find(row => row.target === path.join(root, '.env'))?.source || '';
+  restartDockerApi(deployRuntime, previousApiCommit, environmentValue(previousRootEnvironment, 'BUILD_TIME'));
   if (!await waitForDockerApi(previousApiCommit)) throw new Error('Restored API not ready; retained candidate and backups require operator inspection.');
   await publishStatic(path.join(backups, 'admin'), targets.admin);
   await publishStatic(path.join(backups, 'h5'), targets.h5);
