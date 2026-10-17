@@ -43,8 +43,9 @@ describe("activity detail shared state contract", () => {
     expect(source).toContain("Manpi activity detail tokens");
     expect(source).toContain(".detail-page .action-button{background:var(--manpi-clay)!important;color:#fff!important}");
     expect(source).toContain(".detail-page .action-button.secondary{border:1rpx solid var(--manpi-line)!important;background:#EEECE6!important;color:#626B73!important;opacity:1}");
-    expect(source).toContain("#B9533F");
-    expect(source).toContain("#F7F5F0");
+    expect(source).toContain("--manpi-clay:#285B43");
+    expect(source).toContain("--manpi-paper:#F4F5F2");
+    expect(source).toContain("rgba(40,91,67,.24)");
     expect(source).toContain("暂不可报名");
     expect(source).toContain("class=\"bottom-bar app-enter\"");
   });
@@ -75,6 +76,10 @@ describe("activity detail shared state contract", () => {
     expect(source).toContain("galleryImageFailed(image)");
     expect(source).toContain("演示照片暂不可用");
     expect(source).toContain("活动照片为演示素材，不代表真实活动现场。");
+    expect(source).toContain('import ceramicsImage from "../../assets/manpi-prototype/activity-ceramics.jpg"');
+    expect(source).toContain('import citywalkImage from "../../assets/manpi-prototype/activity-citywalk.jpg"');
+    expect(source).toContain('import mountainImage from "../../assets/manpi-prototype/activity-mountain.jpg"');
+    expect(source).toContain('if (activity.value?.isTest || String(activity.value?.title || "").startsWith("【演示】"))');
   });
 
   it("does not expose tenant routing identifiers in the customer activity detail", () => {

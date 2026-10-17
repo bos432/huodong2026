@@ -38,4 +38,8 @@ withDefaults(defineProps<{ name: string; size?: number; label?: string }>(), { s
 .icon-shield::before { inset: 8% 18%; border: 1.8px solid currentColor; border-radius: 45% 45% 52% 52%; transform: scaleY(1.08); }
 .icon-help::before { inset: 9%; border: 1.8px solid currentColor; border-radius: 50%; }
 .icon-help::after { top: 23%; left: 45%; width: 12%; height: 48%; border-right: 1.8px solid currentColor; border-bottom: 1.8px solid currentColor; transform: rotate(45deg); }
+.icon-leaf::before { top: 14%; left: 18%; width: 64%; height: 64%; border: 1.8px solid currentColor; border-radius: 85% 8% 75% 10%; transform: rotate(-35deg); }
+.icon-leaf::after { top: 27%; left: 48%; width: 1.8px; height: 58%; background: currentColor; transform: rotate(42deg); transform-origin: top; }
+.icon-image::before { inset: 12%; border: 1.8px solid currentColor; border-radius: 3px; }
+.icon-image::after { right: 18%; bottom: 19%; left: 18%; height: 45%; background: currentColor; clip-path: polygon(0 100%, 33% 30%, 52% 66%, 70% 42%, 100% 100%); }
 </style>

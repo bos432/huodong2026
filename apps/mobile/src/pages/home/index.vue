@@ -18,6 +18,10 @@ import { queryActivities } from "./activity-query";
 import { mapPublicActivityList } from "./activity-adapter";
 import { mobileTabRoute } from "../../mobile-tab-routes";
 import "../../styles/tokens.css";
+import splashImage from "../../assets/manpi-prototype/splash-landscape.jpg";
+import mountainImage from "../../assets/manpi-prototype/activity-mountain.jpg";
+import ceramicsImage from "../../assets/manpi-prototype/activity-ceramics.jpg";
+import citywalkImage from "../../assets/manpi-prototype/activity-citywalk.jpg";
 
 const categories = ["推荐", "城市漫步", "手作体验", "自然体验", "阅读分享", "主题沙龙", "轻户外", "公益行动", "影像记录"];
 const activeCategory = ref("推荐");
@@ -48,6 +52,12 @@ const activityReviews = computed(() => queryRealActivityReviews(inspirationTenan
 const carouselIndex = ref(0);
 const heroImageFailed = ref<Record<number, boolean>>({});
 const activeHeroIsDemo = computed(() => Boolean(heroCards.value[carouselIndex.value]?.isDemo));
+function heroCover(item: Activity) {
+  if (item.cover) return item.cover;
+  if (item.category === "手作体验") return ceramicsImage;
+  if (item.category === "城市漫步") return citywalkImage;
+  return mountainImage || splashImage;
+}
 const canUseDistanceSort = false;
 const canUsePopularitySort = false;
 const filteredActivities = computed(() => {
@@ -192,12 +202,11 @@ onShow(() => {
     <view class="home-page">
       <view class="topbar"><view class="city" role="button" tabindex="0" aria-label="选择活动城市" @click="openCityPicker" @keyup.enter="openCityPicker" @keyup.space.prevent="openCityPicker"><IconGlyph name="pin" :size="14" label="当前城市" /><text>{{ currentCity }}</text><IconGlyph name="chevron" :size="12" label="选择城市" /></view><view class="search"><IconGlyph name="search" :size="16" label="搜索" /><input v-model="search" placeholder="搜索活动、地点或主理人" /></view><text class="wordmark">慢π</text></view>
       <view class="discovery-heading"><view><text class="discovery-title">今天，去参加一场活动</text><text class="discovery-subtitle">先看时间、地点和组织者</text></view></view>
-      <CategoryScroller :items="categories" :active="activeCategory" @select="selectCategory" />
       <view v-if="heroCards.length" class="hero-carousel">
         <swiper class="hero-swiper" :current="carouselIndex" :duration="260" :circular="heroCards.length > 1" @change="onHeroChange">
           <swiper-item v-for="(item, index) in heroCards" :key="item.id">
             <view class="hero-slide app-press" role="button" tabindex="0" :aria-label="`查看活动：${item.title}`" @click="openActivity(item.id)" @keyup.enter="openActivity(item.id)" @keyup.space.prevent="openActivity(item.id)">
-              <image v-if="item.cover && !heroImageFailed[item.id]" class="hero-image" :src="item.cover" mode="aspectFill" @error="heroImageError(item.id)" />
+              <image v-if="!heroImageFailed[item.id]" class="hero-image" :src="heroCover(item)" mode="aspectFill" @error="heroImageError(item.id)" />
               <view v-else class="hero-image-fallback"><IconGlyph name="image" :size="24" label="封面不可用" /><text>活动封面暂不可用</text></view>
               <view class="hero-copy"><text class="hero-kicker">{{ item.category || "慢π活动" }}<text v-if="item.isDemo"> · 演示活动</text></text><text class="hero-title">{{ item.title }}</text><view class="hero-meta"><view><IconGlyph name="calendar" :size="14" label="活动时间" /><text>{{ item.date }} {{ item.weekday }} {{ item.startTime }}–{{ item.endTime || "时间以正式发布为准" }}</text></view><view><IconGlyph name="pin" :size="14" label="活动地点" /><text>{{ item.isDemo ? `${item.city} · 地点信息以正式发布为准` : `${item.city} · ${item.venue}` }}</text></view></view><view class="hero-bottom"><text class="hero-price">{{ item.isDemo ? "示例费用 " : "" }}{{ item.priceText }}</text><text>{{ item.isDemo ? "报名数据未接入 · 名额以正式发布为准" : "查看活动详情" }}</text></view><text v-if="item.isDemo" class="hero-demo">当前仅用于页面展示 · 不代表真实举办安排</text></view>
               <text class="hero-count">{{ index + 1 }} / {{ heroCards.length }}</text>
@@ -209,11 +218,12 @@ onShow(() => {
         </view>
       </view>
       <view v-else-if="!inspirations.length" class="hero-empty"><b>暂时没有推荐活动</b><small>已发布并开放报名的活动会出现在这里。</small></view>
+      <CategoryScroller :items="categories" :active="activeCategory" @select="selectCategory" />
       <view v-if="activityReviews.length" class="activity-reviews"><view class="activity-reviews-heading"><b>真实活动回顾</b><small>来源：铜梁区融媒体中心 · 已结束，不可报名</small></view><view v-for="item in activityReviews" :key="item.title" class="activity-review-card"><b>{{ item.title }}</b><text>{{ item.date }} · {{ item.place }}</text><small>{{ item.summary }}</small><a :href="item.sourceUrl" target="_blank" rel="noopener noreferrer">{{ item.sourceName }} ↗</a></view></view>
-      <WeekendInspiration :items="inspirations" />
       <view class="intro"><view class="intro-copy"><b>近期活动</b><small>{{ isShowcase && demoMode ? '演示商家 · 样例不可报名' : '来自活动服务的公开信息' }}</small></view><view v-if="hasRealActivities" class="actions"><view @click="sheet = 'sort'"><IconGlyph name="sort" :size="14" /><text>{{ sortLabel(activeSort) }}</text></view><view @click="openFilter"><IconGlyph name="filter" :size="14" /><text>筛选</text></view></view></view>
       <view v-if="statusFilter !== 'all' || filterCategory !== '推荐'" class="active-filters"><IconGlyph name="filter" :size="13" label="当前筛选" /><text>当前条件：{{ filterSummary() }}</text><view role="button" tabindex="0" aria-label="清除筛选" @click="clearFilters">清除</view></view>
       <view class="feed"><view v-if="loadError" class="state notice"><b>当前为本地演示模式</b><small>{{ loadError }}</small><button @click="retryLoad">重试接口</button></view><view v-if="loading" class="state loading">正在同步公开活动…</view><template v-else><ActivityCard v-for="activity in filteredActivities" :key="activity.id" :activity="activity" @open="openActivity(activity.id)" /><view v-if="!filteredActivities.length" class="state empty"><b>{{ hasRealActivities ? (cityActivities.length ? "还没有匹配的活动" : `${currentCity}暂没有可展示的活动`) : "真实活动即将上线" }}</b><small>{{ hasRealActivities ? (cityActivities.length ? "换个关键词或放宽筛选条件，再看看附近的安排。" : "该城市暂无已发布活动，试试切换城市。") : "主理人发布并通过审核后，活动会显示在这里。" }}</small><button v-if="hasRealActivities && cityActivities.length" @click="clearFilters">清除筛选</button></view><button v-else-if="filteredActivities.length < activities.length" class="load" @click="loadMore">加载更多活动</button><view v-else-if="filteredActivities.length" class="load done">已加载全部活动</view></template></view>
+      <WeekendInspiration :items="inspirations" />
     </view>
     <BaseBottomSheet :open="sheet === 'sort'" title="排序" @close="sheet = null"><view class="option" v-for="option in (['recommended','nearest_time','nearest_distance','popularity','price_low'] as ActivitySort[])" :key="option" :class="{ disabled: (option === 'nearest_distance' && !canUseDistanceSort) || (option === 'popularity' && !canUsePopularitySort) }" @click="(option !== 'nearest_distance' || canUseDistanceSort) && (option !== 'popularity' || canUsePopularitySort) ? (activeSort = option, sheet = null) : undefined"><view><text>{{ sortLabel(option) }}</text><small v-if="option === 'nearest_distance' && !canUseDistanceSort">需要定位权限，当前不可用</small><small v-else-if="option === 'popularity' && !canUsePopularitySort">演示数据不提供可信热度</small></view><b v-if="activeSort === option">✓</b></view></BaseBottomSheet>
     <BaseBottomSheet :open="sheet === 'filter'" title="筛选" @close="sheet = null"><view class="filter-content"><b>活动状态</b><view class="filter-grid"><text :class="{ selected: draftStatusFilter === 'all' }" @click="draftStatusFilter = 'all'">全部</text><text :class="{ selected: draftStatusFilter === 'open' }" @click="draftStatusFilter = 'open'">可报名</text><text :class="{ selected: draftStatusFilter === 'full' }" @click="draftStatusFilter = 'full'">已满座</text></view><b>活动类型</b><view class="filter-grid types"><text v-for="type in categories.slice(1)" :key="type" :class="{ selected: draftFilterCategory === type }" @click="draftFilterCategory = type">{{ type }}</text></view><button class="reset" @click="draftStatusFilter = 'all'; draftFilterCategory = '推荐'">重置</button><button class="confirm" @click="applyFilter">确定</button></view></BaseBottomSheet>
@@ -233,6 +243,26 @@ onShow(() => {
 </style>
 <style scoped>
 @media screen and (max-width: 420px){.topbar{grid-template-columns:auto minmax(0,1fr) auto;display:grid;gap:6px}.search{min-width:0;flex:1 1 auto}.city,.dots{font-size:12px}.hero-carousel{margin-left:10px;margin-right:10px}.hero-swiper{height:314px}.feed{padding-left:10px;padding-right:10px}}
+
+/* Final mini-program rhythm: compact 粗门 inspired discovery shell. */
+.home-page{background:#f4f5f2}
+.topbar{margin:0;padding:10px 13px 9px;background:#fff;border-bottom:1px solid #f0f0ef;gap:9px}
+.city{font-size:12px;color:#232a26}
+.search{height:34px;padding:0 10px;border:0;border-radius:18px;background:#f5f6f5;font-size:11px}
+.wordmark{display:none}
+.discovery-heading{display:none}
+.category-scroll{padding:9px 13px 10px;background:#fff;border-bottom:1px solid #f0f0ef}
+.category-row{gap:7px}
+.category-chip{min-height:34px;padding:0 11px;border:0;border-radius:3px;background:#f3f4f3;color:#303a34;font-size:11px}
+.category-chip.selected{background:#18dfa1;color:#18372c;font-weight:700}
+.hero-carousel{margin:10px 13px 8px;border:0;border-radius:6px;box-shadow:0 3px 14px rgb(24 37 28 / 7%)}
+.hero-swiper{height:290px}
+.hero-image{height:52%}
+.hero-copy{max-height:48%;padding:9px 12px 8px;background:#fff}
+.hero-kicker{color:#285b43}
+.hero-price{color:#b75b42}
+.intro{margin:12px 13px 8px}
+.feed{padding:0 13px}
 .city-overlay{position:fixed;z-index:var(--mp-z-sheet);inset:0;display:flex;align-items:flex-end;background:var(--mp-overlay)}.city-sheet{box-sizing:border-box;width:100%;max-height:78vh;overflow-y:auto;padding:20px 18px calc(22px + env(safe-area-inset-bottom));border-radius:16px 16px 0 0;background:var(--mp-bg-surface);box-shadow:var(--mp-shadow-sheet)}.city-sheet-head{display:flex;align-items:center;justify-content:space-between;font-size:18px;color:var(--mp-text-primary)}.city-sheet-head view{display:grid;width:40px;height:40px;place-items:center;border-radius:50%;background:var(--mp-bg-soft);font-size:24px}.city-note{display:block;margin-top:8px;color:var(--mp-text-muted);font-size:12px;line-height:1.5}.locate-row{display:flex;align-items:center;gap:10px;min-height:62px;margin-top:14px;padding:10px 12px;border:1px solid var(--mp-mist-border);border-radius:10px;background:var(--mp-mist-soft);color:var(--mp-mist-600)}.locate-row>view{display:grid;flex:1;gap:3px}.locate-row b{font-size:13px}.locate-row small{font-size:10px;color:var(--mp-text-muted)}.city-list{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-top:12px}.city-list button{display:grid;gap:3px;min-height:56px;padding:9px;border:1px solid var(--mp-border);border-radius:8px;background:#fff;color:var(--mp-text-primary);text-align:left}.city-list button.selected{border-color:var(--mp-brand-primary);background:var(--mp-brand-soft)}.city-list button text{font-size:12px;font-weight:700}.city-list button small{font-size:9px;color:var(--mp-text-muted)}.city-state{display:grid;justify-items:center;gap:8px;padding:26px 8px;color:var(--mp-text-muted);font-size:12px;text-align:center}.city-state button{min-height:38px;padding:0 16px;border:1px solid var(--mp-border);border-radius:19px;background:#fff;color:var(--mp-mist-600)}
 </style>
 <style scoped>

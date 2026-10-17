@@ -1,7 +1,7 @@
 :root {
-  --mp-brand-primary: #b9533f;
-  --mp-brand-primary-dark: #974233;
-  --mp-brand-soft: #f6ded7;
+  --mp-brand-primary: #285b43;
+  --mp-brand-primary-dark: #1f4b36;
+  --mp-brand-soft: #dce9dc;
   --mp-mist-soft: #e8eff0;
   --mp-mist-600: #557083;
   --mp-mist-border: #cad8de;
@@ -12,7 +12,7 @@
   --mp-bg-page: #f7f5f0;
   --mp-bg-surface: #ffffff;
   --mp-bg-soft: #f1efea;
-  --mp-price: #b9533f;
+  --mp-price: #b75b42;
   --mp-danger: #b04444;
   --mp-success: #3f8062;
   --mp-border: #e6e3dd;
@@ -36,7 +36,7 @@
   --mp-radius-pill: 999px;
   --mp-shadow-card: 0 6px 20px rgb(29 36 48 / 8%);
   --mp-shadow-sheet: 0 -10px 30px rgb(29 36 48 / 15%);
-  --mp-shadow-fab: 0 7px 20px rgb(185 83 63 / 28%);
+  --mp-shadow-fab: 0 7px 20px rgb(40 91 67 / 28%);
   --mp-z-tabbar: 40;
   --mp-z-sheet: 50;
   --mp-z-toast: 80;

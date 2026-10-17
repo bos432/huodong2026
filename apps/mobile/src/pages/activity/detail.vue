@@ -20,6 +20,9 @@ import EmptyState from "../../components/EmptyState.vue";
 import { mockActivities } from "../../mock/activity";
 import { demoDetailForTenant } from "./activity-demo-view";
 import { demoActivityDate } from "../../mock/demo-activity-dates";
+import ceramicsImage from "../../assets/manpi-prototype/activity-ceramics.jpg";
+import citywalkImage from "../../assets/manpi-prototype/activity-citywalk.jpg";
+import mountainImage from "../../assets/manpi-prototype/activity-mountain.jpg";
 
 const activity = ref<any>();
 const invite = ref<any>();
@@ -38,6 +41,12 @@ const organizerFollowLoading = ref(false);
 const galleryIndex = ref(0);
 const failedGalleryImages = ref<string[]>([]);
 const galleryImages = computed(() => {
+  if (activity.value?.isTest || String(activity.value?.title || "").startsWith("【演示】")) {
+    const category = String(activity.value?.category?.name || "");
+    if (category === "手作体验") return [ceramicsImage];
+    if (category === "城市漫步" || category === "主题沙龙") return [citywalkImage];
+    return [mountainImage];
+  }
   const images = [activity.value?.coverUrl, ...(activity.value?.gallery || [])].filter(Boolean) as string[];
   return [...new Set(images)];
 });
@@ -1162,7 +1171,7 @@ onShow(() => {
 .detail-page .detail-section .title,.detail-page .detail-section .section-title { border-left: 4rpx solid #a33d36; padding-left: 14rpx; }
 .section-heading{display:flex;align-items:center;justify-content:space-between;gap:12rpx}.section-heading>text{color:var(--app-muted,#7b8580);font-size:22rpx}.gallery-strip{padding-top:10rpx}.gallery-row{display:flex;gap:12rpx;overflow:hidden;margin-top:14rpx}.gallery-row image{width:190rpx;height:130rpx;border-radius:12rpx;opacity:.68}.gallery-row image.active{opacity:1;outline:4rpx solid rgba(185,83,63,.18)}.map-preview{padding-top:10rpx}.map-surface{position:relative;min-height:190rpx;margin-top:14rpx;overflow:hidden;border-radius:16rpx;background:#edf2ed}.map-surface::before,.map-surface::after{position:absolute;content:"";background:rgba(104,145,118,.18);transform:rotate(-18deg)}.map-surface::before{top:20%;left:-10%;width:125%;height:2px}.map-surface::after{top:60%;left:-10%;width:125%;height:2px;transform:rotate(22deg)}.map-route{position:absolute;top:18%;left:18%;width:58%;height:42%;border:5rpx solid rgba(185,83,63,.68);border-right-color:transparent;border-bottom-color:transparent;border-radius:50%;transform:rotate(22deg)}.map-pin{position:absolute;top:36%;left:58%;display:grid;place-items:center;width:58rpx;height:58rpx;border-radius:50% 50% 50% 0;background:var(--app-primary,#b9533f);color:#fff;font-size:20rpx;transform:rotate(-45deg)}.map-pin::first-line{transform:rotate(45deg)}.map-copy{position:absolute;right:16rpx;bottom:14rpx;left:16rpx;display:grid;gap:4rpx;padding:12rpx 14rpx;border-radius:10rpx;background:rgba(255,255,255,.9)}.map-copy b{font-size:26rpx}.map-copy small{color:var(--app-muted,#7b8580);font-size:21rpx}.attendee-preview{padding-top:10rpx}.attendee-row{display:flex;gap:20rpx;margin-top:14rpx}.attendee{display:grid;justify-items:center;gap:6rpx;color:var(--app-muted,#7b8580);font-size:20rpx}.attendee image,.attendee-fallback{width:58rpx;height:58rpx;border-radius:50%;background:#f2ddd7;color:#a33d36}.attendee-fallback{display:grid;place-items:center;font-weight:700}
 /* Manpi activity detail tokens */
-.container.detail-page{--manpi-paper:#F7F5F0;--manpi-ink:#1D2430;--manpi-muted:#78828C;--manpi-line:#E6E3DD;--manpi-clay:#B9533F;--manpi-clay-dark:#974233;--manpi-clay-soft:#F6DED7;--manpi-mist:#E5EEF1;background:var(--manpi-paper)!important;color:var(--manpi-ink)}
+.container.detail-page{--manpi-paper:#F4F5F2;--manpi-ink:#202923;--manpi-muted:#78847C;--manpi-line:#E7E7DF;--manpi-clay:#285B43;--manpi-clay-dark:#1F4B36;--manpi-clay-soft:#DCE9DC;--manpi-mist:#E5EEF1;background:var(--manpi-paper)!important;color:var(--manpi-ink)}
 .detail-page .detail-hero{background:var(--manpi-paper)}
 .detail-page .hero-image{background:#E5EEF1}
 .detail-page .hero-head{background:var(--manpi-paper)}
@@ -1184,14 +1193,14 @@ onShow(() => {
 .detail-page .organizer-identity{min-width:0;display:grid;gap:5rpx}
 .detail-page .organizer-head .name{margin:0;color:var(--manpi-ink);font-size:27rpx;font-weight:700}
 .detail-page .organizer-intro{color:#45505D}
-.detail-page .organizer-follow{min-width:96rpx;min-height:56rpx;display:flex;align-items:center;justify-content:center;border-color:#E8C4BA;border-radius:8rpx;color:var(--manpi-clay-dark)}
+.detail-page .organizer-follow{min-width:96rpx;min-height:56rpx;display:flex;align-items:center;justify-content:center;border-color:var(--manpi-line);border-radius:8rpx;color:var(--manpi-clay-dark)}
 .detail-page .organizer-proof{gap:8rpx}
 .detail-page .organizer-proof text{background:var(--manpi-mist);color:#45505D}
 .detail-page .organizer-promise{background:#F8F6F2;color:#45505D}
 .detail-page .decision-status{background:var(--manpi-clay)}
 .detail-page .action-item text{background:var(--manpi-mist);color:#557083}
 .detail-page .map-surface{background:#E7E9E3}
-.detail-page .map-route{border-color:rgba(185,83,63,.68);border-right-color:transparent;border-bottom-color:transparent}
+.detail-page .map-route{border-color:rgba(40,91,67,.68);border-right-color:transparent;border-bottom-color:transparent}
 .detail-page .map-pin{background:var(--manpi-clay)}
 .detail-page .map-copy{color:var(--manpi-ink)}
 .detail-page .map-copy small,.detail-page .section-heading>text{color:var(--manpi-muted)}
@@ -1199,7 +1208,7 @@ onShow(() => {
 .detail-page .action-button{border:0;border-radius:8rpx;background:var(--manpi-clay);color:#fff}
 .detail-page .action-button.secondary{border:1rpx solid #D7D2CA;background:#EEECE6;color:#626B73}
 .detail-page .test-activity-banner{border-color:#D8D3C6;background:#F1EEE6;color:#626B73}
-.detail-page .gallery-row image.active{outline-color:rgba(185,83,63,.24)}
+.detail-page .gallery-row image.active{outline-color:rgba(40,91,67,.24)}
 .detail-page .related-item{border-color:var(--manpi-line);border-radius:10rpx;background:#fff}
 .detail-page .related-item image,.detail-page .related-cover-fallback{background:var(--manpi-mist);color:#557083}
 .detail-page .related-copy text:first-child{color:var(--manpi-ink)}

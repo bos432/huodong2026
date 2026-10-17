@@ -186,7 +186,7 @@ describe("mobile client state consistency", () => {
     expect(activityList).toContain('role="tablist"');
     expect(activityPreviewRow).toContain(':aria-label="`查看活动：${activity.title}`"');
     expect(activityPreviewRow).toContain("organizerLabel?: string");
-    expect(activityPreviewRow).toContain("主办：{{ organizerLabel || '主办方待确认' }}");
+    expect(activityPreviewRow).toContain("主办：${organizerLabel || '主办方待确认'}");
     expect(activityList).toContain(":organizer-label=\"tenant?.name || '主办方待确认'\"");
     expect(homePage).toContain("<ActivityCard v-for=\"activity in filteredActivities\"");
   });
@@ -782,10 +782,11 @@ describe("mobile client state consistency", () => {
   it("locks settings dialogs before they open and preserves tenant context on logout", () => {
     expect(userSettings.indexOf('activeAction.value = "logout"')).toBeLessThan(userSettings.indexOf("uni.showModal({", userSettings.indexOf("function logout")));
     expect(userSettings).toContain('if (!r.confirm) { activeAction.value = ""; return; }');
-    expect(userSettings).toContain('uni.reLaunch({ url:withTenantCode("/pages/user/my") })');
+    expect(userSettings).toContain('uni.reLaunch({ url:withTenantCode(mobileTabRoute("me")) })');
+    expect(userSettings).toContain('import { mobileTabRoute } from "../../mobile-tab-routes";');
     expect(userSettings).toContain('role="button"');
     expect(userSettings).toContain('request<{ miniprogramVersion?: string | null }>("/public/settings/operation")');
-    expect(userSettings).toContain("当前小程序版本 ${clientVersion.value}");
+    expect(userSettings).toContain("小程序版本 ${clientVersion.value}");
     expect(publicService).toContain("miniprogramVersion: String(miniprogramRelease?.version || \"\").trim() || null");
   });
 
@@ -1040,7 +1041,9 @@ describe("mobile client state consistency", () => {
 
   it("exposes home activity failures without accepting stale tenant responses", () => {
     expect(homePage).toContain("const loadError = ref(\"\")");
-    expect(homePage).toContain("activities.value = mockActivities.map");
+    expect(homePage).toContain("publicActivities.value = []");
+    expect(homePage).toContain('activities.value = tenantCode.value === "qiwai-showcase"');
+    expect(homePage).toContain("visibleActivitiesForTenant(tenantCode.value, publicActivities.value)");
     expect(homePage).toContain("function retryLoad()");
     expect(homePage).toContain('v-if="loadError" class="state notice"');
     expect(homePage).toContain("<view v-if=\"loading\" class=\"state loading\"");

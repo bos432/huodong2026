@@ -18,6 +18,15 @@ describe("showcase activities remain isolated and non-bookable", () => {
     expect(demoDetailForTenant("qiwai-showcase", 999)).toBeNull();
   });
 
+  it("uses packaged category photos for demo activity covers", () => {
+    const citywalk = demoDetailForTenant("qiwai-showcase", 1);
+    const ceramics = demoDetailForTenant("qiwai-showcase", 2);
+    const nature = demoDetailForTenant("qiwai-showcase", 4);
+    expect(citywalk?.coverUrl).toContain("activity-citywalk.jpg");
+    expect(ceramics?.coverUrl).toContain("activity-ceramics.jpg");
+    expect(nature?.coverUrl).toContain("activity-mountain.jpg");
+  });
+
   it("turns samples into explicitly marked list rows with future dates and no capacity claims", () => {
     const rows = demoActivitiesAsPublicSummaries(activitiesForList("qiwai-showcase", []), new Date("2026-10-15T00:00:00+08:00"));
     expect(rows.length).toBeGreaterThan(0);

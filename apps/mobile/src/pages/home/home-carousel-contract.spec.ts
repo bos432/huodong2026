@@ -39,14 +39,14 @@ describe("home featured activity carousel", () => {
     expect(source).toContain('class="hero-demo"');
   });
 
-  it("places the discovery heading and categories before the featured activities", () => {
+  it("places the city search, featured image, and categories before the activity feed", () => {
     const template = source.slice(source.indexOf("<template>"));
-    const heading = template.indexOf("今天，去参加一场活动");
     const categories = template.indexOf("<CategoryScroller");
     const carousel = template.indexOf('class="hero-carousel"');
-    expect(heading).toBeGreaterThan(-1);
-    expect(heading).toBeLessThan(categories);
-    expect(categories).toBeLessThan(carousel);
+    const feed = template.indexOf('class="intro"');
+    expect(template.indexOf('class="topbar"')).toBeLessThan(carousel);
+    expect(carousel).toBeLessThan(categories);
+    expect(categories).toBeLessThan(feed);
   });
 
   it("shows a Manpi-styled recovery surface when a featured cover cannot load", () => {

@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { onMounted, ref } from "vue";
 import { withTenantCode } from "../api";
-import launchPhoto from "../assets/manpi-prototype/event-gala.jpg";
+import launchPhoto from "../assets/manpi-prototype/splash-landscape.jpg";
 const emit = defineEmits<{ close: [] }>();
 const visible = ref(false);
 const storageKey = "manpi-launch-screen-version-1";
@@ -27,7 +27,7 @@ onMounted(() => { visible.value = !uni.getStorageSync(storageKey); });
 .launch-mark { width: 58rpx; height: 58rpx; display: grid; place-items: center; border: 1rpx solid rgba(255,255,255,.66); border-radius: 50%; font-size: 28rpx; }
 .launch-title { display: block; color: #fff; font-size: 46rpx; font-weight: 900; line-height: 1.25; white-space: pre-line; }
 .launch-subtitle { display: block; margin-top: 16rpx; color: rgba(255,255,255,.84); font-size: 24rpx; line-height: 1.65; }
-.launch-enter { display: flex; align-items: center; justify-content: center; min-height: 88rpx; margin-top: 28rpx; border-radius: 14rpx; background: #fff; color: #18241f; font-size: 28rpx; font-weight: 800; }
+.launch-enter { display: flex; align-items: center; justify-content: center; min-height: 88rpx; margin-top: 28rpx; border-radius: 8rpx; background: #e0e98e; color: #18372c; font-size: 28rpx; font-weight: 800; }
 .launch-skip:focus-visible, .launch-enter:focus-visible { outline: 3rpx solid #b8f0c7; outline-offset: 4rpx; }
 @media (min-width: 900px) { .launch-copy { width: min(100%, 760px); margin: 0 auto; } }
 </style>

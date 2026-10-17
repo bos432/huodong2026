@@ -125,6 +125,11 @@ async function loadPage(nextPage: number, append = false) {
   const loadToken = pageLoadGuard.begin();
   if (append) loadingMore.value = true;
   else loading.value = true;
+  if (!append) rows.value = [];
+  if (!append) {
+    demoRows.value = [];
+    localDemoRows.value = false;
+  }
   error.value = "";
   try {
     const result = await request<PublicActivityListResponse | PublicActivitySummary[]>(buildQuery(nextPage));
